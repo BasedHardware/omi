@@ -100,7 +100,6 @@ RULES: tuple[InventoryRule, ...] = (
         (
             "backend/utils/memory/*.py",
             "backend/jobs/short_term_lifecycle_worker.py",
-            "backend/modal/memory_maintenance_job.py",
             "backend/routers/memory_admin.py",
             "backend/database/product_memory_items.py",
         ),
@@ -112,7 +111,6 @@ RULES: tuple[InventoryRule, ...] = (
         "consolidation_promotion",
         (
             "backend/utils/memory/*.py",
-            "backend/modal/memory_maintenance_job.py",
             "backend/scripts/memory-continuity-gauntlet.py",
         ),
         CONSOLIDATION_PROMOTION_MARKER,
@@ -155,9 +153,7 @@ RULES: tuple[InventoryRule, ...] = (
     InventoryRule(
         "maintenance_resources",
         (
-            ".github/workflows/gcp_memory_maintenance_job*.yml",
             "backend/deploy/runtime_env/*.yaml",
-            "backend/scripts/validate_memory_maintenance_scheduler.py",
             "backend/runtime_images.json",
         ),
         r"memory-maintenance-job|memory-maintenance-hourly|MEMORY_CANONICAL_(?:MAINTENANCE|CONSOLIDATION)|short_term_lifecycle",

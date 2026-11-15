@@ -50,7 +50,11 @@ array bodies, status codes, and rate buckets.
   is rejected while a legacy `initialize`+`ping` batch still works.
 - `GET` → 405, `HEAD` → auth probe, `DELETE` → 204 on both paths.
 - `get_conversations_by_ids` budgets the whole serialized JSON-RPC response
-  (≤120k chars), not just inner item JSON. List tools offer cursors;
+  (≤120k chars), not just inner item JSON. It pages whole per-item details
+  without reducing requested transcript limits; each successful item has one nested
+  `conversation`, while locked items have `id` and `error` instead.
+  `include_participants=false` omits roster metadata.
+  List tools offer cursors;
   `get_action_items` also supports `updated_since`.
 - Scope challenges stay protocol errors (`-32003` with `mcp/www_authenticate`);
   typed tool errors (`ToolExecutionError`) intentionally return safe,

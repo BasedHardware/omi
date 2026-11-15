@@ -126,6 +126,12 @@ def test_prod_bucket_by_hash_is_refused():
     assert ('prod_hash', 'BUCKET_BATCH_PIPELINE') in staging_violations(env)
 
 
+def test_prod_derived_audio_bucket_is_refused():
+    env = _clean_env()
+    env['BUCKET_AUDIO_DERIVED'] = 'omi-audio-derived-uc1'
+    assert ('prod_hash', 'BUCKET_AUDIO_DERIVED') in staging_violations(env)
+
+
 def test_hashes_are_hex_digests_not_values():
     assert all(len(h) == 64 and int(h, 16) >= 0 for h in PROD_DATA_PLANE_HASHES)
 
@@ -288,7 +294,9 @@ def test_jobstore_shadow_refuses_the_prod_namespace_in_prod():
 
 
 def test_jobstore_shadow_admits_the_prod_namespace_in_staging_on_the_staging_db():
-    assert staging_fence.jobstore_shadow_admits('batch_pipeline_prod', _clean_env())
+    assert staging_fence.jobstore_shadow_admits(
+        'batch_pipeline_prod', {**_clean_env(), 'JOBSTORE_SHADOW_NAMESPACES': 'batch_pipeline_prod'}
+    )
 
 
 @pytest.mark.parametrize('database_id', [None, '', '(default)', 'prod'])
@@ -302,7 +310,10 @@ def test_jobstore_shadow_refuses_the_staging_flag_on_a_non_staging_db(database_i
 
 
 def test_jobstore_shadow_admits_other_namespaces():
-    assert staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
+    assert not staging_fence.jobstore_shadow_admits('batch_pipeline_dev', {})
+    assert staging_fence.jobstore_shadow_admits(
+        'batch_pipeline_dev', {'JOBSTORE_SHADOW_NAMESPACES': 'batch_pipeline_dev'}
+    )
 
 
 def test_unset_key_with_a_prod_code_default_is_refused():

@@ -95,14 +95,14 @@ def test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces(gate
     )
 
 
-def test_gateway_promotion_intent_includes_memory_maintenance_job(gateway_gate, tmp_path: Path) -> None:
+def test_gateway_promotion_intent_includes_x_connector_sync_job(gateway_gate, tmp_path: Path) -> None:
     manifest = tmp_path / 'runtime_env.yaml'
     manifest.write_text(
         'environments:\n'
         '  prod:\n'
         '    cloud_run:\n'
         '      jobs:\n'
-        '        memory-maintenance-job:\n'
+        '        x-connector-sync-job:\n'
         '          env:\n'
         '            OMI_LLM_GATEWAY_FEATURE_MODE:\n'
         '              value: gateway\n',

@@ -91,6 +91,57 @@ def route_app():
     return app, sync
 
 
+@pytest.mark.parametrize('demand', [False, True])
+@pytest.mark.asyncio
+async def test_locked_obsolete_job_is_consumed_but_current_job_keeps_retrying(monkeypatch, route_app, demand):
+    import httpx
+    from utils.sync.playback import conversation_merge_fingerprint
+
+    app, sync = route_app
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'true' if demand else 'false')
+    monkeypatch.setattr(sync, 'account_deletion_blocks_user_work', lambda *_: False)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: None)
+    row = dict(started_at=1000.0, audio_files=[dict(id='current', chunk_timestamps=[1000.0])])
+    read = Mock(return_value=row)
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', read)
+    release, encode, stamp = Mock(), Mock(), Mock()
+    monkeypatch.setattr(sync, 'release_job_run_lock', release)
+    monkeypatch.setattr(build, 'ensure_conversation_artifact', encode)
+    monkeypatch.setattr(sync.conversations_db, 'update_conversation', stamp)
+    payload = dict(schema_version=2, uid='synthetic', conversation_id='conversation', on_demand=demand)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        for _ in range(3):
+            result = await client.post('/v2/audio-merge-jobs/run', json={**payload, 'fingerprint': 'obsolete'})
+            assert result.status_code == 200 and result.json() == {'status': 'superseded'}
+        result = await client.post(
+            '/v2/audio-merge-jobs/run',
+            json={**payload, 'fingerprint': conversation_merge_fingerprint(row, demand=demand)},
+        )
+        assert result.status_code == 409 and result.json() == {'status': 'locked'}
+    assert read.call_args.kwargs['field_paths'] == ['audio_files', 'started_at', 'created_at', 'deleted']
+    assert read.call_args.kwargs['timeout'] == 1.0
+    for work in (release, encode, stamp):
+        work.assert_not_called()
+
+
+@pytest.mark.parametrize('row', [None, {}, {'deleted': True}, {'audio_files': []}, {'audio_files': [None]}])
+def test_locked_job_with_uncertain_source_retries(monkeypatch, row):
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', Mock(return_value=row))
+    assert not build.superseded_while_locked(dict(uid='synthetic', conversation_id='conversation', fingerprint='old'))
+
+
+def test_locked_job_read_failure_and_missing_fingerprint_retry(monkeypatch):
+    read = Mock(side_effect=RuntimeError('synthetic read failure'))
+    monkeypatch.setattr(build.conversations_db, 'get_conversation_raw_snapshot', read)
+    assert not build.superseded_while_locked(dict(uid='synthetic', conversation_id='conversation', fingerprint='old'))
+    read.assert_called_once()
+    read.reset_mock()
+    for fingerprint in (None, '', 1):
+        assert not build.superseded_while_locked(dict(fingerprint=fingerprint))
+    read.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_http_retry_after_stamp_failure_reuses_published_audio(monkeypatch, route_app):
     import httpx
@@ -178,6 +229,141 @@ def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
     assert playback._conversation_audio_urls_entry('synthetic', 'conversation', files, row)['status'] == 'pending'
     lookup.assert_not_called()
     enqueue.assert_called_once()
+
+
+@pytest.mark.parametrize('reason', ['merge_failed', 'chunks_missing', 'empty_audio', 'source_changed'])
+@pytest.mark.parametrize('conversation', [False, True])
+def test_only_old_failed_merges_get_one_generation_scoped_retry(monkeypatch, reason, conversation):
+    from datetime import datetime, timezone
+    from utils.other import storage
+
+    monkeypatch.delenv('PLAYBACK_MANIFEST_RECOVERY_ENABLED', raising=False)
+    blob = Mock(generation=123, updated=datetime.fromtimestamp(1000, timezone.utc))
+    blob.download_as_bytes.return_value = (f'fp:{reason}' if conversation else reason).encode()
+    monkeypatch.setattr(storage, '_playback_unavailable_blob', lambda *_: blob)
+    monkeypatch.setattr(storage, '_conversation_playback_unavailable_blob', lambda *_: blob)
+    clock = [1899]
+    monkeypatch.setattr(storage.time, 'time', lambda: clock[0])
+    args = ('u', 'c') if conversation else ('u', 'c', 'file')
+    kwargs = {'fingerprint': 'fp'} if conversation else {}
+    assert storage.get_playback_failure_retry_epoch(*args, **kwargs) is None
+    blob.download_as_bytes.assert_not_called()
+    clock[0] = 1900
+    token = storage.get_playback_failure_retry_epoch(*args, **kwargs)
+    assert token == ('mf123' if reason == 'merge_failed' else None)
+    blob.download_as_bytes.assert_called_once_with(if_generation_match=123)
+    monkeypatch.setenv('PLAYBACK_MANIFEST_RECOVERY_ENABLED', 'false')
+    blob.reload.reset_mock()
+    assert storage.get_playback_failure_retry_epoch(*args, **kwargs) is None
+    blob.reload.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', [NotFound('expired'), PreconditionFailed('marker replaced')])
+def test_failure_marker_races_never_open_a_retry(monkeypatch, failure):
+    from datetime import datetime, timezone
+    from utils.other import storage
+
+    blob = Mock(generation=123, updated=datetime.fromtimestamp(1000, timezone.utc))
+    monkeypatch.setattr(storage, '_playback_unavailable_blob', lambda *_: blob)
+    monkeypatch.setattr(storage.time, 'time', lambda: 1900)
+    blob.download_as_bytes.side_effect = failure
+    assert storage.get_playback_failure_retry_epoch('u', 'c', 'file') is None
+
+
+@pytest.mark.parametrize('on_demand', [False, True])
+def test_230_failed_files_reenqueue_once_per_marker_even_across_hour_boundary(monkeypatch, on_demand):
+    from utils.other import storage
+    from utils.sync import playback
+    from utils import cloud_tasks
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', str(on_demand).lower())
+    files = [dict(id=f'file-{i}', chunk_timestamps=[1000.0 + i * 100], duration=1) for i in range(230)]
+    fp = storage.compute_audio_files_fingerprint(files, **({'origin': None} if on_demand else {}))
+    monkeypatch.setattr(playback, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: fp)
+    monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *a, **kw: 'mf123')
+    monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', storage.enqueue_conversation_audio_merge)
+    monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', storage.enqueue_conversation_artifact_build)
+    tasks = {}
+
+    def enqueue(payload):
+        tasks.setdefault(cloud_tasks._audio_merge_task_id(payload), payload)
+
+    monkeypatch.setattr(storage, 'enqueue_audio_merge_job', enqueue)
+    clock = [3599]
+    monkeypatch.setattr(storage.time, 'time', lambda: clock[0])
+    first = playback._get_audio_urls_via_artifacts('u', 'c', files)
+    assert len(tasks) == 231  # 230 immutable part tasks + one conversation task.
+    assert all(af['status'] == 'pending' for af in first['audio_files'])
+    assert first['conversation_audio']['status'] == 'pending'
+    assert all(name.endswith('-rmf123') for name in tasks)
+    assert all('_playback_retry_epoch' not in af for af in files)
+    clock[0] = 3601
+    playback._get_audio_urls_via_artifacts('u', 'c', files)
+    assert len(tasks) == 231
+
+
+def test_download_access_uses_failure_generation_and_returns_to_polling(monkeypatch):
+    from utils.sync import playback
+
+    monkeypatch.setattr(playback, 'download_playback_artifact', lambda *_: None)
+    monkeypatch.setattr(playback, 'get_merged_audio_signed_url', lambda *_: None)
+    monkeypatch.setattr(playback, 'is_playback_unavailable', lambda *_: True)
+    monkeypatch.setattr(playback, 'get_playback_failure_retry_epoch', lambda *_: 'mf123')
+    enqueue = Mock()
+    monkeypatch.setattr(playback, 'enqueue_conversation_audio_merge', enqueue)
+    af = dict(id='file', chunk_timestamps=[1000])
+    assert playback._get_artifact_download_payload('u', 'c', 'file', af) is None
+    enqueue.assert_called_once_with('u', 'c', [{**af, '_playback_retry_epoch': 'mf123'}], caller='sync_download')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('schema', [1, 2])
+@pytest.mark.parametrize('when', ['before', 'during'])
+async def test_changed_source_is_terminal_without_publishing_or_burning_attempts(monkeypatch, route_app, schema, when):
+    from copy import deepcopy
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from utils.other import storage
+    from utils.other.playback_identity import source_fingerprint
+
+    _, sync = route_app
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    source = [dict(path='chunks/u/c/1000.000.bin', timestamp=1000.0, generation='7', size=32)]
+    files = [dict(id='file', chunk_timestamps=[1000.0], source_fingerprint=source_fingerprint(source))]
+    row = dict(started_at=1000.0, audio_files=files)
+    payload = dict(schema_version=schema, uid='u', conversation_id='c')
+    if schema == 1:
+        payload.update(audio_file_id='file', timestamps=[1000.0], source_fingerprint=files[0]['source_fingerprint'])
+    else:
+        payload['fingerprint'] = storage.compute_audio_files_fingerprint(files)
+    changed = deepcopy(source)
+    changed[0]['generation'] = 'replacement'
+    listing = Mock(side_effect=[source, changed] if when == 'during' else [changed])
+    monkeypatch.setattr(sync.sync_playback, 'list_audio_chunks', listing)
+    download = Mock(return_value=b'\0' * 32)
+    monkeypatch.setattr(sync.sync_playback, 'download_audio_chunks_and_merge', download)
+    monkeypatch.setattr(sync, 'try_acquire_job_run_lock', lambda *_: 'token')
+    monkeypatch.setattr(sync, 'release_job_run_lock', lambda *_: None)
+    monkeypatch.setattr(sync, 'should_skip_background_account_mutation', lambda *_: False)
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *_: row)
+    monkeypatch.setattr(sync, 'get_playback_artifact_signed_url', lambda *_: None)
+    monkeypatch.setattr(sync.playback_build, 'get_conversation_playback_manifest', lambda *_: None)
+    file_upload, conversation_upload = Mock(), Mock()
+    monkeypatch.setattr(sync, 'upload_playback_artifact', file_upload)
+    monkeypatch.setattr(sync.playback_build, 'upload_conversation_playback_artifact', conversation_upload)
+    file_marker, conversation_marker = Mock(), Mock()
+    monkeypatch.setattr(sync, 'mark_playback_unavailable', file_marker)
+    monkeypatch.setattr(sync, 'mark_conversation_playback_unavailable', conversation_marker)
+    result = await sync.run_audio_merge_job(SimpleNamespace(json=AsyncMock(return_value=payload)), 0)
+    assert result.status_code == 200 and b'source_manifest_changed' in result.body
+    (file_marker if schema == 1 else conversation_marker).assert_called_once()
+    assert (file_marker if schema == 1 else conversation_marker).call_args.args[-1] == 'source_changed'
+    assert download.call_count == (1 if when == 'during' else 0)
+    file_upload.assert_not_called()
+    conversation_upload.assert_not_called()
 
 
 def test_playback_write_metric_survives_sync_export_filter():
@@ -387,3 +573,133 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
     marker.assert_not_called()
     encoder.assert_called_once()
     assert cache.cached_manifest(blob) == (3, _SPANS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'success',
+        'timeout',
+        'off',
+        'newer_marker',
+        'refused',
+        'saturated',
+        'error',
+        'marker_retired_before_read',
+        'retire_error',
+        'no_objects',
+    ],
+)
+async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, caplog, mode):
+    import httpx
+    import threading
+    import asyncio
+    from database import record_projection_rebuild
+    from utils.batch_pipeline import record_projection_rebuild as repair
+    from utils.sync import playback_metadata
+    from utils.executors import ExecutorSaturatedError
+
+    app, sync = route_app
+    monkeypatch.setattr(playback_metadata, '_coordinator', playback_metadata.DemandCoordinator())
+    enabled = mode != 'off'
+    monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'true' if enabled else 'false')
+    app.dependency_overrides[sync.auth.get_current_user_uid] = lambda: 'synthetic'
+    row = {'audio_files': [], 'record_lane_owner': 'batch_live_v1', 'record_audio_closed': True}
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *a, **kw: dict(row))
+
+    def readback(*args, **kwargs):
+        if mode == 'marker_retired_before_read':
+            return {**row, 'audio_files': [dict(id='part', duration=1, chunk_timestamps=[100])]}
+        return dict(row)
+
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', readback)
+    read = Mock(return_value=None if mode == 'marker_retired_before_read' else 'old')
+    monkeypatch.setattr(record_projection_rebuild, 'pending_version', read)
+    monkeypatch.setattr(record_projection_rebuild, 'preflight_projection', lambda *args: True)
+    release, finished = threading.Event(), threading.Event()
+    marker = {'version': 'old'}
+
+    def rebuild(*args):
+        if mode == 'timeout':
+            assert release.wait(5)
+        if mode == 'refused':
+            finished.set()
+            return False
+        if mode == 'no_objects':
+            finished.set()
+            return 'no_objects'
+        if mode == 'error':
+            finished.set()
+            raise RuntimeError('PRIVATE-SDK-DETAIL-CANARY')
+        row['audio_files'] = [dict(id='part', duration=1, chunk_timestamps=[100])]
+        if mode == 'newer_marker':
+            marker['version'] = 'new'
+        return True
+
+    def retire(*args, observed_update_time):
+        assert observed_update_time == 'old'
+        if mode == 'retire_error':
+            finished.set()
+            raise OSError('PRIVATE-SDK-DETAIL-CANARY')
+        if marker.get('version') == observed_update_time:
+            marker.clear()
+        finished.set()
+        return not marker
+
+    discovery = Mock(side_effect=rebuild)
+    deletion = Mock(side_effect=retire)
+    monkeypatch.setattr(repair, 'rebuild', discovery)
+    monkeypatch.setattr(record_projection_rebuild, 'retire_observed', deletion)
+    monkeypatch.setattr(playback_metadata, 'OPEN_TIMEOUT_SECONDS', 0.01 if mode == 'timeout' else 2)
+    if mode == 'saturated':
+        monkeypatch.setattr(playback_metadata, 'submit_with_context', Mock(side_effect=ExecutorSaturatedError()))
+    monkeypatch.setattr(sync.sync_playback, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(sync.sync_playback, 'get_playback_artifact_signed_url', lambda *a: 'signed')
+    monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: {'status': 'unavailable'})
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            response = await client.get('/v1/sync/audio/conversation/urls')
+            if mode == 'no_objects':
+                repeat = await client.get('/v1/sync/audio/conversation/urls')
+                assert repeat.status_code == 200 and repeat.json()['poll_after_ms'] == 5000
+        if mode == 'error':
+            assert response.status_code == 200 and response.json()['poll_after_ms'] == 5000 and marker
+            assert 'PRIVATE-SDK-DETAIL-CANARY' not in response.text + caplog.text
+            deletion.assert_not_called()
+        elif mode == 'refused':
+            assert response.status_code == 404 and marker
+            deletion.assert_not_called()
+        elif mode in {'timeout', 'off', 'saturated', 'no_objects'}:
+            assert response.status_code == 200
+            assert response.json() == {
+                'audio_files': [],
+                'conversation_audio': None,
+                'poll_after_ms': 5000 if enabled else None,
+            }
+            deletion.assert_not_called()
+        else:
+            assert response.status_code == 200
+            assert response.json()['audio_files'][0]['id'] == 'part'
+            assert response.json()['audio_files'][0]['signed_url'] == 'signed'
+            if mode == 'marker_retired_before_read':
+                deletion.assert_not_called()
+            else:
+                assert marker == (
+                    {'version': 'new'}
+                    if mode == 'newer_marker'
+                    else {'version': 'old'} if mode == 'retire_error' else {}
+                )
+                deletion.assert_called_once()
+    finally:
+        release.set()
+        if enabled and mode not in {'saturated', 'marker_retired_before_read'}:
+            assert await asyncio.to_thread(finished.wait, 5)
+    assert read.call_count == int(enabled and mode != 'saturated')
+    assert discovery.call_count == int(enabled and mode not in {'saturated', 'marker_retired_before_read'})

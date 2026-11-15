@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
 import database.action_items as action_items_db
+
+conversations_db: Any = None
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
@@ -18,9 +20,21 @@ from utils.model_text import format_date, format_instant
 from utils.user_clock import clock_for_uid
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
+from utils.task_intelligence.task_source_validation import validate_task_sources
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def create_action_item(uid: str, data: Dict[str, Any], **kwargs) -> str:
+    """Shared create boundary; callers retain their HTTP/tool error contracts."""
+    validate_task_sources(uid, [data])
+    return action_items_db.create_action_item(uid, data, **kwargs)
+
+
+def create_action_items_batch(uid: str, items: List[Dict[str, Any]]) -> List[str]:
+    validate_task_sources(uid, items)  # Validate the whole batch before any write.
+    return action_items_db.create_action_items_batch(uid, items)
 
 
 def get_action_items_text(
@@ -157,6 +171,14 @@ def create_action_item_text(
     if not description or not description.strip():
         return "Error: Description is required."
 
+    if conversation_id is not None:
+        conv_db = conversations_db
+        if conv_db is None:
+            import database.conversations as conv_db
+        conversation = conv_db.get_conversation(uid, conversation_id)
+        if not conversation or conv_db.is_soft_deleted(conversation):
+            return f"Error: Conversation '{conversation_id}' not found."
+
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
@@ -178,7 +200,7 @@ def create_action_item_text(
         pass
 
     try:
-        action_item_id = action_items_db.create_action_item(uid, action_item_data)
+        action_item_id = create_action_item(uid, action_item_data)
         if not action_item_id:
             return "Error: Failed to create action item."
 
@@ -231,9 +253,9 @@ def update_action_item_text(
     if not action_item_id or not action_item_id.strip():
         return "Error: action_item_id is required."
 
-    # Verify exists and not locked
+    # Verify exists, not soft-deleted, and not locked
     existing = action_items_db.get_action_item(uid, action_item_id)
-    if not existing:
+    if not existing or existing.get('deleted', False):
         return f"Error: Action item '{action_item_id}' not found."
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."

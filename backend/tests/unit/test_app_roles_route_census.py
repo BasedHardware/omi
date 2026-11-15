@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -96,9 +97,15 @@ def _scheduler_backend_paths() -> set[str]:
     for env in jobs['environments'].values():
         for job in env['jobs']:
             uri = str((job.get('target') or {}).get('uri') or '')
-            match = re.match(r'https://backend(?:-[a-z]+)*-[a-z0-9]+-uc\.a\.run\.app(/v\d[^?]*)', uri)
-            if match:
-                paths.add(match.group(1))
+            target = urlsplit(uri)
+            host = target.hostname or ''
+            if (
+                target.scheme == 'https'
+                and host.startswith('backend-')
+                and host.endswith('.run.app')
+                and re.match(r'^/v\d+/', target.path)
+            ):
+                paths.add(target.path)
     return paths
 
 

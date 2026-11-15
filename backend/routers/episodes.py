@@ -1,12 +1,12 @@
 """Episodes API: the live occasion overlay the mobile app lists and opens.
 
 ``enabled`` in every read is the server capability. With ``EPISODES_ENABLED``
-off (or outside the ramp cohort) it is false and the app keeps today's
+off it is false and the app keeps today's
 per-conversation UI; a server that predates this router answers 404, which
 the app treats the same way.
 
-A call is admitted when the uid is in the cohort *and* the request's
-``X-Omi-App-Channel`` is in ``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
+A call is admitted when the request's ``X-Omi-App-Channel`` is in
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
 store, missing or unknown channel answers ``enabled: false`` (404 for writes),
 so that client keeps today's UI. Every admitted call is also the
 client-capability signal: it leaves the sticky ``episodes:client_seen:{uid}``
@@ -16,12 +16,28 @@ and the finalizer require before spending anything.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from models.recording_speakers import (
+    RecordingSpeakerRequest,
+    RecordingSpeakerResponse,
+    RecordingSpeakerConflict,
+    RecordingSpeakerLimit,
+)
 
-from config.episodes import APP_CHANNEL_HEADER, app_channel, client_channel_admitted, episodes_enabled_for
-from models.episode import Episode, EpisodeLiveResponse, EpisodeLookupResponse, EpisodeWrapUpRequest
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
+
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.episodes import client_channel_admitted, episodes_enabled_for
+from utils.episodes import home_read
+from models.episode import (
+    EpisodeListResponse,
+    Episode,
+    EpisodeLiveResponse,
+    EpisodeLookupResponse,
+    EpisodeWrapUpRequest,
+)
 from utils.episodes import client_gate, metrics, service
 from utils.other import endpoints as auth
 
@@ -42,6 +58,30 @@ def _admitted(uid: str, channel: Optional[str]) -> bool:
     return True
 
 
+@router.get('/v1/episodes', response_model=EpisodeListResponse)
+def list_episodes(
+    start: datetime = Query(..., alias='from'),
+    end: datetime = Query(..., alias='to'),
+    limit: int = Query(50, ge=1, le=100),
+    cursor: Optional[str] = Query(None, max_length=200, pattern=r'^[A-Za-z0-9_-]+$'),
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    if not _admitted(uid, channel):
+        return {'enabled': False}
+    if start.tzinfo is None or end.tzinfo is None or start > end:
+        raise HTTPException(status_code=422, detail='Expected an ordered, timezone-aware window')
+    try:
+        rows, next_cursor = home_read.list_episode_window(uid, start, end, limit=limit, cursor=cursor)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {
+        'enabled': True,
+        'episodes': home_read.project_episodes(uid, rows),
+        'next_cursor': next_cursor,
+    }
+
+
 @router.get('/v1/episodes/live', response_model=EpisodeLiveResponse, response_model_exclude_unset=True)
 def get_live_episode(
     uid: str = Depends(auth.get_current_user_uid),
@@ -52,13 +92,13 @@ def get_live_episode(
     episode = service.live_episode(uid)
     response = {
         'enabled': True,
-        'episode': service.to_wire(episode),
+        'episode': home_read.wire_episode(episode),
     }
     # Without a live episode this response is the recovery-navigation answer, so the
     # recap is read fresh; alongside a live episode it comes from the poll cache.
     closed = service.last_closed_episode(uid, fresh=episode is None)
     if closed is not None:
-        response['last_closed_episode'] = service.to_wire(closed)
+        response['last_closed_episode'] = home_read.wire_episode(closed)
     return response
 
 
@@ -70,7 +110,10 @@ def get_episode_for_conversation(
 ):
     if not _admitted(uid, channel):
         return {'enabled': False, 'episode': None}
-    return {'enabled': True, 'episode': service.to_wire(service.episode_for_conversation(uid, conversation_id))}
+    return {
+        'enabled': True,
+        'episode': home_read.project_lookup(uid, service.episode_for_conversation(uid, conversation_id)),
+    }
 
 
 def _require(uid: str, channel: Optional[str]) -> None:
@@ -88,7 +131,12 @@ def get_episode(
     episode = service.episode_by_id(uid, episode_id)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
-    return service.to_wire(episode)
+    projected = home_read.project_episode(uid, episode)
+    if projected is None:
+        raise HTTPException(status_code=404, detail='Episode not found')
+    # Opening the page is the trigger for a late episode's deferred compose.
+    home_read.schedule_opened_compose(uid, episode)
+    return projected
 
 
 @router.post('/v1/episodes/{episode_id}/wrap-up', response_model=Episode)
@@ -102,7 +150,7 @@ def wrap_up_episode(
     episode = service.wrap_up(uid, episode_id, conversation_id=body.conversation_id if body else None)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
-    return service.to_wire(episode)
+    return home_read.wire_episode(episode)
 
 
 @router.post('/v1/episodes/{episode_id}/items/{item_id}/dismiss', response_model=Episode)
@@ -116,4 +164,29 @@ def dismiss_episode_item(
     episode = service.dismiss_item(uid, episode_id, item_id)
     if episode is None:
         raise HTTPException(status_code=404, detail='Episode not found')
-    return service.to_wire(episode)
+    return home_read.wire_episode(episode)
+
+
+@router.patch(
+    '/v1/episodes/{episode_id}/assign-speaker',
+    response_model=RecordingSpeakerResponse,
+    responses={
+        409: {'model': RecordingSpeakerConflict, 'description': 'Recording rename disabled or speaker selection stale'},
+        413: {'model': RecordingSpeakerLimit, 'description': 'Recording exceeds the member or segment limit'},
+    },
+)
+def assign_episode_speaker(
+    episode_id: str,
+    body: RecordingSpeakerRequest,
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    _require(uid, channel)
+    from routers.recording_speakers import edit
+
+    episode = service.episode_by_id(uid, episode_id)
+    if not episode or not episode.get('conversation_ids'):
+        raise HTTPException(status_code=404, detail='Episode not found')
+    anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
+    return edit(uid, anchor, body, background_tasks, episode_id=episode_id)

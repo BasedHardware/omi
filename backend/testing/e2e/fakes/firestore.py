@@ -6,8 +6,9 @@ the same API surface as google.cloud.firestore — collections,
 subcollections, where filters, batch operations, get_all, etc.
 """
 
-from copy import deepcopy
+from copy import copy, deepcopy
 from datetime import datetime, timezone
+from functools import partial
 from typing import Optional
 
 from fake_firestore import MockFirestore
@@ -20,6 +21,8 @@ from fake_firestore.document import (
     get_by_path,
     set_by_path,
 )
+from fake_firestore.query import FakeQuery
+from fake_firestore.transaction import FakeTransaction
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
@@ -27,6 +30,7 @@ _original_document_set = None
 _original_document_delete = None
 _original_snapshot_to_dict = None
 _delete_field_noop_patched = False
+_nonmap_update_patched = False
 
 
 class _DocumentIdAwareDict(dict):
@@ -62,6 +66,18 @@ def _patch_document_id_query_ordering():
         return _DocumentIdAwareDict(data, self.id)
 
     FakeDocumentSnapshot.to_dict = _to_dict
+
+    # fake-firestore applies stable sorts in declaration order, making the LAST
+    # field primary. Firestore's first order_by is primary. #20629's explicit
+    # created_at/document-id cursor reproduced the reversal in the HTTP journey.
+    original_query_stream = FakeQuery.stream
+
+    def _ordered_stream(self, *args, **kwargs):
+        ordered = copy(self)
+        ordered.orders = list(reversed(self.orders))
+        return original_query_stream(ordered, *args, **kwargs)
+
+    FakeQuery.stream = _ordered_stream
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -123,6 +139,31 @@ def _patch_delete_field_missing_key_noop():
     _delete_field_noop_patched = True
 
 
+def _patch_update_nonmap_parents():
+    """Match emulator-proven dotted updates over null/scalar parent fields.
+
+    Proof: tests/integration/test_conversation_terminal_family_firestore.py.
+    fake-firestore only creates absent parents and otherwise attempts to assign
+    into None. Real Firestore replaces a non-map ancestor with a map.
+    """
+    global _nonmap_update_patched
+    if _nonmap_update_patched:
+        return
+
+    def _apply_updates(document: dict, data: dict) -> None:
+        for key, value in data.items():
+            path = key.split('.')
+            parent = document
+            for part in path[:-1]:
+                if not isinstance(parent.get(part), dict):
+                    parent[part] = {}
+                parent = parent[part]
+            parent[path[-1]] = value
+
+    fake_firestore_transformations._apply_updates = _apply_updates
+    _nonmap_update_patched = True
+
+
 def _patch_document_delete_missing_doc_noop():
     """Match Firestore: root deletion preserves children; absent delete succeeds."""
     global _original_document_delete
@@ -155,13 +196,24 @@ def get_mock_firestore() -> MockFirestore:
     return _mock_store
 
 
+def _patch_transaction_create():
+    """Stage real create semantics; fake-firestore's implementation is a no-op."""
+
+    def _create(self, reference, document_data):
+        self._add_write_op(partial(reference.create, deepcopy(document_data)))
+
+    FakeTransaction.create = _create
+
+
 def setup_fake_firestore() -> MockFirestore:
     """Create and register the global MockFirestore singleton."""
     global _mock_store
     _patch_document_merge_preserves_subcollections()
     _patch_delete_field_missing_key_noop()
+    _patch_update_nonmap_parents()
     _patch_document_delete_missing_doc_noop()
     _patch_document_id_query_ordering()
+    _patch_transaction_create()
     _mock_store = MockFirestore()
     return _mock_store
 
@@ -306,6 +358,16 @@ def read_action_items(uid: str) -> list:
     db = get_mock_firestore()
     docs = db.collection("users").document(uid).collection("action_items").stream()
     return [d.to_dict() for d in docs]
+
+
+def clear_partition_routes():
+    """Reset all hermetic routing authorities, including orphan operation documents."""
+    db = get_mock_firestore()
+    collection = 'pinecone_partition_routes'
+    # Deleting only parent snapshots preserves operation descendants in Firestore.
+    # Reset the fake's data and existence indexes together, including missing parents.
+    db._data.pop(collection, None)
+    db._written_docs.difference_update({path for path in db._written_docs if path[0] == collection})
 
 
 def clear_user_data(uid: str):

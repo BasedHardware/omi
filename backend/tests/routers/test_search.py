@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 import database.conversations as conversations_db
 import database.memories as memories_db
 import database.users as users_db
+from database.ports.folders import FolderEntity
 from routers import search as search_router
 from routers import users as users_router
 from utils.daily_summary_search import DAILY_SUMMARY_SEARCH_WINDOW, filter_daily_summaries
@@ -117,9 +118,9 @@ def test_filter_ignores_blank_query_and_malformed_fields():
 # --- overview counts ------------------------------------------------------
 
 FOLDERS = [
-    {'id': 'f-work', 'name': 'Work', 'icon': '💼', 'color': '#3B82F6', 'order': 0},
-    {'id': 'f-personal', 'name': 'Personal', 'icon': '👤', 'color': '#10B981', 'order': 1},
-    {'id': None, 'name': 'Broken'},
+    FolderEntity(id='f-work', name='Work', icon='💼', color='#3B82F6', order=0),
+    FolderEntity(id='f-personal', name='Personal', icon='👤', color='#10B981', order=1),
+    FolderEntity.model_construct(id=None, name='Broken'),
 ]
 
 

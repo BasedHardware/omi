@@ -30,6 +30,22 @@ Uint8List _wav(int dataBytes, {int sampleRate = 16000, int channels = 1, int bit
   return b.toBytes();
 }
 
+class _BrokenStreamFile extends Fake implements File {
+  final File source;
+  _BrokenStreamFile(this.source);
+  @override
+  String get path => source.path;
+  @override
+  Future<Uint8List> readAsBytes() => source.readAsBytes();
+  @override
+  Future<RandomAccessFile> open({FileMode mode = FileMode.read}) => source.open(mode: mode);
+  @override
+  Stream<List<int>> openRead([int? start, int? end]) async* {
+    yield [1, 2];
+    throw const FileSystemException('Synthetic read failure');
+  }
+}
+
 void main() {
   late Directory dir;
 
@@ -41,11 +57,11 @@ void main() {
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
-  File _write(String name, List<int> bytes) => File('${dir.path}/$name')..writeAsBytesSync(bytes);
+  File write(String name, List<int> bytes) => File('${dir.path}/$name')..writeAsBytesSync(bytes);
 
   test('combines valid WAV parts', () async {
-    final a = _write('a.wav', _wav(100));
-    final b = _write('b.wav', _wav(60));
+    final a = write('a.wav', _wav(100));
+    final b = write('b.wav', _wav(60));
 
     final out = await WavCombiner.combineWavFiles([a, b], '${dir.path}/out.wav');
     final bytes = await out.readAsBytes();
@@ -55,9 +71,9 @@ void main() {
   });
 
   test('skips a corrupt part (missing RIFF) and combines the rest', () async {
-    final a = _write('a.wav', _wav(100));
-    final bad = _write('bad.wav', List.filled(200, 7)); // no RIFF header
-    final c = _write('c.wav', _wav(60));
+    final a = write('a.wav', _wav(100));
+    final bad = write('bad.wav', List.filled(200, 7)); // no RIFF header
+    final c = write('c.wav', _wav(60));
 
     final out = await WavCombiner.combineWavFiles([a, bad, c], '${dir.path}/out.wav');
     final bytes = await out.readAsBytes();
@@ -67,9 +83,9 @@ void main() {
   });
 
   test('one valid part among corrupt parts is returned as-is', () async {
-    final bad = _write('bad.wav', List.filled(200, 7));
-    final tooSmall = _write('small.wav', List.filled(10, 3));
-    final good = _write('good.wav', _wav(80));
+    final bad = write('bad.wav', List.filled(200, 7));
+    final tooSmall = write('small.wav', List.filled(10, 3));
+    final good = write('good.wav', _wav(80));
 
     final out = await WavCombiner.combineWavFiles([bad, good, tooSmall], '${dir.path}/out.wav');
     final bytes = await out.readAsBytes();
@@ -77,9 +93,26 @@ void main() {
     expect(bytes.length, 44 + 80);
   });
 
+  test('stream failure preserves previous export and removes partial output', () async {
+    final a = write('a.wav', _wav(4));
+    final b = _BrokenStreamFile(write('b.wav', _wav(4)));
+    final out = write('out.wav', [42]);
+    final before = (await dir.list().map((e) => e.path).toList()).toSet();
+    await expectLater(WavCombiner.combineWavFiles([a, b], out.path), throwsA(isA<FileSystemException>()));
+    expect(await out.readAsBytes(), [42]);
+    expect((await dir.list().map((e) => e.path).toList()).toSet(), before);
+  });
+
+  test('truncated payload is skipped without corrupting the final duration', () async {
+    final bad = write('truncated.wav', _wav(100).sublist(0, 46));
+    final good = write('good.wav', _wav(8));
+    final out = await WavCombiner.combineWavFiles([bad, good], '${dir.path}/out.wav');
+    expect(await out.readAsBytes(), _wav(8));
+  });
+
   test('throws when no part is a valid WAV', () async {
-    final bad1 = _write('b1.wav', List.filled(200, 7));
-    final bad2 = _write('b2.wav', List.filled(10, 3));
+    final bad1 = write('b1.wav', List.filled(200, 7));
+    final bad2 = write('b2.wav', List.filled(10, 3));
 
     expect(
       () => WavCombiner.combineWavFiles([bad1, bad2], '${dir.path}/out.wav'),

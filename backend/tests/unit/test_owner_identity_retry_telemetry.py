@@ -429,6 +429,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             self.chunks = chunks
             self.limit_hit = False
             self.reason = fetch_reason
+            self.cache = {}
 
         def in_budget(self):
             return failure != 'budget'
@@ -437,6 +438,7 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
             reads.append(path)
             if failure == 'download_cap':
                 self.limit_hit = True
+            self.cache[path] = (pcm, fetch_reason)
             return pcm
 
     monkeypatch.setattr(stage, 'AudioChunkReadSession', Session)
@@ -450,6 +452,11 @@ def test_actual_inventory_proof_primary_reason_and_unchanged_io(env, monkeypatch
         result = stage._verified_read_session('u1', conv, files, conv.transcript_segments, placements, float('inf'))
         assert telemetry.resolver_trace().reason == reason
     assert result is None and baseline is None
+    if failure == 'window':
+        # A window with no trusted coordinates now refuses before downloading
+        # unrelated PCM; the closed primary reason remains unchanged.
+        assert reads == [] and baseline_reads == ['fixture']
+        return
     assert reads == baseline_reads
 
 
@@ -553,15 +560,19 @@ def test_first_finalization_pipeline_emits_funnel_without_counting_reprocess(env
     _stub_sync_enrichment(monkeypatch, store)
     # The real lifecycle, processing dispatcher, resolver and persistence path.
     # Only model/provider work is stubbed, as in the existing outcome tests.
-    monkeypatch.setattr(
-        processing,
-        'resolve_speakers_for_processing',
-        (
-            baseline_module.resolve_speakers_for_processing
-            if os.getenv('OMI_OWNER_RETRY_RED') == '1'
-            else stage.resolve_speakers_for_processing
-        ),
+    resolver = (
+        baseline_module.resolve_speakers_for_processing
+        if os.getenv('OMI_OWNER_RETRY_RED') == '1'
+        else stage.resolve_speakers_for_processing
     )
+
+    def resolve_for_processing(uid, conversation, *, on_persist):
+        # Match the processing wrapper's boundary. This audio-less fixture
+        # exercises the identity funnel, without creating final-pass custody.
+        assert callable(on_persist)
+        return resolver(uid, conversation)
+
+    monkeypatch.setattr(processing, 'resolve_speakers_for_processing', resolve_for_processing)
     monkeypatch.setenv('CONVERSATION_SPEAKER_RESOLUTION_ENABLED', 'true')
     segment = _sync_segment(
         text='We agreed to ship the recognition fix today.', is_user=True, end=8.0, scope='sync:keep'

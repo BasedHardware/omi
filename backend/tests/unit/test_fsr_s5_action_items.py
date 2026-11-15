@@ -279,3 +279,24 @@ def test_truncated_filtered_page_remains_uncached_with_lever_on(installed, monke
     assert first['truncated'] and first['has_more']
     assert reads[0] > before
     assert not any(key.startswith('ail:u:') for key in fake.data)
+
+
+def test_page_lever_defaults_to_a_120s_reuse_window_and_keeps_rollbacks(monkeypatch):
+    monkeypatch.setenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', '30')
+    monkeypatch.delenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', raising=False)
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"action_items_page":100}')
+    assert cache.list_cache_ttl_seconds('u') == 30
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"action_items_page":100,"action_items_ttl120":100}')
+    assert cache.list_cache_ttl_seconds('u') == 120
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"action_items_ttl120":100}')
+    assert cache.list_cache_ttl_seconds('u') == 30
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"action_items_page":100,"action_items_ttl120":100}')
+    # Prod deploys ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS=30; the lever must still deliver 120 (Luna r1 P2).
+    monkeypatch.setenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', '30')
+    assert cache.list_cache_ttl_seconds('u') == 120
+    monkeypatch.setenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', '200')
+    assert cache.list_cache_ttl_seconds('u') == 200
+    monkeypatch.setenv('ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS', '0')
+    assert cache.list_cache_ttl_seconds('u') == 0
+    monkeypatch.setenv('ACTION_ITEMS_LIST_CACHE_TTL_SECONDS', '0')
+    assert cache.list_cache_ttl_seconds('u') == 0

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-paywall-omi-pro.png",
+      "platform": "web",
+      "description": "web/paywall page titled and CTA Upgrade to Omi Pro",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

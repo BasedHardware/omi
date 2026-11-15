@@ -88,6 +88,25 @@ reconciliation. Trials retain their separate user votes, generation fences,
 30 admitted outcomes from at least 10 witnesses after 300 seconds for the 5%
 step, and 60 admitted outcomes from at least 20 witnesses after 600 seconds for
 the 25% step; a completed admitted window before the dwell holds at its stage.
+Recovery re-benching uses two tiers of **admitted, non-censored outcomes in
+the current trial window**. Ordinary rejection needs at least 100 outcomes,
+the same CUSUM burst evidence as stage 100, broad failure witnesses, and a
+user failure share above the gate. A fast path for a truly broken provider
+needs at least 20 outcomes, at least 25% attributable failures, and broad
+failure witnesses. One or two timeouts in a tiny trial do not qualify.
+The former 30/60-outcome rate-only rejection is removed. Promotion, dwell and
+bounded trial windows (120/240 outcomes) are unchanged; completing the clean
+5→25→100 ramp clears the consecutive failure history. The default-on
+`STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` switch restores the former rules
+when explicitly set to `false`, `0`, or `off`.
+To retain the chronic-provider disruption budget with the larger recovery
+sample, a guarded re-bench advances two cooldown exponents (instead of one)
+and caps the wait at six hours. After a first full-traffic bench, successive
+failed recovery trials wait 20 minutes, 80 minutes, 320 minutes, then six hours.
+A single false bench still starts its first 5% recovery after five minutes.
+Stage-100 detection/cooldowns are unchanged. The deterministic 17,900-session,
+61%-failure daily replay retains its original bounds: fewer than 100 failed
+sessions including the initial detection allowance and fewer than 200 trials.
 Redis CAS enforces all
 of this fleet-wide. Bench writes are one atomic Lua update — an active account
 quarantine rejects a selection write, same-kind writes keep the longest
@@ -127,6 +146,56 @@ provider errors bench at median 20/13/8 and p95 48/21/8 sessions. At 62 sessions
 per five minutes that is about four minutes at the 40% p95, plus settlement
 and cache delay. The rate must be representative admitted votes, not one
 client's repeated reconnects. These are synthetic bounds, not prod acceptance.
+
+## Audited operator cost-gate reset
+
+After a confirmed false bench, an authorized operator may reset **one registered
+target** using the deployed backend image and its existing runtime environment.
+Complete the rolling deployment first so old pods cannot reconcile pre-fix local
+fault evidence. This action writes cost-routing state, not user/account data.
+It does not change account quarantines, endpoint circuits, admission capacity,
+language capabilities, or allocation. No runtime config change is required;
+leave `STT_ROUTING_RECOVERY_SAMPLE_GUARD_ENABLED` unset or `true`.
+
+Run from `backend/` in that environment, first without `--apply`:
+
+```bash
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z
+python scripts/reset_live_stt_cost_gate.py --target parakeet-window --environment prod --reason sttbench-20261027-06z --apply
+```
+
+The explicit environment must match `OMI_ENV_STAGE`. Both commands print only
+the target, environment, change identifier, stages and generations by language.
+Apply uses one Redis WATCH/MULTI transaction for `all` and every supported
+language: clears evidence/strikes, sets stage 100 and advances each generation.
+Generations advance into a new Redis-time reset epoch to also supersede
+unreconciled pod-local fault generations. Every dial captures that epoch before
+awaiting the handshake; connect failures may follow ordinary gate changes but
+cannot cross an operator reset. A separate content-free generation floor
+persists under the target identity, so expiry of the normal 900-second healthy
+evidence key cannot re-admit a long-lived pre-reset session's votes. Refresh
+and cold writers seed missing evidence from that floor. The reset epoch carries
+no user/fairness data; the normal fairness-data TTL remains unchanged.
+A competing health update retries the entire reset, at most five times.
+The same transaction writes a content-free audit receipt under the target's
+endpoint/account namespace for 30 days; stdout and the warning log contain
+the receipt and its `audit_id`. Retain the output in the operator's train record.
+This is a one-time reset; subsequent real failures can immediately bench again.
+
+After the next shared refresh (normally five seconds), verify stage 100 on every
+fresh pod and check language state, timeout counters, transcript success and
+first-text latency. A transport interruption after submission can make the
+command's result uncertain: use the pre-submit log's `audit_id` to read that
+target's `operator-audit:<audit_id>` receipt through the same runtime namespace
+and inspect fresh stage telemetry before retrying. A repeated apply advances generations
+again, so do not run it as a recurring job.
+
+To reverse the release, use the same command with `--stage 0`, a new reason and
+`--apply`: it benches the target for five minutes and then resumes normal staged
+recovery. Removing the command or changing the guard switch does not undo a
+committed reset. A malformed scope aborts the entire transaction, preserving all
+existing state. Healthy state retains the normal 900-second idle TTL; a reversed
+bench persists until normal recovery advances it.
 
 ## Minimum shadow go/no-go (normally 60–120 minutes)
 
@@ -399,13 +468,20 @@ through dev: dev shares production Redis/Firestore.
 
 ## Static-routing cohort ramp (stage 1)
 
-This sequence supersedes the historical router-on expansion above. Production
-listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=90`: the
-complementary approximately 10% of managed accounts use static selection. Keep
+This sequence supersedes the historical router-on expansion above. Since
+2026-10-24 (T3b, two-lane lead) the static-cohort expansion is **rolled
+back**: production listen serves `STT_ROUTING_MODE=on`,
+`STT_ROUTING_ON_PERCENT=100` (full cost-router admission; no static cohort).
+The abort step for a router-arm regression is back to `on/90` (the
+approximately 10% static cohort this section describes), with the same image,
+through the normal listen configuration workflow. Keep
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=100`, `PARAKEET_WINDOW_MAX_SESSIONS=16`,
 `STT_FAILOVER_RECOVERY_ENABLED=true`, and `STT_NO_TEXT_RESCUE_ENABLED=true`.
 There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
 BYOK, and multi-channel sessions remain outside the managed cohort.
+
+The stage table below is the historical procedure record for the expansion
+that stage 1 began at `STT_ROUTING_ON_PERCENT=90`; stages 2-4 are not planned.
 
 Ship the instrumented binary with `STT_ROUTING_MODE=on` and
 `STT_ROUTING_ON_PERCENT=100` first. Let that image serve on/100 for at least
@@ -474,10 +550,12 @@ HOLDs, not automatic serving rollback. Watch the whole fleet and each serving
 zone as well as the two arms. LB 101 share has a broad 403/429-inclusive request
 denominator and is supporting evidence, not an exact session-open success SLI.
 
-Rollback for this **static expansion** is `STT_ROUTING_MODE=on` and
+The rollback direction above (on/90 → on/100) was executed on 2026-10-24
+(T3b): prod listen now serves `STT_ROUTING_MODE=on` and
 `STT_ROUTING_ON_PERCENT=100`, with the same image, through the normal listen
-configuration workflow. Keep chart, prod overlay and generated runtime manifest
-aligned. This direction differs from aborting the historical router-on ramp.
+configuration workflow. Chart, prod overlay and generated runtime manifest
+stay aligned. From on/100 the remaining abort step is back to on/90; this
+differs from aborting the historical router-on ramp.
 Do not set global mode off for a partial ramp: it ignores the on percentage and
 also suppresses shared health evidence. Keeping mode on preserves health
 collection even in the complementary static cohort; a later global evidence-off

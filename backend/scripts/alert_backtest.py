@@ -472,6 +472,12 @@ def lint_rule(rule, inventory):
             # Declared metrics let a source-backed exporter add alert contracts
             # before deployment without pretending its series were observed.
             known_metrics = set(inventory['metrics']) | set(inventory.get('declared_metrics', []))
+            # GMP can expose a histogram that the in-cluster exporter never
+            # imports. Keep that observed evidence scoped to its datasource;
+            # it must not admit the same name on a different Prometheus.
+            scoped = inventory.get('datasource_metrics', {}).get(node.get('datasourceUid'), {})
+            known_metrics.update(scoped.get('metrics', []))
+            known_metrics.update(scoped.get('declared_metrics', []))
             missing = metric_names(model['expr']) - known_metrics
             if missing:
                 errors.append('missing metrics: ' + ', '.join(sorted(missing)))
@@ -580,6 +586,7 @@ def main():
                     declared_metrics=old.get('declared_metrics', []),
                     legacy_debt=old.get('legacy_debt', {}),
                     admission_holds=old.get('admission_holds', {}),
+                    datasource_metrics=old.get('datasource_metrics', {}),
                 ),
                 indent=2,
             )

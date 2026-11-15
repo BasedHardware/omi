@@ -20,7 +20,7 @@ from testing.pipeline_sim.models import (
     SequencerModel,
 )
 from testing.pipeline_sim.scorer import TERMINAL_UNRECOVERED_SPEECH_LIMIT, percentile, verdict
-from testing.pipeline_sim.sim import SimConfig, simulate
+from testing.pipeline_sim.sim import SimConfig, Simulation, simulate
 from testing.pipeline_sim.store import CustomerData, SimStore
 from testing.pipeline_sim.stt import EMPTY, TIMEOUT, WORDS, ExhaustionWindow, FakeSTT, STTProfile
 from testing.pipeline_sim.workload import WorkloadSpec, generate
@@ -53,6 +53,16 @@ def test_virtual_loop_reports_a_modelling_deadlock():
 
     with pytest.raises(SimulationStalled):
         run_virtual(VirtualClock(), main)
+
+
+def test_arrival_process_failure_cannot_be_scored_as_a_partial_clean_gate(monkeypatch):
+    async def broken_arrivals(self):
+        await asyncio.sleep(0)
+        raise ValueError('synthetic admission failure')
+
+    monkeypatch.setattr(Simulation, '_arrivals', broken_arrivals)
+    with pytest.raises(ValueError, match='synthetic admission failure'):
+        simulate(SimConfig(workload=WorkloadSpec(owners=0), horizon_seconds=60))
 
 
 def _item(segment, owner='sim-owner-a', capture=1.0, conversation=None):

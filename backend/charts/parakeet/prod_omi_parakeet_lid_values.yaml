@@ -1,0 +1,69 @@
+# Independent release: prod-omi-parakeet-lid. Use chart defaults + this file only,
+# never the streaming prod values or prod_omi_parakeet_off_values.yaml.
+fullnameOverride: prod-omi-parakeet-lid
+# CPU-only language ID is independent of the retired streaming GPU release.
+fleetRetired: false
+image:
+  repository: gcr.io/based-hardware/parakeet
+  tag: "" # Rollout lead supplies the image built from this change.
+serviceAccount:
+  automount: false
+service:
+  type: ClusterIP
+  port: 8080
+  backendConfigName: parakeet-lid-backend-config
+nodeSelector:
+  # Existing CPU pool labels from backend-listen/prod_omi_backend_listen_values.yaml.
+  service: backend-listen
+  env: prod
+  type: high-cpu
+resources:
+  requests: {cpu: "2", memory: 4Gi}
+  limits: {cpu: "2", memory: 4Gi}
+env:
+  - {name: PARAKEET_DEVICE, value: cpu}
+  - {name: PARAKEET_LID_ONLY, value: "true"}
+  - {name: PARAKEET_LID_MODEL, value: whisper-base}
+  - {name: NVIDIA_VISIBLE_DEVICES, value: void}
+  - {name: OMP_NUM_THREADS, value: "2"}
+  - {name: MKL_NUM_THREADS, value: "2"}
+startupProbe:
+  httpGet: {path: /health, port: http}
+  periodSeconds: 10
+  failureThreshold: 90
+readinessProbe:
+  httpGet: {path: /health, port: http}
+  periodSeconds: 5
+  failureThreshold: 1
+livenessProbe:
+  httpGet: {path: /health, port: http}
+  periodSeconds: 10
+  failureThreshold: 3
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 16
+  targetCPUUtilizationPercentage: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - {type: Pods, value: 4, periodSeconds: 15}
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - {type: Pods, value: 1, periodSeconds: 60}
+strategy:
+  type: RollingUpdate
+  rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    labels: {release: prod-omi-kube-prometheus-stack}
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway
+  pathPrefix: /lid
+  timeoutSeconds: 6
+  connectionDrainingSeconds: 30

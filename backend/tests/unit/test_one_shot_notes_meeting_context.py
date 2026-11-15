@@ -55,7 +55,7 @@ class _CaptureModel:
         return SimpleNamespace(content=_NOTE)
 
 
-def _evidence_json(monkeypatch, **extra) -> dict:
+def _evidence_json(monkeypatch, prefix_fields=None, **extra) -> dict:
     from utils.llm import conversation_processing
 
     model = _CaptureModel()
@@ -66,6 +66,7 @@ def _evidence_json(monkeypatch, **extra) -> dict:
             context='FULL TRANSCRIPT\nhello there',
             shaped_context='hello there',
             has_usable_content=True,
+            **(prefix_fields or {}),
         ),
         started_at=_STARTED,
         language_code='en',
@@ -104,3 +105,35 @@ def test_no_meeting_context_means_no_key(monkeypatch):
 def test_empty_meeting_context_means_no_key(monkeypatch):
     packet = _evidence_json(monkeypatch, meeting_context='')
     assert 'meeting_context' not in packet
+
+
+@pytest.mark.parametrize('packet_mode', ['off', 'serve'])
+@pytest.mark.parametrize('agent_path', ['disabled', 'fallback', 'enriched_fallback'])
+def test_one_shot_receives_explicit_screen_binding(monkeypatch, packet_mode, agent_path):
+    from utils.llm import conversation_processing
+
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', packet_mode)
+    if agent_path == 'disabled':
+        monkeypatch.setenv('CONVERSATION_NOTES_AGENT_ENABLED', 'false')
+    else:
+
+        def fallback(**kwargs):
+            if agent_path == 'enriched_fallback':
+                from utils.llm.notes_identity import NotesIdentity
+
+                kwargs['kwargs']['notes_identity'] = NotesIdentity(screen_bindings=(('c1', 'Robert Ream'),))
+            return None
+
+        monkeypatch.setattr(conversation_processing, 'agentic_notes_payload', fallback)
+    packet = _evidence_json(
+        monkeypatch,
+        prefix_fields={
+            'speaker_names': (('c0', 'David Zhang'), ('c1', None)),
+            'account_owner_name': 'David Zhang',
+            'owner_call_speaker': 'c0',
+            'call_tile_names': () if agent_path == 'enriched_fallback' else ('Robert Ream',),
+        },
+    )
+    assert [(row['speaker'], row['name'], row['evidence_kind']) for row in packet['screen_speaker_bindings']] == [
+        ('c1', 'Robert Ream', 'screen')
+    ]

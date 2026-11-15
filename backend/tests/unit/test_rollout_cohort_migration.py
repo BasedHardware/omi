@@ -48,12 +48,12 @@ def test_live_dry_run_reads_sources_but_never_firestore_or_uids(tier, capsys, en
     factory.assert_not_called()
     output = capsys.readouterr().out
     assert 'private-one' not in output and 'private-two' not in output
-    assert len(output.splitlines()) == len(migration.COHORT_ENVS)
+    assert len(output.splitlines()) == len(migration.MIGRATABLE)
     assert all('writes=0' in line for line in output.splitlines())
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-@pytest.mark.parametrize('name', sorted(migration.COHORT_ENVS))
+@pytest.mark.parametrize('name', sorted(migration.MIGRATABLE))
 def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, environment, name):
     desired, _ = migration.inventory(sources())
 
@@ -77,6 +77,83 @@ def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, e
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('member_count', [0, migration.LIMIT, migration.LIMIT + 1])
+def test_seeded_control_documents_are_validated_separately_from_member_inventory(environment, member_count):
+    client = MagicMock()
+    ramp = {'schema_version': 1, 'revision': 1, 'envs': {environment: {'percents': {'batch-pipeline': 0}}}}
+    rows = [
+        SimpleNamespace(id='_ramp', to_dict=lambda: ramp),
+        SimpleNamespace(
+            id=migration.STT_CAP_DOCUMENT,
+            to_dict=lambda: {'environment': environment, 'tokens': 'pct:5'},
+        ),
+        SimpleNamespace(
+            id=migration.HELD_CONTENT_DOCUMENT,
+            to_dict=lambda: {'environment': environment, 'tokens': ''},
+        ),
+    ]
+    rows.extend(
+        SimpleNamespace(id=f'synthetic-{i}', to_dict=lambda: {'cohorts': {environment: {'batch-pipeline': True}}})
+        for i in range(member_count)
+    )
+    client.collection.return_value.limit.return_value.stream.return_value = rows
+    if member_count > migration.LIMIT:
+        with pytest.raises(ValueError, match='exceeds migration bound'):
+            migration.validate_stored_documents(client, environment)
+    else:
+        migration.validate_stored_documents(client, environment)
+    client.collection.return_value.limit.assert_called_once_with(migration.LIMIT + 4)
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('document_id', [migration.STT_CAP_DOCUMENT, migration.HELD_CONTENT_DOCUMENT])
+@pytest.mark.parametrize(
+    'payload',
+    [
+        None,
+        {},
+        {'environment': 'prod'},
+        {'environment': 'staging', 'tokens': ''},
+        {'environment': 'prod', 'tokens': 'bad'},
+    ],
+)
+def test_malformed_stored_cohort_control_documents_block_seed_validation(environment, document_id, payload):
+    client = MagicMock()
+    client.collection.return_value.limit.return_value.stream.return_value = [
+        SimpleNamespace(id=document_id, to_dict=lambda: payload)
+    ]
+    with pytest.raises(ValueError, match='malformed stored cohort control document'):
+        migration.validate_stored_documents(client, environment)
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize(('target', 'stored'), [('prod', 'dev'), ('dev', 'prod')])
+@pytest.mark.parametrize('document_id', [migration.STT_CAP_DOCUMENT, migration.HELD_CONTENT_DOCUMENT])
+def test_control_document_environment_must_match_migration_target(target, stored, document_id):
+    client = MagicMock()
+    client.collection.return_value.limit.return_value.stream.return_value = [
+        SimpleNamespace(id=document_id, to_dict=lambda: {'environment': stored, 'tokens': 'pct:5'})
+    ]
+    with pytest.raises(ValueError, match='malformed stored cohort control document'):
+        migration.validate_stored_documents(client, target)
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'payload', [{}, {'schema_version': 1, 'revision': 1, 'envs': {'prod': {'percents': {'batch-pipeline': 101}}}}]
+)
+def test_malformed_ramp_does_not_bypass_seed_validation(payload):
+    client = MagicMock()
+    client.collection.return_value.limit.return_value.stream.return_value = [
+        SimpleNamespace(id='_ramp', to_dict=lambda: payload)
+    ]
+    with pytest.raises(ValueError):
+        migration.validate_stored_documents(client, 'prod')
+    client.batch.assert_not_called()
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_seed_atomic_leaf_merge_and_rerun_is_idempotent(monkeypatch, environment):
     monkeypatch.setattr(migration, 'read_stored', lambda *_: frozenset())
     factory = MagicMock()
@@ -90,7 +167,7 @@ def test_seed_atomic_leaf_merge_and_rerun_is_idempotent(monkeypatch, environment
         assert set(call.args[1]['cohorts']) == {environment}
         flags = call.args[1]['cohorts'][environment]
         assert 'messaging-telegram' not in flags and 'batch-pipeline-shadow' not in flags
-        assert set(flags) == set(migration.COHORT_ENVS) - {'messaging-telegram', 'batch-pipeline-shadow'}
+        assert set(flags) == set(migration.MIGRATABLE) - {'messaging-telegram', 'batch-pipeline-shadow'}
         assert set(flags.values()) == {True}
     batch.commit.assert_called_once_with(timeout=15.0, retry=None)
 
@@ -175,6 +252,30 @@ def test_live_cli_reads_serving_revision_and_installed_helm_values():
     assert all('--all' in call and 'explicit-context' in call for call in calls if call[0] == 'helm')
 
 
+def test_live_cli_reads_the_ingress_container_beside_a_sidecar():
+    app = {
+        'name': 'backend-1',
+        'ports': [{'containerPort': 8080}],
+        'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'private-one'}],
+    }
+    collector = {'name': 'collector', 'env': [{'name': 'DREAM_AGENT_UID_ALLOWLIST', 'value': 'other'}]}
+
+    def command(argv, containers):
+        if argv[0] == 'helm':
+            return {'env': []}
+        if argv[2] == 'services':
+            return {'status': {'traffic': [{'percent': 100, 'revisionName': 'serving-revision'}]}}
+        return {'spec': {'containers': containers}}
+
+    result = migration.read_live('prod', 'ctx', command=lambda argv: command(argv, [collector, app]))
+    expected = {'DREAM_AGENT_UID_ALLOWLIST': 'private-one'}
+    assert all(result[f'cloud-run/{host}'] == expected for host in migration.CLOUD_RUN_HOSTS)
+    # Two port-bearing containers (or none) stay ambiguous rather than guessing.
+    for containers in ([app, dict(collector, ports=[{'containerPort': 4317}])], [collector, dict(app, ports=[])]):
+        with pytest.raises(ValueError, match='ambiguous serving container'):
+            migration.read_live('prod', 'ctx', command=lambda argv, c=containers: command(argv, c))
+
+
 def test_live_cli_requires_tier_and_sanitizes_command_errors(tier, capsys):
     reader = MagicMock(side_effect=RuntimeError('private-one credential payload'))
     argv = ['--seed-live', '--project', 'based-hardware', '--environment', 'prod', '--kube-context', 'explicit-context']
@@ -200,7 +301,7 @@ def test_missing_host_binding_is_not_silently_omitted_from_seed():
 @pytest.mark.parametrize('payload', [None, {}, {'cohorts': {'dev': {'unrelated': 'invalid'}}}])
 def test_malformed_unrelated_fields_block_seed_and_verification(payload):
     factory = MagicMock()
-    row = SimpleNamespace(to_dict=lambda: payload)
+    row = SimpleNamespace(id='synthetic-owner', to_dict=lambda: payload)
     factory.return_value.collection.return_value.limit.return_value.stream.return_value = [row]
     with pytest.raises(ValueError, match='malformed stored'):
         migration.migrate(args(apply=True), client_factory=factory, live_reader=lambda *_: sources())

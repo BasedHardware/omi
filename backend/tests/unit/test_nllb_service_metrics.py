@@ -167,10 +167,53 @@ class TestSlowBurnAlertVolumeGate(unittest.TestCase):
 
         assert "NLLBSLOBurnRateSlow" in content, "Slow burn alert should exist"
         slow_burn_start = content.index("NLLBSLOBurnRateSlow")
-        slow_burn_section = content[slow_burn_start : slow_burn_start + 500]
+        next_alert = content.find("- alert:", slow_burn_start + 1)
+        slow_burn_section = content[slow_burn_start : next_alert if next_alert != -1 else len(content)]
         assert (
-            "sum(rate(nllb_requests_total[30m])) > 0.1" in slow_burn_section
+            'sum(rate(nllb_requests_total{status!="unsupported_target",status!="unsupported_source"}[30m])) > 0.1'
+            in slow_burn_section
         ), "Slow burn alert must have volume gate to prevent noisy alerts during low traffic"
+
+
+class TestSloRulesExcludeClientInputRejections(unittest.TestCase):
+    """unsupported_target/unsupported_source are client-input validation
+    rejections (400), not service errors: they must not burn the NLLB error
+    budget (2026-10-27: lt/tl live-translation targets fired the slow-burn
+    alert on an otherwise healthy service)."""
+
+    ERROR_NUMERATOR = 'rate(nllb_requests_total{status!="ok",status!="unsupported_target",status!="unsupported_source"}'
+    ELIGIBLE_DENOMINATOR = 'rate(nllb_requests_total{status!="unsupported_target",status!="unsupported_source"}'
+
+    def setUp(self):
+        rule_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'charts', 'nllb-translation', 'templates', 'prometheusrule.yaml'
+        )
+        with open(rule_path) as f:
+            self.content = f.read()
+
+    def test_error_ratio_rules_exclude_unsupported_rejections(self):
+        for alert in ("NLLBErrorRateHigh", "NLLBSLOBurnRateFast", "NLLBSLOBurnRateSlow"):
+            start = self.content.index(f"- alert: {alert}")
+            end = (
+                self.content.index("- alert:", start + 1)
+                if "- alert:" in self.content[start + 1 :]
+                else len(self.content)
+            )
+            section = self.content[start:end]
+            assert self.ERROR_NUMERATOR in section, f"{alert} must exclude client-input rejections from its numerator"
+            assert self.ELIGIBLE_DENOMINATOR in section, f"{alert} must count only service-eligible requests"
+            assert 'nllb_requests_total{status!="ok"}' not in section, f"{alert} must not use the raw error selector"
+
+
+class TestClientTargetSetMirrorsServiceTable(unittest.TestCase):
+    """The listen coordinator skips targets outside NLLB_SUPPORTED_TARGET_LANGUAGES;
+    the set must mirror the service's BCP47 table or valid targets get skipped."""
+
+    def test_supported_target_languages_match_service_bcp47_bases(self):
+        from utils.translation_language import NLLB_SUPPORTED_TARGET_LANGUAGES
+
+        service_bases = {code.split('-')[0] for code in _nllb_main.BCP47_TO_NLLB}
+        assert NLLB_SUPPORTED_TARGET_LANGUAGES == service_bases
 
 
 class TestAdmissionControl(unittest.TestCase):

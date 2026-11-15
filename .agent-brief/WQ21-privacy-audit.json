@@ -1,0 +1,31 @@
+{
+  "status": "BLOCKED_NO_IMPLEMENTATION",
+  "privacy_document_reads": {
+    "wq12_off_20_checks_one_transaction": 100,
+    "wq12_on_20_checks_one_transaction": 5,
+    "wq12_on_20_checks_20_transactions": 100
+  },
+  "unchanged_generation_counterexamples": [
+    {
+      "writer": "speaker_auto_enroll.update_privacy",
+      "generation_before": 7,
+      "generation_after": 7,
+      "denial": "recording_privacy_changed"
+    },
+    {
+      "writer": "speaker_auto_enroll.retract_conversation",
+      "generation_before": 7,
+      "generation_after": 7,
+      "denial": "conversation_deleted"
+    },
+    {
+      "writer": "conversation_tombstones.record_deletion",
+      "generation_before": 7,
+      "generation_after": 7,
+      "denial": "conversation_deleted"
+    }
+  ],
+  "implemented_read_savings": 0,
+  "new_lever_registered": false,
+  "live_service_acceptance": "NOT_RUN"
+}

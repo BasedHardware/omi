@@ -30,6 +30,26 @@ from utils.speakers.display import sanitize_speaker_text
 
 ITEM_KINDS = frozenset({'task', 'reminder'})
 _SPACE = re.compile(r'\s+')
+_PLACEHOLDER_HEADING = re.compile(r'^\s*(new|unknown)\b.*\bmoment\b', re.I)
+_SENTENCE_END = re.compile(r'[.!?。！？](?=\s|$)')
+
+
+def is_placeholder_heading(heading: str) -> bool:
+    return bool(_PLACEHOLDER_HEADING.match(heading))
+
+
+def trim_text(text: str, limit: int) -> str:
+    """Fit text to a limit without ending mid-word: a whole sentence if most of one fits, else whole words."""
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    ends = [match.end() for match in _SENTENCE_END.finditer(head)]
+    if ends and ends[-1] > limit // 2:
+        return head[: ends[-1]]
+    head = text[: limit - 1]
+    # An unspaced script has no word to protect, so it cuts at the limit.
+    cut = head.rfind(' ') if text[limit - 1] != ' ' else limit - 1
+    return f'{(head[:cut] if cut > limit // 2 else head).rstrip()}…'
 
 
 def clean_text(value: Any, limit: int) -> str:
@@ -37,7 +57,7 @@ def clean_text(value: Any, limit: int) -> str:
     if not isinstance(value, str):
         return ''
     text = _SPACE.sub(' ', sanitize_speaker_text(value)).strip().strip('•-* ').strip()
-    return text[:limit].rstrip()
+    return trim_text(text, limit)
 
 
 def _clean_list(values: Any, *, limit: int, chars: int) -> list[str]:

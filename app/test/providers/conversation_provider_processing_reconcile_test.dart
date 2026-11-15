@@ -1,18 +1,384 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
+import 'package:omi/pages/conversations/home_rows.dart';
 
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  for (final status in ConversationStatus.values) {
+    test('optimistic target reconciles to authoritative ${status.name}', () async {
+      final real = _conversation('target', status: status);
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        conversationLifecycleFetcher: (id) async {
+          expect(id, 'target');
+          return (item: real, ok: true);
+        },
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      provider.addProcessingConversation(
+        OptimisticProcessingPlaceholder.conversation(targetConversationId: 'target'),
+      );
+      await provider.forceRefreshConversations();
+      if (status == ConversationStatus.in_progress) {
+        // The person just ended this conversation and the Process Now request has not landed yet, so the
+        // server still reads it as in progress. The placeholder holds the Home row; its timeout still expires it.
+        expect(provider.processingConversations.map((row) => row.id), ['0']);
+        return;
+      }
+      expect(provider.processingConversations.any((row) => row.id == '0'), isFalse);
+      final active = status == ConversationStatus.processing || status == ConversationStatus.merging;
+      expect(provider.processingConversations.map((row) => row.id), active ? ['target'] : isEmpty);
+      if (status == ConversationStatus.completed) {
+        expect(provider.conversations.map((row) => row.id), contains('target'));
+      }
+    });
+  }
+
+  for (final status in [ConversationStatus.processing, ConversationStatus.merging]) {
+    for (final homeStep in <String?>['failed', null]) {
+      test('${status.name} probe with home_step=$homeStep honors Home failure', () async {
+        final provider = ConversationProvider(
+          conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+          conversationLifecycleFetcher: (_) async =>
+              (item: _conversation('c1', status: status, homeStep: homeStep), ok: true),
+          isSignedIn: () => true,
+        );
+        addTearDown(provider.dispose);
+        provider.addProcessingConversation(_conversation('c1', status: status));
+
+        await provider.forceRefreshConversations();
+
+        expect(provider.processingConversations.map((row) => row.id), homeStep == 'failed' ? isEmpty : ['c1']);
+      });
+    }
+
+    test('${status.name} failed page is not admitted and websocket replay cannot revive it', () async {
+      final failed = _conversation('c1', status: status, homeStep: 'failed');
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: [failed], ok: true),
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+
+      await provider.fetchConversations();
+      expect(provider.processingConversations, isEmpty);
+      expect(provider.conversations.single.homeStep, 'failed');
+      provider.addProcessingConversation(_conversation('c1', status: status));
+      expect(provider.processingConversations, isEmpty);
+
+      // A detail refresh still carries stored status and may omit home_step.
+      provider.upsertConversation(_conversation('c1', status: status, title: 'Fresh detail'));
+      expect(provider.conversations.single.structured.title, 'Fresh detail');
+      expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+      expect(
+          buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
+              .single
+              .isProcessing,
+          isFalse);
+    });
+
+    test('${status.name} failed page wins over missing or inconclusive detail projection', () async {
+      for (final probeOk in [true, false]) {
+        final failed = _conversation('c1', status: status, homeStep: 'failed');
+        final provider = ConversationProvider(
+          conversationListFetcher: () async => (items: [failed], ok: true),
+          conversationLifecycleFetcher: (_) async => (item: _conversation('c1', status: status), ok: probeOk),
+          isSignedIn: () => true,
+        );
+        addTearDown(provider.dispose);
+        provider.addProcessingConversation(_conversation('c1', status: status));
+        // A previous detail upsert must not leave a normal Home row behind.
+        provider.upsertConversation(_conversation('c1', status: status));
+
+        await provider.forceRefreshConversations();
+
+        expect(provider.processingConversations, isEmpty);
+        expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+        expect(
+            buildHomeRows(provider.conversations, const [], enabled: false, groupAwaitingTranscript: true)
+                .single
+                .isProcessing,
+            isFalse);
+        provider.updateConversationInSortedList(_conversation('c1', status: status));
+        expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+      }
+    });
+  }
+
+  for (final ok in [true, false]) {
+    test('cache restore keeps known failure when initial fetch ok=$ok', () async {
+      final cached = _conversation('c1', status: ConversationStatus.processing);
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: ok),
+        conversationCacheLoader: () async => [cached],
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      provider
+          .addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
+      provider.conversations.clear(); // Simulate a cold cache fallback after the projection was learned.
+      await provider.fetchConversations();
+      expect(provider.conversations.single.homeStep, 'failed');
+      expect(provider.processingConversations, isEmpty);
+      expect(
+          buildHomeRows(provider.conversations, [], enabled: false, groupAwaitingTranscript: true).single.isProcessing,
+          isFalse);
+    });
+  }
+
+  test('cache restore respects its own failed projection without a remembered id', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationCacheLoader: () async =>
+          [_conversation('cached', status: ConversationStatus.processing, homeStep: 'failed')],
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.fetchConversations();
+    expect(homeStepOf(provider.conversations.single), HomeStep.failed);
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  test('failed target removes an optimistic placeholder', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed')], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.processing), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
+    await provider.fetchConversations();
+    expect(provider.processingConversations, isEmpty);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  for (final nextStep in <String?>['writing_notes', null]) {
+    test('fresh page home_step=$nextStep clears a previous Home failure', () async {
+      var page = _conversation('c1', status: ConversationStatus.processing, homeStep: 'failed');
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: [page], ok: true),
+        isSignedIn: () => true,
+      );
+      addTearDown(provider.dispose);
+      await provider.fetchConversations();
+      page = _conversation('c1', status: ConversationStatus.processing, homeStep: nextStep);
+      await provider.forceRefreshConversations();
+      expect(provider.processingConversations.map((row) => row.id), ['c1']);
+    });
+  }
+
+  test('stale page cannot erase a websocket Home failure received during refresh', () async {
+    final probe = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing)], ok: true),
+      conversationLifecycleFetcher: (_) => probe.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+    final refresh = provider.forceRefreshConversations();
+    await Future<void>.delayed(Duration.zero);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
+    probe.complete((item: _conversation('c1', status: ConversationStatus.processing), ok: true));
+    await refresh;
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  test('a failed row on a later page clears tracking and fences replay', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (
+        items: List.generate(50, (i) => _conversation('page-$i', status: ConversationStatus.completed)),
+        ok: true,
+      ),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.fetchConversations();
+    provider.addProcessingConversation(_conversation('later', status: ConversationStatus.processing));
+    provider.conversationPageFetcherOverride = () async => (
+          items: [_conversation('later', status: ConversationStatus.processing, homeStep: 'failed')],
+          ok: true,
+          truncated: false,
+        );
+
+    await provider.getMoreConversationsFromServer();
+
+    expect(provider.processingConversations, isEmpty);
+    provider.addProcessingConversation(_conversation('later', status: ConversationStatus.processing));
+    expect(provider.processingConversations, isEmpty);
+    expect(homeStepOf(provider.conversations.firstWhere((row) => row.id == 'later')), HomeStep.failed);
+  });
+
+  test('carrying Home failure preserves fresh detail fields and deletion', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async =>
+          (items: [_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed')], ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.fetchConversations();
+    final detail = _conversation('c1', status: ConversationStatus.processing, title: 'Fresh', starred: true)
+      ..isNew = false
+      ..transcriptCarried = true;
+    provider.upsertConversation(detail);
+    final projected = provider.conversations.single;
+    expect(projected.homeStep, 'failed');
+    expect(projected.structured, same(detail.structured));
+    expect(projected.starred, isTrue);
+    expect(projected.isNew, isFalse);
+    expect(projected.transcriptCarried, isTrue);
+    expect(detail.homeStep, isNull);
+
+    provider.updateConversationInSortedList(_conversation('c1', status: ConversationStatus.processing, deleted: true));
+    expect(provider.conversations, isEmpty);
+  });
+
+  test('explicit failed websocket row drops tracking and session clear forgets the projection', () {
+    final provider = ConversationProvider(isSignedIn: () => true);
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing, homeStep: 'failed'));
+    expect(provider.processingConversations, isEmpty);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+    expect(provider.processingConversations, isEmpty);
+    provider.clearUserData();
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+    expect(provider.processingConversations.map((row) => row.id), ['c1']);
+  });
+
+  testWidgets('unknown optimistic row expires offline without refresh', (tester) async {
+    final provider = ConversationProvider(isSignedIn: () => false);
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump(OptimisticProcessingPlaceholder.timeout - const Duration(seconds: 1));
+    expect(provider.processingConversations.map((row) => row.id), ['0']);
+    await tester.pump(const Duration(seconds: 1));
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  testWidgets('failed detail probe cannot pin the optimistic row past its deadline', (tester) async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async => (item: null, ok: false),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'target'));
+    await provider.forceRefreshConversations();
+    expect(provider.processingConversations, hasLength(1));
+    await tester.pump(OptimisticProcessingPlaceholder.timeout);
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  testWidgets('new placeholder owns its deadline and clear cancels its timers', (tester) async {
+    final provider = ConversationProvider(isSignedIn: () => false);
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump(const Duration(minutes: 1));
+    final replacement = OptimisticProcessingPlaceholder.conversation();
+    provider.addProcessingConversation(replacement);
+    await tester.pump(const Duration(minutes: 1));
+    expect(provider.processingConversations.single, same(replacement));
+    provider.clearUserData();
+    await tester.pump(OptimisticProcessingPlaceholder.timeout);
+    expect(provider.processingConversations, isEmpty);
+  });
+
+  test('in-flight probe cannot remove a newer optimistic attempt', () async {
+    final response = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) => response.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'old'));
+    final refresh = provider.forceRefreshConversations();
+    await Future<void>.delayed(Duration.zero);
+    final replacement = OptimisticProcessingPlaceholder.conversation(targetConversationId: 'new');
+    provider.addProcessingConversation(replacement);
+    response.complete((item: _conversation('old', status: ConversationStatus.completed), ok: true));
+    await refresh;
+    expect(provider.processingConversations.single, same(replacement));
+  });
+
+  testWidgets('server processing row settles on the timer without a websocket event', (tester) async {
+    var probes = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async {
+        probes++;
+        return (item: _conversation('real', status: ConversationStatus.completed), ok: true);
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('real', status: ConversationStatus.processing));
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(probes, 1);
+    expect(provider.processingConversations, isEmpty);
+    expect(provider.conversations.map((row) => row.id), ['real']);
+    await tester.pump(const Duration(minutes: 1));
+    expect(probes, 1);
+  });
+
+  testWidgets('processing polling waits while the app is backgrounded', (tester) async {
+    var probes = 0;
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async {
+        probes++;
+        return (item: _conversation('real', status: ConversationStatus.completed), ok: true);
+      },
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('real', status: ConversationStatus.processing));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 15));
+    expect(probes, 0);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pump();
+    expect(probes, 1);
+  });
+
+  test('live completion fences a stale optimistic target probe', () async {
+    final response = Completer<({ServerConversation? item, bool ok})>();
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) => response.future,
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'old'));
+    final refresh = provider.forceRefreshConversations();
+    await Future<void>.delayed(Duration.zero);
+    provider.removeProcessingConversation('old');
+    response.complete((item: _conversation('old', status: ConversationStatus.processing), ok: true));
+    await refresh;
+    expect(provider.processingConversations, isEmpty);
   });
 
   test('refresh clears the processing card for a conversation the server completed', () async {
@@ -33,6 +399,23 @@ void main() {
 
     expect(provider.processingConversations, isEmpty);
     expect(provider.conversations.map((c) => c.id), contains('c1'));
+  });
+
+  test('in-progress placeholder outside the active date filter is not kept on the filtered list', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      conversationLifecycleFetcher: (_) async =>
+          (item: _conversation('c1', status: ConversationStatus.in_progress), ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.selectedStartDate = DateTime(2020, 1, 1);
+    provider.selectedEndDate = DateTime(2020, 1, 1);
+    provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation(targetConversationId: 'c1'));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations, isEmpty);
   });
 
   test('refresh clears the processing card when lifecycle rolls back to in progress', () async {
@@ -781,7 +1164,7 @@ void main() {
     addTearDown(provider.dispose);
 
     provider.conversations = [conversation];
-    provider.deleteConversationLocally(conversation, conversationLocalDayKey(conversation.createdAt));
+    provider.deleteConversationLocally(conversation);
     provider.deleteConversationOnServer(conversation.id);
 
     await provider.forceRefreshConversations();
@@ -1062,9 +1445,11 @@ ServerConversation _conversation(
   required ConversationStatus status,
   DateTime? createdAt,
   bool discarded = false,
+  bool deleted = false,
   bool starred = false,
   String? folderId,
   String title = 'Title',
+  String? homeStep,
 }) =>
     ServerConversation(
       id: id,
@@ -1072,6 +1457,8 @@ ServerConversation _conversation(
       structured: Structured(title, 'Overview'),
       status: status,
       discarded: discarded,
+      deleted: deleted,
       starred: starred,
       folderId: folderId,
+      homeStep: homeStep,
     );

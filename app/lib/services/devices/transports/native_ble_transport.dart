@@ -18,7 +18,7 @@ const _captureAudioSilenceResubscribeLimit = 1;
 /// Uses the intent-based manageDevice/unmanageDevice API.
 /// Native owns the connection lifecycle (retry, reconnect, bonding).
 /// This transport is long-lived
-class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionErrors {
+class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionErrors, SilentAudioRecovery {
   /// Installed by capture. Counts audio notifications as they arrive so a
   /// silent GATT link is distinct from a socket that sent nothing.
   static void Function(String deviceId, int byteCount)? ingressByteObserver;
@@ -59,6 +59,18 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   bool _nativeIngressOwned = false;
   final Map<String, Object> subscriptionFailures = {};
   final _audioSubscriptionErrors = StreamController<Object>.broadcast();
+
+  @override
+  bool get supportsSilentAudioRecovery => defaultTargetPlatform == TargetPlatform.android;
+
+  @override
+  Future<void> recoverSilentAudio() async {
+    if (!supportsSilentAudioRecovery) {
+      throw UnsupportedError('Silent audio recovery is only supported on Android');
+    }
+    await _hostApi.recoverSilentAudio(_peripheralUuid);
+  }
+
   @override
   Stream<Object> get audioSubscriptionErrors => Stream.multi((consumer) {
         final subscription = _audioSubscriptionErrors.stream.listen(consumer.add, onDone: consumer.close);

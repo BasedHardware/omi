@@ -17,6 +17,7 @@ from tests.unit.test_subscription_ingestion_characterization import (
     event as lifecycle_event,
     lane,
     run as run_lifecycle,
+    _checkout_event,
 )
 
 NOW = datetime(2026, 10, 13, tzinfo=timezone.utc)
@@ -396,7 +397,7 @@ def test_unresolved_checkout_keeps_cache_effects_without_writing_the_plan(lane, 
     )
     assert run_lifecycle(lane) == {'status': 'success'}
     assert lane.current is None
-    assert [name for name, _ in lane.calls] == ['customer', 'credits', 'trial_cache']
+    assert [name for name, _ in lane.calls] == ['customer', 'credits']
     if enabled:
         assert receipt(db)['outcome'] == 'failed'
     else:
@@ -437,7 +438,7 @@ def test_unresolved_checkout_unlocks_only_an_open_paid_period(lane, monkeypatch,
     )
     assert run_lifecycle(lane) == {'status': 'success'}
     assert lane.current.model_dump_json() == before
-    expected = ['customer', 'credits', 'trial_cache']
+    expected = ['customer', 'credits']
     if unlocks:
         expected += ['conversations', 'memories', 'actions', 'fair_use']
     assert [name for name, _ in lane.calls] == expected
@@ -463,3 +464,271 @@ def test_invalid_signature_real_sdk_parser_precedes_ledger(monkeypatch):
     with pytest.raises(HTTPException) as error:
         asyncio.run(payment.stripe_webhook(Request(), 't=100,v1=deadbeef'))
     assert error.value.status_code == 400
+
+
+_HOSTED_ISSUANCE = {
+    'attribution_schema': '1',
+    'attribution_source': 'shopify_bundle_code',
+    'shopify_shop': 'fixture-shop.myshopify.com',
+    'shopify_order_id': 'gid://shopify/Order/12345',
+    'bundle_order_line_item_id': 'gid://shopify/LineItem/67890',
+    'bundle_redemption_role': 'gift',
+}
+
+
+def _arm_hosted_checkout(lane, monkeypatch, metadata=None, coupon=None, metadata_failures=0):
+    import stripe
+
+    db = StrictFirestore()
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true')
+    monkeypatch.setattr(ledger, '_client', lambda client: db)
+    lane.current = None
+    lane.stripe_obj = lifecycle_event('customer.subscription.updated', 'active')['data']['object']
+    lane.event = _checkout_event()
+    lane.event.update(id='evt-hosted-checkout', created=200)
+    lane.event['data']['object']['total_details'] = {
+        'breakdown': {
+            'discounts': [{'discount': {'promotion_code': 'promo_hosted'}}],
+        }
+    }
+    promotion = {'id': 'promo_hosted', 'object': 'promotion_code', 'max_redemptions': 1, 'metadata': metadata or {}}
+    if coupon is not None:
+        promotion['coupon'] = coupon
+    monkeypatch.setattr(
+        payment.stripe.PromotionCode,
+        'retrieve',
+        lambda promotion_id, **kwargs: stripe.PromotionCode.construct_from(promotion, 'fixture'),
+    )
+    writes = []
+    failures = {'remaining': metadata_failures}
+
+    def modify(subscription_id, **kwargs):
+        if failures['remaining']:
+            failures['remaining'] -= 1
+            raise RuntimeError('synthetic Stripe metadata write failure')
+        writes.append((subscription_id, kwargs))
+        lane.calls.append(('stripe_metadata', (subscription_id,)))
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'modify', modify)
+    return db, writes
+
+
+@pytest.mark.parametrize('created_first', [False, True])
+def test_hosted_checkout_resolves_applied_promotion_and_converges_before_ack(lane, monkeypatch, created_first):
+    db, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
+    checkout = lane.event
+    if created_first:
+        created = lifecycle_event('customer.subscription.created', 'active')
+        created.update(id='evt-created-first', created=199)
+        lane.event = created
+        assert run_lifecycle(lane) == {'status': 'success'}
+        assert writes == []
+    lane.event = checkout
+
+    result = run_lifecycle(lane)
+    assert result['status'] == 'success'
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert len(writes) == 1
+    metadata = writes[0][1]['metadata']
+    assert metadata == {
+        'uid': 'fixture-user',
+        'sub_type': 'plus',
+        **_HOSTED_ISSUANCE,
+        'bundle_promotion_code_id': 'promo_hosted',
+        'redeemed_promotion_code_id': 'promo_hosted',
+    }
+    assert metadata['bundle_redemption_role'] == 'gift'
+    assert lane.current.plan == PlanType.plus
+    assert receipt(db)['outcome'] == 'acknowledged'
+
+
+@pytest.mark.parametrize(
+    'metadata,coupon',
+    [
+        ({}, None),
+        (_HOSTED_ISSUANCE, {'metadata': {**_HOSTED_ISSUANCE, 'shopify_order_id': 'different'}}),
+        ({**_HOSTED_ISSUANCE, 'shopify_order_id': 'malformed'}, None),
+    ],
+)
+def test_missing_or_conflicting_hosted_provenance_does_not_block_entitlement(lane, monkeypatch, metadata, coupon):
+    _, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=metadata, coupon=coupon)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    metadata = writes[0][1]['metadata']
+    assert metadata['uid'] == 'fixture-user'
+    assert metadata['sub_type'] == 'plus'
+    assert 'shopify_order_id' not in metadata
+    assert 'shopify_shop' not in metadata
+    assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
+    assert lane.current.plan == PlanType.plus
+
+
+@pytest.mark.parametrize('discount_key', ['discounts', 'discount'])
+def test_checkout_without_session_breakdown_uses_expanded_subscription_discount(lane, monkeypatch, discount_key):
+    import stripe
+
+    _, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
+    del lane.event['data']['object']['total_details']
+    unexpanded = dict(lane.stripe_obj)
+    unexpanded[discount_key] = ['di_fixture'] if discount_key == 'discounts' else 'di_fixture'
+    expanded = dict(lane.stripe_obj)
+    expanded['discounts'] = [{'id': 'di_fixture', 'promotion_code': 'promo_hosted'}]
+
+    def retrieve(subscription_id, **kwargs):
+        value = expanded if kwargs.get('expand') == ['discounts'] else unexpanded
+        return stripe.Subscription.construct_from(value, 'fixture')
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'retrieve', retrieve)
+    result = run_lifecycle(lane)
+    assert result['status'] == 'success'
+    assert writes[0][1]['metadata']['shopify_order_id'] == _HOSTED_ISSUANCE['shopify_order_id']
+
+
+def test_hosted_checkout_preserves_conflicting_existing_order(lane, monkeypatch):
+    _, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
+    original = {
+        **_HOSTED_ISSUANCE,
+        'shopify_order_id': 'gid://shopify/Order/99999',
+        'bundle_promotion_code_id': 'promo_original',
+    }
+    lane.stripe_obj['metadata'] = {'uid': 'fixture-user', **original}
+    assert run_lifecycle(lane) == {'status': 'success'}
+    metadata = writes[0][1]['metadata']
+    assert {key: metadata[key] for key in original} == original
+    assert metadata['uid'] == 'fixture-user'
+    assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
+
+
+@pytest.mark.parametrize('line', [None, '67890', 'invalid'])
+def test_hosted_checkout_optional_line_propagation(lane, monkeypatch, line):
+    issuance = {k: v for k, v in _HOSTED_ISSUANCE.items() if k != 'bundle_order_line_item_id'}
+    if line is not None:
+        issuance['bundle_order_line_item_id'] = line
+    db, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=issuance)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    metadata = writes[0][1]['metadata']
+    expected = {} if line == 'invalid' else {**issuance, 'bundle_promotion_code_id': 'promo_hosted'}
+    assert {
+        k: v for k, v in metadata.items() if k in payment.stripe_utils.PROMOTION_ATTRIBUTION_METADATA_KEYS
+    } == expected
+    assert metadata['uid'] == 'fixture-user'
+    assert receipt(db)['outcome'] == 'acknowledged'
+
+
+@pytest.mark.parametrize('failure_source', [None, 'promotion_read', 'metadata_write'])
+def test_code_bearing_duplicate_checkout_finishes_unlock_and_ack_despite_optional_failure(
+    lane, monkeypatch, failure_source
+):
+    db, writes = _arm_hosted_checkout(
+        lane,
+        monkeypatch,
+        metadata=_HOSTED_ISSUANCE,
+        metadata_failures=1 if failure_source == 'metadata_write' else 0,
+    )
+    lane.event.update(id='evt-code-bearing-duplicate')
+    lane.event['data']['object']['metadata']['uid'] = 'untrusted-session-metadata'
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        stripe_subscription_id='sub-current',
+        current_period_end=STORED_NOW + 100,
+    )
+    original_state = lane.current.model_dump()
+    original_provenance = {
+        **_HOSTED_ISSUANCE,
+        'shopify_order_id': 'gid://shopify/Order/99999',
+        'bundle_promotion_code_id': 'promo_original',
+    }
+    lane.stripe_obj['metadata'] = {'uid': 'fixture-user', **original_provenance}
+    promotion_reads = []
+    retrieve = payment.stripe.PromotionCode.retrieve
+
+    def retrieve_promotion(*args, **kwargs):
+        promotion_reads.append((args, kwargs))
+        if failure_source == 'promotion_read':
+            raise RuntimeError('synthetic promotion read failure')
+        return retrieve(*args, **kwargs)
+
+    monkeypatch.setattr(payment.stripe.PromotionCode, 'retrieve', retrieve_promotion)
+    result = run_lifecycle(lane)
+    assert result == {'status': 'success', 'message': 'Subscription already processed.'}
+    assert lane.current.model_dump() == original_state
+    assert promotion_reads == [(('promo_hosted',), {'expand': ['coupon']})]
+    effects = [name for name, _ in lane.calls]
+    assert effects == ([] if failure_source else ['stripe_metadata']) + [
+        'conversations',
+        'memories',
+        'actions',
+        'fair_use',
+    ]
+    for name, args in lane.calls:
+        if name != 'stripe_metadata':
+            assert args == ('fixture-user',)
+    if failure_source:
+        assert writes == []
+    else:
+        metadata = writes[0][1]['metadata']
+        assert {key: metadata[key] for key in original_provenance} == original_provenance
+        assert metadata['uid'] == 'fixture-user'
+        assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
+    assert receipt(db)['outcome'] == 'acknowledged'
+    completed_calls = list(lane.calls)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert lane.calls == completed_calls
+    assert len(promotion_reads) == 1
+
+
+@pytest.mark.parametrize('failure_effect', ['conversations', 'fair_use'])
+def test_code_bearing_duplicate_checkout_entitlement_failure_is_not_acknowledged(lane, monkeypatch, failure_effect):
+    db, _ = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        stripe_subscription_id='sub-current',
+        current_period_end=STORED_NOW + 100,
+    )
+
+    def fail(*args):
+        raise RuntimeError('synthetic entitlement failure')
+
+    if failure_effect == 'conversations':
+        monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', fail)
+    else:
+        monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', fail)
+    with pytest.raises(RuntimeError, match='synthetic entitlement failure'):
+        run_lifecycle(lane)
+    assert receipt(db)['outcome'] == 'failed'
+
+
+@pytest.mark.parametrize('created_first', [False, True])
+@pytest.mark.parametrize('failure_source', ['promotion_read', 'metadata_write'])
+def test_attribution_failures_never_block_legacy_entitlement_reconciliation(
+    lane, monkeypatch, created_first, failure_source
+):
+    db, writes = _arm_hosted_checkout(
+        lane,
+        monkeypatch,
+        metadata=_HOSTED_ISSUANCE,
+        metadata_failures=1 if failure_source == 'metadata_write' else 0,
+    )
+    if failure_source == 'promotion_read':
+        monkeypatch.setattr(
+            payment.stripe.PromotionCode,
+            'retrieve',
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError('synthetic promotion read failure')),
+        )
+    checkout = lane.event
+    if created_first:
+        created = lifecycle_event('customer.subscription.created', 'active')
+        created.update(id='evt-created-before-attribution-failure', created=199)
+        lane.event = created
+        assert run_lifecycle(lane) == {'status': 'success'}
+    lane.event = checkout
+
+    result = run_lifecycle(lane)
+
+    assert result['status'] == 'success'
+    assert lane.current.plan == PlanType.plus
+    assert writes == []
+    call_names = [name for name, _ in lane.calls]
+    for effect in ('write', 'credits', 'conversations', 'memories', 'actions', 'fair_use'):
+        assert effect in call_names
+    assert ('notification' in call_names) is (not created_first)
+    assert receipt(db)['outcome'] == 'acknowledged'

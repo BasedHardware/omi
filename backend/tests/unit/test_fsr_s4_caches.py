@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import time
+from unittest.mock import Mock
 from datetime import datetime, timezone
 from contextvars import Context
 from types import SimpleNamespace
@@ -14,7 +15,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from google.cloud.firestore_v1.transforms import Increment
 
-from database import account_deletion_marker as deletion
+from database import _client, account_deletion_marker as deletion
 from database import desktop_update_policy, serving_query_reads, user_usage, users
 from models.users import PlanType, Subscription
 from routers import users as router, payment, desktop_prompts, updates
@@ -131,13 +132,15 @@ class Ref:
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '0')
     store = Store()
     redis = fakeredis.FakeRedis()
     monkeypatch.setattr(cache, '_redis', lambda: redis)
     monkeypatch.setattr(users, 'db', store)
     monkeypatch.setattr(users, 'get_data_plane_firestore_client', lambda: store)
-    monkeypatch.setattr(deletion, 'get_data_plane_firestore_client', lambda: store)
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: store)
     monkeypatch.setattr(user_usage, 'db', store)
+    monkeypatch.setattr(user_usage, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *args, **kwargs: 'basic')
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{}')
     cache._configs.clear()
@@ -150,11 +153,19 @@ def enable(monkeypatch, *names):
 
 @pytest.mark.parametrize('enabled,expected', [(False, 6), (True, 1)])
 def test_deletion_negative_cache_read_count(env, monkeypatch, enabled, expected):
+    from database import privacy_check_metrics as metrics
+
+    calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get()
+    reads = metrics.READS.labels('deletion_marker', 'live', 'miss', 'unattributed')._value.get()
     if enabled:
         enable(monkeypatch, 'deletion_marker_cache')
     for _ in range(6):
         assert deletion.get_user_deletion_wipe_status('u') is None
     assert len(env[0].reads) == expected
+    assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get() == decisions + 6
+    assert metrics.READS.labels('deletion_marker', 'live', 'miss', 'unattributed')._value.get() == reads + expected
 
 
 def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch):
@@ -173,6 +184,25 @@ def test_deletion_next_request_fenced_after_real_intent_writer(env, monkeypatch)
     assert deletion.get_user_deletion_wipe_status('u') == 'pending'  # Positive state stays durable.
     users.cancel_user_deletion_wipe('u')
     assert deletion.get_user_deletion_wipe_status('u') == 'cancelled'
+
+
+@pytest.mark.asyncio
+async def test_deletion_request_dedupe_counts_every_decision_but_only_issued_reads(env, monkeypatch):
+    from database import privacy_check_metrics as metrics
+
+    enable(monkeypatch, 'request_read_dedupe')
+    calls = metrics.CALLS.labels('deletion_marker', 'live')._value.get()
+    decisions = metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get()
+    scope = cache.request_read_scope()
+    await anext(scope)
+    try:
+        for _ in range(6):
+            assert deletion.get_user_deletion_wipe_status('u') is None
+    finally:
+        await scope.aclose()
+    assert len(env[0].reads) == 6  # Deletion marker is not memoized in request scope (Issue #24647)
+    assert metrics.CALLS.labels('deletion_marker', 'live')._value.get() == calls + 6
+    assert metrics.CHECKS.labels('deletion_marker', 'live', 'allow', 'unattributed')._value.get() == decisions + 6
 
 
 def test_lever_off_writer_still_fences_enabled_readers(env, monkeypatch):
@@ -251,6 +281,161 @@ def test_usage_month_counts_and_writer_never_undercounts(env, monkeypatch, enabl
     assert len(store.reads) == expected
     user_usage.update_hourly_usage('u', date, {'transcription_seconds': 100})
     assert user_usage.get_monthly_usage_stats_since('u', date, date)['transcription_seconds'] == 120
+
+
+@pytest.mark.parametrize('since', [False, True])
+def test_usage_shadow_hit_only_and_fresh_error_preserves_response(env, monkeypatch, since):
+    from utils import executors, read_cache_shadow as shadow
+
+    enable(monkeypatch, 'usage_month_cache')
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    pending = []
+    metric = Mock()
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    read = user_usage.get_monthly_usage_stats_since if since else user_usage.get_monthly_usage_stats
+    args = ('u', date, date) if since else ('u', date)
+    expected = read(*args)
+    assert not pending
+    assert read(*args) == expected
+    fresh = Mock(side_effect=RuntimeError('durable read failed'))
+    monkeypatch.setattr(user_usage, '_fresh_month_stats', fresh)
+    pending.pop()()
+    fresh.assert_called_once_with('u', date, date if since else None, 5.0)
+    metric.labels.assert_called_with(cache='usage_month', result='error')
+    assert read(*args) == expected
+
+
+def test_broken_hit_observer_does_not_fetch_or_change_response(env, monkeypatch):
+    enable(monkeypatch, 'usage_month_cache')
+    fetch = Mock(return_value={'total': 10})
+    observer = Mock(side_effect=RuntimeError('observer broken'))
+    assert cache.cached_read('usage_month_cache', 'u', 'v', fetch, on_hit=observer) == {'total': 10}
+    assert cache.cached_read('usage_month_cache', 'u', 'v', fetch, on_hit=observer) == {'total': 10}
+    fetch.assert_called_once()
+    observer.assert_called_once_with({'total': 10})
+
+
+@pytest.mark.parametrize('start_day,expected', [(None, 17), (16, 16)])
+def test_fresh_usage_aggregates_hourly_totals_with_rpc_bound(env, monkeypatch, start_day, expected):
+    from database import firestore_document_probe as probe
+    from database.firestore_read_origin import current_read_origin
+
+    store, _ = env
+    for day in (1, 16):
+        key = f'2026-10-{day:02}-00'
+        store.docs[f'users/u/hourly_usage/{key}'] = {
+            'id': key,
+            'year': 2026,
+            'month': 10,
+            'transcription_seconds': day,
+        }
+    options_seen = []
+    recorded = Mock()
+    monkeypatch.setattr(user_usage, 'record_firestore_read', recorded)
+    caller_counter = probe.FIRESTORE_BILLED_READS_BY_CALLER.labels(
+        collection='users/hourly_usage', kind='query', caller='database.user_usage:_fresh_month_stats'
+    )
+    origin_counter = probe.FIRESTORE_BILLED_READS_BY_ORIGIN.labels(
+        collection='users/hourly_usage', kind='query', origin='job:read_cache_shadow'
+    )
+    before_caller, before_origin = caller_counter._value.get(), origin_counter._value.get()
+    stream = Ref.stream
+
+    def bounded_stream(self, *, timeout, retry):
+        assert self.count == 744
+        assert current_read_origin() == 'job:read_cache_shadow'
+        options_seen.append((timeout, retry))
+        return stream(self)
+
+    monkeypatch.setattr(
+        Ref, '_parent', property(lambda self: SimpleNamespace(_path=tuple(self.path.split('/')))), raising=False
+    )
+    monkeypatch.setattr(Ref, 'stream', probe._wrap_query_stream(bounded_stream))
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    start = date.replace(day=start_day) if start_day else None
+    assert user_usage._fresh_month_stats('u', date, start, 5)['transcription_seconds'] == expected
+    assert options_seen == [(5, user_usage.FIRESTORE_NO_RETRY)]
+    recorded.assert_called_once_with(
+        user_usage.FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
+        user_usage.FirestoreReadMode.BOUNDED,
+        2 if start_day is None else 1,
+    )
+    count = 2 if start_day is None else 1
+    assert caller_counter._value.get() == before_caller + count
+    assert origin_counter._value.get() == before_origin + count
+    assert not store.writes
+
+
+@pytest.mark.parametrize('since', [False, True])
+def test_real_projection_cache_compares_hourly_float_sums_as_match(env, monkeypatch, since):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _ = env
+    enable(monkeypatch, 'usage_month_cache', 'usage_month_total')
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    values = [0.1, 0.2, 0.3]
+    total = sum(reversed(values))
+    assert total != sum(values)
+    projection = dict.fromkeys(user_usage.monthly_usage_totals.FIELDS, 3)
+    projection.update(transcription_seconds=total, speech_seconds=total)
+    store.docs['users/u/monthly_usage_totals/2026-10'] = {
+        'ready': True,
+        'schema_version': 1,
+        'epoch': 'v1',
+        'totals': projection,
+        'days': {'16': projection},
+    }
+    for hour, value in enumerate(values):
+        key = f'2026-10-16-{hour:02d}'
+        store.docs[f'users/u/hourly_usage/{key}'] = {
+            'id': key,
+            'year': 2026,
+            'month': 10,
+            **dict.fromkeys(shadow.USAGE_FIELDS, 1),
+            'transcription_seconds': value,
+            'speech_seconds': value,
+        }
+    stream = Ref.stream
+    monkeypatch.setattr(Ref, 'stream', lambda self, **options: stream(self))
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    date = datetime(2026, 10, 16, tzinfo=timezone.utc)
+    read = user_usage.get_monthly_usage_stats_since if since else user_usage.get_monthly_usage_stats
+    args = ('u', date, date) if since else ('u', date)
+    assert read(*args) == projection
+    assert not pending
+    assert read(*args) == projection
+    pending.pop()()
+    metric.labels.assert_called_once_with(cache='usage_month', result='match')
+    assert not store.writes
+
+
+@pytest.mark.parametrize('documents', [743, 744, 745])
+def test_usage_document_limit_is_bounded_and_skips_incomplete_comparison(env, monkeypatch, documents):
+    from utils import executors, read_cache_shadow as shadow
+
+    store, _ = env
+    for number in range(documents):
+        store.docs[f'users/u/hourly_usage/{number:04d}'] = {'year': 2026, 'month': 10}
+    stream = Ref.stream
+    monkeypatch.setattr(Ref, 'stream', lambda self, **options: stream(self))
+    monkeypatch.setenv('OMI_READ_CACHE_SHADOW_RATE', '1')
+    pending, metric = [], Mock()
+    monkeypatch.setattr(executors, 'submit_with_context', lambda pool, fn: pending.append(fn))
+    monkeypatch.setattr(shadow, 'SHADOW', metric)
+    shadow.compare_hit(
+        'usage_month',
+        dict.fromkeys(shadow.USAGE_FIELDS, 0),
+        lambda timeout: user_usage._fresh_month_stats('u', datetime(2026, 10, 16), None, timeout),
+        sample=lambda: 0,
+    )
+    pending.pop()()
+    assert len(store.reads) == min(documents, 744)
+    metric.labels.assert_called_once_with(cache='usage_month', result='skipped' if documents >= 744 else 'match')
 
 
 def test_usage_month_and_launch_boundary_separate(env, monkeypatch):
@@ -432,8 +617,8 @@ def test_serving_config_expires_and_does_not_serve_stale_after_error(env, monkey
 @pytest.mark.parametrize(
     'route,enabled,expected',
     [
-        ('trial', False, 6),
-        ('trial', True, 2),
+        ('trial', False, 2),
+        ('trial', True, 1),
         # +1 per request (this case issues two) for the trial-eligibility read of
         # stripe_customer_id; it joins the entitlement projection when request_read_dedupe
         # is on, so the deduped budget below is unchanged.
@@ -461,14 +646,8 @@ def test_real_users_endpoints_read_count_with_auth(env, monkeypatch, route, enab
     monkeypatch.setattr(auth, 'validate_byok_request', lambda uid: None)
     monkeypatch.setattr(auth, '_recover_locked_content_if_request', lambda *args: None)
     monkeypatch.setattr(auth, '_enforce_cutover_http_if_request', lambda *args: None)
-    monkeypatch.setattr(subscription, 'TRIAL_PAYWALL_ENABLED', True)
-    monkeypatch.setattr(
-        subscription,
-        '_get_user',
-        lambda uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=(time.time() - 3600) * 1000)),
-    )
     monkeypatch.setattr(router, 'is_marketplace_reviewer', lambda uid: False)
-    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub: sub)
+    monkeypatch.setattr(router, 'reconcile_basic_plan_with_stripe', lambda uid, sub, **kwargs: sub)
     monkeypatch.setattr(router, 'get_paid_plan_definitions', lambda: [])
     monkeypatch.setattr(router, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(

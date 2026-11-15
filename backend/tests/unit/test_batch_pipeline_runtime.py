@@ -4,21 +4,29 @@ from tests.unit.fixtures.cap_rollout import full_cap_dispatch_rollout  # noqa: F
 
 import asyncio
 from copy import deepcopy
+import time
 from types import SimpleNamespace
 import urllib.error
 import urllib.request
 
+import numpy as np
 from prometheus_client import CollectorRegistry
 import pytest
 
+from config.batch_pipeline_providers import provider_config
 from diarizer import batch_pipeline_runtime as runtime
+from diarizer.batch_pipeline import SAMPLE_RATE
 from diarizer.batch_pipeline_models import ParakeetWords, pin_parakeet_decoding
 
 
 class FakeASR:
     def __init__(self):
         self.cfg = SimpleNamespace(
-            decoding=SimpleNamespace(compute_timestamps=False, greedy=SimpleNamespace(use_cuda_graph_decoder=True))
+            decoding=SimpleNamespace(
+                strategy='greedy_batch',
+                compute_timestamps=False,
+                greedy=SimpleNamespace(use_cuda_graph_decoder=True),
+            )
         )
         self.rebuilds = 0
         self.change_decoding_strategy(self.cfg.decoding)
@@ -26,10 +34,17 @@ class FakeASR:
     def change_decoding_strategy(self, config, verbose=False):
         self.cfg.decoding = deepcopy(config)
         self.rebuilds += 1
-        computer = SimpleNamespace(allow_cuda_graphs=config.greedy.use_cuda_graph_decoder, full_graph=None)
+        if config.strategy != 'greedy_batch':
+            # Non-batched TDT greedy has no label-looping computer.
+            self.decoding = SimpleNamespace(decoding=SimpleNamespace())
+            return
+        allowed = config.greedy.use_cuda_graph_decoder
+        computer = SimpleNamespace(
+            allow_cuda_graphs=allowed, cuda_graphs_mode='full_graph' if allowed else None, full_graph=None
+        )
 
         def disable():
-            computer.allow_cuda_graphs = False
+            computer.cuda_graphs_mode = None
             computer.full_graph = None
 
         self.decoding = SimpleNamespace(
@@ -43,30 +58,90 @@ class FakeASR:
             updated.compute_timestamps = True
             self.change_decoding_strategy(updated)
         return [
-            SimpleNamespace(text='hello', timestamp={'word': [{'word': 'hello', 'start': 0, 'end': 0.1}]})
+            SimpleNamespace(text='hello', timestamp={'word': [{'word': 'hello', 'start': 2.0, 'end': 2.1}]})
             for _ in samples
         ]
 
 
-def test_graph_policy_persists_through_first_and_repeated_timestamp_calls():
+@pytest.mark.parametrize('cuda_graphs', [True, False])
+def test_graph_policy_persists_through_first_and_repeated_timestamp_calls(cuda_graphs):
     model = FakeASR()
-    pin_parakeet_decoding(model)
-    provider = ParakeetWords(model, enforce_eager=True)
+    model.cfg.decoding.strategy = 'greedy'
+    model.cfg.decoding.greedy.use_cuda_graph_decoder = not cuda_graphs
+    pin_parakeet_decoding(model, cuda_graphs=cuda_graphs)
+    provider = ParakeetWords(model, cuda_graphs=cuda_graphs)
     rebuilds = model.rebuilds
+    computer = model.decoding.decoding.decoding_computer
     for _ in range(3):
         assert provider.transcribe_batch([[0.0]])[0][0]['word'] == 'hello'
+        assert model.cfg.decoding.strategy == 'greedy_batch'
         assert model.cfg.decoding.compute_timestamps
-        assert model.cfg.decoding.greedy.use_cuda_graph_decoder is False
-        assert model.decoding.decoding.decoding_computer.allow_cuda_graphs is False
+        assert model.cfg.decoding.greedy.use_cuda_graph_decoder is cuda_graphs
+        assert computer.allow_cuda_graphs is cuda_graphs
+        assert (computer.cuda_graphs_mode is not None) is cuda_graphs
+    # The single-item recovery retry runs under the same asserted mode.
+    words = provider.recover_empty(np.ones(SAMPLE_RATE, dtype=np.float32), 272)
+    assert [w['word'] for w in words] == ['hello']
     assert model.rebuilds == rebuilds
 
 
 def test_runtime_graph_regression_fails_closed_even_if_config_still_off():
     model = FakeASR()
-    pin_parakeet_decoding(model)
+    pin_parakeet_decoding(model, cuda_graphs=False)
     model.decoding.decoding.decoding_computer.allow_cuda_graphs = True
     with pytest.raises(RuntimeError, match='graph policy'):
-        ParakeetWords(model, enforce_eager=True).transcribe_batch([[0.0]])
+        ParakeetWords(model, cuda_graphs=False).transcribe_batch([[0.0]])
+
+
+def test_silent_eager_fallback_fails_closed_when_graphs_are_chosen():
+    model = FakeASR()
+    pin_parakeet_decoding(model, cuda_graphs=True)
+    model.decoding.decoding.disable_cuda_graphs()
+    with pytest.raises(RuntimeError, match='graph policy'):
+        ParakeetWords(model, cuda_graphs=True).transcribe_batch([[0.0]])
+
+
+def test_graph_mode_is_also_checked_after_transcription():
+    model = FakeASR()
+    pin_parakeet_decoding(model, cuda_graphs=True)
+    transcribe = model.transcribe
+
+    def drop_graphs(samples, **kwargs):
+        model.decoding.decoding.disable_cuda_graphs()
+        return transcribe(samples, **kwargs)
+
+    model.transcribe = drop_graphs
+    with pytest.raises(RuntimeError, match='graph policy'):
+        ParakeetWords(model, cuda_graphs=True).transcribe_batch([[0.0]])
+
+
+@pytest.mark.parametrize('mode', ['no_graphs', None])
+def test_graphs_chosen_rejects_non_graph_modes(mode):
+    model = FakeASR()
+    model.change_decoding_strategy = lambda config, verbose=False: None
+    model.decoding.decoding.decoding_computer.cuda_graphs_mode = mode
+    with pytest.raises(RuntimeError, match='graph policy'):
+        pin_parakeet_decoding(model, cuda_graphs=True)
+
+
+def test_decoding_without_label_looping_computer_fails_closed():
+    model = FakeASR()
+    model.change_decoding_strategy(SimpleNamespace(**{**vars(model.cfg.decoding), 'strategy': 'greedy'}))
+    for cuda_graphs in (True, False):
+        with pytest.raises(RuntimeError, match='graph policy'):
+            ParakeetWords(model, cuda_graphs=cuda_graphs).transcribe_batch([[0.0]])
+
+
+@pytest.mark.parametrize(
+    'value, expected',
+    [(None, True), ('', True), ('false', False), (' FALSE ', False), ('TRUE', True), (' true ', True)],
+)
+def test_asr_cuda_graphs_kill_switch(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED', value)
+    assert provider_config().asr_cuda_graphs is expected
 
 
 def test_synchronize_runs_on_success_and_failure_and_errors_cannot_publish():
@@ -113,6 +188,35 @@ def test_health_and_readiness_are_distinct_and_shutdown_closes_admission():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_firestore_probe_is_served_by_every_child_before_parent_merge():
+    from prometheus_client.parser import text_string_to_metric_families
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS, FIRESTORE_BILLED_READS_BY_CALLER
+
+    FIRESTORE_BILLED_READS.labels('other', 'query', 'unattributed').inc(7)
+    FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'query', 'tests:batch_export').inc(7)
+    pages = []
+    for index in range(2):
+        registry = CollectorRegistry()
+        server = runtime.health_server(runtime.RuntimeState(), registry, 0, '127.0.0.1')
+        try:
+            assert FIRESTORE_BILLED_READS in registry._collector_to_names
+            assert FIRESTORE_BILLED_READS_BY_CALLER in registry._collector_to_names
+            with urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics', timeout=5) as response:
+                pages.append((index, response.read()))
+        finally:
+            server.shutdown()
+            server.server_close()
+    samples = [
+        sample
+        for family in text_string_to_metric_families(runtime.merge_metrics(pages).decode())
+        for sample in family.samples
+    ]
+    for name in ('omi_firestore_billed_reads_total', 'omi_firestore_billed_reads_by_caller_total'):
+        observed = [s for s in samples if s.name == name and s.labels['collection'] == 'other']
+        assert {s.labels['worker_process'] for s in observed} == {'0', '1'}
+        assert all(s.value >= 7 for s in observed)
 
 
 def test_supervision_drains_after_stop_before_readiness_closes():
@@ -238,7 +342,9 @@ def test_startup_pins_precision_reuses_segmentation_and_owns_one_gpu(monkeypatch
     assert ('vad-model', segmentation) in calls
     assert ('asr-revision', startup.ASR_REVISION) in calls
     assert ('diarizer-revision', startup.DIARIZER_REVISION) in calls
-    assert asr.cfg.decoding.greedy.use_cuda_graph_decoder is False
+    # Graph decoding ships on; the kill switch restores asserted eager decoding.
+    assert asr.cfg.decoding.greedy.use_cuda_graph_decoder is True
+    assert worker.words.cuda_graphs is True
     fake_torch.cuda.device_count = lambda: 2
     startup_calls = list(calls)
     with pytest.raises(RuntimeError, match='exactly one'):
@@ -430,3 +536,219 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     from database.batch_pipeline_shadow_hook import shadow_parity_collectors
 
     assert shadow_parity_collectors() == ()
+
+
+@pytest.mark.parametrize('raw,expected', [(None, 1), ('2', 2), ('1', 1), ('3', 3), ('0', 1), ('4', 1), ('two', 1)])
+def test_worker_processes_default_one_and_malformed_never_multiplies_memory(monkeypatch, raw, expected):
+    from config.batch_pipeline import worker_processes
+
+    if raw is None:
+        monkeypatch.delenv('BATCH_PIPELINE_WORKER_PROCESSES', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESSES', raw)
+    assert worker_processes() == expected
+
+
+def test_only_the_sampling_child_reads_queue_metrics():
+    async def check(sample_queue):
+        class Pump:
+            samples = 0
+
+            async def sample_metrics(self):
+                self.samples += 1
+
+            async def run(self, signal):
+                await asyncio.sleep(0.01)
+                signal.set()
+
+        pump = Pump()
+        await runtime.supervise(pump, runtime.RuntimeState(), asyncio.Event(), sample_queue=sample_queue)
+        return pump.samples
+
+    assert asyncio.run(check(True)) >= 1
+    assert asyncio.run(check(False)) == 0
+
+
+class FakePopen:
+    def __init__(self, drained=0):
+        self.returncode = None
+        self.drained = drained
+        self.signals = []
+
+    def poll(self):
+        return self.returncode
+
+    def send_signal(self, sig):
+        self.signals.append(sig)
+        self.returncode = self.drained
+
+
+def child(index, port=0, **popen):
+    return runtime.WorkerProcess(index, port, FakePopen(**popen))
+
+
+def test_supervisor_dispatch_runs_only_in_the_parent(monkeypatch):
+    calls = []
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_PROCESSES', '2')
+    monkeypatch.setenv('PORT', '8080')
+    monkeypatch.delenv(runtime.PROCESS_INDEX_ENV, raising=False)
+    monkeypatch.setattr(runtime, 'supervise_processes', lambda count, port: calls.append((count, port)) or 3)
+    monkeypatch.setattr(runtime, 'FirestoreStore', lambda *a, **k: pytest.fail('supervisor touched Firestore'))
+    with pytest.raises(SystemExit) as exited:
+        runtime.main()
+    assert exited.value.code == 3 and calls == [(2, 8080)]
+    # A child never recurses into another supervisor: it is the single-process runtime.
+    monkeypatch.setenv(runtime.PROCESS_INDEX_ENV, '1')
+    monkeypatch.delenv('BATCH_PIPELINE_NAMESPACE', raising=False)
+    with pytest.raises(KeyError, match='BATCH_PIPELINE_NAMESPACE'):
+        runtime.main()
+    assert calls == [(2, 8080)]
+
+
+def test_spawned_child_gets_its_index_and_a_private_port(monkeypatch):
+    launched = {}
+    monkeypatch.setattr(
+        runtime.subprocess, 'Popen', lambda argv, env: launched.update(argv=argv, env=env) or FakePopen()
+    )
+    process = runtime.WorkerProcess.spawn(1)
+    assert launched['argv'][1:] == ['-m', 'diarizer.batch_pipeline_runtime']
+    assert launched['env'][runtime.PROCESS_INDEX_ENV] == '1'
+    assert launched['env']['PORT'] == str(runtime.CHILD_PORT_BASE + 1) == str(process.port)
+
+
+def test_fatal_child_drains_its_siblings_and_restarts_the_pod():
+    children = [child(0), child(1)]
+
+    def spawn(index):
+        if index == 1:
+            children[1].process.returncode = 1  # Fatal CUDA quarantine exits non-zero.
+        return children[index]
+
+    assert runtime.supervise_processes(2, 0, spawn=spawn, poll_seconds=0.01) == 1
+    assert children[0].process.signals == [runtime.signal.SIGTERM]
+    assert children[1].process.signals == []  # Already gone; never signalled again.
+
+
+def test_unrequested_clean_child_exit_still_restarts_the_pod():
+    children = [child(0), child(1)]
+    children[0].process.returncode = 0
+    assert runtime.supervise_processes(2, 0, spawn=lambda index: children[index], poll_seconds=0.01) == 1
+    assert children[1].process.signals == [runtime.signal.SIGTERM]
+
+
+def test_sigterm_reaches_every_child_and_waits_for_each_drain():
+    import signal
+    import threading
+
+    children = [child(0), child(1), child(2)]
+
+    def spawn(index):
+        if index == 2:
+            threading.Timer(0.05, signal.raise_signal, (signal.SIGTERM,)).start()
+        return children[index]
+
+    previous = signal.getsignal(signal.SIGTERM)
+    assert runtime.supervise_processes(3, 0, spawn=spawn, poll_seconds=0.01) == 0
+    assert all(c.process.signals == [signal.SIGTERM] for c in children)
+    assert signal.getsignal(signal.SIGTERM) is previous
+
+
+def test_drain_failure_is_reported_after_sigterm():
+    import signal
+    import threading
+
+    children = [child(0), child(1, drained=1)]
+
+    def spawn(index):
+        if index == 1:
+            threading.Timer(0.05, signal.raise_signal, (signal.SIGTERM,)).start()
+        return children[index]
+
+    assert runtime.supervise_processes(2, 0, spawn=spawn, poll_seconds=0.01) == 1
+
+
+def test_real_child_processes_receive_sigterm_and_a_crash_exit_code_survives(tmp_path):
+    import subprocess
+    import sys
+
+    # Stand-in children: drain on SIGTERM (exit 0), or crash like a quarantined chain.
+    drain = 'import signal,sys,time; signal.signal(signal.SIGTERM, lambda *_: sys.exit(0)); time.sleep(30)'
+    crash = 'import sys,time; time.sleep(0.2); sys.exit(7)'
+
+    def spawn(index):
+        script = crash if index == 1 else drain
+        return runtime.WorkerProcess(index, 0, subprocess.Popen([sys.executable, '-c', script]))
+
+    started = time.monotonic()
+    assert runtime.supervise_processes(2, 0, spawn=spawn, poll_seconds=0.02) == 7
+    assert time.monotonic() - started < 10  # The surviving sibling drained on SIGTERM, not its sleep.
+
+
+def test_pod_probes_need_every_child_and_metrics_carry_each_child_once(monkeypatch):
+    from prometheus_client import Counter, Gauge
+    from prometheus_client.parser import text_string_to_metric_families
+
+    states, servers, children = [], [], []
+    for index in range(2):
+        state, registry = runtime.RuntimeState(), CollectorRegistry()
+        Counter('omi_batch_pipeline_synthetic_events', 'synthetic', registry=registry).inc(index + 1)
+        # Each real worker is a separate process with its own privacy counter.
+        negative = Counter(
+            'privacy_negative_lookup_total', 'synthetic', ['collection', 'mode', 'result'], registry=None
+        )
+        negative.labels('conversations', 'shadow', 'hit').inc(index + 1)
+        monkeypatch.setattr(runtime, 'NEGATIVE_LOOKUPS', negative)
+        if index == 0:  # Only the sampling child exports queue gauges.
+            Gauge('omi_batch_pipeline_ready_units', 'ready', ['priority'], registry=registry).labels('fresh').set(7)
+        server = runtime.health_server(state, registry, 0, '127.0.0.1')
+        states.append(state)
+        servers.append(server)
+        children.append(child(index, server.server_port))
+    pod = runtime.pod_server(runtime.SupervisorState(children), 0)
+    base = f'http://127.0.0.1:{pod.server_port}'
+
+    def status(path):
+        try:
+            return urllib.request.urlopen(base + path).status
+        except urllib.error.HTTPError as error:
+            return error.code
+
+    try:
+        assert status('/health') == 200
+        states[0].ready = True
+        assert status('/ready') == 503  # One child still loading its chain.
+        states[1].ready = True
+        assert status('/ready') == 200
+        families = {
+            family.name: family
+            for family in text_string_to_metric_families(urllib.request.urlopen(base + '/metrics').read().decode())
+        }
+        events = families['omi_batch_pipeline_synthetic_events'].samples
+        lookups = families['privacy_negative_lookup'].samples
+        assert sorted((s.labels['worker_process'], s.value) for s in lookups if s.name.endswith('_total')) == [
+            ('0', 1.0),
+            ('1', 2.0),
+        ]
+        assert sorted((s.labels['worker_process'], s.value) for s in events if s.name.endswith('_total')) == [
+            ('0', 1.0),
+            ('1', 2.0),
+        ]
+        assert [s.labels for s in families['omi_batch_pipeline_ready_units'].samples] == [
+            {'priority': 'fresh', 'worker_process': '0'}
+        ]
+        states[1].ticked_at -= 61  # A wedged child event loop fails pod liveness.
+        assert status('/health') == 503
+        states[1].ticked_at += 61
+        children[1].process.returncode = 1  # An exited child closes readiness, not liveness.
+        assert status('/ready') == 503 and status('/health') == 200
+        servers[1].shutdown()
+        servers[1].server_close()
+        children[1].process.returncode = None  # A running child that stops answering fails both.
+        assert status('/health') == 503 and status('/ready') == 503
+        assert status('/metrics') == 200  # The unreachable child drops out; the scrape survives.
+    finally:
+        pod.shutdown()
+        pod.server_close()
+        servers[0].shutdown()
+        servers[0].server_close()

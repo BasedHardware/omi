@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/review/review_item_sheet.dart';
@@ -18,6 +19,7 @@ Future<ReviewProvider> _provider() async {
     isEligible: () => true,
     reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
     loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [dreamSpellingQuestion], remainingToday: 3)),
+    loadOpenLoopCards: () async => const ApiSuccess(OpenLoopCardsResponse(cards: [])),
   );
   await provider.load();
   return provider;

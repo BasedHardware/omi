@@ -1,3 +1,10 @@
+// The single shared chat provider: the one message timeline that Main Chat,
+// Home chat, and the floating/notch chat all render.
+//
+// Kernel main_chat turns are the durable source of truth and journal acceptance
+// publishes the pending projection -- UI never appends a pre-journal turn, and
+// every other surface holds a viewport cursor over these messages rather than a
+// second transcript (product/invariants/chat-continuity.md).
 import Combine
 import CoreGraphics
 import CryptoKit

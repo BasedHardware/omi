@@ -27,6 +27,9 @@ class SpeakerCandidate(BaseModel):
     band: Band
     source: CandidateSource
     label_eligible: bool = False  # joint policy decision; probability alone never authorizes a label
+    # Manual evidence can bind an excerpt rather than the whole voice. None on
+    # older evidence means unknown scope, never permission to expand it.
+    segment_ids: Optional[List[str]] = None
 
 
 class VoiceCluster(BaseModel):

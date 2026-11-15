@@ -175,6 +175,33 @@ final class ConversationDetailAutomationStateTests: XCTestCase {
     XCTAssertTrue(ConversationsPage.shouldReplaceSelectedConversation(processing, with: completed))
   }
 
+  func testRestoringAMatchedSearchHitRefreshesTheQuery() {
+    // #23695: restoring a discarded conversation can reprocess its summary,
+    // which can be the only thing that matched the active query. Patching the
+    // row in place instead of revalidating left a stale hit in the list.
+    XCTAssertTrue(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "summary",
+        restoredId: "conversation-1"))
+  }
+
+  func testRestoringAConversationOutsideTheCurrentSearchDoesNothing() {
+    XCTAssertFalse(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "summary",
+        restoredId: "conversation-2"))
+  }
+
+  func testRestoringWithNoActiveSearchDoesNothing() {
+    XCTAssertFalse(
+      ConversationsPage.shouldRefreshSearchAfterRestore(
+        searchResults: [Self.conversation(id: "conversation-1")],
+        searchQuery: "",
+        restoredId: "conversation-1"))
+  }
+
   /// The summary pane's markdown must stay drag-selectable *through AppKit*:
   /// one `NSTextView` owning one selection, with no SwiftUI `SelectionOverlay`
   /// around the tall block (FC-selection-overlay-layout-loop). The boundary

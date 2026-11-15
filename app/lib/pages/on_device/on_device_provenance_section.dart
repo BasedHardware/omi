@@ -44,8 +44,9 @@ class OnDeviceProvenanceChip extends StatelessWidget {
 }
 
 /// Top of a conversation's summary when its transcript was made on the phone: where the transcript
-/// and summary were made, why, the keep-everything switch where a summary left the phone, and Redo
-/// with Omi Cloud. Nothing for a conversation Omi Cloud transcribed.
+/// and summary were made on one line, and — behind a tap on that line — why, the keep-everything
+/// switch where a summary left the phone, and Redo with Omi Cloud. Nothing for a conversation Omi
+/// Cloud transcribed.
 class OnDeviceProvenanceSection extends StatelessWidget {
   const OnDeviceProvenanceSection({super.key, required this.conversationId, this.controller, this.onRedo});
 
@@ -90,52 +91,53 @@ class OnDeviceProvenanceSection extends StatelessWidget {
         key: const Key('on_device_provenance_section'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: OmiSpacing.xs,
-            runSpacing: OmiSpacing.xs,
-            children: [
-              OnDeviceStatusChip(icon: onDevicePhoneIcon, label: onDeviceTranscriptOriginLabel(context, provenance)),
-              if (cloudSummary) OnDeviceStatusChip(icon: Icons.cloud, label: l10n.onDeviceSummarizedByCloud),
-            ],
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          Container(
-            padding: const EdgeInsets.all(OmiSpacing.md),
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          _CollapsibleWhy(
+            summary: Wrap(
+              spacing: OmiSpacing.xs,
+              runSpacing: OmiSpacing.xs,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ExcludeSemantics(child: Icon(Icons.info_outline, size: 18, color: OmiColors.textSecondary)),
-                    const SizedBox(width: OmiSpacing.xs),
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          cloudSummary ? l10n.onDeviceWhyCloudTitle : l10n.onDeviceWhyPhoneTitle,
-                          style: OmiType.headline,
+                OnDeviceStatusChip(icon: onDevicePhoneIcon, label: onDeviceTranscriptOriginLabel(context, provenance)),
+                if (cloudSummary) OnDeviceStatusChip(icon: Icons.cloud, label: l10n.onDeviceSummarizedByCloud),
+              ],
+            ),
+            details: Container(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ExcludeSemantics(child: Icon(Icons.info_outline, size: 18, color: OmiColors.textSecondary)),
+                      const SizedBox(width: OmiSpacing.xs),
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            cloudSummary ? l10n.onDeviceWhyCloudTitle : l10n.onDeviceWhyPhoneTitle,
+                            style: OmiType.headline,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                Text(why, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
-                if (onRedo != null) ...[
-                  const SizedBox(height: OmiSpacing.sm),
-                  OmiButton.secondary(
-                    key: const Key('on_device_redo_with_cloud'),
-                    label: l10n.onDeviceRedoWithCloud,
-                    icon: Icons.refresh,
-                    size: OmiButtonSize.compact,
-                    onPressed: onRedo,
+                    ],
                   ),
-                  const SizedBox(height: OmiSpacing.xxs),
-                  Text(l10n.onDeviceRedoHint, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  const SizedBox(height: OmiSpacing.xs),
+                  Text(why, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+                  if (onRedo != null) ...[
+                    const SizedBox(height: OmiSpacing.sm),
+                    OmiButton.secondary(
+                      key: const Key('on_device_redo_with_cloud'),
+                      label: l10n.onDeviceRedoWithCloud,
+                      icon: Icons.refresh,
+                      size: OmiButtonSize.compact,
+                      onPressed: onRedo,
+                    ),
+                    const SizedBox(height: OmiSpacing.xxs),
+                    Text(l10n.onDeviceRedoHint, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           if (cloudSummary) ...[
@@ -154,6 +156,49 @@ class OnDeviceProvenanceSection extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The one-line provenance, collapsed by default: a tap on the line opens the details beneath it.
+class _CollapsibleWhy extends StatefulWidget {
+  const _CollapsibleWhy({required this.summary, required this.details});
+
+  final Widget summary;
+  final Widget details;
+
+  @override
+  State<_CollapsibleWhy> createState() => _CollapsibleWhyState();
+}
+
+class _CollapsibleWhyState extends State<_CollapsibleWhy> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          button: true,
+          expanded: _expanded,
+          child: InkWell(
+            key: const Key('on_device_why_toggle'),
+            borderRadius: OmiRadius.lgAll,
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Row(
+              children: [
+                Expanded(child: widget.summary),
+                Icon(_expanded ? Icons.expand_less : Icons.expand_more, color: OmiColors.textSecondary),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          widget.details,
+        ],
+      ],
     );
   }
 }

@@ -1,0 +1,62 @@
+version: 2
+name: passive-window-focus
+tier: 1
+description: Synthetic presentation probes in a disposable non-production bundle; live foreground-app focus is verified separately in normal presentation mode.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationPassiveWindowActions.swift
+preconditions:
+  - automation_bridge_ready
+steps:
+  - id: S1
+    name: Prepare an isolated bar
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: prepare
+    expect:
+      result.detail.visible: "false"
+  - id: S2
+    name: Background reveal with an open composer never requests keyboard focus
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: background_input
+    expect:
+      result.detail.key: "false"
+      result.detail.foreground_unchanged: "true"
+  - id: S3
+    name: Temporary reveal keeps keyboard focus unchanged
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: temporary
+    expect:
+      result.detail.key: "false"
+      result.detail.foreground_unchanged: "true"
+  - id: S4
+    name: Snooze the bar
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: snooze
+    expect:
+      result.detail.snoozed: "true"
+  - id: S5
+    name: Snooze expiry reveals without focusing
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: snooze_end
+    expect:
+      result.detail.snoozed: "false"
+      result.detail.key: "false"
+  - id: S6
+    name: Hide the fixture after the probe
+    bridge.action:
+      name: probe_passive_window
+      params:
+        event: disable
+    expect:
+      result.detail.enabled: "false"
+      result.detail.visible: "false"

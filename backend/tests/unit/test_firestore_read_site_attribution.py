@@ -318,7 +318,12 @@ class _DeletionClient:
 
 
 def test_user_deletion_wipe_status_hit_records_hit_and_keeps_behaviour(monkeypatch):
-    recorded = _spy_record_document_read(monkeypatch, deletion_marker)
+    # The marker helper imports the metric recorder lazily to keep module
+    # initialization light, so patch the defining module rather than an
+    # attribute that the marker module does not export.
+    from database import firestore_read_metrics as metrics
+
+    recorded = _spy_record_document_read(monkeypatch, metrics)
     client = _DeletionClient(_DeletionSnapshot(exists=True, data={'wipe_status': 'running'}))
 
     status = users_db.get_user_deletion_wipe_status('uid-1', firestore_client=client)
@@ -328,7 +333,9 @@ def test_user_deletion_wipe_status_hit_records_hit_and_keeps_behaviour(monkeypat
 
 
 def test_user_deletion_wipe_status_miss_records_miss_and_keeps_behaviour(monkeypatch):
-    recorded = _spy_record_document_read(monkeypatch, deletion_marker)
+    from database import firestore_read_metrics as metrics
+
+    recorded = _spy_record_document_read(monkeypatch, metrics)
     client = _DeletionClient(_DeletionSnapshot(exists=False))
 
     status = users_db.get_user_deletion_wipe_status('uid-1', firestore_client=client)

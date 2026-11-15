@@ -61,12 +61,12 @@ struct ReferralProgramView: View {
           .accessibilityHidden(true)
 
         VStack(spacing: OmiSpacing.sm) {
-          Text("Give a friend one free month of Operator")
+          Text("Give a friend one free month of Omi Pro")
             .scaledFont(size: OmiType.title, weight: .semibold)
             .foregroundColor(Ink.primary)
             .multilineTextAlignment(.center)
 
-          Text("Share your unique link. When a friend joins Omi, they'll get one month of Operator free.")
+          Text("Share your unique link. When a friend joins Omi, they'll get one month of Omi Pro free.")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)

@@ -98,6 +98,7 @@ There are exactly two ways out, and they mean different things.
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
   next to a checkbox (`OmiCheckboxRow`).
+- A compact pill action uses `OmiButton(size: OmiButtonSize.compact, pill: true)` with `OmiRadius.pillAll`.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.
@@ -255,7 +256,7 @@ for every locale (`hardcoded-text` counts `Text('…')` with letters in it).
 | Say | Not |
 |---|---|
 | **Omi** | omi, OMI |
-| **Task(s)** (D3) | Action Item(s), To-Do(s) |
+| **Tasks** (D3) | Action Item(s), To-Do(s), except the meeting-note section of extracted items is **Action items** |
 | **Memories** | Facts |
 | **Try Again** | Retry, Try again |
 | **Not Now** (postpone) | Later, Maybe Later, No |
@@ -330,3 +331,5 @@ guidance.
 Changing a rule here is a product decision: update the primitive, migrate its callers in the same PR,
 and add or tighten a rule in `check_mobile_ux_contract.py` (with a failing case in
 `test_check_mobile_ux_contract.py`) so the old pattern cannot come back.
+
+Closed episode headers use `OmiDateFormat.weekdayDate` with `timeRange` and `OmiDuration.compact`; their Home rows reuse `ConversationListItem`.

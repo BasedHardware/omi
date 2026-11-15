@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-on-the-way-rows-before.png",
+      "platform": "mobile-ios",
+      "description": "On the Way before: refused rows show only Failed with a chevron, undated rows show no length, no row actions",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-on-the-way-rows-after.png",
+      "platform": "mobile-ios",
+      "description": "On the Way after: rows show time and length, short reasons (Invalid recording date, Too large, too old) and Retry/Delete actions over the whole recording; the too-large row offers Delete only, including the undated never-set-clock row",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-device-stats-before.png",
+      "platform": "mobile-ios",
+      "description": "Device stats before: Heard today 0s and On Device 0s while a 33-minute episode runs and audio is queued on the phone",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-device-stats-after.png",
+      "platform": "mobile-ios",
+      "description": "Device stats after: Heard today 33m counts the running episode, On Device names the 7h 45m phone queue, and the three tiles share one row height — the On Device captions raise the whole row",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

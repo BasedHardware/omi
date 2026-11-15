@@ -75,6 +75,10 @@ def _load_real_notifications():
 
         import utils.notifications as notif
 
+        # This suite tests token analytics in isolation from the deletion
+        # authority; account-deletion behavior has dedicated coverage.
+        notif.account_deletion_blocks_user_work = lambda _uid: False
+
         return notif
     finally:
         sys.meta_path.remove(finder)

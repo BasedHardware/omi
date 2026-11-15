@@ -1,5 +1,6 @@
 """Bounded Firestore query contract for canonical required-memory processing."""
 
+import pytest
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -7,6 +8,7 @@ from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
 from utils.memory.canonical_required_processing import (
     list_pending_required_processing_items,
+    list_receipted_required_processing_items,
     run_required_memory_processing,
 )
 from utils.memory.required_promotion import (
@@ -44,11 +46,13 @@ class _Query:
         filters: list[tuple[str, str, Any]] | None = None,
         order_fields: list[str] | None = None,
         limit_count: int | None = None,
+        after: dict[str, Any] | None = None,
     ):
         self._db = db
         self._filters = list(filters or [])
         self._order_fields = list(order_fields or [])
         self._limit_count = limit_count
+        self._after = after
 
     def where(
         self,
@@ -69,6 +73,7 @@ class _Query:
             [*self._filters, (field_path, op_string, value)],
             self._order_fields,
             self._limit_count,
+            self._after,
         )
 
     def order_by(self, field_path: str) -> "_Query":
@@ -77,10 +82,15 @@ class _Query:
             self._filters,
             [*self._order_fields, field_path],
             self._limit_count,
+            self._after,
         )
 
     def limit(self, limit_count: int) -> "_Query":
-        return _Query(self._db, self._filters, self._order_fields, limit_count)
+        return _Query(self._db, self._filters, self._order_fields, limit_count, self._after)
+
+    def start_after(self, cursor):
+        assert set(cursor) == {'captured_at', 'memory_id'}
+        return _Query(self._db, self._filters, self._order_fields, self._limit_count, cursor)
 
     def stream(self) -> list[_Snapshot]:
         rows = list(self._db.rows)
@@ -89,11 +99,18 @@ class _Query:
                 rows = [row for row in rows if _nested_value(row[1], field_path) == expected]
             elif op_string == "in":
                 rows = [row for row in rows if _nested_value(row[1], field_path) in expected]
+            elif op_string == ">=":
+                rows = [row for row in rows if _nested_value(row[1], field_path) >= expected]
+            elif op_string == "<":
+                rows = [row for row in rows if _nested_value(row[1], field_path) < expected]
             else:
                 raise AssertionError(f"unexpected operator: {op_string}")
 
         for field_path in reversed(self._order_fields):
             rows.sort(key=lambda row: _nested_value(row[1], field_path))
+        if self._after:
+            boundary = tuple(self._after[key] for key in self._order_fields)
+            rows = [row for row in rows if tuple(_nested_value(row[1], key) for key in self._order_fields) > boundary]
 
         if self._limit_count is not None:
             rows = rows[: self._limit_count]
@@ -217,3 +234,53 @@ def test_required_processing_limit_zero_does_not_query() -> None:
     report = run_required_memory_processing("uid-zero", db_client=_Boom(), limit=0)
     assert report.attempted_count == 0
     assert report.processed_memory_ids == []
+
+
+def test_pending_query_is_unwindowed_after_maintenance_retirement() -> None:
+    """The maintenance window (MEMORY_MAINTENANCE_CAPTURED_AFTER) was retired with
+    memory-maintenance-job on 2026-10-26; pending intake decides every age."""
+    items = [_item("old", captured_at=NOW - timedelta(days=30)), _item("new", captured_at=NOW)]
+    db = _Db([(f"users/{UID}/memory_items/{item.memory_id}", item.model_dump(mode="python")) for item in items])
+
+    pending = list_pending_required_processing_items(UID, db_client=db, limit=25)
+
+    assert [item.memory_id for item in pending] == ["old", "new"]
+    assert all(operator != ">=" for _field, operator, _value in db.filters)
+
+
+def test_completion_query_excludes_observations_and_unprocessed_rows_before_stream():
+    ordinary = [
+        _item(f'ordinary-{index}', captured_at=NOW, required=False, processing_status='processed').model_copy(
+            update={'processing_state': ProcessingState.processed}
+        )
+        for index in range(250)
+    ]
+    ready = _item('ready', captured_at=NOW, processing_status='processed').model_copy(
+        update={'processing_state': ProcessingState.processed}
+    )
+    pending = _item('pending', captured_at=NOW)
+    db = _Db(
+        [
+            (f'users/{UID}/memory_items/{row.memory_id}', row.model_dump(mode='python'))
+            for row in [*ordinary, ready, pending]
+        ]
+    )
+    result = list_receipted_required_processing_items(UID, db_client=db)
+    assert [row.memory_id for row in result] == ['ready']
+    assert db.streamed_count == 1 and db.stream_limit == 100
+
+
+def test_retry_and_completion_cursors_preserve_same_time_tie_breaks():
+    for processed in (False, True):
+        rows = [
+            _item(
+                key, captured_at=NOW, processing_status='processed' if processed else REQUIRED_PROCESSING_STATUS_PENDING
+            ).model_copy(
+                update={'processing_state': ProcessingState.processed if processed else ProcessingState.pending}
+            )
+            for key in ('a', 'b', 'c')
+        ]
+        db = _Db([(f'users/{UID}/memory_items/{row.memory_id}', row.model_dump(mode='python')) for row in rows])
+        read = list_receipted_required_processing_items if processed else list_pending_required_processing_items
+        result = read(UID, db_client=db, cursor={'captured_at': NOW, 'memory_id': 'a'})
+        assert [row.memory_id for row in result] == ['b', 'c']

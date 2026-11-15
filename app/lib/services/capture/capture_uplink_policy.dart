@@ -194,7 +194,7 @@ extension _CaptureUplinkPolicy on CaptureController {
     await _ensureDeviceSocketConnection();
     if (!_admitsCapture(revision)) return;
     await _initiateDeviceAudioStreaming();
-    if (!_admitsCapture(revision)) return;
+    if (!_admitsCapture(revision) || (_bleBytesStream == null && !SyncWakeScope.syncOnly)) return;
     updateRecordingState(RecordingState.deviceRecord);
     _publishCaptureChange();
   }

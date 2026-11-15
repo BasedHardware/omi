@@ -1,7 +1,7 @@
 """Run the real four FastAPI routes with offline auth/storage dependencies."""
 
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -24,6 +24,8 @@ PATHS = ['/v1/dev/user/conversations', '/v1/dev/user/memories', '/v1/dev/user/ac
 
 @pytest.fixture
 def routes(monkeypatch):
+    # Legacy cache contract; the transcription gate has independent time-dependent responses.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'off')
     storage = FakeRedis()
     monkeypatch.setattr(cache.action_item_versions, 'version', lambda uid: 'stable-' + uid)
     monkeypatch.setattr(cache, 'submit_with_context', immediate_population)
@@ -52,7 +54,11 @@ def routes(monkeypatch):
     async def action_auth(context=Depends(auth)):
         return context.uid
 
-    for dependency in [developer.get_api_key_auth, developer.get_auth_with_conversations_read]:
+    for dependency in [
+        developer.get_api_key_auth,
+        developer.get_auth_with_conversations_read,
+        developer.get_auth_with_conversation_detail_read,
+    ]:
         app.dependency_overrides[dependency] = auth
     for dependency in [
         developer.get_developer_memory_default_memory_read_context,
@@ -60,6 +66,7 @@ def routes(monkeypatch):
     ]:
         app.dependency_overrides[dependency] = memory_auth
     app.dependency_overrides[developer.get_uid_with_action_items_read] = action_auth
+    app.dependency_overrides[developer.get_uid_with_goals_read] = action_auth
 
     def grant(*args, **kwargs):
         calls.grant()
@@ -109,8 +116,88 @@ def test_real_routes_cache_final_array_bytes_and_still_authorize(routes, path, o
     assert client.get(path, headers={'Authorization': 'Bearer synthetic-key'}).status_code == 429
     state.status = 401
     assert client.get(path, headers={'Authorization': 'Bearer synthetic-key'}).status_code == 401
+    state.status = 403
+    assert client.get(path, headers={'Authorization': 'Bearer synthetic-key'}).status_code == 403
     assert getattr(calls, origin).call_count == 1
     assert storage.entries
+
+
+@pytest.mark.parametrize('kind', ['conversations', 'daily-summaries', 'goals'])
+def test_item_404_cache_runs_after_auth_and_isolates_owner_key_and_item(routes, monkeypatch, kind):
+    client, state, calls, _ = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
+    if kind == 'conversations':
+        reader = Mock(return_value=None)
+        monkeypatch.setattr(developer.conversations_db, 'get_conversation', reader)
+    elif kind == 'daily-summaries':
+        reader = Mock(return_value=None)
+        monkeypatch.setattr(developer.daily_summaries_db, 'get_daily_summary', reader)
+    else:
+        reader = Mock(return_value=None)
+        monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', reader)
+        monkeypatch.setattr(
+            developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read'))
+        )
+    path = f'/v1/dev/user/{kind}/missing'
+    assert client.get(path).status_code == 404
+    cached = client.get(path)
+    assert cached.status_code == 404
+    assert cached.headers['X-Omi-List-Cache'] == 'negative; max-age=10'
+    assert reader.call_count == 1
+    for status in [401, 403]:
+        state.status = status
+        assert client.get(path).status_code == status
+    assert reader.call_count == 1
+    state.status = 200
+    assert client.get(path + '-other').status_code == 404
+    assert reader.call_count == 2
+    state.uid = 'other-owner'
+    assert client.get(path).status_code == 404
+    assert reader.call_count == 3
+    state.key_id = 'other-key'
+    assert client.get(path).status_code == 404
+    assert reader.call_count == 4
+
+
+def test_malformed_goal_is_not_negative_cached_and_repair_is_immediately_visible(routes, monkeypatch):
+    client, _, _, storage = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'true')
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_PERCENT', '100')
+    now = datetime.now(timezone.utc)
+    repaired = developer.goals_db.normalize_goal_storage(
+        dict(
+            id='repaired',
+            title='Repaired',
+            goal_type='boolean',
+            target_value=1,
+            current_value=0,
+            min_value=0,
+            max_value=1,
+            created_at=now,
+            updated_at=now,
+        ),
+        goal_id='repaired',
+    )
+    point_read = Mock(side_effect=[ValueError('malformed stored goal'), repaired])
+    monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', point_read)
+    monkeypatch.setattr(developer.goals_db, 'get_all_goals', Mock(side_effect=AssertionError('cohort uses point read')))
+    first = client.get('/v1/dev/user/goals/repaired')
+    assert first.status_code == 404 and not storage.entries
+    second = client.get('/v1/dev/user/goals/repaired')
+    assert second.status_code == 200 and second.json()['title'] == 'Repaired'
+    assert point_read.call_count == 2
+
+
+def test_goal_item_off_cohort_keeps_the_original_list_reader_and_no_negative_cache(routes, monkeypatch):
+    client, _, _, storage = routes
+    monkeypatch.setenv('OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED', 'false')
+    reader = Mock(return_value=[])
+    monkeypatch.setattr(developer.goals_db, 'get_all_goals', reader)
+    monkeypatch.setattr(developer.goals_db, 'get_goal_by_id', Mock(side_effect=AssertionError('off cohort stays live')))
+    for _ in range(2):
+        assert client.get('/v1/dev/user/goals/missing').status_code == 404
+    assert reader.call_count == 2 and not storage.entries
 
 
 @pytest.mark.parametrize('path,origin', zip(PATHS, ['cards', 'memories', 'actions', 'mcp_memories']))
@@ -363,3 +450,30 @@ def test_real_route_cache_separates_effective_read_limits_and_owner(routes, monk
     assert getattr(calls, origin).call_count == 3
     assert seen == [('owner', 'owner')] * 4 + [('other-owner', 'other-owner')]
     assert len(storage.entries) == 3
+
+
+def test_transcription_gate_projects_developer_list_and_bypasses_cache(routes, monkeypatch):
+    client, state, calls, storage = routes
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', 'on')
+    now = datetime.now(timezone.utc)
+    # Keep this route/cache contract independent of another test module's heavy
+    # import graph; it needs only the stamped batch presentation fields.
+    state.rows = [
+        {
+            'id': 'capture',
+            'created_at': now,
+            'started_at': now,
+            'finished_at': now,
+            'status': 'completed',
+            'record_lane_owner': 'batch_live_v1',
+            'home_transcription_deadline_at': now + timedelta(hours=2),
+            'structured': {'title': '', 'overview': '', 'category': 'other'},
+            'transcript_segments': [],
+        }
+    ]
+    for _ in range(2):
+        result = client.get('/v1/dev/user/conversations', headers={'Authorization': 'Bearer synthetic-key'})
+        assert result.status_code == 200, result.text
+        assert result.json()[0]['structured']['title'] == 'Transcribing…'
+    assert calls.cards.call_count == 2
+    assert not storage.entries

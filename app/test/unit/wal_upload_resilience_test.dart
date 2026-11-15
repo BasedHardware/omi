@@ -1,18 +1,23 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import '../support/faulting_wal_writer.dart';
 
 /// Covers WAL upload failure scenarios that cause recordings to become stuck.
 ///
@@ -40,6 +45,19 @@ class _MockListener implements IWalSyncListener {
 
   @override
   void onWalSynced(Wal wal, {ServerConversation? conversation}) => syncedWals.add(wal);
+}
+
+class _UploadGateSpy implements SyncUploadGate {
+  int calls = 0;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #upload) {
+      calls++;
+      return Future.value(UploadFilesResult.queued('accepted'));
+    }
+    return super.noSuchMethod(invocation);
+  }
 }
 
 Wal _makeWal({
@@ -121,6 +139,166 @@ void main() {
     );
     SyncRateLimiter.instance.clear();
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+  });
+
+  for (final liveOnly in [false, true]) {
+    test('cancel during queued flush prevents the real ${liveOnly ? 'live' : 'fallback'} phone drain reaching its gate',
+        () async {
+      final gate = _UploadGateSpy();
+      final phone = LocalWalSyncImpl(listener, uploadGate: gate);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final wal = _makeWal(timerStart: now - (liveOnly ? 60 : 86400));
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+      phone.testWals = [wal];
+      final blocked = Completer<void>();
+      final queued = phone.testQueueWalIo(blocked.future);
+      final pass = liveOnly ? phone.syncLiveCaptureOnly() : phone.syncAll();
+      phone.cancelSync(); // The real drain has entered and is waiting on the buffer queue.
+      blocked.complete();
+      await queued;
+      await pass;
+      expect(gate.calls, 0);
+      expect(wal.status, WalStatus.miss);
+      expect(wal.isSyncing, isFalse);
+      expect(await File('${tempDir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
+      await phone.syncAll(); // Only a deliberately new pass may upload again.
+      expect(gate.calls, 1);
+    });
+  }
+
+  test('end watermark counts unknown clocks and refusals without counting accepted files or valid trailing silence',
+      () {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final end = DateTime.fromMillisecondsSinceEpoch((now - 120) * 1000);
+    Wal row(int start, WalStatus status) => _makeWal(timerStart: start, status: status)..recordingSessionId = 'ended';
+    final refused = row(now - 180, WalStatus.uploadRejected)
+      ..uploadRejectionReason = WalUploadRejection.invalidCaptureTime;
+    sync.testWals = [
+      row(now - 180, WalStatus.miss),
+      row(2145916800, WalStatus.miss),
+      row(0, WalStatus.miss),
+      refused,
+      row(now - 180, WalStatus.inProgress),
+      row(now - 60, WalStatus.miss), // Trusted trailing silence after the end.
+      row(2145916800, WalStatus.uploaded),
+      row(2145916800, WalStatus.synced)..syncedAt = now,
+      row(now - 180, WalStatus.synced), // Transport only: no server proof.
+      row(now - 180, WalStatus.corrupted),
+      row(now - 180, WalStatus.outsideRecoveryWindow),
+      row(2145916800, WalStatus.miss)..recordingSessionId = 'other',
+    ];
+    expect(sync.pendingWalsForRecording('ended', through: end), 8);
+    expect(sync.pendingWalsForRecording('ended'), 9);
+  });
+
+  for (final operation in ['flush', 'close']) {
+    test('failed $operation seal stays pending from disk through cancel and replay until real upload acceptance',
+        () async {
+      SharedPreferencesUtil().uid = 'owner';
+      late FaultingWalWriter writer;
+      final producer = MobileBatchBuffer(
+        directory: tempDir,
+        publish: (_) async => fail('a failed seal must not publish'),
+        openWriter: (file) => writer = FaultingWalWriter(file),
+      );
+      await producer.initialize();
+      final now = DateTime.now();
+      expect(
+          producer.append([9], uid: 'owner', codec: BleAudioCodec.opus, now: now, recordingSessionId: 'sealed'), true);
+      if (operation == 'flush') {
+        writer.failFlush = true;
+      } else {
+        writer.failClose = true;
+      }
+      producer.seal();
+      expect(producer.failed, isTrue);
+      expect(producer.hasFrames, isFalse, reason: 'the failed writer has left the in-memory set');
+      // Recreate the observer as on restart: it has never held this WAL in memory.
+      final observer = MobileBatchBuffer(directory: tempDir, publish: (_) async {});
+      final sent = <int>[];
+      Future<int> pending() async =>
+          await observer.pendingJournalCount('sealed',
+              through: now, acceptedFileBytes: sync.captureEndAcceptedFileBytes('sealed')) +
+          sync.pendingWalsForRecording('sealed', through: now);
+      final reporter = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add(pendingWals);
+          return true;
+        },
+        pendingWals: (_) => pending(),
+        disabled: () async => false,
+      );
+      await reporter.report(CaptureEndSignal(
+          recordingSessionId: 'sealed', type: CaptureEndType.userInitiated, lastSpeechAt: now, decidedAt: now));
+      expect(sent, [1], reason: 'the durable journal survives a failed seal and a fresh observer');
+      final recovered = await MobileBatchBuffer.recover(tempDir, []);
+      expect(recovered, hasLength(1));
+      await sync.addExternalWal(recovered.single, admittedGeneration: sync.sessionGeneration);
+      expect(await pending(), greaterThan(0), reason: 'journal replay/index admission is not server acceptance');
+      final blocked = Completer<void>();
+      final queued = sync.testQueueWalIo(blocked.future);
+      final cancelled = sync.syncAll();
+      sync.cancelSync();
+      blocked.complete();
+      await queued;
+      await cancelled;
+      await reporter.uploadAccepted('sealed');
+      expect(uploadAttempts, isEmpty);
+      expect(sent, [1], reason: 'cancellation cannot discharge pending evidence');
+      uploadResponse = (_) async => UploadFilesResult.queued('accepted-seal');
+      sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+      await sync.syncAll();
+      await reporter.uploadAccepted('sealed');
+      expect(sent, [1, 0]);
+      expect(await pending(), 0);
+      expect(tempDir.listSync().whereType<File>().where((file) => file.path.endsWith('.batch-journal')), hasLength(1),
+          reason: 'observing acceptance does not delete or rewrite recovery evidence');
+      expect(await File('${tempDir.path}/${recovered.single.filePath}').readAsBytes(), [1, 0, 0, 0, 9]);
+    });
+  }
+
+  test('end reporter reaches zero only after both clock classes in the same session are accepted', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final valid = _makeWal(timerStart: now - 60, filePath: 'audio_${now - 60}.bin')..recordingSessionId = 'mixed';
+    final future = _makeWal(timerStart: 2145916800, filePath: 'audio_2145916800.bin')
+      ..recordingSessionId = 'mixed'
+      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400);
+    for (final wal in [valid, future]) {
+      await File('${tempDir.path}/${wal.filePath}').writeAsBytes([1, 0, 0, 0, 42]);
+    }
+    sync.testWals = [future, valid];
+    final sent = <int>[];
+    final reporter = CaptureEndReporter(
+      disabled: () async => false,
+      post: (signal, {required pendingWals, required sentAt}) async {
+        sent.add(pendingWals);
+        return true;
+      },
+      pendingWals: (signal) => sync.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt),
+    );
+    sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+    uploadResponse = (files) async {
+      if (files.single.uri.pathSegments.last == future.filePath) {
+        expect(valid.status, WalStatus.uploaded, reason: 'valid audio retains the first turn');
+        expect(sync.pendingWalsForRecording('mixed', through: DateTime.now()), 1);
+      }
+      return UploadFilesResult.queued('accepted-${uploadAttempts.length}');
+    };
+    await reporter.report(CaptureEndSignal(
+      recordingSessionId: 'mixed',
+      type: CaptureEndType.userInitiated,
+      lastSpeechAt: DateTime.now(),
+      decidedAt: DateTime.now(),
+    ));
+    await sync.syncAll();
+    await reporter.uploadAccepted('mixed'); // Settle the reporter's serialized observer queue.
+    expect(uploadAttempts, [
+      [valid.filePath],
+      [future.filePath]
+    ]);
+    expect(liveClaims.last, isFalse, reason: 'the unknown clock never claims a live manifest');
+    expect(sent, [2, 0], reason: 'accepting valid work must not hide the retained invalid-date refusal');
+    expect(future.status, WalStatus.uploaded);
   });
 
   // -------------------------------------------------------------------------
@@ -278,7 +456,7 @@ void main() {
       // production file validation accepts the file.
       const filename = 'valid_audio_5000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]); // Any content — just needs to exist
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]); // Any content — just needs to exist
 
       final wal = _makeWal(timerStart: 5000, filePath: filename);
       sync.testWals = [wal];
@@ -315,7 +493,7 @@ void main() {
 
       const filename = 'zombie_audio_6000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]); // File exists — passes pre-upload checks
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]); // File exists — passes pre-upload checks
 
       final wal = _makeWal(timerStart: 6000, filePath: filename);
       expect(wal.retryCount, 0);
@@ -351,7 +529,7 @@ void main() {
       // `isAutoUploadEligible` now applies `walMaxAutoRetries` to every auto loop.
       const filename = 'high_retry_7000.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
 
       final wal = _makeWal(timerStart: 7000, filePath: filename);
       wal.retryCount = 50; // Has failed 50 times already
@@ -371,7 +549,7 @@ void main() {
     test('syncAll still uploads a WAL with budget left', () async {
       const filename = 'some_retry_7100.bin';
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
 
       final wal = _makeWal(timerStart: 7100, filePath: filename);
       wal.retryCount = walMaxAutoRetries - 1;
@@ -382,6 +560,57 @@ void main() {
       expect(result?.localUploadFailures, 1, reason: 'the last budgeted attempt is still made');
       expect(sync.testWals.first.isSyncing, false);
     });
+  });
+
+  // -------------------------------------------------------------------------
+  // A network switch under an open upload: iOS fails the socket with
+  // EADDRNOTAVAIL (errno 49), and package:http reports it as a bare
+  // ClientException("Can't assign requested address"). The recording must stay
+  // queued with its retry budget, the failure must not read as a permanent
+  // refusal, and the next pass must upload the same file.
+  // -------------------------------------------------------------------------
+
+  group('network switch mid-upload (EADDRNOTAVAIL)', () {
+    final uri = Uri.parse('https://api.omi.me/v2/sync-local-files?audio_start_seconds=1792927415.0');
+    final failures = <String, Object>{
+      'bare ClientException': http.ClientException("Can't assign requested address", uri),
+      'SocketException errno 49':
+          const SocketException('Write failed', osError: OSError("Can't assign requested address", 49)),
+    };
+
+    for (final MapEntry(key: label, value: failure) in failures.entries) {
+      test('$label keeps the recording queued and the next pass uploads it', () async {
+        const filename = 'handover_audio_8000.bin';
+        final file = File('${tempDir.path}/$filename');
+        await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
+        final wal = _makeWal(timerStart: 8000, filePath: filename);
+        sync.testWals = [wal];
+        uploadFailure = failure;
+
+        final failed = await sync.syncAll();
+
+        expect(failed?.localUploadFailures, 1);
+        expect(failed?.localUploadPermanentFailures, 0, reason: 'a network switch is not a refusal of the audio');
+        expect(failed?.localUploadPermanentError, isNull);
+        expect(wal.status, WalStatus.miss);
+        expect(wal.retryCount, 0);
+        expect(wal.isSyncing, isFalse);
+        expect(isAutoUploadEligible(wal), isTrue, reason: 'the next automatic pass must pick it up');
+        expect(file.existsSync(), isTrue, reason: 'the audio is never dropped');
+
+        uploadResponse = (files) async => UploadFilesResult.queued('job-after-switch');
+        final recovered = await sync.syncAll();
+
+        expect(recovered?.localUploadFailures, 0);
+        expect(uploadAttempts, [
+          [filename],
+          [filename],
+        ]);
+        expect(wal.status, WalStatus.uploaded);
+        expect(wal.jobId, 'job-after-switch');
+        expect(file.existsSync(), isTrue, reason: 'the file is kept until the server confirms the job');
+      });
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -400,7 +629,7 @@ void main() {
 
     Future<File> writeAudio(String filename) async {
       final file = File('${tempDir.path}/$filename');
-      await file.writeAsBytes([0xAA, 0xBB]);
+      await file.writeAsBytes([1, 0, 0, 0, 0xAA]);
       return file;
     }
 
@@ -508,7 +737,7 @@ void main() {
       for (var i = 0; i < 2; i++) {
         final start = now - 180 + i * 60;
         final name = 'audio_omi_$start.bin';
-        await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+        await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
         wals.add(_makeWal(timerStart: start, filePath: name)
           ..conversationId = 'live-recording'
           ..captureRoot = '12345678-1234-1234-1234-123456789abc'
@@ -533,7 +762,7 @@ void main() {
         final wals = <Wal>[];
         for (var i = 0; i < 3; i++) {
           final name = 'audio_omi_1000$i.bin';
-          await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+          await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
           wals.add(_makeWal(timerStart: 10000 + i, filePath: name));
         }
         sync.testWals = wals;
@@ -551,8 +780,8 @@ void main() {
         expect(uploadAttempts.map((attempt) => attempt.length), [3, 1, 1, 1]);
         expect(wals.take(2).map((wal) => wal.status), everyElement(WalStatus.uploaded));
         expect(wals.last.status, statusCode == 400 ? WalStatus.uploadRejected : WalStatus.uploaded);
-        expect(result?.localUploadPermanentFailures, statusCode == 400 ? 1 : 0);
-        expect(result?.localUploadFailures, statusCode == 400 ? 1 : 0);
+        expect(result?.localUploadPermanentFailures, 0);
+        expect(result?.localUploadFailures, 0);
         for (final wal in wals) {
           expect(File('${tempDir.path}/${wal.filePath}').existsSync(), isTrue);
           expect(wal.timerStart, 10000 + wals.indexOf(wal), reason: 'recovery never invents a capture time');
@@ -563,20 +792,20 @@ void main() {
     Future<Wal> refusedWal(int statusCode) async {
       uploadFailure = SyncUploadHttpException(statusCode, 'definitive refusal');
       final filename = 'refused_$statusCode.bin';
-      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
       final wal = _makeWal(timerStart: 10000 + statusCode, filePath: filename);
       sync.testWals = [wal];
       return wal;
     }
 
     for (final statusCode in [400, 413]) {
-      test('HTTP $statusCode becomes terminal and repeated wakes do not re-upload', () async {
+      test('HTTP $statusCode is quiet and immediate repeated wakes do not re-upload', () async {
         final wal = await refusedWal(statusCode);
 
         final first = await sync.syncAll();
         final second = await sync.syncAll();
 
-        expect(first?.localUploadPermanentFailures, 1);
+        expect(first?.localUploadPermanentFailures, 0);
         expect(second, isNull, reason: 'a connectivity wake must not re-offer a definitive refusal');
         expect(wal.status, WalStatus.uploadRejected);
         expect(wal.syncDisplayState, WalSyncDisplayState.uploadRejected);
@@ -625,7 +854,7 @@ void main() {
       final originals = <Wal>[];
       for (var i = 0; i < 2; i++) {
         final name = 'audio_old_$i.bin';
-        await File('${tempDir.path}/$name').writeAsBytes([0xAA, i]);
+        await File('${tempDir.path}/$name').writeAsBytes([1, 0, 0, 0, i]);
         originals.add(_makeWal(timerStart: 10100 + i, filePath: name));
       }
       final next = _makeWal(timerStart: 10200, filePath: 'audio_next.bin');
@@ -685,12 +914,11 @@ void main() {
         WalStatus.corrupted,
         WalStatus.outsideRecoveryWindow,
         WalStatus.unsupportedAudio,
-        WalStatus.uploadRejected,
       ];
 
       for (var index = 0; index < terminalStatuses.length; index++) {
         final filename = 'manual_terminal_$index.bin';
-        await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+        await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
         final wal = _makeWal(timerStart: 11000 + index, status: terminalStatuses[index], filePath: filename);
         manualSync.testWals = [wal];
 
@@ -706,7 +934,7 @@ void main() {
     test('recent ID-less WAL drains after connectivity returns without lifecycle events', () async {
       final now = DateTime.utc(2026, 9, 26, 12);
       const filename = 'accepted_socket_no_lifecycle.bin';
-      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      await File('${tempDir.path}/$filename').writeAsBytes([1, 0, 0, 0, 0xAA]);
       var uploads = 0;
       String? uploadedConversationId = 'not-called';
       var claimedLiveCapture = true;
@@ -748,6 +976,83 @@ void main() {
       expect(claimedLiveCapture, isFalse, reason: 'an ID-less WAL creates a new server conversation');
       expect(result?.newConversationIds, ['recovered']);
       expect(wal.status, WalStatus.synced);
+    });
+  });
+
+  group('syncAll: server-unavailable pacing', () {
+    Future<LocalWalSyncImpl> buildDrain({
+      required Object Function() failure,
+      required List<Duration> pauses,
+      required List<List<String>> attempts,
+    }) async {
+      final sync = LocalWalSyncImpl(
+        listener,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            attempts.add(files.map((file) => file.uri.pathSegments.last).toList());
+            throw failure();
+          },
+          fairUseStatusLoader: () async => null,
+        ),
+        sleep: (duration) async => pauses.add(duration),
+      );
+      // Distinct conversations/sessions so each WAL forms its own batch.
+      const base = 2000000000 - 7 * 24 * 60 * 60;
+      sync.testWals = [
+        for (var i = 0; i < 4; i++)
+          () {
+            final name = 'paced_$i.bin';
+            File('${tempDir.path}/$name').writeAsBytesSync([1]);
+            return _makeWal(timerStart: base - i * 60, filePath: name)
+              ..conversationId = 'paced-conversation-$i'
+              ..recordingSessionId = 'paced-session-$i';
+          }(),
+      ];
+      return sync;
+    }
+
+    test('a 503 with Retry-After stops the drain instead of failing every batch', () async {
+      final pauses = <Duration>[];
+      final attempts = <List<String>>[];
+      final sync = await buildDrain(
+        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable', retryAfterSeconds: 30),
+        pauses: pauses,
+        attempts: attempts,
+      );
+
+      await sync.syncAll();
+
+      expect(attempts.length, 1, reason: 'the gate cooldown must stop the drain after the first refused batch');
+      expect(SyncRateLimiter.instance.isLimited, isTrue);
+      expect(SyncRateLimiter.instance.reason, RateLimitReason.backendBusy);
+      expect(pauses, isEmpty, reason: 'the server already scoped the pause; no local backoff on top');
+      expect(sync.testWals.every((wal) => wal.status == WalStatus.miss), isTrue,
+          reason: 'a 503 consumes no retry budget');
+    });
+
+    test('a 503 without Retry-After pauses between batches with a growing backoff', () async {
+      final pauses = <Duration>[];
+      final attempts = <List<String>>[];
+      final sync = await buildDrain(
+        failure: () => const SyncUploadHttpException(503, 'Server is temporarily unavailable'),
+        pauses: pauses,
+        attempts: attempts,
+      );
+
+      await sync.syncAll();
+
+      expect(attempts.length, 4, reason: 'without server pacing the drain keeps trying every batch');
+      expect(pauses.map((duration) => duration.inSeconds), [2, 4, 8, 16]);
+      expect(SyncRateLimiter.instance.isLimited, isFalse);
     });
   });
 }

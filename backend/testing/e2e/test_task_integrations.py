@@ -15,7 +15,7 @@ def _todoist_task_payload(title="E2E task"):
 
 
 def _save_todoist_integration(client, auth_headers, **overrides):
-    payload = {"connected": True, "access_token": "todoist-token"}
+    payload = {"connected": True, "access_token": "dummy-token"}
     payload.update(overrides)
     response = client.put("/v1/task-integrations/todoist", json=payload, headers=auth_headers)
     assert response.status_code == 200, response.text
@@ -76,7 +76,7 @@ def test_task_integration_crud_default_and_todoist_task_creation(client, auth_he
     assert len(requests) == 1
     request = requests[0]
     assert str(request.url) == "https://api.todoist.com/api/v1/tasks"
-    assert request.headers["authorization"] == "Bearer todoist-token"
+    assert request.headers["authorization"] == "Bearer dummy-token"
     payload = json.loads(request.content)
     assert payload["content"] == "E2E task"
     assert payload["description"] == "from hermetic test"
@@ -151,7 +151,7 @@ def test_todoist_provider_500_returns_failure_without_disconnect(client, auth_he
 
 
 def test_todoist_provider_401_marks_integration_disconnected(client, auth_headers, monkeypatch):
-    _save_todoist_integration(client, auth_headers, access_token="expired-todoist-token")
+    _save_todoist_integration(client, auth_headers, access_token="expired-dummy-token")
 
     def handler(request):
         return httpx.Response(401, json={"error": "unauthorized"})

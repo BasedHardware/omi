@@ -55,8 +55,10 @@ def requires_multilingual(language: str | None) -> bool:
 
 # Self-hosted gate (Parakeet /v2/language, Whisper-base). The statistic is
 # P(supported) summed over the Parakeet-25 languages, not a vendor's top-1.
-# Offline maxima on unsupported speech: 0.922 at >=6 s, 0.978 for 3 s crops.
-SELF_LID_CONFIDENCE = 0.95
+# Production shadow also found Vietnamese/vendor versus English/self candidates
+# at 0.9700 and 0.9757 on 16.7/30 s probes. Retain them on the multilingual path;
+# longer audio is not sufficient reason to lower the support-confidence floor.
+SELF_LID_CONFIDENCE = 0.985
 SELF_LID_SHORT_CONFIDENCE = 0.985
 SELF_LID_SHORT_SECONDS = 6.0
 SELF_LID_MIN_SECONDS = 1.0
@@ -80,6 +82,21 @@ def language_gate_shadow_enabled() -> bool:
         'STT_PRERECORDED_LANGUAGE_GATE_SHADOW',
         os.getenv('STT_PRERECORDED_LANGUAGE_GATE_SHADOW', 'true').strip().lower() != 'false',
     )
+
+
+def language_gate_confident_skip() -> str:
+    """Prerecorded only: skip the paid vendor probe when the shadow self verdict is already confident.
+
+    'both' (default): a self-parakeet verdict goes to Parakeet and an unsupported top-1 to the
+    multilingual route. 'unsupported': only the second, which can never put speech on Parakeet.
+    off/false/0/no restores vendor-only routing. Any other value means 'unsupported'.
+    """
+    raw = os.getenv('STT_PRERECORDED_LANGUAGE_GATE_CONFIDENT_SKIP', '').strip().lower()
+    if raw in {'', 'on', 'true', 'both'}:
+        return 'both'
+    if raw in {'off', 'false', '0', 'no'}:
+        return 'off'
+    return 'unsupported'
 
 
 def language_gate_percent() -> int:

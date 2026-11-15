@@ -298,6 +298,22 @@ void main() {
     expect(writes, ['pg', null]);
   });
 
+  test('legacy Set Default persists the built-in through the shared writer', () async {
+    final writes = <String?>[];
+    final provider = summaryProvider(summaryConversation(), writePreferredSummaryApp: (id) async {
+      writes.add(id);
+      return true;
+    });
+    addTearDown(provider.dispose);
+    expect(await provider.setPreferredSummarizationApp(builtInSummaryTemplateAppId), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId]);
+    expect(provider.preferredSummarizationAppId, builtInSummaryTemplateAppId);
+    expect(provider.defaultSummaryTemplateAppId, builtInSummaryTemplateAppId);
+    expect(await provider.setDefaultSummaryTemplateAppId(null), isTrue);
+    expect(writes, [builtInSummaryTemplateAppId, null]);
+    expect(provider.defaultSummaryTemplateAppId, isNull);
+  });
+
   test('a failed server preference write keeps the local default and reports false', () async {
     final provider = summaryProvider(
       summaryConversation(),
@@ -311,13 +327,13 @@ void main() {
   test('the default summary template is saved locally; null is Omi', () {
     final provider = summaryProvider(summaryConversation());
     addTearDown(provider.dispose);
-    expect(provider.defaultSummaryTemplateAppId, isNull);
+    expect(provider.defaultSummaryTemplateAppId, 'omi-default-summary');
     provider.setDefaultSummaryTemplateAppId('pg');
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     final otherUser = summaryProvider(summaryConversation());
     addTearDown(otherUser.dispose);
     SharedPreferencesUtil().uid = 'someone-else';
-    expect(otherUser.defaultSummaryTemplateAppId, isNull, reason: 'the default is per signed-in user');
+    expect(otherUser.defaultSummaryTemplateAppId, 'omi-default-summary', reason: 'the default is per signed-in user');
     SharedPreferencesUtil().uid = '';
     expect(provider.defaultSummaryTemplateAppId, 'pg');
     provider.setDefaultSummaryTemplateAppId(null);

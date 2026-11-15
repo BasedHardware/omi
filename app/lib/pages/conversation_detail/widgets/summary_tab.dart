@@ -24,17 +24,23 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
+import 'conversation_action_items_section.dart';
 import 'conversation_screenshots_section.dart';
+import 'summary_task_recovery.dart';
 import 'feedback_prompt_policy.dart';
 import 'feedback_sheet.dart';
-import 'summary_task_recovery.dart';
 
 class SummaryTab extends StatefulWidget {
   final bool reviewEnabled;
   final ValueChanged<String>? onOpenSource;
   final String searchQuery;
   final int currentResultIndex;
+
+  /// How many of the Summary tab's search matches precede the action-item
+  /// section; the page computes it alongside the tab's total.
+  final int summarySearchResultOffset;
   final VoidCallback? onTapWhenSearchEmpty;
+  final ValueChanged<List<String>>? onShowActionItemInTranscript;
 
   /// Switches the page to the Transcript tab.
   final VoidCallback? onOpenTranscript;
@@ -45,7 +51,9 @@ class SummaryTab extends StatefulWidget {
       this.onOpenSource,
       this.searchQuery = '',
       this.currentResultIndex = -1,
+      this.summarySearchResultOffset = 0,
       this.onTapWhenSearchEmpty,
+      this.onShowActionItemInTranscript,
       this.onOpenTranscript});
 
   @override
@@ -161,12 +169,22 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                                       );
                                 },
                               ),
+                        // After the note's sections, before the screenshots: the Mac's order.
                         if (conversation != null &&
                             !_isEditing &&
                             !summarySelection.isApp &&
                             !provider.isLoading &&
                             !provider.loadingReprocessConversation)
                           SliverToBoxAdapter(child: SummaryTaskRecovery(conversation: conversation)),
+                        if (!discarded && conversation != null)
+                          ConversationActionItemsSection(
+                            items: conversation.structured.actionItems,
+                            conversationId: conversation.id,
+                            onShowInTranscript: widget.onShowActionItemInTranscript ?? (_) {},
+                            searchQuery: widget.searchQuery,
+                            currentResultIndex: widget.currentResultIndex,
+                            searchResultOffset: widget.summarySearchResultOffset,
+                          ),
                       ]),
                     ),
                     // Where the Mac puts its strip: after the note's own sections. Only a completed

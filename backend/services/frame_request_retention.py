@@ -17,6 +17,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.frame_requests import (
     FrameCleanupPage,
     cleanup_ambiguous_frame_upload_pixels,
@@ -223,6 +224,14 @@ def run_frame_request_retention_maintenance(
     for user in users:
         uid = str(getattr(user, "id", "")).strip()
         if not uid:
+            continue
+        try:
+            if account_deletion_blocks_user_work(uid):
+                continue
+        except Exception:
+            logger.exception("frame retention deletion fence failed closed for one account")
+            failures += 1
+            retry_collection.document(uid).set({"uid": uid, "updated_at": datetime.now(timezone.utc)}, merge=True)
             continue
         attempted += 1
         try:

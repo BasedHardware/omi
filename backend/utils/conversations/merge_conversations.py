@@ -23,6 +23,7 @@ from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
+from database.conversation_merge_policy import source_has_merge_receipt
 from database._client import db as firestore_db
 from database.vector_db import delete_action_item_vectors_batch, delete_vector
 from models.audio_file import AudioFile
@@ -171,6 +172,9 @@ def validate_merge_compatibility(
         if conv.get("deleted"):
             return False, "Cannot merge a deleted conversation.", None
 
+    if any(source_has_merge_receipt(conv) for conv in conversations):
+        return False, "A conversation is already incorporated into a merged result.", None
+
     # Check none are locked
     for conv in conversations:
         if conv.get("is_locked", False):
@@ -268,6 +272,11 @@ def perform_merge_async(
         # transcript/photos/audio into a new visible conversation. Abort rather than merge.
         if any(conv.get("deleted") for conv in conversations):
             logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
+        if any(source_has_merge_receipt(conv) for conv in conversations):
+            logger.error(f"Merge aborted: a source was already incorporated into another target uid={uid}")
             checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
@@ -689,11 +698,22 @@ def _copy_audio_chunks_for_merge(
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
-    existing = (
-        {blob.name: blob for blob in bucket.list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")}
-        if skip_existing
-        else None
-    )
+    # A chunk is copied within the bucket it was listed from (a regional-cohort
+    # owner's batches live in BUCKET_AUDIO_DERIVED); list_audio_chunks lists both.
+    buckets: Dict[str, Any] = {private_cloud_sync_bucket: bucket}
+    existing_by_bucket: Dict[str, Dict[str, Any]] = {}
+
+    def existing_in(name: str) -> Dict[str, Any]:
+        if name not in buckets:
+            buckets[name] = _get_storage_client().bucket(name)
+        if name not in existing_by_bucket:
+            existing_by_bucket[name] = {
+                blob.name: blob for blob in buckets[name].list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")
+            }
+        return existing_by_bucket[name]
+
+    if skip_existing:
+        existing_in(private_cloud_sync_bucket)
 
     for conv in conversations:
         conv_id = conv["id"]
@@ -712,12 +732,16 @@ def _copy_audio_chunks_for_merge(
             # Preserve original filename (handles both single and batch blob naming)
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
-            source_blob = bucket.blob(chunk["path"])
-            if existing is None:
-                _copy_chunk_with_backoff(uid, bucket, source_blob, new_path)
+            name = chunk.get('bucket') or private_cloud_sync_bucket
+            if name not in buckets:
+                buckets[name] = _get_storage_client().bucket(name)
+            target = buckets[name]
+            source_blob = target.blob(chunk["path"])
+            if not skip_existing:
+                _copy_chunk_with_backoff(uid, target, source_blob, new_path)
             else:
-                identity = _copied_source_identity(bucket, chunk)
-                _copy_bridge_chunk(uid, bucket, source_blob, new_path, identity, existing.get(new_path))
+                identity = _copied_source_identity(chunk)
+                _copy_bridge_chunk(uid, target, source_blob, new_path, identity, existing_in(name).get(new_path))
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -769,16 +793,13 @@ def _copy_chunk_with_backoff(
         return
 
 
-def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
-    """Checksum and size of the object copy_blob actually reads: private bucket, chunk path.
+def _copied_source_identity(chunk: Dict) -> Dict:
+    """Checksum and size of the object copy_blob actually reads.
 
-    A chunk listed from BUCKET_AUDIO_DERIVED carries that bucket's checksum, not the
-    private object's, so stat the private source instead of trusting the listing.
+    The copy reads the listed object in the bucket it was listed from, so the
+    listing's own checksum describes exactly the copied bytes.
     """
-    if not chunk.get('bucket'):
-        return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
-    source = bucket.get_blob(chunk['path'], retry=None)  # a 429 must not wait out the library's 120 s retry
-    return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
+    return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
 
 
 def _same_object(blob: Any, identity: Dict) -> bool:
@@ -905,9 +926,21 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
+def delete_conversation_with_sync_sources(
+    uid: str,
+    conversation_id: str,
+    *,
+    merged_into: Optional[str] = None,
+    conversation_row: Optional[Dict] = None,
+) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
-    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    # An explicit lake purge may already have removed the transcript object.
+    # Reuse its raw inventory rather than losing donors through decoded reads.
+    row = (
+        conversation_row
+        if conversation_row is not None
+        else conversations_db.get_conversation(uid, conversation_id) or {}
+    )
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments
@@ -1161,3 +1194,6 @@ def _handle_merge_failure(
 def delete_merged_source(uid: str, conversation_id: str, target_id: str) -> None:
     """Replay the existing idempotent derived/source retraction for a sealed merge."""
     _delete_conversation_and_related_data(uid, conversation_id, merged_into=target_id)
+    # The merge-source delete path also owns the sibling ledger row; the
+    # conversation delete above normally removes it, and this is idempotent.
+    conversations_db.delete_pipeline_ledger_row(uid, conversation_id)

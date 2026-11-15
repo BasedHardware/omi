@@ -15,6 +15,9 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
+
+from git_test_env import clean_git_env
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -60,6 +63,9 @@ POLICY_JSON = """{
 
 class ScannerFixture(unittest.TestCase):
     def setUp(self) -> None:
+        git_env = patch.dict(os.environ, clean_git_env(), clear=True)
+        git_env.start()
+        self.addCleanup(git_env.stop)
         self.tmp = tempfile.TemporaryDirectory(prefix="omi-secret-scanner-test-")
         self.root = Path(self.tmp.name)
         (self.root / "app" / "config").mkdir(parents=True)

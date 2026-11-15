@@ -7,6 +7,7 @@ token and can never carry caller-controlled text into structured logs.
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from enum import StrEnum
 
@@ -174,14 +175,14 @@ def bounded_exception_class(error: object) -> str:
 
 
 def bounded_correlation_ref(value: object) -> str:
-    """Opaque correlation is allowed only for UUIDv4 identifiers (hex form)."""
+    """Hash only UUIDv4 identifiers; arbitrary IDs and text collapse to none."""
     if not isinstance(value, str):
         return 'none'
     try:
         parsed = uuid.UUID(value)
     except (ValueError, AttributeError, TypeError):
         return 'none'
-    return parsed.hex if parsed.version == 4 else 'none'
+    return hashlib.sha256(parsed.hex.encode('ascii')).hexdigest()[:32] if parsed.version == 4 else 'none'
 
 
 def new_attempt_ref() -> str:

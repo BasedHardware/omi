@@ -12,8 +12,9 @@ import 'package:omi/utils/logger.dart';
 class PaymentWebViewPage extends StatefulWidget {
   final String checkoutUrl;
   final String? title;
+  final VoidCallback? onLoaded;
 
-  const PaymentWebViewPage({super.key, required this.checkoutUrl, this.title});
+  const PaymentWebViewPage({super.key, required this.checkoutUrl, this.title, this.onLoaded});
 
   @override
   State<PaymentWebViewPage> createState() => _PaymentWebViewPageState();
@@ -23,6 +24,8 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
   late final WebViewController _controller;
   bool _isLoading = true;
   bool _hasError = false;
+  bool _reportedLoaded = false;
+  final _failedHttpUrls = <String>{};
 
   @override
   void initState() {
@@ -47,6 +50,18 @@ class _PaymentWebViewPageState extends State<PaymentWebViewPage> {
             setState(() {
               _isLoading = true;
             });
+            _failedHttpUrls.clear();
+          },
+          onHttpError: (HttpResponseError error) {
+            final uri = error.request?.uri ?? error.response?.uri;
+            if (uri != null) _failedHttpUrls.add(uri.toString());
+          },
+          onPageFinished: (String url) {
+            final scheme = Uri.tryParse(url)?.scheme;
+            if (!mounted || _hasError || _reportedLoaded || _failedHttpUrls.contains(url)) return;
+            if (scheme != 'https' && scheme != 'http') return;
+            _reportedLoaded = true;
+            widget.onLoaded?.call();
           },
           onWebResourceError: (WebResourceError error) {
             // Sub-resource failures (an analytics pixel, a font) do not break checkout; only a

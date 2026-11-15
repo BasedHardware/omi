@@ -266,7 +266,7 @@ class TranslationProviderChain:
                 raise failure
 
         raise TranslationProviderError(
-            TranslationProvider.nllb, 'config_incomplete', 'No translation provider configured'
+            TranslationProvider.luna, 'config_incomplete', 'No translation provider configured'
         )
 
     def _try_provider(

@@ -72,6 +72,50 @@ void main() {
       expect(restored.structured.sections.last.bodyMarkdown, 'Backend migration is not started yet.');
     });
 
+    test('action-item metadata survives a full conversation cache round trip', () {
+      final conversation = ServerConversation(
+        id: 'conv-action-items',
+        createdAt: DateTime.utc(2026, 7, 1, 12, 0, 0),
+        structured: Structured(
+          'Planning',
+          'Short compatibility paragraph.',
+          emoji: '🧭',
+          category: 'work',
+        )..actionItems = [
+            ActionItem(
+              'Share the provider information with David.',
+              captureOwner: 'other',
+              ownerName: 'Eddie Thai',
+              dueAt: DateTime.utc(2026, 10, 7, 16),
+              context: 'Eddie said they would follow up about Simple Closure.',
+            ),
+          ],
+      );
+
+      final restored = ServerConversation.fromJson(jsonDecode(jsonEncode(conversation.toJson())));
+
+      final item = restored.structured.actionItems.single;
+      expect(item.description, 'Share the provider information with David.');
+      expect(item.captureOwner, 'other');
+      expect(item.ownerName, 'Eddie Thai');
+      // The wire parser returns the local representation; compare the instant.
+      expect(item.dueAt?.toUtc(), DateTime.utc(2026, 10, 7, 16));
+      expect(item.context, 'Eddie said they would follow up about Simple Closure.');
+    });
+
+    test('legacy description-string action items still decode', () {
+      final structured = Structured.fromJson({
+        ..._structuredJson(),
+        'actionItems': ['Share the provider information with David.'],
+      });
+
+      final item = structured.actionItems.single;
+      expect(item.description, 'Share the provider information with David.');
+      expect(item.ownerName, isNull);
+      expect(item.dueAt, isNull);
+      expect(item.context, isNull);
+    });
+
     test('missing sections decode to an empty list', () {
       final json = _structuredJson()..remove('sections');
 

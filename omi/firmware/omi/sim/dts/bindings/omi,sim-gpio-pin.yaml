@@ -1,0 +1,6 @@
+description: Simulator stand-in for a board GPIO line (native_sim gpio_emul).
+compatible: "omi,sim-gpio-pin"
+properties:
+  gpios:
+    type: phandle-array
+    required: true

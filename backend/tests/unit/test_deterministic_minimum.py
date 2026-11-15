@@ -27,6 +27,7 @@ from models.conversation_enums import CategoryEnum, ConversationProcessingState
 from utils.conversations.deterministic_minimum import (
     TITLE_MAX_CHARS,
     build_deterministic_minimum_structured,
+    build_deferred_structured,
     deterministic_minimum_title,
     fallback_title,
     first_sentence,
@@ -42,6 +43,20 @@ def _conversation(*texts: str, started_at: datetime | None = _STARTED_AT) -> Sim
         transcript_segments=[SimpleNamespace(text=text) for text in texts],
         started_at=started_at,
     )
+
+
+@pytest.mark.parametrize(
+    'texts,title',
+    [
+        ((), 'Recording'),
+        (('  ', '  Call the venue tomorrow  ', 'Later words'), 'Call the venue tomorrow'),
+        (('One two three four five six seven eight nine ten',), 'One two three four five six seven eight'),
+    ],
+)
+def test_deferred_placeholder_retains_its_existing_title_policy(texts, title):
+    structured = build_deferred_structured(_conversation(*texts))
+    assert structured.title == title
+    assert not structured.overview
 
 
 # ---------------------------------------------------------------- title table

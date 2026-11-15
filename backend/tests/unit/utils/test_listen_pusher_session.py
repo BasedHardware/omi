@@ -3,6 +3,8 @@ import json
 import logging
 import struct
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from websockets.exceptions import ConnectionClosedError
@@ -19,6 +21,7 @@ from utils.listen_pusher_session import (
     ListenPusherSessionDeps,
 )
 from utils.pusher_protocol import audio_timeline_ack_frame
+from utils.other.live_audio_archive import LiveAudioArchive
 
 
 class FakePusherWebSocket:
@@ -123,7 +126,13 @@ def make_session(
         config_values.update(config_overrides)
 
     async def connect_to_pusher(
-        uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
     ):
         if connect_calls is not None:
             connect_calls.append((uid, sample_rate, retries, is_active, audio_timeline))
@@ -299,20 +308,77 @@ def test_default_audio_pressure_retains_prefix_and_unacknowledged_input(monkeypa
 
 
 @pytest.mark.anyio
-async def test_audio_socket_send_cannot_clear_pcm_before_archive_barrier(monkeypatch):
-    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+async def test_live_relay_keeps_its_cadence_while_original_window_is_unacknowledged(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    write = AsyncMock()
+    monkeypatch.setattr(archive, '_write', write)
     ws = FakePusherWebSocket()
-
-    async def refused():
-        raise OSError('durable storage unavailable')
-
-    session = make_session(ws=ws, deps_overrides={'ensure_audio_durable': refused})
+    session = make_session(ws=ws)
     await session.connect()
-    session.audio_bytes_send(b'abcd', received_at=1)
-    with pytest.raises(OSError):
+    for second in range(10):
+        await archive.append(b'abcd', 'conv-1', 1000 + second, 2)
+        session.audio_bytes_send(b'abcd', received_at=1000 + second)
         await session._audio_bytes_flush()
-    assert not ws.sent
-    assert [run.data for run in session.audio_runs] == [b'abcd']
+        assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+    write.assert_not_awaited()
+    assert archive.packs[0].data == b'abcd' * 10
+    assert session.audio_total_size == 0
+    await archive.close()
+    write.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_slow_window_commit_does_not_block_live_relay_or_release_custody(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    h = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic', codec='pcm16', sample_rate=16000),
+        private_cloud_sync_enabled=True,
+        spawn=lambda coro, **kwargs: asyncio.create_task(coro),
+    )
+    archive = LiveAudioArchive(h)
+    release = asyncio.Event()
+    started = asyncio.Event()
+    acknowledged = []
+
+    async def slow_write(*args):
+        started.set()
+        await release.wait()
+
+    async def ack():
+        acknowledged.append(True)
+
+    monkeypatch.setattr(archive, '_write', slow_write)
+    # A real 60s boundary schedules storage but does not await its upload.
+    await archive.append(b'\x01\x00' * 16000 * 60, 'conv-1', 1000, 16000 * 60)
+    await archive.defer_ack('conv-1', ack)
+    await started.wait()
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    relay = None
+    try:
+        for second in range(10):
+            await archive.append(b'abcd', 'conv-1', 1060 + second, 2)
+            session.audio_bytes_send(b'abcd', received_at=1060 + second)
+            relay = asyncio.create_task(session._audio_bytes_flush())
+            await asyncio.sleep(0)
+            assert relay.done()  # No wall-clock threshold: storage is still blocked.
+            await relay
+            assert not acknowledged and archive.uncommitted
+            assert len([frame for frame in ws.sent if frame_type(frame) == 101]) == second + 1
+        assert archive.packs[0].data == b'abcd' * 10
+    finally:
+        release.set()
+        if relay is not None:
+            await relay
+        await archive.close()
+    assert acknowledged == [True]
 
 
 @pytest.mark.anyio
@@ -1110,7 +1176,15 @@ async def test_spans_session_without_ack_keeps_legacy_byte_semantics(monkeypatch
     replacement = FakePusherWebSocket()
     sockets = [uncertain, replacement]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         connect_calls.append((uid, sample_rate, retries, is_active, audio_timeline))
         return sockets.pop(0)
 
@@ -1176,7 +1250,13 @@ async def test_spans_capability_loss_mid_recording_withholds_audio_then_resumes(
     )
 
     async def rotating_connector(
-        uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
     ):
         return sockets.pop(0)
 
@@ -1257,7 +1337,15 @@ async def test_late_ack_replaces_uncertain_socket_with_legacy_replacement(monkey
     connect_queries = []
     sockets = [uncertain, replacement]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         connect_queries.append(audio_timeline)
         return sockets.pop(0)
 
@@ -1295,7 +1383,15 @@ async def test_late_ack_failed_replacement_leaves_buffered_runs_disconnected(mon
     uncertain = FakePusherWebSocket()
     sockets = [uncertain, None]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         return sockets.pop(0)
 
     session = make_session(
@@ -1328,7 +1424,15 @@ async def test_late_ack_close_failure_does_not_fall_back_on_uncertain_socket(mon
     replacement = FakePusherWebSocket()
     sockets = [uncertain, replacement]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         return sockets.pop(0)
 
     session = make_session(
@@ -1353,7 +1457,15 @@ async def test_ack_wait_cancellation_does_not_fall_back():
     connect_queries = []
     sockets = [uncertain, replacement]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         connect_queries.append(audio_timeline)
         return sockets.pop(0)
 
@@ -1383,7 +1495,15 @@ async def _capable_timeline_session(monkeypatch, active_ref, sockets):
     """Connect once on a capable socket; the caller drives the reconnect."""
     monkeypatch.setattr(pusher_session, 'AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS', 0.01)
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         return sockets.pop(0)
 
     session = make_session(
@@ -1531,7 +1651,15 @@ async def test_late_ack_on_legacy_fallback_socket_is_ignored(monkeypatch):
     fallback = FakePusherWebSocket()
     sockets = [uncertain, fallback]
 
-    async def connector(uid, sample_rate, retries=5, is_active=None, client_kind='unknown', audio_timeline=None):
+    async def connector(
+        uid,
+        sample_rate,
+        retries=5,
+        is_active=None,
+        client_kind='unknown',
+        audio_timeline=None,
+        record_close_protocol=None,
+    ):
         return sockets.pop(0)
 
     session = make_session(
@@ -1582,3 +1710,156 @@ async def test_replaced_socket_close_does_not_disconnect_new_socket():
     assert session.pusher_connected
     assert session.pusher_ws is fresh
     assert session.reconnect_task is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('failure_code', [None, 'transient_processing_failed'])
+async def test_recovery_bursts_have_a_total_send_cap(monkeypatch, caplog, failure_code):
+    clock = [1000.0]
+    active_ref = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active_ref, deps_overrides={'now': lambda: clock[0]})
+
+    async def receive():
+        clock[0] += pusher_session.PENDING_REQUEST_RECOVERY_COOLDOWN + pusher_session.PENDING_REQUEST_TIMEOUT + 1
+        if not session.pending_conversation_requests:
+            active_ref['active'] = False
+        if failure_code is None:
+            raise asyncio.TimeoutError
+        return (
+            struct.pack('<I', 201)
+            + json.dumps({'conversation_id': 'conv-1', 'error': failure_code, 'terminal': False}).encode()
+        )
+
+    ws.recv = receive
+    session.pusher_connected, session.pusher_ws = True, ws
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    session.deps.is_active = lambda: bool(session.pending_conversation_requests)
+    with caplog.at_level(logging.WARNING):
+        await asyncio.wait_for(session.pusher_receive(), 2)
+    frames = [f for f in ws.sent if frame_type(f) == 104]
+    assert len(frames) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests
+    assert any('failed terminally' in r.message for r in caplog.records)
+    assert not await session.request_conversation_processing('conv-1', 'job-1', 1)
+    # A durable replay generation is allowed a fresh, finite budget.
+    assert await session.request_conversation_processing('conv-1', 'job-1', 2)
+    assert session.pending_conversation_requests['conv-1']['attempts'] == 1
+
+
+@pytest.mark.anyio
+async def test_reconnect_replay_cannot_reset_processing_send_budget():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    for _ in range(pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS + 3):
+        await session.request_conversation_processing('conv-1', 'job-1', 1)
+        await session.connect()
+    assert len([f for f in ws.sent if frame_type(f) == 104]) == pusher_session.MAX_PROCESSING_REQUEST_ATTEMPTS
+    assert not session.pending_conversation_requests
+
+
+@pytest.mark.anyio
+async def test_new_generation_at_pending_capacity_does_not_evict_another_conversation():
+    clock = [1000.0]
+    session = make_session(config_overrides={'max_pending_requests': 2}, deps_overrides={'now': lambda: clock[0]})
+    await session.request_conversation_processing('conv-1', 'job-1', 1)
+    clock[0] += 1
+    await session.request_conversation_processing('conv-2', 'job-2', 1)
+    await session.request_conversation_processing('conv-2', 'job-2', 2)
+    assert set(session.pending_conversation_requests) == {'conv-1', 'conv-2'}
+    assert session.pending_conversation_requests['conv-1']['dispatch_generation'] == 1
+    assert session.pending_conversation_requests['conv-2']['dispatch_generation'] == 2
+    assert session.pending_conversation_requests['conv-2']['attempts'] == 0
+
+
+@pytest.mark.anyio
+async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
+    assert not await session.request_recording_close('conv-1')
+    assert not ws.sent
+    session.record_close_supported = True
+    assert not await session.request_recording_close('conv-1')
+    assert [frame_type(f) for f in ws.sent] == [104]
+    assert frame_json(ws.sent[-1])['phase'] == 'prepare'
+    close = session.pending_record_closes['conv-1']
+    close.prepared = True
+    session.deps.get_current_conversation_id = lambda: None
+    assert not await session.request_recording_close('conv-1')
+    assert [frame_type(f) for f in ws.sent] == [104, 103, 101, 104]
+    assert frame_json(ws.sent[-1])['phase'] == 'commit'
+    assert frame_json(ws.sent[-1])['watermark'] == 4
+    assert 'conv-1' in session.pending_record_closes
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    assert not await session.request_recording_close('conv-1')
+    assert len(ws.sent) == 4
+
+
+@pytest.mark.anyio
+async def test_close_only_keeps_control_pending_when_tail_send_fails(monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    ws = FakePusherWebSocket(send_errors=[None, None, OSError('synthetic')])
+    session = make_session(ws=ws)
+    await session.connect()
+    session.record_close_supported = True
+    session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
+    assert not await session.request_recording_close('conv-1')
+    session.pending_record_closes['conv-1'].prepared = True
+    session.deps.get_current_conversation_id = lambda: None
+    assert not await session.request_recording_close('conv-1')
+    assert 'conv-1' in session.pending_record_closes
+    assert all(frame_type(f) != 104 or frame_json(f)['phase'] == 'prepare' for f in ws.sent)
+    assert session.audio_runs
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('version', [1, True, 2, 3])
+async def test_close_capability_ack_drains_pending_notification_only_for_supported_version(version, monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
+
+    active = {'active': True}
+    ack = (
+        struct.pack('<I', PUSHER_RECORD_CLOSE_ACK_OPCODE)
+        + json.dumps({'type': 'record_close_ack', 'version': version}).encode()
+    )
+    ws = FakePusherWebSocket(incoming=[ack, b''])
+    session = make_session(
+        ws=ws, active_ref=active, deps_overrides={'finish_recording_audio': AsyncMock(return_value=True)}
+    )
+    await session.connect()
+    assert not await session.request_recording_close('conv-1')
+    ws.on_recv = lambda: active.update(active=len(ws.incoming) > 1)
+    await session.pusher_receive()
+    assert session.record_close_supported is (type(version) is int and version == 3)
+    assert any(frame_type(f) == 104 for f in ws.sent) is session.record_close_supported
+
+
+@pytest.mark.anyio
+async def test_replaced_socket_ack_cannot_qualify_legacy_replacement(monkeypatch):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
+    from utils.pusher_protocol import record_close_ack_frame
+
+    active = {'active': True}
+    ws = FakePusherWebSocket(incoming=[record_close_ack_frame()])
+    session = make_session(ws=ws, active_ref=active)
+    await session.connect()
+    assert not await session.request_recording_close("conv-1")
+    replacement = FakePusherWebSocket()
+
+    def replace():
+        session.pusher_ws = replacement
+        active['active'] = False
+
+    ws.on_recv = replace
+    await session.pusher_receive()
+    assert not session.record_close_supported
+    assert not replacement.sent

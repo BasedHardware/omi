@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-memory-open.png",
+      "platform": "mobile-ios",
+      "source": "manual",
+      "description": "Resolved newly saved memory opens the existing memory sheet after refreshing a warm empty list. Production card/provider in an isolated simulator fixture; reused native debug host, fresh Dart bundle, no live OAuth/MCP/account verification.",
+      "captured_by": "agent"
+    },
+    {
+      "file": "002-mobile-ios-memory-read-retry.png",
+      "platform": "mobile-ios",
+      "source": "manual",
+      "description": "Synthetic HTTP 503 with an empty account-scoped cache offers Try Again; no deletion claim. Production card/provider in an isolated simulator fixture; reused native debug host, fresh Dart bundle, no live OAuth/MCP/account verification.",
+      "captured_by": "agent"
+    },
+    {
+      "file": "003-mobile-ios-memory-retry-recovered.png",
+      "platform": "mobile-ios",
+      "source": "manual",
+      "description": "After restoring the synthetic server and tapping Try Again, the production card resolves in two reads. Production card/provider in an isolated simulator fixture; reused native debug host, fresh Dart bundle, no live OAuth/MCP/account verification.",
+      "captured_by": "agent"
+    },
+    {
+      "file": "004-mobile-ios-memory-list-incomplete.png",
+      "platform": "mobile-ios",
+      "source": "manual",
+      "description": "Truncated empty list stays unresolved with a manual retry and no deletion claim. Production card/provider in an isolated simulator fixture; reused native debug host, fresh Dart bundle, no live OAuth/MCP/account verification.",
+      "captured_by": "agent"
+    }
+  ]
+}

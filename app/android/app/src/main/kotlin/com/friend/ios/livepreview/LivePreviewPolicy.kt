@@ -24,6 +24,15 @@ object LivePreviewPolicy {
 
     fun running(): Map<String, Any> = mapOf("engine" to "android_on_device", "reason" to "ok", "bundledInstalled" to false)
 
+    /** Word start points from Android 14+, independent of callback latency. */
+    fun timedSpans(originMs: Long, parts: List<Pair<String, Long>>): List<Map<String, Any>> {
+        if (originMs <= 0 || parts.isEmpty() || parts.all { it.second == 0L } ||
+            parts.any { it.second < 0L } || parts.zipWithNext().any { it.first.second > it.second.second }) return emptyList()
+        return parts.map { (text, offset) ->
+            mapOf("text" to text, "startMs" to originMs + offset, "endMs" to originMs + offset + 1)
+        }
+    }
+
     /** Reason the OS engine cannot even be probed, or null when it can. */
     fun preflight(sdkInt: Int, recordAudioGranted: Boolean, onDeviceAvailable: () -> Boolean): String? = when {
         sdkInt < MIN_SDK -> "os_too_old"

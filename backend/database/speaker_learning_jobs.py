@@ -9,6 +9,8 @@ publication fences the extractors already use. Deterministic job ids make
 duplicate delivery a no-op; expired leases are reclaimed by the next trigger.
 """
 
+from database.transcript_pointer import TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded
+
 import hashlib
 import json
 import math
@@ -18,6 +20,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database.speaker_profile_authority import owner_teaching_authorized, person_teaching_authorized
 from models.other import VoiceReadiness, voice_readiness
 from models.person_confidence import SOURCE_CARD
@@ -103,7 +106,7 @@ def get_firestore_client() -> Any:
 
 
 def run_transactional(client: Any, fn: Callable[..., Any], **kwargs: Any) -> Any:
-    from database._client import run_transactional as run
+    from database.transcript_pointer import run_preloaded_transactional as run
 
     return run(client, fn, **kwargs)
 
@@ -455,7 +458,7 @@ def _admit_legacy_jobs(
             )
             or []
         )
-    except Exception:
+    except (conversations_db.TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded):
         segments = []
     if not segments:
         return False
@@ -575,6 +578,7 @@ def _ledger_transaction(
             dirty = True
         for doc_ref, update in writes:
             transaction.update(doc_ref, update)
+            bump_people_generation(transaction, doc_ref)
         if dirty or events:
             _trim_jobs(jobs, events)
             transaction.set(ref, {'jobs': jobs})
@@ -642,7 +646,7 @@ def ensure_job(
                 )
                 or []
             )
-        except Exception:
+        except (TranscriptSegmentsDecodeError, TranscriptBlobAbsent, TranscriptShredded):
             decoded = []
         from utils.speaker_learning_policy import winning_receipt_decision
 

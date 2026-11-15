@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "source_revision": "e86cda5abb0ea7ff942ac1bcd07261140953812c",
+  "sdk_nrf_revision": "7787b264984022cda64d9629278942053e6462a5",
+  "sdk_mcuboot_revision": "12e5ee106034972b0f1074d6f2261b2b39d1501b",
+  "bootloader_images": {
+    "network": {
+      "retained_config_sha256": "120de69f54b5f47ea58f4ff2529a88208a2bc301424a7f2486bb8168ed8eb86d",
+      "retained_image_hex_sha256": "79a5aa59c639eae0552bdb13f1d3ce6ffd304601333609d5ab31944a141c5fbc",
+      "defined_image_bytes": 19120,
+      "saved_readback_hex_sha256": "ee711c2525c44602e79ac2cb694f0f3f6afb420aa46250168ee760e0db686b4f",
+      "saved_command_receipt_sha256": "5cc0c3bba41286a224cab112395677428b0c5318e0e3131bd349a9de0dbdf9e0",
+      "defined_image_byte_mismatches": 0,
+      "comparison": "All defined retained bootloader image bytes match historical saved readback. Not a fresh hardware observation; source/build association is retained-build provenance, not a reproducible rebuild proof."
+    },
+    "application": {
+      "retained_config_sha256": "d744f3cc81d2af45b9e1b7bf85d8d379e269fdc88d9ee486ace85e7d2d20d4c4",
+      "retained_image_hex_sha256": "81acf59c40d7de844090d5b676a2a614fd83999238190642ed1602eaef6f09d6",
+      "defined_image_bytes": 52520,
+      "saved_readback_hex_sha256": "361ad80ca8a92f3ed88097f136b21c12ade7890a3a2f3f1614f199494373fa44",
+      "saved_command_receipt_sha256": "d9db13653b9d97355b3f3b7c8b745f094e7377257c1a34d69f3b0551742b7b18",
+      "defined_image_byte_mismatches": 0,
+      "comparison": "All defined retained bootloader image bytes match historical saved readback. Not a fresh hardware observation; source/build association is retained-build provenance, not a reproducible rebuild proof."
+    }
+  },
+  "source_records": {
+    "nrf/subsys/bootloader/bl_validation/bl_validation.c": {
+      "sha256": "eef49a63599557585ad8095909b4558c71f0bd48eefb3def20431bd647fad8c8",
+      "excerpt_file": "validation-excerpts/b0n-validation.c",
+      "ranges": [
+        [
+          197,
+          204
+        ],
+        [
+          273,
+          300
+        ],
+        [
+          417,
+          423
+        ]
+      ]
+    },
+    "nrf/subsys/bootloader/bl_validation/Kconfig": {
+      "sha256": "50c142571a18f83718558684bf1eb0027cfe50e0cde1190724e5226c89ffb344",
+      "excerpt_file": "validation-excerpts/b0n-validation-Kconfig.txt",
+      "ranges": [
+        [
+          60,
+          76
+        ]
+      ]
+    },
+    "bootloader/mcuboot/scripts/imgtool/keys/rsa.py": {
+      "sha256": "9d901e1ab808a9e5ba3d24aa40ef8de5e017e26400a9b57c3a1d655122d59bb3",
+      "excerpt_file": "validation-excerpts/imgtool-rsa.py",
+      "ranges": [
+        [
+          63,
+          84
+        ]
+      ]
+    },
+    "bootloader/mcuboot/boot/bootutil/src/image_rsa.c": {
+      "sha256": "f05a225de53ffedf57000cd49ad636f38a6ada2f14d8bdc59b6d6bf699150145",
+      "excerpt_file": "validation-excerpts/mcuboot-rsa-verifier.c",
+      "ranges": [
+        [
+          48,
+          65
+        ],
+        [
+          115,
+          138
+        ],
+        [
+          243,
+          253
+        ]
+      ]
+    },
+    "nrf/cmake/sysbuild/debug_keys.cmake": {
+      "sha256": "9280ae864c208e1246f9a5b2efa9a2ce6d754142ac3e7e4342a96becbf7dd43f",
+      "excerpt_file": "validation-excerpts/generated-development-key.cmake",
+      "ranges": [
+        [
+          19,
+          40
+        ]
+      ]
+    },
+    "zephyr/subsys/mgmt/mcumgr/transport/src/smp_bt.c": {
+      "sha256": "22a9cd3f1aaa66c29b3656d091315c2921e1e9648c1030a1e5032d846179fad5",
+      "excerpt_file": "validation-excerpts/smp-gatt-permissions.c",
+      "ranges": [
+        [
+          52,
+          68
+        ]
+      ]
+    }
+  },
+  "network_bundle": {
+    "sha256": "838a7a1fe5921d4012c9b3d0509c96608fd267b342632fe0d31b2e7ca7afdaa8",
+    "defined_bytes": 193881,
+    "saved_readback_sha256": "ee711c2525c44602e79ac2cb694f0f3f6afb420aa46250168ee760e0db686b4f",
+    "defined_byte_mismatches": 0
+  },
+  "scope": "Retained generated build config plus exact defined bootloader/network bytes matched to saved installed readbacks; no new target operation, no negative signature test, no shipped-device inference, no private key reads."
+}

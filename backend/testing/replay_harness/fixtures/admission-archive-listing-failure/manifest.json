@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "admission-archive-listing-failure",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "stages": {
+    "admission": {
+      "expect_stop_stage": "admission",
+      "expect_reason": "admission:admit:TimeoutError:utils\\.executors\\.run_blocking"
+    }
+  },
+  "notes": "Synthetic raw-live listing I/O timeout with a complete PCM chunk present. Models the real list_audio_chunks require_archive=True fail-closed propagation; no listing deadline is supplied by admission. On current main the asyncio/executor boundary exposes TimeoutError at utils.executors.run_blocking; the raw-archive fault is not bypassed or swallowed."
+}

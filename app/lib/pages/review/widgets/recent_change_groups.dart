@@ -131,3 +131,17 @@ Map<RecentChangeSection, List<RecentChangeGroup>> groupRecentChanges(List<Review
       if (result[section] case final groups?) section: groups,
   };
 }
+
+/// Groups [changes] by the local day each group's newest change was made: days newest first, and
+/// groups newest first within each day.
+Map<DateTime, List<RecentChangeGroup>> groupRecentChangesByDay(List<ReviewChange> changes) {
+  final groups = [
+    for (final sectionGroups in groupRecentChanges(changes).values) ...sectionGroups,
+  ]..sort((a, b) => b.latest.createdAt.compareTo(a.latest.createdAt));
+  final result = <DateTime, List<RecentChangeGroup>>{};
+  for (final group in groups) {
+    final local = group.latest.createdAt.toLocal();
+    (result[DateTime(local.year, local.month, local.day)] ??= []).add(group);
+  }
+  return result;
+}

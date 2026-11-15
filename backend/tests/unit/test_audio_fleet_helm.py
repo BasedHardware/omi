@@ -57,6 +57,11 @@ def test_parakeet_helm_apply_changes_only_hpa_against_origin_main(environment):
     allowed = {'PARAKEET_PACKING_ENABLED', 'PARAKEET_EXPLICIT_CUDA_GRAPHS'}
     for objects, require_flags in ((current, True), (baseline, False)):
         deployment = next(obj for obj in objects if obj['kind'] == 'Deployment')
+        # Retirement may set the main deployment to zero; its model/pod contract stays pinned.
+        if environment == 'prod':
+            if require_flags:
+                assert deployment['spec']['replicas'] == 0
+            deployment['spec'].pop('replicas', None)
         container = next(c for c in deployment['spec']['template']['spec']['containers'] if c['name'] == 'parakeet')
         flags = [entry for entry in container['env'] if entry['name'] in allowed]
         # Only these exact literals may be added; duplicate/valueFrom/true entries fail.
@@ -66,7 +71,9 @@ def test_parakeet_helm_apply_changes_only_hpa_against_origin_main(environment):
             assert {entry['name'] for entry in flags} == allowed
         container['env'] = [entry for entry in container['env'] if entry['name'] not in allowed]
         # The language gate's one Ingress path may be added, and only onto the transcribe backend.
-        ingress = next(obj for obj in objects if obj['kind'] == 'Ingress')
+        ingress = next((obj for obj in objects if obj['kind'] == 'Ingress'), None)
+        if environment == 'prod' and ingress is None:
+            continue
         paths = ingress['spec']['rules'][0]['http']['paths']
         gate = [entry for entry in paths if entry['path'] == '/v2/language']
         transcribe = next(entry for entry in paths if entry['path'] == '/v2/transcribe')
@@ -75,7 +82,9 @@ def test_parakeet_helm_apply_changes_only_hpa_against_origin_main(environment):
         ingress['spec']['rules'][0]['http']['paths'] = [entry for entry in paths if entry['path'] != '/v2/language']
     # All remaining pod-template fields and non-HPA objects must match main exactly.
     stable = lambda objects: {
-        (obj['kind'], obj['metadata']['name']): obj for obj in objects if obj['kind'] != 'HorizontalPodAutoscaler'
+        (obj['kind'], obj['metadata']['name']): obj
+        for obj in objects
+        if obj['kind'] != 'HorizontalPodAutoscaler' and not (environment == 'prod' and obj['kind'] == 'Ingress')
     }
     assert stable(current) == stable(baseline)
 
@@ -114,7 +123,7 @@ def test_parakeet_template_gate_rejects_changes_beside_dark_flags(monkeypatch, m
 
     monkeypatch.setitem(globals(), 'render_resources', changed_render)
     with pytest.raises(AssertionError):
-        test_parakeet_helm_apply_changes_only_hpa_against_origin_main('prod')
+        test_parakeet_helm_apply_changes_only_hpa_against_origin_main('dev')
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -151,6 +160,29 @@ def manifest():
     return yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
 
 
+def _assert_parakeet_floor_covers_guard_schedule(chart_floor):
+    """The guard floorSchedule owns the running floor while enabled and not
+    deferred; the chart floor is what the fleet holds while the schedule is
+    deferred by a rollback marker. The deferred state must never be colder
+    than the scheduled one, and resuming the schedule must never raise the
+    floor above the deferred state (Luna r1 on #24276)."""
+    guards = yaml.load(
+        (CHARTS / 'incluster-guards' / 'prod_omi_incluster_guards_values.yaml').read_text(),
+        Loader=yaml.CSafeLoader,
+    )['floorSchedule']
+    if not guards.get('enabled'):
+        return
+    hours = guards['hours']
+    assert len(hours) == 24
+    scheduled_max = max(hours)
+    assert scheduled_max <= chart_floor, (
+        f'guards floorSchedule hour {scheduled_max} exceeds the parakeet chart '
+        f'floor {chart_floor}: resuming a deferred schedule would RAISE the '
+        'live floor above the deferred state, and a deferred fleet colder '
+        'than the schedule would surprise the next guard resume'
+    )
+
+
 @pytest.mark.parametrize('chart', ['backend-listen', 'pusher', 'parakeet'])
 def test_prod_pool_placement_preserves_current_cpu_pools(chart):
     objects = render(chart)
@@ -176,23 +208,10 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
         assert labels == expected
 
 
-def test_parakeet_scales_conservatively_without_relaxing_admission():
+def test_parakeet_prod_is_retired_without_relaxing_model_admission():
     objects = render('parakeet')
-    hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 8
-    assert hpa['maxReplicas'] == 12
-    assert hpa['behavior']['scaleUp'] == {
-        'stabilizationWindowSeconds': 0,
-        'selectPolicy': 'Max',
-        'policies': [{'type': 'Pods', 'value': 4, 'periodSeconds': 15}],
-    }
-    assert hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 900
-    metrics = hpa['metrics']
-    assert next(m['pods']['target']['averageValue'] for m in metrics if m['type'] == 'Pods') == '2'
-    external = {
-        m['external']['metric']['name']: m['external']['target']['value'] for m in metrics if m['type'] == 'External'
-    }
-    assert external == {'parakeet_gpu_utilization': '35'}
+    assert objects['Deployment']['spec']['replicas'] == 0
+    assert 'HorizontalPodAutoscaler' not in objects
     env = {e['name']: e.get('value') for e in objects['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['PARAKEET_MAX_INFLIGHT'] == '1'
 

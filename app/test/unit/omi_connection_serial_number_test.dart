@@ -62,7 +62,29 @@ BtDevice _device() => BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, r
 Future<BtDevice> _resolve(_DisTransport transport) =>
     _device().getDeviceInfo(OmiDeviceConnection(_device(), transport));
 
+class _FailedInfoConnection extends OmiDeviceConnection {
+  _FailedInfoConnection() : super(_device(), _DisTransport({}));
+
+  @override
+  Future<Map<String, String>> getDeviceInfo() async => throw StateError('DIS read failed');
+}
+
 void main() {
+  test('a failed device-info read keeps firmware unknown instead of inventing 1.0.2', () async {
+    final device = await _device().getDeviceInfo(_FailedInfoConnection());
+    expect(device.firmwareRevision, isEmpty);
+  });
+
+  test('a missing firmware characteristic stays unknown through BtDevice hydration', () async {
+    final device = await _resolve(_DisTransport({}));
+    expect(device.firmwareRevision, isEmpty);
+  });
+
+  test('a successfully read 1.0.2 is still a real legacy version', () async {
+    final device = await _resolve(_DisTransport({firmwareRevisionCharacteristicUuid: '1.0.2'.codeUnits}));
+    expect(device.firmwareRevision, '1.0.2');
+  });
+
   group('CV1 DIS serial number', () {
     test('firmware without 0x2A25 keeps device info and leaves serial unset', () async {
       final device = await _resolve(_DisTransport(_cv1Reads()));

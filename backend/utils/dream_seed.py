@@ -15,6 +15,11 @@ from utils.agent_capabilities.reads import read_record, unavailable_is_transient
 _SEED_SCAN_CAP = 64
 
 
+def byte_ceiling(limits):
+    """Serialized seed budget by size bucket; shared with the pre-scan serve path."""
+    return 8000 if limits.bucket in {'empty', 'light'} else 24000
+
+
 def load(uid, caps):
     size = sum(dream_history.history_count(uid, collection) for collection in dream_history.COLLECTIONS)
     limits = SessionLimits.for_size(size, token_ceiling=caps.tokens, edit_ceiling=caps.edits)
@@ -31,7 +36,7 @@ def load(uid, caps):
         'recent_feedback': [],
         'previous_notes': '',
     }
-    ceiling = 8000 if limits.bucket in {'empty', 'light'} else 24000
+    ceiling = byte_ceiling(limits)
 
     def append(key, value):
         seed[key].append(value)
@@ -97,7 +102,8 @@ def load(uid, caps):
     for _, raw in dream_store.own_runs(uid, limit=1):
         source = (review_store.decode_doc(uid, raw) or {}).get('source') or {}
         notes = source.get('notes')
-        if isinstance(notes, str) and len(notes) <= 2000:
+        # Older notes may quote voice text the model could then read; a model can carry them forward.
+        if source.get('notes_voice_free') and isinstance(notes, str) and len(notes) <= 2000:
             seed['previous_notes'] = notes
     records = EvidenceRecords()
     initial = 2 if limits.bucket in {'empty', 'light'} else 4 if limits.bucket == 'medium' else 8

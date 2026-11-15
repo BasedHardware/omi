@@ -38,8 +38,37 @@ def github_json(path: str) -> object:
         return json.load(response)
 
 
-def require_quiesced_writers(fetch=github_json) -> None:
-    """Opening even a read edit invalidates another edit by this API user."""
+def scheduler_job_json() -> object:
+    credentials_raw = os.environ.get("GCLOUD_SERVICE_ACCOUNT_CREDENTIALS", "").strip()
+    if not credentials_raw:
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused")
+    try:
+        from google.auth.transport.requests import AuthorizedSession
+        from google.oauth2 import service_account
+
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(credentials_raw),
+            scopes=["https://www.googleapis.com/auth/cloud-scheduler"],
+        )
+        session = AuthorizedSession(credentials)
+        response = session.get(
+            "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"
+            "jobs/app-review-config-sweep-hourly",
+            timeout=30,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError("Cloud Scheduler returned a non-object response")
+        return result
+    except Exception:
+        raise BrakeError("cannot verify app-review-config-sweep-hourly is paused") from None
+
+
+def require_quiesced_writers(fetch=None, scheduler_fetch=None) -> None:
+    """Require the scheduled sweep and both GitHub Play writers to be paused."""
+    fetch = fetch or github_json
+    scheduler_fetch = scheduler_fetch or scheduler_job_json
     try:
         for workflow in ("mobile_rollout_watch.yml", "mobile_daily_train.yml"):
             metadata = fetch(f"actions/workflows/{workflow}")
@@ -50,6 +79,9 @@ def require_quiesced_writers(fetch=github_json) -> None:
                 raise BrakeError("cannot verify Play writer workflows are drained")
             if any(not isinstance(run, dict) or run.get("status") != "completed" for run in payload["workflow_runs"]):
                 raise BrakeError("wait for all mobile Play writer workflow runs to finish before using the brake")
+        scheduler = scheduler_fetch()
+        if not isinstance(scheduler, dict) or scheduler.get("state") != "PAUSED":
+            raise BrakeError("pause app-review-config-sweep-hourly before using the brake")
     except BrakeError:
         raise
     except Exception as exc:
@@ -173,8 +205,15 @@ def commit_expected(client: object, edit_id: str, expected: object, open_edits: 
     commit = client.edits().commit(packageName=promote.PACKAGE_NAME, editId=edit_id)
     # The runner's pinned discovery document predates this query option.
     # Attach it to the authenticated request without depending on SDK schema age.
+    # changesNotSentForReview follows promote.CHANGES_NOT_SENT_FOR_REVIEW so a
+    # brake edit joins the same held-changes queue (and the same Play Console
+    # -> Publishing overview -> Send for review step) as every other committed
+    # Play edit, and unholds with them when the constant flips back.
     separator = "&" if "?" in commit.uri else "?"
-    commit.uri += separator + urllib.parse.urlencode({"changesInReviewBehavior": "ERROR_IF_IN_REVIEW"})
+    commit_params = {"changesInReviewBehavior": "ERROR_IF_IN_REVIEW"}
+    if promote.CHANGES_NOT_SENT_FOR_REVIEW:
+        commit_params["changesNotSentForReview"] = "true"
+    commit.uri += separator + urllib.parse.urlencode(commit_params)
     commit.execute()
     open_edits.remove(edit_id)
     # A committed edit cannot be reused. Open a fresh edit to read live state.
@@ -210,6 +249,11 @@ def run_brake(
         if not notes_line.strip() or "\n" in notes_line:
             raise BrakeError("stage requires a one-line BRAKE_NOTES_LINE for the en-US What's New")
     (quiescence_check or require_quiesced_writers)()
+    if action in ("halt", "resume") and promote.CHANGES_NOT_SENT_FOR_REVIEW:
+        raise BrakeError(
+            "Play holds changes for review; halt or resume in Play Console "
+            "(Test and release → Production/track → rollout), then verify the live track there"
+        )
     edit_factory = edit_factory or promote.play_edit
     client, edit_id = edit_factory()
     open_edits = [edit_id]

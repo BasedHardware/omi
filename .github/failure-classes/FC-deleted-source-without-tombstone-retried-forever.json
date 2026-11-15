@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-deleted-source-without-tombstone-retried-forever",
+  "violated_contract": "A projection job whose source conversation was deleted, with no deletion tombstone and no redirect, must end in a terminal disposition that publishes nothing and writes no usage. A tombstone-required guard that only blocks and retries leaves the job non-terminal for good.",
+  "canonical_prevention": "Admit the deleted-source case to a terminal source_deleted disposition at session admission; suppress every output ID across parts before publish; skip usage on that path. A kill switch restores the prior blocking behavior.",
+  "evidence_prs": [
+    24692
+  ],
+  "scope_hints": [
+    "backend/database/batch_pipeline_projection*.py",
+    "backend/utils/batch_pipeline/projection.py"
+  ],
+  "canonical_prevention_artifact": [
+    "backend/database/batch_pipeline_projection_session.py",
+    "backend/database/batch_pipeline_projection.py",
+    "backend/utils/batch_pipeline/projection.py",
+    "backend/tests/unit/test_batch_projection_source_deleted.py"
+  ],
+  "status": "open"
+}

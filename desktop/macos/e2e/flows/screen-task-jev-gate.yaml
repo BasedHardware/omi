@@ -5,6 +5,9 @@ description: Synthetic screen fixtures verify default-on Jev admission, canonica
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/PostHogManager.swift
+  - desktop/macos/Desktop/Sources/OmiFlagStore.swift
+  - desktop/macos/Desktop/Sources/Telemetry/PostHogFlagRequestBlocker.swift
+  - desktop/macos/Desktop/Sources/APIClient+Flags.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
   - desktop/macos/Desktop/Sources/DesktopLogPrivacy.swift
@@ -31,7 +34,15 @@ preconditions:
 steps:
   - id: S1
     name: Default-on flag read admits the Jev gate
-    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent, unknown, quota-limited or returning an error, analyze a synthetic request screenshot and verify the screen-task gate runs. Set the flag explicitly false and verify the existing 2.5 Flash tool loop runs without a screen-task gate request."
+    do: "Use an isolated named bundle and synthetic local backend fixtures only. With screen_task_jev_gate absent or a cold unavailable Omi store, analyze a synthetic request screenshot and verify the screen-task gate runs. Set the flag explicitly false, relaunch the app (a running client keeps its Omi answer until the next successful 30-minute store refresh) and verify the existing 2.5 Flash tool loop runs without a screen-task gate request. Opt out of analytics and verify the gate stops within 55 seconds."
+
+  - id: S1b
+    name: Only the Omi flag-store rule can answer
+    do: "With the synthetic backend serving GET /v1/flags?surface=macos as {screen_task_jev_gate: enabled=false} relaunch and verify the gate does not run. Serve an empty flags list and verify the gate defaults on after the next successful refresh, without consulting PostHog. A failed refresh keeps the same-account Omi answer. Sign out and in as another synthetic account and verify the first account's Omi answers are gone before the new fetch lands."
+
+  - id: S1c
+    name: SDK identity changes cannot fetch flags and analytics still captures
+    do: "Run the hermetic PostHogFlagRequestBlockerTests with its SDK-scoped URLProtocol fixture (posthog.invalid, no production host or account). Verify both /flags and /decide path forms are answered locally with empty flags. Drive SDK identify, reset and reload; assert the downstream fixture records zero flag paths and receives the analytics /batch request. The same fixture must pass capture, replay and remote-config paths through. Record this unit evidence separately from live named-bundle acceptance; no production analytics request is permitted for this probe."
 
   - id: S2
     name: Content admission avoids duplicate requests and rejected pixel uploads
@@ -47,4 +58,4 @@ steps:
 
   - id: S5
     name: Focused behavioral evidence
-    do: "Run ScreenTaskLoggingTests, ScreenTaskPipelineTests, ScreenTaskRampBoundaryTests, StagedTaskSyncIntegrityTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Verify capture followed by suppressed distribution and departure retains the original authority; swap owner (including same UID/new generation) or exclusions at each suspended boundary. Expire a 55-second admission lease and verify queued frames select owner-bound legacy, with no feature dispatch or mutation. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Defer a canonical outbox delivery, reload its row, and retry: verify original extractor/audit provenance and one Screen Task Delivery Completed event on the first receipt, zero additional events on repeated/coalesced receipts. Event properties must contain only bounded provenance/status/count fields. Retain command results separately from live app acceptance."
+    do: "Run OmiFlagStoreTests, PostHogFlagRequestBlockerTests, ScreenTaskLoggingTests, ScreenTaskPipelineTests, ScreenTaskRampBoundaryTests, StagedTaskSyncIntegrityTests, TaskAssistantContextPromptTests, TaskAssistantPromptTests and TaskIntelligenceContractFixtureTests. Verify capture followed by suppressed distribution and departure retains the original authority; swap owner (including same UID/new generation) or exclusions at each suspended boundary. Expire a 55-second admission lease and verify queued frames select owner-bound legacy, with no feature dispatch or mutation. Run the explicit backend gate and reservation-transition test files through backend/test.sh. Defer a canonical outbox delivery, reload its row, and retry: verify original extractor/audit provenance and one Screen Task Delivery Completed event on the first receipt, zero additional events on repeated/coalesced receipts. Event properties must contain only bounded provenance/status/count fields. Retain command results separately from live app acceptance."

@@ -32,9 +32,9 @@ struct ScreenEmbeddingPolicy: Sendable, Equatable {
     // TODO(#21488 follow-up): consume server cloud_screen_vectors when the
     // subscription wire exposes it. Plus screen context is Pro-only in ladder v1.
     // Neo retains vectors only through its server-reported grandfather deadline.
-    // Mobile-only Unlimited-v2 and unknown plans do not grant screen vectors.
+    // Omi Pro (unlimited_v2) unlocks desktop; unknown plans do not grant screen vectors.
     switch plan {
-    case .operator?, .pro?, .architect?:
+    case .operator?, .pro?, .architect?, .unlimitedV2?:
       shouldEmbedWithGemini = status == .active
     case .unlimited?:
       shouldEmbedWithGemini = status == .active && (desktopGrandfatherUntil ?? 0) > now.timeIntervalSince1970

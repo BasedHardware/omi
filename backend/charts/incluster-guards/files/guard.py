@@ -41,6 +41,10 @@ WINDOW_SHARE_OF_BASELINE = WINDOW / 3600
 # that lands beyond the last finite bucket is reported as exactly this
 # boundary, not measured.
 FIRST_P95_TOP_BUCKET = 60.0
+# The HPA's own scale-out targets (build_rollback asserts the live spec still
+# carries exactly these): what the live load needs, never the floor.
+REQUESTS_PER_POD = 2
+GPU_TARGET_PERCENT = 35
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -200,6 +204,15 @@ def queries(namespace):
             'omi_stt_window_session_outcome_total',
             '{job="backend-listen-metrics",outcome="no_text",reason="first_text_deadline"}',
         ),
+        # The HPA's inputs at their worst minute of the lookback window (the
+        # adapter's parakeet_active_requests_total and parakeet_gpu_utilization),
+        # so load_need() is what the live load asks for, not what a floor or the
+        # 900s scale-down window holds.
+        'live_requests_max': (
+            f'max_over_time((sum(parakeet_active_streams{gpu})'
+            f' + (sum(parakeet_active_batch_requests{gpu}) or vector(0)))[15m:1m])'
+        ),
+        'gpu_util_max': f'max_over_time(avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{gpu}[1m]))[15m:1m])',
     }
 
 
@@ -215,8 +228,8 @@ def workload_only(spec):
 
 
 def build_rollback(old):
-    """Exact step_fast.build(old, 12, rollback=True) patch and drift assertions."""
-    assert old['maxReplicas'] == 12, 'Unexpected cap'
+    """Restore rollback capacity, including an operator-capped workload HPA."""
+    assert type(old['maxReplicas']) is int and 1 <= old['maxReplicas'] <= ROLLBACK_REPLICAS, 'Unexpected cap'
     metrics = old['metrics']
     names = [m.get('pods', m.get('external', {})).get('metric', {}).get('name') for m in metrics]
     assert set(names) <= {
@@ -230,10 +243,10 @@ def build_rollback(old):
     }, 'Missing/duplicate metric'
     assert next(
         m for m in metrics if m.get('pods', {}).get('metric', {}).get('name') == 'parakeet_active_requests_total'
-    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': '2'}, 'Requests drift'
+    )['pods']['target'] == {'type': 'AverageValue', 'averageValue': str(REQUESTS_PER_POD)}, 'Requests drift'
     assert next(
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') == 'parakeet_gpu_utilization'
-    )['external']['target'] == {'type': 'Value', 'value': '35'}, 'GPU drift'
+    )['external']['target'] == {'type': 'Value', 'value': str(GPU_TARGET_PERCENT)}, 'GPU drift'
     # Kubernetes defaults selectPolicy=Max on stored objects; Helm may omit it.
     up = {'selectPolicy': 'Max', **old['behavior']['scaleUp']}
     legacy_up = {
@@ -249,6 +262,13 @@ def build_rollback(old):
     restored.append(copy.deepcopy(LATENCY))
     return [
         {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(old)},
+        # Restore the cap in the same atomic patch as the floor, or Kubernetes
+        # rejects minReplicas=12 under an operator's maxReplicas=4/6 cap.
+        *(
+            [{'op': 'replace', 'path': '/spec/maxReplicas', 'value': ROLLBACK_REPLICAS}]
+            if old['maxReplicas'] < ROLLBACK_REPLICAS
+            else []
+        ),
         {'op': 'replace', 'path': '/spec/minReplicas', 'value': ROLLBACK_REPLICAS},
         {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
     ]
@@ -340,6 +360,50 @@ def evaluate(values):
     }
 
 
+def load_need(values, ready):
+    """Pods the live load needs at the HPA's targets; None when unmeasured (evaluate blinds).
+
+    Never below one, so an empty fleet cannot pass as an idle one. GPU work is
+    the ready pods' average utilization times their count: Pending pods carry
+    none.
+    """
+    requests, gpu = values.get('live_requests_max'), values.get('gpu_util_max')
+    if not (finite(requests) and finite(gpu)) or requests < 0 or gpu < 0:
+        return None
+    return max(1, math.ceil(requests / REQUESTS_PER_POD), math.ceil(ready * gpu / GPU_TARGET_PERCENT))
+
+
+def capacity_shortfall(hpa, deployment, events, values, reading, now):
+    """Trip only when ready pods are short of the live load, with that shortfall's scheduling evidence.
+
+    2026-10-30..11-02 01:25Z: 28 of 31 rollbacks tripped only on
+    FailedScheduling or ready < desired, with latency healthy; replaying this
+    rule keeps 4 of them (ready short of the load). In the L4 stockout a rollback's 12 pods
+    leave Pending pods and their events on a 10-node pool; after it expires
+    and the schedule lowers the floor, the 900s scale-down window still holds
+    desired near 12, so the next run tripped again (about every 50 minutes),
+    and an ordinary one-pod scale-up waiting for its node tripped the same
+    way. Pending pods the live load does not need are recorded, not tripped.
+    A real stockout at peak still trips here, and latency, refusals and the
+    first-text gates trip on harm whatever the pod counts say.
+    """
+    desired = hpa.get('status', {}).get('desiredReplicas')
+    if desired is None:
+        reading['blind'].append('desired_replicas_missing')
+        return
+    ready = deployment.get('status', {}).get('readyReplicas', 0)
+    need = load_need(values, ready)
+    failures = scheduling_failures(events, hpa['metadata']['name'], now)
+    reading['load_need'] = need
+    if need is None:
+        return
+    if ready < min(desired, need):
+        reading['trips'].append('ready_shortfall')
+        reading['trips'] += failures
+    else:
+        reading['pending_beyond_load'] = len(failures)
+
+
 def scheduling_failures(events, name, now):
     failed = []
     for event in events:
@@ -405,17 +469,22 @@ def decide(hpa, deployment, events, values, state, now):
         # already-armed guard, never a fresh 15-minute warmup during which a
         # demand spike could not roll the floor back (review r1 P1). The floor
         # itself is excluded from the identity, so this elapsed time counts.
-        return 'NOOP', advance(state, identity, now, False), reading
-    reading['trips'] += scheduling_failures(events, hpa['metadata']['name'], now)
+        # advance() rebuilds its dict, so the rolled-back clean streak must be
+        # carried explicitly - same identity only; a spec change restarts it
+        # (review r3 P1: without the carry the streak reset on every run and
+        # the rollback could never expire).
+        advanced = advance(state, identity, now, False)
+        if state.get('identity') == identity and 'rollback' in state:
+            advanced['rollback'] = state['rollback']
+        # A rollback expires only once ready also covers the live load: a real
+        # peak stockout holds it instead of cycling expiry -> lower -> trip.
+        capacity_shortfall(hpa, deployment, events, values, reading, now)
+        return 'NOOP', advanced, reading
+    capacity_shortfall(hpa, deployment, events, values, reading, now)
     if not any(
         c['type'] == 'ScalingActive' and c['status'] == 'True' for c in hpa.get('status', {}).get('conditions', [])
     ):
         reading['trips'].append('HPA_not_ScalingActive')
-    desired = hpa.get('status', {}).get('desiredReplicas')
-    if desired is None:
-        reading['blind'].append('desired_replicas_missing')
-    elif deployment.get('status', {}).get('readyReplicas', 0) < desired:
-        reading['trips'].append('ready_shortfall')
     state = advance(state, identity, now, bool(reading['blind']))
     if now - state['since'] < WINDOW:
         verdict = 'WARMUP'
@@ -435,7 +504,17 @@ def batch_queries(namespace):
     sel = '{namespace="' + namespace + '"}'
     return {
         'oldest_age': f'max(omi_batch_pipeline_oldest_age_seconds{sel})',
+        # Prometheus max ignores NaNs when another priority has a finite age.
+        # Count them separately so one saturated priority cannot look healthy.
+        'age_incomplete': (
+            f'(count(omi_batch_pipeline_oldest_age_seconds{sel} != '
+            f'omi_batch_pipeline_oldest_age_seconds{sel}) or vector(0))'
+        ),
         'retry_age': f'max(omi_batch_pipeline_retry_age_seconds{sel})',
+        'retry_incomplete': (
+            f'(count(omi_batch_pipeline_retry_age_seconds{sel} != '
+            f'omi_batch_pipeline_retry_age_seconds{sel}) or vector(0))'
+        ),
         'freshness': f'max(time() - omi_batch_pipeline_metrics_refreshed_at_seconds{sel})',
         'scrape_age': f'max(time() - timestamp(omi_batch_pipeline_metrics_refreshed_at_seconds{sel}))',
     }
@@ -445,8 +524,13 @@ def evaluate_batch(values):
     # No invented projection/custody/speech metrics: worker queue age is a proxy only.
     unknown = ['new_projection_obligations_unavailable', 'audio_custody_unavailable', 'proven_speech_loss_unavailable']
     blind = any(not finite(values.get(k)) for k in batch_queries('unused'))
-    blind = blind or values.get('freshness', 0) > 120 or values.get('scrape_age', 0) > 120
-    trips = [] if blind else (['uncommitted_job_age_over_30m'] if values['oldest_age'] > 1800 else [])
+    fresh = all(finite(values.get(k)) and values[k] <= 120 for k in ('freshness', 'scrape_age'))
+    blind = blind or not fresh
+    blind = blind or values.get('age_incomplete', 0) > 0 or values.get('retry_incomplete', 0) > 0
+    # A missing priority cannot erase a fresh, positively measured breach in
+    # another priority. Keep metrics_blind alongside that known TRIP.
+    late = finite(values.get('oldest_age')) and values['oldest_age'] > 1800
+    trips = ['uncommitted_job_age_over_30m'] if fresh and late else []
     return {
         'verdict': 'TRIP' if trips else 'BLIND' if blind else 'PARTIAL',
         'trips': trips,
@@ -522,10 +606,66 @@ def log(event, **fields):
             return [safe(v) for v in value]
         return value
 
-    severity = logging.ERROR if fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error') else logging.INFO
+    unsafe = fields.get('verdict') in {'TRIP', 'BLIND'} or event.endswith('error')
+    # A bounded Cloud Logging counter consumes this boolean. Keep the signal on
+    # batch observer trips too: their evidence intentionally does not own the
+    # Parakeet Job's exit code. Dry-run readings must never notify humans.
+    page_signal = unsafe and not fields.get('dry_run', False) and os.environ.get('DRY_RUN', 'false').lower() != 'true'
+    severity = logging.ERROR if unsafe else logging.INFO
     logging.getLogger('incluster-guards').log(
-        severity, json.dumps(safe({'event': event, **fields}), allow_nan=False, sort_keys=True)
+        severity,
+        json.dumps(safe({'event': event, **fields, 'page_signal': page_signal}), allow_nan=False, sort_keys=True),
     )
+
+
+def rolled_back(spec):
+    return any(
+        m.get('external', {}).get('metric', {}).get('name') == 'parakeet_request_latency_p99'
+        for m in spec.get('metrics', [])
+    )
+
+
+def build_rollback_clear(spec):
+    """The inverse rollback: restore workload-only metrics, keep the current floor.
+
+    The floor stays at ROLLBACK_REPLICAS; the time-of-day schedule and the
+    arming/usable gates own any later reduction. Drift-refuses exactly like
+    build_rollback through the whole-spec test patch.
+    """
+    restored = [
+        m
+        for m in spec['metrics']
+        if m.get('external', {}).get('metric', {}).get('name') != 'parakeet_request_latency_p99'
+    ]
+    return [
+        {'op': 'test', 'path': '/spec', 'value': copy.deepcopy(spec)},
+        {'op': 'replace', 'path': '/spec/metrics', 'value': restored},
+    ]
+
+
+def advance_rollback_state(state, is_rolled_back, reading, now):
+    """Track the rolled-back clock; return True when the rollback may expire.
+
+    A rollback expires only after one full lookback window of consecutive
+    usable, clean readings while rolled back (2026-10-25 21:06Z: the 13:50Z
+    rollback kept the floor schedule deferred every hour with a healthy
+    fleet, and no in-band clear existed). Any trip, blind, unmeasured or
+    low-sample reading restarts the clean streak.
+    """
+    if not is_rolled_back:
+        state.pop('rollback', None)
+        return False
+    entry = state.get('rollback') or {}
+    since = entry.get('since', now)
+    clean = (
+        not reading.get('trips')
+        and not reading.get('blind')
+        and not reading.get('unmeasured')
+        and not reading.get('low_sample')
+    )
+    clean_since = now if clean and entry.get('clean_since') is None else (entry['clean_since'] if clean else None)
+    state['rollback'] = {'since': since, 'clean_since': clean_since}
+    return clean_since is not None and now - clean_since >= WINDOW and now - since >= WINDOW
 
 
 def load_floor_schedule():
@@ -565,10 +705,7 @@ def apply_floor_schedule(client, hpa, deployment, state, reading, schedule, now,
     hour = dt.datetime.fromtimestamp(now, dt.timezone.utc).hour
     target = schedule[hour]
     current = spec.get('minReplicas')
-    if any(
-        m.get('external', {}).get('metric', {}).get('name') == 'parakeet_request_latency_p99'
-        for m in spec.get('metrics', [])
-    ):
+    if rolled_back(spec):
         log('floor_schedule', result='deferred_guard_rollback', hour=hour, target=target, floor=current)
         return
     if current == target:
@@ -603,7 +740,7 @@ def run(client, dry_run, now=None):
     # Batch evaluation is independent of a missing dev HPA or Parakeet data failure.
     batch_values = client.sample(batch_queries(client.namespace))
     batch = evaluate_batch(batch_values)
-    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled')
+    log('batch_safety', **batch, values=batch_values, cloud_run_rollback='disabled', dry_run=dry_run)
     hpa = None
     values = {}
     schedule = None
@@ -620,7 +757,9 @@ def run(client, dry_run, now=None):
             events = client.kube(client.path('events'))['items']
             verdict, state, reading = decide(hpa, deployment, events, values, state, now)
         else:
-            verdict, state, reading = 'NOOP', {}, evaluate(values)
+            # Preserve the loaded state: the rolled-back clock must survive
+            # parked readings, not reset on every one of them.
+            verdict, reading = 'NOOP', evaluate(values)
     except Exception as exc:
         # No exact observed spec => no rollback; failed Job still alerts.
         log('parakeet_read_error', error=type(exc).__name__)
@@ -634,6 +773,19 @@ def run(client, dry_run, now=None):
         blind_runs=state.get('blind', 0),
         dry_run=dry_run,
     )
+    # Rollback expiry bookkeeping rides the same persisted state: a rolled-back
+    # HPA that has been clean for one full lookback window clears itself, so a
+    # rolled-back fleet cannot keep the floor schedule deferred forever with no
+    # in-band clear path (2026-10-25 21:06Z). Any unusable reading restarts it.
+    rollback_expires = False
+    if hpa is not None and verdict != 'BLIND':
+        rollback_expires = advance_rollback_state(state, rolled_back(hpa['spec']), reading, now)
+    elif hpa is not None and state.get('rollback'):
+        # An unreadable section never counts as clean: keep the clock, restart
+        # the clean streak.
+        state['rollback']['clean_since'] = None
+    # With no HPA read at all, leave any bookkeeping; the next readable run
+    # reconciles it.
     # Record evidence before attempting rollback; optimistic concurrency protects the persisted counter.
     data = {
         'state': json.dumps(state, sort_keys=True),
@@ -651,6 +803,8 @@ def run(client, dry_run, now=None):
                 'op': 'add',
                 'path': '/metadata/annotations',
                 'value': {
+                    **cm.get('metadata', {}).get('annotations', {}),
+                    'helm.sh/resource-policy': 'keep',
                     'omi.me/batch-safety-verdict': batch['verdict'],
                     'omi.me/parakeet-guard-verdict': verdict,
                 },
@@ -662,6 +816,11 @@ def run(client, dry_run, now=None):
         if not dry_run:
             client.kube(client.path('hpa'), patch)
         log('parakeet_rollback', result='dry_run' if dry_run else 'applied')
+    elif rollback_expires and hpa is not None:
+        clear = build_rollback_clear(hpa['spec'])
+        if not dry_run:
+            client.kube(client.path('hpa'), clear)
+        log('parakeet_rollback_expired', result='dry_run' if dry_run else 'applied')
     elif hpa is not None and verdict != 'BLIND' and schedule is not None:
         # Scheduled floor changes are ordinary operation, not a safety action:
         # they run after the reading (never in the same run as a rollback) and
@@ -672,7 +831,10 @@ def run(client, dry_run, now=None):
         except Exception as exc:
             log('floor_schedule_error', error=type(exc).__name__)
             return 2
-    return 1 if verdict in {'TRIP', 'BLIND'} or batch['verdict'] in {'TRIP', 'BLIND'} else 0
+    # The batch observer is isolated evidence: its trips/unknowns never fail
+    # the Job or block the Parakeet schedule (2026-10-25 21:06Z ruling); only
+    # the Parakeet section owns the exit code.
+    return 1 if verdict in {'TRIP', 'BLIND'} else 0
 
 
 def main():

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-provisional-home-content-published-as-final",
+  "violated_contract": "Home must not publish capture fragments or provisional titles as settled content while episode membership and summary authority are still arriving. Hiding a member requires a reachable replacement held by that client.",
+  "canonical_prevention": "Apply shared settling and neutral-title projections at the backend read boundary, require an exact client-held replacement before member suppression, and schedule compose at close. Contract tests cover expired versus settled floor verdicts, legacy title provenance, output language, close-triggered compose and member reachability.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_homesettle.py",
+    "backend/tests/unit/test_episodes_service.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/episodes/",
+    "backend/utils/conversations/fragment_visibility.py",
+    "backend/database/conversations.py"
+  ],
+  "status": "open"
+}

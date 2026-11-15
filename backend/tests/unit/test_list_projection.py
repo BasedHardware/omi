@@ -77,7 +77,7 @@ def store(monkeypatch):
     monkeypatch.setattr(checks, '_version', read_version)
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'synthetic-complete-writer-rollout')
     monkeypatch.setenv('OMI_BACKEND_RELEASE_SHA', 'a' * 40)
-    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'true')
     state.client = client
     return state
 
@@ -462,6 +462,7 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
     )
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: root))
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'search_apps_db', lambda _uid, my_apps: [])
     monkeypatch.setattr(
         user_data_deletion,
         'get_data_plane_firestore_client',
@@ -499,6 +500,27 @@ def test_release_and_epoch_rotation_invalidate_existing_validator(store, monkeyp
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'synthetic-complete-writer-rollout')
     monkeypatch.setenv('OMI_BACKEND_RELEASE_SHA', 'b' * 40)
     assert client.get('/v1/conversations', headers=headers).status_code == 200
+
+
+@pytest.mark.parametrize('epoch', ['', 'synthetic-complete-writer-rollout'])
+@pytest.mark.parametrize('family', ['conversations', 'action_items'])
+def test_writer_off_by_default_keeps_readers_on_the_source_path(store, monkeypatch, epoch, family):
+    # Default (unset) is off: no row/version is written, and a conditional GET
+    # never consults a version, so a stale version can never answer 304.
+    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', epoch)
+    assert not projection.writer_enabled()
+    writes = [Write(update={'name': f'projects/p/databases/(default)/documents/users/owner/{family}/one'})]
+    assert projection.project_writes(writes) is writes
+
+    path = '/v1/conversations' if family == 'conversations' else '/v1/action-items'
+    headers = [(b'if-none-match', b'W/"lp1-x"')]
+    request = Request({'type': 'http', 'path': path, 'headers': headers, 'query_string': b''})
+    before = checks.VALIDATORS.labels(checks.ORIGINS[path], 'present')._value.get()
+    check = checks.ListVersionCheck.start(request, 'owner', family)
+    assert not check.active and check.not_modified is None and check.etag is None
+    assert store.reads == 0
+    assert checks.VALIDATORS.labels(checks.ORIGINS[path], 'present')._value.get() == before + 1
 
 
 def test_no_header_action_polls_keep_old_cache_path_without_marker_reads(store):
@@ -544,9 +566,22 @@ def test_per_request_proxy_trace_does_not_break_unchanged_poll(store):
     assert client.get('/v1/conversations', headers=headers).status_code == 304
 
 
-def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch):
+@pytest.mark.parametrize('gate', ['on', 'off'])
+@pytest.mark.parametrize('home_gate', ['on', 'off'])
+def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch, gate, home_gate):
+    # Both presentation switches must be off to restore writer-version ETags.
+    # Either reader-enforced age bound must bypass them without a writer bump.
+    monkeypatch.setenv('HOME_TRANSCRIPTION_PRESENTATION_GATE', gate)
+    monkeypatch.setenv('HOME_STEP_PROJECTION', home_gate)
     store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
     rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
+
+    def wire(source_rows):
+        # The default-on Home row contract stamps the wire copy (both gate
+        # modes). This bare completed capture has no title, transcript, batch
+        # receipt, or 2h bound, so it reads as still transcribing.
+        return [{**row, 'home_step': 'transcribing'} for row in source_rows] if home_gate == 'on' else source_rows
+
     calls = []
 
     def source(*args, **kwargs):
@@ -582,13 +617,26 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
         starred=None,
     )
     first = Response()
-    assert conversation_routes.get_conversations(response=first, **params) == rows
+    assert conversation_routes.get_conversations(response=first, **params) == wire(rows)
     assert 'etag' not in first.headers  # monthly rollover must still reach heal
-    assert conversation_routes.get_conversations(response=Response(), **params) == rows
+    assert conversation_routes.get_conversations(response=Response(), **params) == wire(rows)
     assert calls == ['source', 'heal', 'source', 'heal']
     rows[0]['is_locked'] = False
     fresh = Response()
-    assert conversation_routes.get_conversations(response=fresh, **params) == rows
+    assert conversation_routes.get_conversations(response=fresh, **params) == wire(rows)
+    if gate == 'on' or home_gate == 'on':
+        assert 'etag' not in fresh.headers
+        params['request'] = Request(
+            {
+                'type': 'http',
+                'path': '/v1/conversations',
+                'query_string': b'',
+                'headers': [(b'if-none-match', b'old-writer-version')],
+            }
+        )
+        assert conversation_routes.get_conversations(response=Response(), **params) == wire(rows)
+        assert calls == ['source', 'heal'] * 4
+        return
     assert 'etag' in fresh.headers
     conditional = Request(
         {
@@ -600,7 +648,7 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
     )
     params['request'] = conditional
     graduated = Response()
-    assert conversation_routes.get_conversations(response=graduated, **params) == rows
+    assert conversation_routes.get_conversations(response=graduated, **params) == wire(rows)
     assert graduated.headers['etag'].startswith('W/"lp1-')
     params['request'] = Request(
         {

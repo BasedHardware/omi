@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-omi-pro-plans-sheet.png",
+      "platform": "mobile-ios",
+      "description": "New buyer plans sheet: Omi Pro yearly and monthly cards, each with Works on Desktop",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-operator-switch-to-omi-pro.png",
+      "platform": "mobile-ios",
+      "description": "Operator subscriber: Omi Pro listed first with Works on Desktop, own Operator plan Active, Continue offered onto Omi Pro",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

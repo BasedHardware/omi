@@ -74,7 +74,26 @@ Future<void> deleteConversationsWithUndo(BuildContext context, List<ServerConver
   if (conversations.isEmpty) return;
   final provider = context.read<ConversationProvider>();
   final l10n = context.l10n;
-  final pendingIndexDeletes = conversations.map(provider.deleteConversationLocally).toList();
+  // The row that triggered deletion can unmount as soon as it is hidden.
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  final failureSnackBar = OmiFeedback.buildSnackBar(
+    context,
+    l10n.unableToDeleteConversation,
+    kind: OmiFeedbackKind.error,
+    duration: OmiFeedbackTiming.error,
+    showClose: true,
+  );
+  var reportedFailure = false;
+  void reportFailure() {
+    if (reportedFailure || messenger == null || !messenger.mounted) return;
+    reportedFailure = true;
+    // Queue behind any other active Undo toast so its window stays open.
+    messenger.showSnackBar(failureSnackBar);
+  }
+
+  final pendingIndexDeletes = conversations
+      .map((conversation) => provider.deleteConversationLocally(conversation, onFailure: reportFailure))
+      .toList();
   final pendingRestores = <Future<void>>[];
   final undone = await OmiFeedback.undo(
     context,

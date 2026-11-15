@@ -228,6 +228,15 @@ def test_firestore_diagnostics_are_bounded(message, expected):
     assert _firestore_error_class(ValueError(message)) == 'none'
 
 
+def test_contention_budget_exhaustion_tokens_are_bounded():
+    from database.firestore_transaction_retry import FirestoreContentionExhausted
+
+    assert _firestore_error_class(FirestoreContentionExhausted('budget spent')) == 'contention'
+    deadline = FirestoreContentionExhausted('deadline spent', reason='deadline_exhausted')
+    assert _firestore_error_class(deadline) == 'deadline_exhausted'
+    assert _firestore_error_class(ValueError('budget spent')) == 'none'
+
+
 def test_ledger_has_no_permanent_segment_guard():
     """The bounded batch cap is the only pause; nothing reads a per-segment guard."""
     assert not hasattr(sync_ledger, 'get_sync_segment_quarantine')
@@ -294,3 +303,20 @@ def test_missing_live_target_keeps_legacy_fallback_without_batch_marker():
     store = StrictFirestore()
     result, created, _ = intake(store, chunk('wal', 1000), target_id='live')
     assert result['id'] == 'wal' and created
+
+
+@pytest.mark.parametrize('target', [False, True])
+def test_batch_transcript_marker_commits_with_assignment_and_exact_retry_preserves_it(target):
+    store = StrictFirestore()
+    target_id = None
+    if target:
+        target_id = 'existing'
+        intake(store, chunk(target_id, 1000))
+    incoming = dict(chunk('batch', 1060), _episode_transcript_receipt=True)
+    first, _, speech = intake(store, incoming, target_id=target_id)
+    marker = _row(store, first['id'])['episode_transcript_updated_at']
+    assert speech and marker == first['episode_transcript_updated_at']
+    assert '_episode_transcript_receipt' not in _row(store, first['id'])
+    retried, _, speech = intake(store, incoming, target_id=target_id)
+    assert not speech and retried['episode_transcript_updated_at'] == marker
+    assert _row(store, first['id'])['episode_transcript_updated_at'] == marker

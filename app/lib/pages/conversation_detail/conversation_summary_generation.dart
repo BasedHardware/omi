@@ -13,6 +13,8 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 
+const builtInSummaryTemplateAppId = 'omi-default-summary';
+
 /// Installed summary templates; throws when the list could not be read (never an empty list).
 typedef EnabledSummaryAppsFetch = Future<List<App>> Function();
 
@@ -91,6 +93,40 @@ Future<List<App>> fetchConversationSuggestedSummaryApps(String conversationId) a
 /// states and stale-response guards), the last failed summary request, the saved default template
 /// and which summary source the Summary tab shows. ConversationDetailProvider mixes it in.
 mixin ConversationSummaryGeneration on ChangeNotifier {
+  String? _preferredSummarizationAppId;
+
+  String? get preferredSummarizationAppId => _preferredSummarizationAppId;
+
+  Future<bool> setPreferredSummarizationApp(String appId) async {
+    if (!await preferredSummaryAppWrite(appId)) return false;
+    rememberDefaultSummaryTemplateAppId(appId);
+    _preferredSummarizationAppId = appId;
+    SharedPreferencesUtil().preferredSummarizationAppId = appId;
+    notifyListeners();
+    return true;
+  }
+
+  void loadPreferredSummarizationApp() {
+    _preferredSummarizationAppId = SharedPreferencesUtil().preferredSummarizationAppId;
+  }
+
+  void trackLastUsedSummarizationApp(String appId) {
+    SharedPreferencesUtil().lastUsedSummarizationAppId = appId;
+    notifyListeners();
+  }
+
+  String? getLastUsedSummarizationAppId() {
+    final lastUsedId = SharedPreferencesUtil().lastUsedSummarizationAppId;
+    return lastUsedId.isEmpty ? null : lastUsedId;
+  }
+
+  App? getLastUsedSummarizationApp() {
+    final lastUsedId = getLastUsedSummarizationAppId();
+    if (lastUsedId == null || appProvider == null) return null;
+
+    return appProvider!.apps.firstWhereOrNull((app) => app.id == lastUsedId && app.worksWithMemories() && app.enabled);
+  }
+
   ServerConversation? get conversationOrNull;
   ServerConversation get conversation;
   AppProvider? get appProvider;
@@ -251,6 +287,23 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   /// Finds an app by ID from cached apps
   App? findAppById(String? appId) {
     if (appId == null) return null;
+    if (appId == builtInSummaryTemplateAppId) {
+      return App(
+          id: appId,
+          name: 'The Best Summarizer',
+          author: 'Omi',
+          description: '',
+          image: '',
+          capabilities: {'memories'},
+          status: 'approved',
+          category: 'productivity',
+          approved: true,
+          ratingCount: 0,
+          enabled: true,
+          deleted: false,
+          isPaid: false,
+          isUserPaid: false);
+    }
 
     final enabledApp = _cachedEnabledConversationApps.firstWhereOrNull((app) => app.id == appId);
     if (enabledApp != null) return enabledApp;
@@ -324,16 +377,23 @@ mixin ConversationSummaryGeneration on ChangeNotifier {
   static String _defaultTemplateKey() => 'defaultSummaryTemplateAppId:${SharedPreferencesUtil().uid}';
 
   String? get defaultSummaryTemplateAppId {
-    final id = SharedPreferencesUtil().getString(_defaultTemplateKey());
+    final prefs = SharedPreferencesUtil();
+    final legacy = prefs.preferredSummarizationAppId;
+    final id =
+        prefs.getString(_defaultTemplateKey(), defaultValue: legacy.isNotEmpty ? legacy : builtInSummaryTemplateAppId);
     return id.isEmpty ? null : id;
   }
 
   /// Saves the default locally (the sheet's initial choice on this device) and on the server, which
   /// owns what automatic processing runs: a template is set as the preferred app, Omi clears it.
   /// Resolves whether the server stored it; the local choice is kept either way.
-  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
+  void rememberDefaultSummaryTemplateAppId(String? appId) {
     SharedPreferencesUtil().saveString(_defaultTemplateKey(), appId ?? '');
     notifyListeners();
+  }
+
+  Future<bool> setDefaultSummaryTemplateAppId(String? appId) async {
+    rememberDefaultSummaryTemplateAppId(appId);
     try {
       final stored = await preferredSummaryAppWrite(appId);
       if (!stored) Logger.debug('preferred summary app was not stored on the server');

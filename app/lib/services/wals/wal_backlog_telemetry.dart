@@ -36,6 +36,14 @@ class WalBacklogTelemetry {
     }
   }
 
+  void uploadRefused({required String reason, required int statusCode}) {
+    _safeEmit(WalUploadRefused(
+      reason: WalUploadRefusedReason.values
+          .firstWhere((r) => r.wireName == reason, orElse: () => WalUploadRefusedReason.serverRefused),
+      statusCode: statusCode,
+    ));
+  }
+
   void clearUserData() {
     _drops.clear();
     _totalDrops = 0;

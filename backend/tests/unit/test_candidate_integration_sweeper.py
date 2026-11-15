@@ -121,7 +121,7 @@ def store(monkeypatch):
     monkeypatch.setattr(integration_outbox_db, 'db', database)
     monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(candidate_service, 'account_deletion_blocks_user_work', lambda uid: False)
     return database
 
 
@@ -517,7 +517,11 @@ def test_account_deletion_skips_provider_dispatch(store, monkeypatch, wipe_statu
     now = _now()
     calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
     path = _put(store, 'deleting', now=now, provider_attempt_outcome='definite_error')
-    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: wipe_status)
+    monkeypatch.setattr(
+        candidate_service,
+        'account_deletion_blocks_user_work',
+        lambda uid: wipe_status not in {'cancelled', 'billing_failed'},
+    )
 
     counts, _client = _sweep(store, now=now)
 
@@ -535,7 +539,7 @@ def test_deletion_fence_is_fail_closed_when_the_marker_read_fails(store, monkeyp
     def explode(uid):
         raise RuntimeError('marker unavailable')
 
-    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', explode)
+    monkeypatch.setattr(candidate_service, 'account_deletion_blocks_user_work', explode)
 
     counts, _client = _sweep(store, now=now)
 

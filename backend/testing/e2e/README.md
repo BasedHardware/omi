@@ -5,10 +5,10 @@ A manually runnable integration test suite that imports the **real omi FastAPI b
 Current dogfood status:
 
 ```text
-113 passed, 3 skipped, 24 warnings
+141 passed, 3 skipped, 2 xfailed
 ```
 
-The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely.
+The run installs a local-only socket guard before importing backend code. Any non-local DNS/socket attempt raises an assertion, so real API calls fail the harness instead of silently leaking. The runner also wraps pytest in a process-level timeout (`E2E_PYTEST_TIMEOUT`, default `120s`) so websocket/provider-seam regressions fail instead of hanging indefinitely; that budget covers interpreter start, collection, the test session, and interpreter exit together. At session end the conftest stops the Redis pub/sub manager and shared executors explicitly (see `_teardown_hermetic_process_state`) with a hard budget, so slow teardown or leaked non-daemon threads fail the run by name instead of silently consuming the wrapper budget at process exit.
 
 Run it with:
 
@@ -54,7 +54,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Cloud Tasks / OIDC | Strict in-memory `tasks_v2.CloudTasksClient` plus a local token-verification seam in the account-deletion lifecycle test | Exercises the production task protobuf, queue payload, OIDC identity/audience, and retry headers without a Cloud Tasks control plane or Google token verification. |
 | Google ADC | `google.auth.default` returns anonymous credentials | Prevents real credential lookup at import time. |
 | Pinecone | `PINECONE_API_KEY` removed globally; targeted retrieval/search tests monkeypatch `database.vector_db.index` to a deterministic in-memory fake | Keeps app import hermetic while allowing route-level vector upsert/query/delete assertions without real Pinecone. |
-| Typesense | Dummy host/port/API key | Lets import-time Typesense client construction succeed; retrieval/search tests rely on vector results and fail-open keyword search rather than real Typesense compatibility. |
+| Typesense | Dummy host/port/API key for import-time construction; conftest routes the runtime seams hermetically (configured-guards return False, the shared lazy `search.client` raises a transient `connection refused`) | Ungated index deletes and lazy keyword-search calls used to attempt real HTTP against the refused dummy port — ~4s of urllib3 retries per call, ~60s across the suite. Fail-open keyword-search semantics are preserved; real Typesense behavior is covered by `tests/unit/test_conversation_typesense_index.py`. |
 | Google Translate | Anonymous Google credentials | Allows import-time client construction; v1 tests do not call live translation. |
 | LLM/STT/VAD/embeddings | Fake modules scaffolded; route and custom-STT suggested-transcript seams covered where deterministic patching is practical | Kept as v2 work where scenarios need real outbound HTTP/WS/provider assertions. |
 | Webhook/task external HTTP | `httpx.MockTransport` in targeted tests | Captures outbound payloads without network. |

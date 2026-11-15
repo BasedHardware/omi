@@ -60,16 +60,19 @@ if not hasattr(_fs, "FieldFilter"):
     _fs.FieldFilter = MagicMock()
 
 _sa = _mod("models.screen_activity")
-if not hasattr(_sa, "ScreenActivityCoverage"):
 
-    class _FakeScreenActivityCoverage:
-        def __init__(self, **kwargs):
-            self._data = kwargs
 
-        def model_dump(self):
-            return self._data
+class _FakeCoverageProjection:
+    def __init__(self, **kwargs):
+        self._data = kwargs
 
-    _sa.ScreenActivityCoverage = _FakeScreenActivityCoverage
+    def model_dump(self):
+        return self._data
+
+
+for _coverage_model in ("ScreenActivityCoverage", "ScreenDeviceCoverage"):
+    if not hasattr(_sa, _coverage_model):
+        setattr(_sa, _coverage_model, _FakeCoverageProjection)
 
 from database import screen_activity
 

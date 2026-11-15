@@ -81,11 +81,36 @@ class MemoryRedis:
             return self._bench_update(args[0], args[1], args[2], float(args[3]))
         if script is live_health.BENCH_CLEANUP:
             return self._bench_cleanup(args[0], args[1], args[2])
-        key, expected, new, _ttl = args
+        key = args[0]
+        expected, new, _ttl = args[_numkeys : _numkeys + 3]
         if self.data.get(key, '') != expected:
             return 0
+        mode = args[_numkeys + 3] if len(args) > _numkeys + 3 else ''
+        mode_keys = int(args[_numkeys + 7]) if len(args) > _numkeys + 7 else _numkeys
+        if len(args) > _numkeys + 7:
+            for index, value in enumerate(json.loads(args[_numkeys + 6])):
+                actual = self.data.get(args[mode_keys + index], '')
+                if (actual.decode() if isinstance(actual, bytes) else actual) != value:
+                    return 0
+        result = 1
+        if mode == 'hold':
+            held, guard_indices = args[_numkeys + 4 : _numkeys + 6]
+            stages = {
+                index
+                + 1: min(
+                    json.loads(self.data.get(args[index], '{"stage":100}'))['stage'],
+                    json.loads(self.data.get(args[index + 1], '{"stage":100}'))['stage'],
+                )
+                for index in range(1, mode_keys, 2)
+            }
+            if any(stages[index] >= 5 for index in json.loads(guard_indices)) and all(
+                stage < 100 for stage in stages.values()
+            ):
+                new, result = held, 2
         self.data[key] = new
-        return 1
+        if str(mode).isdigit():
+            self.data[args[1]] = str(self.clock() + int(mode))
+        return result
 
     @staticmethod
     def _bench_deadline(raw, kind):

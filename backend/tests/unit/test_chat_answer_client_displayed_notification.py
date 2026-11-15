@@ -86,6 +86,10 @@ def _loaded_notifications() -> Iterator[ModuleType]:
             'firebase_admin': firebase_admin,
             'firebase_admin.messaging': messaging,
             'firebase_admin.auth': auth,
+            'database.account_deletion_marker': _module(
+                'database.account_deletion_marker',
+                account_deletion_blocks_user_work=lambda _uid: False,
+            ),
             'database.notifications': notification_db,
             'database.redis_db': redis_db,
             'database.auth': database_auth,

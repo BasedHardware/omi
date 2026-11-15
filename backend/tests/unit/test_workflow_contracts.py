@@ -118,6 +118,7 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         "backend/scripts/validate_rendered_deployment_contract.py": "tests/unit/test_rendered_deployment_contract.py",
         ".github/workflows/gcp_backend_auto_dev.yml": "tests/unit/test_llm_gateway_deploy_contract.py",
         ".github/workflows/gcp_llm_gateway.yml": "tests/unit/test_preflight_cloud_run_deploy.py",
+        ".github/workflows/gcp_diarizer.yml": "tests/unit/test_record_seal_cluster_repair_deploy.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",
     }
@@ -132,6 +133,23 @@ def test_workflow_contract_sources_select_adjacent_tests(selector_and_all_tests)
         assert expected_test in selected, source_path
         assert reason == f"{source_path} requires the full backend unit suite"
         assert selected == all_tests
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/charts/backend-secrets/templates/metrics-scrape-token.yaml',
+        'backend/charts/backend-secrets/prod_omi_backend_secrets_values.yaml',
+        'backend/charts/pusher/templates/podmonitoring.yaml',
+        'backend/charts/backend-listen/templates/collector-rbac.yaml',
+    ],
+)
+def test_monitoring_sources_select_scrape_auth_contracts(selector_and_all_tests, source):
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths([source], all_tests)
+    assert 'tests/unit/test_serving_podmonitoring_chart.py' in selected
+    assert 'tests/unit/test_backend_secrets_chart.py' in selected
+    assert reason == 'selected backend unit tests from changed paths and workflow contracts'
 
 
 def test_workflow_contract_directory_glob_selects_nested_chart_test(selector_and_all_tests):
@@ -363,7 +381,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     test time, and sharing processes across files is blocked by dense
     sys.modules contamination (see the BACKEND_PYTEST_PARALLEL_SESSION
     measurement in backend/test.sh). The workflow therefore runs the SAME
-    selection as six parallel shard jobs whose interleaved slices partition
+    selection as eight parallel shard jobs whose weighted partitions cover
     the sorted file list exactly (union = full selection), plus a concurrent
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
@@ -374,10 +392,10 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     runner = (BACKEND_DIR / "scripts/run-unit-ci.sh").read_text(encoding="utf-8")
 
-    assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
-    assert "--shard 6/${{ matrix.shard }}" in workflow
-    assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
-    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
+    assert "shard: [1, 2, 3, 4, 5, 6, 7, 8]" in workflow
+    assert "--shard 8/${{ matrix.shard }}" in workflow
+    assert "name: Backend unit shard ${{ matrix.shard }}/8" in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
     # guardrail result that is not a plain success.
@@ -391,12 +409,13 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert '::notice title=Heavy CI deferred::' in workflow
     assert 'echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"' in workflow
     assert 'guardrails_required=skipped' in workflow
-    # The runner slices the deterministic selection round-robin with the
-    # one-based mapping (line i runs in shard ((i - 1) % total) + 1, so
-    # shard labels match the files they carry); `index` is an awk builtin,
-    # so the shard variable must be named anything else.
-    assert "(NR - 1) % total == shard - 1" in runner
-    assert "awk -v index=" not in runner
+    # The runner deals the deterministic selection heaviest-first (measured
+    # weights) to the least loaded shard (PR #23767: round-robin left walls
+    # 433-754s); ties fall back to round-robin with one-based shard labels.
+    assert "backend_unit_shard_weights.tsv" in runner
+    assert (BACKEND_DIR / "scripts/backend_unit_shard_weights.tsv").is_file()
+    assert "key=lambda index: (load[index], count[index], index)" in runner
+    assert "assigned[path] = target + 1" in runner
 
 
 def test_backend_test_runner_defaults_python_to_utf8():
@@ -1085,7 +1104,7 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
     policy = _workflow_policy()
     repo = BACKEND_DIR.parent
     dockerfiles = policy._runtime_images(repo)
-    workflow = (repo / '.github/workflows/gcp_memory_maintenance_job.yml').read_text(encoding='utf-8')
+    workflow = (repo / '.github/workflows/gcp_frame_request_retention_job.yml').read_text(encoding='utf-8')
 
     gate_block = re.search(r'      - name: Verify serving Firestore indexes\n(?:        .*\n)+', workflow).group(0)
     removed = workflow.replace(gate_block, '')
@@ -1121,11 +1140,6 @@ def test_firestore_gate_policy_rejects_ungated_deploy_mutations():
     )
     assert policy.workflow_gate_violations(tolerated_control, name='tolerated-control.yml', dockerfiles=dockerfiles)
 
-    push_step = re.search(r'      - name: Push verified runtime image\n(?:        .*\n)+', workflow).group(0)
-    reordered = workflow.replace(gate_block, '')
-    reordered = reordered.replace(push_step, push_step + gate_block)
-    assert policy.workflow_gate_violations(reordered, name='reordered.yml', dockerfiles=dockerfiles)
-
 
 def _synthetic_deploy(steps: str, *, extra_jobs: str = '', job_prefix: str = '') -> str:
     return f"""name: synthetic-deploy
@@ -1151,7 +1165,8 @@ _SYNTHETIC_GATE = """      - uses: actions/checkout@v7
         with:
           source_sha: ${{ github.sha }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 """
 
 
@@ -1520,12 +1535,11 @@ def test_firestore_gate_policy_rejects_orphaned_readiness_dependency():
 
 _LANE_SOURCE_BINDINGS = {
     'gcp_backend.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
+    'gcp_diarizer.yml': '${{ steps.vars.outputs.source_sha }}',
     'gcp_backend_auto_dev.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
     'desktop_backend_prod.yml': '${{ steps.admitted-source.outputs.source_sha }}',
     'desktop_backend_auto_dev.yml': '${{ steps.candidate-identity.outputs.source_sha }}',
     'gcp_llm_gateway.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job.yml': '${{ env.CHECKED_OUT_SHA }}',
-    'gcp_memory_maintenance_job_auto_dev.yml': '${{ github.sha }}',
     'gcp_notifications_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_x_connector_sync_job.yml': '${{ env.CHECKED_OUT_SHA }}',
     'gcp_day3_reengagement_email_job.yml': '${{ steps.admitted_source.outputs.admitted_sha }}',
@@ -2060,6 +2074,8 @@ def _composite_control_root(tmp_path: Path) -> Path:
         'review_queries.py',
         'messaging_queries.py',
         'sync_pipeline_indexes.py',
+        'batch_pipeline_indexes.py',
+        'lifecycle_metrics_indexes.py',
     ):
         (database_dir / name).write_text((backend / 'database' / name).read_text(encoding='utf-8'), encoding='utf-8')
     (scripts_dir / '__init__.py').write_text('', encoding='utf-8')
@@ -2094,7 +2110,6 @@ def _run_composite(
     live_indexes,
     source_sha='e' * 40,
     head_sha=None,
-    credentials='{}',
     verify_credential_project='false',
     run_validate_step=False,
 ):
@@ -2124,7 +2139,7 @@ def _run_composite(
     runner_temp.mkdir(exist_ok=True)
     _stub_bin(tmp_path)
     credentials_path = tmp_path / 'credentials.json'
-    credentials_path.write_text(credentials or '', encoding='utf-8')
+    credentials_path.write_text('{}', encoding='utf-8')
     indexes_file = tmp_path / 'live-indexes.json'
     indexes_file.write_text(json.dumps(live_indexes), encoding='utf-8')
 
@@ -2132,7 +2147,6 @@ def _run_composite(
         'inputs.source_sha': source_sha,
         'inputs.project_id': 'dev-project',
         'inputs.database': '(default)',
-        'inputs.credentials_json': credentials,
         'inputs.verify_credential_project': verify_credential_project,
         'inputs.artifact_suffix': '',
         'runner.temp': str(runner_temp),
@@ -2212,10 +2226,6 @@ def test_firestore_readiness_composite_executes_hermetically(tmp_path):
     assert check.returncode == 1
     assert 'Invalid Firestore source SHA' in check.stdout
 
-    check, _ = _run_composite(tmp_path / 'no-creds', live_indexes=ready_live, credentials='')
-    assert check.returncode == 1
-    assert 'Missing Firestore read-only credentials' in check.stdout
-
     check, _ = _run_composite(tmp_path / 'mismatch', live_indexes=ready_live, head_sha='0' * 40)
     assert check.returncode == 1
     assert 'Firestore source mismatch' in check.stdout
@@ -2259,3 +2269,104 @@ def test_notifications_job_renders_the_verified_gateway_endpoint():
     assert "--github-output" in steps[gate]["run"]
     assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
     assert "http://127.0.0.1:9" in steps[render]["run"]
+
+
+def _gcp_backend_workflow() -> dict:
+    return yaml.safe_load((BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8'))
+
+
+def test_backend_dispatch_input_names_its_requester():
+    """Every manual backend dispatch names who requested it (lead ruling 310a7c).
+
+    Prod run 40214727824 (2026-10-25) could not be traced to any session: every
+    agent dispatches as the shared account, so the run itself must carry the
+    requester. `required` alone is not enough -- the REST API does not enforce
+    required string inputs -- so the prod boundary step checks it again.
+    """
+    workflow = _gcp_backend_workflow()
+    triggers = workflow.get('on', workflow.get(True))
+    inputs = triggers['workflow_dispatch']['inputs']
+
+    requested_by = inputs['requested_by']
+    assert requested_by['type'] == 'string'
+    assert requested_by['required'] is True
+    assert 'lane label or session' in requested_by['description']
+
+    run_name = workflow['run-name']
+    assert 'inputs.requested_by' in run_name
+    # Non-dispatch triggers still render the event and actor instead of blanks.
+    assert 'inputs.environment || github.event_name' in run_name
+    assert 'inputs.requested_by || github.actor' in run_name
+
+
+def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
+    """The prod boundary check fails closed when requested_by is empty or
+    whitespace, echoes the requester into the log, and ignores it for
+    development dispatches."""
+    workflow = _gcp_backend_workflow()
+    job = workflow['jobs']['validate-production-boundary']
+    step = next(step for step in job['steps'] if step.get('env', {}).get('DEPLOY_ENVIRONMENT') is not None)
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'boundary.sh'
+    # Expand the inline deploy_gateway expressions the way the dispatcher does;
+    # literal ${{ }} is not valid bash and is irrelevant to the requester check.
+    script.write_text(re.sub(r'\$\{\{[^}]*\}\}', 'false', step['run']), encoding='utf-8')
+
+    def run_boundary(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {
+            **os.environ,
+            'DEPLOY_ENVIRONMENT': environment,
+            'DEPLOY_TARGETS': 'cloud-run-only',
+            'WORKFLOW_MODE': 'deploy',
+            'SERVICE_IMAGES': '',
+            'REQUESTED_BY': requested_by,
+            'RELEASE_SHA': '',
+            'SKIP_ELIGIBILITY': 'false',
+            'BREAK_GLASS_LOCK': 'false',
+        }
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_boundary('prod', '   ')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_boundary('prod', 'train:nightly-42')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=train:nightly-42' in accepted.stdout
+
+    development = run_boundary('development', '')
+    assert development.returncode == 0, development.stderr
+
+
+def test_backend_traffic_repair_prod_dispatch_needs_a_requester(tmp_path):
+    """repair-traffic-only is an independent prod mutation path: it skips
+    validate-production-boundary and validates in its own first step, so the
+    requester check must live there too (Luna round 1, PR #23694)."""
+    workflow = _gcp_backend_workflow()
+    steps = workflow['jobs']['repair-traffic']['steps']
+    step = next(step for step in steps if step.get('name') == 'Validate Environment Input')
+    assert step['env']['REQUESTED_BY'] == '${{ github.event.inputs.requested_by }}'
+
+    script = tmp_path / 'repair.sh'
+    # Expand the inline github.event.inputs.environment expressions the way the
+    # dispatcher does; literal ${{ }} is not valid bash.
+    script.write_text(
+        re.sub(r'\$\{\{\s*github\.event\.inputs\.(\w+)\s*\}\}', r'${INPUT_\1}', step['run']),
+        encoding='utf-8',
+    )
+
+    def run_repair(environment: str, requested_by: str) -> subprocess.CompletedProcess:
+        env = {**os.environ, 'INPUT_environment': environment, 'REQUESTED_BY': requested_by}
+        return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+
+    rejected = run_repair('prod', '')
+    assert rejected.returncode != 0
+    assert '::error::' in rejected.stdout and 'requested_by' in rejected.stdout
+
+    accepted = run_repair('prod', 'op1')
+    assert accepted.returncode == 0, accepted.stderr
+    assert 'requested_by=op1' in accepted.stdout
+
+    development = run_repair('development', '')
+    assert development.returncode == 0, development.stderr

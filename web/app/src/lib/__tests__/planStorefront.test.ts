@@ -63,12 +63,12 @@ describe('storefront goldens', () => {
     const data = golden('plus_monthly_yearly_toggle');
     expect(buttons(data, 'month')).toEqual({
       operator: 'Upgrade to Pro',
-      plus: 'Switch to yearly · save $39.98',
+      plus: 'Switch to yearly · save US$39.98',
       architect: 'Upgrade to Architect',
     });
     const plus = data.tiers.find((t) => t.isCurrent)!;
     // The single yearly price shows on the Monthly chip with the monthly headline.
-    expect(offeredPrice(plus, 'month')?.headline).toBe('$19.99/month');
+    expect(offeredPrice(plus, 'month')?.headline).toBe('US$19.99/month');
   });
 
   it('annual Plus starts on the yearly chip and never offers monthly', () => {
@@ -84,7 +84,7 @@ describe('storefront goldens', () => {
     expect(buttons(data, 'month')).toEqual({
       architect: 'Upgrade to Architect',
       plus: null,
-      operator: 'Switch to yearly · save $99.98',
+      operator: 'Switch to yearly · save US$99.98',
     });
     expect(partitionTiers(data).primary.map((t) => t.planId)).toEqual([
       'architect',
@@ -144,6 +144,15 @@ describe('storefront goldens', () => {
     expect(shouldGate(golden('pro_budget_cap'), 'proactive_agent')).toBe(false);
     expect(shouldGate(golden('legacy_neo'), 'proactive_agent')).toBe(false);
   });
+
+  it('Omi Pro clears every Pro gate', () => {
+    const free = golden('free_pro_gate_proactive');
+    const gated = { ...free, usage: { ...free.usage, proGates: ['proactive_agent'] } };
+    expect(shouldGate(gated, 'proactive_agent')).toBe(true);
+    const omiPro = { ...gated, current: { ...gated.current!, planId: 'unlimited_v2' } };
+    expect(shouldGate(omiPro, 'proactive_agent')).toBe(false);
+    expect(shouldGate(gated, 'proactive_agent', 'unlimited_v2')).toBe(false);
+  });
 });
 
 describe('defensive decode', () => {
@@ -168,7 +177,7 @@ describe('defensive decode', () => {
       ...payload.tiers[2],
       prices: [
         ...(payload.tiers[2].prices as unknown[]),
-        { interval: 'week', amount_minor: 1, currency: 'usd', headline: '$1/week' },
+        { interval: 'week', amount_minor: 1, currency: 'usd', headline: 'US$1/week' },
       ],
     };
     payload.usage = { ...payload.usage, kind: 'tokens' };

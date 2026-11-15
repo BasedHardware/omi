@@ -6,12 +6,12 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
-import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The device page's numbers: battery, how much Omi heard today, and audio still on the device.
-/// Every value is measured; a stat with nothing to show is left out rather than invented.
+/// The device page's numbers: battery, how much Omi heard today, and audio still on the device —
+/// or, while recordings are catching up, how much is still on its way. Every value is measured; a
+/// stat with nothing to show is left out rather than invented.
 class DeviceStatsRow extends StatelessWidget {
   const DeviceStatsRow({
     super.key,
@@ -19,6 +19,10 @@ class DeviceStatsRow extends StatelessWidget {
     required this.isCharging,
     required this.heardTodaySeconds,
     required this.onDeviceSeconds,
+    this.phoneQueueSeconds = 0,
+    this.catchUpSeconds,
+    this.catchUpCaption,
+    this.onOpenCatchUp,
   });
 
   /// Battery percent, or <= 0 when the device has not reported one.
@@ -26,6 +30,19 @@ class DeviceStatsRow extends StatelessWidget {
   final bool isCharging;
   final int heardTodaySeconds;
   final int onDeviceSeconds;
+
+  /// Audio recorded on the phone still waiting for its upload: the On Device
+  /// tile names it so hours of phone queue never read as nothing to sync.
+  final int phoneQueueSeconds;
+
+  /// Audio still on its way to becoming conversations. While set, the third tile reads
+  /// "Catching up" with this duration (a dash when the work has no measured length yet) and
+  /// opens On the Way; null when nothing is pending, and the tile is On Device again.
+  final int? catchUpSeconds;
+
+  /// What the catch-up is waiting on ("when online"); the tile adds the chevron.
+  final String? catchUpCaption;
+  final VoidCallback? onOpenCatchUp;
 
   @override
   Widget build(BuildContext context) {
@@ -43,19 +60,32 @@ class DeviceStatsRow extends StatelessWidget {
         label: l10n.deviceHeardToday,
         value: OmiDuration.compact(_minutes(heardTodaySeconds), l10n),
       ),
-      _StatTile(
-        key: const Key('device_stat_on_device'),
-        label: l10n.onDevice,
-        value: OmiDuration.compact(_minutes(onDeviceSeconds), l10n),
-        caption: onDeviceSeconds > 0 ? l10n.deviceToSync : null,
-      ),
+      if (catchUpSeconds case final seconds?)
+        _StatTile(
+          key: const Key('device_stat_catching_up'),
+          label: l10n.deviceCatchingUp,
+          value: seconds > 0 ? OmiDuration.compact(_minutes(seconds), l10n) : '—',
+          caption: catchUpCaption,
+          onTap: onOpenCatchUp,
+        )
+      else
+        _StatTile(
+          key: const Key('device_stat_on_device'),
+          label: l10n.onDevice,
+          value: OmiDuration.compact(_minutes(onDeviceSeconds), l10n),
+          caption: onDeviceSeconds > 0 ? l10n.deviceToSync : null,
+          secondCaption:
+              phoneQueueSeconds > 0 ? l10n.deviceOnPhoneQueue(OmiDuration.compact(phoneQueueSeconds, l10n)) : null,
+        ),
     ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    // One plain line, battery · on device: no boxes, so the numbers read as text.
+    return Wrap(
+      spacing: OmiSpacing.xs,
+      runSpacing: OmiSpacing.xxs,
       children: [
         for (var i = 0; i < tiles.length; i++) ...[
-          if (i > 0) const SizedBox(width: OmiSpacing.xs),
-          Expanded(child: tiles[i]),
+          if (i > 0) Text('·', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+          tiles[i],
         ],
       ],
     );
@@ -65,48 +95,59 @@ class DeviceStatsRow extends StatelessWidget {
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile({super.key, required this.label, required this.value, this.caption});
+  const _StatTile({super.key, required this.label, required this.value, this.caption, this.secondCaption, this.onTap});
 
   final String label;
   final String value;
   final String? caption;
 
+  /// A second caption after the first, in the same style.
+  final String? secondCaption;
+
+  /// A tappable tile ends its caption with a chevron; the whole line is the target.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
+    final captionStyle = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
+    // Wraps rather than overflows when a caption is long or the text size is large.
+    final content = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: OmiSpacing.xxs,
+      children: [
+        Text(label, style: captionStyle),
+        Text(value, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+        if (caption != null) Text(caption!, style: captionStyle),
+        if (secondCaption != null) Text(secondCaption!, style: captionStyle),
+        if (onTap != null)
+          Icon(
+            Icons.chevron_right,
+            size: MediaQuery.textScalerOf(context).scale(captionStyle.fontSize!),
+            color: OmiColors.textTertiary,
+          ),
+      ],
+    );
     return Semantics(
-      label: [label, value, if (caption != null) caption!].join(', '),
+      label: [label, value, if (caption != null) caption!, if (secondCaption != null) secondCaption!].join(', '),
+      button: onTap != null,
       excludeSemantics: true,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 84),
-        padding: const EdgeInsets.all(OmiSpacing.sm),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-            const SizedBox(height: OmiSpacing.xxs),
-            Text(value, style: OmiType.title3, maxLines: 1, overflow: TextOverflow.ellipsis),
-            if (caption != null) ...[
-              const SizedBox(height: 2),
-              Text(caption!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            ],
-          ],
-        ),
-      ),
+      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
     );
   }
 }
 
-/// Right now: the live episode this device is feeding, and offline audio catching up.
+/// Right now: the live episode this device is feeding. Offline audio catching up is the stat
+/// row's Catching up tile, not a row here.
 class DeviceRightNowGroup extends StatelessWidget {
   const DeviceRightNowGroup({
     super.key,
     this.liveTitle,
     this.liveLength,
     this.liveLengthNow,
+    this.liveSubtitle,
+    this.liveProblem = false,
+    this.onFixProblem,
     this.onOpenLive,
-    this.catchingUp,
-    this.onOpenCatchingUp,
   });
 
   final String? liveTitle;
@@ -114,12 +155,18 @@ class DeviceRightNowGroup extends StatelessWidget {
 
   /// The running length read fresh each second; only the live row re-renders, not the page.
   final String Function(DateTime now)? liveLengthNow;
+
+  /// A fixed subtitle instead of a running length: "Connecting…" while the pendant's
+  /// audio is still being verified, or the failure sentence when [liveProblem] is set.
+  final String? liveSubtitle;
+
+  /// The live row is a failure the reader can act on ([onFixProblem]); no length, no clock.
+  final bool liveProblem;
+  final VoidCallback? onFixProblem;
+
   final VoidCallback? onOpenLive;
 
-  final DeviceCatchUpSummary? catchingUp;
-  final VoidCallback? onOpenCatchingUp;
-
-  bool get hasContent => liveTitle != null || catchingUp != null;
+  bool get hasContent => liveTitle != null;
 
   Widget _liveRow(String subtitle) => OmiSettingsRow(
         key: const Key('device_right_now_live'),
@@ -129,26 +176,32 @@ class DeviceRightNowGroup extends StatelessWidget {
         onTap: onOpenLive,
       );
 
+  /// The pendant owes audio: the row names the failure and its tap is the fix.
+  Widget _problemRow() => OmiSettingsRow(
+        key: const Key('device_right_now_no_audio'),
+        leading: Icon(Icons.warning_amber_rounded, color: OmiColors.warning),
+        title: liveTitle!,
+        subtitle: liveSubtitle,
+        onTap: onFixProblem,
+      );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final catchingUp = this.catchingUp;
     return OmiSettingsGroup(
       header: l10n.deviceRightNow,
       children: [
         if (liveTitle != null)
-          liveLengthNow == null
-              ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
-              : LiveEpisodeClock(
-                  clock: DateTime.now,
-                  builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
-                ),
-        if (catchingUp != null)
-          DeviceCatchingUpCard(
-            key: const Key('device_right_now_catching_up'),
-            summary: catchingUp,
-            onOpen: onOpenCatchingUp,
-          ),
+          liveProblem
+              ? _problemRow()
+              : liveSubtitle != null
+                  ? _liveRow(liveSubtitle!)
+                  : liveLengthNow == null
+                      ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
+                      : LiveEpisodeClock(
+                          clock: DateTime.now,
+                          builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
+                        ),
       ],
     );
   }

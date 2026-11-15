@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
     NONCURRENT_DELETE_RULE,
@@ -43,22 +45,53 @@ def test_no_delete_rule_can_reach_chunks_except_the_scoped_noncurrent_rule():
 
 def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
     for name in APPLY_FILES:
-        set_class = [r for r in _rules(_load(name)) if r["action"]["type"] == "SetStorageClass"]
+        set_class = [
+            r
+            for r in _rules(_load(name))
+            if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+        ]
         assert len(set_class) == 1, name
         rule = set_class[0]
-        assert rule["action"]["storageClass"] == "COLDLINE"
         assert rule["condition"]["age"] == 30
         assert rule["condition"]["matchesPrefix"] == ["chunks/"]
 
 
 def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
-    set_class = [r for r in _rules(_load("prod.json")) if r["action"]["type"] == "SetStorageClass"]
+    set_class = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["action"]["storageClass"] == "COLDLINE"
+    ]
     assert len(set_class) == 1
     rule = set_class[0]
     assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
         "prod Coldline transitions must stay scoped to the large batch artifacts; "
         "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
     )
+
+
+def test_prod_has_no_archive_rule():
+    assert all(rule["action"].get("storageClass") != "ARCHIVE" for rule in _rules(_load("prod.json"))), (
+        "David dropped the existing-stock Archive transition on 2026-11-02; " "prod apply must never reinstall it"
+    )
+
+
+@pytest.mark.parametrize("name", APPLY_FILES + ROLLBACK_FILES)
+def test_archive_rule_is_rejected_in_every_private_cloud_variant(name):
+    document = _load(name)
+    document["lifecycle"]["rule"].append(
+        {
+            "action": {"type": "SetStorageClass", "storageClass": "ARCHIVE"},
+            "condition": {
+                "age": 90,
+                "matchesPrefix": ["chunks/"],
+                "matchesStorageClass": ["COLDLINE"],
+                "matchesSuffix": [".batch.enc", ".batch.bin"],
+            },
+        }
+    )
+    errors = validate_desired_document(document)
+    assert any("must set storageClass COLDLINE" in e and "ARCHIVE" in e for e in errors), errors
 
 
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():

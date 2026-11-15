@@ -16,8 +16,26 @@ ROOT = BACKEND.parent
 sys.path.insert(0, str(BACKEND / 'scripts'))
 
 import ops_train  # noqa: E402
+from scripts import select_backend_unit_tests as unit_selector  # noqa: E402
 
 PROD_HEADER = 'schema: omi.ops/v1\nenvironment: prod\nproject: based-hardware\nregion: us-central1\n'
+
+# Ruling 008024: production backlog capacity is intentionally not applied to staging.
+# Each field pins (prod, staging), so an exemption cannot hide drift on either side.
+INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES = {
+    'enrichment': {'max_concurrent_dispatches': (300, 50)},
+    'enrichment-fresh': {
+        'max_concurrent_dispatches': (30, 5),
+        'max_dispatches_per_second': (10.0, 2.0),
+    },
+}
+
+
+def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
+    queue = yaml.safe_load((BACKEND / 'deploy/ops/prod.yaml').read_text())['cloud_tasks']['sync-jobs-fresh']
+    assert queue['max_dispatches_per_second'] == 15
+    assert queue['max_concurrent_dispatches'] == 160
+    assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
 
 
 def _container(image: str, env: dict[str, str], *, ports: bool = True, name: str = 'backend') -> dict[str, Any]:
@@ -205,22 +223,52 @@ def test_prod_carries_both_stall_repoints_and_recovery_16_8():
     queues = {q.name: q for q in spec.queues}
     recovery = queues['batch-quarantine-recovery'].fields
     assert (recovery['max_concurrent_dispatches'], recovery['max_dispatches_per_second']) == (16, 8.0)
-    # Lane 9's enrichment queue is declared but not created before M3.
-    assert queues['enrichment'].enabled is False
+    # Plan C prod activation: the config-train creates C3's enrichment and C8's provider-stt queues before the
+    # backend roll that points ENRICHMENT_ROUTE / PROVIDER_STT_TASKS_* at them (draining needs provider_stt_live).
+    assert queues['enrichment'].enabled is True
+    enrichment = queues['enrichment']
+    assert (enrichment.fields['max_concurrent_dispatches'], enrichment.fields['max_dispatches_per_second']) == (
+        300,
+        25.0,
+    )
+    fresh = queues['enrichment-fresh']
+    assert fresh.enabled is True
+    assert (fresh.fields['max_concurrent_dispatches'], fresh.fields['max_dispatches_per_second']) == (30, 10.0)
+    assert fresh.fields['max_attempts'] == -1
+    provider = queues['provider-stt']
+    assert provider.enabled is True
+    assert (provider.fields['max_concurrent_dispatches'], provider.fields['max_dispatches_per_second']) == (48, 10.0)
+    assert provider.fields['max_attempts'] == -1
 
 
-def test_staging_mirrors_prod_except_names():
+def test_staging_mirrors_prod_except_names_and_intentional_env_and_capacity_divergences():
     prod, staging = ops_train.load_ops('prod'), ops_train.load_ops('staging')
     staging_services = {s.name: s for s in staging.services}
     for svc in prod.services:
         twin = staging_services[f'{svc.name}-staging']
-        assert set(twin.env) == set(svc.env)
-        # Queue names carry the staging- prefix; every other ops value is identical.
-        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in svc.env.items())
+        shared_env = dict(svc.env)
+        # lead2 8b9c8f: only the production sweep owner has the 8/tick cap.
+        # Staging keeps the code default; all other env parity remains strict.
+        cap = 'SUMMARY_DEBT_REPAIR_ADMISSION_LIMIT'
+        assert cap not in twin.env
+        if svc.name == 'backend-integration':
+            assert shared_env.pop(cap) == '8'
+        else:
+            assert cap not in shared_env
+        assert set(twin.env) == set(shared_env)
+        # Queue names carry the staging- prefix; every shared ops value is identical.
+        assert all(twin.env[k] == (f'staging-{v}' if k.endswith('_QUEUE') else v) for k, v in shared_env.items())
         # Scaling (replica counts) is on contract (i)'s staging allowlist; only env must mirror.
     staging_queues = {q.name: q for q in staging.queues}
+    assert INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.keys() <= {q.name for q in prod.queues}
     for queue in prod.queues:
-        assert staging_queues[f'staging-{queue.name}'].fields == queue.fields
+        expected = dict(queue.fields)
+        for field, (prod_value, staging_value) in INTENTIONAL_STAGING_QUEUE_CAPACITY_DIVERGENCES.get(
+            queue.name, {}
+        ).items():
+            assert queue.fields[field] == prod_value, (queue.name, field)
+            expected[field] = staging_value
+        assert staging_queues[f'staging-{queue.name}'].fields == expected
 
 
 # ----------------------------------------------------------------------------- schema
@@ -695,3 +743,35 @@ def test_staging_enrichment_stays_off_until_prod_turns_it_on():
     staging = yaml.safe_load((BACKEND / 'deploy/ops/staging.yaml').read_text())['cloud_tasks']
     for name, queue in prod.items():
         assert staging[f'staging-{name}'].get('enabled', True) == queue.get('enabled', True), name
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'backend/config/firestore_read_levers.py',
+        'backend/deploy/runtime_env/_base.yaml',
+        'backend/deploy/runtime_env/dev.overlay.yaml',
+        'backend/deploy/runtime_env/prod.overlay.yaml',
+        'backend/deploy/runtime_env.yaml',
+        'backend/deploy/compose_runtime_env.py',
+        'backend/deploy/generate_read_lever_manifest.py',
+        'backend/deploy/firestore_read_levers_manifest.json',
+        'backend/charts/batch-pipeline-worker/values.yaml',
+        'backend/charts/batch-pipeline-worker/dev_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml',
+        'backend/charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        'backend/charts/pusher/dev_omi_pusher_values.yaml',
+        'backend/charts/pusher/prod_omi_pusher_values.yaml',
+    ],
+)
+def test_read_lever_sources_select_existing_offline_unit_contracts(source):
+    required = {
+        'tests/unit/test_backend_runtime_env_validator.py',
+        'tests/unit/test_batch_pipeline_chart.py',
+        'tests/unit/test_config_train.py',
+        'tests/unit/test_runtime_env_sources.py',
+    }
+    selected, _ = unit_selector.tests_for_changed_paths([source], sorted(required | {'tests/unit/test_unrelated.py'}))
+    assert required <= set(selected)
+    assert 'tests/unit/test_unrelated.py' not in selected

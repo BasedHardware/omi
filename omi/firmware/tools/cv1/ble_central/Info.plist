@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key><string>CV1BLECentral</string>
+    <key>CFBundleIdentifier</key><string>com.omi.cv1.ble-central</string>
+    <key>CFBundleName</key><string>CV1 BLE Central</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>Bench-test an Omi CV1: scan matching advertisements, connect and read firmware, serial, features and diagnostics. The audio command subscribes to at most three seconds of audio notifications. Image commands use SMP to inspect image state; image-upload writes firmware, marks test/confirm, and resets unless disabled. Bonds and pairing are never used. Results stay in the selected local receipt; audio is saved locally only when explicitly requested. Nothing is sent over the network.</string>
+</dict>
+</plist>

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "admission-partial-inventory",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "stages": {
+    "admission": {
+      "expect_stop_stage": "admission",
+      "expect_reason": "admission:admit:ValueError:utils.batch_pipeline.record_barrier.validate_record_tail"
+    }
+  },
+  "notes": "Synthetic post-barrier partial durability: one second of retained PCM is present but the closed capture window ends at two seconds; models validate_record_tail coverage refusal. Expectation is verified against unchanged product main."
+}

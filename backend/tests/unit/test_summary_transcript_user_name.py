@@ -13,6 +13,7 @@ def test_conversation_transcript_for_llm_passes_configured_name(monkeypatch: pyt
         lambda uid, use_default=False: "Stephen",
     )
     conversation = MagicMock()
+    conversation.transcript_segments = []
     conversation.get_transcript.return_value = "Stephen: Hello.\n\nSpeaker 1: Hi."
     people = [MagicMock()]
 
@@ -29,6 +30,7 @@ def test_conversation_transcript_for_llm_forwards_missing_name(monkeypatch: pyte
         lambda uid, use_default=False: None,
     )
     conversation = MagicMock()
+    conversation.transcript_segments = []
     conversation.get_transcript.return_value = "You: Hello."
 
     conversation_transcript_for_llm("uid-1", conversation, people=None, include_timestamps=True)

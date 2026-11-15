@@ -1,10 +1,14 @@
 import re
+import hashlib
+from dataclasses import dataclass
 from typing import Optional, Tuple, List, Dict
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from enum import Enum
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
+from config.app_channel import APP_CHANNEL_HEADER, APP_CHANNELS, app_channel
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 import logging
 
@@ -112,8 +116,101 @@ def _get_release_prefix(device: DeviceModel) -> str:
     return "Friend"
 
 
+# Release audience keys. A release that names an audience goes to that audience
+# whatever its rollout_percent, so it can be published at 0% and reach only
+# testers:
+#   allow_uid_sha256: comma-separated hex SHA-256 of Firebase uids. Hashes, not
+#     uids, because release bodies are public.
+#   channels: comma-separated X-Omi-App-Channel values, e.g. "beta" for TestFlight
+#     and non-production builds. While set, nobody outside these channels or the
+#     allowlist gets the release, so remove it to roll out to everyone.
+# A malformed audience value fails closed.
+AUDIENCE_UIDS_KEY = 'allow_uid_sha256'
+AUDIENCE_CHANNELS_KEY = 'channels'
+_UID_SHA256_PATTERN = re.compile(r'^[0-9a-f]{64}$')
+
+
+@dataclass(frozen=True)
+class ReleaseAudience:
+    """Who is asking: the hashed uid when the request was authenticated, and the app channel."""
+
+    uid_sha256: Optional[str] = None
+    channel: str = 'unknown'
+
+
+def _parse_list(raw) -> Optional[List[str]]:
+    values = [v.strip().lower() for v in str(raw).split(',')]
+    if not values or any(not v for v in values):
+        return None
+    return values
+
+
+def _audience_match(kv: Dict, audience: Optional[ReleaseAudience]) -> Optional[bool]:
+    """True/False for a valid audience policy, None when it is malformed."""
+    matched = False
+    if AUDIENCE_UIDS_KEY in kv:
+        uids = _parse_list(kv[AUDIENCE_UIDS_KEY])
+        if uids is None or not all(_UID_SHA256_PATTERN.match(u) for u in uids):
+            return None
+        matched = matched or bool(audience and audience.uid_sha256 in uids)
+    if AUDIENCE_CHANNELS_KEY in kv:
+        channels = _parse_list(kv[AUDIENCE_CHANNELS_KEY])
+        if channels is None or not set(channels) <= APP_CHANNELS:
+            return None
+        matched = matched or bool(audience and audience.channel in channels)
+    return matched
+
+
+def _release_is_eligible(
+    kv: Dict,
+    device_id: Optional[str],
+    *,
+    ignore_rollout_percent: bool = False,
+    audience: Optional[ReleaseAudience] = None,
+) -> bool:
+    """Stable nested cohorts. Missing policy preserves published-release behavior.
+
+    Unidentified clients can receive legacy or 100% releases, never partial cohorts.
+    Invalid explicit policies fail closed so a typo cannot expand a rollout.
+    Explicit version requests ignore rollout_percent, but always honor blocked.
+    """
+    blocked = str(kv.get('blocked', 'false')).strip().lower()
+    if blocked != 'false':
+        return False
+    if ignore_rollout_percent:
+        return True
+    if AUDIENCE_UIDS_KEY in kv or AUDIENCE_CHANNELS_KEY in kv:
+        matched = _audience_match(kv, audience)
+        if matched is None:
+            return False
+        if matched:
+            return True
+        if AUDIENCE_CHANNELS_KEY in kv:
+            return False
+    raw_percent = str(kv.get('rollout_percent', '100')).strip()
+    if not re.fullmatch(r'[0-9]+', raw_percent):
+        return False
+    percent = int(raw_percent)
+    if not 0 <= percent <= 100:
+        return False
+    if percent == 100:
+        return True
+    if percent == 0 or not device_id or not device_id.strip():
+        return False
+    # Hash only the identifier, not the release, so expanding the percentage
+    # retains existing members and successive releases share the same cohort.
+    bucket = int.from_bytes(hashlib.sha256(device_id.encode('utf-8')).digest()[:8], 'big') % 100
+    return bucket < percent
+
+
 def _find_candidate_releases(
-    releases: List[Dict], release_prefix: str, current_firmware_tuple: Optional[Tuple[int, ...]] = None
+    releases: List[Dict],
+    release_prefix: str,
+    current_firmware_tuple: Optional[Tuple[int, ...]] = None,
+    device_id: Optional[str] = None,
+    *,
+    ignore_rollout_percent: bool = False,
+    audience: Optional[ReleaseAudience] = None,
 ) -> List[Dict]:
     """Filter releases matching the device prefix.
 
@@ -138,6 +235,8 @@ def _find_candidate_releases(
             continue
 
         kv = extract_key_value_pairs(release.get("body"))
+        if not _release_is_eligible(kv, device_id, ignore_rollout_percent=ignore_rollout_percent, audience=audience):
+            continue
 
         release_firmware_version_str = kv.get("release_firmware_version")
         if not release_firmware_version_str:
@@ -175,8 +274,9 @@ def _find_release_by_version(
     filtering, sorts newest-published first (matching get_stable/get_latest) so the result is
     deterministic if two releases ever advertise the same version, then matches the exact target. An
     unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
+    Ignores rollout_percent for support/reverts; blocked releases remain unavailable.
     """
-    candidates = _find_candidate_releases(releases, release_prefix)
+    candidates = _find_candidate_releases(releases, release_prefix, ignore_rollout_percent=True)
     candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     for release in candidates:
         kv = extract_key_value_pairs(release.get("body"))
@@ -228,8 +328,51 @@ def _extract_firmware_response(device: DeviceModel, release: Dict) -> Dict:
     }
 
 
+async def _request_audience(request: Optional[Request], releases: List[Dict]) -> ReleaseAudience:
+    """The caller's audience. The token is verified only when some release has a uid allowlist.
+
+    An absent or invalid token just means no uid: the update check stays anonymous-safe.
+    """
+    if request is None:
+        return ReleaseAudience()
+    channel = app_channel(request.headers.get(APP_CHANNEL_HEADER))
+    uid_sha256 = None
+    if any(AUDIENCE_UIDS_KEY in extract_key_value_pairs(r.get("body")) for r in releases):
+        uid = await run_in_threadpool(_verified_uid, request.headers.get("authorization"))
+        if uid:
+            uid_sha256 = hashlib.sha256(uid.encode("utf-8")).hexdigest()
+    return ReleaseAudience(uid_sha256=uid_sha256, channel=channel)
+
+
+def _verified_uid(authorization: Optional[str]) -> Optional[str]:
+    parts = (authorization or "").split(" ")
+    if len(parts) != 2 or not parts[1]:
+        return None
+    from utils.other.endpoints import verify_token
+
+    try:
+        return verify_token(parts[1])
+    except Exception:  # an unverifiable token only drops the uid allowlist match
+        logger.info("firmware audience: token not verified")
+        return None
+
+
 @router.get("/v2/firmware/latest", response_model=FirmwareVersionResponse)
-async def get_latest_version(device_model: str, firmware_revision: str, hardware_revision: str, manufacturer_name: str):
+async def get_latest_version(
+    device_model: str,
+    firmware_revision: str,
+    hardware_revision: str,
+    manufacturer_name: str,
+    device_id: Optional[str] = None,
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI injects Request; direct callers omit it
+):
+    """Return the newest eligible update using stable device rollout cohorts.
+
+    device_id is the hex SHA-256 of the device's normalized DIS serial, never the
+    raw serial. Omit it when no serial is available; unidentified clients cannot
+    receive partial rollouts. Blocked releases are never offered. Releases with an
+    audience (allow_uid_sha256, channels) also read the caller's token and app channel.
+    """
     device = _get_device_by_model_number(device_model)
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
@@ -250,7 +393,10 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
     release_prefix = _get_release_prefix(device)
-    candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple)
+    audience = await _request_audience(request, releases)
+    candidates = _find_candidate_releases(
+        releases, release_prefix, current_firmware_tuple, device_id, audience=audience
+    )
 
     if not candidates:
         raise HTTPException(status_code=404, detail="No suitable firmware update found for your device version.")
@@ -289,6 +435,7 @@ async def get_firmware_version(device_model: str, version: str):
 
     Complements /v2/firmware/stable by making any individual published build addressable, e.g. to pin
     or roll a device back to a known-good earlier version, or for QA/support to flash a named build.
+    Explicit requests ignore rollout_percent for support/reverts, but blocked releases return 404.
     """
     device = _get_device_by_model_number(device_model)
     if not device:

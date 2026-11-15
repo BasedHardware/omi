@@ -1,0 +1,50 @@
+[
+  {
+    "name": "raw transcript quotation",
+    "transcript": "Others: No, do not send us again. Okay, where should I send?",
+    "bullets": ["No, do not send us again. Okay, where should I send?"],
+    "issues": ["verbatim_overlap"]
+  },
+  {
+    "name": "raw transcript quotation split across speaker lines",
+    "transcript": "Others: No, do not send us again.\nYou: Okay, where should I send?",
+    "bullets": ["No, do not send us again. Okay, where should I send?"],
+    "issues": ["verbatim_overlap"]
+  },
+  {
+    "name": "quoted source detail can be summarized without false rejection",
+    "transcript": "Minh said that the schedule remains provisional until the venue confirms its date.",
+    "bullets": ["Minh said the schedule is \"provisional until the venue confirms its date\"."],
+    "issues": []
+  },
+  {
+    "name": "diarization style speaker label",
+    "transcript": "The invite went to the new address after lunch.",
+    "bullets": ["Others: The invite went to the new address."],
+    "issues": ["speaker_label"]
+  },
+  {
+    "name": "short paraphrase",
+    "transcript": "The meeting starts at ten and needs a larger room.",
+    "bullets": ["Move the meeting to a bigger space for its ten o'clock start."],
+    "issues": []
+  },
+  {
+    "name": "short marked quotation is allowed",
+    "transcript": "We will meet again next week.",
+    "bullets": ["They agreed \"we will meet again next\"."],
+    "issues": []
+  },
+  {
+    "name": "summary can reuse transcript wording without being mostly verbatim",
+    "transcript": "The team said we will meet again next week after the venue confirms its schedule.",
+    "bullets": ["The team plans to meet again after the venue confirms the final schedule."],
+    "issues": []
+  },
+  {
+    "name": "mostly verbatim long bullet is rejected",
+    "transcript": "The team agreed to meet again next week after the venue confirms its final schedule.",
+    "bullets": ["The team agreed to meet again next week after the venue confirms its final schedule."],
+    "issues": ["verbatim_overlap"]
+  }
+]

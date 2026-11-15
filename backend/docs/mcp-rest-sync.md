@@ -140,16 +140,19 @@ return `more_in_window_known=false` when their continuation contains unexamined
 candidates. `has_more` on that path means that a resumable candidate cursor exists,
 not that another eligible match has already been proved.
 
-`get_conversations_by_ids` accepts 1–20 IDs, shrinks transcript and structured
-text budgets evenly, preserves request order, and returns `omitted_ids`,
-`next_ids`, and `next_cursor` when metadata still cannot fit. Resume with the
-same IDs/filters and cursor, or request `next_ids` directly. `not_found` contains
-only missing IDs; short ID prefixes receive a `use the full id` hint. Prefix
-lookup is not enabled. Each item keeps the released nested `conversation` and
-adds the same flat card as list/search. Optional `fields` (array or comma-separated
-names; `id` retained) selects card fields; `summary_only=true` on detail tools
-omits transcripts. `truncated_fields` names clipped structured fields. Locked
-items retain their existing paid-plan error and never expose transcript content.
+`get_conversations_by_ids` accepts 1–20 IDs and pages whole per-item details
+within a 120000-character serialized response budget. It preserves the requested
+transcript bounds instead of shrinking all transcripts to fit the batch.
+`omitted_ids`, `next_ids`, and `next_cursor` identify the remaining details.
+Resume with the same IDs/filters and cursor, or request `next_ids` directly.
+A single detail that exceeds the cap returns an actionable error; retry without
+rosters (`include_participants=false`), with fewer fields, or smaller transcript
+limits. `not_found` contains only missing IDs; short ID prefixes receive a full-ID
+hint. Each item contains `id` and one nested `conversation`; the duplicate flat
+card has been removed. Optional `fields` (array or comma-separated names;
+`id` retained) supports `structured.title`/`overview`/`category`/`emoji` and their
+short aliases. `discarded` is selectable. `summary_only=true` omits transcripts.
+Locked items retain their paid-plan error and never expose transcript content.
 Cards add nullable `source`, `is_call`, `call_platform`, `calendar_event_id` from
 stored source/calendar context (including `external_data.calendar_meeting_context`).
 Unknown call identity remains null. A linked calendar event alone does not prove
@@ -158,7 +161,7 @@ when no conversation identity exists; no provenance is guessed from task prose.
 
 Screen `group_by=app|hour|day` aggregates the window server-side, independently
 of raw-page `limit`. A supplied group cursor is ignored with a `note`; groups have no next cursor. `coverage` reports a 5000-row
-bound, scanned count, first/last observations and `complete_window`; truncation
+bound, scanned count, first/last observations and `query_complete`; truncation
 is explicit. With no timezone, timestamp strings and `YYYY-MM-DD HH:00` hour labels retain the released format. Explicit `timezone` (including UTC) or `timestamp_format=iso_offset` opts into ISO offsets. Capture/sync completeness remains
 unknown. These are observation counts and bounded observation seconds, not
 proof of device usage duration. Raw mode remains cursor-paginated.
@@ -203,3 +206,21 @@ Their sum remains `reported_device_watching_minutes`. Historical values are
 clamped and explicitly labeled `legacy_device_counter_sum_clamped; interval
 union unavailable`, with unknown coverage; they are not claimed reconstructed.
 No historical documents are rewritten by these reads.
+
+Screen `complete_window` is false: a complete cloud query cannot establish
+complete device capture. `capture_completeness=unknown` and per-device observed
+bounds make that limit explicit. `synced_through` stays null until devices supply
+an acknowledged sync watermark; the latest observation is not one.
+
+Summary `covers_until` falls back to generation time as an upper bound, with
+`coverage_basis` labeling late-arrival uncertainty. `stored_memories_created`
+retains the storage count; `fetchable_memories_created=null` with an explicit
+status avoids claiming the count describes caller-visible memories. No extra
+account reads or historical rewrites are performed.
+
+Memory API `source_at` is the earliest known evidence capture time and
+`extracted_at` the earliest explicitly recorded extraction time. Legacy adapters
+may synthesize evidence `created_at` from capture time, so it cannot establish
+extraction time; those rows return null. Missing provenance
+returns null; `created_at` remains storage insertion time and `updated_at` remains
+the product edit time. KG extraction bookkeeping does not advance `updated_at`.

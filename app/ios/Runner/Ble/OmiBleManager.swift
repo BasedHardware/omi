@@ -570,7 +570,7 @@ final class OmiBleManager: NSObject {
             // after the retry starts. CoreBluetooth provides no attempt ID, so
             // only the retry's deadline can declare terminal failure.
             guard reason == "timeout" else { return }
-            reportDiscoveryFailure(uuid: uuid, reason: reason)
+            reportDiscoveryFailure(peripheral: peripheral, uuid: uuid, reason: reason)
             return
         }
         discoveryRetries[uuid] = 1
@@ -579,13 +579,22 @@ final class OmiBleManager: NSObject {
         discoverServices(for: peripheral, uuid: uuid)
     }
 
-    private func reportDiscoveryFailure(uuid: String, reason: String) {
+    private func reportDiscoveryFailure(peripheral: CBPeripheral, uuid: String, reason: String) {
         guard failedReadyRequests.insert(uuid).inserted else { return }
         if savedReconnect.contains(uuid) {
             savedRetryAttempts[uuid, default: 0] += 1
             let delay = OmiBleConnectionPolicy.savedRetryDelay(attempt: savedRetryAttempts[uuid] ?? 0)
             savedSetupRetryAfter[uuid] = ProcessInfo.processInfo.systemUptime + delay
             logBle(uuid: uuid, event: "reconnect_setup_backoff", detail: "delay_s=\(delay)")
+
+            // A connected CoreBluetooth link with failed GATT discovery does not
+            // produce didDisconnect on its own. Retire that unusable link so the
+            // saved target's disconnect callback can submit a delayed OS reconnect
+            // while the app is still allowed to run in the background.
+            if peripheral.state == .connected, shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                logBle(uuid: uuid, event: "reconnect_discovery_reset", detail: reason)
+                centralManager.cancelPeripheralConnection(peripheral)
+            }
         }
         finishReadyRequest(uuid: uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
@@ -1482,7 +1491,11 @@ final class OmiBleManager: NSObject {
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
             history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
-            timestampOf: OmiBleReconnectDiagnostics.retentionTimestamp,
+            timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
+            resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
+            onLookupMiss: { start in
+                self.logBle(uuid: uuid, event: "reconnect_history_lookup_miss", detail: "start=\(start)")
+            },
             withDuration: { event, duration in
                 var updated = event
                 updated["timeToReconnectMs"] = duration

@@ -30,6 +30,7 @@ export function useRecording() {
     state,
     audioMode,
     segments,
+    isBatchSession,
     duration,
     micLevel,
     systemLevel,
@@ -38,6 +39,7 @@ export function useRecording() {
     setWidgetExpanded,
     setState,
     setSegments,
+    setBatchSession,
     setDuration,
     setMicLevel,
     setSystemLevel,
@@ -98,6 +100,7 @@ export function useRecording() {
       const isCurrent = () => isMountedRef.current && attemptRef.current === attempt;
       setState('initializing');
       setSegments([]);
+      setBatchSession(false);
       setDuration(0);
       setError(null);
       startTimeRef.current = Date.now();
@@ -133,6 +136,9 @@ export function useRecording() {
             // Bound the live UI list so ~1h sessions do not freeze Chrome (#5399).
             // Server audio still holds the full session for finalize-on-stop.
             setSegments((prev) => applyLiveTranscriptSegment(prev, segment));
+          },
+          onServerBatch: (isBatch) => {
+            if (isCurrent()) setBatchSession(isBatch);
           },
           onConversationSession: (conversationId) => {
             if (isCurrent()) attempt.conversationId = conversationId;
@@ -213,6 +219,7 @@ export function useRecording() {
         const message = err instanceof Error ? err.message : 'Failed to start recording';
         setError(message);
         setState('idle');
+        setBatchSession(false);
       }
     },
     [
@@ -220,6 +227,7 @@ export function useRecording() {
       release,
       setState,
       setSegments,
+      setBatchSession,
       setDuration,
       setError,
       setMicLevel,
@@ -270,6 +278,7 @@ export function useRecording() {
     setMicLevel(0);
     setSystemLevel(0);
     setState('idle');
+    setBatchSession(false);
 
     // Process this web conversation by ID — never the shared Redis pointer (#5388).
     if (!attempt.started || !attempt.conversationId) return;
@@ -282,7 +291,7 @@ export function useRecording() {
         console.error('Failed to process conversation:', err);
         // Optionally show an error toast here
       });
-  }, [release, setState, setMicLevel, setSystemLevel]);
+  }, [release, setState, setMicLevel, setSystemLevel, setBatchSession]);
 
   // Register action handlers with context
   // The root controller stays mounted across route navigation.
@@ -330,6 +339,7 @@ export function useRecording() {
       attemptRef.current = null;
       if (attempt) release(attempt);
       setState('idle');
+      setBatchSession(false);
       setMicLevel(0);
       setSystemLevel(0);
     };
@@ -340,13 +350,14 @@ export function useRecording() {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [state, release, setState, setMicLevel, setSystemLevel]);
+  }, [state, release, setState, setMicLevel, setSystemLevel, setBatchSession]);
 
   return {
     // State
     state,
     audioMode,
     segments,
+    isBatchSession,
     duration,
     micLevel,
     systemLevel,

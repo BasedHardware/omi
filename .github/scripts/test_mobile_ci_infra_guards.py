@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Static contract for the 2026-10-21 mobile CI infra flake guards.
 
-Two recurring infra failures, both on mobile-app-checks.yml:
+Infrastructure failures on mobile-app-checks.yml:
 
+* Hosted runner Java drift. Gradle 8.14.2 cannot run on Java 25.
+  Pin Java 21 before Flutter setup in each Android Gradle job.
 * Android NDK download corruption. Every Gradle-configuring mobile job
   auto-downloaded NDK 28.2 inside Gradle configure with no retry, and a
   truncated dl.google.com response failed the job before any app code ran
@@ -68,6 +70,16 @@ class MobileCIInfraGuardTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.doc = load_workflow()
         cls.jobs = cls.doc["jobs"]
+
+    def test_gradle_jobs_pin_java_before_flutter_setup(self) -> None:
+        for job_id in NDK_JOBS:
+            with self.subTest(job=job_id):
+                steps = self.jobs[job_id]["steps"]
+                actions = [step.get("uses", "").split("@")[0] for step in steps]
+                self.assertEqual(actions.count("actions/setup-java"), 1)
+                java_index = actions.index("actions/setup-java")
+                self.assertEqual(str(steps[java_index]["with"]["java-version"]), "21")
+                self.assertLess(java_index, actions.index("subosito/flutter-action"))
 
     def test_ndk_pin_matches_build_gradle_fallback(self) -> None:
         expected = build_gradle_ndk_pin()

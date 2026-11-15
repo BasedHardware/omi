@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-cache-commit-replay",
+  "violated_contract": "A derived read cache identity must advance for every successfully committed source mutation, including an automatic retry of a successful Commit whose acknowledgement was lost. A request UUID generated outside GAPIC retry is not a commit revision: A can succeed, a reader caches A, B deletes another document, then A's retry restores its old UUID and the deleted document reappears from cache. A repeated source Increment without B also changes source data while retaining that UUID.",
+  "canonical_prevention": "Atomically increment a server generation in the same head Write as source mutations; key raw projections by generation, request token and exact server update_time. Reject missing, malformed or saturated generations and old schema/coverage epochs. Require the same retry-safe capability from dependent head writers before reusing their projections; otherwise retain source paths. Preserve authorization and deletion fences.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_memory_change_head.py",
+    "backend/tests/unit/test_released_memory_projection.py",
+    "backend/tests/integration/test_released_memory_retry_emulator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/memory_change_head.py",
+    "backend/database/released_memory_projection.py"
+  ],
+  "status": "open"
+}

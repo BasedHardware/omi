@@ -37,7 +37,7 @@ _KNOWN_TRANSITION_REASONS = frozenset(
 
 _KNOWN_ACCESS_DECISIONS = frozenset({'allow', 'deny', 'other'})
 _KNOWN_CLIENT_ACTIONS = frozenset({'none', 'force_upgrade', 'migration_maintenance', 'other'})
-_KNOWN_STATES = frozenset({'legacy', 'migrating', 'new', 'rolled_back_stranded', 'other'})
+_KNOWN_STATES = frozenset({'legacy', 'migrating', 'migrated', 'new', 'rolled_back_stranded', 'other'})
 
 
 def _safe(value: str, *, default: str = 'other', max_len: int = 64) -> str:

@@ -51,6 +51,10 @@
     {
       "path": "app/lib/pages/apps/page.dart",
       "reason": "AppsPage left the shell (the catalog is Settings > Integrations), but protected spine oracles (app/test/spine/b1_surface_contract.dart) import it; remove with the B1 contract revision"
+    },
+    {
+      "path": "app/lib/services/wals/wal_derived_sync_views.dart",
+      "reason": "SyncProvider stand-ins (hermetic journeys, visual audits, perf scenarios, widget tests) derive the production WalDerivedViews from raw inventory; integration_test cannot import test/, so it lives in lib with no app import by design"
     }
   ]
 }

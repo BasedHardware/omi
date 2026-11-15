@@ -18,14 +18,21 @@ Usage:
     # The UIDs file should contain one UID per line (blank lines and # comments ignored).
 """
 
+from contextlib import nullcontext
+
 import argparse
 import logging
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 import firebase_admin
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
+
+# Keep the documented direct-script invocation usable from any working directory.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from database.action_item_fence import fenced_action_item_commit
 
 # firebase_admin ships partial/py.typed stubs that surface as partially-unknown
 # member types; the SDK boundary is treated as Any (mirrors database/_client.py).
@@ -78,11 +85,13 @@ def unlock_collection(db: Any, uid: str, collection_name: str) -> int:
         batch.update(doc.reference, {'is_locked': False})
         count += 1
         if count % 499 == 0:
-            batch.commit()
+            with fenced_action_item_commit(uid) if collection_name == 'action_items' else nullcontext():
+                batch.commit()
             batch = db.batch()
 
     if count % 499 != 0:
-        batch.commit()
+        with fenced_action_item_commit(uid) if collection_name == 'action_items' else nullcontext():
+            batch.commit()
 
     return count
 

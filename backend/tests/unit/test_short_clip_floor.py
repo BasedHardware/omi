@@ -34,6 +34,7 @@ def isolated_flags(monkeypatch):
     from database import users as users_db
 
     monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
+    monkeypatch.setattr(processing.redis_db, 'get_user_preferred_app', lambda *_args: None)
 
 
 def _segments(words: int, *, start: float, end: float) -> list[SimpleNamespace]:
@@ -198,6 +199,73 @@ def test_a_two_second_clip_never_reaches_a_model_title_or_the_relevance_tiers(mo
     assert [d.reason for d in decisions] == ['content_below_floor']
 
 
+def _short_clip(text, seconds=1.0):
+    return SimpleNamespace(
+        transcript_segments=[SimpleNamespace(text=text, start=0.0, end=seconds)],
+        started_at=START,
+        finished_at=START + timedelta(seconds=seconds),
+        photos=[],
+        source='omi',
+    )
+
+
+def _structure(monkeypatch, conversation, *, trigger=None, calendar=False):
+    monkeypatch.setenv(packet.FLAG, 'serve')
+    monkeypatch.setattr(processing.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
+    monkeypatch.setattr(processing, 'get_conversation_notes', lambda *_args, **_kwargs: pytest.fail('paid notes'))
+    monkeypatch.setattr(processing, '_calendar_overlap_retains_conversation', lambda *_args, **_kwargs: calendar)
+    decisions: list[Any] = []
+    structured, discarded = processing._get_structured(
+        'synthetic-account',
+        'en',
+        conversation,
+        trigger=trigger or processing.ProcessingTrigger.SYNC_UPDATE,
+        relevance_observer=decisions.append,
+    )
+    return structured, discarded, decisions
+
+
+@pytest.mark.parametrize(
+    'text,rule',
+    [
+        ('Thank you', 'no_content_words'),
+        ('Thank you.', 'no_content_words'),
+        ('Yeah.', 'filler_only'),
+        ("I don't know", 'no_content_words'),
+        ('ハハハハ', 'filler_only'),
+    ],
+)
+def test_a_content_free_short_clip_is_hidden_not_stood_up_as_a_row(monkeypatch, text, rule):
+    structured, discarded, decisions = _structure(monkeypatch, _short_clip(text))
+    assert discarded and structured.title_provenance == 'server_minimum'
+    assert [(d.verdict, d.decided_by, d.reason) for d in decisions] == [('discard', 'rule', rule)]
+
+
+def test_a_short_clip_with_content_stays_a_kept_row(monkeypatch):
+    _, discarded, decisions = _structure(monkeypatch, _short_clip('Call mom'))
+    assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
+
+
+def test_a_calendar_overlap_keeps_a_content_free_short_clip(monkeypatch):
+    _, discarded, decisions = _structure(monkeypatch, _short_clip('Thank you'), calendar=True)
+    assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
+
+
+@pytest.mark.parametrize('curation', ['starred', 'folder_user_set'])
+def test_a_curated_content_free_short_clip_stays_kept(monkeypatch, curation):
+    clip = _short_clip('Yeah.')
+    setattr(clip, curation, True)
+    _, discarded, decisions = _structure(monkeypatch, clip)
+    assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
+
+
+def test_opening_a_content_free_short_clip_keeps_it(monkeypatch):
+    _, discarded, decisions = _structure(
+        monkeypatch, _short_clip('Thank you'), trigger=processing.ProcessingTrigger.FIRST_OPEN
+    )
+    assert not discarded and [d.reason for d in decisions] == ['content_below_floor']
+
+
 # ------------------------------------------------------- the duration source (sync intake)
 
 
@@ -244,3 +312,9 @@ def test_sync_intake_wall_window_equals_the_transcript_span_and_the_floor_uses_t
     # packed a dozen words into it, and even if its wall window collapses.
     assert below_short_clip_floor(words=12, speech_seconds=2.0)
     assert below_short_clip_floor(words=12, speech_seconds=speech_seconds(_segments(12, start=0.0, end=2.0)))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')

@@ -1,11 +1,7 @@
-"""V4 consumers delegate content-kind admission to V2's shared authority.
-
-The lanes merge independently. If V2 is not installed, preserve legacy output
-and report the missing serving dependency rather than invent another policy.
-"""
+"""Every derived consumer delegates serving and shadow to the shared media gate."""
 
 from importlib import import_module
-from config.refactor_modes import serving_for
+from config.refactor_modes import shadow_or_serve
 from utils.conversations.calls_metrics import observe
 
 
@@ -14,7 +10,7 @@ def _policy():
 
 
 def is_excluded(uid, conversation, *, consumer):
-    if not serving_for('MEDIA_NOISE_MODE', uid):
+    if not shadow_or_serve('MEDIA_NOISE_MODE'):
         return False
     try:
         return _policy()(uid, conversation, consumer=consumer)

@@ -14,6 +14,7 @@ enum ConversationSearchResultFilter {
     starredOnly: Bool,
     date: Date?,
     folderId: String?,
+    includeDiscarded: Bool = false,
     calendar: Calendar = .current
   ) -> [ServerConversation] {
     let dateRange: (start: Date, end: Date)? = date.flatMap { selectedDate in
@@ -23,6 +24,7 @@ enum ConversationSearchResultFilter {
     }
 
     return conversations.filter { conversation in
+      if conversation.deleted || (!includeDiscarded && conversation.discarded) { return false }
       if starredOnly && !conversation.starred { return false }
       if let folderId, conversation.folderId != folderId { return false }
       if let dateRange {
@@ -40,6 +42,8 @@ enum ConversationSearchResultFilter {
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
+  @ObservedObject private var failurePlacement = HomeFailurePlacementStore.shared
+  @ObservedObject private var placementAuth = AuthState.shared
   @Binding var selectedConversation: ServerConversation?
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
@@ -118,8 +122,40 @@ struct ConversationsPage: View {
       != ConversationDetailRequestToken(conversation: current)
   }
 
+  /// Whether a restore should re-run the active text search rather than patch
+  /// the restored row in place.
+  ///
+  /// Restoring a discarded conversation can reprocess its summary/title, so
+  /// patching the row's fields without revalidating the query can leave a row
+  /// that no longer matches stuck in the result list until the next search.
+  /// A local substring check can't stand in for the server's match semantics,
+  /// so this only decides *whether* to re-ask the server, never what matches.
+  static func shouldRefreshSearchAfterRestore(
+    searchResults: [ServerConversation],
+    searchQuery: String,
+    restoredId: String
+  ) -> Bool {
+    guard !searchQuery.isEmpty else { return false }
+    return searchResults.contains(where: { $0.id == restoredId })
+  }
+
   var body: some View {
     pageSurface
+      .task(id: placementAuth.userId) {
+        let owner = placementAuth.userId
+        await failurePlacement.refresh()
+        failurePlacement.remember(appState.conversations, for: owner)
+      }
+      .onReceive(appState.$conversations) { rows in
+        failurePlacement.remember(rows, for: placementAuth.userId)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        failurePlacement.reset()
+        Task { await failurePlacement.refresh() }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+        Task { await failurePlacement.refresh() }
+      }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .glassContent()
       .conversationRowPrompts(rowPrompts, appState: appState)
@@ -227,6 +263,14 @@ struct ConversationsPage: View {
         else { return }
         guard Self.shouldReplaceSelectedConversation(selectedConversation, with: refreshed) else { return }
         self.selectedConversation = refreshed
+      }
+      .onReceive(appState.conversationRestored) { restored in
+        guard
+          Self.shouldRefreshSearchAfterRestore(
+            searchResults: searchResults, searchQuery: searchQuery, restoredId: restored.id)
+        else { return }
+        searchResults = []
+        performSearch(query: searchQuery)
       }
       .dismissableSheet(isPresented: $showCreateFolderSheet) {
         FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
@@ -393,6 +437,10 @@ struct ConversationsPage: View {
       if !isLive {
         isLiveTranscriptExpanded = false
       }
+    }
+    .onChange(of: appState.showDiscardedConversations) { _, _ in
+      searchResults = []
+      if !searchQuery.isEmpty { performSearch(query: searchQuery) }
     }
     // A row that becomes hidden behind its event's row must not stay selected for
     // a merge or delete the user can no longer see.
@@ -604,9 +652,13 @@ struct ConversationsPage: View {
     }
   }
 
+  private var homeConversations: [ServerConversation] {
+    ConversationFailurePlacement.home(appState.conversations, confirmed: failurePlacement.enabled)
+  }
+
   /// Loaded rows hidden behind their capture group's representative.
   private var collapsedAwayConversationIds: Set<String> {
-    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
+    let loaded = searchQuery.isEmpty ? homeConversations : visibleSearchResults
     return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
   }
 
@@ -619,19 +671,21 @@ struct ConversationsPage: View {
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
+    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? homeConversations : visibleSearchResults).map(\.id)
   }
 
   /// Search is text-only at the API boundary. Apply the same local refinements
   /// to the returned rows so search and list queries have identical AND
   /// semantics without inventing a second backend endpoint.
   private var visibleSearchResults: [ServerConversation] {
-    ConversationSearchResultFilter.apply(
-      searchResults,
-      starredOnly: appState.showStarredOnly,
-      date: appState.selectedDateFilter,
-      folderId: appState.selectedFolderId
-    )
+    ConversationFailurePlacement.home(
+      ConversationSearchResultFilter.apply(
+        searchResults,
+        starredOnly: appState.showStarredOnly,
+        date: appState.selectedDateFilter,
+        folderId: appState.selectedFolderId,
+        includeDiscarded: appState.showDiscardedConversations
+      ), confirmed: failurePlacement.enabled)
   }
 
   /// Entry point for the multi-select / merge feature. Without this the whole
@@ -698,13 +752,17 @@ struct ConversationsPage: View {
         // A successful filtered request with no rows is different from an
         // account with no conversations. Keep the recovery action beside the
         // state that caused the empty result instead of suggesting recording.
-        if appState.hasActiveConversationFilters && !appState.isLoadingConversations
+        if failurePlacement.enabled && !appState.conversations.isEmpty && homeConversations.isEmpty
+          && !appState.isLoadingConversations && appState.conversationsError == nil
+        {
+          HomeFailuresMovedState { onSelectBrainDestination?(.activity) }
+        } else if appState.hasActiveConversationFilters && !appState.isLoadingConversations
           && appState.conversationsError == nil && appState.conversations.isEmpty
         {
           filteredConversationsEmptyView
         } else {
           ConversationListView(
-            conversations: appState.conversations,
+            conversations: homeConversations,
             isLoading: appState.isLoadingConversations,
             error: appState.conversationsError,
             folders: appState.folders,
@@ -847,12 +905,14 @@ struct ConversationsPage: View {
     isSearching = true
     searchError = nil
     log("Search: Starting search for '\(query)'")
+    let searchOwner = AuthState.shared.userId
 
     Task {
       do {
         let result = try await appState.searchConversations(query)
         log("Search: Found \(result.count) results")
         searchResults = result
+        failurePlacement.remember(result, for: searchOwner)
         isSearching = false
         SearchAnalytics.queryEntered(surface: .conversations, query: query, resultsCount: result.count)
       } catch is CancellationError {
@@ -931,6 +991,13 @@ struct ConversationsPage: View {
 
       Section("Refine") {
         Button {
+          Task { await appState.toggleDiscardedConversations() }
+        } label: {
+          Text(appState.showDiscardedConversations ? "Hide Discarded" : "Show Discarded")
+        }
+        .accessibilityIdentifier("conversations-show-discarded")
+
+        Button {
           Task {
             isFilteringStarred = true
             await appState.toggleStarredFilter()
@@ -983,7 +1050,7 @@ struct ConversationsPage: View {
     .popover(isPresented: $showDatePicker) {
       datePickerPopover
     }
-    .help("Filter conversations by collection, starred status, or date")
+    .help("Filter conversations by collection, starred status, date, or show discarded")
     .accessibilityIdentifier("conversations-filter-menu")
   }
 
@@ -1012,6 +1079,13 @@ struct ConversationsPage: View {
   private var activeConversationFilters: [PageActiveFilter] {
     var filters: [PageActiveFilter] = []
 
+    if appState.showDiscardedConversations {
+      filters.append(
+        PageActiveFilter(id: "discarded", title: "Including discarded") {
+          Task { await appState.toggleDiscardedConversations() }
+        })
+    }
+
     if appState.showStarredOnly {
       filters.append(
         PageActiveFilter(id: "starred", title: "Starred") {
@@ -1038,6 +1112,7 @@ struct ConversationsPage: View {
 
   private var activeConversationFilterCount: Int {
     (appState.showStarredOnly ? 1 : 0)
+      + (appState.showDiscardedConversations ? 1 : 0)
       + (appState.selectedDateFilter == nil ? 0 : 1)
       + (appState.selectedFolderId == nil ? 0 : 1)
   }

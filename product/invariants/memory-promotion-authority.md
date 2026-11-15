@@ -60,11 +60,6 @@ PR may promote it to `locked`.
 - `backend/tests/unit/test_canonical_maintenance_ordering.py` — maintenance has
   one L2 route owner and blocked consolidation cannot fall through to generic
   promotion
-- `backend/tests/unit/test_canonical_short_term_maintenance_cron.py` and
-  `backend/tests/unit/test_validate_memory_maintenance_scheduler.py` — the
-  scheduled runtime invokes only the canonical maintenance owner, prioritizes
-  expiry work independently of the registry/cooldown, and reports projection
-  delivery and unadjudicated-expiry failures
 - `backend/tests/unit/test_atomic_apply.py` and
   `backend/tests/unit/test_memory_apply_store.py` — promotion atomically writes
   the item, graph assertion, ledger state, operation result, and outbox;
@@ -104,15 +99,11 @@ PR may promote it to `locked`.
 - `backend/routers/memories.py`
 - `backend/routers/memory_*.py`
 - `backend/routers/knowledge_graph.py`
-- `backend/modal/memory_maintenance_job.py`
 - `backend/deploy/runtime_env.yaml`
-- `backend/scripts/validate_memory_maintenance_scheduler.py`
-- `.github/workflows/gcp_memory_maintenance_job*.yml`
 - `scripts/dev-harness/run-canonical-maintenance.py`
 - `backend/tests/unit/test_canonical_memory_vectors.py`
 - `backend/tests/unit/test_memory_graph_assertion_read.py`
 - `backend/tests/unit/test_knowledge_graph_canonical_mutation_routes.py`
-- `backend/tests/unit/test_validate_memory_maintenance_scheduler.py`
 - `scripts/dev-harness/tests/test_python_resolver.py`
 - `firestore.rules`
 

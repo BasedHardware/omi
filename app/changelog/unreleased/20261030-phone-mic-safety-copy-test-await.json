@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test-only determinism fix plus a @visibleForTesting getter; no user-facing behavior or WAL policy change."
+}

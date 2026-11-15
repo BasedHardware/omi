@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import copy
 import sys
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,45 @@ from scripts.deploy_status_report import (
 from scripts.verify_k8s_secret_keys import expected_keys
 
 FIXTURES = BACKEND_ROOT / 'tests' / 'fixtures' / 'deploy_status'
+
+
+def test_batch_report_requires_the_spot_companion_ready_on_the_primary_image():
+    primary = {
+        'metadata': {
+            'name': 'prod-omi-batch-pipeline-worker',
+            'generation': 1,
+            'annotations': {'omi.ai/required-companion-deployment': 'prod-omi-batch-pipeline-worker-spot'},
+        },
+        'spec': {
+            'replicas': 1,
+            'template': {'spec': {'containers': [{'name': 'worker', 'image': 'synthetic@sha256:' + 'a' * 64}]}},
+        },
+        'status': {'updatedReplicas': 1, 'availableReplicas': 1, 'observedGeneration': 1},
+    }
+    spot = copy.deepcopy(primary)
+    spot['metadata'] = {'name': 'prod-omi-batch-pipeline-worker-spot', 'generation': 1}
+
+    def inspect(deployments):
+        return render_gke_report(
+            {'deployments': deployments},
+            namespace='prod-omi-backend',
+            services=['batch-pipeline-worker'],
+            now=datetime.now(timezone.utc),
+            stale_rs_threshold_minutes=15,
+        )
+
+    report, findings = inspect([primary, spot])
+    assert 'prod-omi-batch-pipeline-worker-spot' in report and not findings
+    assert any(f.severity == 'FAIL' and f.scope.endswith('-spot') for f in inspect([primary])[1])
+    for mutation in ('unready', 'zero', 'wrong_image'):
+        broken = copy.deepcopy(spot)
+        if mutation == 'unready':
+            broken['status']['availableReplicas'] = 0
+        elif mutation == 'zero':
+            broken['spec']['replicas'] = 0
+        else:
+            broken['spec']['template']['spec']['containers'][0]['image'] = 'synthetic@sha256:' + 'b' * 64
+        assert any(f.severity == 'FAIL' and f.scope.endswith('-spot') for f in inspect([primary, broken])[1])
 
 
 def test_gke_report_flags_incomplete_rollout_bad_pod_and_stale_replicaset() -> None:

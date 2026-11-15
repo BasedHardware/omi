@@ -1,5 +1,6 @@
 """Synthetic sample-identifiable PCM through the actual storage iterator and clip reader."""
 
+import gc
 import time
 from types import SimpleNamespace
 
@@ -538,3 +539,41 @@ def test_authoritative_placement_never_recovers_main_rejected_window(memory_buck
         )
         is None
     )
+
+
+def test_widened_session_keeps_its_own_download_and_decoded_memory_caps(memory_bucket, monkeypatch):
+    memory_bucket.add(ORIGIN, 4)
+    memory_bucket.add(ORIGIN + 5, 4)
+    first, second = sorted(memory_bucket.objects)
+    monkeypatch.setattr(audio_chunks, 'MAX_SPEAKER_DOWNLOADS', 0)
+    session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+    session.max_downloads = 2
+    session.max_pcm_bytes = 5 * 32000
+    assert session.fetch(first) is not None and not session.limit_hit
+    # The second object fits the count but would pass the decoded-memory cap.
+    assert session.fetch(second) is None
+    assert session.limit_hit and session.reason == 'download_limit'
+    assert second not in session.cache
+    # Proof already cached for the first window stays readable after the budget hit.
+    assert session.cache[first][0] is not None
+
+
+def test_widened_sessions_share_a_process_pool_and_return_it(memory_bucket, monkeypatch):
+    memory_bucket.add(ORIGIN, 4)
+    path = next(iter(memory_bucket.objects))
+    gc.collect()  # Earlier sessions return their PCM on collection; keep them out of this pool.
+    monkeypatch.setattr(audio_chunks, '_pcm_pool_bytes', 0)
+    monkeypatch.setattr(audio_chunks, 'MAX_SPEAKER_PCM_POOL_BYTES', 5 * 32000)
+
+    def widened():
+        session = audio_chunks.AudioChunkReadSession('synthetic-user', 'synthetic')
+        session.max_downloads, session.max_pcm_bytes = 2, 5 * 32000
+        return session
+
+    first, second = widened(), widened()
+    assert first.fetch(path) is not None
+    assert second.fetch(path) is None and second.limit_hit
+    assert audio_chunks._pcm_pool_bytes == 4 * 32000
+    first.release_pcm()
+    assert audio_chunks._pcm_pool_bytes == 0 and not first.cache
+    assert widened().fetch(path) is not None

@@ -1,4 +1,4 @@
-import { daysUntilDue } from '@/lib/taskDue';
+import { taskDueDays } from '@/lib/taskDue';
 import type { ActionItem, GroupedActionItems } from '@/types/conversation';
 
 function emptyGroups(): GroupedActionItems {
@@ -37,12 +37,12 @@ export function groupActionItems(
       continue;
     }
 
-    if (!item.due_at) {
+    const dueInDays = taskDueDays(item, now);
+    if (dueInDays === null) {
       groups.noDueDate.push(item);
       continue;
     }
 
-    const dueInDays = daysUntilDue(item.due_at, now);
     if (dueInDays < 0) {
       groups.overdue.push(item);
     } else if (dueInDays === 0) {
@@ -57,11 +57,13 @@ export function groupActionItems(
   }
 
   const sortByDueDate = (a: ActionItem, b: ActionItem) => {
-    if (a.due_at && b.due_at) {
+    if (a.due_at && b.due_at)
       return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
-    }
-    if (a.due_at) return -1;
-    if (b.due_at) return 1;
+    const aDue = taskDueDays(a, now);
+    const bDue = taskDueDays(b, now);
+    if (aDue !== null && bDue !== null) return aDue - bDue;
+    if (aDue !== null) return -1;
+    if (bDue !== null) return 1;
     const aCreated = a.created_at ? new Date(a.created_at).getTime() : 0;
     const bCreated = b.created_at ? new Date(b.created_at).getTime() : 0;
     return bCreated - aCreated;

@@ -102,10 +102,8 @@ class LiveLegOutcome:
                 except Exception:
                     logger.debug('Cost ignored-death diagnostic unavailable; retaining lifecycle fence')
             self.path = 'connect' if connect else 'failover'
-            # Connect rejection belongs to the gate at rejection, not the
-            # generation captured before awaiting the provider handshake.
-            if connect:
-                self.generations = None
+            # Keep the pre-dial reset epoch. The writer still admits connect
+            # failures across ordinary gate changes within that same epoch.
         return self.reason or normalize_live_stt_reason(reason)
 
     def settle(self, *, text_seen: bool = False, emit_fallback: Callable[[], None] | None = None) -> bool:

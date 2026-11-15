@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Internal: feature-flag values may come from the Omi flag store instead of PostHog; no user-visible change."
+}

@@ -53,6 +53,11 @@ from utils.observability.fallback import record_fallback
 from utils.journey_metrics_contract import ClientKind, resolve_client_kind_from_headers
 from utils.product_metrics import record_product_event
 from utils.observability.journeys import ClientJourneyAttempt, JourneyAttempt
+from utils.observability.reasons import (
+    ChatResponseFailureReason,
+    chat_response_failure_reason,
+    exception_class_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -542,9 +547,13 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             if journey_attempt is not None and not journey_attempt.finished:
                 journey_attempt.finish('cancelled')
             raise
-        except Exception:
+        except Exception as error:
             if journey_attempt is not None and not journey_attempt.finished:
-                journey_attempt.finish('failure')
+                journey_attempt.finish(
+                    'failure',
+                    failure_reason=chat_response_failure_reason(type(error).__name__),
+                    error_type=type(error).__name__,
+                )
             raise
         finally:
             if journey_attempt is not None and not journey_attempt.finished:
@@ -579,6 +588,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             not left with only an earlier ``error:`` frame.
             """
             persist_outcome = 'degraded'
+            persist_error_type: str | None = None
             try:
                 ai_message, ask_for_nps = await run_blocking(db_executor, process_message, response, callback_data)
             except Exception as persist_exc:
@@ -587,6 +597,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     uid,
                     type(persist_exc).__name__,
                 )
+                persist_error_type = type(persist_exc).__name__
                 persist_outcome = 'exhausted'
                 ai_message = Message(
                     id=str(uuid.uuid4()),
@@ -605,8 +616,13 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             response_message = ResponseMessage(**ai_message.model_dump())
             response_message.ask_for_nps = ask_for_nps
             encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')
-            if callback_data.get('error'):
-                journey_attempt.finish('failure')
+            staged_error = callback_data.get('error')
+            if staged_error:
+                journey_attempt.finish(
+                    'failure',
+                    failure_reason=chat_response_failure_reason(staged_error),
+                    error_type=exception_class_name(staged_error),
+                )
                 record_fallback(
                     component='other',
                     from_mode='llm_answer',
@@ -616,7 +632,11 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                 )
             else:
                 if persist_outcome == 'exhausted':
-                    journey_attempt.finish('failure')
+                    journey_attempt.finish(
+                        'failure',
+                        failure_reason=ChatResponseFailureReason.PERSISTENCE_FAILURE,
+                        error_type=persist_error_type,
+                    )
                     record_fallback(
                         component='other',
                         from_mode='llm_answer',
@@ -692,8 +712,12 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
         except asyncio.CancelledError:
             journey_attempt.finish('cancelled')
             raise
-        except Exception:
-            journey_attempt.finish('failure')
+        except Exception as error:
+            journey_attempt.finish(
+                'failure',
+                failure_reason=chat_response_failure_reason(type(error).__name__),
+                error_type=type(error).__name__,
+            )
             await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
             raise
         finally:
@@ -701,7 +725,20 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
             if app_context is not None:
                 surface_runtime.reset(app_context)
             if not journey_attempt.finished:
-                journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
+                if stream_exhausted:
+                    # Reached only when no terminal frame was emitted: a staged error, or no answer at all.
+                    staged_error = callback_data.get('error')
+                    journey_attempt.finish(
+                        'failure',
+                        failure_reason=(
+                            chat_response_failure_reason(staged_error)
+                            if staged_error
+                            else ChatResponseFailureReason.EMPTY_ANSWER
+                        ),
+                        error_type=exception_class_name(staged_error),
+                    )
+                else:
+                    journey_attempt.finish('cancelled')
 
     observed_stream = mobile_journey_attempt.observe_stream(
         generate_stream(),
@@ -741,12 +778,14 @@ class _LeasedReplySink:
     def __init__(self, delegate, store, uid, token):
         self.delegate, self.store, self.uid, self.token = delegate, store, uid, token
 
-    def _release_after_stop(self):
+    def release_after_interruption(self):
         try:
             self.store.release(self.uid, 'app', self.token)
         except PermissionError:
-            # A newer turn already took the lease over: nothing of ours to free.
-            logger.info('App turn lease already taken over at stop')
+            logger.info('App turn lease already taken over during cleanup')
+        except Exception as error:
+            # Cleanup must preserve the preparation or streaming failure.
+            logger.warning('App turn lease cleanup failed error_type=%s', type(error).__name__)
 
     def response(self, stream, *, media_type):
         async def leased():
@@ -765,7 +804,7 @@ class _LeasedReplySink:
                     # awaited: this runs while the stream is being cancelled.
                     from utils.executors import submit_with_context  # lazy: tests stub utils.executors
 
-                    submit_with_context(db_executor, self._release_after_stop)
+                    submit_with_context(db_executor, self.release_after_interruption)
 
         return self.delegate.response(leased(), media_type=media_type)
 
@@ -794,5 +833,11 @@ def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opti
         store, lease = _acquire_app_turn(uid)
         if store is not None:
             options = replace(options, app_store=store, app_lease=lease)
-            reply_sink = _LeasedReplySink(reply_sink, store, uid, lease)
+            leased_sink = _LeasedReplySink(reply_sink, store, uid, lease)
+            try:
+                return _run_chat_turn(uid, surface, session, message, leased_sink, principal=principal, options=options)
+            except Exception:
+                # Preparation failed before the stream could own cleanup.
+                leased_sink.release_after_interruption()
+                raise
     return _run_chat_turn(uid, surface, session, message, reply_sink, principal=principal, options=options)

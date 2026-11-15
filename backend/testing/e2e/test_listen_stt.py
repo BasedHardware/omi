@@ -1,10 +1,12 @@
 """Listen/STT websocket seam coverage."""
 
 import json
+import time
 import uuid
 
 import pytest
 
+from tests.unit.fixtures.live_stt_registry import enabled_live_targets
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event, install_streaming_stt_fake
 from listen_test_helpers import (
@@ -135,10 +137,13 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
         assert session_event["status"] == "in_progress"
         receive_until(websocket, is_ready_event)
 
+        capture_start = read_conversation(test_uid, session_event["conversation_id"])["started_at"]
+        sent_at = time.time()
         websocket.send_bytes(b"\x80" * 320)
         websocket.send_text(json.dumps(fake_suggested_transcript_event()))
 
         emitted_segments = receive_until(websocket, is_segment_batch)
+        received_at = time.time()
 
     expected_segment = {
         "id": "seg-custom-stt-1",
@@ -154,7 +159,9 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     assert len(emitted_segments) == 1
     emitted_segment = emitted_segments[0]
     assert {k: emitted_segment[k] for k in expected_segment} == expected_segment
-    assert abs(emitted_segment["start"]) < 0.01
+    # Setup silence remains part of capture; the first word need not be at
+    # offset zero. Its absolute clock must still describe the audio just sent.
+    assert sent_at <= capture_start.timestamp() + emitted_segment["start"] <= received_at
     assert abs((emitted_segment["end"] - emitted_segment["start"]) - 1.25) < 0.000001
 
     conversations = list(
@@ -163,6 +170,7 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     assert len(conversations) == 1
     conversation = read_conversation(test_uid, conversations[0].id)
     assert conversation is not None
+    assert conversation["started_at"] == capture_start
     assert conversations[0].id == session_event["conversation_id"]
     assert getattr(conversation["source"], "value", conversation["source"]) == "desktop"
     assert getattr(conversation["status"], "value", conversation["status"]) == "in_progress"
@@ -423,6 +431,7 @@ def test_web_listen_streaming_stt_send_failure_fails_over_and_the_session_surviv
     replacement socket in the same flush, a transcript flows from it, and the
     client socket never sees ``stt_failed``.
     """
+    enabled_live_targets(monkeypatch)
     from utils.stt.streaming import STTService
     from utils.stt import streaming as st
     from utils.stt.provider_resilience import ProviderCircuitBreaker

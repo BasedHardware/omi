@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-play-held-edit-mistaken-for-live-track",
+  "violated_contract": "An operation that must stop active Google Play rollout exposure cannot treat an edit committed with changesNotSentForReview=true as a live track mutation. Play queues that edit for manual review, so current exposure remains unchanged until the queued changes are submitted and applied.",
+  "canonical_prevention": "Before opening a Play edit for halt or resume, check the shared held-changes mode and fail closed with the Play Console procedure when the operation cannot take effect immediately. Keep the Play test double's pending held edits separate from live track state, and cover both no-edit rejection in held mode and live mutation in auto-send mode.",
+  "canonical_prevention_artifact": [
+    "app/scripts/mobile_rollout_brake.py",
+    "backend/tests/unit/test_mobile_rollout_brake.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/scripts/mobile_rollout_brake.py",
+    "backend/tests/unit/test_mobile_rollout_brake.py"
+  ],
+  "status": "open"
+}

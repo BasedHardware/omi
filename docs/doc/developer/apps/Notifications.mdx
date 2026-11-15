@@ -1,7 +1,7 @@
 ---
-title: "Sending Notifications"
+title: "Sending notifications"
 icon: "bell"
-description: "Send push notifications to Omi users from your apps - both direct text notifications and AI-generated proactive notifications."
+description: "Send push notifications to Omi users from your apps, either as direct text notifications or as AI-generated proactive notifications."
 ---
 
 ## Overview
@@ -9,15 +9,15 @@ description: "Send push notifications to Omi users from your apps - both direct 
 Omi supports two types of notifications you can send to users:
 
 <CardGroup cols={2}>
-  <Card title="Direct Notifications" icon="message">
+  <Card title="Direct notifications" icon="message">
     Send immediate, exact-text messages to specific users
   </Card>
-  <Card title="Proactive Notifications" icon="robot">
+  <Card title="Proactive notifications" icon="robot">
     AI-generated contextual messages based on real-time conversations
   </Card>
 </CardGroup>
 
-### Direct Flow
+### Direct flow
 
 ```mermaid
 flowchart LR
@@ -25,7 +25,7 @@ flowchart LR
     O -->|Push| U[User]
 ```
 
-### Proactive Flow
+### Proactive flow
 
 ```mermaid
 flowchart LR
@@ -34,14 +34,12 @@ flowchart LR
     O -->|AI Generated| U[User]
 ```
 
----
+## Direct notifications
 
-## Direct Notifications
-
-Send immediate messages to specific users. Perfect for alerts, updates, and responses to user actions.
+Send immediate messages to specific users. Use them for alerts, updates, and responses to user actions.
 
 <AccordionGroup>
-  <Accordion title="Use Cases" icon="lightbulb">
+  <Accordion title="Use cases" icon="lightbulb">
     - Task reminders and event notifications
     - Service updates or changes
     - Real-time alerts and warnings
@@ -50,7 +48,7 @@ Send immediate messages to specific users. Perfect for alerts, updates, and resp
   </Accordion>
 </AccordionGroup>
 
-### API Reference
+### API reference
 
 | Setting | Value |
 |---------|-------|
@@ -68,7 +66,7 @@ Send immediate messages to specific users. Perfect for alerts, updates, and resp
 ### Implementation
 
 <Steps>
-  <Step title="Get Credentials" icon="key">
+  <Step title="Get credentials" icon="key">
     You'll need your App ID and App Secret from the Omi developer portal.
 
     ```bash
@@ -77,10 +75,10 @@ Send immediate messages to specific users. Perfect for alerts, updates, and resp
     ```
 
     <Warning>
-    Store credentials securely - never commit them to version control.
+    Store credentials securely. Never commit them to version control.
     </Warning>
   </Step>
-  <Step title="Send Notification" icon="paper-plane">
+  <Step title="Send notification" icon="paper-plane">
     Make a POST request with the user ID and message:
 
     ```bash
@@ -89,12 +87,12 @@ Send immediate messages to specific users. Perfect for alerts, updates, and resp
       -H "Content-Type: application/json"
     ```
   </Step>
-  <Step title="Handle Response" icon="check">
+  <Step title="Handle response" icon="check">
     Check the response status code to confirm delivery.
   </Step>
 </Steps>
 
-### Code Examples
+### Code examples
 
 <Tabs>
   <Tab title="Node.js" icon="node-js">
@@ -153,25 +151,23 @@ Send immediate messages to specific users. Perfect for alerts, updates, and resp
   </Tab>
 </Tabs>
 
----
+## Proactive notifications
 
-## Proactive Notifications
-
-Context-aware, AI-generated notifications that leverage user data during real-time conversations. You provide a prompt template, Omi generates the personalized message.
+Context-aware, AI-generated notifications that use user data during real-time conversations. You provide a prompt template, and Omi generates the personalized message.
 
 <Info>
 Unlike direct notifications, proactive notifications require an app with specific capabilities and user-granted permissions.
 </Info>
 
 <AccordionGroup>
-  <Accordion title="Use Cases" icon="lightbulb">
+  <Accordion title="Use cases" icon="lightbulb">
     - Real-time mentoring advice during meetings
     - Context-aware suggestions based on conversation topics
     - Personalized insights based on user's goals
     - Intelligent responses to specific phrases
     - Meeting action item reminders
   </Accordion>
-  <Accordion title="How It Works" icon="gear">
+  <Accordion title="How it works" icon="gear">
     1. User installs your app and grants permissions
     2. During conversations, Omi sends transcripts to your webhook
     3. Your webhook analyzes the transcript and returns a prompt template
@@ -180,7 +176,7 @@ Unlike direct notifications, proactive notifications require an app with specifi
   </Accordion>
 </AccordionGroup>
 
-### App Configuration
+### App configuration
 
 Your app needs these capabilities:
 
@@ -198,7 +194,7 @@ Your app needs these capabilities:
 }
 ```
 
-### Available Scopes
+### Available scopes
 
 | Scope | Template Variable | Description |
 |-------|------------------|-------------|
@@ -207,7 +203,7 @@ Your app needs these capabilities:
 | `user_context` | `{{user_context}}` | Relevant conversation context |
 | `user_chat` | `{{user_chat}}` | Recent chat history with your app |
 
-### Webhook Implementation
+### Webhook implementation
 
 Your webhook receives real-time transcripts and returns notification prompts:
 
@@ -244,7 +240,7 @@ POST /your-webhook?session_id=abc123&uid=user123
 }
 ```
 
-### Complete Example
+### Complete example
 
 <Tabs>
   <Tab title="Python (FastAPI)" icon="python">
@@ -323,16 +319,16 @@ POST /your-webhook?session_id=abc123&uid=user123
 ### Testing
 
 <Steps>
-  <Step title="Enable Developer Mode" icon="code">
+  <Step title="Enable developer mode" icon="code">
     Open Omi app → Settings → Developer Mode
   </Step>
-  <Step title="Install Your App" icon="download">
+  <Step title="Install your app" icon="download">
     Install your app in Developer Mode and grant requested scopes
   </Step>
-  <Step title="Set Webhook URL" icon="link">
+  <Step title="Set webhook URL" icon="link">
     Configure your webhook URL in Developer Settings
   </Step>
-  <Step title="Trigger Notifications" icon="microphone">
+  <Step title="Trigger notifications" icon="microphone">
     Start a conversation and say trigger phrases (e.g., "what do you think?")
   </Step>
   <Step title="Verify" icon="check">
@@ -344,22 +340,20 @@ POST /your-webhook?session_id=abc123&uid=user123
 **Rate Limit:** 1 proactive notification per user per app every 30 seconds.
 </Note>
 
----
-
-## Best Practices
+## Best practices
 
 <CardGroup cols={2}>
-  <Card title="Rate Limiting" icon="gauge">
+  <Card title="Rate limiting" icon="gauge">
     - Implement delays between notifications
     - Avoid duplicate messages
     - Group related notifications
   </Card>
-  <Card title="Content Quality" icon="pen">
+  <Card title="Content quality" icon="pen">
     - Keep messages concise and clear
     - Include relevant context
     - Use appropriate urgency levels
   </Card>
-  <Card title="Error Handling" icon="triangle-exclamation">
+  <Card title="Error handling" icon="triangle-exclamation">
     - Implement retry with exponential backoff
     - Log errors for debugging
     - Monitor delivery status
@@ -371,11 +365,9 @@ POST /your-webhook?session_id=abc123&uid=user123
   </Card>
 </CardGroup>
 
----
-
 ## Troubleshooting
 
-### Error Codes
+### Error codes
 
 | Code | Meaning | Solution |
 |------|---------|----------|
@@ -385,14 +377,14 @@ POST /your-webhook?session_id=abc123&uid=user123
 | 500 | Server error | Retry with backoff, check Omi status page |
 
 <AccordionGroup>
-  <Accordion title="Direct Notifications Not Sending" icon="circle-question">
+  <Accordion title="Direct notifications not sending" icon="circle-question">
     **Check these:**
     - API credentials are correct
     - User ID is valid
     - Bearer token is properly formatted
     - Request includes required headers
   </Accordion>
-  <Accordion title="Proactive Notifications Not Appearing" icon="circle-question">
+  <Accordion title="Proactive notifications not appearing" icon="circle-question">
     **Check these:**
     - App has `proactive_notification` capability enabled
     - User has installed your app
@@ -400,7 +392,7 @@ POST /your-webhook?session_id=abc123&uid=user123
     - Webhook is returning proper response format
     - Prompt is at least 5 characters
   </Accordion>
-  <Accordion title="Notifications Not Contextual" icon="circle-question">
+  <Accordion title="Notifications not contextual" icon="circle-question">
     **Solutions:**
     - Request additional scopes in app configuration
     - Include more template variables in your prompt
@@ -408,21 +400,19 @@ POST /your-webhook?session_id=abc123&uid=user123
   </Accordion>
 </AccordionGroup>
 
----
-
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
-  <Card title="Integration Apps" icon="plug" href="/doc/developer/apps/Integrations">
+  <Card title="Integration apps" icon="plug" href="/doc/developer/apps/Integrations">
     Build webhook-based integrations
   </Card>
-  <Card title="OAuth Setup" icon="key" href="/doc/developer/apps/Oauth">
+  <Card title="OAuth setup" icon="key" href="/doc/developer/apps/Oauth">
     Add authentication to your apps
   </Card>
-  <Card title="Chat Tools" icon="wrench" href="/doc/developer/apps/ChatTools">
+  <Card title="Chat tools" icon="wrench" href="/doc/developer/apps/ChatTools">
     Add custom tools to Omi chat
   </Card>
-  <Card title="Submit Your App" icon="rocket" href="/doc/developer/apps/Submitting">
+  <Card title="Submit your app" icon="rocket" href="/doc/developer/apps/Submitting">
     Publish your app to the store
   </Card>
 </CardGroup>

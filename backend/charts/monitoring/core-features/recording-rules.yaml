@@ -1,0 +1,35 @@
+# The lead installs this with kubectl apply. It records series only and changes no alert.
+# A tile reads one with sum_over_time(<rule>[$__range]) * 60, because the group runs each minute.
+# Nothing recorded exists before the install, so a panel moves here only once these series
+# cover its longest offered range. Summed trailing rates smooth bursts across a trend's steps.
+# Cloud Run samples can be nearly 4 minutes old when they arrive, so a rule reading the present
+# undercounts them by up to 47%. Reading 5 minutes back lets them settle, and tiles lag by that much.
+# A missed evaluation undercounts a tile, so a panel moves only if, over 1h, 24h and 7d, a ratio
+# is within 0.1 points of its raw query, a count is within the larger of 1% and 2 events, and
+# count_over_time finds at least 99% of the group's minutes.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: omi-core-features-recording
+  namespace: prod-omi-monitoring
+  labels:
+    release: prod-omi-kube-prometheus-stack
+spec:
+  groups:
+    - name: omi.core_features.recording
+      interval: 1m
+      rules:
+        - record: source_outcome:omi_listen_audio_outcome:rate5m_offset5m
+          expr: sum by (transcription_source, outcome) (rate(omi_listen_audio_outcome_total[5m] offset 5m))
+        - record: source:omi_listen_accepted:rate5m_offset5m
+          expr: sum by (transcription_source) (rate(omi_listen_accepted_total[5m] offset 5m))
+        - record: journey_outcome:omi_journey_terminal:rate5m_offset5m
+          expr: sum by (journey, outcome) (rate(omi_journey_terminal_total[5m] offset 5m))
+        - record: job_journey_outcome:omi_client_journey_terminal:rate5m_offset5m
+          expr: sum by (job, journey, outcome) (rate(omi_client_journey_terminal_total[5m] offset 5m))
+        - record: lane_outcome:llm_gateway_requests:rate5m_offset5m
+          expr: sum by (lane_id, outcome) (rate(llm_gateway_requests_total[5m] offset 5m))
+        - record: outcome:omi_conversation_summary_vector_upserts:rate5m_offset5m
+          expr: sum by (outcome) (rate(omi_conversation_summary_vector_upserts_total[5m] offset 5m))
+        - record: event_plan:omi_subscription_events:rate5m_offset5m
+          expr: sum by (event, plan) (rate(omi_subscription_events_total[5m] offset 5m))

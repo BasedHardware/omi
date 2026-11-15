@@ -1,0 +1,4 @@
+{
+  "change": "Pendant transcription now recovers when live audio stops after starting",
+  "platforms": ["android"]
+}

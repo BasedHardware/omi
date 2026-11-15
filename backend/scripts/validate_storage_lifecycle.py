@@ -21,7 +21,10 @@ The load-bearing facts this guards:
   always keeps the newest generation of every object name (David, 10-23: delete
   noncurrent ``.opus.enc`` only after the regen check; see the storage-ops
   README for why this shape satisfies it).
-* Every ``SetStorageClass`` rule must be prefix-scoped to exactly ``chunks/``.
+* At most one ``SetStorageClass`` rule is permitted, targeting COLDLINE from
+  STANDARD/MULTI_REGIONAL and prefix-scoped to exactly ``chunks/``. David
+  dropped the prod-stock ARCHIVE transition on 11-02 because of its one-time
+  operation cost. The new-empty-bucket forward policy is a separate contract.
 * All other noncurrent-version rules (``isLive: false`` and friends) are
   forbidden: a bucket-wide noncurrent rule would move ``playback/`` noncurrent
   versions to Coldline, which the 30-day Delete rule then early-deletes.
@@ -135,11 +138,10 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                             f"desired rule {index} is a Delete rule whose prefix {prefix!r} can match {CHUNKS_PREFIX!r}"
                         )
         else:  # SetStorageClass
+            target_class = action.get("storageClass")
             set_class_rules += 1
-            if action.get("storageClass") != "COLDLINE":
-                errors.append(
-                    f"desired rule {index} must set storageClass COLDLINE, got {action.get('storageClass')!r}"
-                )
+            if target_class != "COLDLINE":
+                errors.append(f"desired rule {index} must set storageClass COLDLINE, got {target_class!r}")
             age = condition.get("age")
             if not isinstance(age, int) or isinstance(age, bool) or age < 30:
                 errors.append(f"desired rule {index} must carry an integer age >= 30, got {age!r}")
@@ -157,11 +159,12 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
             if not classes_ok:
                 errors.append(
                     f"desired rule {index} matchesStorageClass must be exactly "
-                    f"{sorted(ALLOWED_SOURCE_CLASSES)}, got {source_classes!r}"
+                    f"{sorted(ALLOWED_SOURCE_CLASSES)}, "
+                    f"got {source_classes!r}"
                 )
 
     if set_class_rules > 1:
-        errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; exactly one is expected")
+        errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; at most one is expected")
     if noncurrent_delete_rules > 1:
         errors.append(
             f"desired document declares {noncurrent_delete_rules} scoped noncurrent Delete rules; at most one is expected"

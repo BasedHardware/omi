@@ -2,6 +2,7 @@
 
 import struct
 import time
+import traceback
 
 from testing.e2e.sync_helpers import patch_fresh_sync_lane
 from testing.e2e.test_sync_lifecycle import _drain_background_coroutines, _patch_sync_pipeline, _poll_sync_job
@@ -14,9 +15,24 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     import utils.sync.pipeline as pipeline
 
     patch_fresh_sync_lane(monkeypatch)
+    failures = []
+    classify_failure = pipeline.failure_from_exception
+
+    def capture_failure(error, **kwargs):
+        failures.append(repr(error))
+        traceback.print_exception(error)
+        return classify_failure(error, **kwargs)
+
+    monkeypatch.setattr(pipeline, 'failure_from_exception', capture_failure)
     real_decode = pipeline.decode_files_to_wav
     reprocessed = []
-    pending = _patch_sync_pipeline(monkeypatch, transcript_text='Testing one two three.', reprocessed=reprocessed)
+    user_selections = []
+    pending = _patch_sync_pipeline(
+        monkeypatch,
+        transcript_text='Testing one two three.',
+        reprocessed=reprocessed,
+        user_selections=user_selections,
+    )
     monkeypatch.setattr(pipeline, 'decode_files_to_wav', real_decode)
     monkeypatch.setattr(demand_processing, 'promote_conversation_effects', lambda *args: None)
     ingest = lifecycle.ingest_sync_conversation
@@ -38,11 +54,13 @@ def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, 
     assert response.status_code == 202, response.text
     _drain_background_coroutines(pending)
     job = _poll_sync_job(client, auth_headers, response.json()['job_id'])
-    assert job['status'] == 'completed', job
+    assert job['status'] == 'completed', (failures, job)
     assert job['result']['new_memories'] == ['sync-created-conversation']
     conversation = client.get('/v1/conversations/sync-created-conversation', headers=auth_headers)
     assert conversation.status_code == 200, conversation.text
     assert conversation.json()['discarded'] is False
+    assert conversation.json()['transcript_segments'][0]['text'] == 'Testing one two three.'
     row = conversations_db.get_conversation('123', 'sync-created-conversation')
     assert row['sync_relevance_user_kept'] is True
     assert reprocessed == ['sync-created-conversation']
+    assert user_selections == [True]

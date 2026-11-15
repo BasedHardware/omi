@@ -18,7 +18,6 @@ import pytest
 
 # Import database before utils.subscription to satisfy the circular import.
 import database.users  # noqa: F401
-import utils.subscription as subscription_mod
 
 from models.users import PlanType, Subscription  # noqa: E402
 from utils.subscription import (  # noqa: E402
@@ -26,10 +25,7 @@ from utils.subscription import (  # noqa: E402
     DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
     DESKTOP_ACCESS_TIER_FULL,
-    desktop_trial_paywall_eligible,
     effective_desktop_access_tier,
-    get_remaining_transcription_seconds,
-    is_trial_paywalled,
     neo_grandfather_until,
     plan_grants_desktop,
 )
@@ -106,53 +102,6 @@ class TestEffectiveDesktopAccessTier:
         assert effective_desktop_access_tier(PlanType.unlimited, post_cutoff_neo) == DESKTOP_ACCESS_TIER_FREE
         assert effective_desktop_access_tier(PlanType.operator) == DESKTOP_ACCESS_TIER_FULL
         assert effective_desktop_access_tier(PlanType.architect) == DESKTOP_ACCESS_TIER_ARCHITECT
-
-    def test_only_free_is_eligible_for_account_age_paywall(self):
-        post_cutoff_neo = Subscription(plan=PlanType.unlimited, current_period_start=POST_CUTOFF)
-
-        assert desktop_trial_paywall_eligible(PlanType.basic) is True
-        assert desktop_trial_paywall_eligible(PlanType.unlimited, post_cutoff_neo) is False
-        assert desktop_trial_paywall_eligible(PlanType.operator) is False
-        assert desktop_trial_paywall_eligible(PlanType.architect) is False
-
-    def test_post_cutoff_neo_cannot_receive_zero_desktop_audio_credits(self, monkeypatch):
-        """Exercise the same resolver used by /v4/listen admission and refresh."""
-        post_cutoff_neo = Subscription(plan=PlanType.unlimited, current_period_start=POST_CUTOFF)
-        cache_values = iter((True, None))
-        cleared_cache_keys = []
-
-        def clear_cache(key):
-            cleared_cache_keys.append(key)
-
-        monkeypatch.setattr(subscription_mod, 'TRIAL_PAYWALL_ENABLED', True)
-        monkeypatch.setattr(
-            subscription_mod.users_db, 'get_user_valid_subscription', lambda _uid, **_kwargs: post_cutoff_neo
-        )
-        monkeypatch.setattr(subscription_mod.users_db, 'is_byok_active', lambda _uid, **_kwargs: False)
-        monkeypatch.setattr(subscription_mod, '_request_has_llm_byok_key', lambda: False)
-        monkeypatch.setattr(subscription_mod.redis_db, 'get_generic_cache', lambda _key: next(cache_values))
-        monkeypatch.setattr(subscription_mod.redis_db, 'set_generic_cache', lambda *_args, **_kwargs: None)
-        monkeypatch.setattr(subscription_mod.redis_db, 'delete_generic_cache', clear_cache)
-        monkeypatch.setattr(subscription_mod, 'record_fallback', lambda **_kwargs: None)
-
-        assert is_trial_paywalled('neo-uid', 'desktop') is False
-        assert get_remaining_transcription_seconds('neo-uid', source='desktop') is None
-        assert cleared_cache_keys == [
-            'trial_paywall:expired:neo-uid:openrouter',
-            'trial_paywall:expired:neo-uid:openrouter:managed',
-            'trial_paywall:expired:neo-uid:openai',
-            'trial_paywall:expired:neo-uid:openai:managed',
-            'trial_paywall:expired:neo-uid:anthropic',
-            'trial_paywall:expired:neo-uid:anthropic:managed',
-            'trial_paywall:expired:neo-uid:gemini',
-            'trial_paywall:expired:neo-uid:gemini:managed',
-            'trial_paywall:expired:neo-uid:deepgram',
-            'trial_paywall:expired:neo-uid:deepgram:managed',
-            'trial_paywall:expired:neo-uid:deepgram:strict',
-            'trial_paywall:expired:neo-uid:deepgram:strict:managed',
-            'trial_paywall:expired:neo-uid',
-            'trial_paywall:expired:neo-uid:managed',
-        ]
 
 
 class TestNeoGrandfatherUntil:

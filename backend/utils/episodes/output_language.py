@@ -1,13 +1,55 @@
 """L3 output-language authority at the episode prompt boundary.
 
-Adapts the existing invoke seam, leaving the incremental prompt module owned by
-L3 untouched. Shadow performs no additional model or preference call.
+The moment prompt is pinned to one resolved language on every path (kill switch
+``EPISODE_OUTPUT_LANGUAGE_PIN``): the user's explicit preference first, then the
+conversation's dominant language tag — never the newest moment's speech or the
+episode's previous output deciding on its own. Blank and sentinel tags
+(``multi``, ``auto``, …) count as unset, so they never reach a prompt.
+
+A state written in a different language (the wrong-language incident) is not fed
+back verbatim: ``repair_instruction`` tells the model to rewrite it in the
+resolved language as part of the next update, and the episode only stamps
+``output_language`` once the state matches it.
 """
 
+from __future__ import annotations
+
+import logging
+from typing import Any, Mapping, Optional
+
 from config.refactor_modes import serving_for
+from utils.llm.output_language import (
+    language_preference as read_language_preference,
+    normalize_language,
+    capture_output_language,
+)
+from utils.translation_language import detect_language
+
+logger = logging.getLogger(__name__)
 
 
-def resolved_invoke(uid, conversation_language, invoke):
+def conversation_language(uid: str, conversation_id: str, firestore_client: Any) -> Optional[str]:
+    """The conversation's dominant language tag, for moments the stream did not carry one."""
+    from database import conversations
+
+    if not conversation_id:
+        return ''
+    try:
+        row = conversations.get_conversation_raw_snapshot(
+            uid, conversation_id, field_paths=['language'], firestore_client=firestore_client
+        )
+        return str((row or {}).get('language') or '')
+    except Exception as error:
+        logger.warning('event=episode_moment conversation_language_failed exception_type=%s', type(error).__name__)
+        return None
+
+
+# langdetect is unreliable on short text (backend AGENTS.md); a shorter state carries no
+# language worth repairing anyway.
+_MIN_STATE_DETECT_CHARS = 20
+
+
+def resolved_invoke(uid, conversation_language, invoke, *, output_language=None):
     if not serving_for('LIFECYCLE_V2_MODE', uid):
         return invoke
     try:
@@ -15,13 +57,71 @@ def resolved_invoke(uid, conversation_language, invoke):
     except ImportError:
         # L3 is integrated independently; until then retain the current prompt.
         return invoke
-    language = resolve_output_language(uid, conversation_language)
+    language = normalize_language(output_language) or resolve_output_language(uid, conversation_language)
     if invoke is None:
         from utils.episodes.incremental import invoke_model
 
         invoke = invoke_model
 
     def with_language(account, messages):
-        return invoke(account, [*messages, ('system', f'Write all episode output in {language}.')])
+        return invoke(
+            account,
+            [*messages, ('system', f'Write all output in {language}. Keep names and quoted words verbatim.')],
+        )
 
     return with_language
+
+
+def stored_language(episode: Optional[Mapping[str, Any]]) -> str:
+    """The language the episode document says its state is written in ('' when unstamped)."""
+    return normalize_language((episode or {}).get('output_language'))
+
+
+def detected_state_language(episode: Optional[Mapping[str, Any]], *, hint_language: Optional[str] = None) -> str:
+    """Detect the language in current state text, ignoring any previous stamp."""
+    parts = [str((episode or {}).get('title') or '')] + [str(b) for b in (episode or {}).get('bullets') or []][:3]
+    text = ' '.join(part for part in parts if part)
+    if len(text) < _MIN_STATE_DETECT_CHARS:
+        return ''
+    # The detector's hint only gates whether it runs; use its broad supported baseline
+    # rather than letting a regional/unsupported target code mute output verification.
+    return normalize_language(detect_language(text, hint_language='en'))
+
+
+def state_language(episode: Optional[Mapping[str, Any]], *, hint_language: Optional[str] = None) -> str:
+    """The language the prior state is written in, checking text even when stamped."""
+    return detected_state_language(episode, hint_language=hint_language) or stored_language(episode)
+
+
+def resolve_episode_language(
+    uid: str,
+    conversation_language: Optional[str],
+    *,
+    preference: Optional[str] = None,
+    segments=None,
+) -> str:
+    """Preference, then a capture tag supported by the dominant transcript language.
+
+    The stored episode language describes the prior state for comparison; it is
+    never an authority over the current resolved output language.
+    """
+    if preference is None:
+        preference = language_preference(uid)
+    preferred = normalize_language(preference)
+    if preferred:
+        return preferred
+    return capture_output_language(conversation_language, segments, preference=preferred)
+
+
+def language_preference(uid: str) -> str:
+    """Read the user's safe, normalized output-language preference once at the boundary."""
+    return read_language_preference(uid)
+
+
+def repair_instruction(prior_language: str, output_language: str) -> str:
+    """The directive that rewrites a wrong-language state instead of feeding it back."""
+    return (
+        f'The episode state so far is written in {prior_language}, not {output_language}. '
+        f'Rewrite the whole state - topic, bullets, open questions - in {output_language} as part of '
+        'this update, keeping names and quoted words verbatim. Do not drop information in the rewrite.'
+    )

@@ -103,6 +103,8 @@ def test_mobile_bootstrap_lifecycle_shapes(client, auth_headers, sample_conversa
     assert memory_create.status_code == 200, memory_create.text
     _assert_mobile_memory_shape(memory_create.json(), "Mobile-visible memory")
 
+    seed_conversation("123", dict(sample_conversation_data, id="mobile-lifecycle-conv"))
+
     action_create = client.post(
         "/v1/action-items",
         json={"description": "Mobile-visible task", "completed": False, "conversation_id": "mobile-lifecycle-conv"},
@@ -110,8 +112,6 @@ def test_mobile_bootstrap_lifecycle_shapes(client, auth_headers, sample_conversa
     )
     assert action_create.status_code == 200, action_create.text
     _assert_mobile_action_item_shape(action_create.json(), "Mobile-visible task")
-
-    seed_conversation("123", dict(sample_conversation_data, id="mobile-lifecycle-conv"))
 
     conversations = client.get(
         "/v1/conversations?include_discarded=true&limit=50&offset=0&statuses=completed,processing",

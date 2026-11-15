@@ -1,4 +1,4 @@
-"""WQ12: physical privacy document reads, scoped to a transaction attempt."""
+"""Retired WQ12 lever: live authority reads and transactional retry contracts."""
 
 from collections import Counter
 from dataclasses import asdict
@@ -13,7 +13,6 @@ from config import firestore_read_levers as levers
 from database import batch_pipeline_store as storage
 from database.batch_pipeline_privacy import (
     BatchPrivacyBlocked,
-    BatchPrivacyMemo,
     assert_batch_write_allowed,
     privacy_owner_key,
 )
@@ -58,8 +57,9 @@ def database():
 def test_default_off_retains_exact_reads_and_no_memo(monkeypatch, reads, raw):
     if raw is not None:
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', raw)
-    assert LEVER in levers.KNOWN_LEVERS
-    assert levers.lever_percent(LEVER) == 0
+    assert LEVER not in levers.KNOWN_LEVERS
+    with pytest.raises(ValueError, match="unknown Firestore read lever"):
+        levers.lever_percent(LEVER)
     db = database()
     tx = storage.FirestoreTransaction(db, NAMESPACE, db.transaction())
     for _ in range(2):
@@ -97,12 +97,12 @@ def test_batch_read_counts_and_assertions_per_write(monkeypatch, reads, count, d
         assertions = count + (count if distinct else 1)
         assert assertion.call_count == assertions
         assert len(transaction.sets) == 2 * count
-        # flush also reads each job once to resolve result ownership. These
-        # non-privacy reads are unchanged by the lever.
-        privacy_reads = 3 + 2 * (count if distinct else 1) if on else 5 * assertions
+        # The retired lever cannot deduplicate any authority reads. Flush also
+        # reads each job once to resolve result ownership.
+        privacy_reads = 5 * assertions
         assert len(reads) == count + privacy_reads
         path_counts = Counter(reads)
-        assert path_counts[('account_deletions', UID)] == (1 if on else assertions)
+        assert path_counts[('account_deletions', UID)] == assertions
         observed.append([payload for _, payload in transaction.sets])
     assert observed[0] == observed[1]
 
@@ -174,13 +174,13 @@ def test_real_intake_batch_counts(monkeypatch, reads):
         # 20 assertions for 20 distinct source conversations.
         assert assertions.call_count == 20
         assert len(db.transactions[0].sets) == 24  # jobs + owner, queue, control, content
-        assert len(reads) == (67 if on else 124)  # 24 unchanged scheduler/content reads
+        assert len(reads) == 124  # 24 unchanged scheduler/content reads
         results.append(db.rows)
     assert results[0] == results[1]
 
 
 def test_projection_prepare_and_plan_counts(monkeypatch, reads):
-    for on, total in [(False, 18), (True, 13)]:
+    for on, total in [(False, 18), (True, 18)]:
         enable(monkeypatch, on)
         db = database()
         session = projection_session(db)
@@ -188,7 +188,7 @@ def test_projection_prepare_and_plan_counts(monkeypatch, reads):
         reads.clear()
         session.prepare(transaction, replay=False)
         session.validate_plan(transaction, {'id': 'source', 'sync_merged_from': ['donor']})
-        # Four protocol reads plus 14 -> 9 privacy reads (7 + 7 -> 7 + 2).
+        # Four protocol reads plus two independent seven-read privacy walks.
         assert len(reads) == total
         session.write_receipt(transaction, {'state': 'ready'})
         assert len(transaction.updates) == 1
@@ -206,6 +206,9 @@ def test_projection_prepare_and_plan_counts(monkeypatch, reads):
 def test_real_sdk_retry_reloads_every_fence(monkeypatch, reads, scope, change, reason):
     """SDK reuses its transaction object and retry ID; callback scope must reset."""
     enable(monkeypatch, True)
+    # This contract exercises the SDK's same-transaction retry path, separately
+    # from the batch store's default-on fresh-transaction retry wrapper.
+    monkeypatch.setenv('BATCH_PIPELINE_CONTENTION_RETRY_ENABLED', 'false')
     db = database()
     session = projection_session(db)
     transaction = db.transaction()
@@ -238,7 +241,7 @@ def test_real_sdk_retry_reloads_every_fence(monkeypatch, reads, scope, change, r
     with pytest.raises(BatchPrivacyBlocked, match=reason):
         run()
     assert len(commits) == 1  # Second attempt denies before it can commit.
-    assert Counter(reads)[change] == 2
+    assert Counter(reads)[change] == 3
 
 
 def test_new_transaction_and_owner_do_not_reuse_absence(monkeypatch, reads):
@@ -263,7 +266,7 @@ def test_generation_is_compared_even_with_cached_documents(monkeypatch, reads):
     assert view.check_privacy(UID, [], 0) == 0
     with pytest.raises(BatchPrivacyBlocked, match='privacy_generation_changed'):
         view.check_privacy(UID, [], 1)
-    assert len(reads) == 3
+    assert len(reads) == 6
 
 
 def test_new_source_is_checked_after_success(monkeypatch, reads):
@@ -274,7 +277,7 @@ def test_new_source_is_checked_after_success(monkeypatch, reads):
     view.check_privacy(UID, ['safe'])
     with pytest.raises(BatchPrivacyBlocked, match='conversation_deleted'):
         view.check_privacy(UID, ['deleted'])
-    assert len(reads) == 6
+    assert len(reads) == 9
 
 
 @pytest.mark.parametrize('on', [False, True])
@@ -325,43 +328,19 @@ def test_snapshots_redirects_and_budget_are_rechecked(monkeypatch, reads):
     db.rows[('users', UID, 'conversations', 'source')] = {'deleted': True, 'sync_merged_into': 'target'}
     db.rows[('users', UID, 'conversations', 'target')] = {'id': 'target'}
     transaction = db.transaction()
-    memo = BatchPrivacyMemo(db, transaction)
     outputs = []
     for _ in range(2):
         snapshots = {}
-        assert_batch_write_allowed(db, transaction, UID, conversation_ids=['source'], snapshots=snapshots, memo=memo)
+        assert_batch_write_allowed(db, transaction, UID, conversation_ids=['source'], snapshots=snapshots)
         outputs.append(snapshots)
     assert outputs[0] == outputs[1]
     assert set(outputs[1]['conversations']) == {'source', 'target'}
-    assert len(reads) == 7
+    assert len(reads) == 14
     outputs[0]['user']['data_protection_level'] = 'e2ee'
     assert outputs[1]['user']['data_protection_level'] == 'standard'
     # Previous small checks must not let a larger call bypass its 256-doc budget.
     with pytest.raises(BatchPrivacyBlocked, match='conversation_fence_budget'):
-        assert_batch_write_allowed(db, transaction, UID, conversation_ids=[f'c-{i}' for i in range(257)], memo=memo)
-
-
-def test_memo_cannot_cross_client_or_transaction(monkeypatch):
-    enable(monkeypatch, True)
-    db = database()
-    memo = BatchPrivacyMemo(db, db.transaction())
-    with pytest.raises(ValueError, match='another transaction attempt'):
-        assert_batch_write_allowed(db, db.transaction(), UID, memo=memo)
-    other = database()
-    with pytest.raises(ValueError, match='another transaction attempt'):
-        assert_batch_write_allowed(other, memo.transaction, UID, memo=memo)
-    with pytest.raises(ValueError, match='requires a transaction'):
-        BatchPrivacyMemo(db, None)
-
-
-def test_off_ignores_even_explicit_memo(monkeypatch, reads):
-    db = database()
-    transaction = db.transaction()
-    memo = BatchPrivacyMemo(db, transaction)
-    for _ in range(2):
-        assert_batch_write_allowed(db, transaction, UID, conversation_ids=['source'], memo=memo)
-    assert len(reads) == 10
-    assert memo.snapshots == {}
+        assert_batch_write_allowed(db, transaction, UID, conversation_ids=[f'c-{i}' for i in range(257)])
 
 
 def test_read_error_is_not_cached(monkeypatch, reads):

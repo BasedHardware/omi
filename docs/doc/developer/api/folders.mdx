@@ -12,8 +12,6 @@ description: "Retrieve user-defined folders for organizing conversations via the
   </Card>
 </CardGroup>
 
----
-
 ## List Folders
 
 <Card title="GET /v1/dev/user/folders" icon="download" color="#22c55e" horizontal>
@@ -21,7 +19,7 @@ description: "Retrieve user-defined folders for organizing conversations via the
 </Card>
 
 <Note>
-This endpoint is strictly read-only. If the user has not yet had folders initialized, an empty array is returned. System folders (Work, Personal, Social) are created lazily through other paths — when the mobile app opens the conversations screen or when a new conversation is created. In normal usage, any user who can issue a Developer API key has already gone through one of those paths.
+This endpoint is strictly read-only. If the user has not yet had folders initialized, an empty array is returned. System folders (Work, Personal, Social) are created lazily through other paths: when the mobile app opens the conversations screen or when a new conversation is created. In normal usage, any user who can issue a Developer API key has already gone through one of those paths.
 </Note>
 
 <Tabs>
@@ -119,8 +117,6 @@ This endpoint is strictly read-only. If the user has not yet had folders initial
     | `conversation_count` | integer | Number of non-discarded conversations in this folder |
   </Accordion>
 </AccordionGroup>
-
----
 
 ## Using Folder IDs to Filter Conversations
 

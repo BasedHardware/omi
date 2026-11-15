@@ -374,3 +374,59 @@ def test_fleet_snapshot_counts_undated_holds_apart_from_the_oldest_dated_row():
 
     _, raced = _snapshot_client(pending=(1, 1), dated=3, oldest=50, backlog=0)
     assert store.fleet_snapshot(raced)['undated_pending'] == 0
+
+
+def test_fleet_snapshot_rpc_budget_is_env_configured_and_clamped(monkeypatch):
+    from database import cap_hold_redrive as store
+
+    seen = []
+
+    class Aggregate:
+        def count(self, alias=None):
+            return self
+
+        def sum(self, field, alias=None):
+            return self
+
+        def get(self, timeout=None):
+            seen.append(timeout)
+            return [[SimpleNamespace(alias='count', value=0)]]
+
+    class Query:
+        def where(self, *args, **kwargs):
+            return self
+
+        def order_by(self, *args, **kwargs):
+            return self
+
+        def limit(self, count):
+            return self
+
+        def count(self, alias=None):
+            return Aggregate()
+
+        def sum(self, field, alias=None):
+            return Aggregate()
+
+        def stream(self, timeout=None):
+            seen.append(timeout)
+            return iter(())
+
+    class Client:
+        def collection_group(self, name):
+            return Query()
+
+    monkeypatch.setenv('CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS', '75')
+    store.fleet_snapshot(Client())
+    assert len(seen) == 4 and set(seen) == {75.0}
+    monkeypatch.setenv('CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS', '9999')  # clamped to the ceiling
+    seen.clear()
+    store.fleet_snapshot(Client())
+    assert set(seen) == {300.0}
+    monkeypatch.setenv('CAP_HOLD_FLEET_SNAPSHOT_TIMEOUT_SECONDS', 'not-a-number')  # bad operator input falls back
+    seen.clear()
+    store.fleet_snapshot(Client())
+    assert set(seen) == {store.SNAPSHOT_RPC_TIMEOUT_SECONDS}
+    seen.clear()
+    store.fleet_snapshot(Client(), timeout=12.5)  # an explicit caller budget wins
+    assert set(seen) == {12.5}

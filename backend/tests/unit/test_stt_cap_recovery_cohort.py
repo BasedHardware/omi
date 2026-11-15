@@ -46,6 +46,8 @@ def admission(request, monkeypatch):
     monkeypatch.delenv('STT_CAP_RECOVERY_COHORT', raising=False)
     if raw is not None:
         monkeypatch.setenv('STT_CAP_RECOVERY_COHORT', raw)
+    # Paid owners: the Free gate is test_held_recovery_paid_only.py's subject.
+    monkeypatch.setattr(funded_processing, 'paid_owner', lambda uid: True)
     return SimpleNamespace(uid=uid, allowed=expected)
 
 
@@ -66,11 +68,11 @@ def consent(monkeypatch):
 def test_recovery_policy_preserves_listen_admission(admission, monkeypatch, legacy, ladder):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(legacy).lower())
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
-    uid, allowed = admission.uid, admission.allowed and (legacy or ladder)
+    uid, allowed = admission.uid, admission.allowed and legacy
     assert policy.any_recovery_admission_enabled(uid) is allowed
     assert policy.recovery_admission_enabled(uid, 'live') is allowed
     assert not policy.recovery_admission_enabled(uid, 'sync')
-    assert policy.execution_admission_enabled(uid, 'live') is (uid != 'outside' and (legacy or ladder))
+    assert policy.execution_admission_enabled(uid, 'live') is (uid != 'outside' and legacy)
     assert policy.enabled_for(uid, 'live') is (uid != 'outside' and legacy)
 
 
@@ -81,16 +83,13 @@ def test_manual_consent_only_starts_selected_owner(admission, consent):
     assert consent.allowance.called is admission.allowed
 
 
-@pytest.mark.parametrize('asynchronous', [False, True])
-async def test_upgrade_consent_only_starts_selected_owner(admission, consent, monkeypatch, asynchronous):
+async def test_trial_start_consent_only_starts_selected_owner(admission, consent, monkeypatch):
     async def immediate(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(worker, 'run_blocking', immediate)
-    if asynchronous:
-        await worker.upgrade_async(admission.uid, 'synthetic-upgrade', intent_at=consent.now)
-    else:
-        worker.upgrade(admission.uid, 'synthetic-upgrade', intent_at=consent.now)
+    trial = {'id': 'sub_synthetic', 'status': 'trialing', 'trial_start': consent.now.timestamp()}
+    await worker.trial_started_async(admission.uid, trial)
     assert consent.start.called is admission.allowed
     if admission.allowed:
         assert consent.start.call_args.kwargs['automatic'] is True
@@ -125,7 +124,7 @@ async def test_redrive_skips_excluded_owners_but_keeps_custody_maintenance(admis
     held = SimpleNamespace(id='hold', reference=SimpleNamespace(path=f'users/{admission.uid}/stt_cap_holds/hold'))
     monkeypatch.setattr(redrive.store, 'fleet_snapshot', lambda: {})
     monkeypatch.setattr(redrive, 'publish_fleet', Mock())
-    monkeypatch.setattr(redrive.store, 'discover', lambda kind: [choice] if kind == 'choices' else [held])
+    monkeypatch.setattr(redrive.store, 'discover', lambda kind, **_: [choice] if kind == 'choices' else [held])
     seal, cleanup = Mock(return_value=True), Mock()
     monkeypatch.setattr(redrive.live_cap_staging, 'seal', seal)
     monkeypatch.setattr(redrive.live_cap_staging, 'cleanup', cleanup)

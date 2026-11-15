@@ -10,6 +10,13 @@ migrates a user by itself.
 
 from __future__ import annotations
 
+import os
+
+
+def cutover_enforcement_enabled() -> bool:
+    return os.getenv('ACCOUNT_CUTOVER_ENFORCEMENT', 'off').strip().lower() in {'1', 'true', 'on', 'yes'}
+
+
 # Empty by design: enrollment is an explicit operator/ceremony action outside
 # this foundation PR. ``AccountCutoverCoordinator.begin`` refuses any uid that
 # is not a member, so an empty set migrates no user.

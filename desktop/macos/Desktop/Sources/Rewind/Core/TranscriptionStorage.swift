@@ -1117,7 +1117,8 @@ actor TranscriptionStorage {
     limit: Int = 50,
     offset: Int = 0,
     starredOnly: Bool = false,
-    folderId: String? = nil
+    folderId: String? = nil,
+    includeDiscarded: Bool = false
   ) async throws -> [ServerConversation] {
     let db = try await ensureInitialized()
 
@@ -1126,7 +1127,10 @@ actor TranscriptionStorage {
         TranscriptionSessionRecord
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
-        .filter(Column("discarded") == false)
+
+      if !includeDiscarded {
+        query = query.filter(Column("discarded") == false)
+      }
 
       if starredOnly {
         query = query.filter(Column("starred") == true)
@@ -1191,7 +1195,9 @@ actor TranscriptionStorage {
   }
 
   /// Get count of local conversations
-  func getLocalConversationsCount(starredOnly: Bool = false, folderId: String? = nil) async throws -> Int {
+  func getLocalConversationsCount(
+    starredOnly: Bool = false, folderId: String? = nil, includeDiscarded: Bool = false
+  ) async throws -> Int {
     let db = try await ensureInitialized()
 
     return try await db.read { database in
@@ -1199,7 +1205,10 @@ actor TranscriptionStorage {
         TranscriptionSessionRecord
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
-        .filter(Column("discarded") == false)
+
+      if !includeDiscarded {
+        query = query.filter(Column("discarded") == false)
+      }
 
       if starredOnly {
         query = query.filter(Column("starred") == true)

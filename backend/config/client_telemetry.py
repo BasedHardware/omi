@@ -87,7 +87,20 @@ FAILURE_CLASSES = frozenset(
 CONVERSATION_OUTCOMES = frozenset({"completed", "failed", "cancelled"})
 LATENCY_BASES = frozenset({"processing_observed", "request_started", "unknown"})
 INGRESS_PHASES = frozenset(
-    {"unknown", "subscribing", "awaiting_audio", "flowing", "recovering", "action_required", "disconnected"}
+    {
+        "unknown",
+        "inactive",
+        "unverified",
+        "subscribing",
+        "awaiting_audio",
+        "flowing",
+        "quiet",
+        "repairing",
+        "recovering",
+        "reconnecting",
+        "action_required",
+        "disconnected",
+    }
 )
 INGRESS_PHASE_ALIASES = {"actionRequired": "action_required"}
 INGRESS_REASONS = frozenset(

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable
 
-from config.translation import TranslationProfile, resolve_translation_profile
+from config.translation import TranslationProfile, TranslationProvider, resolve_translation_profile
 from utils.translation_core.quality import output_rejection_reason
 from utils.translation_core.metrics import get_translation_metrics
 from utils.translation_core.cache import CachedTranslation, TranslationCache, viewed_cache_fingerprint
@@ -51,6 +51,10 @@ class TranslationEngine:
         self.cache = cache
         self._providers = providers
         self._profile_resolver = profile_resolver
+
+    def primary_provider(self) -> TranslationProvider:
+        """Primary provider this engine will dispatch to (the viewed policy is Luna-only)."""
+        return self._profile_resolver().primary_provider
 
     def translate(
         self,
@@ -174,6 +178,12 @@ class TranslationEngine:
             logger.warning('Ignoring unsupported translation providers: %s', ','.join(profile.unsupported_tokens))
         if profile.unavailable_tokens:
             logger.warning('Ignoring unavailable translation providers: %s', ','.join(profile.unavailable_tokens))
+        if profile.deprecated_tokens:
+            logger.warning(
+                'Deprecated translation provider names resolve to luna: %s', ','.join(profile.deprecated_tokens)
+            )
+            for token in profile.deprecated_tokens:
+                get_translation_metrics().deprecated_provider(token)
 
 
 def _guard_value(source: str, value: CachedTranslation, target: str) -> CachedTranslation:

@@ -1,0 +1,28 @@
+id: safe/crash-loop-enters-safe
+summary: >
+  Automatic entry on a real crash loop: three watchdog resets (the main loop
+  stops feeding at 30 s) and the fourth boot is SAFE, reason 1, from retained
+  RAM alone. SAFE never writes the latch to flash.
+committee: [1]
+tags: [guard]
+build: wdt-starve
+timeline: []
+end: 260000
+expect:
+  boot_count: 4
+  boots:
+    - {exit: watchdog, reset: power-on, safe: false, boot_count: 1}
+    - {exit: watchdog, reset: watchdog, warm: true, safe: false, boot_count: 2}
+    - {exit: watchdog, reset: watchdog, warm: true, safe: false, boot_count: 3}
+    - {exit: stop, reset: watchdog, safe: true, latch_reason: 1, boot_count: 4,
+       log: ["Safe mode feed loop started"], not_log: ["FAULT_INJECT", "omi/bootstate=SAFE"]}
+baseline_bug:
+  observed_at: c06b9bcd8749 (3.0.23)
+  expect:
+    boot_count: 4
+    boots:
+      - {exit: watchdog}
+      - {exit: watchdog}
+      - {exit: watchdog}
+      # 3.0.23 also persisted the crash-loop latch to NVS.
+      - {safe: true, latch_reason: 1, log: ["omi/bootstate=SAFE"]}

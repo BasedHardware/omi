@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-review-open-loops-light.png",
+      "platform": "mobile-ios",
+      "description": "Review page (light) with two open-loop cards above one task question; each card shows Done / Remind me later / Drop it",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-review-open-loops-dark.png",
+      "platform": "mobile-ios",
+      "description": "Review page (dark) with the same two open-loop cards",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-review-open-loops-reminded.png",
+      "platform": "mobile-ios",
+      "description": "Review page after tapping Remind me later on the first card: it leaves at once, the second card remains",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

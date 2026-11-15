@@ -1287,8 +1287,6 @@ async def test_queued_live_frame_never_writes_past_capture_age_deadline(monkeypa
     wire write after its 28s residence bound — even when the episode budget
     itself is unlimited or already released by proof text."""
 
-    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
-    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
     transport = Transport()
     transport.timer = virtual_clock
     raw = kind(transport, lambda _: None, asyncio.get_running_loop())
@@ -1339,8 +1337,6 @@ async def test_unpaced_tail_write_blocked_through_residence_deadline_is_local_no
     default connection_lost, which votes on the provider circuit and counts as
     provider failure (review of #23074; lead ruling 603b95)."""
 
-    monkeypatch.setattr(st, 'clock', lambda: virtual_clock.now)
-    monkeypatch.setattr(soniox_module, 'clock', lambda: virtual_clock.now)
     transport = Transport()
     transport.timer = virtual_clock
     raw = kind(transport, lambda _: None, asyncio.get_running_loop())

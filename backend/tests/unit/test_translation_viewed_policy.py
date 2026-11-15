@@ -74,19 +74,19 @@ def test_viewed_cache_identity_rotates_from_retired_gemini_model():
     ],
 )
 def test_viewed_quality_fixtures_keep_names_honorifics_and_number_sense(source, target, translated, hint):
-    gemini = FakeProvider(TranslationProvider.gemini, [translations((translated, hint))])
-    service, _ = build_service({TranslationProvider.gemini: gemini}, store=DictTranslationStore())
+    luna = FakeProvider(TranslationProvider.luna, [translations((translated, hint))])
+    service, _ = build_service({TranslationProvider.luna: luna}, store=DictTranslationStore())
     viewed = viewed_translation_profile(profile(), resolve_ondemand_config({}))
     result = service.translate_outcomes(target, [('s', source)], hint, mode=TranslationMode.whole_text, profile=viewed)
     assert result[0].text == translated
     assert result[0].status == TranslationStatus.translated
-    assert gemini.calls[0]['contents'] == [source]
+    assert luna.calls[0]['contents'] == [source]
 
 
 def test_already_target_text_remains_raw_with_fake_provider():
     source = 'Yến will arrive at five.'
-    gemini = FakeProvider(TranslationProvider.gemini, [translations((source, 'en'))])
-    service, _ = build_service({TranslationProvider.gemini: gemini}, store=DictTranslationStore())
+    luna = FakeProvider(TranslationProvider.luna, [translations((source, 'en'))])
+    service, _ = build_service({TranslationProvider.luna: luna}, store=DictTranslationStore())
     viewed = viewed_translation_profile(profile(), resolve_ondemand_config({}))
     outcome = service.translate_outcomes('en', [('s', source)], mode=TranslationMode.whole_text, profile=viewed)[0]
     assert outcome.status == TranslationStatus.unchanged
@@ -95,8 +95,8 @@ def test_already_target_text_remains_raw_with_fake_provider():
 
 def test_viewed_negative_cache_never_uses_legacy_negative_key():
     store = DictTranslationStore()
-    gemini = FakeProvider(TranslationProvider.gemini, [])
-    service, _ = build_service({TranslationProvider.gemini: gemini}, store=store)
+    luna = FakeProvider(TranslationProvider.luna, [])
+    service, _ = build_service({TranslationProvider.luna: luna}, store=store)
     viewed = viewed_translation_profile(profile(), resolve_ondemand_config({}))
     fingerprint = fingerprint_text('This is already English.')
     service.set_negative_cache(fingerprint, 'en', profile=viewed)
@@ -135,12 +135,12 @@ def test_viewed_provider_rejects_reordered_items_and_quotes_untrusted_content(mo
 
 
 def test_viewed_provider_capacity_refuses_dispatch_without_blocking(monkeypatch):
-    gemini = FakeProvider(TranslationProvider.gemini, [])
-    service, _ = build_service({TranslationProvider.gemini: gemini}, store=DictTranslationStore())
+    luna = FakeProvider(TranslationProvider.luna, [])
+    service, _ = build_service({TranslationProvider.luna: luna}, store=DictTranslationStore())
     capacity = SimpleNamespace(acquire=lambda **kwargs: False, release=lambda: None)
     monkeypatch.setattr(translation_module, 'VIEWED_PROVIDER_CAPACITY', capacity)
     viewed = viewed_translation_profile(profile(), resolve_ondemand_config({}))
     result = service.translate_outcomes('en', [('s', 'Yến nói với bác.')], profile=viewed)
     assert result[0].status == TranslationStatus.failed
     assert result[0].error_reason == 'provider_saturated'
-    assert gemini.calls == []
+    assert luna.calls == []

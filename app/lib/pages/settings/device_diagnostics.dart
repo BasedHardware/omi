@@ -145,7 +145,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
     final windowStart = _recentWindowStart(sinceMs);
     return {
-      'schema_version': 2,
       'device_id': widget.deviceId,
       'exported_at': DateTime.now().toUtc().toIso8601String(),
       'app_version': package.version,
@@ -171,29 +170,8 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count_window': disconnects
           .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
           .length,
-      'rssi_samples': extended['rssi_samples'] ?? [],
-      'battery_history': extended['battery_history_v2'] ??
-          _batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
-      'disconnect_history': disconnects
-          .map(
-            (e) => {
-              'ts': e['timestamp'],
-              'reason': e['reason'],
-              'code': e['reasonCode'],
-              'manual': e['isManual'],
-              'event_type': e['eventType'],
-              'last_rssi': e['lastRssi'],
-              'last_rssi_age_ms': e['lastRssiAgeMs'],
-              'connection_duration_ms': e['connectionDurationMs'],
-              'app_state': e['appState'],
-              'time_to_reconnect_ms': e['timeToReconnectMs'],
-              'rssi_trend': e['rssiTrend'],
-              'lost_audio_seconds': e['lostAudioSeconds'],
-              'audio_packets_received': e['audioPacketsReceived'],
-              'audio_packets_expected': e['audioPacketsExpected'],
-            },
-          )
-          .toList(),
+      ...feedbackDiagnosticsExportFields(extended,
+          captureHealth: BleBridge.instance.diagnosticsCaptureHealth(widget.deviceId), batteryHistory: _batteryHistory),
       'audio_packets_received_current': extended['audio_packets_received'],
       'audio_packets_expected_current': extended['audio_packets_expected'],
       'offline_storage_used_bytes': deviceProvider.ringStatus?.usedBytes,
@@ -208,8 +186,6 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'reconnect_suppressed': extended['reconnect_suppressed'],
       'reconnect_scan_active': extended['reconnect_scan_active'],
       'reconnect_scan_results_seen': extended['reconnect_scan_results_seen'],
-      'capture_health': extended['capture_health'] ?? {},
-      'capture_health_history': extended['capture_health_history'] ?? [],
     };
   }
 
@@ -1067,4 +1043,49 @@ DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {requi
     longestGapMs: gaps.isEmpty ? null : gaps.last,
     dropsPerHour: perHour,
   );
+}
+
+/// Schema 3's diagnostic projection also accepts native schema 2 fixtures.
+/// Missing old fields remain unknown. Historical charging comes only from the
+/// native sample; a live provider value must never rewrite a past observation.
+@visibleForTesting
+Map<String, dynamic> feedbackDiagnosticsExportFields(
+  Map<String, dynamic> extended, {
+  required Map<String, dynamic>? captureHealth,
+  List<BleBatteryPoint> batteryHistory = const [],
+}) {
+  final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
+  return {
+    'schema_version': 3,
+    'rssi_samples': extended['rssi_samples'] ?? [],
+    'battery_history': extended['battery_history_v2'] ??
+        batteryHistory.map((p) => {'ts': p.timestamp, 'level': p.level, 'charging': null}).toList(),
+    'disconnect_history': disconnects
+        .map(
+          (e) => {
+            'ts': e['timestamp'],
+            'reason': e['reason'],
+            'code': e['reasonCode'],
+            'manual': e['isManual'],
+            'event_type': e['eventType'],
+            'last_rssi': e['lastRssi'],
+            'last_rssi_age_ms': e['lastRssiAgeMs'],
+            'last_audio_notification_age_ms': e['lastAudioNotificationAgeMs'],
+            'connection_duration_ms': e['connectionDurationMs'],
+            'app_state': e['appState'],
+            'time_to_reconnect_ms': e['timeToReconnectMs'],
+            'rssi_trend': e['rssiTrend'],
+            'lost_audio_seconds': e['lostAudioSeconds'],
+            'audio_packets_received': e['audioPacketsReceived'],
+            'audio_packets_expected': e['audioPacketsExpected'],
+          },
+        )
+        .toList(),
+    'capture_health': captureHealth,
+    'capture_health_history': null,
+    'capture_health_history_status': 'unavailable',
+    'firmware_diagnostics_read': extended['firmware_diagnostics_read'],
+    'process_exit_collection': extended['process_exit_collection'],
+    'previous_run_exit': extended['previous_run_exit'],
+  };
 }

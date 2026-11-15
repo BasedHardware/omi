@@ -8,6 +8,7 @@ from services.frame_request_retention import FrameCleanupPage
 @pytest.fixture(autouse=True)
 def _plain_firestore_transactions(monkeypatch):
     monkeypatch.setattr(frame_request_retention.firestore, "transactional", lambda function: function)
+    monkeypatch.setattr(frame_request_retention, "account_deletion_blocks_user_work", lambda _uid: False)
 
 
 def test_run_frame_request_retention_maintenance_invalid_limits():
@@ -84,3 +85,29 @@ def test_run_frame_request_retention_maintenance_happy_path_and_counters(monkeyp
     assert result["users_page_full"] == 1
     assert result["accounts_with_errors"] == 0
     assert result["lease_skipped"] == 0
+
+
+def test_pending_deletion_user_is_skipped_and_population_cursor_advances(monkeypatch):
+    client = _Client(["a", "b"])
+    called = []
+    monkeypatch.setattr(frame_request_retention, "account_deletion_blocks_user_work", lambda uid: uid == "a")
+    monkeypatch.setattr(
+        frame_request_retention, "prune_expired_frame_requests", lambda uid, **_kw: called.append(uid) or 0
+    )
+    monkeypatch.setattr(frame_request_retention, "cleanup_frame_request_pixels", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(frame_request_retention, "delete_expired_frame_request_metadata", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(frame_request_retention, "cleanup_expired_frame_vision_outputs", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(frame_request_retention, "cleanup_ambiguous_frame_upload_pixels", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(
+        frame_request_retention, "cleanup_conversation_frame_deletion_outbox", lambda *_args, **_kwargs: 0
+    )
+    monkeypatch.setattr(
+        frame_request_retention, "prune_expired_conversation_keyframe_jobs", lambda *_args, **_kwargs: 0
+    )
+    monkeypatch.setattr(frame_request_retention, "emit_posthog_event", lambda *_args, **_kwargs: None)
+
+    result = frame_request_retention.run_frame_request_retention_maintenance(user_limit=1, firestore_client=client)
+
+    assert result["users_scanned"] == 0
+    assert called == []
+    assert client.state.cursor_uid == "a"

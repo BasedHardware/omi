@@ -143,6 +143,9 @@ void main() {
     expect(requests, 1);
     now = now.add(const Duration(seconds: 1));
     await sync.reconcileUploadedWals();
+    expect(requests, 1, reason: 'the pass at 59s also starts the pass-level minimum interval');
+    now = now.add(LocalWalSyncImpl.reconcilePassInterval - const Duration(seconds: 1));
+    await sync.reconcileUploadedWals();
     expect(requests, 2);
     expect(wal.status, WalStatus.uploaded);
     expect(wal.jobId, 'job-1');

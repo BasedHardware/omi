@@ -54,6 +54,9 @@ def world(monkeypatch):
     store.rows[USER_PATH] = {'save_other_voice_profiles': True}
     store.rows[PERSON_PATH] = dict(id=PERSON, name='Sam')
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    # The shared marker retirement must stay on the hermetic store: never let
+    # it build a real Firestore client in unit tests.
+    monkeypatch.setattr(service.voice_profiles_db, 'clear_ignored_voices', lambda *a, **k: 0)
     return SimpleNamespace(store=store)
 
 
@@ -133,6 +136,9 @@ def test_invalidated_profile_records_disabled_when_consent_off(world):
 
 
 def test_tag_prompt_person_answer_consent_false_schedules_nothing(world, monkeypatch):
+    monkeypatch.setattr(
+        service.conversations_db, 'get_conversation', lambda uid, cid: deepcopy(world.store.rows[CONV_PATH])
+    )
     world.store.rows[USER_PATH]['save_other_voice_profiles'] = False
     monkeypatch.setattr(service, 'named_speaker_prompts_allowed', lambda uid: True)
     monkeypatch.setattr(

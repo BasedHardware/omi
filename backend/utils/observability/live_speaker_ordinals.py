@@ -147,15 +147,19 @@ class LiveSpeakerOrdinalTracker:
         return ordinals, rotations
 
 
-def record_live_speaker_ordinals(tracker: Optional[LiveSpeakerOrdinalTracker], matcher: Any) -> None:
-    """Observe one ended listen session. Never raises: telemetry must not fail teardown."""
+def record_live_speaker_ordinals(
+    tracker: Optional[LiveSpeakerOrdinalTracker], matcher: Any
+) -> Optional[tuple[int, int]]:
+    """Observe one ended listen session; returns (ordinals, rotations). Never raises."""
     try:
         if tracker is None:
-            return
+            return None
         tracker.note_named_voices(matcher)
         ordinals, rotations = tracker.close()
         OMI_LIVE_SPEAKER_ORDINALS_PER_SESSION.observe(ordinals)
         if rotations:
             OMI_LIVE_SPEAKER_SCOPE_ROTATIONS_TOTAL.inc(rotations)
+        return ordinals, rotations
     except Exception as error:
         logger.warning('Live speaker ordinal metric failed type=%s', type(error).__name__)
+        return None

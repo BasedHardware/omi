@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-processing.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic iPhone simulator: real Home provider and processing row while the lifecycle lookup is unreachable.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-completed.png",
+      "platform": "mobile-ios",
+      "description": "Same synthetic Home: successful authoritative completion replaces the optimistic processing row with the real finished recording.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-expired.png",
+      "platform": "mobile-ios",
+      "description": "Same iPhone simulator after more than two real minutes with an unreachable lifecycle lookup: the local Processing row expired without a manual refresh or completion response.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

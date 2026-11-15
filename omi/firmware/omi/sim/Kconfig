@@ -1,0 +1,20 @@
+rsource "../Kconfig"
+
+config OMI_NATIVE_SIM
+    bool
+    default y
+    depends on BOARD_NATIVE_SIM
+    help
+      Link-only startup stubs. This symbol exists only in this simulation app.
+
+config OMI_SIM_FORCE_SAFE_MODE
+    bool "Force retained latch for startup testing"
+    default n
+config OMI_SIM_FINISH_DFU
+    bool "Deliver synthetic completed-upload callback in safe feed loop"
+    default n
+
+# BT is disabled; supply only the version string used by app-owned bootstate.
+config BT_DIS_FW_REV_STR
+    string
+    default "sim-3.0.22"

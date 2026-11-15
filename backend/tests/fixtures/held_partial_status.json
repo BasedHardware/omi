@@ -1,0 +1,22 @@
+{
+  "job_id": "bp_upload",
+  "status": "processing",
+  "reason_code": "batch_unit_held",
+  "lane": "backfill",
+  "total_files": 1,
+  "total_segments": 2,
+  "processed_segments": 1,
+  "successful_segments": 1,
+  "failed_segments": 1,
+  "errors": [],
+  "result": {
+    "new_memories": [],
+    "updated_memories": [],
+    "failed_segments": 1,
+    "held_segments": 1,
+    "total_segments": 2,
+    "errors": [],
+    "outcome": "partial"
+  },
+  "poll_after_ms": 300000
+}

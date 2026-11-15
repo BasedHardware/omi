@@ -17,7 +17,7 @@ from tests.unit.test_batch_pipeline_terminal_empty import terminal_setup
 from utils.batch_pipeline.contracts import FailedWork, RecoveryWork, ValidationFailureWork, vad_receipt
 from tests.unit.test_batch_pipeline_flight import FakeFlight
 from utils.stt import local_vad
-from utils.batch_pipeline.quarantine_recovery import transcribe
+from utils.batch_pipeline.recovery_recognizers import transcribe
 from utils.batch_pipeline.recovery_disposition import terminal_empty_payload, MultilingualEmpty
 from utils.batch_pipeline.scheduler import Scheduler
 from utils.batch_pipeline.pump import Pump

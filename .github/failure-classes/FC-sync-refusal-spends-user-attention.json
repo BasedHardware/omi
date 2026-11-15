@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-refusal-spends-user-attention",
+  "violated_contract": "A deterministic sync upload refusal without a user repair must preserve audio and produce bounded operator feedback without repeated user Retry prompts or an unbounded pending-work time span.",
+  "canonical_prevention": "Persist closed refusal reasons and a daily recovery clock separately from transient retry budgets. Keep refused audio outside user attention, expose an aggregate, accept no-audio clips as no-ops, and derive pending spans from current work with authoritative job reconciliation.",
+  "canonical_prevention_artifact": ["app/test/unit/sync_attention_policy_test.dart", "backend/tests/unit/test_sync_upload_attention.py"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/services/wals/", "backend/utils/sync/empty_upload.py"],
+  "status": "open"
+}

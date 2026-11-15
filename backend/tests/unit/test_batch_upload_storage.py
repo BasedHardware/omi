@@ -45,7 +45,9 @@ def merge():
     the same module its patches target.
     """
     database_pkg = ModuleType("database")
-    database_pkg.__path__ = []  # type: ignore[attr-defined]
+    # Resolve pure database helpers (including the merge-receipt policy) while
+    # keeping the client and IO modules below explicitly isolated.
+    database_pkg.__path__ = [str(_BACKEND / 'database')]  # type: ignore[attr-defined]
 
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
@@ -392,6 +394,7 @@ class TestListAudioChunksBatchAware:
             mock_blob = MagicMock()
             mock_blob.name = name
             mock_blob.size = 1000
+            mock_blob.metadata = None
             mock_blobs.append(mock_blob)
         mock_bucket.list_blobs.return_value = mock_blobs
         storage_mod.storage_client.bucket.return_value = mock_bucket
@@ -582,6 +585,7 @@ class TestDownloadAudioChunksMergeBatchAware:
             mb = MagicMock()
             mb.name = name
             mb.size = size
+            mb.metadata = None
             list_blobs.append(mb)
         mock_bucket.list_blobs.return_value = list_blobs
 

@@ -5,15 +5,19 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
+from unittest.mock import patch
 
 import yaml
 
@@ -1183,11 +1187,135 @@ def check_firmware_release_metadata() -> list[str]:
     if "ota_update_steps" not in kv:
         errors.append("firmware release body must include ota_update_steps when provided")
     if workflow.exists():
-        workflow_text = workflow.read_text(encoding="utf-8")
-        ota_asset = r'Omi_CV1_OTA_v$VER.zip'
-        if ota_asset not in workflow_text:
-            errors.append("firmware release workflow must stage and publish an OTA .zip asset")
+        errors.extend(check_firmware_ota_assets(workflow))
     return errors
+
+
+def check_firmware_ota_assets(workflow: Path) -> list[str]:
+    """Follow the workflow's helper and smoke its actual staged/published assets offline."""
+    helper = ROOT / "omi/firmware/scripts/ci/cv1_release.py"
+    try:
+        document = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+        steps = document["jobs"]["build-cv1"]["steps"]
+        for command in ("stage", "promote", "publish"):
+            expected_if = (
+                "${{ inputs.publish != 'publish' }}" if command == "stage" else "${{ inputs.publish == 'publish' }}"
+            )
+            matches = [
+                step for step in steps if step.get("run") == f"python3 omi/firmware/scripts/ci/cv1_release.py {command}"
+            ]
+            if len(matches) != 1 or matches[0].get("if") != expected_if:
+                return [f"firmware release workflow must invoke the guarded {command} helper"]
+        spec = importlib.util.spec_from_file_location("cv1_release_guard_smoke", helper)
+        release = importlib.util.module_from_spec(spec)
+        with patch.object(sys, "path", [str(helper.parent), *sys.path]), patch.dict(sys.modules):
+            sys.modules.pop("cv1_bootloader", None)
+            spec.loader.exec_module(release)
+        # The smoke exercises packaging, not the simulator: pin a synthetic
+        # scenario catalog that the staged report below matches exactly.
+        catalog = {f"suite/s{i}" for i in range(release.SIM_MIN_SCENARIOS)}
+        release.sim_catalog = lambda root=None: catalog
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            build, out = root / "build", root / "assets"
+            build.mkdir()
+            image = bytearray(32)
+            struct.pack_into("<I", image, 0, 0x96F3B83D)
+            struct.pack_into("<BBH", image, 20, 9, 8, 7)
+            manifest = {
+                "format-version": 1,
+                "files": [{"file": "omi.signed.bin", "image_index": "0", "size": len(image)}],
+            }
+            with zipfile.ZipFile(build / "dfu_application.zip", "w") as archive:
+                archive.writestr("manifest.json", json.dumps(manifest))
+                archive.writestr("omi.signed.bin", image)
+            # Synthetic boot policy is confined to this offline smoke module.
+            boot = release.bootloader
+            boot_memory = {0: 0x42}
+            boot_hash = hashlib.sha256(boot.boot_bytes(boot_memory)).hexdigest()
+            policy = root / "boot-policy.json"
+            policy.write_text(json.dumps({"build_boot_sha256": boot_hash, "approved_boot_sha256": [boot_hash]}))
+            boot.POLICY = policy
+            boot_path = build / "mcuboot/zephyr/zephyr.hex"
+            boot_path.parent.mkdir(parents=True)
+            boot.write_hex(boot_path, boot_memory)
+            (build / "merged_CPUNET.hex").write_text(
+                ":020000040100F9\n:0100000033CC\n:00000001FF\n"
+            )
+            context = {
+                "sha": "a" * 40,
+                "run_id": "123",
+                "run_attempt": "1",
+                "workflow": ".github/workflows/firmware_release.yml",
+                "repository": "BasedHardware/omi",
+            }
+            # Staging fails closed without a passing simulator report for this SHA/version.
+            rows = [{"id": name, "verdict": "pass"} for name in sorted(catalog)]
+            report = root / "sim-report.json"
+            report.write_text(
+                json.dumps(
+                    {
+                        "kind": "omi-cv1-sim-report",
+                        "schema_version": 1,
+                        "verdict": "pass",
+                        "mode": "current",
+                        "source_sha": context["sha"],
+                        "firmware_version": "9.8.7",
+                        "selection": ["*"],
+                        "counts": {"scenarios": len(rows), "passed": len(rows), "failed": 0},
+                        "failed": [],
+                        "scenarios": rows,
+                        "fuzz": {"verdict": "pass", "seeds": release.SIM_MIN_FUZZ_SEEDS},
+                    }
+                )
+            )
+            try:
+                release.stage(build, root / "unproven", "9.8.7", False, context, None)
+                return ["firmware release staging must refuse a build without a simulator report"]
+            except ValueError:
+                pass
+            release.stage(build, out, "9.8.7", False, context, report)
+            ota = out / "Omi_CV1_OTA_v9.8.7.zip"
+            with zipfile.ZipFile(ota) as archive:
+                if archive.read("omi.signed.bin") != image or json.loads(archive.read("manifest.json")) != manifest:
+                    return ["firmware release staging must preserve the OTA image and manifest"]
+            run = {
+                "id": 123,
+                "run_attempt": 1,
+                "workflow_id": 42,
+                "path": context["workflow"],
+                "repository": {"full_name": context["repository"]},
+                "event": "workflow_dispatch",
+                "head_sha": context["sha"],
+                "status": "completed",
+                "conclusion": "success",
+            }
+            (root / "cv1-validated-run.json").write_text(json.dumps({"run": run, "workflow_id": 42}))
+            tag_ref = json.dumps({"object": {"type": "commit", "sha": context["sha"]}})
+            responses = ["", tag_ref, "", json.dumps({"isDraft": True, "tagName": "Omi_CV1_v9.8.7"}), tag_ref, ""]
+            env = {
+                "VERSION_INPUT": "9.8.7",
+                "PUBLISH": "publish",
+                "QA_RUN_ID": "123",
+                "QA_RUN_ATTEMPT": "1",
+                "TESTED_SIGNED_SHA256": hashlib.sha256(image).hexdigest(),
+                "GITHUB_REF": "refs/heads/main",
+                "GITHUB_SHA": context["sha"],
+                "GITHUB_REPOSITORY": context["repository"],
+                "OUT": str(out),
+                "BODY_FILE": "body.md",
+            }
+            with patch.dict(os.environ, env, clear=True), patch.object(
+                sys, "argv", [str(helper), "publish"]
+            ), patch.object(release, "gh", side_effect=responses) as gh:
+                release.main()
+            creates = [call.args for call in gh.call_args_list if call.args[:2] == ("release", "create")]
+            expected_assets = {str(ota), str(out / "Omi_CV1_v9.8.7.hex"), str(out / "Omi_CV1_v9.8.7_CPUNET.hex")}
+            if len(creates) != 1 or set(creates[0][-3:]) != expected_assets:
+                return ["firmware release helper must publish the staged OTA .zip, app-only HEX and separate network HEX"]
+    except Exception as exc:
+        return [f"firmware OTA staging/publishing smoke failed: {exc}"]
+    return []
 
 
 def extract_key_value_pairs(markdown_content: str) -> dict[str, str]:

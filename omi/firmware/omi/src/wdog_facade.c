@@ -1,6 +1,11 @@
+#include <zephyr/drivers/hwinfo.h>
 #include <zephyr/drivers/watchdog.h>
-#include <zephyr/logging/log.h>
+#include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+
+#include "diagnostics.h"
+#include "safe_mode.h"
 
 LOG_MODULE_REGISTER(wdog_facade, CONFIG_LOG_DEFAULT_LEVEL);
 
@@ -8,16 +13,21 @@ LOG_MODULE_REGISTER(wdog_facade, CONFIG_LOG_DEFAULT_LEVEL);
 
 static const struct device *wdt_dev;
 static int wdt_channel_id;
+static bool started;
 
 void watchdog_feed(void)
 {
-    if (wdt_dev && device_is_ready(wdt_dev)) {
+    if (started) {
         wdt_feed(wdt_dev, wdt_channel_id);
     }
 }
 
 int watchdog_init(void)
 {
+    if (started) {
+        watchdog_feed();
+        return 0;
+    }
     int ret;
     struct wdt_timeout_cfg wdt_config;
 
@@ -29,10 +39,10 @@ int watchdog_init(void)
     }
 
     // Configure watchdog timeout
-    wdt_config.flags = WDT_FLAG_RESET_SOC;         // Reset entire SoC on timeout
-    wdt_config.window.min = 0U;                    // No minimum window
+    wdt_config.flags = WDT_FLAG_RESET_SOC; // Reset entire SoC on timeout
+    wdt_config.window.min = 0U;            // No minimum window
     wdt_config.window.max = WATCHDOG_TIMEOUT_MS;
-    wdt_config.callback = NULL;                    // No callback, just reset
+    wdt_config.callback = NULL; // No callback, just reset
 
     // Install watchdog timeout
     wdt_channel_id = wdt_install_timeout(wdt_dev, &wdt_config);
@@ -48,6 +58,7 @@ int watchdog_init(void)
         return ret;
     }
 
+    started = true;
     LOG_INF("Watchdog initialized (timeout: %u ms, channel: %d)", WATCHDOG_TIMEOUT_MS, wdt_channel_id);
     return 0;
 }
@@ -56,3 +67,15 @@ int watchdog_deinit(void)
 {
     return wdt_disable(wdt_dev);
 }
+static int early_watchdog_start(void)
+{
+    /* Preserve the normal diagnostics' Zephyr reset flags before the retained
+     * state machine captures and clears the raw Nordic register. */
+    uint32_t cause;
+    if (hwinfo_get_reset_cause(&cause) == 0) {
+        omi_diagnostics_set_reset_cause(cause);
+    }
+    safe_mode_early_boot();
+    return watchdog_init();
+}
+SYS_INIT(early_watchdog_start, PRE_KERNEL_2, 0);

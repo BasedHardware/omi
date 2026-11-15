@@ -182,31 +182,56 @@ def test_concurrent_writer_with_different_bytes_still_fails(install, monkeypatch
         merge.copy_sync_bridge_audio(UID, 'donor', 'target')
 
 
-def test_derived_listing_checksum_never_certifies_the_private_copy(install, monkeypatch):
-    # list_audio_chunks keeps the BUCKET_AUDIO_DERIVED entry for a path in both buckets,
-    # but copy_blob reads the private object. Compare against what is actually copied.
+def test_derived_chunk_is_copied_within_the_derived_bucket(install, monkeypatch):
+    # A regional-cohort owner's chunk lives only in BUCKET_AUDIO_DERIVED. The copy must
+    # read it there and write the destination beside it; the private bucket never holds it.
     source = 'chunks/u1/donor/100.0.bin'
     dest = _dest(source)
-    bucket = _Bucket(
-        {
-            source: SimpleNamespace(crc32c='crc-a', size=10, generation=1),
-            dest: SimpleNamespace(crc32c='derived-crc', size=10, generation=9),
-        }
-    )
-    install(bucket)
+    private = _Bucket()
+    derived = _Bucket({source: SimpleNamespace(crc32c='crc-a', size=10, generation=1)})
+    install(private)
+    by_name = {merge.private_cloud_sync_bucket: private, 'derived': derived}
+    monkeypatch.setattr(merge, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: by_name[name]))
     monkeypatch.setattr(
         merge,
         'list_audio_chunks',
-        lambda uid, cid, **kwargs: [{'path': source, 'crc32c': 'derived-crc', 'size': 10, 'bucket': 'derived'}],
+        lambda uid, cid, **kwargs: [{'path': source, 'crc32c': 'crc-a', 'size': 10, 'bucket': 'derived'}],
     )
 
     merge.copy_sync_bridge_audio(UID, 'donor', 'target')
 
-    assert bucket.copies == [(dest, 9)]
-    assert bucket.objects[dest].crc32c == 'crc-a'
-    # A second bridge now sees the private bytes in place and skips.
+    assert derived.copies == [(dest, 0)]
+    assert derived.objects[dest].crc32c == 'crc-a'
+    assert private.copies == [] and dest not in private.objects
+    # A second bridge sees the identical destination in the derived bucket and skips.
     merge.copy_sync_bridge_audio(UID, 'donor', 'target')
-    assert len(bucket.copies) == 1
+    assert len(derived.copies) == 1
+
+
+def test_derived_destination_with_other_bytes_is_replaced_at_its_listed_generation(install, monkeypatch):
+    # The skip check reads the destination listing of the bucket the copy writes to.
+    source = 'chunks/u1/donor/100.0.bin'
+    dest = _dest(source)
+    private = _Bucket({dest: SimpleNamespace(crc32c='crc-a', size=10, generation=4)})
+    derived = _Bucket(
+        {
+            source: SimpleNamespace(crc32c='crc-a', size=10, generation=1),
+            dest: SimpleNamespace(crc32c='stale', size=10, generation=9),
+        }
+    )
+    install(private)
+    by_name = {merge.private_cloud_sync_bucket: private, 'derived': derived}
+    monkeypatch.setattr(merge, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: by_name[name]))
+    monkeypatch.setattr(
+        merge,
+        'list_audio_chunks',
+        lambda uid, cid, **kwargs: [{'path': source, 'crc32c': 'crc-a', 'size': 10, 'bucket': 'derived'}],
+    )
+
+    merge.copy_sync_bridge_audio(UID, 'donor', 'target')
+
+    assert derived.copies == [(dest, 9)]
+    assert private.copies == []
 
 
 def test_unchecksummed_pack_raced_by_a_same_size_copy_is_not_a_failure(install, monkeypatch):

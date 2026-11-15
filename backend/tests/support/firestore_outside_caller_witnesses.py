@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+import routers.episodes as episodes_router
 import routers.desktop_prompts as desktop_prompts_router
 import routers.desktop_tts_updates as desktop_tts_updates_router
 import routers.fair_use_admin as fair_use_admin_router
@@ -28,6 +29,7 @@ from tests.support.firestore_query_drivers import FROZEN_NOW, SHAPE_UID
 TARGETS = frozenset(
     {
         'utils.sync.completed_status.get_completed_legacy_status',
+        'utils.episodes.home_read.list_episode_window',
         'database.serving_query_reads.list_active_desktop_prompt_snapshots',
         'database.serving_query_reads.list_desktop_release_snapshots',
         'database.serving_query_reads.find_fair_use_case_snapshots',
@@ -91,9 +93,31 @@ def _run_expired_sync_status(monkeypatch: pytest.MonkeyPatch, capture: HelperCap
     trial(capture, sync_router.get_sync_job_status, 'legacy-job', uid=SHAPE_UID)
 
 
+def _run_episode_home(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    monkeypatch.setattr(episodes_router, '_admitted', lambda uid, channel: True)
+    trial(
+        capture,
+        episodes_router.list_episodes,
+        start=FROZEN_NOW,
+        end=FROZEN_NOW,
+        limit=25,
+        cursor=None,
+        uid=SHAPE_UID,
+        channel='beta',
+    )
+
+
 WITNESSES: dict[str, CallerWitness] = {
     witness.key: witness
     for witness in (
+        CallerWitness(
+            'routers/episodes.py:list_episodes:utils.episodes.home_read.list_episode_window',
+            'utils.episodes.home_read.list_episode_window',
+            'utils.episodes.home_read.list_episode_window',
+            ('request-episode-home',),
+            1,
+            _run_episode_home,
+        ),
         CallerWitness(
             'routers/sync.py:get_sync_job_status:utils.sync.completed_status.get_completed_legacy_status',
             'utils.sync.completed_status.get_completed_legacy_status',

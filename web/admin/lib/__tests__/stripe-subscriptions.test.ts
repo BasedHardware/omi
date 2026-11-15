@@ -295,8 +295,8 @@ describe('omi plan scoping', () => {
       'Neo',
       'Omi Architect',
       'Omi Plus',
+      'Omi Pro',
       'Omi Unlimited',
-      'Omi Unlimited v2',
       'Operator',
     ]);
   });

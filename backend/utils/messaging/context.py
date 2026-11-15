@@ -9,6 +9,7 @@ import time
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
+from config.messaging import MESSAGING_CHANNELS
 from database.chat_context import ChatContextStore
 from database.chat_history_window import cache_aligned_history_limit
 from utils.executors import (
@@ -41,7 +42,7 @@ _preparation: ContextVar[Any] = ContextVar('shaped_context_preparation', default
 def context_surface():
     runtime = surface_runtime.get()
     channel = runtime.channel if runtime is not None else None
-    return channel if channel in ('telegram', 'imessage') else 'app'
+    return channel if channel in MESSAGING_CHANNELS else 'app'
 
 
 async def measured(phase, operation, *, timeout=None):

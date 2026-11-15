@@ -5,7 +5,8 @@
   "canonical_prevention": "Drive the hook from the ingestion lane itself, not from a trigger list restated at a second site: the sync lane schedules the same after-finalization episode hook every other finalize path uses (schedule_after_finalization with ProcessingTrigger.SYNC_UPDATE), and the hook's trigger set admits it. Behavioral coverage pins every guard the omission bypassed: a sync-finalized conversation joins the live episode covering its span, never reopens a closed one, never opens an episode on its own, a discarded one never joins, and an existing trigger keeps its behavior. The app's fold contract is pinned at the widget layer: every member of the live episode hides under its row whatever its status, non-members stay, processing rows stay, and closing the episode returns the members as ordinary rows.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_episodes_service.py",
-    "app/test/widgets/l5_home_visibility_test.dart"
+    "app/test/widgets/l5_home_visibility_test.dart",
+    "backend/tests/unit/test_episode_batch_audio_close.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

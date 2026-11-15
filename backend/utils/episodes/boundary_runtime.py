@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Mapping
 
 from config.occasion_conversations import EPISODE_BOUNDARIES_MODE_ENV
@@ -28,7 +28,7 @@ def _decision(
     proposed = legacy
     if episode and current != previous:
         proposed = policy.Boundary('close', 'boundary')
-    elif current:
+    elif current and legacy.reason != 'hard_cap':
         # A meeting stays whole even across source changes and occasion caps.
         proposed = policy.Boundary(policy.CONTINUE if episode else policy.NEW)
     observe('episode_boundary', proposed == legacy)
@@ -43,9 +43,7 @@ def decision(uid, episode, facts, legacy, *, firestore_client=None):
         return legacy
 
 
-def apply_signal_edges(
-    uid: str, *, now: datetime | None = None, quiet: bool = False, firestore_client: Any = None
-) -> str:
+def apply_signal_edges(uid: str, *, arrival_at: datetime, quiet: bool = False, firestore_client: Any = None) -> str:
     """Intake fast path: close on a new signal edge, open the meeting episode.
 
     The live controller owns conversation finalization; this only changes its
@@ -53,7 +51,7 @@ def apply_signal_edges(
     """
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return 'disabled'
-    now = now or datetime.now(timezone.utc)
+    now = arrival_at
     known = boundary_store.windows(uid, firestore_client=firestore_client)
     episode = episodes_db.get_current_episode(uid, firestore_client=firestore_client)
     current = boundaries.active(known, now)
@@ -63,13 +61,32 @@ def apply_signal_edges(
     if not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid):
         return 'shadow'
     if episode is not None and (changed or quiet):
-        episodes_db.close_episode(uid, str(episode['id']), 'boundary', closed_at=now, firestore_client=firestore_client)
+        edges = [
+            edge
+            for window in known.values()
+            for field in ('started_at', 'ended_at')
+            if (edge := policy.utc(window.get(field))) is not None
+            and started is not None
+            and started < edge <= arrival_at
+        ]
+        last = policy.utc(episode.get('last_activity_at'))
+        from datetime import timedelta
+        from config.recorded_time_tolerances import CLOSE_GAP_SECONDS
+
+        close_at = last + timedelta(seconds=CLOSE_GAP_SECONDS) if quiet and last else min(edges) if edges else started
+        if close_at is None:
+            return 'unchanged'
+        episodes_db.close_episode(
+            uid, str(episode['id']), 'boundary', closed_at=close_at, firestore_client=firestore_client
+        )
         episode = None
     if episode is None and current and not quiet:
         from utils.episodes.service import new_episode
 
         start = max(start for key in current if (start := policy.utc(known[key]['started_at'])) is not None)
-        base = new_episode(conversation_id='', started_at=start, last_activity_at=now, calendar_identity=None, now=now)
+        base = new_episode(
+            conversation_id='', started_at=start, last_activity_at=start, calendar_identity=None, now=arrival_at
+        )
         episodes_db.commit_moment(
             uid,
             expected_episode_id=None,

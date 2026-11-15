@@ -20,6 +20,10 @@ from utils.conversations.calls_metrics import observe
 FLAG_ENV = 'ACTION_ITEMS_V2_MODE'
 FLAG = FLAG_ENV
 RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
+- Write a self-contained description of the action and object/outcome, grounded in cited
+  source/context and the supplied speaker-role map. Resolve pronouns where supported;
+  never invent names from speaker numbers. Omit irreducible placeholders. "Buy milk"
+  is valid without a proper noun. Preserve explicit manual task wording.
 - Extract commitments made by the account owner, requests accepted by the owner,
   and explicit offers/promises by another person to the owner. Keep the actual
   promisor in owner_name; describe the recipient in context. Use clear_commitment
@@ -33,6 +37,10 @@ RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
   Never invent an owner or date.
 - Preserve exact source_segment_ids and source conversation identity. Unknown voices
   stay unknown; contact lists and calendar rosters do not establish voice identity.
+- Explicit owner "remind me to" and "don't let me forget" requests are direct tasks,
+  even for ordinary errands; preserve explicit date/time in due_at or context without
+  inventing an hour. Current-session commands to an AI are not personal follow-up tasks
+  unless an explicit reminder or later owner commitment is present.
 - Do not promote uncertain remarks to decisions or invent numbers or durations.
 '''
 

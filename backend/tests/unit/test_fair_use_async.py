@@ -308,9 +308,12 @@ class TestFairUseStatusRestrictionExpiry:
         assert result['stage'] == 'throttle'
         assert 'temporarily reduced' in result['message']
         _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
-        _fair_use_db.update_fair_use_state.assert_called_once_with(
-            'user1', {'stage': 'throttle', 'restrict_until': None}
-        )
+        _fair_use_db.update_fair_use_state.assert_called_once()
+        uid, updates = _fair_use_db.update_fair_use_state.call_args.args
+        assert uid == 'user1'
+        assert updates['stage'] == 'throttle'
+        assert updates['restrict_until'] is None
+        assert updates['throttle_until'] == updates['stage_entered_at'] + timedelta(days=7)
 
     def test_status_preserves_active_restriction_with_one_state_read(self):
         _fair_use_db.get_fair_use_state.return_value = {
@@ -434,9 +437,12 @@ class TestPublicCaseStatusRestrictionExpiry:
         assert result['stage'] == 'throttle'
         assert 'temporarily reduced' in result['message']
         _fair_use_db.get_fair_use_state.assert_called_once_with('user1')
-        _fair_use_db.update_fair_use_state.assert_called_once_with(
-            'user1', {'stage': 'throttle', 'restrict_until': None}
-        )
+        _fair_use_db.update_fair_use_state.assert_called_once()
+        uid, updates = _fair_use_db.update_fair_use_state.call_args.args
+        assert uid == 'user1'
+        assert updates['stage'] == 'throttle'
+        assert updates['restrict_until'] is None
+        assert updates['throttle_until'] == updates['stage_entered_at'] + timedelta(days=7)
 
     def test_public_status_preserves_active_restriction(self):
         _fair_use_db.get_fair_use_state.return_value = {

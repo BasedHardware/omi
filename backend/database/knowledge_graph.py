@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, cast
 import uuid
+import logging
 
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -10,6 +11,12 @@ from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
 from ._client import db
 from .read_boundary import parse_snapshot_or_none
+from config.firestore_quick_reads import kg_citation_index_enabled, indexed_string_value_safe
+from database.firestore_read_origin import read_origin
+from google.api_core.exceptions import FailedPrecondition
+from utils.observability.fallback import record_fallback
+
+logger = logging.getLogger(__name__)
 
 users_collection = 'users'
 knowledge_nodes_collection = 'knowledge_nodes'
@@ -861,6 +868,38 @@ def delete_knowledge_graph(uid: str, *, db_client: Any = None) -> None:
     _batch_delete(edges_ref)
 
 
+def _citation_nodes(nodes_ref: Any, memory_ids: List[str]) -> List[Any]:
+    """Use Firestore's writer-maintained reverse index, including historical rows.
+
+    Native array indexes cover every successful write and are backfilled by
+    Firestore before READY. Never infer coverage from an empty side collection.
+    Materialize all queries before mutations, so fallback cannot repeat writes.
+    """
+    if not kg_citation_index_enabled():
+        return list(nodes_ref.stream())
+    ids = set(memory_ids)
+    # A node can match every chunk of a large retraction. Keep the original
+    # single scan for bulk work rather than multiply billed reads for it.
+    if len(ids) > 30 or not all(indexed_string_value_safe(value) for value in ids):
+        return list(nodes_ref.stream())
+    try:
+        query = nodes_ref.where(filter=FieldFilter('memory_ids', 'array_contains_any', sorted(ids)))
+        return list(query.stream())
+    except FailedPrecondition as error:
+        if 'index' not in str(error).lower():
+            raise
+        record_fallback(
+            component='other',
+            from_mode='indexed_query',
+            to_mode='legacy_query',
+            reason='unavailable',
+            outcome='recovered',
+            log=logger,
+        )
+        return list(nodes_ref.stream())
+
+
+@read_origin('task:kg_citation_prune')
 def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client: Any = None) -> int:
     """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
     if not memory_ids:
@@ -872,7 +911,7 @@ def prune_memory_citations_from_kg(uid: str, memory_ids: List[str], *, db_client
     edges_ref = user_ref.collection(knowledge_edges_collection)
     pruned = 0
 
-    for doc in nodes_ref.stream():
+    for doc in _citation_nodes(nodes_ref, memory_ids):
         node_doc: KnowledgeNodeDoc = cast(KnowledgeNodeDoc, _typed_doc(doc))
         existing_ids = set(node_doc.get("memory_ids") or [])
         if not existing_ids.intersection(retracted):

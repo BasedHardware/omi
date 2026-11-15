@@ -1,8 +1,10 @@
-"""Counts exclude privacy tombstones and reversible duplicate-capture links."""
+"""Counts exclude tombstones, duplicate-capture links and unexpired live-bridge holds."""
 
 from typing import Any, Mapping, Optional, List
 from datetime import datetime
 from google.cloud.firestore_v1 import FieldFilter
+
+from utils.sync import bridge_pending
 
 
 def matches_list_predicates(
@@ -52,20 +54,30 @@ def count_hidden(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
 ) -> int:
-    """Count `deleted==True` rows that would have matched the list query.
+    """Count hidden rows that would otherwise match the list query.
 
     Equality on `deleted` only matches documents that have the field, so
     pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
-    per user are few; this avoids a composite index on every list-filter combo.
+    per user are few. Pending holds use a single-field deadline range and are
+    deduplicated against tombstones/duplicate links, without a new composite index.
     """
     matching = 0
+    now = bridge_pending.current_time()
     queries = (collection.where(filter=FieldFilter('deleted', '==', True)),)
     if not include_discarded:
         queries += (collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),)
+    # Most users have no active bridge holds. Pay one bounded probe
+    # rather than opening a second full document stream on every count call.
+    if not include_discarded:
+        pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
+        if next(iter(pending.limit(1).stream()), None) is not None:
+            queries += (pending,)
     for index, query in enumerate(queries):
         for doc in query.stream():
             data = doc.to_dict() or {}
-            if index == 1 and data.get('deleted'):
+            if index > 0 and data.get('deleted'):
+                continue
+            if index == 2 and (data.get('dream_duplicate_of') or not bridge_pending.hidden(data, now=now)):
                 continue
             if matches_list_predicates(
                 data,

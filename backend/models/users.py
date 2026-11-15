@@ -197,7 +197,7 @@ class TranscriptionAllowanceSnapshot(BaseModel):
 
     ``mode``: ``managed`` (Omi-billed socket), ``on_device`` (the plan's managed
     minutes are spent; the local engine is free on every plan), ``blocked``
-    (desktop trial paywall). ``remaining_seconds`` is null when unlimited.
+    (no transcription access). ``remaining_seconds`` is null when unlimited.
     """
 
     mode: str
@@ -242,6 +242,40 @@ class ProcessingBacklog(BaseModel):
     exceeds_remaining: bool = False
 
 
+class PaymentIssueMonthlySwitch(BaseModel):
+    """The plan's catalog monthly price, charged today by POST /v1/payments/payment-issue/monthly-switch.
+
+    Amounts are minor units of ``currency``. ``yearly_amount`` is the unpaid yearly charge the switch voids.
+    """
+
+    price_id: str
+    amount: int
+    currency: str
+    yearly_amount: int
+
+
+class PaymentIssue(BaseModel):
+    """A paid plan whose renewal charge failed and can still be paid.
+
+    Set only while the stored Stripe subscription is past_due or unpaid with an
+    open invoice. The fix is a Stripe-hosted page the client opens through
+    POST /v1/payments/customer-portal; this response carries no payment URL.
+    """
+
+    status: Literal['past_due', 'unpaid']
+    plan: PlanType
+    # A declined yearly renewal may move to the same plan's monthly price instead
+    # (utils/monthly_switch.py). Omitted when not offered; older clients ignore it.
+    monthly_switch: Optional[PaymentIssueMonthlySwitch] = None
+
+    @model_serializer(mode='wrap')
+    def serialize_optional_monthly_switch(self, handler):
+        data = handler(self)
+        if data.get('monthly_switch') is None:
+            data.pop('monthly_switch', None)
+        return data
+
+
 class UserSubscriptionResponse(BaseModel):
     subscription: Subscription
     transcription_seconds_used: int
@@ -280,6 +314,8 @@ class UserSubscriptionResponse(BaseModel):
     processing_backlog: Optional[ProcessingBacklog] = None
     # Server catalog capability, independent of BYOK and usage-budget availability.
     cloud_screen_vectors: Optional[bool] = None
+    # A failed renewal the user can still pay. Omitted when there is none; older clients ignore it.
+    payment_issue: Optional[PaymentIssue] = None
 
     @model_serializer(mode='wrap')
     def serialize_optional_held_audio(self, handler):
@@ -290,6 +326,8 @@ class UserSubscriptionResponse(BaseModel):
             data.pop('held_audio', None)
         if data.get('processing_backlog') is None:
             data.pop('processing_backlog', None)
+        if data.get('payment_issue') is None:
+            data.pop('payment_issue', None)
         return data
 
 

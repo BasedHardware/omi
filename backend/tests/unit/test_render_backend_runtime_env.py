@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from datetime import datetime, timezone
+from config.firestore_read_levers import lever_percent
 from config.plan_catalog import (
     LADDER_V1_PRICE_BINDINGS,
     RECOGNIZED_STRIPE_PRICE_PLAN_TYPES,
@@ -157,17 +158,20 @@ def test_network_flags_still_required(monkeypatch):
 def test_selected_job_renders_only_shared_network_and_named_job_outputs(monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setenv('X_OAUTH_CLIENT_ID', 'x-client-id')
+    monkeypatch.setenv('X_OAUTH_REDIRECT_URI', 'https://api.example/v1/x/callback')
+    monkeypatch.setenv('RAPID_API_HOST', 'twitter-api.example')
     monkeypatch.setattr(
         'sys.argv',
-        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'memory-maintenance-job'],
+        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'x-connector-sync-job'],
     )
 
     assert _MODULE['main']() == 0
 
     output = _read_workflow_outputs()
     assert 'cloud_run_flags<<' in output
-    assert 'memory_maintenance_job_flags<<' in output
-    assert 'memory_maintenance_job_env_vars<<' in output
+    assert 'x_connector_sync_job_flags<<' in output
+    assert 'x_connector_sync_job_env_vars<<' in output
     assert 'backend_env_vars<<' not in output
     assert 'notifications_job_env_vars<<' not in output
 
@@ -179,37 +183,6 @@ def test_selected_job_rejects_unknown_name_without_emitting_partial_output(monke
         _MODULE['main']()
 
     assert _read_workflow_outputs() == ''
-
-
-def test_render_dev_emits_memory_maintenance_job_outputs():
-    jobs = _MANIFEST['environments']['dev']['cloud_run']['jobs']
-    memory_job = jobs['memory-maintenance-job']
-    memory_env = _MODULE['_render_env_vars'](memory_job['env'])
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in memory_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in memory_env
-    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED' not in memory_env
-    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in memory_env
-    assert 'MEMORY_ENABLED_USERS' not in memory_env
-    assert 'MEMORY_ENABLED=on' in memory_env
-    assert 'MEMORY_MODE=' not in memory_env
-    assert 'MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED' not in memory_env
-    assert 'TYPESENSE_HOST_PORT=443' in memory_env
-
-    rendered_flags = _MODULE['_render_flags'](memory_job['flags'])
-    assert '--task-timeout=3600s' in rendered_flags
-    assert '--cpu=2' in rendered_flags
-    assert '--memory=2Gi' in rendered_flags
-    assert (
-        '--remove-env-vars=MEMORY_ENABLED_USERS,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,'
-        'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,'
-        'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-    ) in rendered_flags
-    memory_secrets = _MODULE['_render_secrets'](memory_job['secrets'])
-    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
-    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
-    assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
-    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 def test_render_dev_emits_x_connector_sync_job_outputs(monkeypatch):
@@ -241,7 +214,7 @@ def test_x_connector_sync_job_pins_its_task_timeout(env):
     pipeline looked healthy throughout. X sync walks a registry at ~1.5s per user plus
     fetch and extraction, so it has the same shape of exposure.
 
-    Pinned equal to memory-maintenance-job, the job this one was cloned from.
+    Pinned at 3600s, matching the other long-running registry walkers.
     """
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
     assert jobs['x-connector-sync-job']['flags']['--task-timeout'] == '3600s'
@@ -262,7 +235,6 @@ def test_every_cloud_run_job_pins_a_task_timeout(env):
 @pytest.mark.parametrize('env', ['dev', 'prod'])
 def test_retired_daily_sweep_runtime_is_absent(env):
     jobs = _MANIFEST['environments'][env]['cloud_run']['jobs']
-    maintenance = jobs['memory-maintenance-job']
     retired_names = {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_KILL_SWITCH',
@@ -278,16 +250,10 @@ def test_retired_daily_sweep_runtime_is_absent(env):
         'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
-    assert retired_names.isdisjoint(maintenance.get('env', {}))
+    for spec in jobs.values():
+        assert retired_names.isdisjoint(spec.get('env', {}))
     assert 'daily-memory-sweep-job' not in jobs
-
-
-def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
-    entrypoint = (_SCRIPT.parents[1] / 'modal' / 'memory_maintenance_job.py').read_text(encoding='utf-8')
-    dockerfile = (_SCRIPT.parents[1] / 'modal' / 'Dockerfile.memory_maintenance_job').read_text(encoding='utf-8')
-    assert 'daily_memory_sweep' not in entrypoint
-    assert 'daily_memory_sweep_job.py' not in dockerfile
-    assert 'memory_maintenance_job.py' in dockerfile
+    assert 'memory-maintenance-job' not in jobs
 
 
 def _contains_uid_outside_approved_allowlists(node, uid: str) -> bool:
@@ -405,23 +371,12 @@ def test_render_prod_emits_memory_maintenance_job_cron_on(monkeypatch):
     rc = _MODULE['main']()
     assert rc == 0
     out = _read_workflow_outputs()
-    job_env = _job_env_block(out, 'memory_maintenance_job')
-    # Prod GO 2026-08-15: the maintenance job follows the request-path product
-    # flag. ST→LT cron is job-hosted on both env overlays with Flex.
-    assert 'MEMORY_ENABLED=on' in job_env
-    assert 'MEMORY_MODE=' not in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED=true' in job_env
-    assert 'MEMORY_CANONICAL_MAINTENANCE_FLEX' not in job_env
-    assert 'OMI_BACKGROUND_FLEX_CAPABLE=true' in job_env
-    assert 'MEMORY_ENABLED_USERS' not in job_env
-    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    assert '--task-timeout=3600s' in _MODULE['_render_flags'](prod_memory_job['flags'])
-
     assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
     assert 'GOOGLE_MAPS_API_KEY=GOOGLE_MAPS_API_KEY:latest' in _job_secret_lines(out, 'backend_sync')
 
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_MAINTENANCE_ENABLED' not in notifications_env
+    assert 'memory_maintenance_job_env_vars<<' not in out
 
 
 def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
@@ -462,8 +417,8 @@ def test_render_prod_gateway_callers_inject_verified_endpoint(monkeypatch):
 def test_render_prod_requires_vpc_env_vars_before_job_outputs(monkeypatch):
     """Prod network flags are env_var-backed; missing VPC vars abort render before job outputs.
 
-    gcp_memory_maintenance_job.yml must pass CLOUD_RUN_VPC_* like gcp_backend.yml, or prod
-    workflow_dispatch fails before memory-maintenance-job env/secrets are emitted.
+    gcp_backend.yml-style workflows must pass CLOUD_RUN_VPC_* like the render requires, or
+    prod workflow_dispatch fails before any job env/secrets are emitted.
     """
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     monkeypatch.delenv('CLOUD_RUN_VPC_SUBNET', raising=False)
@@ -491,48 +446,6 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
         'MEMORY_TYPESENSE_COLLECTION,TYPESENSE_HOST,'
         'TYPESENSE_HOST_PORT,TYPESENSE_API_KEY'
     ) in text
-
-
-def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
-    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job.yml'
-    text = workflow.read_text(encoding='utf-8')
-    assert 'SERVICE: memory-maintenance-job' in text
-    assert 'Dockerfile.memory_maintenance_job' in text
-    assert 'memory_maintenance_job_env_vars' in text
-    assert 'memory_maintenance_job_secrets' in text
-    assert 'CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}' in text
-    assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
-    assert (
-        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
-        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
-    ) in text
-    # Prod deploys through GitHub WIF (credential-hygiene WS-C), which needs the
-    # OIDC token; development keeps its JSON lane.
-    assert "id-token: 'write'" in text
-    assert 'omi-gha-deploy-prod/providers/github' in text
-    assert "if: github.event.inputs.environment == 'prod'" in text
-    assert 'git rev-parse --short=7 HEAD' in text
-    assert 'short_sha=${GITHUB_SHA::7}' not in text
-    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
-    prod_memory_job = _MANIFEST['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    prod_job_flags = _MODULE['_render_flags'](prod_memory_job['flags'])
-    assert 'MEMORY_ENABLED_USERS' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS' in prod_job_flags
-    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED' in prod_job_flags
-    assert 'Measure runner disk cleanup' in text
-    assert 'Duration: $((SECONDS - started_at))s' in text
-
-
-def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
-    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
-
-    assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in workflow.read_text(
-        encoding='utf-8'
-    )
-    text = workflow.read_text(encoding='utf-8')
-    assert 'Measure runner disk cleanup' in text
-    assert 'Duration: $((SECONDS - started_at))s' in text
 
 
 def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
@@ -564,16 +477,6 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
     assert f'REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL,{retired}' in action_text
     assert f'--remove-env-vars=HOSTED_PUSHER_API_URL,{retired}' in action_text
 
-    # The memory-maintenance-job is also a Cloud Run deploy that merges env
-    # vars across revisions. Its rendered --remove-env-vars must strip the
-    # same retired set so the stale binding does not survive the universal-
-    # memory change (see #11447, #11472).
-    manifest = _MANIFEST['environments']
-    for env in ('dev', 'prod'):
-        job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
-        job_flags = _MODULE['_render_flags'](job['flags'])
-        assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
-
 
 def _deploy_backend_stack_step_flags(step_id: str) -> str:
     action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
@@ -593,7 +496,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
     # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     # 2026-10-24 costcut mirror: backend now pins its OWN live shape (prod-scoped
-    # 8Gi/2 CPU/20/3/100) instead of inheriting it revision-to-revision; --cpu=2
+    # margin-20 4Gi/2 CPU/20/3/100) instead of inheriting it; --cpu=2
     # is legitimate there for the same #21668 pairing, but every
     # integration-specific flag below still must not leak onto it.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
@@ -601,11 +504,15 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
     # 2026-10-24 right-sizing: prod integration stays warm; the dev project idles at 0.
     integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
+    # 2026-11-01 packing: enrichment (/v2/enrichment/run) holds LLM-bound requests at ~27% CPU,
+    # so concurrency 40 scaled integration 3 -> 8.3 instances. 80 per instance with 64 postprocess
+    # threads (prod overlay) and 4Gi packs them; 80 x 35 also widens MCP's slot ceiling. Dev keeps
+    # 40/2Gi with the default 24 threads.
     for flag in (
-        '--memory=2Gi',
-        '--concurrency=40',
+        "--memory=${{ inputs.runtime_env == 'prod' && '4Gi' || '2Gi' }}",
+        "--concurrency=${{ inputs.runtime_env == 'prod' && '80' || '40' }}",
         integration_min,
-        '--max-instances=50',
+        "--max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}",
         '--no-cpu-throttling',
     ):
         assert flag in integration_flags, flag
@@ -619,7 +526,7 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     assert '--cpu=2' in sync_flags
     # Backend's own prod shape (dev branch empty: dev keeps inheriting).
     assert (
-        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=8Gi --concurrency=20"
+        "${{ inputs.runtime_env == 'prod' && '--cpu=2 --memory=4Gi --concurrency=20"
         " --min-instances=3 --max-instances=100' || '' }}"
     ) in backend_flags
 
@@ -821,7 +728,7 @@ def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_
     assert result.stdout == ''
     workflow_outputs = renderer_output.read_text(encoding='utf-8')
     assert (
-        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"backfill_task_reads":100\\,"batch_privacy_memoize":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"deletion_marker_cache":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":25\\,"people_scan_dedupe":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"usage_month_cache":100}\n'
+        'firestore_read_env_vars<<__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\nFIRESTORE_READ_LEVERS={"action_items_page":100\\,"action_items_ttl120":100\\,"backfill_task_reads":100\\,"bpp_decision_cache":0\\,"bpp_generation_memo":100\\,"candidates_page":100\\,"canonical_statuses_dedupe":100\\,"conversation_list_cursor":100\\,"deletion_marker_cache":100\\,"finjob_candidate_queries":100\\,"historical_scan_memo":100\\,"ledger_purge_coalesce":100\\,"lifecycle_record_pending_head":5\\,"mcp_conversation_cards_cache":100\\,"memory_list_index_window":100\\,"people_scan_dedupe":100\\,"privacy_checks_shadow":0\\,"privacy_ttl60":0\\,"queue_age_sample_budget":100\\,"request_read_dedupe":100\\,"serving_config_cache":100\\,"singleton_loops":100\\,"subscription_cache":100\\,"sync_snapshot_resolve_cache":100\\,"usage_month_cache":0\\,"usage_month_total":0}\n'
         in workflow_outputs
     )
     assert workflow_outputs.endswith('__BACKEND_RUNTIME_ENV_firestore_read_env_vars__\n')
@@ -876,7 +783,16 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
 def test_prod_cloud_run_secret_refs_match_approved_bindings():
     # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
     # Preserve resource, env alias and version: aliases can introduce startup dependencies.
-    common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
+    # Lead 2026-11-02 17:42Z approved the existing Soniox key on all four roles
+    # for live GPU retirement, using the existing shared runtime identity.
+    # The independent language-recovery gate remains integration-only.
+    common = {
+        'GOOGLE_CLIENT_SECRET',
+        'ENCRYPTION_SECRET',
+        'MODULATE_API_KEY',
+        'OMI_LLM_GATEWAY_SERVICE_TOKEN',
+        'SONIOX_API_KEY',
+    }
     baseline = {
         'backend': common
         | {
@@ -892,6 +808,9 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
             'TELEGRAM_WEBHOOK_SECRET',
             'LINQ_API_KEY',
             'LINQ_WEBHOOK_SECRET',
+            # Keiki iMessage/WhatsApp signing secrets (David, 2026-10-30: build the Keiki integration).
+            'KEIKI_IMESSAGE_SIGNING_SECRET',
+            'KEIKI_WHATSAPP_SIGNING_SECRET',
         },
         'backend-sync': common
         | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
@@ -1404,3 +1323,317 @@ def test_full_render_refuses_to_emit_when_a_service_key_would_be_removed(monkeyp
     with pytest.raises(ValueError, match='Cloud Run service backend env does not render every manifest key'):
         _MODULE['main']()
     assert _read_workflow_outputs() == ''
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_firestore_cut_switches_preserve_operator_next_roll_policy(environment):
+    services = _MANIFEST['environments'][environment]['cloud_run']['services']
+    for name, service in services.items():
+        env = service['env']
+        # SCA-2173 / SCA-2283 (2026-11-14): finish backoff is declared off for prod backend-integration,
+        # which runs the finish sweep, and for prod backend-sync, which can reach the same sweep through
+        # its reconcile and batch metrics routes (review SCA-2270). It was turned off in production at
+        # 19:41Z and stays off by ruling. No other service or environment declares it (SCA-1993).
+        if environment == 'prod' and name in ('backend-integration', 'backend-sync'):
+            assert env['BATCH_PROJECTION_FINISH_BACKOFF_ENABLED'] == {'value': 'false', 'category': 'rollout'}
+        else:
+            assert 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' not in env
+        # A hand-set true was left on prod backend and backend-sync-backfill. Deploy merges env, so
+        # leaving the key out would keep it; the removal list is what turns it off there (SCA-2283).
+        removed = 'BATCH_PROJECTION_FINISH_BACKOFF_ENABLED' in service.get('forbidden_env', [])
+        assert removed == (environment == 'prod' and name in ('backend', 'backend-sync-backfill'))
+        expected = {}
+        if environment == 'prod':
+            expected['BATCH_HELD_POLL_SKIP_ENABLED'] = 'true'
+            if name in ('backend-sync', 'backend-integration'):
+                expected['BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED'] = 'true'
+        switches = {
+            key: env[key]
+            for key in ('BATCH_HELD_POLL_SKIP_ENABLED', 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED')
+            if key in env
+        }
+        assert switches == {key: {'value': value, 'category': 'ops_kill'} for key, value in expected.items()}
+        rendered = {entry['name']: entry['value'] for entry in _MODULE['_render_env_entries'](switches)}
+        assert rendered == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(environment, monkeypatch):
+    """A base edit must neither enable unqualified readers nor miss CR overrides."""
+    config = _MANIFEST['environments'][environment]
+    cloud_run = config['cloud_run']['services']
+    assert set(cloud_run) == {'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'}
+    expected = {
+        'action_items_page': 100,
+        'action_items_ttl120': 100,
+        'backfill_task_reads': 100,
+        'bpp_decision_cache': 0,
+        'bpp_generation_memo': 100,
+        'candidates_page': 100,
+        'canonical_statuses_dedupe': 100,
+        'conversation_list_cursor': 100,
+        'deletion_marker_cache': 100,
+        'finjob_candidate_queries': 100,
+        'historical_scan_memo': 100,
+        'ledger_purge_coalesce': 100,
+        'lifecycle_record_pending_head': 5,
+        'mcp_conversation_cards_cache': 100,
+        'memory_list_index_window': 100,
+        'people_scan_dedupe': 100,
+        'privacy_checks_shadow': 0,
+        'privacy_ttl60': 0,
+        'queue_age_sample_budget': 100,
+        'request_read_dedupe': 100,
+        'serving_config_cache': 100,
+        'singleton_loops': 100,
+        'subscription_cache': 100,
+        'sync_snapshot_resolve_cache': 100,
+        'usage_month_cache': 0,
+        'usage_month_total': 0,
+    }
+    hosts = [(f'gke/{name}', config['gke'][name]['env']) for name in ('backend-listen', 'pusher')]
+    hosts += [('desktop', config['desktop_backend']['env'])]
+    hosts += [(f'cloud_run/{name}', host['env']) for name, host in cloud_run.items()]
+    hosts += [(f'job/{name}', host['env']) for name, host in config['cloud_run']['jobs'].items()]
+    for name, env in hosts:
+        assert 'FIRESTORE_READ_LEVERS' in env, name
+        enabled = environment == 'prod' and name.startswith('cloud_run/')
+        literal = env['FIRESTORE_READ_LEVERS']
+        assert set(literal) == {'value', 'category'}, name
+        # All non-Cloud-Run hosts (including listen/pusher) retain the guard literal.
+        wanted = {**expected}
+        # Ruling ec191a row 3 pins the live Cloud Run literals without widening other hosts.
+        # SCA-2173 / SCA-2222 Train 1: the prod read train carries the same five lever values
+        # on backend-integration, backend-sync and backend — monthly readers on
+        # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
+        # sampler election and capped backlog counts on), privacy shadow 0.
+        # backend-sync-backfill keeps its ec191a row 3 pins.
+        if enabled:
+            wanted.update(bpp_decision_cache=100, privacy_negative_lookup_cache=100)
+            if name == 'cloud_run/backend-sync-backfill':
+                wanted.update(privacy_checks_shadow=100, batch_timeliness_leader=0)
+            else:
+                wanted.update(
+                    usage_month_cache=100,
+                    usage_month_total=100,
+                    lifecycle_record_pending_head=100,
+                    batch_timeliness_leader=100,
+                    privacy_checks_shadow=0,
+                )
+        assert json.loads(literal['value']) == wanted, name
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
+        assert lever_percent('episode_members_cache') == 0, name
+        # SCA-1750: prod listen/pusher read the same monthly doc as the Cloud Run billing
+        # gate (allowance watch), so they share its epoch while their levers stay 0.
+        epoch_aligned = enabled or (environment == 'prod' and name in {'gke/backend-listen', 'gke/pusher'})
+        epoch = 'c2fs_20261026_r1' if epoch_aligned else 'v1'
+        assert env['FSR_USAGE_MONTH_TOTAL_EPOCH']['value'] == epoch, name
+        if name.startswith('cloud_run/'):
+            rendered = {
+                entry['name']: entry.get('value')
+                for entry in _MODULE['_render_env_entries'](
+                    {key: env[key] for key in ('FIRESTORE_READ_LEVERS', 'FSR_USAGE_MONTH_TOTAL_EPOCH')}
+                )
+            }
+            assert rendered['FIRESTORE_READ_LEVERS'] == literal['value'], name
+            assert json.loads(rendered['FIRESTORE_READ_LEVERS']) == wanted, name
+            assert rendered['FSR_USAGE_MONTH_TOTAL_EPOCH'] == epoch, name
+    for chart in ('backend-listen', 'pusher'):
+        values_path = _SCRIPT.parents[1] / 'charts' / chart / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+        values = yaml.safe_load(values_path.read_text())
+        chart_env = {entry['name']: entry.get('value') for entry in values['env']}
+        assert json.loads(chart_env['FIRESTORE_READ_LEVERS']) == expected
+        monkeypatch.setenv('FIRESTORE_READ_LEVERS', chart_env['FIRESTORE_READ_LEVERS'])
+        assert lever_percent('episode_members_cache') == 0, chart
+        assert chart_env['FSR_USAGE_MONTH_TOTAL_EPOCH'] == ('c2fs_20261026_r1' if environment == 'prod' else 'v1')
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_episode_switches_render_on_every_composition_host(environment):
+    keys = (
+        'EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_DETAIL_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
+    )
+    config = _MANIFEST['environments'][environment]
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = config['cloud_run']['services'][name]['env']
+        for key in keys:
+            assert env[key] == {'value': 'true', 'category': 'ops_kill'}
+            assert _MODULE['_render_env_entries']({key: env[key]}) == [{'name': key, 'value': 'true'}]
+            # An operator override must survive the renderer rather than fall back to code defaults.
+            assert _MODULE['_render_env_entries']({key: {'value': 'false', 'category': 'ops_kill'}}) == [
+                {'name': key, 'value': 'false'}
+            ]
+    for chart in ('backend-listen', 'pusher'):
+        for key in keys:
+            assert config['gke'][chart]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+        chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+        values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+        result = subprocess.run(
+            [
+                'helm',
+                'template',
+                f'{environment}-{chart}',
+                str(chart_dir),
+                '-f',
+                str(values),
+                '--set-string',
+                'image.digest=sha256:' + 'a' * 64,
+                '--set',
+                'image.tag=',
+                '--set',
+                'image.pullPolicy=IfNotPresent',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+        entries = [
+            entry
+            for container in deployment['spec']['template']['spec']['containers']
+            for entry in container.get('env', [])
+            if entry['name'] in keys
+        ]
+        assert sorted(entries, key=lambda entry: entry['name']) == [
+            {'name': key, 'value': 'true'} for key in sorted(keys)
+        ]
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['backend-listen', 'batch-pipeline-worker'])
+@pytest.mark.parametrize('mode', ['staged', 'disabled', 'qualified'])
+def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, mode, tmp_path):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    stem = 'batch-pipeline-worker' if chart == 'batch-pipeline-worker' else 'backend_listen'
+    values = chart_dir / f'{environment}_omi_{stem}_values.yaml'
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    command = [
+        'helm',
+        'template',
+        f'{environment}-{chart}',
+        str(chart_dir),
+        '-f',
+        str(values),
+        '--set-string',
+        'image.digest=sha256:' + 'a' * 64,
+        '--set',
+        'image.tag=',
+        '--set',
+        'image.pullPolicy=IfNotPresent',
+    ]
+    if chart == 'batch-pipeline-worker':
+        command += ['--set', 'enabled=true']
+        command += ['--namespace', f'{environment}-omi-backend']
+        if mode != 'staged':
+            for key in flags:
+                command += ['--set', f'worker.{key}={str(mode == "qualified").lower()}']
+    elif mode != 'staged':
+        source = yaml.safe_load(values.read_text())
+        for entry in source['env']:
+            if entry['name'] in flags:
+                entry['value'] = str(mode == 'qualified').lower()
+        override = tmp_path / 'disabled.yaml'
+        override.write_text(yaml.safe_dump({'env': source['env']}))
+        command += ['-f', str(override)]
+    result = subprocess.run(command, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert deployments
+    for deployment in deployments:
+        if (
+            chart == 'batch-pipeline-worker'
+            and deployment['spec']['template']['metadata']['labels'].get('app.kubernetes.io/name')
+            != 'batch-pipeline-worker'
+        ):
+            continue  # Repair/sweeper children do not execute these paths.
+        containers = deployment['spec']['template']['spec']['containers']
+        env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
+        if chart == 'batch-pipeline-worker':
+            assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
+            assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
+            continue
+        for key in flags:
+            expected = (
+                'false'
+                if mode == 'disabled'
+                or (mode == 'staged' and key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'})
+                else 'true'
+            )
+            assert env[key] == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['pusher', 'backend-listen'])
+def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+    result = subprocess.run(
+        [
+            'helm',
+            'template',
+            f'{environment}-{chart}',
+            str(chart_dir),
+            '-f',
+            str(values),
+            '--set-string',
+            'image.digest=sha256:' + 'a' * 64,
+            '--set',
+            'image.tag=',
+            '--set',
+            'image.pullPolicy=IfNotPresent',
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert len(deployments) == 1
+    containers = deployments[0]['spec']['template']['spec']['containers']
+    expected = {
+        'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED': 'true',
+        'HOME_TRANSCRIPTION_MAX_AGE_SECONDS': '86400',
+    }
+    if chart == 'pusher':
+        expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
+        expected['PUSHER_RECORD_SEAL_WAKE_ENABLED'] = 'true'
+    else:
+        expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
+        expected['RECORD_INTAKE_AGE_PRIORITY_ENABLED'] = 'true'
+        expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] = 'false'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT'] = '100'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S'] = ''
+    expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
+    contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
+    for key, value in expected.items():
+        entries = [entry for container in containers for entry in container.get('env', []) if entry['name'] == key]
+        assert entries == [{'name': key, 'value': value}]
+        assert contract[key]['value'] == value
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('service', ['backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'])
+def test_record_close_notify_renders_on_every_cloud_run_listener(environment, service, monkeypatch):
+    config = _MANIFEST['environments'][environment]
+    _set_workflow_bound_env(monkeypatch, config)
+    rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](
+        _MODULE['_render_env_vars'](config['cloud_run']['services'][service]['env'])
+    )
+    for key, expected in {
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED': 'false',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED': 'true',
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT': '100',
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
+    }.items():
+        assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]

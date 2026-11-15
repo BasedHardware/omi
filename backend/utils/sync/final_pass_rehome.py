@@ -27,6 +27,7 @@ from enum import StrEnum
 from typing import Any, Callable, Optional
 
 from utils.sync import legacy_dark
+from database.account_deletion_policy import account_deletion_marker_blocks_access
 
 logger = logging.getLogger(__name__)
 
@@ -113,7 +114,10 @@ def rehome_final_pass_owner(
     # Privacy: a tombstone or a deleting account gets no new processing route.
     if conversations_db.is_soft_deleted(row):
         return RehomeOutcome.NOT_APPLICABLE
-    if client.collection('account_deletions').document(uid).get().exists:
+    deletion = client.collection('account_deletions').document(uid).get()
+    if account_deletion_marker_blocks_access(
+        marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('wipe_status')
+    ):
         return RehomeOutcome.NOT_APPLICABLE
     pending = probe(uid)
     if pending is None or pending > 0:

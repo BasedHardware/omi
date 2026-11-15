@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-live-frame-synced-without-durable-copy",
+  "violated_contract": "A transport send is not server confirmation. A live capture surface that marks frames synced at socket-send time and skips durable storage for all-synced chunks holds no local copy of the audio it already handed off, so the end-of-session transcript confirmation has no stamped copy to judge or repair, and the retry budget of a transient failure class ends with the process instead of the network epoch. The same contract covers composer input: a draft cleared before the send is acknowledged has no restorable copy.",
+  "canonical_prevention": "Keep a durable local safety copy for every live frame until the server confirms it: the phone-mic buffer stores chunks exactly like the Apple Watch safety copy (a transport send never starts the retention clock - syncedAt stays 0), the lifecycle pause seals and flushes the in-memory tail the way the Watch checkpoint does, the conversation stamp binds transport-only synced copies so confirmSessionTranscription can release covered copies into synced retention and reclassify uncovered ones for repair upload, a cold start re-arms the transient retry budget exactly like a connectivity restore (durable HTTP refusals keep their persisted clock), and the chat composer persists its draft and clears it only after the send is accepted.",
+  "canonical_prevention_artifact": [
+    "app/lib/services/wals/local_wal_sync.dart",
+    "app/lib/pages/chat/page.dart",
+    "app/lib/providers/sync_provider.dart",
+    "app/test/unit/phone_mic_live_safety_copy_test.dart",
+    "app/test/widgets/chat_draft_persistence_test.dart",
+    "app/test/providers/sync_provider_needs_attention_retry_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/**",
+    "app/lib/pages/chat/**",
+    "app/lib/providers/sync_provider.dart"
+  ],
+  "status": "open"
+}

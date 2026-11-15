@@ -1,3 +1,6 @@
+import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'dart:async';
 
 import 'package:omi/services/onboarding_sync_runtime.dart';
@@ -171,7 +174,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       // Precache next image for smoother transitions
       _precacheNextImage(_controller!.index);
       if (_controller!.index == kSpeechProfilePage && _knowledgeGraphPrebuildFuture == null) {
-        _knowledgeGraphPrebuildFuture = _prebuildKnowledgeGraph().catchError((_) {});
+        _knowledgeGraphPrebuildFuture = KnowledgeGraphApi.prebuildForOnboarding().catchError((_) {});
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
@@ -207,7 +210,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // account on a fresh install — sees the consent screen at least
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
-            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
@@ -285,7 +287,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// control, and never when subscription UI is hidden (the router checks that). The `trial` arm
   /// has its placement right after sign-up instead ([_maybeShowSignupPaywall]).
   Future<void> _maybeShowOnboardingPaywall() async {
-    final config = await PaywallExperiment.resolve();
+    final config = PaywallExperiment.current;
     if (!mounted || config.isControl || !config.onboardingPaywall) return;
     if (config.variant == PaywallVariant.trial) return;
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
@@ -297,7 +299,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
-    final config = await PaywallExperiment.resolve();
+    final config = PaywallExperiment.current;
     if (!mounted || config.variant != PaywallVariant.trial || !config.onboardingPaywall) return;
     _signupPaywallShown = true;
     // The router needs the subscription (trial eligibility) that sign-in only started fetching.
@@ -312,14 +314,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     );
   }
 
-  /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
-  /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
-  /// falls back lands on that same native step.
+  /// Enters the steps after sign-in and consent: Pocket's flow. The other arms are debug-only: Reid's
+  /// web page, Yinka's flow, or the native step the reader left off at. A web page that falls back
+  /// lands on that same native step.
   Future<void> _enterSteps() async {
     await _maybeShowSignupPaywall();
     if (!mounted) return;
-    final arm = await OnboardingVariantGate.resolve();
-    if (!mounted) return;
+    final arm = OnboardingVariantGate.arm;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {
       'variant': arm.variant.wireName,
       '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
@@ -492,7 +493,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
-    OnboardingVariantGate.invalidate();
     _voiceController?.dispose();
     _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -501,32 +501,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     await SharedPreferencesUtil().clear();
     await AuthService.instance.signOut();
     navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
-  }
-
-  Future<void> _prebuildKnowledgeGraph() async {
-    try {
-      final current = await KnowledgeGraphApi.getKnowledgeGraph();
-      // Canonical graphs are derived on read, even when no relationships exist.
-      // Do not schedule the legacy mutation rejected by the canonical fence.
-      if (current['canonical'] == true) return;
-      final nodes = current['nodes'] as List<dynamic>? ?? const [];
-      final hasGraph = nodes.any((node) => (node['id'] ?? '') != 'user-node');
-      if (hasGraph) return;
-    } catch (_) {
-      // Continue to rebuild below.
-    }
-
-    final rebuildResult = await KnowledgeGraphApi.rebuildKnowledgeGraph();
-    final status = rebuildResult['status'];
-    // 'canonical_up_to_date' is the synthetic client status returned on HTTP 409.
-    if (status == 'canonical_up_to_date') {
-      return;
-    }
-    await KnowledgeGraphApi.waitForGraphStability(
-      timeout: const Duration(seconds: 25),
-      interval: const Duration(seconds: 2),
-      stabilityChecks: 1,
-    );
   }
 
   void _updateBackgroundImage(int pageIndex) {
@@ -605,6 +579,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       AuthComponent(
         onSignIn: () async {
           if (!mounted) return;
+          final deletion = await context.read<AuthenticationProvider>().checkAccountDeletion();
+          if (!context.mounted) return;
+          if (deletion is! ApiSuccess<AccountDeletionStatus> || deletion.data.pendingDeletion) {
+            Navigator.of(context).pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
+            return;
+          }
           PlatformManager.instance.analytics.onboardingStepCompleted('Auth');
           context.read<HomeProvider>().setupHasSpeakerProfile();
           // Refresh subscription on sign-in: AppShell only fetches it on mount,
@@ -616,7 +596,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
-            OnboardingVariantGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);

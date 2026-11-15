@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-server-minimum-runs-derived-intelligence",
+  "violated_contract": "A deterministic server minimum must not spend on memory extraction or summary apps, while capture and conversation-creation webhooks must still complete.",
+  "canonical_prevention": "Preserve stored manual-title authority and normalized reminder exemptions before floor admission. Gate intelligence consumers on persisted minimum provenance, waive summary debt only for an audited intentional floor, retain provider-fault debt and banked summaries, and preserve normal creation delivery.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_short_clip_rollout.py",
+    "backend/tests/unit/test_short_clip_authority.py",
+    "backend/tests/unit/test_short_clip_summary_debt.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/minimum_derived.py",
+    "backend/utils/llm/notes_short_clip.py"
+  ],
+  "status": "open"
+}

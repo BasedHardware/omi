@@ -446,22 +446,10 @@ class WorkflowContractTests(unittest.TestCase):
     def test_auto_workflow_rejects_steps_outside_the_source_admission_sequence(self) -> None:
         cases = (
             (
-                "read-only credentials",
-                "Require read-only Firestore credentials",
-                "Resolve and verify the newest proven main source",
-                "automatic release-proof freshness validation must run before read-only credential use",
-            ),
-            (
                 "admitted source checkout",
                 "Checkout admitted Firestore source",
                 "Resolve and verify the newest proven main source",
                 "automatic release-proof freshness validation must run before admitted-source checkout or execution",
-            ),
-            (
-                "admitted source checkout before credentials",
-                "Checkout admitted Firestore source",
-                "Require read-only Firestore credentials",
-                "read-only credential use must run before admitted-source checkout",
             ),
             (
                 "Firestore readiness gate before admission",
@@ -492,7 +480,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.move_step_before(
             root,
             CHECKER.AUTO_WORKFLOW_PATH,
-            "Require read-only Firestore credentials",
+            "Checkout admitted Firestore source",
             "Resolve and verify the newest proven main source",
         )
         self.mutate(
@@ -502,7 +490,7 @@ class WorkflowContractTests(unittest.TestCase):
             "  dummy:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Resolve and verify the newest proven main source\n        run: true\n\n  firestore_readiness:\n",
         )
         self.assertIn(
-            "automatic release-proof freshness validation must run before read-only credential use",
+            "automatic release-proof freshness validation must run before admitted-source checkout or execution",
             CHECKER.validate(root),
         )
 

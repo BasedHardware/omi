@@ -16,7 +16,6 @@ addresses.
 import hashlib
 import logging
 import os
-import re
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -56,14 +55,22 @@ DAILY_SEND_QUOTA = 30
 RESEND_API_URL = 'https://api.resend.com/emails'
 SHARE_EMAIL_FROM_ADDRESS = os.getenv('SHARE_EMAIL_FROM_ADDRESS', 'notes@mail.omi.me')
 
-_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-
 
 def _normalized_email(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     email = value.strip().lower()
-    if not _EMAIL_RE.match(email):
+    local, at, domain = email.partition('@')
+    # Linear shape check (CodeQL flags backtracking quantifier chains): exactly
+    # one '@' with a non-empty local part, no whitespace, and a domain that has
+    # a dot with a non-empty head and tail. Same accept set as the previous
+    # regex, verified by differential fuzzing.
+    if not at or not local or not domain or '@' in domain:
+        return None
+    if any(ch.isspace() for ch in email):
+        return None
+    dot = domain.find('.', 1)
+    if dot == -1 or dot > len(domain) - 2:
         return None
     return email
 

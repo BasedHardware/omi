@@ -118,6 +118,28 @@ class AudioDeliveryExpired(TimeoutError):
     """A queued live audio frame outlived its absolute capture-age deadline."""
 
 
+class RecoveryWriteStalled(TimeoutError):
+    """A paced recovery write outlived our own episode budget or slot bound.
+
+    The vendor socket is still open; we stopped waiting. It is a local
+    delivery bound (``replay_send_stalled``, censored), never ``connection_lost``,
+    which would vote against the successor's health (FC-local-bound-as-provider-death)."""
+
+
+async def paced_send(send: Callable[[], Awaitable[Any]], pace: RecoveryWriterPace, deadline: float | None = None):
+    """One recovery-leg wire write inside ``pace.write_bound``, typed by whose bound expired."""
+    bound = asyncio.timeout(pace.write_bound(deadline))
+    try:
+        async with bound:
+            await send()
+    except TimeoutError:
+        if deadline is not None and deadline <= clock():
+            raise AudioDeliveryExpired('live audio delivery expired') from None
+        if bound.expired():
+            raise RecoveryWriteStalled('recovery write exceeded its bound') from None
+        raise
+
+
 class RecoveryWriterPace:
     """Opt-in per-recovery-leg wire cadence shared with the typed limits.
 
@@ -151,7 +173,7 @@ class RecoveryWriterPace:
                 return
             cap = self.budget()
             if cap is not None and cap <= 0:
-                raise TimeoutError('recovery writer budget exhausted')
+                raise RecoveryWriteStalled('recovery writer budget exhausted')
             if deadline is not None:
                 await sleep(min(delay, WRITER_SLOT_SECONDS, max(0.000001, deadline - clock())))
             else:
@@ -173,7 +195,7 @@ class RecoveryWriterPace:
         queued frame's remaining absolute deadline — never a send after expiry."""
         cap = self.budget()
         if cap is not None and cap <= 0:
-            raise TimeoutError('recovery writer budget exhausted')
+            raise RecoveryWriteStalled('recovery writer budget exhausted')
         bound = WRITER_SLOT_SECONDS if cap is None else min(WRITER_SLOT_SECONDS, cap)
         if deadline is not None:
             remaining = deadline - clock()
@@ -775,6 +797,8 @@ class ReplayTailSocket:
                             expired_mid = True
                             break
                         entry.start = position
+                        if getattr(self.connection, 'idle_cost_reselect_requested', False) is True:
+                            self._retain_idle_onset()
                         self._dead = True
                         return
                     try:
@@ -878,6 +902,33 @@ class ReplayTailSocket:
         self.tail.clear()
         self._tail_bytes = 0
 
+    def _retain_idle_onset(self) -> None:
+        # Both the pump and owner-side transfer call this: the monitor can
+        # observe planned death before the pacer's final yield returns.
+        onset = self.connection.take_unsent_packet()
+        if onset is None or not self.tail:
+            return
+        data, spans = onset
+        if not spans or sum(length for _, length in spans) * 2 != len(data):
+            return
+        received = self.tail[0].received
+        boundary = max(start + length for start, length in spans)
+        while self.tail and self.tail[0].start < boundary:
+            entry = self.tail[0]
+            cut = min(len(entry.data) // 2, boundary - entry.start)
+            entry.start += cut
+            entry.data = entry.data[cut * 2 :]
+            if not entry.data:
+                self.tail.popleft()
+        offset = 0
+        retained = []
+        for start, length in spans:
+            chunk = data[offset * 2 : (offset + length) * 2]
+            retained.append(TailPacket(start, chunk, received, admitted=True))
+            offset += length
+        self.tail.extendleft(reversed(retained))
+        self._tail_bytes = sum(len(entry.data) for entry in self.tail)
+
     def take_tail(self) -> deque[TailPacket]:
         """Transfer unwritten capture before aborting a leg without a replay ring.
 
@@ -885,6 +936,8 @@ class ReplayTailSocket:
         off packets. Confirmed writes are debited; an ambiguous write remains
         owed to the successor. The original capture timestamps stay intact.
         """
+        if getattr(self.connection, 'idle_cost_reselect_requested', False) is True:
+            self._retain_idle_onset()
         self._closing = True
         if self._task is not None:
             self._task.cancel()

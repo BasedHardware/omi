@@ -29,6 +29,7 @@ from database.client_telemetry_ops import (
 )
 from utils.client_telemetry_metrics import record_ingest
 from utils.executors import db_executor, run_blocking
+from utils.home_rows_metric import observe_home_rows
 from utils.other.endpoints import get_current_user_uid
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,26 @@ async def post_client_telemetry_batch(request: Request, uid: str = Depends(get_c
         "accepted_count": result["accepted_count"],
         "duplicate_count": result["duplicate_count"],
     }
+
+
+@router.post("/v1/telemetry/home-rows", tags=["telemetry"])
+async def post_home_rows(request: Request, uid: str = Depends(get_current_user_uid)) -> Any:
+    """Record the visible Home row count. The daily peak is what the board averages."""
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "telemetry_invalid", "message": "request body is not valid JSON"},
+        ) from None
+    row_count = payload.get("row_count") if isinstance(payload, dict) else None
+    if isinstance(row_count, bool) or not isinstance(row_count, int) or row_count < 0 or row_count > 500:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "telemetry_invalid", "message": "row_count must be an integer from 0 to 500"},
+        )
+    observe_home_rows(uid, row_count)
+    return {"ok": True}
 
 
 @router.get("/v1/telemetry/client/aggregates", tags=["telemetry"])

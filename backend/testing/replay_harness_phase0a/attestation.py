@@ -65,6 +65,10 @@ EGRESS_SCOPE = (
     "independent attestation of real kernel egress."
 )
 
+# How many denied endpoints the outcome-binding violation names inline. The
+# verdict must stay one log line; the full raw evidence stays in the artifact.
+_DENIED_ENDPOINT_DETAIL_LIMIT = 4
+
 
 def _topology_hash(topology: dict[str, Any]) -> str:
     """Deterministic SHA-256 over the canonical topology-contract encoding."""
@@ -317,6 +321,7 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
 
     recomputed_allowed = 0
     recomputed_denied = 0
+    denied_endpoints: list[str] = []
     for e in egress_events:
         host = e.get("host")
         port = e.get("port")
@@ -326,6 +331,8 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
             recomputed_allowed += 1
         else:
             recomputed_denied += 1
+            if len(denied_endpoints) < _DENIED_ENDPOINT_DETAIL_LIMIT:
+                denied_endpoints.append(f"{e.get('event')} role={role} host={host!r} port={port}")
         recorded = e.get("decision")
         if recorded == "allow" and decision == "deny":
             # Critical forgery: an event marked allow that is not a declared
@@ -357,9 +364,18 @@ def validate_attestation(attestation: dict[str, Any], *, expected_topology: dict
     #     artifact that honestly reports a denied attempt must still be invalid
     #     as feasible; summary consistency alone is not sufficient.
     if attestation.get("outcome") == "feasible" and recomputed_denied > 0:
+        # Name the denied endpoints in the violation itself. The runner prints
+        # violations to the job log, but the workflow's failure diagnostics only
+        # tail the attestation artifact — and with sort_keys JSON, raw_evidence
+        # sorts before the trailing topology contract and never fits that tail.
+        # Without the destinations here, a BLOCKED run is unattributable from CI
+        # evidence (observed on 92 main-push failures in the 10-18..11-01 window).
+        detail = "; ".join(denied_endpoints)
+        if recomputed_denied > _DENIED_ENDPOINT_DETAIL_LIMIT:
+            detail += f"; (+{recomputed_denied - _DENIED_ENDPOINT_DETAIL_LIMIT} more)"
         violations.append(
             f"outcome 'feasible' requires zero denied egress, but {recomputed_denied} "
-            "denied attempt(s) recomputed from raw evidence"
+            f"denied attempt(s) recomputed from raw evidence [{detail}]"
         )
 
     # 4c. Bind role readiness/ports/probes to an explicit launcher

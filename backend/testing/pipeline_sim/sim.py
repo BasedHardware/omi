@@ -54,11 +54,13 @@ from utils.batch_pipeline import pump as pump_module
 from utils.batch_pipeline import quarantine_recovery as recovery_module
 from utils.batch_pipeline import serving as serving_module
 from utils.batch_pipeline.contracts import PoolCapacity, ProjectionBinding, WorkItem
-from utils.batch_pipeline.provider_stt import ProviderSttStage, provider_enqueue, resolve_route
+from utils.batch_pipeline.provider_stt import ProviderSttStage, VendorCallFailure
+from utils.batch_pipeline.provider_stt_admission import provider_enqueue, resolve_route
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.recovery_disposition import MultilingualEmpty, RecoveryFailure
 from utils.batch_pipeline.quarantine_recovery import QuarantineRecovery
 from utils.batch_pipeline.scheduler import Scheduler, owns_lease
+from utils.observability.reasons import VendorAttemptOutcome, VendorHealthReason
 from utils.batch_pipeline.serving import Serving
 from utils.sync.capture import chunk_identity
 
@@ -69,6 +71,7 @@ from testing.pipeline_sim.store import CustomerData, SimStore
 from testing.pipeline_sim.stt import (
     EMPTY,
     ERROR,
+    NEAR_SILENCE,
     SILENCE,
     SPEECH,
     TIMEOUT,
@@ -83,6 +86,7 @@ from testing.pipeline_sim.stt import (
     vad_spans,
 )
 from testing.pipeline_sim.workload import (
+    NORMAL,
     PRIVACY_AT_ADMISSION,
     PRIVACY_MIDFLIGHT,
     TARGET_DELETED,
@@ -99,8 +103,6 @@ logger = logging.getLogger(__name__)
 # state disagrees across dates, so these are explicit simulation inputs.
 DEFAULT_FLAGS = {
     'OMI_ENV_STAGE': 'dev',
-    'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
-    'FIRST_SUMMARY_DEADLINE_PERCENT': '100',
     'BATCH_PIPELINE_ENABLED': 'true',
     'BATCH_PIPELINE_PERCENT': '100',
     'BATCH_PIPELINE_UID_ALLOWLIST': '',
@@ -131,6 +133,18 @@ DEFAULT_FLAGS = {
 BACKFILL_SPEECH_SECONDS_PER_UID_DAY = 4 * 3600  # backend/AGENTS.md: four processed speech hours per UID/day
 
 
+class _SimVendorHealth:
+    """VendorHealth for drills: a vendor inside an outage window is refused (breaker open)."""
+
+    def __init__(self, sim: 'Simulation'):
+        self.sim = sim
+
+    def allows(self, service: str) -> tuple[bool, VendorHealthReason]:
+        if self.sim.config.vendor_health_aware and self.sim.vendor_down(service):
+            return False, VendorHealthReason.BREAKER_OPEN
+        return True, VendorHealthReason.HEALTHY
+
+
 @dataclass
 class SimConfig:
     name: str = 'custom'
@@ -148,6 +162,7 @@ class SimConfig:
     task_hop_seconds: float = 2.0
     recovery_duplicate_delivery_rate: float = 0.0
     worker_rpc_duplicate_rate: float = 0.0  # duplicate complete/fail delivery from a lease-holding worker
+    unrecoverable_near_silence: bool = False  # fixed negative input for recovery scheduling comparisons
     projection_seconds: float = 1.0
     projection_cursor_blocks: bool = True
     backfill_speech_seconds_per_day: float = BACKFILL_SPEECH_SECONDS_PER_UID_DAY
@@ -179,11 +194,20 @@ class SimConfig:
     stage_roles: dict[str, str] = field(default_factory=dict)
     trace_policy: bool = False
     policy_parts: dict[str, dict] = field(default_factory=dict)  # Persisted owner parts for replay.
+    backlog_flood: dict[str, Any] | None = None  # backlog_flood.py scenario inputs; otherwise None.
     gate_poll_seconds: float = 300.0  # fleet_gate.sh POLL_SECONDS
     # C8 admission route (intake.accept_upload): stored language, BYOK, legacy_sync mode.
     language: str = 'en'
+    worker_language: str | None = None  # frozen intake metadata, when different from the declared language
     byok: bool = False
     legacy_sync: str = 'on'  # on | draining | dark
+    # Slice D vendor drills. Each (service, start, end) window fails every call to that vendor;
+    # with vendor_health_aware the vendor's health also refuses it (breaker open) so no call is
+    # spent. vendor_failover_routes is the route table's vendor list after the admitted one.
+    vendor_outages: tuple[tuple[str, float, float], ...] = ()
+    vendor_failover_routes: tuple[str, ...] = ()
+    vendor_health_aware: bool = True
+    vendor_routing_armed: bool = False  # a configured route table is served (failover and holds arm)
 
     def __post_init__(self):
         if isinstance(self.policy, dict):
@@ -277,7 +301,7 @@ class SimWorker:
             config=self.config,
             recover_words=self.planned.recover_words,
             gpu_lock=contextlib.nullcontext(),
-            language_of=lambda item: 'en',  # This virtual corpus is declared English.
+            language_of=lambda item: self.sim.config.worker_language or self.sim.config.language,
         )
         self.index = index
 
@@ -290,13 +314,17 @@ class SimWorker:
 
     async def _plan(self, item) -> None:
         sim = self.sim
-        kind = sim.truth[item.segment_id]['kind']
+        truth = sim.truth[item.segment_id]
+        kind = truth['kind']
+        forced = EMPTY if truth.get('unrecoverable') else None
         first, retry = None, None
         if kind != SILENCE:
-            first = await sim.stt.request(kind, item.duration_seconds, purpose='batch')
+            first = await sim.stt.request(kind, item.duration_seconds, purpose='batch', forced_outcome=forced)
             samples = self._decode(item)
             if first == EMPTY and padded_retry_fits(samples, self.config.max_padded_seconds):
-                retry = await sim.stt.request(kind, padded_retry_seconds(samples), purpose='padded_retry')
+                retry = await sim.stt.request(
+                    kind, padded_retry_seconds(samples), purpose='padded_retry', forced_outcome=forced
+                )
         self.planned.plan[item.segment_id] = {'first': first, 'retry': retry}
         sim.counters[f'asr_{first or "skipped_silence"}'] += 1
 
@@ -348,6 +376,7 @@ class Simulation:
         self.serving: Serving | None = None
         self.recovery: QuarantineRecovery | None = None
         self.polls: list[tuple[float, str, int]] = []
+        self.vendor_calls: collections.Counter = collections.Counter()  # (segment, service) -> calls
         self.provider_stage = (
             None
             if self.store is None
@@ -358,6 +387,9 @@ class Simulation:
                 allowed=lambda *_: True,
                 inspect=self._provider_inspect,
                 clock=self.clock.time,
+                health=_SimVendorHealth(self),
+                failover_routes=lambda language: ('modulate', *self.config.vendor_failover_routes),
+                armed=lambda: self.config.vendor_routing_armed,
             )
         )
         self._seed_customers()
@@ -377,6 +409,24 @@ class Simulation:
                     sid,
                     {'kind': segment.kind, 'duration': segment.duration, 'owner': upload.owner, 'upload': upload},
                 )
+        if self.config.unrecoverable_near_silence:
+            # A late capture leaves one known held unit after healthy traffic
+            # establishes the denominator. Random latency/outcome draws cannot
+            # guarantee identical provider inputs across scheduling variants.
+            held = next(
+                (
+                    truth
+                    for truth in reversed(list(self.truth.values()))
+                    if truth['kind'] == NEAR_SILENCE
+                    and truth['upload'].owner_kind == NORMAL
+                    and truth['upload'].target is None
+                    and truth['upload'].duplicate_of is None
+                ),
+                None,
+            )
+            if held is None:
+                raise ValueError('unrecoverable fixture requires an unfenced near-silence capture')
+            held['unrecoverable'] = True
 
     @staticmethod
     def _segment_id(upload: UploadSpec, index: int) -> str:
@@ -420,6 +470,12 @@ class Simulation:
             (recovery_module, 'enqueue_named_task', self._enqueue_named_task),
             (recovery_module, 'named_task_exists', self._named_task_exists),
             (recovery_module, 'cancel_fenced_recovery', self._cancel_fenced_recovery),
+            # Synthetic artifacts are not WAV bytes; use the same explicit
+            # strict-VAD double as the provider stage at this external leaf.
+            (recovery_module, 'inspect_audio', self._provider_inspect),
+            # Only Modulate is modeled here. Refuse the unmodeled Soniox leg
+            # before touching its real client, even if the host has a key.
+            (recovery_module, 'independent_ready', lambda: False),
         ]
         originals = [(module, name, getattr(module, name)) for module, name, _ in patches]
         try:
@@ -451,10 +507,14 @@ class Simulation:
 
     # ---- models replacing Firestore-query / Cloud Tasks / Redis leaves ----
     def _recovery_candidates(self, client, namespace, owner_id, limit=10, *, after_id=None):
-        """Model of recovery_candidates(): recovery_state in held/prepared/running, ordered by doc id."""
+        """Model of recovery_candidates(): quarantined, recovery_state in held/prepared/running, ordered by doc id."""
         rows = []
         for (table, key), row in sorted(self.store.rows.items()):
-            if table != 'jobs' or row.get('recovery_state') not in {'held', 'prepared', 'running'}:
+            if (
+                table != 'jobs'
+                or row.get('state') != 'quarantined'
+                or row.get('recovery_state') not in {'held', 'prepared', 'running'}
+            ):
                 continue
             if owner_id is not None and row.get('owner_id') != owner_id:
                 continue
@@ -528,8 +588,15 @@ class Simulation:
         spans = [{'start': start, 'end': end} for start, end in vad_spans(samples)]
         return b'', item.duration_seconds, spans
 
+    def vendor_down(self, service: str) -> bool:
+        now = self.clock.elapsed()  # windows are seconds after the simulation start
+        return any(name == service and start <= now < end for name, start, end in self.config.vendor_outages)
+
     def _provider_call(self, item, language, inspected, *, service):
         """The stage's vendor seam on the paid-provider model; errors map as ``transcribe`` maps them."""
+        self.vendor_calls[(item.segment_id, service)] += 1
+        if self.vendor_down(service):
+            raise VendorCallFailure('provider', 'provider_failed', VendorAttemptOutcome.ERROR_5XX)
         try:
             payload = self.modulate(item, None, b'')
         except ProviderUnavailable:
@@ -540,6 +607,8 @@ class Simulation:
 
     def _cancel_fenced_recovery(self, store, segment_id):
         """Model of cancel_fenced_recovery(): revocation-only write after the fence rejects."""
+        if hasattr(store, 'cancel_fenced_recovery'):
+            return store.cancel_fenced_recovery(segment_id)
         job = store.rows.get(('jobs', segment_id), {})
         if not job or not job.get('recovery'):
             return False
@@ -657,8 +726,8 @@ class Simulation:
             )
         return items
 
-    def _accept_batch(self, record: UploadRecord) -> None:
-        """Mirrors utils/batch_pipeline/intake.accept_upload around the REAL admit() transaction."""
+    def _accept_batch(self, record: UploadRecord, *, provider: bool | None = None, deliver: bool = True) -> None:
+        """Mirrors intake around the REAL admit(); backlog fixtures may seed the post-STT state."""
         upload = record.spec
         record.policy = self.config.policy or resolve_batch_policy(upload.owner, flags=self._policy_flags('admission'))
         if not record.policy.batch_enabled:
@@ -667,7 +736,8 @@ class Simulation:
         # C8, as intake: a language Parakeet cannot serve takes the provider stage once legacy is
         # draining or dark; the admission policy records the route actually taken.
         route = resolve_route(self.config.language, byok=self.config.byok)
-        provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
+        if provider is None:
+            provider = self.config.legacy_sync != 'on' and route.stt_route == 'provider'
         stamp = {
             'stt_route': 'provider' if provider else 'parakeet',
             'provider_reason': route.provider_reason if provider else ('byok' if self.config.byok else 'none'),
@@ -716,10 +786,11 @@ class Simulation:
             self.counters['duplicate_uploads_deduplicated'] += 1
             return
         loop = asyncio.get_running_loop()
-        for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
-            loop.call_later(
-                self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
-            )
+        if deliver:
+            for row_id in wakes:  # Cloud Tasks model: one hop after the admission transaction commits
+                loop.call_later(
+                    self.config.task_hop_seconds, lambda sid=row_id: loop.create_task(self._provider_delivery(sid))
+                )
         record.status = 'admitted'
         record.accepted_at = self.clock.now
         record.job_id = binding.job_id
@@ -813,9 +884,12 @@ class Simulation:
                 f'{record.spec.owner}/{record.spec.content_id}',
                 lambda row: row.update(status='completed', updated_at=now),
             )
-            # Production ProjectionStore re-copies its siblings to the A2 shadow after commit (no-op otherwise).
+            # Production ProjectionStore re-copies its siblings AND the owner row (projection_watermark) to the
+            # A2 shadow after commit (ProjectionStore._mirror; no-op outside shadow mode).
+            owners = {('owners', self.store.rows[('results', s)]['owner_key']) for s in record.segment_ids}
             mirror_refresh(
-                getattr(self.store, 'namespace', ''), [(t, s) for s in record.segment_ids for t in ('jobs', 'results')]
+                getattr(self.store, 'namespace', ''),
+                [*((t, s) for s in record.segment_ids for t in ('jobs', 'results')), *sorted(owners)],
             )
             record.projected_at = now
             if record.has_words:
@@ -895,7 +969,7 @@ class Simulation:
         for index in range(self.config.gpu_pumps):
             worker = SimWorker(self, index)
             pump = Pump(
-                Scheduler(self.store, pool='batch'),
+                Scheduler(self.store, pool='batch', worker_id=f'worker-{index}'),
                 worker,
                 batch_size=self.config.pump_batch_size,
                 capacity=lambda: PoolCapacity(
@@ -1023,6 +1097,8 @@ class Simulation:
                         record.fenced_at = self.clock.now
 
     def _drained(self) -> bool:
+        if len(self.records) != len(self.workload.uploads):
+            return False
         if self.clock.elapsed() < max((u.at for u in self.workload.uploads), default=0.0):
             return False
         for record in self.records:
@@ -1064,6 +1140,11 @@ class Simulation:
         next_poll = self.clock.now + self.config.gate_poll_seconds
         while self.clock.now < deadline:
             await asyncio.sleep(min(60.0, deadline - self.clock.now))
+            for task in tasks:
+                if task.done() and not task.cancelled():
+                    error = task.exception()
+                    if error is not None:
+                        raise error
             if self.clock.now >= next_poll:
                 next_poll += self.config.gate_poll_seconds
                 sample = score(self._result(self.clock.now), final=False)

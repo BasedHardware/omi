@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Add pinned virtual-device performance qualification with retained warmup evidence and raw frame attribution; no production app behavior change."
+}

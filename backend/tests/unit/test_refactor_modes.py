@@ -49,6 +49,32 @@ def test_serving_for_cohort_by_digest_and_percent(monkeypatch):
     assert rm.serving_for('X_MODE', None) is True
 
 
+def test_wave2_percentage_cohorts_align_and_expand_monotonically():
+    previous = set()
+    for percent in (1, 5, 25, 100):
+        env = {f'{name}_SERVE_PERCENT': str(percent) for name in rm.WAVE2_MODES}
+        selected = set()
+        for index in range(1000):
+            account = f'synthetic-{index}'
+            decisions = {rm.serving_for(name, account, environ=env) for name in rm.WAVE2_MODES}
+            assert len(decisions) == 1
+            if decisions == {True}:
+                selected.add(account)
+        assert previous <= selected
+        assert selected
+        previous = selected
+    assert len(previous) == 1000
+
+
+def test_wave2_digest_pilot_and_off_rollback_override_aligned_percent():
+    for name in rm.WAVE2_MODES:
+        env = {f'{name}_SERVE_UID_SHA256S': rm.uid_digest('synthetic-pilot')}
+        assert rm.serving_for(name, 'synthetic-pilot', environ=env)
+        assert not rm.serving_for(name, 'synthetic-control', environ=env)
+        env[name] = 'off'
+        assert not rm.serving_for(name, 'synthetic-pilot', environ=env)
+
+
 def test_shadow_or_serve(monkeypatch):
     assert rm.shadow_or_serve('X_MODE') is True
     monkeypatch.setenv('X_MODE', 'off')

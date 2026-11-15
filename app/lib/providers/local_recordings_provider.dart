@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -69,11 +70,24 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       if (provider == null) return;
       final pointers = await ConversationSyncUtils.processConversationIds(
-          newConversationIds: result.newConversationIds, updatedConversationIds: result.updatedConversationIds);
+          newConversationIds: result.newConversationIds,
+          updatedConversationIds: result.updatedConversationIds,
+          onConversation: (requestedId, row) {
+            if (!_disposed && session == _ledger.sessionGeneration && identical(provider, _conversationProvider)) {
+              if (requestedId != row.id) {
+                provider.replaceBridgedConversation(requestedId, row);
+              } else if (row.isHiddenFromDefaultList) {
+                provider.upsertConversation(row);
+              }
+            }
+          });
       if (_disposed || session != _ledger.sessionGeneration || !identical(provider, _conversationProvider)) return;
       for (final pointer in pointers) {
         provider.upsertConversation(pointer.conversation);
       }
+      // A sync response can name only the survivor. Refresh the authoritative
+      // list too so older donor IDs disappear when no event names them.
+      await provider.forceRefreshConversations();
     } catch (e) {
       Logger.error('LocalRecordings: surfacing confirmed conversations failed: $e');
     }
@@ -84,9 +98,16 @@ class LocalRecordingsProvider extends ChangeNotifier {
   }
 
   Future<void>? _refreshInFlight;
+  String? _refreshOwner;
+  int? _refreshSession;
   Future<void> refresh() {
+    if (!_subscribed && _ledgerOverride == null) return Future.value();
     final active = _refreshInFlight;
-    if (active != null) return active;
+    final uid = SharedPreferencesUtil().uid;
+    final session = _ledger.sessionGeneration;
+    if (active != null && _refreshOwner == uid && _refreshSession == session) return active;
+    _refreshOwner = uid;
+    _refreshSession = session;
     final pass = _refresh();
     _refreshInFlight = pass;
     return pass.whenComplete(() {
@@ -96,25 +117,35 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   Future<void> _refresh() async {
     if (!_subscribed && _ledgerOverride == null) return;
+    final session = _ledger.sessionGeneration;
+    final uid = SharedPreferencesUtil().uid;
     _isLoading = true;
     try {
       await _ledger.intakeNativeRecordings();
     } catch (e) {
       Logger.error('LocalRecordings: refresh deferred: $e');
     } finally {
-      await _readLedger();
-      _isLoading = false;
-      if (!_disposed) notifyListeners();
+      if (session == _ledger.sessionGeneration && uid == SharedPreferencesUtil().uid) {
+        await _readLedger();
+        _isLoading = false;
+        if (!_disposed) notifyListeners();
+      }
     }
   }
 
   Future<void> _readLedger() async {
     final generation = ++_generation;
-    final wals = await _ledger.getAllWals();
+    final currentUid = SharedPreferencesUtil().uid;
+    final wals = currentUid.isEmpty ? <Wal>[] : await _ledger.getAllWals();
     final rows = <String, Wal>{};
     final recordings = <LocalRecording>[];
     for (final wal in wals) {
-      if (wal.ownerUid == null || wal.filePath == null) continue;
+      if (wal.filePath == null) continue;
+      final isDeferredBatch = wal.filePath!.split('/').last.startsWith('audio_omibatch');
+      if ((wal.ownerUid == null || wal.ownerUid == 'legacy') && isDeferredBatch) continue;
+      if (wal.ownerUid != null && wal.ownerUid != 'legacy' && wal.ownerUid != currentUid) {
+        continue;
+      }
       rows[wal.filePath!] = wal;
       if (!wal.holdForUser || wal.status == WalStatus.synced) continue;
       final path = await Wal.getFilePath(wal.filePath);
@@ -126,7 +157,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       rows[wal.filePath!] = wal;
       recordings.add(LocalRecording.fromWal(wal, filePath: path, sizeBytes: bytes));
     }
-    if (_disposed || generation != _generation) return;
+    if (_disposed || generation != _generation || currentUid != SharedPreferencesUtil().uid) return;
     recordings.sort((a, b) => b.timerStart.compareTo(a.timerStart));
     _rows
       ..clear()
@@ -247,6 +278,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   void clearUserData() {
     _generation++;
+    _refreshInFlight = null;
+    _isLoading = false;
     _rows.clear();
     _recordings = [];
     _lastCompletion = null;

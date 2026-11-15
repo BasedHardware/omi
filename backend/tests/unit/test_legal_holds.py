@@ -559,3 +559,77 @@ def test_stale_holder_exit_cannot_report_success_after_takeover(monkeypatch):
     # and the peer's running row was preserved untouched.
     gate = client.docs["legal_hold_deletion_gates/uid1"]
     assert gate["token"] == "peer" and gate["state"] == "running"
+
+
+def _real_gate_transactions(monkeypatch):
+    monkeypatch.setattr(
+        legal_holds,
+        "_acquire_destructive_operation_transaction",
+        legal_holds._acquire_destructive_operation_transaction.to_wrap,
+    )
+    monkeypatch.setattr(
+        legal_holds,
+        "_finish_destructive_operation_transaction",
+        legal_holds._finish_destructive_operation_transaction.to_wrap,
+    )
+
+
+@pytest.mark.parametrize("transactional", [False, True])
+def test_gate_owner_nested_writes_are_not_blocked_by_their_own_gate(monkeypatch, transactional):
+    """A cascade delete's own nested fenced writes must not self-block (prod 409s since 2026-10-27)."""
+    _real_gate_transactions(monkeypatch)
+    client = _FakeClient()
+    transaction = client.transaction() if transactional else None
+
+    with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+        with legal_holds.external_write_fence("uid1", firestore_client=client, transaction=transaction):
+            pass
+        # Canonical intake stays fenced even inside the owner's context.
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            legal_holds.assert_no_destructive_operation_transaction(client.transaction(), client, uid="uid1")
+
+    assert client.docs["legal_hold_deletion_gates/uid1"]["state"] == "completed"
+
+
+def test_gate_owner_exemption_never_reaches_other_requests_or_accounts(monkeypatch):
+    import contextvars
+
+    _real_gate_transactions(monkeypatch)
+    client = _FakeClient({"legal_hold_deletion_gates/uid2": {**_gate(token="other"), "uid": "uid2"}})
+
+    def other_request():
+        with legal_holds.external_write_fence("uid1", firestore_client=client):
+            raise AssertionError("a concurrent writer must stay fenced")
+
+    with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+        # A request that did not acquire the gate (fresh context) is still blocked.
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            contextvars.Context().run(other_request)
+        # Owning uid1's gate grants nothing on another account's live gate.
+        with pytest.raises(legal_holds.DestructiveOperationInProgress):
+            with legal_holds.external_write_fence("uid2", firestore_client=client):
+                raise AssertionError("another account's gate must still block")
+
+
+def test_gate_owner_exemption_ends_after_peer_takeover_and_never_skips_account_deletion(monkeypatch):
+    _real_gate_transactions(monkeypatch)
+    client = _FakeClient()
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+            future = now + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=future
+            )
+            # The peer's row now carries the peer token; the old holder is just another writer.
+            client.docs["legal_hold_deletion_gates/uid1"]["started_at"] = now
+            with pytest.raises(legal_holds.DestructiveOperationInProgress):
+                with legal_holds.external_write_fence("uid1", firestore_client=client):
+                    raise AssertionError("a displaced holder must not write")
+
+    client = _FakeClient({"account_deletions/uid1": {"wipe_status": "accepted"}})
+    with pytest.raises(legal_holds.DestructiveOperationInProgress, match="account deletion"):
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+            with legal_holds.external_write_fence("uid1", firestore_client=client):
+                raise AssertionError("account deletion still blocks the gate owner")

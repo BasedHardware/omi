@@ -1,0 +1,12 @@
+{
+  "queued_units": ["bad"],
+  "unchanged_projected_job": true,
+  "unchanged_projection_receipt": true,
+  "processed_segment_ids": ["good"],
+  "same_job_owner": true,
+  "ledger_status": "partial",
+  "charged_seconds": 3,
+  "disposition": "restored",
+  "old_paid_intent_unchanged": true,
+  "job_complete": false
+}

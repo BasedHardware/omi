@@ -1,7 +1,7 @@
 ---
-title: "Update Omi Firmware"
+title: "Update Omi firmware"
 icon: "bolt"
-description: "Keep your Omi device up to date with the latest firmware. Use the app for easy updates or follow the manual process."
+description: "Keep your Omi device on the latest firmware. Use the app for updates, or follow the manual steps."
 ---
 
 ## Overview
@@ -9,12 +9,12 @@ description: "Keep your Omi device up to date with the latest firmware. Use the 
 There are two ways to update your Omi device firmware:
 
 <CardGroup cols={2}>
-  <Card title="Via Omi App" icon="mobile">
-    **Recommended** - The easiest way to update
+  <Card title="Via Omi app" icon="mobile">
+    **Recommended**: the easiest way to update
 
     Go to **Settings → Device Settings → Product Update**
   </Card>
-  <Card title="Manual Update" icon="terminal">
+  <Card title="Manual update" icon="terminal">
     For advanced users or troubleshooting
 
     Follow the instructions below for your device
@@ -23,10 +23,10 @@ There are two ways to update your Omi device firmware:
 
 <Tabs>
   <Tab title="DevKit (DK1 & DK2)" icon="microchip">
-    ## Manual Update for DevKit
+    ## Manual update for DevKit
 
     <Steps>
-      <Step title="Download Required Files" icon="download">
+      <Step title="Download required files" icon="download">
         **Bootloader** (required for first-time setup or if corrupted):
         - Download [bootloader0.9.0.uf2](https://github.com/BasedHardware/omi/releases/download/v2.0.1-Omi/bootloader0.9.0.uf2)
         - Compatible with Seeed XIAO nRF52840 Sense (SoftDevice S140 7.3.0)
@@ -36,12 +36,12 @@ There are two ways to update your Omi device firmware:
         - [DevKit 2 Firmware](https://github.com/BasedHardware/omi/releases?q=release_firmware+DK2)
       </Step>
       <Step title="Prepare Your Device" icon="check">
-        Before starting, ensure:
-        - Battery is above 50%
-        - Using a direct USB connection (avoid USB hubs)
-        - Have a small pin ready for the reset button
+        Before you start, check that:
+        - The battery is reasonably charged
+        - You are using a direct USB connection, not a USB hub
+        - You have a small pin ready for the reset button
       </Step>
-      <Step title="Enter DFU Mode" icon="power-off">
+      <Step title="Enter DFU mode" icon="power-off">
         1. Connect your device via USB
         2. Locate the reset button:
 
@@ -61,7 +61,7 @@ There are two ways to update your Omi device firmware:
         3. **Double-click** the reset button quickly
         4. Your computer should show a drive named `/Volumes/XIAO-SENSE`
       </Step>
-      <Step title="Flash the Device" icon="bolt">
+      <Step title="Flash the device" icon="bolt">
         **Install Bootloader** (if needed):
         1. Drag `bootloader0.9.0.uf2` to the `/Volumes/XIAO-SENSE` drive
         2. Wait for the drive to eject automatically
@@ -84,7 +84,7 @@ There are two ways to update your Omi device firmware:
       </Accordion>
       <Accordion title="Update fails" icon="rotate">
         - Retry the process from the beginning
-        - Make sure battery is above 50%
+        - Charge the battery
         - Try double-clicking the reset button faster
       </Accordion>
       <Accordion title="'Transfer incomplete' message" icon="clock">
@@ -96,149 +96,71 @@ There are two ways to update your Omi device firmware:
     </AccordionGroup>
   </Tab>
 
-  <Tab title="Consumer Version (CV1)" icon="microchip">
-    ## Flashing Consumer Version 1
+  <Tab title="Consumer version (CV1)" icon="microchip">
+    ## Flashing consumer version 1
 
     <Warning>
-    Wired recovery requires a **SWD connection** to a J-Link programmer. For normal updates, use **Product Update** in the Omi app over Bluetooth; no flashing cable is needed.
+    For normal updates, use **Product Update** in the Omi app over Bluetooth.
+    Stock MCUboot must never be flashed to CV1: it can misread an OTA image on
+    the shared SD/NOR bus and prevent installation.
     </Warning>
 
-    ### Prerequisites
-
-    <CardGroup cols={2}>
-      <Card title="Hardware Required" icon="plug">
-        - Omi CV1 device
-        - J-Link programmer
-        - Special SWD flashing cable
-        - USB cable
-      </Card>
-      <Card title="Software Required" icon="download">
-        - [J-Link Software](https://www.segger.com/downloads/jlink/)
-        - Latest firmware files from GitHub
-      </Card>
-    </CardGroup>
-
-    ### Step 1: Download Latest Firmware
+    Wired app recovery requires a J-Link programmer and an SWD connection.
+    Follow the checked-in [CV1 bootloader and recovery procedure](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docs/cv1-bootloader.md).
+    It covers the approved bootloader hashes, backup/readback and blank-device
+    manufacturing qualification.
 
     <Steps>
-      <Step title="Get Firmware Files" icon="download">
-        1. Go to [Omi GitHub Releases for CV1](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v)
-        2. Find the latest `Omi_CV1_v<version>` release
-        3. Download both recovery files:
-           - `Omi_CV1_v<version>.hex` — Application core firmware
-           - `Omi_CV1_v<version>_CPUNET.hex` — Network core firmware
+      <Step title="Get a validated app-core image" icon="download">
+        Download `Omi_CV1_v<version>.hex` from the intended
+        [CV1 release](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v).
+        Release packaging combines the qualified bootloader with the signed app. If it is
+        absent, stop; do not substitute an older merged HEX or a stock build.
+        The OTA ZIP is for Bluetooth updates. The separate CPUNET HEX is not
+        part of normal app recovery.
 
-        The `Omi_CV1_OTA_v<version>.zip` asset is for Bluetooth OTA updates. For the J-Link scripts in `omi/firmware/FLASH_3.0.8/`, save the downloaded HEX files as `merged.hex` and `merged_CPUNET.hex` in the appropriate `MAC/` or `WINDOWS/` folder. The bundled images are stale 3.0.8 recovery images.
+        Extract `omi.signed.bin` from the matching OTA ZIP. From a repository checkout,
+        validate the downloaded HEX against that signed app:
+
+        ```bash
+        python3 omi/firmware/scripts/ci/cv1_bootloader.py --require-bootloader --signed-app path/to/omi.signed.bin path/to/Omi_CV1_vX.hex
+        ```
+
+        The check requires the pinned bootloader and exact signed app bytes; it rejects
+        storage, UICR and network-core bytes.
+        Do not copy downloaded files over the archived factory images or run
+        the legacy two-core batch/J-Link scripts.
       </Step>
-      <Step title="Replace Existing Files" icon="copy">
-        <Tabs>
-          <Tab title="macOS">
-            ```bash
-            cd MAC/
-
-            # Optional: Backup existing files
-            mv merged.hex merged.hex.backup
-            mv merged_CPUNET.hex merged_CPUNET.hex.backup
-
-            # Copy new firmware files to this folder
-            ```
-          </Tab>
-          <Tab title="Windows">
-            ```cmd
-            cd WINDOWS\
-
-            # Optional: Backup existing files
-            # Rename merged.hex → merged.hex.backup
-            # Rename merged_CPUNET.hex → merged_CPUNET.hex.backup
-
-            # Copy new firmware files to this folder
-            ```
-          </Tab>
-        </Tabs>
+      <Step title="Back up and verify the bootloader" icon="shield">
+        Back up and hash the boot region before programming. The validated
+        release image replaces it with the pinned qualified loader. Program
+        only through the `nRF5340_xxAA_APP` target, following the recovery procedure.
+        Do not mass erase, unlock/recover, change protection settings or flash
+        the network core. A blank pendant needs a separately qualified
+        manufacturing procedure; app-only HEX is insufficient.
       </Step>
-      <Step title="Verify Files" icon="check">
-        Ensure both files are updated:
-        - File sizes should match downloaded versions
-        - Modification dates should reflect the replacement
+      <Step title="Verify the result" icon="check">
+        Read back the boot region and confirm its hash matches the qualified
+        release bootloader. Reconnect in
+        the Omi app, verify the firmware version, and check SD storage and
+        audio capture. Blinking LEDs alone do not verify an update.
       </Step>
     </Steps>
 
-    ### Step 2: Flash the Firmware
-
-    <Tabs>
-      <Tab title="macOS" icon="apple">
-        1. Install J-Link Software from [SEGGER](https://www.segger.com/downloads/jlink/)
-
-        2. Navigate to the MAC folder and flash:
-        ```bash
-        cd MAC
-
-        # Flash network core first
-        JLinkExe -CommanderScript program_net.jlink
-
-        # Then flash application core
-        JLinkExe -CommanderScript program_app.jlink
-        ```
-      </Tab>
-      <Tab title="Windows" icon="windows">
-        1. Install J-Link Software from [SEGGER](https://www.segger.com/downloads/jlink/)
-        2. Add J-Link to your PATH (default: `C:\Program Files\SEGGER\JLink\`)
-
-        3. Navigate to the WINDOWS folder and flash:
-        ```cmd
-        cd WINDOWS
-
-        # Flash network core first
-        JLink.exe -CommanderScript program_net.jlink
-
-        # Then flash application core
-        JLink.exe -CommanderScript program_app.jlink
-        ```
-      </Tab>
-    </Tabs>
-
-    ### Verification
-
-    <Info>
-    Check that both J-Link commands completed successfully, then confirm the firmware version in the Omi app. Blinking LEDs alone do not verify an update; red blinking can mean the clock has not been synced.
-    </Info>
-
-    ### Troubleshooting
-
-    <AccordionGroup>
-      <Accordion title="JLinkExe not found" icon="terminal">
-        - Verify J-Link is installed correctly
-        - Check that the installation path is in your system PATH
-        - Try using the full path to the executable
-      </Accordion>
-      <Accordion title="Connection issues" icon="plug">
-        - Try a different USB port or cable
-        - Ensure device is in programming mode
-        - Check that the flashing cable is properly connected
-      </Accordion>
-      <Accordion title="Flashing fails" icon="circle-xmark">
-        - Always flash the network core first
-        - Wait for each command to complete before running the next
-        - Ensure device has sufficient power
-      </Accordion>
-      <Accordion title="Firmware file errors" icon="file-circle-xmark">
-        - Re-download the firmware files
-        - Verify file integrity (sizes should match GitHub)
-        - Check for file corruption during download
-      </Accordion>
-    </AccordionGroup>
+    If wired programming fails, stop and inspect the probe connection, image
+    validation and backup. Do not try a different bootloader or erase the
+    device as a shortcut. See the [stock-loader field-recovery assessment](https://github.com/BasedHardware/omi/blob/main/omi/firmware/docs/cv1-manufacturing-and-field-recovery.md)
+    for units whose bootloader cannot reliably install an OTA.
   </Tab>
 </Tabs>
-
----
 
 ## Success!
 
 <Tip>
-Your Omi device is now updated with the latest firmware. Enjoy the enhanced features and improvements!
+Your Omi device now runs the latest firmware.
 </Tip>
 
-## Related Documentation
+## Related documentation
 
 <CardGroup cols={2}>
   <Card title="Build Your Device" icon="hammer" href="/doc/assembly/Build_the_device">
@@ -247,7 +169,7 @@ Your Omi device is now updated with the latest firmware. Enjoy the enhanced feat
   <Card title="Buying Guide" icon="cart-shopping" href="/doc/assembly/Buying_Guide">
     Components needed to build Omi
   </Card>
-  <Card title="Get Started" icon="rocket" href="/doc/get_started/introduction">
+  <Card title="What is Omi" icon="rocket" href="/doc/get_started/what-is-omi">
     Introduction to Omi
   </Card>
 </CardGroup>

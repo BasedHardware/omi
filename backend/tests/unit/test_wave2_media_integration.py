@@ -1,5 +1,6 @@
 """Applied V2 consumer seams: real processing, durable replay, recap and restore."""
 
+from contextlib import nullcontext
 from datetime import timedelta
 from unittest.mock import MagicMock, AsyncMock
 
@@ -17,7 +18,8 @@ from models.speaker_evidence import SpeakerEvidence, VoiceCluster
 
 
 @pytest.mark.parametrize('kind', ['media', 'noise'])
-def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, pc, kind):
+@pytest.mark.parametrize('post_persist_failure', [False, True])
+def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, pc, kind, post_persist_failure):
     from utils.conversations import relevance_media as media
 
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
@@ -67,6 +69,7 @@ def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, 
     assert conversation.content_kind == kind
     assert conversation.structured.title_provenance == 'server_minimum'
     assert payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is True
+    assert payloads[-1].get('sync_relevance_user_kept') is not True
     assert dispositions[-1] is pc.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
     assert bundles == []
     pc.get_conversation_notes.assert_not_called()
@@ -83,18 +86,30 @@ def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, 
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a: [])
     monkeypatch.setattr(pc, 'notes_agent_inputs', lambda *a: {})
     monkeypatch.setattr(llm_input_dedupe, 'notes', lambda *a, **k: pc.Structured(title='Restored', overview='w0 w1 w2'))
-    pc.process_conversation(
-        'synthetic',
-        'en',
-        conversation,
-        trigger=pc.ProcessingTrigger.USER_REPROCESS,
-        user_kept=True,
-        defer_derived_effects=True,
-        derived_effects_observer=bundles.append,
+    conversation.sync_relevance = 'review'
+    if post_persist_failure:
+        monkeypatch.setattr(pc, 'record_final', MagicMock(side_effect=RuntimeError('controlled post-persist failure')))
+    outcome = (
+        pytest.raises(RuntimeError, match='controlled post-persist failure') if post_persist_failure else nullcontext()
     )
+    with outcome:
+        pc.process_conversation(
+            'synthetic',
+            'en',
+            conversation,
+            trigger=pc.ProcessingTrigger.USER_REPROCESS,
+            user_kept=True,
+            defer_derived_effects=True,
+            derived_effects_observer=bundles.append,
+        )
     assert conversation.content_kind == 'conversation'
     assert payloads[-1][pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] is None
-    assert bundles
+    # A failure after the canonical write must not expose a row whose explicit
+    # keep choice can be lost on retry or relevance reassessment.
+    assert payloads[-1]['sync_relevance_user_kept'] is True
+    assert payloads[-1]['sync_relevance'] == 'keep'
+    assert conversation.sync_relevance == 'keep'
+    assert bool(bundles) is not post_persist_failure
 
 
 @pytest.mark.anyio

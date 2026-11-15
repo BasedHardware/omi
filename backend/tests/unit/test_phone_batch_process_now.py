@@ -93,13 +93,15 @@ def prepare_recording(pipeline, *, discarded=True):
 async def test_process_now_keeps_selected_recording_before_enrichment(pipeline, discarded, path, source):
     row = prepare_recording(pipeline, discarded=discarded)
 
-    await pipeline._run_full_pipeline_background_async('job', 'uid', [path], source, False, '/tmp/job')
+    await pipeline.run_full_pipeline_background_async('job', 'uid', [path], source, False, '/tmp/job')
 
     pipeline.lifecycle_service.restore_discarded.assert_called_once_with('uid', 'recording')
     pipeline.process_conversation.assert_called_once()
     assert pipeline.process_conversation.call_args.kwargs['user_kept'] is True
+    assert pipeline.process_conversation.call_args.kwargs['trigger'].value == 'backlog_choice'
     assert row['discarded'] is False
-    assert row['relevance_decision']['decided_by'] == 'user'
+    assert row['relevance_decision']['decided_by'] == 'policy'
+    assert row['relevance_decision']['reason'] == 'backlog_choice'
 
 
 @pytest.mark.asyncio
@@ -118,7 +120,7 @@ async def test_process_now_keeps_selected_recording_before_enrichment(pipeline, 
 async def test_automatic_or_mixed_uploads_keep_existing_discard_policy(pipeline, paths):
     row = prepare_recording(pipeline)
 
-    await pipeline._run_full_pipeline_background_async('job', 'uid', paths, 'phone', False, '/tmp/job')
+    await pipeline.run_full_pipeline_background_async('job', 'uid', paths, 'phone', False, '/tmp/job')
 
     pipeline.lifecycle_service.restore_discarded.assert_not_called()
     assert row['discarded'] is True

@@ -64,6 +64,10 @@ grafana:
   # Use the supported synchronous installer (also exercised in local13 QA).
   env:
     GF_PLUGINS_PREINSTALL_SYNC: yesoreyeram-infinity-datasource@4.1.1
+    # 2026-11-13: Go soft memory limit at ~85% of the container limit below, so the
+    # runtime collects garbage hard before the kernel OOM-kills the pod (Grafana's
+    # working set bursts to 1.0-2.0Gi when several dashboard loads overlap).
+    GOMEMLIMIT: 3400MiB
   # Grafana 13 refuses to start with the default [rendering] renderer_token in
   # production (2026-10-16 crash loop). Secret grafana-renderer-token is created
   # out of band; the renderer reads the same value as AUTH_TOKEN.
@@ -145,13 +149,18 @@ grafana:
   # Grafana 13 was OOMKilled at 1Gi three times on 2026-10-16 (15:18, 15:19,
   # 15:51Z), each at the end of an internet scanner burst (~300 unauthenticated
   # .env/secrets probes in ~70s) while steady-state working set stays ~260-510Mi.
+  # 2026-11-12 09:02Z it was OOM-killed again at 2Gi (peak 2048Mi; ~220-490Mi
+  # otherwise, +140Mi per full Omi TV load, bursts to ~1.2Gi at 02:51Z 11-13).
+  # David 2026-11-13: raise to 4Gi alongside the Omi TV refresh cut; the request
+  # is unchanged, so scheduling is unaffected (Prometheus request 8Gi, limit 14Gi
+  # on the 28.9Gi monitoring nodes).
   resources:
     requests:
       cpu: 250m
       memory: 384Mi
     limits:
       cpu: "1"
-      memory: 2Gi
+      memory: 4Gi
   serviceAccount:
     create: true
     annotations:
@@ -338,10 +347,64 @@ prometheus:
               names: [prod-omi-backend]
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
-            regex: prod-omi-diarizer-batch
+            regex: prod-omi-diarizer-batch(-fallback)?
             action: keep
           - source_labels: [__meta_kubernetes_pod_container_port_name]
             regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      # Same batch contract for the GPU batch-pipeline workers. The adapter's
+      # omi_batch_pipeline_* external rules join sample freshness per pod
+      # (on (namespace, worker_release, pod)): the relabels must add exactly
+      # namespace+pod, while priority and worker_release ride the samples.
+      # Select by the name label so every chart release is covered, not just
+      # today's single prod-omi-batch-pipeline-worker pool.
+      - job_name: batch-pipeline-worker-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: batch-pipeline-worker
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      # CPU seal slots use the same local Prometheus -> Adapter path as the
+      # batch HPA. PodMonitoring alone feeds managed monitoring, not this adapter.
+      - job_name: record-seal-worker-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: record-seal-worker
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: metrics
             action: keep
           - source_labels: [__meta_kubernetes_pod_phase]
             regex: Running
@@ -394,6 +457,8 @@ prometheus:
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -426,6 +491,8 @@ prometheus:
         kubernetes_sd_configs:
         - role: pod
         relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_service_name]
+            target_label: service_name
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -583,6 +650,23 @@ kube-state-metrics:
   enabled: true
   metricLabelsAllowlist:
     - namespaces=[{{ .Release.Namespace }}],deployments=[app]
+  # 2026-11-07: as a BestEffort pod on a monitoring-pool node at 99% CPU requests, KSM was
+  # CPU-starved, timed out its 5 s /livez probe and restarted 1,711 times from ~11-05 17Z. Most
+  # scrapes then returned 0 samples, which blinded every kube_* consumer (the backend-listen HPA
+  # custom metric, capacity alerts, the margin meter's GKE node-hours). A CPU request gives it a
+  # guaranteed share (working set peaks ~120 MiB); the probe slack keeps a slow /metrics write
+  # from looking like a dead process. Alert: omi-kube-state-metrics-empty (alerts/resilience.json).
+  resources:
+    requests:
+      cpu: 100m
+      memory: 192Mi
+    limits:
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 10
+    failureThreshold: 6
 
 nodeExporter:
   enabled: true

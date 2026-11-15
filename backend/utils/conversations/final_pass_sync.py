@@ -61,7 +61,7 @@ def _reserve_budget(seconds):
 
 
 def _skipped_budget():
-    OUTCOMES.labels(outcome='skipped_budget').inc()
+    OUTCOMES.labels(lane='legacy', outcome='skipped_budget').inc()
     record_fallback(
         component='stt_selection',
         from_mode='sync_final_pass',
@@ -126,7 +126,7 @@ def _run_sync_final_pass(uid, audio, words, segments, cache, *, scope, owner_res
         return passed, outcome
     except Exception as exc:
         logger.warning('Sync final pass failed exception_type=%s', type(exc).__name__)
-        OUTCOMES.labels(outcome='failed:sync_audio').inc()
+        OUTCOMES.labels(lane='legacy', outcome='failed:sync_audio').inc()
         record_fallback(
             component='stt_selection',
             from_mode='sync_final_pass',

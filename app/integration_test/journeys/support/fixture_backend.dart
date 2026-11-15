@@ -38,6 +38,10 @@ class JourneyFixtureBackend {
 
   /// Seeded, owned records served by the fixture.
   final List<Map<String, dynamic>> conversations = [];
+
+  /// Manual-merge admission only. Journeys control worker completion/failures
+  /// through the existing seeded rows; no LLM, storage, or push is simulated.
+  String mergeTargetId = 'fixture-new-merge-target';
   final List<Map<String, dynamic>> memories = [];
   final List<Map<String, dynamic>> actionItems = [];
   final List<Map<String, dynamic>> chatSessions = [];
@@ -134,6 +138,16 @@ class JourneyFixtureBackend {
       return;
     }
     // Dynamic id routes before the exact-match switch.
+    if (method == 'DELETE' && path.startsWith('/v3/memories/')) {
+      final id = path.substring('/v3/memories/'.length);
+      final exists = memories.any((row) => row['id'] == id);
+      memories.removeWhere((row) => row['id'] == id);
+      req.response.statusCode = exists ? 200 : 404;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({'status': exists ? 'ok' : 'not found'}));
+      await req.response.close();
+      return;
+    }
     if (method == 'PATCH' && path.startsWith('/v3/memories/') && !path.contains('/baseline')) {
       await _handleMemoryEdit(req);
       return;
@@ -155,6 +169,21 @@ class JourneyFixtureBackend {
     }
 
     switch ('$method $path') {
+      case 'POST /v1/conversations/merge':
+        final body = await _readBody(req);
+        final ids = (body['conversation_ids'] as List).cast<String>();
+        for (final row in conversations.where((row) => ids.contains(row['id']))) {
+          row['status'] = 'merging';
+        }
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({
+          'status': 'merging',
+          'message': 'Merge started',
+          'conversation_ids': ids,
+          'merged_conversation_id': mergeTargetId
+        }));
+        await req.response.close();
+        return;
       case 'POST /v1/auth/local-dev/custom-token':
         final body = await _readBody(req);
         final uid = body['uid'] as String? ?? fixtureUid;

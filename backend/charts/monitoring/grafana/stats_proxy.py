@@ -1,16 +1,23 @@
 """Loopback-only stats capability for Infinity. Uses GKE Workload Identity, no keys.
 
 Only GET stats routes are forwarded. Tokens, upstream bodies and request details
-are never logged. Successful GETs coalesce/cache for 15m; failures never serve stale.
+are never logged. Each path coalesces and caches on its own (15m settled, 15s while
+the admin reports `refreshing`). Once a path has answered, an expired or failed
+refresh serves that last good body (up to MAX_STALE) while one background refresh
+per path runs, so a slow or cold admin never blanks the board; the admin body
+carries its own freshness ("Data through", cacheStale). Only a path that has never
+answered blocks, and a failure there is shared briefly, never retried per panel.
 """
 
 import base64
 import json
+import os
+from datetime import datetime, timezone
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 AUDIENCE = "https://admin.omi.me/api/omi/stats"
@@ -33,12 +40,124 @@ class NoRedirect(HTTPRedirectHandler):
 # each become a distinct 360-second cache/slot entry. The set is fixed and small.
 WALL_PATH = "/api/omi/stats/wall"
 SERIES_NAMES = ("headline", "growth", "activation", "retention", "revenue", "health")
-ALLOWED_PATHS = frozenset([WALL_PATH] + [f"{WALL_PATH}/series/{name}" for name in SERIES_NAMES])
+ALLOWED_PATHS = frozenset(
+    [WALL_PATH, "/api/omi/stats/uptime"] + [f"{WALL_PATH}/series/{name}" for name in SERIES_NAMES]
+)
 # A cold admin response returns within its 5 s bound while the fill continues
 # (`"refreshing": true`). Cache that body only briefly so the next panel refresh
 # picks up the filled result instead of pinning the empty one for 15 minutes.
 REFRESHING_TTL = 15
 SETTLED_TTL = 900
+FAILURE_TTL = 5
+UNAVAILABLE = b'{"error":"stats upstream unavailable"}'
+# The admin keeps stale-good legs for 24h and labels them; the proxy never holds a
+# body longer than that.
+MAX_STALE = 24 * 3600
+
+
+# Uptime (David 2026-11-06): "what % of the time a user used the product did it
+# go the way it should". Served by this sidecar from FIXED PromQL against the
+# in-cluster Prometheus, because the Business org must not hold a Prometheus
+# datasource (see README: datasource queries are not folder-scoped). No query
+# text, label or range ever comes from the request. Attempt-weighted: every
+# settled attempt in a core journey counts once; cancelled/degraded/unknown are
+# not settled. Definitions mirror the Omi Core Features stat panels.
+UPTIME_PATH = "/api/omi/stats/uptime"
+PROMETHEUS = os.environ.get(
+    "OMI_UPTIME_PROMETHEUS_URL", "http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090"
+)
+# (key, label, success selector, settled selector)
+UPTIME_JOURNEYS = (
+    (
+        "capture",
+        "Live capture",
+        'pusher_socket_closed_total{frames_seen="audio",reason!~"queue_wait_timeout|application_error"}',
+        'pusher_socket_closed_total{frames_seen="audio"}',
+    ),
+    (
+        "saved",
+        "Conversation saved",
+        'omi_journey_terminal_total{journey="capture_finalization",outcome="success"}',
+        'omi_journey_terminal_total{journey="capture_finalization",outcome=~"success|failure"}',
+    ),
+    (
+        "chat",
+        "Chat answer",
+        'omi_journey_terminal_total{journey="chat_response",outcome="success"}',
+        'omi_journey_terminal_total{journey="chat_response",outcome=~"success|failure"}',
+    ),
+    (
+        "ptt",
+        "Push-to-talk",
+        'omi_client_journey_terminal_total{job="cloud-run-application-metrics",journey="realtime_voice",outcome="success"}',
+        'omi_client_journey_terminal_total{job="cloud-run-application-metrics",journey="realtime_voice",outcome=~"success|failure"}',
+    ),
+)
+UPTIME_DAYS = 35
+UPTIME_TTL = 900
+UPTIME_MAX_STALE = 6 * 3600
+GOOD_MARK, BAD_MARK = "\u200b", "\u2060"  # tone markers read by the board (lib/wall-series.ts)
+
+
+def uptime_pct(success, settled):
+    return None if not settled else round(100 * success / settled, 2)
+
+
+def uptime_delta_text(current, prior):
+    """The board's strip text: change in percentage points, up is good."""
+    if current is None:
+        return "—"
+    if prior is None:
+        return "no prior"
+    shown = round(current - prior, 1)
+    glyph = "▲" if shown > 0 else "▼" if shown < 0 else "■"
+    mark = GOOD_MARK if shown > 0 else BAD_MARK if shown < 0 else ""
+    return f"{glyph}\u00a0{abs(shown):.1f}\u00a0pp{mark}"
+
+
+def build_uptime(instant, ranged, now):
+    """Uptime frames from two fixed-query readers: `instant(expr) -> float|None`
+    and `ranged(expr) -> [(unix_seconds, float)]`. Pure; no I/O of its own."""
+    totals = {"now": [0.0, 0.0], "prior": [0.0, 0.0]}
+    journeys = []
+    for key, label, success, settled in UPTIME_JOURNEYS:
+        row = {"journey": label}
+        for window, offset in (("now", ""), ("prior", " offset 7d")):
+            ok = instant(f"sum(increase({success}[7d]{offset}))") or 0.0
+            all_ = instant(f"sum(increase({settled}[7d]{offset}))") or 0.0
+            totals[window][0] += ok
+            totals[window][1] += all_
+            if window == "now":
+                row.update(uptime=uptime_pct(ok, all_), attempts=round(all_), failures=round(all_ - ok))
+        journeys.append(row)
+    current = uptime_pct(*totals["now"])
+    prior = uptime_pct(*totals["prior"])
+    days = {}
+    for key, _label, success, settled in UPTIME_JOURNEYS:
+        for part, expr in (("ok", success), ("all", settled)):
+            for stamp, value in ranged(f"sum(increase({expr}[1d]))"):
+                day = days.setdefault(int(stamp), {})
+                day[f"{key}_{part}"] = value
+    daily = []
+    for stamp in sorted(days):
+        day = days[stamp]
+        row = {"date": (stamp - 86400) * 1000}  # the UTC day the 1d increase covers
+        ok_sum = all_sum = 0.0
+        for key, *_ in UPTIME_JOURNEYS:
+            ok, all_ = day.get(f"{key}_ok", 0.0), day.get(f"{key}_all", 0.0)
+            row[key] = uptime_pct(ok, all_)
+            ok_sum, all_sum = ok_sum + ok, all_sum + all_
+        row["all"] = uptime_pct(ok_sum, all_sum)
+        daily.append(row)
+    return {
+        "asOf": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "frames": {
+            "headline": [{"value": current, "prior": prior}],  # one row: a null is never shown as an older value
+            "strip": [{"uptime": uptime_delta_text(current, prior)}],
+            "journeys": journeys,
+            "daily": daily,
+        },
+    }
 
 
 def allowed_path(path):
@@ -54,15 +173,34 @@ def allowed_path(path):
     )
 
 
+def stale_until(body):
+    """The admin's `staleUntil` (ISO time its oldest served value turns 24h old),
+    or None when the body carries no valid bound."""
+    try:
+        value = json.loads(body).get("staleUntil")
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        return None
+
+
 class StatsProxy:
-    def __init__(self, opener=None, clock=time.time):
+    def __init__(self, opener=None, clock=time.time, spawn=None):
         self.opener = opener or build_opener(ProxyHandler({}), NoRedirect())
         self.clock = clock
+        self.spawn = spawn or (lambda work: threading.Thread(target=work, daemon=True).start())
         self.token = ""
         self.expiry = 0
         self.token_lock = threading.Lock()
-        self.cache_lock = threading.Lock()
-        self.cache = {}
+        # state_lock guards the dicts below and is never held across I/O. One
+        # fill lock per path: a slow series no longer queues every other path
+        # (2026-10-28: one global lock serialized all six behind the slowest).
+        self.state_lock = threading.Lock()
+        self.cache = {}  # path -> (expires_at, status, body), latest answer
+        self.good = {}  # path -> (at, body, serve_until), last 200
+        self.fill_locks = {}
+        self.refreshing = set()
+        self.uptime_lock = threading.Lock()
+        self.uptime_cache = None  # (at, body)
 
     def request(self, url, headers=None, data=None, timeout=20):
         request = Request(url, headers=headers or {}, data=data)
@@ -97,45 +235,159 @@ class StatsProxy:
             self.token, self.expiry = token, expiry
             return token
 
-    def remember(self, path, status, body, ttl):
+    def remember(self, path, status, body, ttl, refreshing=False):
+        """Record a path's latest answer; caller holds state_lock."""
         stamp = self.clock()
         self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
+        self.good = {k: v for k, v in self.good.items() if stamp < v[2]}
         while self.cache and (
             len(self.cache) >= 32 or sum(len(v[2]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
         ):
             del self.cache[next(iter(self.cache))]
-        self.cache[path] = (min(stamp + ttl, (int(stamp) // 86400 + 1) * 86400), status, body)
+        expires = stamp + ttl
+        if status == 200:
+            # A `refreshing` body keeps the age of the last settled answer, so
+            # repeated refreshing answers cannot extend MAX_STALE indefinitely.
+            prior = self.good.get(path)
+            at = prior[0] if refreshing and prior else stamp
+            # Fail closed: only a body that states its own data-age bound
+            # (admin `staleUntil`) is ever served stale, and never past it.
+            bound = stale_until(body)
+            if bound is None or bound <= stamp:
+                self.good.pop(path, None)
+            else:
+                serve_until = min(at + MAX_STALE, bound)
+                self.good[path] = (at, body, serve_until)
+                expires = min(expires, serve_until)
+            if bound is not None and bound <= stamp:
+                # Already past its own data-age bound: not data the board may show.
+                status, body, expires = 502, UNAVAILABLE, stamp + FAILURE_TTL
+        self.cache[path] = (expires, status, body)
         return status, body
+
+    def upstream(self, path):
+        for attempt in range(2):
+            try:
+                token = self.identity_token()
+                body = self.request(
+                    "https://admin.omi.me" + path,
+                    {"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                    timeout=360,
+                )
+                parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
+                refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
+                return 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL, refreshing, False
+            except HTTPError as exc:
+                exc.close()
+                if exc.code == 401 and attempt == 0:
+                    with self.token_lock:
+                        self.token, self.expiry = "", 0
+                    continue
+                # A definitive denial (reader revoked) must not keep finance data
+                # on the board; transport errors and 5xx may serve last good.
+                return 502, UNAVAILABLE, FAILURE_TTL, False, exc.code in (401, 403)
+            except Exception:
+                break
+        return 502, UNAVAILABLE, FAILURE_TTL, False, False
+
+    def fill(self, path):
+        """One upstream read per path at a time; waiters share its answer."""
+        with self.state_lock:
+            lock = self.fill_locks.setdefault(path, threading.Lock())
+        with lock:
+            with self.state_lock:
+                cached = self.cache.get(path)
+                if cached and self.clock() < cached[0]:
+                    return cached[1], cached[2]
+            status, body, ttl, refreshing, denied = self.upstream(path)
+            with self.state_lock:
+                if denied:
+                    self.good.pop(path, None)
+                elif status != 200 and path in self.good:
+                    # Keep serving the last good body; retry after FAILURE_TTL.
+                    self.cache[path] = (self.clock() + ttl, status, body)
+                    return status, body
+                return self.remember(path, status, body, ttl, refreshing)
+
+    def refresh(self, path):
+        try:
+            self.fill(path)
+        except Exception:
+            pass
+        finally:
+            with self.state_lock:
+                self.refreshing.discard(path)
+
+    def prometheus(self, endpoint, params):
+        body = self.request(f"{PROMETHEUS}/api/v1/{endpoint}?{urlencode(params)}", timeout=30)
+        parsed = json.loads(body)
+        if parsed.get("status") != "success":
+            raise ValueError("prometheus query failed")
+        return parsed["data"]["result"]
+
+    def uptime(self):
+        """Fixed-query uptime, cached UPTIME_TTL; a failed refresh serves the
+        last good body up to UPTIME_MAX_STALE (its own asOf says how old)."""
+        with self.uptime_lock:
+            stamp = self.clock()
+            cached = self.uptime_cache
+            if cached and stamp < cached[0] + UPTIME_TTL:
+                return 200, cached[1]
+            now = datetime.fromtimestamp(stamp, timezone.utc)
+            end = int(stamp // 86400 * 86400)  # whole UTC days
+
+            def instant(expr):
+                result = self.prometheus("query", {"query": expr, "time": int(stamp)})
+                return float(result[0]["value"][1]) if result else None
+
+            def ranged(expr):
+                result = self.prometheus(
+                    "query_range",
+                    {"query": expr, "start": end - 86400 * (UPTIME_DAYS - 1), "end": end, "step": 86400},
+                )
+                return [(t, float(v)) for t, v in result[0]["values"]] if result else []
+
+            try:
+                body = json.dumps(build_uptime(instant, ranged, now), ensure_ascii=False).encode()
+            except Exception:
+                if cached and stamp < cached[0] + UPTIME_MAX_STALE:
+                    return 200, cached[1]
+                return 502, UNAVAILABLE
+            self.uptime_cache = (stamp, body)
+            return 200, body
 
     def fetch(self, path):
         if not allowed_path(path):
             return 404, b'{"error":"not found"}'
-        # Share failures briefly too: waiters must not each retry a 360s timeout.
-        with self.cache_lock:
+        if path == UPTIME_PATH:
+            return self.uptime()
+        now = self.clock()
+        start = False
+        with self.state_lock:
             cached = self.cache.get(path)
-            if cached and self.clock() < cached[0]:
+            fresh = cached is not None and now < cached[0]
+            if fresh and cached[1] == 200:
                 return cached[1], cached[2]
-            for attempt in range(2):
-                try:
-                    token = self.identity_token()
-                    body = self.request(
-                        "https://admin.omi.me" + path,
-                        {"Authorization": f"Bearer {token}", "Accept": "application/json"},
-                        timeout=360,
-                    )
-                    parsed = json.loads(body)  # Never forward HTML, redirects or a login page.
-                    refreshing = isinstance(parsed, dict) and parsed.get("refreshing") is True
-                    return self.remember(path, 200, body, REFRESHING_TTL if refreshing else SETTLED_TTL)
-                except HTTPError as exc:
-                    exc.close()
-                    if exc.code == 401 and attempt == 0:
-                        with self.token_lock:
-                            self.token, self.expiry = "", 0
-                        continue
-                    break
-                except Exception:
-                    break
-            return self.remember(path, 502, b'{"error":"stats upstream unavailable"}', 5)
+            good = self.good.get(path)
+            if not (good and now < good[2]):
+                good = None
+                if fresh:
+                    return cached[1], cached[2]
+            elif not fresh and path not in self.refreshing:
+                # Stale-while-revalidate: answer now, refresh once in the
+                # background (not while a recent failure is cooling down).
+                self.refreshing.add(path)
+                start = True
+        if good is None:
+            return self.fill(path)
+        if start:
+            try:
+                self.spawn(lambda: self.refresh(path))
+            except Exception:
+                # e.g. thread start failed: let the next request try again.
+                with self.state_lock:
+                    self.refreshing.discard(path)
+        return 200, good[1]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -176,7 +428,10 @@ class Server(ThreadingHTTPServer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.slots = threading.BoundedSemaphore(8)
+        # Handler threads, not upstream calls: each path already has at most one
+        # upstream read (fill locks), so same-path waiters must not be able to
+        # hold every slot while another path's request queues (Luna r2).
+        self.slots = threading.BoundedSemaphore(self.request_queue_size)
 
     def get_request(self):
         request, address = super().get_request()

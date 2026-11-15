@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-subscription-price-presentment-drift",
+  "violated_contract": "A subscription offer must disclose the same unambiguous currency, full recurring amount and billing interval that its selected price charges in checkout, including the amount after a free trial. Locale-dependent dollar symbols, server-formatted strings and automatic presentment conversion must not split that contract.",
+  "canonical_prevention": "Format purchase amounts from the selected catalog currency and Stripe minor units through one shared client formatter, carry those strings into the web paywall, disclose post-trial totals beside the action, and pin checkout to the selected price's original currency with Adaptive Pricing disabled. Exercise real rendered purchase surfaces and checkout handoffs in multiple locales and retain zero-decimal legacy management coverage.",
+  "canonical_prevention_artifact": [
+    "app/lib/utils/billing_price.dart",
+    "app/test/widgets/billing_currency_surfaces_test.dart",
+    "backend/tests/unit/test_payment_currency_changes.py",
+    "backend/tests/unit/test_payment_promo_adaptive_pricing.py"
+  ],
+  "evidence_prs": [23604],
+  "scope_hints": [
+    "app/lib/pages/paywall/",
+    "app/lib/pages/settings/widgets/plans_sheet.dart",
+    "backend/utils/stripe.py",
+    "backend/utils/storefront_copy.py",
+    "web/paywall/index.html"
+  ],
+  "status": "open"
+}

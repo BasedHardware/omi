@@ -22,6 +22,11 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      expected_sha:
+        description: 'Full commit SHA the checked-out tree must contain before any mutation (blank keeps the unpinned behavior; prod dispatches should pin the reviewed SHA)'
+        required: false
+        default: ''
+        type: string
       mode:
         description: 'deploy applies the chart; rollback restores an earlier Helm revision'
         required: true
@@ -139,8 +144,36 @@ jobs:
           ref: ${{ github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch }}
           fetch-depth: 0
 
+      - name: Bind shared record token lease rollout inputs
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}
+        shell: bash
+        env:
+          RECORD_TOKEN_LEASE_MODE: ${{ vars.RECORD_TOKEN_LEASE_MODE || 'off' }}
+          RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT: ${{ vars.RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT || '0' }}
+          RECORD_TOKEN_LEASE_SECONDS: ${{ vars.RECORD_TOKEN_LEASE_SECONDS || '3600' }}
+          RECORD_TOKEN_LEASE_DEPLOYED_AT: ${{ vars.RECORD_TOKEN_LEASE_DEPLOYED_AT || '0' }}
+        run: |
+          python3 - <<'PYTHON'
+          import math, os
+          mode = os.environ['RECORD_TOKEN_LEASE_MODE']
+          percent = int(os.environ['RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT'])
+          seconds = int(os.environ['RECORD_TOKEN_LEASE_SECONDS'])
+          epoch = float(os.environ['RECORD_TOKEN_LEASE_DEPLOYED_AT'])
+          if mode not in {'off', 'shadow', 'serve'} or not 0 <= percent <= 100 or not 1800 <= seconds <= 7200:
+              raise ValueError('invalid record token lease rollout vector')
+          if not math.isfinite(epoch) or epoch < 0 or (mode != 'off' and epoch <= 0):
+              raise ValueError('enabled record token leases require a pinned release epoch')
+          epoch_value = str(int(epoch)) if epoch.is_integer() else repr(epoch)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for key, value in {'RECORD_TOKEN_LEASE_MODE': mode, 'RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT': percent,
+                                 'RECORD_TOKEN_LEASE_SECONDS': seconds, 'RECORD_TOKEN_LEASE_DEPLOYED_AT': epoch_value}.items():
+                  output.write(f'{key}={value}\n')
+          PYTHON
+
       - name: Admit checked-out production source and image identity
         id: admit-deploy-source
+        env:
+          EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
         run: |
           set -euo pipefail
           CHECKED_OUT_SHA=$(git rev-parse HEAD)
@@ -150,6 +183,31 @@ jobs:
               echo "ERROR: checked-out HEAD $CHECKED_OUT_SHA is not an ancestor of fresh origin/main $(git rev-parse origin/main)." >&2
               exit 1
             fi
+          fi
+          # Optional caller pin, checked before any helm/kubectl mutation in
+          # this workflow: the checked-out tree must contain this commit (the
+          # containment rule gcp_backend.yml applies to release_sha), so a
+          # dispatch cannot roll whatever main happened to be at checkout time.
+          # Blank keeps the historical unpinned behavior for existing callers;
+          # manual prod dispatches should pass the reviewed SHA.
+          if [[ -n "${EXPECTED_SHA:-}" ]]; then
+            if [[ ! "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ || "$EXPECTED_SHA" == "0000000000000000000000000000000000000000" ]]; then
+              echo "ERROR: expected_sha must be one non-zero, lowercase, full commit SHA." >&2
+              exit 1
+            fi
+            # Plain object-type check, version-proof like gcp_backend.yml (git
+            # 2.54 regressed "<full-sha>^{commit}" peeling).
+            if [ "$(git cat-file -t "$EXPECTED_SHA" 2>/dev/null)" != "commit" ]; then
+              echo "ERROR: expected_sha $EXPECTED_SHA is not a commit in this repository." >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$EXPECTED_SHA" "$CHECKED_OUT_SHA"; then
+              echo "ERROR: expected_sha $EXPECTED_SHA is not contained in the checked-out HEAD $CHECKED_OUT_SHA; failing closed before any mutation." >&2
+              exit 1
+            fi
+            echo "Admitted expected tree: $EXPECTED_SHA is contained in $CHECKED_OUT_SHA."
+          elif [[ "${{ github.event_name }}" == workflow_dispatch ]]; then
+            echo "::notice title=Deploy tree unpinned::No expected_sha was provided; deploying the head of the selected ref ($CHECKED_OUT_SHA)."
           fi
           IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")
           echo "Admitted deployment source: $CHECKED_OUT_SHA"
@@ -328,7 +386,8 @@ jobs:
         with:
           source_sha: ${{ env.BACKEND_LISTEN_SOURCE_SHA }}
           project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       # Private env values (e.g. a test-account cohort UID) live only in the prod
       # environment secret LISTEN_PRIVATE_VALUES_YAML and are rendered by Helm in

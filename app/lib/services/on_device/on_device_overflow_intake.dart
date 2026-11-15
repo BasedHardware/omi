@@ -23,13 +23,29 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
     if (!name.startsWith('audio_omibatchoverflow_') || !name.endsWith('.bin')) continue;
     final existing = ledger.nativeWalForFileName(name);
     if (existing != null) {
-      if (!await ledger.nativeWalIsDurable(existing, generation)) await ledger.persistRetryMetadata(existing);
+      var needsPersist = false;
+      if (existing.ownerUid == null || existing.ownerUid!.isEmpty || existing.ownerUid == 'legacy') {
+        final info = BatchRecordingInfo.fromFileName(name);
+        if (info != null) {
+          final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);
+          if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
+          if (owner != null && owner.isNotEmpty) {
+            existing.ownerUid = owner;
+            needsPersist = true;
+          }
+        }
+      }
+      if (needsPersist || !await ledger.nativeWalIsDurable(existing, generation)) {
+        if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
+        await ledger.persistRetryMetadata(existing);
+      }
       continue;
     }
     final info = BatchRecordingInfo.fromFileName(name);
     if (info == null || !info.isOverflow) continue;
     final owner = await owners.resolve(entry, name, uid, timerStart: info.timerStart);
-    if (owner == null) continue;
+    if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
+    if (owner == null || owner.isEmpty) continue;
     final bytes = await entry.length();
     if (bytes == 0) continue;
     final frames = await countBatchRecordingFrames(entry.path);
@@ -54,5 +70,10 @@ Future<void> intakeOnDeviceOverflow(LocalWalSyncImpl ledger) async {
       ..frameSize = info.frameSize;
     await ledger.addExternalWal(wal, admittedGeneration: generation);
     if (!await ledger.nativeWalIsDurable(wal, generation)) throw StateError('Overflow WAL index is not durable');
+  }
+  // The headless on-device worker calls this intake without Home/native intake.
+  // Re-admit legacy rows whose owner was just resolved into its existing ledger.
+  if (generation == ledger.sessionGeneration && uid == SharedPreferencesUtil().uid) {
+    await ledger.rehydrateForCurrentUser();
   }
 }

@@ -90,7 +90,7 @@ def test_invalid_bounds_and_metric_failure_never_block_finalize(monkeypatch):
     metrics.record_capture_loss(item)
 
 
-def persistence_hook(record):
+def persistence_hook(record, settlements=None):
     # Execute the production nested hook without importing LLM/DB providers.
     tree = ast.parse((Path(__file__).parents[2] / 'utils/conversations/process_conversation.py').read_text())
     process = next(
@@ -109,6 +109,7 @@ def persistence_hook(record):
         'derived_effects_disposition_observer': None,
         'DerivedEffectsDisposition': SimpleNamespace(RUN='run'),
         'defer_derived_effects': True,
+        'final_pass_settlements': [] if settlements is None else settlements,
         # Owner-recognition observation is a separate counter. This hook only
         # proves capture-loss accounting still runs on an accepted persist.
         '_observe_owner_recognition_completion': lambda _completed: None,
@@ -126,6 +127,18 @@ def test_processing_hook_counts_only_accepted_persistence():
     record.assert_not_called()
     report(True, completed=item)
     record.assert_called_once_with(item)
+
+
+@pytest.mark.parametrize('accepted', [False, True])
+def test_processing_hook_settles_speaker_pass_once_with_persistence_result(accepted):
+    settle = MagicMock()
+    settlements = [settle]
+    report = persistence_hook(MagicMock(), settlements)
+    report(accepted)
+    settle.assert_called_once_with(accepted)
+    assert settlements == []
+    report(accepted)
+    settle.assert_called_once_with(accepted)
 
 
 def test_pydantic_internal_evidence_survives_wire_exclusion_for_finalize_accounting(monkeypatch):

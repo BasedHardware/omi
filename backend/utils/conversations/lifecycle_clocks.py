@@ -32,6 +32,11 @@ def utc(value: Any) -> datetime | None:
 
 
 def speech_clock(uid: str, row: Mapping[str, Any]) -> datetime | None:
+    from utils.conversations.recorded_time import conversation_span
+
+    if row.get('recorded_end') is not None:
+        span = conversation_span(row)
+        return span.recorded_end if span else None
     legacy = utc(row.get('finished_at'))
     speech = utc(row.get('last_speech_at')) or legacy
     if shadow_or_serve(LIFECYCLE_V2_MODE_ENV):
@@ -42,7 +47,7 @@ def speech_clock(uid: str, row: Mapping[str, Any]) -> datetime | None:
 def activity_updates(
     uid: str,
     current: Mapping[str, Any],
-    at: datetime,
+    arrival_at: datetime,
     *,
     segments: Sequence[Mapping[str, Any]] = (),
     started_at: Any = None,
@@ -50,8 +55,10 @@ def activity_updates(
     """Monotonic activity and actual speech end, never empty-flush speech time."""
     if not shadow_or_serve(LIFECYCLE_V2_MODE_ENV):
         return {}
-    activity = max(filter(None, (utc(at), utc(current.get('last_activity_at')))))
-    updates: dict[str, Any] = {'last_activity_at': activity}
+    updates: dict[str, Any] = {}
+    activity = utc(current.get('recorded_end')) or utc(current.get('last_speech_at'))
+    if activity is not None:
+        updates['last_activity_at'] = activity
     origin = utc(started_at) or utc(current.get('started_at'))
     ends = [
         float(s['end'])
@@ -66,6 +73,7 @@ def activity_updates(
     if origin and ends:
         end = origin + timedelta(seconds=max(ends))
         updates['last_speech_at'] = max(end, utc(current.get('last_speech_at')) or end)
+        updates['last_activity_at'] = max(end, activity or end)
     return updates
 
 
@@ -75,13 +83,33 @@ def segment_activity_updates(uid, current, at, live_segments, started_at):
 
 
 def overlap_snapshot(uid, conversation, persisted):
-    """Carry the internal speech clock across the existing Conversation DTO seam."""
-    if not serving_for(LIFECYCLE_V2_MODE_ENV, uid):
-        return conversation
-    return {**conversation.model_dump(), 'last_speech_at': persisted.get('last_speech_at')}
+    """Carry recording evidence across the Conversation DTO seam."""
+    return {
+        **persisted,
+        **{
+            key: getattr(conversation, key, persisted.get(key))
+            for key in (
+                'id',
+                'source',
+                'status',
+                'discarded',
+                'started_at',
+                'finished_at',
+                'created_at',
+                'transcript_segments',
+                'external_data',
+                'client_device_id',
+            )
+        },
+        **{
+            key: persisted.get(key)
+            for key in ('recorded_start', 'recorded_end', 'arrival_at', 'clock', 'last_speech_at')
+        },
+    }
 
 
 def overlap_fields(uid, row):
-    if not serving_for(LIFECYCLE_V2_MODE_ENV, uid):
-        return row
-    return dict(row, started_at=utc(row.get('started_at')), finished_at=speech_clock(uid, row))
+    from utils.conversations.recorded_time import conversation_span
+
+    span = conversation_span(row)
+    return dict(row, started_at=span.recorded_start if span else None, finished_at=span.recorded_end if span else None)

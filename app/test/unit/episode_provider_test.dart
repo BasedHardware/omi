@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
@@ -5,6 +7,9 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 
 final _t0 = DateTime.utc(2026, 10, 20, 12);
 
@@ -20,11 +25,622 @@ Episode _episode({String id = 'ep1', bool live = true, List<EpisodeItem> items =
 
 EpisodeItem _item(String id) => EpisodeItem(id: id, text: 'Book the table', createdAt: _t0);
 
+class _HomeHistory extends ConversationProvider {
+  _HomeHistory() : super(isSignedIn: () => false);
+  void changed() => notifyListeners();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  test('Home collects every page, including empty filtered pages, before publishing membership', () async {
+    final cursorCalls = <String?>[];
+    final lastPage = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(
+      fetchPage: (from, to, {cursor}) async {
+        cursorCalls.add(cursor);
+        if (cursor == null) return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'page-2'));
+        return lastPage.future;
+      },
+    )..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final reading = provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+    await Future<void>.delayed(Duration.zero);
+    expect(cursorCalls, [null, 'page-2']);
+    expect(provider.homeEpisodes, isEmpty);
+    lastPage.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)])));
+    await reading;
+    expect(provider.homeEpisodes.single.id, 'ep1');
+    await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+    expect(cursorCalls.length, 2, reason: 'rebuilds coalesce within the poll interval');
+  });
+
+  test('unfinished Home requests coalesce without treating the window as cached', () async {
+    var calls = 0;
+    final page = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(
+      fetchPage: (_, __, {cursor}) {
+        calls++;
+        return page.future;
+      },
+    )..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final first = provider.refreshHome(_t0, _t0);
+    final second = provider.refreshHome(_t0, _t0);
+    expect(calls, 1);
+    page.complete(const ApiFailure(ApiProblem(ApiProblemKind.transport)));
+    await Future.wait([first, second]);
+    await provider.refreshHome(_t0, _t0);
+    expect(calls, 2, reason: 'failed coalesced reads must remain retryable');
+  });
+
+  test('Home re-reads on its own while an episode waits for its summary, and stops once settled', () {
+    fakeAsync((async) {
+      var reads = 0;
+      var composed = false;
+      final waiting = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+      );
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
+        ],
+      );
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async {
+          reads++;
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [composed ? done : waiting]));
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      expect(reads, 1);
+      async.elapse(EpisodeProvider.pollInterval);
+      expect(reads, 2);
+      composed = true;
+      async.elapse(EpisodeProvider.pollInterval);
+      expect(reads, 3);
+      expect(provider.homeEpisodes.single.composed, isTrue);
+      async.elapse(EpisodeProvider.pollInterval * 3);
+      expect(reads, 3, reason: 'a settled Home stops re-reading');
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  group('Home hold', () {
+    final waiting = Episode(
+      id: 'ep1',
+      live: false,
+      startedAt: _t0,
+      lastActivityAt: _t0,
+      closedAt: _t0,
+      conversationIds: const ['a', 'b'],
+    );
+
+    test('stops re-reading once the summary wait runs out', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var now = _t0;
+        final provider = EpisodeProvider(
+          clock: () => now,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting]));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        now = _t0.add(Episode.summaryWait);
+        async.elapse(EpisodeProvider.pollInterval);
+        expect(reads, 2);
+        async.elapse(EpisodeProvider.pollInterval * 3);
+        expect(reads, 2, reason: 'past the wait Home shows plain conversations and stops');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a failed read keeps re-reading', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            if (reads == 2) return const ApiFailure<EpisodePageRead>(ApiProblem(ApiProblemKind.transport));
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting]));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval * 2);
+        expect(reads, 3);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a timer from an old range does not read it again', () {
+      fakeAsync((async) {
+        final froms = <DateTime>[];
+        final later = _t0.add(const Duration(days: 1));
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            froms.add(from);
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: from == _t0 ? [waiting] : const []));
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        unawaited(provider.refreshHome(later, later));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval * 2);
+        expect(froms, [_t0, later]);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a second episode does not reset the first episode call budget', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var includeSecond = false;
+        final now = _t0.add(const Duration(hours: 2));
+        final history = _HomeHistory()
+          ..processingConversations = [
+            ServerConversation(
+              id: 'a',
+              createdAt: _t0,
+              startedAt: _t0,
+              status: ConversationStatus.processing,
+              structured: Structured('', ''),
+            ),
+          ];
+        Episode pending(String id) => Episode(
+              id: id,
+              live: false,
+              startedAt: _t0,
+              lastActivityAt: _t0,
+              closedAt: id == 'ep1' ? _t0 : now,
+              title: 'read-$reads',
+              conversationIds: const ['a', 'b'],
+            );
+        final provider = EpisodeProvider(
+          clock: () => now,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(
+              EpisodePageRead(enabled: true, episodes: [pending('ep1'), if (includeSecond) pending('ep2')]),
+            );
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 13));
+        expect(reads, 6, reason: 'the old processing hold has spent five calls');
+        includeSecond = true;
+        unawaited(provider.refreshHome(_t0, _t0, force: true));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        expect(reads, 17, reason: '5 first-only, 5 shared, 5 second-only calls, plus 2 explicit loads');
+        expect(provider.homeEpisodes.first.title, 'read-12', reason: 'ep1 stops after its own 10 calls');
+        expect(provider.homeEpisodes.last.title, 'read-17', reason: 'ep2 receives its own remaining budget');
+        provider.dispose();
+        history.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('new held episodes cannot exceed the per-user window call ceiling', () {
+      fakeAsync((async) {
+        var reads = 0;
+        var episodeId = 'ep1';
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [
+                  Episode(
+                    id: episodeId,
+                    live: false,
+                    startedAt: _t0,
+                    lastActivityAt: _t0,
+                    closedAt: _t0,
+                    conversationIds: const ['a', 'b'],
+                  ),
+                ],
+              ),
+            );
+          },
+        )..debugSetLive(null);
+        for (final id in ['ep1', 'ep2', 'ep3']) {
+          episodeId = id;
+          unawaited(provider.refreshHome(_t0, _t0, force: true));
+          async.flushMicrotasks();
+          async.elapse(const Duration(hours: 2));
+        }
+        expect(reads, 3 + EpisodeProvider.homeHoldWindowCalls);
+        // Returning to an old window must retain its ceiling as well.
+        unawaited(provider.refreshHome(_t0.add(const Duration(days: 1)), _t0.add(const Duration(days: 1))));
+        async.flushMicrotasks();
+        provider.invalidateHome();
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        expect(reads, 5 + EpisodeProvider.homeHoldWindowCalls);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('multi-page holds count backend calls and preserve unread window membership', () {
+      fakeAsync((async) {
+        final calls = <String?>[];
+        Episode pending(String id) => Episode(
+              id: id,
+              live: false,
+              startedAt: _t0,
+              lastActivityAt: _t0,
+              closedAt: _t0,
+              conversationIds: const ['a', 'b'],
+              moments: id == 'ep2' && calls.length >= 5
+                  ? [
+                      EpisodeMoment(
+                        id: 'm',
+                        conversationId: 'a',
+                        startedAt: _t0,
+                        endedAt: _t0,
+                        points: const [EpisodePoint('Notes landed')],
+                      ),
+                    ]
+                  : const [],
+            );
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          fetchPage: (from, to, {cursor}) async {
+            calls.add(cursor);
+            return ApiSuccess(switch (cursor) {
+              null => EpisodePageRead(
+                  enabled: true,
+                  episodes: [_episode(id: 'live')],
+                  nextCursor: 'page-2',
+                ),
+              'page-2' => EpisodePageRead(enabled: true, episodes: [pending('ep2')], nextCursor: 'page-3'),
+              _ => EpisodePageRead(enabled: true, episodes: [pending('ep3')]),
+            });
+          },
+        )..debugSetLive(null);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(EpisodeProvider.pollInterval);
+        expect(calls, [null, 'page-2', 'page-3', null, 'page-2', 'page-3']);
+        expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
+        expect(provider.homeEpisodes.singleWhere((e) => e.id == 'ep2').composed, isTrue);
+        async.elapse(const Duration(hours: 2));
+        expect(
+          calls.length,
+          3 + EpisodeProvider.homeHoldAttempts,
+          reason: '10 extra backend calls, not 10 full-window scans',
+        );
+        expect(
+          calls.where((c) => c == 'page-3').length,
+          4,
+          reason: 'older held episodes remain reachable; the last retry stops when its call budget runs out',
+        );
+        expect(provider.homeEpisodes.map((e) => e.id), ['live', 'ep2', 'ep3']);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a same-window episode closure cancels the old timer and reschedules from the new read', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final provider = EpisodeProvider(
+          clock: () => _t0,
+          wrapUp: (_, {conversationId}) async => ApiSuccess(_episode(id: 'ep2', live: false)),
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [
+                  waiting,
+                  _episode(id: 'ep2'),
+                ],
+              ),
+            );
+          },
+        )..debugSetLive(_episode(id: 'ep2'));
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 20));
+        provider.onLiveFinalized();
+        expect(provider.homeEpisodes.last.live, isFalse);
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 10));
+        expect(reads, 1, reason: 'the invalidated generation must not fire at 30 seconds');
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        expect(reads, 2);
+        async.elapse(const Duration(seconds: 29));
+        expect(reads, 2);
+        async.elapse(const Duration(seconds: 1));
+        expect(reads, 3, reason: 'the current generation has its own timer');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('a device clock far behind does not wait forever', () {
+      expect(waiting.awaitingSummary(_t0.subtract(const Duration(hours: 1))), isFalse);
+    });
+  });
+
+  group('a closed episode held by a processing member is re-read until its summary lands', () {
+    final closedLongAgo = _t0.add(const Duration(hours: 2));
+    Episode closed({bool composed = false}) => Episode(
+          id: 'ep1',
+          live: false,
+          startedAt: _t0,
+          lastActivityAt: _t0,
+          title: 'Dinner',
+          conversationIds: const ['c1', 'c2'],
+          moments: composed
+              ? [
+                  EpisodeMoment(
+                    id: 'm',
+                    conversationId: 'c1',
+                    startedAt: _t0,
+                    endedAt: _t0,
+                    points: const [EpisodePoint('Picked a trail')],
+                  ),
+                ]
+              : const [],
+        );
+    ServerConversation processing(String id) => ServerConversation(
+          id: id,
+          createdAt: _t0,
+          startedAt: _t0,
+          status: ConversationStatus.processing,
+          structured: Structured('', ''),
+        );
+
+    test('re-reads with backoff and stops once the composed copy arrives', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final history = _HomeHistory()..processingConversations = [processing('c2')];
+        final provider = EpisodeProvider(
+          clock: () => closedLongAgo,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed(composed: reads >= 3)]));
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        expect(reads, 1);
+        async.elapse(const Duration(seconds: 30));
+        async.flushMicrotasks();
+        expect(reads, 2, reason: 'first re-read at the poll interval');
+        async.elapse(const Duration(seconds: 60));
+        async.flushMicrotasks();
+        expect(reads, 3, reason: 'second re-read after backing off');
+        expect(provider.homeEpisodes.single.composed, isTrue);
+        async.elapse(const Duration(hours: 1));
+        async.flushMicrotasks();
+        expect(reads, 3, reason: 'a composed copy ends the hold');
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+
+    test('gives up after the bounded number of re-reads', () {
+      fakeAsync((async) {
+        var reads = 0;
+        final history = _HomeHistory()..processingConversations = [processing('c2')];
+        final provider = EpisodeProvider(
+          clock: () => closedLongAgo,
+          fetchPage: (from, to, {cursor}) async {
+            reads++;
+            return ApiSuccess(EpisodePageRead(enabled: true, episodes: [closed()]));
+          },
+        )..debugSetLive(null);
+        provider.observeHomeConversations(history);
+        unawaited(provider.refreshHome(_t0, _t0));
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 2));
+        async.flushMicrotasks();
+        expect(reads, 1 + EpisodeProvider.homeHoldAttempts);
+        provider.dispose();
+        async.flushTimers();
+      });
+    });
+  });
+
+  for (final close in ['poll', 'finalize', 'wrapUp']) {
+    test('Home refreshes immediately after close via $close and fences a stale in-flight read', () async {
+      var closed = false;
+      var reads = 0;
+      final stale = Completer<ApiResult<EpisodePageRead>>();
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: closed ? null : _episode())),
+        lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
+        wrapUp: (_, {conversationId}) async => ApiSuccess(_episode(live: false)),
+        fetchPage: (from, to, {cursor}) async {
+          reads++;
+          if (reads == 2) return stale.future;
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: !closed)]));
+        },
+      );
+      addTearDown(provider.dispose);
+      await provider.refreshLive();
+      await provider.refreshHome(_t0, _t0);
+      expect(provider.homeEpisodes.single.live, isTrue);
+      final inFlight = provider.refreshHome(_t0, _t0, force: true);
+      await Future<void>.delayed(Duration.zero);
+      closed = true;
+      switch (close) {
+        case 'poll':
+          await provider.refreshLive();
+        case 'finalize':
+          provider.onLiveFinalized();
+        case 'wrapUp':
+          await provider.wrapUp();
+      }
+      expect(provider.homeEpisodes.single.live, isFalse, reason: 'no individual-row flash while revalidating');
+      await provider.refreshHome(_t0, _t0);
+      expect(reads, 3, reason: 'close bypasses the 30-second Home cache');
+      stale.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode()])));
+      await inFlight;
+      expect(provider.homeEpisodes.single.live, isFalse);
+      expect(provider.live, isNull);
+    });
+  }
+
+  test('disabled episodes never request Home history', () async {
+    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) async => throw StateError('not admitted'));
+    addTearDown(provider.dispose);
+    await provider.refreshHome(_t0, _t0);
+    expect(provider.homeEpisodes, isEmpty);
+  });
+
+  test('an account switch rejects an old Home response and hides cached episodes immediately', () async {
+    SharedPreferencesUtil().uid = 'first';
+    final response = Completer<ApiResult<EpisodePageRead>>();
+    final provider = EpisodeProvider(fetchPage: (from, to, {cursor}) => response.future)
+      ..debugSetLive(null)
+      ..debugSetHomeEpisodes([_episode(live: false)]);
+    addTearDown(provider.dispose);
+    final reading = provider.refreshHome(_t0, _t0);
+    SharedPreferencesUtil().uid = 'second';
+    expect(provider.enabled, isFalse);
+    expect(provider.homeEpisodes, isEmpty);
+    response.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)])));
+    await reading;
+    expect(provider.homeEpisodes, isEmpty);
+  });
+
+  test('a failed later page preserves the last complete Home snapshot', () async {
+    final provider = EpisodeProvider(
+      fetchPage: (from, to, {cursor}) async => cursor == null
+          ? ApiSuccess(
+              EpisodePageRead(
+                enabled: true,
+                episodes: [_episode(id: 'partial')],
+                nextCursor: 'next',
+              ),
+            )
+          : const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+    )
+      ..debugSetLive(null)
+      ..debugSetHomeEpisodes([_episode(id: 'complete', live: false)]);
+    addTearDown(provider.dispose);
+    expect(await provider.refreshHome(_t0, _t0), isFalse);
+    expect(provider.homeEpisodes.single.id, 'complete');
+  });
+
+  for (final failure in ['failed page', 'repeated cursor']) {
+    test('Home does not cache a wider incomplete window: $failure', () async {
+      var calls = 0;
+      var incomplete = false;
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async {
+          calls++;
+          if (incomplete) {
+            if (failure == 'failed page') return const ApiFailure(ApiProblem(ApiProblemKind.transport));
+            return const ApiSuccess(EpisodePageRead(enabled: true, nextCursor: 'repeat'));
+          }
+          return ApiSuccess(EpisodePageRead(enabled: true, episodes: [_episode(live: false)]));
+        },
+      )..debugSetLive(null);
+      addTearDown(provider.dispose);
+      await provider.refreshHome(_t0, _t0.add(const Duration(days: 1)));
+      incomplete = true;
+      final wide = _t0.subtract(const Duration(days: 10));
+      await provider.refreshHome(wide, _t0.add(const Duration(days: 1)));
+      final afterFailure = calls;
+      incomplete = false;
+      await provider.refreshHome(wide.add(const Duration(days: 1)), _t0);
+      expect(calls, afterFailure + 1, reason: 'failed coverage cannot suppress the narrower read');
+    });
+  }
+
+  test('Home acknowledges only fetched live episode snapshots', () async {
+    final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
+    final history = _HomeHistory()..conversations = [member];
+    final episodes = EpisodeProvider(
+      fetchPage: (_, __, {cursor}) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+    )..debugSetLive(null);
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    episodes.observeHomeConversations(history);
+    expect(await episodes.refreshHome(_t0, _t0), isFalse);
+    expect(history.heldHomeEpisodes!(), isEmpty, reason: 'failed or missing snapshot never grants suppression');
+    episodes.debugSetHomeEpisodes([
+      Episode(
+        id: 'live',
+        live: true,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        conversationIds: const ['c1'],
+        members: [member],
+      ),
+    ]);
+    expect(history.heldHomeEpisodes!().keys, ['live']);
+    expect(history.heldHomeEpisodes!()['live']!.single.id, 'c1');
+    episodes.debugSetHomeEpisodes([]);
+    expect(history.heldHomeEpisodes!(), isEmpty);
+  });
+
+  test('local member deletion stays hidden after DELETE settles, while Undo restores it', () async {
+    final member = ServerConversation(id: 'c1', createdAt: _t0, structured: Structured('Member', ''));
+    final history = _HomeHistory()..conversations = [member];
+    final episodes = EpisodeProvider()..debugSetLive(null);
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    episodes.observeHomeConversations(history);
+    history.memoriesToDelete['c1'] = member;
+    history.conversations = [];
+    history.changed();
+    expect(episodes.hiddenHomeMembers, {'c1'});
+    history.memoriesToDelete.clear();
+    history.changed();
+    expect(episodes.hiddenHomeMembers, {'c1'}, reason: 'stale episode metadata cannot resurrect a deleted member');
+    history.conversations = [member];
+    history.changed();
+    expect(episodes.hiddenHomeMembers, isEmpty, reason: 'Undo or a refused DELETE restores membership');
   });
 
   test('cold launch recovers an idle-closed episode from the account-scoped live pointer', () async {
@@ -307,5 +923,214 @@ void main() {
       _item('d').withStatus(EpisodeItemStatus.dismissed),
     ];
     expect(_episode(items: items).visibleItems.map((i) => i.id), ['a', 'b']);
+  });
+
+  test('opening an uncomposed episode reads it once and folds the composed copy in', () {
+    fakeAsync((async) {
+      final waiting = Episode(
+        composeDeferred: true,
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+      );
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
+        ],
+      );
+      final reads = <String>[];
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [waiting])),
+        detail: (id) async {
+          reads.add(id);
+          return ApiSuccess(reads.length == 1 ? waiting : done);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      expect(provider.homeEpisodes.single.composed, isFalse);
+
+      Episode? opened;
+      unawaited(provider.openEpisode('ep1').then((episode) => opened = episode));
+      async.flushMicrotasks();
+      expect(reads, ['ep1'], reason: 'the page open is the server compose trigger');
+      async.elapse(EpisodeProvider.openComposePollInterval);
+      async.flushMicrotasks();
+      expect(reads, ['ep1', 'ep1']);
+      expect(opened?.composed, isTrue);
+      expect(provider.openedEpisode('ep1')?.composed, isTrue, reason: 'the composed detail reaches the page');
+      expect(provider.homeEpisodes.single.composed, isFalse, reason: 'Home retains its filtered list projection');
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('opening a composed episode does not poll', () {
+    fakeAsync((async) {
+      final done = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        closedAt: _t0,
+        conversationIds: const ['a', 'b'],
+        moments: [
+          EpisodeMoment(
+            id: 'm',
+            conversationId: 'a',
+            startedAt: _t0,
+            endedAt: _t0,
+            points: const [EpisodePoint('Point')],
+          ),
+        ],
+      );
+      var reads = 0;
+      final provider = EpisodeProvider(
+        clock: () => _t0,
+        fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [done])),
+        detail: (id) async {
+          reads++;
+          return ApiSuccess(done);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.refreshHome(_t0, _t0));
+      async.flushMicrotasks();
+      unawaited(provider.openEpisode('ep1'));
+      async.flushMicrotasks();
+      async.elapse(EpisodeProvider.openComposePollInterval * 3);
+      expect(reads, 1);
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+  test('a lede-only detail compose is settled and cached outside Home', () async {
+    final done = Episode(
+      id: 'detail',
+      live: false,
+      startedAt: _t0,
+      lastActivityAt: _t0,
+      title: 'Short notes',
+      lede: 'A brief planning conversation',
+      conversationIds: const ['c1'],
+    );
+    var reads = 0;
+    final provider = EpisodeProvider(
+      detail: (_) async {
+        reads++;
+        return ApiSuccess(done);
+      },
+    )..debugSetLive(null);
+    addTearDown(provider.dispose);
+    final result = await provider.openEpisode('detail');
+    expect(result?.composed, isTrue);
+    expect(reads, 1);
+    expect(provider.openedEpisode('detail'), same(done));
+    expect(provider.cachedEpisodeFor('c1'), same(done));
+  });
+
+  test('a detail response after disposal never publishes', () async {
+    final response = Completer<ApiResult<Episode>>();
+    final provider = EpisodeProvider(detail: (_) => response.future)..debugSetLive(null);
+    final reading = provider.openEpisode('detail');
+    provider.dispose();
+    response.complete(ApiSuccess(_episode(id: 'detail', live: false)));
+    expect(await reading, isNull);
+  });
+  test('a normal processing episode has one detail read and no compose poll', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final provider = EpisodeProvider(
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(_episode(id: 'normal', live: false));
+        },
+      )..debugSetLive(null);
+      unawaited(provider.openEpisode('normal'));
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      expect(reads, 1);
+      provider.dispose();
+    });
+  });
+
+  test('concurrent deferred opens coalesce and leaving cancels further polling', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final deferred = Episode(id: 'late', live: false, startedAt: _t0, lastActivityAt: _t0, composeDeferred: true);
+      final provider = EpisodeProvider(
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(deferred);
+        },
+      )..debugSetLive(null);
+      final first = provider.openEpisode('late');
+      final second = provider.openEpisode('late');
+      expect(identical(first, second), isTrue);
+      async.flushMicrotasks();
+      expect(reads, 1);
+      provider.cancelOpenEpisode('late');
+      async.elapse(const Duration(minutes: 2));
+      async.flushMicrotasks();
+      expect(reads, 1);
+      provider.dispose();
+    });
+  });
+
+  test('a stalled detail read times out and releases the open claim', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final provider = EpisodeProvider(
+        detail: (_) {
+          reads++;
+          return Completer<ApiResult<Episode>>().future;
+        },
+      )..debugSetLive(null);
+      Episode? result;
+      unawaited(provider.openEpisode('late').then((value) => result = value));
+      async.elapse(EpisodeProvider.openComposeReadTimeout);
+      async.flushMicrotasks();
+      expect(result, isNull);
+      unawaited(provider.openEpisode('late'));
+      expect(reads, 2, reason: 'timeout releases the coalescing claim');
+      provider.dispose();
+      async.elapse(EpisodeProvider.openComposeReadTimeout);
+      async.flushMicrotasks();
+    });
+  });
+
+  test('deferred polling stops at the total deadline', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final deferred = Episode(id: 'late', live: false, startedAt: _t0, lastActivityAt: _t0, composeDeferred: true);
+      final provider = EpisodeProvider(
+        clock: () => _t0.add(async.elapsed),
+        detail: (_) async {
+          reads++;
+          return ApiSuccess(deferred);
+        },
+      )..debugSetLive(null);
+      unawaited(provider.openEpisode('late'));
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 2));
+      async.flushMicrotasks();
+      expect(reads, EpisodeProvider.openComposePolls + 1);
+      provider.dispose();
+    });
   });
 }

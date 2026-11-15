@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "admission-control",
+  "tier": "S",
+  "scrub": "synthetic-structure-only",
+  "seed_blob_sha256": [],
+  "created": "2026-11-04T00:00:00Z",
+  "prod_evidence": {},
+  "stages": {
+    "admission": {
+      "expect": "pass"
+    }
+  },
+  "expect": "pass"
+}

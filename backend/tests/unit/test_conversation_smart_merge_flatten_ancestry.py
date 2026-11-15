@@ -167,7 +167,7 @@ def test_donor_ancestor_three_node_cycle_rejects(world, reads):
 
 def test_sync_assign_into_smart_survivor_rejects_hidden_grand_donor(world, reads):
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     _bridge(world, 'g3', 19, merged_into='d', nested=['zz'], minutes=2)
     _bridge(world, 'zz', 18, merged_into='g3', minutes=2)
     world.raw('d')['sync_merged_from'] = ['g3']
@@ -184,7 +184,7 @@ def test_sync_assign_into_smart_survivor_rejects_existing_survivor_hidden_descen
     _flattened_world(world)
     world.raw('g1')['sync_merged_from'] = ['hidden']
     _bridge(world, 'hidden', 3, merged_into='g1', minutes=2)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     _seed_index(world, 'd')
     before = deepcopy(world.store.rows)
     reads.clear()
@@ -199,7 +199,7 @@ def test_sync_assign_into_smart_survivor_rejects_existing_survivor_hidden_descen
 
 def test_sync_assign_into_smart_survivor_rejects_grand_donor_cycle(world):
     _flattened_world(world)
-    world.add('d', 20, 8, sync_content_revision=1)
+    world.add('d', 20, 8, sync_content_revision=1, structured={})
     _bridge(world, 'g3', 19, merged_into='d', nested=['g4'], minutes=2)
     _bridge(world, 'g4', 18, merged_into='d', nested=['g3'], minutes=2)
     world.raw('d')['sync_merged_from'] = ['g3', 'g4']

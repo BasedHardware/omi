@@ -147,7 +147,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         add(name, AutoMockModule(name))
 
     task_intelligence = ModuleType("utils.task_intelligence")
-    task_intelligence.__path__ = []  # type: ignore[attr-defined]
+    # Keep pure policy modules importable while persistence adapters stay stubbed.
+    task_intelligence.__path__ = [str(BACKEND_DIR / 'utils' / 'task_intelligence')]  # type: ignore[attr-defined]
     add("utils.task_intelligence", task_intelligence)
     conversation_capture = AutoMockModule("utils.task_intelligence.conversation_capture")
     conversation_capture.capture_enabled = MagicMock(return_value=False)
@@ -160,6 +161,13 @@ def _build_fakes() -> dict[str, ModuleType]:
     workstream_association = AutoMockModule("utils.task_intelligence.workstream_association")
     workstream_association.associate_canonical_evidence = MagicMock()
     add("utils.task_intelligence.workstream_association", workstream_association)
+
+    # Speaker providers/custody are outside this usage/persistence fixture.
+    # Stub the processing boundary, including its on_persist keyword, rather
+    # than importing diarization against the deliberately fake Firebase SDK.
+    speakers = AutoMockModule("utils.conversations.processing_speakers")
+    speakers.resolve_speakers_for_processing = MagicMock(return_value=False)
+    add("utils.conversations.processing_speakers", speakers)
 
     # --- firebase / pinecone / typesense / anthropic / stripe --------------
     firebase_admin = ModuleType("firebase_admin")
@@ -270,7 +278,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     subjects.infer_subject_from_segments = lambda segments: (None, None)
 
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
-    subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
     subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
@@ -705,13 +712,18 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     # a projection is display, so it must not reach a stored conversation payload.
     # A null modeled processing_state is omitted too (flip-review F-1): persist is
     # merge=True, so a dumped None is a real Firestore key.
+    # The server-only member context is explicitly null on create so reprocessing
+    # can clear it after a later group separation.
+    expected_payload = completed_conversation.dict()
+    expected_payload['capture_group_member_context'] = None
     created.assert_called_once_with(
         'uid',
-        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        omit_null_processing_state(strip_client_processing(expected_payload)),
         idempotent=True,
     )
     assert 'client_processing' not in created.call_args.args[1]
     assert 'processing_state' not in created.call_args.args[1]
+    assert created.call_args.args[1]['capture_group_member_context'] is None
     persisted.assert_not_called()
 
 
@@ -727,7 +739,7 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     deferred_conversation.dict.return_value = {'id': 'deferred-conversation', 'status': 'processing'}
     created = MagicMock(return_value=True)
     persisted = MagicMock()
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', persisted)
@@ -754,7 +766,7 @@ def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
     deferred_conversation.id = 'deferred-filler'
     deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
     created = MagicMock(return_value=True)
-    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, 'build_deferred_structured', lambda *args: MagicMock())
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
     monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
     monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
@@ -1302,12 +1314,7 @@ def test_replace_mode_preferred_app_leads_and_keeps_other_results():
     ]
 
 
-@pytest.mark.parametrize('enabled', [False, True], ids=['flag-off', 'flag-on'])
-def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypatch, enabled):
-    if enabled:
-        monkeypatch.setenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', 'true')
-    else:
-        monkeypatch.delenv('CONVERSATION_REPROCESS_RESULT_CONTRACT_ENABLED', raising=False)
+def test_user_reprocess_preserves_results_and_returns_generic_app_failure(monkeypatch):
     seen_kwargs: list = []
 
     def _failing_trigger_apps(uid, conversation, **kwargs):
@@ -1317,14 +1324,9 @@ def test_user_reprocess_passes_the_result_contract_and_maps_app_failure(monkeypa
     with pytest.raises(HTTPException) as exc_info:
         _run_explicit_selection_flow(monkeypatch, _failing_trigger_apps, [])
 
-    # Keep-until-replaced is the default for every user reprocess; the flag
-    # selects only the error code.
+    # Keep-until-replaced is the default for every user reprocess.
     assert seen_kwargs[0]['replace_selected_result'] is True
-    if enabled:
-        assert exc_info.value.status_code == 502
-        assert exc_info.value.detail['code'] == 'app_result_failed'
-    else:
-        assert exc_info.value.status_code == 500
+    assert exc_info.value.status_code == 500
 
 
 def test_first_party_only_never_runs_or_reads_the_preferred_app():
@@ -1788,7 +1790,11 @@ def _ledger_gate_conversation(conversation_id: str) -> Conversation:
         transcript_segments=[
             TranscriptSegment(
                 id='seg-1',
-                text='hello there, this is a transcript segment',
+                text=(
+                    'hello there, this is a transcript segment with enough owner speech '
+                    'to clear the memory admission floor and reach the extraction boundary '
+                    'for the writer-mode admission tests that follow it here'
+                ),
                 speaker='SPEAKER_00',
                 speaker_id=0,
                 is_user=True,
@@ -2008,3 +2014,135 @@ def test_lazy_worker_uses_settled_notes_without_regenerating_them(monkeypatch):
     tasks.assert_called_once()
     vectors.assert_called_once()
     notes.assert_not_called()
+
+
+@pytest.mark.parametrize('late_dispatch', [False, True])
+def test_held_budget_denial_never_reports_superseded_persistence(monkeypatch, late_dispatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+    from utils.sync.processing_hold import ProcessingDeferred
+
+    completed = Conversation(
+        id='c',
+        status=ConversationStatus.completed,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(title='Prior notes', overview='Previous revision'),
+        transcript_segments=[],
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    token = PROCESS_CONTEXT.set({'sync_hold': True})
+    try:
+        with pytest.raises(ProcessingDeferred, match='processing_budget'):
+            if late_dispatch:
+
+                @process_conversation._preserve_capture_on_budget_denial
+                def dispatch(*a, **kw):
+                    raise HTTPException(402, detail={'error': 'usage_budget_exhausted'})
+
+                dispatch('uid', 'en', completed, persistence_observer=observer)
+            else:
+                process_conversation.process_conversation('uid', 'en', completed, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    observer.assert_not_called()
+    assert completed.structured.overview == 'Previous revision'
+
+
+def test_held_budget_denial_at_max_hold_is_terminal(monkeypatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    completed = Conversation(
+        id='c',
+        status=ConversationStatus.completed,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(title='Prior notes', overview='Previous revision'),
+        transcript_segments=[],
+    )
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    context = {'sync_hold': True, 'hold_outcome': 'max_hold'}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        result = process_conversation.process_conversation('uid', 'en', completed, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+
+    assert result is completed
+    assert context['hold_budget_denied_at_max']
+    observer.assert_called_once_with(False)
+    assert completed.structured.overview == 'Previous revision'
+
+
+@pytest.mark.parametrize('late_dispatch', [False, True])
+def test_held_raw_budget_denial_preserves_backlog_choice_authority(monkeypatch, late_dispatch):
+    from utils.conversations.summary_delivery import PROCESS_CONTEXT
+
+    raw = Conversation(
+        id='c',
+        status=ConversationStatus.processing,
+        source=ConversationSource.omi,
+        created_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        structured=Structured(),
+        transcript_segments=[],
+    )
+    stored = raw.model_copy(update={'processing_deferred': True})
+    store = MagicMock(return_value=(stored, True))
+    monkeypatch.setattr(process_conversation, '_store_budget_waiting', store)
+    monkeypatch.setattr(process_conversation.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(process_conversation.funded_processing, 'processing_allowed', lambda *_: False)
+    observer = MagicMock()
+    token = PROCESS_CONTEXT.set({'sync_hold': True})
+    try:
+        if late_dispatch:
+
+            @process_conversation._preserve_capture_on_budget_denial
+            def dispatch(*a, **kw):
+                raise HTTPException(402, detail={'error': 'usage_budget_exhausted'})
+
+            result = dispatch('uid', 'en', raw, persistence_observer=observer)
+        else:
+            result = process_conversation.process_conversation('uid', 'en', raw, persistence_observer=observer)
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    assert result.processing_deferred
+    store.assert_called_once()
+    observer.assert_called_once_with(True)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_relevance_policy(monkeypatch):
+    # This legacy model/input fixture has no episode or neighbor database.
+    monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
+def test_builtin_preference_runs_on_new_conversation_without_install_then_clear_stops_it():
+    from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID
+
+    _setup_trigger_apps_mocks(preferred_app_id=DEFAULT_SUMMARY_APP_ID)
+    first = _make_trigger_conversation()
+    result, available, llm, usage, catalog = _trigger_apps_context()
+    with available, llm, usage as record_usage, catalog as lookup:
+        process_conversation.trigger_conversation_apps('user-builtin', first)
+        assert [(item.app_id, item.content) for item in first.apps_results] == [
+            (DEFAULT_SUMMARY_APP_ID, 'App result content')
+        ]
+        assert result.call_args.args[2].id == DEFAULT_SUMMARY_APP_ID
+        lookup.assert_not_called()
+        record_usage.assert_not_called()
+
+        # A later conversation sees the cleared preference and must not run the default again.
+        process_conversation.redis_db.get_user_preferred_app.return_value = None
+        second = _make_trigger_conversation()
+        process_conversation.trigger_conversation_apps('user-builtin', second)
+        assert second.apps_results == []
+        result.assert_called_once()

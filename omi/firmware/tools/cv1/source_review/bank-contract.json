@@ -1,0 +1,142 @@
+{
+  "schema": 1,
+  "status": "proposed source-review contract; no device authority",
+  "erase_alignment": 65536,
+  "capacity": 2097152,
+  "options": {
+    "A1": [
+      [
+        "legacy_official_app_stage",
+        0,
+        983040
+      ],
+      [
+        "legacy_network_stage",
+        983040,
+        1245184
+      ],
+      [
+        "personal_candidate",
+        1245184,
+        1638400
+      ],
+      [
+        "last_known_good",
+        1638400,
+        2031616
+      ],
+      [
+        "metadata",
+        2031616,
+        2097152
+      ]
+    ],
+    "A2": [
+      [
+        "legacy_official_app_stage",
+        0,
+        983040
+      ],
+      [
+        "legacy_network_stage",
+        983040,
+        1245184
+      ],
+      [
+        "personal_candidate",
+        1245184,
+        1507328
+      ],
+      [
+        "last_known_good",
+        1507328,
+        1769472
+      ],
+      [
+        "stock_cache",
+        1769472,
+        2031616
+      ],
+      [
+        "metadata",
+        2031616,
+        2097152
+      ]
+    ]
+  },
+  "internal_A": [
+    [
+      "current_mcuboot",
+      0,
+      65536
+    ],
+    [
+      "supervisor_and_guard",
+      65536,
+      327680
+    ],
+    [
+      "owner_journal",
+      327680,
+      344064
+    ],
+    [
+      "personal_slot",
+      344064,
+      983040
+    ],
+    [
+      "trial_journal",
+      983040,
+      999424
+    ],
+    [
+      "gap",
+      999424,
+      1007616
+    ],
+    [
+      "littlefs_existing",
+      1007616,
+      1032192
+    ],
+    [
+      "settings_existing",
+      1032192,
+      1040384
+    ],
+    [
+      "legacy_trailer_tail",
+      1040384,
+      1048576
+    ]
+  ],
+  "normal_ram": [
+    [
+      "pcd_reserved",
+      536870912,
+      536879104
+    ],
+    [
+      "secure_supervisor",
+      536879104,
+      536944640
+    ],
+    [
+      "nonsecure_app",
+      536944640,
+      537329664
+    ],
+    [
+      "radio_ipc",
+      537329664,
+      537395200
+    ]
+  ],
+  "recovery_secure_ram": [
+    536879104,
+    537329664
+  ],
+  "hardware_authority": false,
+  "firmware_link_proof": false
+}

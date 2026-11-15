@@ -1,14 +1,17 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
 import logging
 import random
 import re
 import time
 from threading import Lock
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 import os
 from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ResourceExhausted, ServiceUnavailable
 from google.cloud import firestore
 
+from database.people_generation import bump_people_generation
 from database.document_ids import document_id_from_seed
 from database.firestore_transaction_retry import (
     FirestoreAborted,
@@ -118,16 +121,21 @@ def _install_document_read_probe() -> None:
 _install_document_read_probe()
 
 
-def _install_action_item_write_fences() -> None:
-    # Match the SDK read probe's import-isolation seam. No clients or IO here.
+def _install_document_write_probe() -> None:
+    """Count every committed Firestore write by collection, caller and origin.
+
+    Installed before the commit-boundary patches below, so the transport wrapper
+    sees each request as sent, including the writes those patches append.
+    """
     try:
-        from database.action_item_write_fence import install_write_fences
+        from database.firestore_write_probe import install_document_write_probe
     except ImportError:
         return
-    install_write_fences()
+
+    install_document_write_probe()
 
 
-_install_action_item_write_fences()
+_install_document_write_probe()
 
 
 def _install_memory_change_heads() -> None:
@@ -150,6 +158,21 @@ def _install_list_projection_writer() -> None:
 
 
 _install_list_projection_writer()
+
+
+def _install_batch_privacy_write_fence() -> None:
+    # Legacy bare-Python hygiene runners replace Firestore with a file-less
+    # ModuleType stub (there is no real SDK/write surface to fence there).
+    if not getattr(firestore, '__file__', None):
+        return
+    # This fence is mandatory for memo-enabled readers. Do not silently skip an
+    # ImportError and leave a process capable of unfenced customer-data writes.
+    from database.batch_privacy_write_fence import install_write_fence
+
+    install_write_fence()
+
+
+_install_batch_privacy_write_fence()
 
 
 _firestore_client = None
@@ -490,6 +513,22 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
+_IN_TXN_BODY: ContextVar[bool] = ContextVar('in_transaction_body', default=False)
+
+
+def in_transaction_body() -> bool:
+    return _IN_TXN_BODY.get()
+
+
+@contextmanager
+def transaction_body() -> Iterator[None]:
+    token = _IN_TXN_BODY.set(True)
+    try:
+        yield
+    finally:
+        _IN_TXN_BODY.reset(token)
+
+
 def run_transactional(
     client: Any,
     transactional_callable: Any,
@@ -513,6 +552,9 @@ def run_transactional(
     session have no way to distinguish it from a real write failure.
     ``initial_transaction`` lets an outer contention budget own the first transaction;
     expiry still replaces it with a new transaction under the existing attempt limit.
+    A nested contention budget that owns the attempts too passes ``attempts=1``:
+    the expiry restart then happens as one bounded outer retry instead of
+    inner restarts, so a single budget bounds the whole chain count.
 
     ``transient=True`` is the idempotent-caller opt-in. It also restarts on contention,
     ``DeadlineExceeded``, ``ServiceUnavailable``, and ``ResourceExhausted``, with
@@ -520,7 +562,9 @@ def run_transactional(
     commit can be ambiguous, so the callable must re-read and refuse a second
     increment. Backoff runs in this helper, after the callable has returned, so a
     lock held only inside the callable is not held during the sleep. The default
-    path still retries only an expired transaction id and does not sleep.
+    path still retries only an expired transaction id, now with the same
+    equal-jitter backoff so an inner restart does not land inside the same
+    contention spike that retired the previous id.
     ``outcome`` receives ``retried_ok`` or ``exhausted`` when set.
     """
     predicate = is_retryable_firestore_transaction_error if transient else is_expired_transaction_error
@@ -530,7 +574,8 @@ def run_transactional(
             transaction = (
                 initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
             )
-            result = transactional_callable(transaction, *args, **kwargs)
+            with transaction_body():
+                result = transactional_callable(transaction, *args, **kwargs)
             if outcome is not None and attempt > 1:
                 outcome['status'] = 'retried_ok'
             return result
@@ -547,10 +592,10 @@ def run_transactional(
                     attempts,
                     firestore_failure_reason(error),
                 )
-                delay = equal_jitter_delay(attempt, random_value or random.random)
-                (sleep or time.sleep)(delay)
             else:
                 logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
+            delay = equal_jitter_delay(attempt, random_value or random.random)
+            (sleep or time.sleep)(delay)
 
 
 class _LazyFirestoreClient:
@@ -596,6 +641,11 @@ def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size:
         batch = client.batch()
         for doc in docs:
             batch.delete(doc.reference)
+        if (
+            getattr(collection_ref, 'id', None) == 'people'
+            and getattr(getattr(getattr(collection_ref, 'parent', None), 'parent', None), 'id', None) == 'users'
+        ):
+            bump_people_generation(batch, docs[0].reference)
         batch.commit()
 
         if len(docs) < batch_size:

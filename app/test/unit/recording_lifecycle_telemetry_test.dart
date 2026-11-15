@@ -1,3 +1,4 @@
+import 'package:omi/utils/logger.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -181,7 +182,13 @@ void main() {
     );
 
     telemetry.prepare(source: 'pendant_live');
+    Logger.instance.talker.cleanHistory();
     telemetry.failStart(failureClass: 'capture_unavailable');
+    expect(
+        Logger.instance.talker.history.map((entry) => entry.message),
+        contains(
+          contains('failure_class=capture_unavailable source=pendant_live prepared=true started=false'),
+        ));
 
     expect(events.map((event) => event.name), [
       RecordingLifecycleTelemetry.requestedEvent,

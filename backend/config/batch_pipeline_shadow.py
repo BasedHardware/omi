@@ -30,3 +30,11 @@ def paid_recovery_limit() -> int:
         return max(0, value)
     except ValueError:
         return 0
+
+
+def language_probe_limit() -> int:
+    """Fleet-wide hourly attempt cap; malformed settings deny new probes."""
+    try:
+        return min(500, max(0, int(os.getenv('BATCH_PIPELINE_SHADOW_LANGUAGE_PROBES_PER_HOUR', '500'))))
+    except ValueError:
+        return 0

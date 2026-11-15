@@ -822,6 +822,7 @@ def plan_segment_targets(
     binding_reasons: Optional[dict],
     *,
     segment_source_maps: Optional[Mapping[str, Any]] = None,
+    capture_time_offset: float = 0.0,
 ) -> dict[str, Optional[str]]:
     """Blocking span construction plus per-segment lineage resolution for one upload.
 
@@ -832,8 +833,19 @@ def plan_segment_targets(
     for the existing failed-segment/re-upload path. A key proven pending in any
     pass keeps the token unless a later pass binds it; a degraded or ordinary
     miss cannot silently revert it to the stamp or temporal path.
+
+    ``capture_time_offset`` is the request-wide server-clock offset for skewed
+    captures: span values (and the lineage query bounds they derive) shift by
+    it so comparisons land on the server-clock stored rows, while the span
+    keys keep the raw capture-clock segment identity.
     """
-    spans = {path: (timestamp_of(path), timestamp_of(path) + duration_of(path)) for path in segment_list}
+    spans = {
+        path: (
+            timestamp_of(path) - capture_time_offset,
+            timestamp_of(path) + duration_of(path) - capture_time_offset,
+        )
+        for path in segment_list
+    }
     proven_pending: set = set()
     pass_reasons: dict = {}
     targets: dict = {}

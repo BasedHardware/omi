@@ -209,9 +209,9 @@ def test_unlock_memories_short_pages_are_not_saturated(monkeypatch):
 
 def _allow_unlocked_data_plane(monkeypatch):
     """Deletion authority is the data plane, not the content client under test."""
-    import database.account_deletion_marker as marker
+    from database import _client
 
-    monkeypatch.setattr(marker, 'get_data_plane_firestore_client', lambda: _UnlockDb())
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: _UnlockDb())
 
 
 @pytest.mark.parametrize('limit', [None, 100])
@@ -289,8 +289,7 @@ def test_unlock_action_items_bounds_updates_and_invalidates_list(monkeypatch):
 @pytest.mark.parametrize('kind', ['conversations', 'action_items'])
 @pytest.mark.parametrize('limit', [None, 100])
 def test_unlock_helpers_fence_deletion_visible_after_memory_page(monkeypatch, kind, limit):
-    import database.account_deletion_marker as marker
-    from database import action_items, conversations
+    from database import _client, action_items, conversations
     from database.legal_holds import DestructiveOperationInProgress
 
     content = _UnlockDb()
@@ -302,7 +301,7 @@ def test_unlock_helpers_fence_deletion_visible_after_memory_page(monkeypatch, ki
     committed = list(content.updates)
     # Uninjected fences read account_deletions on the data-plane client.
     data_plane.markers['account_deletions/u1'] = {'wipe_status': 'in_progress'}
-    monkeypatch.setattr(marker, 'get_data_plane_firestore_client', lambda: data_plane)
+    monkeypatch.setattr(_client, 'get_data_plane_firestore_client', lambda: data_plane)
     module = conversations if kind == 'conversations' else action_items
     monkeypatch.setattr(module, 'db', content)
     invalidations = []

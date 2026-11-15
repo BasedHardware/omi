@@ -82,6 +82,7 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_get_all,
+    canonical_scan_window_size,
     indexed_list_reads_enabled,
 )
 from utils.other.portability_read import check_portability_read
@@ -135,11 +136,12 @@ from utils.memory.read_resilience import (
 )
 from utils.memory.rejected_memory_feedback import clear_rejected_memory_feedback_cache
 from utils.memory.required_promotion import required_processing_payload
+from utils.memory.required_intake import capture_budget as required_intake_capture_budget
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import memory_matches_device
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_provenance_timestamps
 from utils.memory.universal_list_cursor import (
     StreamKeyset,
     UniversalListCursorError,
@@ -614,10 +616,11 @@ class CanonicalMemoryBackend:
         with batch_canonical_expiry_observations():
             while len(collected) < needed and scanned < raw_cap:
                 scan_kwargs: Dict[str, Any] = {
-                    "limit": (
-                        min(500, needed - len(collected), raw_cap - scanned)
-                        if indexed_list_reads_enabled()
-                        else MEMORY_LIST_SCAN_CHUNK_SIZE
+                    "limit": canonical_scan_window_size(
+                        min(needed - len(collected), raw_cap - scanned),
+                        MEMORY_LIST_SCAN_CHUNK_SIZE,
+                        indexed=indexed_list_reads_enabled(),
+                        filtered=scanned > len(collected),
                     ),
                     "start_after": start_after,
                     "db_client": self._db_client,
@@ -679,6 +682,9 @@ class CanonicalMemoryBackend:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         search_kwargs: Dict[str, Any] = {
             "limit": limit,
@@ -686,6 +692,10 @@ class CanonicalMemoryBackend:
             "device_scope_request": device_scope_request,
             "item_filter": item_filter,
         }
+        if owner_summary:
+            search_kwargs["owner_summary"] = True
+        if vector_only:
+            search_kwargs.update(vector_only=True, budget=budget)
         if ledger_kinds is not None:
             search_kwargs["ledger_kinds"] = ledger_kinds
         if as_of is not None:
@@ -703,7 +713,7 @@ class CanonicalMemoryBackend:
         for rank, item in enumerate(items):
             if not item.get("memory_id"):
                 continue
-            memory_obj = search_result_to_memorydb(uid, item)
+            memory_obj = search_result_to_memorydb(uid, item, **({'owner_summary': True} if owner_summary else {}))
             if memory_obj.is_locked or memory_obj.user_review is False or memory_obj.invalid_at is not None:
                 continue
             raw_score = item.get("score") or item.get("relevance_score")
@@ -744,7 +754,8 @@ class CanonicalMemoryBackend:
         return memory_item_to_memorydb(item)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
-        return [self.write(uid, item) for item in items]
+        with required_intake_capture_budget():
+            return [self.write(uid, item) for item in items]
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
         item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)
@@ -1236,21 +1247,49 @@ class HistoricalMemoryAdapter:
         *,
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
+        budget: Optional[ListReadBudget] = None,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         try:
-            matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
+            if budget is not None:
+                budget.check()
+            if budget is not None:
+                matches = vector_db.find_similar_memories(
+                    uid,
+                    query,
+                    threshold=0.0,
+                    limit=min(capped * 3, 60),
+                    timeout_seconds=budget.rpc_timeout(),
+                    owner_summary=owner_summary,
+                )
+            else:
+                matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Historical memory search unavailable") from exc
+        if budget is not None:
+            budget.check()
         ids, scores = _memory_ids_and_scores(matches or [])
         if not ids:
             return []
         try:
-            rows = memory_store_read(memories_db.get_memories_by_ids, uid, ids, **self._firestore_kwargs())
+            rows = memory_store_read(
+                memories_db.get_memories_by_ids,
+                uid,
+                ids,
+                **self._firestore_kwargs(),
+                **({'budget': budget} if budget is not None else {}),
+            )
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
         by_id: Dict[str, HistoricalMemoryRecord] = {}
         for raw in rows:
+            if budget is not None and (
+                any(raw.get(k) for k in ('deleted', 'is_deleted', 'deleted_at'))
+                or raw.get('status') in {'tombstoned', 'deleted', 'purged', 'superseded'}
+                or raw.get('source_state') in {'tombstoned', 'purged'}
+            ):
+                continue
             record = self._adapt(uid, raw)
             if record is None or not self.matches_device(record, device_scope_request):
                 continue
@@ -1805,6 +1844,7 @@ class _CanonicalCursorStream:
         self._as_of = as_of
         self._page_limit = max(1, int(page_limit or 100))
         self._consumed_count = 0
+        self._filtered_slots = False
         self._peek: Optional[MemoryDB] = None
         self._peek_keyset: Optional[StreamKeyset] = None
         self._peek_scan: Optional[StreamKeyset] = None
@@ -1821,10 +1861,11 @@ class _CanonicalCursorStream:
             start_after = self._service.stream_keyset_to_scan_cursor(self.scan_keyset)
         try:
             scan_kwargs: dict[str, Any] = {
-                "limit": (
-                    min(500, max(1, self._page_limit + 1 - self._consumed_count))
-                    if indexed_list_reads_enabled()
-                    else MEMORY_LIST_SCAN_CHUNK_SIZE
+                "limit": canonical_scan_window_size(
+                    max(1, self._page_limit + 1 - self._consumed_count),
+                    MEMORY_LIST_SCAN_CHUNK_SIZE,
+                    indexed=indexed_list_reads_enabled(),
+                    filtered=self._filtered_slots,
                 ),
                 "start_after": start_after,
                 "db_client": self._service.db_client,
@@ -1877,6 +1918,7 @@ class _CanonicalCursorStream:
             memory, scan_keyset = self._slots[self._slot_index]
             # Raw scan position advances for filtered rows too.
             if memory is None:
+                self._filtered_slots = True
                 self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
@@ -1884,6 +1926,7 @@ class _CanonicalCursorStream:
             if self.emitted_keyset is not None and self._service.memory_cursor_sort_key(memory) <= (
                 self._service.keyset_sort_key(self.emitted_keyset)
             ):
+                self._filtered_slots = True
                 self._budget.charge(stream="canonical")
                 self.scan_keyset = scan_keyset
                 self._advance_raw_slot()
@@ -3416,6 +3459,10 @@ class MemoryService:
         ledger_kinds: Optional[Collection[str]] = None,
         view: str = 'released',
         as_of: Optional[datetime] = None,
+        vector_only: bool = False,
+        budget: Optional[ListReadBudget] = None,
+        single_attempt: bool = False,
+        owner_summary: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.
@@ -3430,6 +3477,12 @@ class MemoryService:
                 "device_scope_request": device_scope_request,
                 "item_filter": canonical_item_filter,
             }
+            if budget is not None:
+                budget.check()
+            if owner_summary:
+                canonical_kwargs["owner_summary"] = True
+            if vector_only:
+                canonical_kwargs.update(vector_only=True, budget=budget)
             if ledger_kinds is not None:
                 canonical_kwargs["ledger_kinds"] = ledger_kinds
             canonical = self._canonical.search(
@@ -3441,24 +3494,34 @@ class MemoryService:
             raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory search unavailable") from exc
-        if ledger_kinds is not None:
-            # The ledger agent surface is explicitly canonical-only. Legacy
+        if ledger_kinds is not None or (vector_only and not owner_summary):
+            # The default vector-only ledger surface is canonical-only. Legacy
             # vector/storage search is a separate historical tool and must not
             # be merged here: aside from leaking stamped compatibility rows,
             # its provider outage would make current ledger search unavailable.
+            # Owner-summary search explicitly includes both stores after successful
+            # canonical checks (owner ruling 2026-11-15), never as an error fallback.
             historical: List[MemorySearchMatch] = []
         else:
+            historical_options: Dict[str, Any] = {}
+            if owner_summary and budget is not None:
+                historical_options.update(budget=budget, owner_summary=True)
             historical = self.history.search(
-                uid,
-                query,
-                limit=candidate_cap,
-                device_scope_request=device_scope_request,
+                uid, query, limit=candidate_cap, device_scope_request=device_scope_request, **historical_options
             )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
             by_id[match.memory.id] = match
         historical_ids = [match.memory.id for match in historical if match.memory.id not in by_id]
-        historical_statuses = self.canonical_statuses(uid, historical_ids) if historical_ids else {}
+        historical_statuses = (
+            self.canonical_statuses(
+                uid, historical_ids, **({'budget': budget} if owner_summary and budget is not None else {})
+            )
+            if historical_ids
+            else {}
+        )
+        if budget is not None:
+            budget.check()
         for match in historical:
             if match.memory.id in by_id:
                 continue
@@ -3660,6 +3723,7 @@ class MemoryService:
                 "content": match.memory.content,
                 "category": match.memory.category.value,
                 "relevance_score": round(float(match.score), 4),
+                **memory_provenance_timestamps(match.memory.model_dump()),
             }
             for match in self.search(uid, query, limit=limit)
         ]
@@ -3950,7 +4014,11 @@ class MemoryService:
         item = read_canonical_memory_item(uid, committed_id or str(data.get("id") or ""), db_client=self.db_client)
         if item is None:
             raise HTTPException(status_code=503, detail="Canonical memory write readback unavailable")
-        return memory_item_to_memorydb(item)
+        result = memory_item_to_memorydb(item)
+        from utils.memory.required_intake import register_capture_view
+
+        register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+        return result
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
         self.ensure_canonical_mutation_ready(uid)
@@ -4610,7 +4678,11 @@ class MemoryService:
                     status_code=503,
                     detail="Canonical memory write readback unavailable",
                 )
-            results.append(memory_item_to_memorydb(item))
+            result = memory_item_to_memorydb(item)
+            from utils.memory.required_intake import register_capture_view
+
+            register_capture_view(uid, item, result, self._invalidate_prompt_cache)
+            results.append(result)
         self._write_historical_overrides(uid, ids, MemoryItemStatus.active)
         self._invalidate_prompt_cache(uid)
         return results

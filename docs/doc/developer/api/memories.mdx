@@ -49,8 +49,6 @@ unavailable.
 `code` is the stable programmatic signal. `reason` provides a diagnostic for the current server-side gate and
 must not be treated as a key or scope error.
 
----
-
 ## Get Memories
 
 <Card title="GET /v1/dev/user/memories" icon="download" color="#22c55e" horizontal>
@@ -133,8 +131,6 @@ must not be treated as a key or scope error.
     | `edited` | boolean | Has been edited |
   </Accordion>
 </AccordionGroup>
-
----
 
 ## Create Memory
 
@@ -235,8 +231,6 @@ must not be treated as a key or scope error.
   ```
 </Accordion>
 
----
-
 ## Create Memories (Batch)
 
 <Card title="POST /v1/dev/user/memories/batch" icon="layer-group" color="#3b82f6" horizontal>
@@ -325,8 +319,6 @@ must not be treated as a key or scope error.
   }
   ```
 </Accordion>
-
----
 
 ## Update Memory
 
@@ -417,8 +409,6 @@ must not be treated as a key or scope error.
   ```
 </Accordion>
 
----
-
 ## Delete Memory
 
 <Card title="DELETE /v1/dev/user/memories/{memory_id}" icon="trash" color="#ef4444" horizontal>
@@ -482,20 +472,16 @@ must not be treated as a key or scope error.
 This action is permanent. Deleted memories cannot be recovered.
 </Warning>
 
----
-
 ## What Are Memories?
 
 <Info>
-**Memories are timeless facts about the user** — preferences, relationships, personal details, and notable insights. They are NOT for notes, tasks, or time-sensitive information.
+**Memories are timeless facts about the user.** They cover preferences, relationships, personal details, and notable insights. They are NOT for notes, tasks, or time-sensitive information.
 
 - **Good memories**: "User is vegetarian", "User's sister Sarah lives in Portland", "User prefers async communication"
 - **Bad memories**: "Meeting on March 15th", "Call dentist tomorrow" (these are action items or conversations)
 
-For notes, meeting summaries, or imported text content, use the [Conversations API](/doc/developer/api/conversations) instead — it automatically extracts memories and action items.
+For notes, meeting summaries, or imported text content, use the [Conversations API](/doc/developer/api/conversations) instead. It automatically extracts memories and action items.
 </Info>
-
----
 
 ## Use Case: Store User Preferences
 
@@ -557,8 +543,6 @@ Import known facts and preferences about the user:
   </Tab>
 </Tabs>
 
----
-
 ## Memory Categories Explained
 
 <CardGroup cols={2}>
@@ -566,7 +550,7 @@ Import known facts and preferences about the user:
     Useful context for the AI: preferences, work details, relationships, logistical info. Example: "User prefers dark mode"
   </Card>
   <Card title="interesting" icon="star" color="#f59e0b">
-    Shareable, notable facts — things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
+    Shareable, notable facts: things the user would excitedly tell someone at dinner. Example: "User climbed Mount Kilimanjaro"
   </Card>
 </CardGroup>
 

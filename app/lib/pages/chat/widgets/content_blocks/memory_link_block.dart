@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,11 +13,10 @@ import 'chat_block_chrome.dart';
 
 /// Renders a `memoryLink` block.
 ///
-/// Memories are loaded as a list, so the block resolves the id against
-/// [MemoriesProvider] and opens the existing memory sheet. An id that is not in
-/// the loaded list renders a loading state while a cold chat asks the provider
-/// for its first coalesced load, then becomes unavailable only after that load
-/// settles without the row.
+/// Resolves against the shared memory view and refreshes a missing reference,
+/// including when chat saves a memory after the view was loaded. A bounded or
+/// failed collection read cannot establish that an individual memory was
+/// deleted, so unresolved references keep an explicit retry.
 class MemoryLinkBlock extends StatefulWidget {
   const MemoryLinkBlock({super.key, required this.block});
 
@@ -26,7 +27,8 @@ class MemoryLinkBlock extends StatefulWidget {
 }
 
 class _MemoryLinkBlockState extends State<MemoryLinkBlock> {
-  bool _hydrationRequested = false;
+  bool _hydrating = true;
+  int _requestGeneration = 0;
 
   Memory? _resolve(MemoriesProvider provider) {
     for (final memory in provider.memories) {
@@ -45,23 +47,33 @@ class _MemoryLinkBlockState extends State<MemoryLinkBlock> {
   void didUpdateWidget(covariant MemoryLinkBlock oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.block.memoryId != widget.block.memoryId) {
-      _hydrationRequested = false;
+      _hydrating = true;
       _scheduleHydration();
     }
   }
 
   void _scheduleHydration() {
-    // Chat can be the first memory surface in a fresh session. Hydrate this
-    // shared provider after the first frame so build stays pure; its own
-    // coalescing makes simultaneous memory links and the Memories page share
-    // one request.
+    final generation = ++_requestGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _hydrationRequested) return;
-      final provider = context.read<MemoriesProvider>();
-      if (provider.hasLoaded) return;
-      _hydrationRequested = true;
-      provider.loadMemories();
+      if (!mounted || generation != _requestGeneration) return;
+      unawaited(_hydrate(generation, automatic: true));
     });
+  }
+
+  Future<void> _hydrate(int generation, {bool automatic = false}) async {
+    final provider = context.read<MemoriesProvider>();
+    // The provider owns the session-scoped automatic attempt budget and load
+    // coalescing. Rebuilding a missing card must not start a polling loop.
+    if (_resolve(provider) != null || (automatic && !provider.consumeHydrationAsk(widget.block.memoryId))) {
+      if (mounted && generation == _requestGeneration) setState(() => _hydrating = false);
+      return;
+    }
+    setState(() => _hydrating = true);
+    try {
+      await provider.loadMemories();
+    } finally {
+      if (mounted && generation == _requestGeneration) setState(() => _hydrating = false);
+    }
   }
 
   @override
@@ -70,12 +82,15 @@ class _MemoryLinkBlockState extends State<MemoryLinkBlock> {
     return Consumer<MemoriesProvider>(
       builder: (context, provider, _) {
         final memory = _resolve(provider);
-        if (memory == null && !provider.loading) {
-          return ChatBlockUnavailable(
-            key: Key('chat-block-memoryLink-${widget.block.id}-unavailable'),
+        if (memory == null && !_hydrating && !provider.loading) {
+          return ChatBlockLinkCard(
+            key: Key('chat-block-memoryLink-${widget.block.id}-unresolved'),
             icon: Icons.psychology_outlined,
             label: l10n.chatBlockMemory,
-            message: l10n.chatBlockUnavailable,
+            summary: l10n.couldNotLoadMemories,
+            actionTitle: l10n.tryAgain,
+            actionKey: Key('chat-block-memoryLink-${widget.block.id}-retry'),
+            onAction: () => unawaited(_hydrate(++_requestGeneration)),
           );
         }
 

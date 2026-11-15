@@ -72,6 +72,20 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-pressure-sampler-stuck",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
+# These native Cloud Monitoring queries explicitly select the production
+# project and datasource. The automatic development import must not install
+# production pages there or assume an equivalent native datasource exists.
+# omi-firestore-unattributed-reads reads the gmp-cloud-run shadow datasource,
+# which only the production overlay creates; development has no equivalent.
+PRODUCTION_ONLY_IMPORT_UIDS = (
+    "omi-enrichment-queue-depth-page",
+    "omi-incluster-guard-unsafe-page",
+    "omi-firestore-unattributed-reads",
+    "omi-firestore-unattributed-reads-blind",
+    "omi-firestore-batch-reads-audio-hour",
+    "omi-firestore-batch-reads-no-output",
+    "omi-firestore-billed-reads-step",
+)
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
@@ -79,6 +93,22 @@ REQUIRED_METRICS = {
     "omi_journey_accepted_total",
     "omi_journey_terminal_total",
 }
+PUSHER_RECEIVE_METRICS = {
+    'omi_pusher_record_close_abandoned_outstanding',
+    'omi_pusher_record_close_outstanding_refusals_total',
+    'pusher_socket_frames_total',
+    'pusher_receive_work_stalls_total',
+    'pusher_receive_work_stalled_handlers',
+    'pusher_receive_work_duration_seconds_count',
+    'pusher_socket_closed_total',
+}
+METRIC_COVERAGE_QUERY = (
+    'count({__name__=~"'
+    + '|'.join(sorted(REQUIRED_METRICS))
+    + '",job=~"pusher-metrics|backend-listen-metrics"} or {__name__=~"'
+    + '|'.join(sorted(PUSHER_RECEIVE_METRICS))
+    + '",job="pusher-metrics"}) by (__name__,job)'
+)
 REQUIRED_JOBS = {"pusher-metrics", "backend-listen-metrics"}
 # Per-target `up` series. Pusher and backend-listen additionalScrapeConfigs both
 # relabel namespace and pod. min(up) is applied in process to the series that
@@ -434,6 +464,8 @@ def _development_rules(rules: dict[str, dict[str, Any]]) -> dict[str, dict[str, 
     # No verified development sentinel exists. Development keeps error pages
     # instead of KeepLast, on a detached copy so canonical rules never change.
     rules = copy.deepcopy(rules)
+    for uid in PRODUCTION_ONLY_IMPORT_UIDS:
+        rules.pop(uid, None)
     for rule in rules.values():
         if rule.get("execErrState") == "KeepLast":
             rule["execErrState"] = "Error"
@@ -554,6 +586,10 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
             continue
         if live.get(key) != expected.get(key):
             keys.append(key)
+    # Only an explicit source pause authorizes a live pause. Compare booleans
+    # strictly so missing/malformed live state cannot satisfy either contract.
+    if live.get("isPaused") is not (expected.get("isPaused") is True):
+        keys.append("isPaused")
     receiver = _receiver(expected)
     if not isinstance(receiver, str) or _receiver(live) != receiver:
         keys.append("receiver")
@@ -563,8 +599,6 @@ def mismatched_definition_keys(live: dict[str, Any], expected: dict[str, Any]) -
 def rule_definition_errors(uid: str, live: dict[str, Any], expected: dict[str, Any]) -> list[str]:
     keys = mismatched_definition_keys(live, expected)
     errors = [f"live alert rule {uid} {key} does not match the committed rule" for key in keys if key != "receiver"]
-    if live.get("isPaused") is not False:
-        errors.append(f"live alert rule {uid} must be unpaused")
     if "receiver" in keys:
         errors.append(f"live alert rule {uid} receiver does not match the committed route")
     return errors
@@ -588,7 +622,7 @@ def classify_fleet_coverage(
             present_but_paused.append(uid)
         if keys:
             present_but_divergent.append(f"{uid} ({','.join(keys)})")
-        if not paused and not keys:
+        if not keys:
             live_and_matching.append(uid)
     live_but_uncommitted = tuple(sorted(uid for uid in live_by_uid if uid not in committed))
     return FleetCoverage(
@@ -643,10 +677,9 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
     if fail_on == "none":
         return []
     absent = set(coverage.committed_but_absent)
-    paused = set(coverage.present_but_paused)
     divergent = {_divergent_uid(entry): entry for entry in coverage.present_but_divergent}
     uncommitted = set(coverage.live_but_uncommitted)
-    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | paused | set(divergent) | uncommitted))
+    uids = gated_uids if fail_on == "gated" else tuple(sorted(absent | set(divergent) | uncommitted))
     failures: list[str] = []
     for uid in uids:
         if uid in uncommitted:
@@ -654,8 +687,6 @@ def fleet_gate_failures(coverage: FleetCoverage, gated_uids: tuple[str, ...], fa
             continue
         if uid in absent:
             failures.append(f"live alert rule {uid} is absent from Grafana")
-        if uid in paused:
-            failures.append(f"live alert rule {uid} must be unpaused")
         if uid in divergent:
             failures.append(f"live alert rule {divergent[uid]} does not match the committed rule")
     return failures
@@ -826,8 +857,13 @@ def validate_live_route(
         if isinstance(item, dict) and isinstance(item.get("metric"), dict)
     }
     required_metric_jobs = {(metric, job) for metric in REQUIRED_METRICS for job in REQUIRED_JOBS}
-    if phase == "postrollout" and observed_metrics != required_metric_jobs:
+    if phase == "postrollout" and not required_metric_jobs <= observed_metrics:
         errors.append("live Prometheus finalization telemetry sources are missing or incomplete")
+    if (
+        phase == 'postrollout'
+        and not {(metric, 'pusher-metrics') for metric in PUSHER_RECEIVE_METRICS} <= observed_metrics
+    ):
+        errors.append('live Prometheus pusher receive-work telemetry sources are missing or incomplete')
     points = contact_points if isinstance(contact_points, list) else []
     for receiver in receivers:
         if not any(
@@ -870,9 +906,7 @@ def _prometheus_instant_query_or_error(base_url: str, token: str, query: str) ->
 
 def _run_pusher_gate(grafana_url: str, token: str, phase: str, attempts: int) -> list[str]:
     metric_query_path = "/api/datasources/proxy/uid/prometheus/api/v1/query?" + urllib.parse.urlencode(
-        {
-            "query": 'count({__name__=~"omi_capture_finalization_failures_total|omi_journey_accepted_total|omi_journey_terminal_total",job=~"pusher-metrics|backend-listen-metrics"}) by (__name__,job)'
-        }
+        {"query": METRIC_COVERAGE_QUERY}
     )
     up_query = PREPUBLISH_UP_QUERY if phase == "prepublish" else SERVING_UP_QUERY
     failures: list[str] = []

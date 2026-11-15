@@ -24,6 +24,7 @@ from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.fair_use_classifier import classify_user_purpose
 from utils.notifications import send_notification
 from utils.observability.fallback import record_fallback
+from utils.observability.fair_use import observe_stage_dwell, record_decay
 
 # Patchable lazy-held callables keep tests at a production seam without using
 # in-function imports. Both imported modules are import-pure and construct their
@@ -48,6 +49,12 @@ logger = logging.getLogger(__name__)
 
 FAIR_USE_ENABLED = os.getenv('FAIR_USE_ENABLED', 'false').lower() == 'true'
 FAIR_USE_KILL_SWITCH = os.getenv('FAIR_USE_KILL_SWITCH', 'false').lower() == 'true'
+FAIR_USE_THROTTLE_DECAY_ENABLED = os.getenv('FAIR_USE_THROTTLE_DECAY_ENABLED', 'true').lower() not in (
+    'false',
+    'off',
+    '0',
+)
+FAIR_USE_STAGE_QUIET_PERIOD = timedelta(days=7)
 
 # Soft cap thresholds (milliseconds of real speech) — default tier (Free, Plus, and any
 # plan with a bounded monthly transcription allowance).
@@ -329,6 +336,22 @@ def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, 
     return (FAIR_USE_DAILY_SPEECH_MS, FAIR_USE_3DAY_SPEECH_MS, FAIR_USE_WEEKLY_SPEECH_MS)
 
 
+def fair_use_caps_for_user(uid: str) -> tuple[int, int, int]:
+    """Return the existing plan's fair-use caps without creating a subscription."""
+    try:
+        from config.referral_campaign import campaign_enabled
+
+        subscription = (
+            users_db.get_user_valid_subscription(uid, provision=False)
+            if campaign_enabled()
+            else users_db.get_existing_user_subscription(uid)
+        )
+        return fair_use_caps_for_plan(subscription.plan if subscription is not None else None)
+    except Exception as error:
+        logger.warning('fair_use: subscription lookup failed; using metered hard caps error=%s', type(error).__name__)
+        return fair_use_caps_for_plan()
+
+
 def is_daily_audio_ceiling_exceeded(uid: str, speech_totals: Optional[Dict[str, Any]] = None) -> bool:
     """Hard anti-abuse ceiling on total daily audio, applied to ALL plans.
 
@@ -491,6 +514,7 @@ def escalate_enforcement(
             action = 'restrict'
 
     # Apply stage changes
+    now = datetime.now(timezone.utc)
     if new_stage != current_stage:
         update: Dict[str, Any] = {
             'stage': new_stage,
@@ -506,7 +530,30 @@ def escalate_enforcement(
         elif new_stage == 'restrict':
             update['restrict_until'] = datetime.now(timezone.utc) + timedelta(days=30)
 
+        if FAIR_USE_THROTTLE_DECAY_ENABLED:
+            update['stage_entered_at'] = now
+            update['warning_until'] = now + FAIR_USE_STAGE_QUIET_PERIOD if new_stage == 'warning' else None
+
         fair_use_db.update_fair_use_state(uid, update)
+        invalidate_enforcement_cache(uid)
+    elif FAIR_USE_THROTTLE_DECAY_ENABLED and current_stage == 'warning' and passes_score_gate:
+        # Re-read and renew atomically with decay. If decay committed after our
+        # initial read, this violation must re-enter warning instead of only
+        # writing a deadline onto a row that is now at none.
+        previous, renewed = fair_use_db.renew_fair_use_warning(
+            uid,
+            {'last_violation_at': now, 'warning_until': now + FAIR_USE_STAGE_QUIET_PERIOD},
+            entry_updates={
+                'stage_entered_at': now,
+                'last_classifier_score': misuse_score,
+                'last_classifier_type': usage_type,
+                'violation_count_7d': counts['violation_count_7d'],
+                'violation_count_30d': counts['violation_count_30d'],
+            },
+        )
+        current_stage = previous.get('stage', 'none')
+        new_stage = renewed.get('stage', 'none')
+        action = 'warning' if current_stage == 'none' and new_stage == 'warning' else 'none'
         invalidate_enforcement_cache(uid)
 
     # Record the event (create_fair_use_event auto-generates a case_ref)
@@ -621,13 +668,65 @@ def _retry_after_seconds_from_restrict_until(restrict_until: Any) -> int | None:
 def normalize_expired_restriction_state(
     uid: str, state: Dict[str, Any], *, now: datetime | None = None
 ) -> Dict[str, Any]:
-    """Return effective state, persisting the existing restrict→throttle expiry transition."""
+    """Return effective state, persisting at most one expiry transition per read.
+
+    The kill switch preserves the original restrict-only behavior. New decay
+    writes compare the complete row transactionally so concurrent escalation or
+    quiet-period renewal cannot be overwritten by an old read.
+    """
     normalized_state = dict(state)
-    if normalized_state.get('stage', 'none') != 'restrict':
+    effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
+    stage = normalized_state.get('stage', 'none')
+    entered_at = _coerce_restrict_until(normalized_state.get('stage_entered_at'))
+    if entered_at is None:
+        entered_at = _coerce_restrict_until(normalized_state.get('last_violation_at'))
+    if entered_at is None:
+        entered_at = _coerce_restrict_until(normalized_state.get('updated_at'))
+    if entered_at is not None:
+        observe_stage_dwell(stage, max(0, (effective_now - entered_at).total_seconds()))
+
+    if FAIR_USE_THROTTLE_DECAY_ENABLED and stage in ('throttle', 'warning'):
+        deadline_field = f'{stage}_until'
+        deadline = _coerce_restrict_until(normalized_state.get(deadline_field))
+        if deadline is not None and effective_now <= deadline:
+            return normalized_state
+        if stage == 'warning' and deadline is None:
+            # Legacy warnings have no written deadline. Honor a known last
+            # violation; otherwise start one bounded quiet period on first read.
+            last_violation = _coerce_restrict_until(normalized_state.get('last_violation_at'))
+            deadline = (last_violation or effective_now) + FAIR_USE_STAGE_QUIET_PERIOD
+            if effective_now <= deadline:
+                result, _ = fair_use_db.update_fair_use_state_if_unchanged(
+                    uid, normalized_state, {'warning_until': deadline}
+                )
+                return result
+        new_stage = 'warning' if stage == 'throttle' else 'none'
+        updates: Dict[str, Any] = {
+            'stage': new_stage,
+            'stage_entered_at': effective_now,
+            deadline_field: None,
+            'warning_until': effective_now + FAIR_USE_STAGE_QUIET_PERIOD if new_stage == 'warning' else None,
+        }
+        result, changed = fair_use_db.update_fair_use_state_if_unchanged(uid, normalized_state, updates)
+        # Even a lost compare may have discovered an escalation behind a cached stage.
+        invalidate_enforcement_cache(uid)
+        if changed:
+            record_decay(stage, new_stage)
+            if deadline is None:
+                record_fallback(
+                    component='other',
+                    from_mode=stage,
+                    to_mode=new_stage,
+                    reason='malformed_doc',
+                    outcome='recovered',
+                    log=logger,
+                )
+        return result
+
+    if stage != 'restrict':
         return normalized_state
 
     restrict_until = _coerce_restrict_until(normalized_state.get('restrict_until'))
-    effective_now = _as_utc(now) if now is not None else datetime.now(timezone.utc)
     # An unparseable restrict_until (e.g. a string timestamp from an older write
     # or admin import) must not strand the user in a permanent restriction. Fail
     # safe toward expiry: clear the restriction instead of keeping it forever.
@@ -646,9 +745,20 @@ def normalize_expired_restriction_state(
             log=logger,
         )
 
-    fair_use_db.update_fair_use_state(uid, {'stage': 'throttle', 'restrict_until': None})
+    updates: Dict[str, Any] = {'stage': 'throttle', 'restrict_until': None}
+    if FAIR_USE_THROTTLE_DECAY_ENABLED:
+        updates.update(
+            {
+                'stage_entered_at': effective_now,
+                'throttle_until': effective_now + FAIR_USE_STAGE_QUIET_PERIOD,
+                'warning_until': None,
+            }
+        )
+    fair_use_db.update_fair_use_state(uid, updates)
     invalidate_enforcement_cache(uid)
-    normalized_state.update({'stage': 'throttle', 'restrict_until': None})
+    normalized_state.update(updates)
+    if FAIR_USE_THROTTLE_DECAY_ENABLED:
+        record_decay('restrict', 'throttle')
     return normalized_state
 
 
@@ -668,13 +778,11 @@ def get_hard_restriction_status(uid: str) -> tuple[bool, int | None]:
 
     restrict_until = state.get('restrict_until')
 
-    # Check if speech is over hard cap
+    # In restrict stage, enforce the user's active plan caps as hard caps.
     speech = get_rolling_speech_ms(uid)
-    # In restrict mode, enforce the soft caps as hard caps
+    daily_cap, three_day_cap, weekly_cap = fair_use_caps_for_user(uid)
     restricted: bool = bool(
-        speech['daily_ms'] > FAIR_USE_DAILY_SPEECH_MS
-        or speech['three_day_ms'] > FAIR_USE_3DAY_SPEECH_MS
-        or speech['weekly_ms'] > FAIR_USE_WEEKLY_SPEECH_MS
+        speech['daily_ms'] > daily_cap or speech['three_day_ms'] > three_day_cap or speech['weekly_ms'] > weekly_cap
     )
     return restricted, _retry_after_seconds_from_restrict_until(restrict_until) if restricted else None
 

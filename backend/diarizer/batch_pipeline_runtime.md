@@ -16,12 +16,19 @@ Startup requires exactly one visible CUDA GPU with BF16 support. ASR uses
 Parakeet v3 revision `541d1f99c6b0c3cd0b11a95167540bb8edefd82b` in BF16;
 community-1 revision `3533c8cf8e369892e6b79ff1bf80f7b0286a54ee` stays FP32.
 VAD reuses that pipeline's FP32 segmentation model. There is no FP8 or Nemotron
-routing. The model factory sets `compute_timestamps=true` and
-`greedy.use_cuda_graph_decoder=false` **before** constructing decoding; it also
-disables the runtime graph and asserts actual eager state before and after
-transcription. This closes the timestamp-initialization graph reset found by
-the GPU quality lane. A graph-policy violation quarantines and restarts the
-process. The prior ASR-only benchmark is not joint-image qualification.
+routing. The model factory sets `strategy=greedy_batch` (label-looping TDT),
+`compute_timestamps=true` and `greedy.use_cuda_graph_decoder` to the chosen
+mode **before** constructing decoding, then asserts the actual decoding state
+before and after every transcription. This closes the timestamp-initialization
+graph reset found by the GPU quality lane. CUDA graph decoding
+(`BATCH_PIPELINE_ASR_CUDA_GRAPHS_ENABLED`, Helm `worker.asrCudaGraphsEnabled`,
+**default on**; `false` is the kill switch) replays the same greedy algorithm
+with identical words. On the dev L4 full chain (2026-11-02, paired eager/graphs
+runs) it cut the ASR stage 26% with word edit rate 0 and +0.15 GiB CUDA peak; on
+the T4, where emulated-BF16 encoding dominates ASR, it is within noise. Off
+keeps runtime graphs disabled. NeMo recaptures only when a call exceeds the captured
+batch or frame count. A graph-policy violation, in either direction, quarantines
+and restarts the process.
 
 SIGTERM stops new pulls; the bounded current chain drains with A's 20-second
 lease renewals. Lost leases cannot complete. CUDA synchronizes before any result
@@ -38,9 +45,26 @@ legacy provider clients into the GPU image is unnecessary.
 `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
 `2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
 admission, completion and ordered merge of one lane overlap another lane's GPU
-chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
-quiescence) stays exclusive behind one asyncio lock, so device and host memory
-remain one flight. Each lane renews its own leases while it waits for the GPU.
+chain; the model chain (VAD, ASR, diarization and CUDA quiescence) stays
+exclusive behind one asyncio lock. Each waiting lane prepares the leading
+units of its flight that fit one shared 1800-audio-second decode budget, using
+the same artifact IO pool (default five), so the GPU section does not wait on
+fetches (`BATCH_PIPELINE_PREPARE_FLIGHT_ENABLED`, Helm
+`worker.prepareFlightEnabled`, default on; `false` prepares only the first
+decode). If any prepared lease is lost, or the lane stops while waiting, the
+whole prepared prefix is cancelled and those units are refunded without an
+attempt charge. The chain returns the reservations (and drops the decoded
+buffers) of finished prepared decodes as soon as its GPU section returns, not
+after settlement and publication, so the next waiting lane can prepare its
+whole flight; the lane's final close still drains any fetch left running.
+Final persist settlement runs after releasing the GPU lock, before publication, with renewal still active. A pull admits at most 32 units,
+so each lane retains at most 32 persist payloads/receipts; the IO pool bounds
+simultaneous uploads rather than waiting for a free upload slot under the GPU
+lock. Even a slow first upload cannot stall the sixth short unit's GPU work.
+Active decoded groups remain
+bounded to 7200 audio seconds; at most the configured pump depth of result
+tails can remain resident. Model precision, batching and CUDA concurrency stay
+unchanged. Each lane renews its own leases while it waits for the GPU.
 On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
 an attempt charge instead of starting another chain. Periodic recovery,
 result-ready drains and queue metrics run in their own task on the same 5s/15s
@@ -48,7 +72,43 @@ cadence instead of inside a lane between flights. Publication is unchanged: the 
 ordered merge remains the per-owner ordering authority across lanes, exactly as
 it already is across replicas and the serving reconciler. `1` restores the serial
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
-arrivals, so fresh work can wait up to one extra chain.
+arrivals, so fresh work can wait up to depth - 1 extra chains (two in prod at depth 3; the T4
+fallback sibling keeps `t4Fallback.pipelineDepth` 2).
+
+### Worker processes per GPU
+
+`BATCH_PIPELINE_WORKER_PROCESSES` (Helm `worker.processes`, default `1`, range
+1-3) runs that many independent pump processes on the pod's one GPU. Much of a
+chain's GPU-lock time is CPU, Python and IO work; a sibling's kernels fill those
+gaps (3-CPU T4 bench, chain before the shared embedding trunk: 33.8
+audio-h/GPU-h with one process, 45.4 with two, identical words and speakers).
+With the shared trunk on, two processes added nothing on that 3-CPU bench (45.1
+vs 48.3 for one), so the chart default stays `1` (no supervisor, the process
+above runs exactly as before). On the 8-vCPU dev L4 (2026-11-04) two processes
+gave 172.8 audio-h/GPU-h against 112.6 for one, at 11.8 of 23 GB VRAM, and prod
+is bound by per-lane claim latency rather than the GPU, so prod values set `2`.
+The T4 fallback sibling takes `t4Fallback.processes` (default `1`), never this
+value. Malformed or out-of-range values run one.
+
+The container's process becomes a supervisor that loads no models and touches
+no cloud client. Each child re-executes this module as the unchanged
+single-process runtime with its own models, leases, fences, pump depth and
+7200-audio-second decoded bound, exactly like another replica; its scheduler
+and leader identities are per process. Children serve probes and metrics on
+loopback ports 8081+. The supervisor's pod port answers `/ready` only once every
+child is ready, `/health` only while every running child's event loop ticks,
+and `/metrics` with every child's series labelled `worker_process`. Only child
+0 samples queue gauges, so Firestore sampling and the HPA's per-pod series stay
+as with one process; the adapter's chain-occupancy rule already takes the max
+per pod, so occupancy never adds across siblings. SIGTERM reaches every child
+and the supervisor waits for each drain. Any child that exits unrequested,
+including a fatal-CUDA quarantine, drains its siblings and the supervisor exits
+non-zero so Kubernetes replaces the pod and its GPU state.
+
+Host memory scales with the count: the chart takes pod resources from
+`processResources.<count>` and refuses a count without an entry. Two processes
+double the one-process sizing (24Gi request / 26Gi limit, 6 / 8 CPU; the limit stays under node allocatable minus daemons) inside
+`g2-standard-8` allocatable; three do not fit that machine shape.
 
 ## Encrypted staging and results
 
@@ -108,9 +168,62 @@ The chart `charts/batch-pipeline-worker` pins a qualified image digest, existing
 Workload Identity service account, explicit data-plane project, secrets and
 staging bucket. It selects the dedicated `batch-pipeline-pool` with
 `service=batch-pipeline` and `env=<env>` labels, requests one GPU, and prevents
-surge GPUs. **An NVIDIA L4 on `g2-standard-8` is required**: the joint chain was
-qualified on L4 and ASR requires native BF16; T4 (`sm75`) is unsupported. The
-live `diarizer-batch-pool` is separate and must not host this worker.
+surge GPUs. **The primary pool is an NVIDIA L4 on `g2-standard-8`.** The live
+`diarizer-batch-pool` is separate and must not host this worker.
+
+**T4 stockout fallback.** `t4Fallback.enabled` renders a `<release>-t4`
+Deployment pinned to `batch-pipeline-t4-pool` (`n1-standard-8` + one T4, same
+labels and taints, zones a/b/c/f, autoscaling `0..N`), with no HPA. The same
+image runs there unchanged: Torch reports emulated BF16 as supported on `sm75`.
+A 2026-11-01 dev bench of the worker's own VAD, Parakeet and pyannote loaders on
+the public gpuqual corpus (226 cases, 7,187 s, AMI + FLEURS in 7 languages)
+measured, against L4 BF16:
+
+| Device / ASR dtype | Audio-h per GPU-busy-h | Words differing | AMI WER | Diarization agreement | VAD |
+| --- | ---: | ---: | ---: | ---: | --- |
+| L4 BF16 (production) | 34.5 | — | 23.70% | — | — |
+| L4 FP16 | 32.0 | 0.61% | 23.61% | 1.0000, 155/155 speaker counts | identical |
+| T4 BF16 (emulated) | 16.6 | 0.36% | 23.64% | 1.0000, 155/155 speaker counts | identical |
+| T4 FP16 | 15.9 | 0.57% | 23.64% | 1.0000, 155/155 speaker counts | identical |
+
+A T4 is about 0.48x an L4. At us-central1 list prices (`n1-standard-8` + T4
+$0.730/h, `g2-standard-8` $0.854/h) that is about 1.8x the L4 cost per
+audio-hour, so the fallback carries work only while L4 workers are Pending:
+scale it with `kubectl scale deploy/<release>-t4 --replicas=N` (N at most the
+Pending L4 count) and back to 0 when they schedule. Helm upgrades keep the live
+count. The L4 HPA's chain-busy metric is namespace-wide, so serving T4 replicas
+raise the L4 recommendation; scale the fallback to 0 as L4 workers schedule
+and the 1800s scale-down window sheds the excess. The bench did not cover flight
+batching, pipeline depth 2 or lease and storage IO. Keep the fallback at zero
+until one T4 running the exact release image passes an approved isolated
+qualification with synthetic audio: a complete flight at production batch/depth
+settings, lease loss and recovery without lost or duplicate projection, and
+encrypted staging through result projection. Record that evidence before
+production activation; the loader bench alone does not qualify the worker.
+
+At the 100% admission target this adds a second GPU supply source before the
+fresh queue reaches saturation. While legacy sync is on, saturated admission
+spills back to legacy sync; Modulate overflow covers drained owners only. T4
+capacity reduces pressure on that already capped legacy queue; it does not
+change admission, draining or vendor routing. A T4 is not a one-for-one L4
+replacement: eight T4s add about 3.85 L4-equivalents using the loader bench,
+not a measured end-to-end fleet guarantee. Four ready L4s plus eight T4s would
+still fall short of a nine-L4 peak projection. Gate on ready capacity and
+fresh-owner wait, not the sum of pod counts.
+
+The on-demand compute envelope is $0 at zero nodes, $0.730/h per T4 node and
+$5.84/h at the pool's eight-node ceiling, plus boot disk and network charges.
+These are us-central1 list rates, not billed spend or commitments:
+[N1 VM pricing](https://cloud.google.com/products/compute/pricing/general-purpose)
+and [T4 pricing](https://cloud.google.com/products/compute/gpus-pricing).
+There is no reservation, commitment or storage migration. Set N to at most
+the lesser of eight and Pending L4 pods. Start production with one T4 only
+after that full-flight qualification passes. Expand beyond one only after its
+complete flight and result projection succeed, and its stage timing, peak
+memory and fresh-owner wait are healthy. Scale to zero when
+L4s recover; `t4Fallback.enabled=false` removes the sibling on the next chart
+upgrade. Setting `t4Fallback.replicas=0` alone does not stop a live sibling:
+Helm deliberately preserves its operator-set count.
 
 An operator creates the pool out-of-band, not through IaC or this chart, with
 labels `env=<env>,service=batch-pipeline` (`env=dev` or `env=prod`), taints

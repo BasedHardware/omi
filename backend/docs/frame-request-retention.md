@@ -51,9 +51,8 @@ buckets' exact identity, location, tier-specific lifecycle, soft-delete,
 uniform bucket-level access, public-access prevention, and encryption posture.
 Runtime-env-only validation cannot claim the live bucket gate. The independent
 `frame-request-retention-hourly` Scheduler target is also a deployment gate; it
-does not share the canonical memory-maintenance schedule. Until operators set
-`FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY=true` after observing that job,
-memory maintenance retains its legacy cleanup call as a rollback-safe bridge. The
+is the sole retention owner since memory-maintenance-job (whose legacy cleanup
+call once bridged this job) was retired on 2026-10-26. The
 desktop `device_id` is an owner-scoped routing and recovery identifier, not a
 standalone credential: Firebase authentication, account generation, and exact
 device matching remain authoritative. The current product does not claim

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.541",
+  "date": "2026-10-26",
+  "changes": [
+    "Added Show discarded and Restore Conversation so you can recover hidden audio and transcripts"
+  ]
+}

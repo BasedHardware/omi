@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-voice-playback-gates-question-completion",
+  "violated_contract": "A pendant question must terminate even if native spoken-output setup or cleanup never completes. Optional audio feedback must not strand tutorial Processing or retain the voice busy guard, and delayed cleanup must not stop a newer response.",
+  "canonical_prevention": "Bound playback admission and revoke late admission after timeout; complete request failures independently of best-effort, request-scoped audio cleanup. Fence cleanup by the admitted playback lifecycle, not the begin-attempt counter: mode-off, missing-headphone and revoked-admission skips must leave existing cleanup intact, while an admitted replacement must be protected from old cleanup.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/pendant_tutorial_question_flow_test.dart",
+    "app/test/services/voice_playback/omi_voice_playback_service_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/providers/message_provider.dart",
+    "app/lib/services/voice_playback/omi_voice_playback_service.dart"
+  ],
+  "status": "open"
+}

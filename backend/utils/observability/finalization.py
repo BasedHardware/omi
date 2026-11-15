@@ -12,6 +12,10 @@ from prometheus_client import Counter
 
 logger = logging.getLogger(__name__)
 
+RECORD_REGISTER_REFUSED = Counter(
+    'omi_record_register_refused_total', 'Batch recording registration refused during conversation finalization'
+)
+
 
 def finalization_diagnostic_id(value: str) -> str:
     """Stable correlation key for logs, without exposing a stored identifier."""

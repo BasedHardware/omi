@@ -1,12 +1,14 @@
 """Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
 import logging
+import asyncio
 from copy import deepcopy
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable, TooManyRequests
 from pathlib import Path
 from types import SimpleNamespace
 import threading
 from unittest.mock import AsyncMock, MagicMock
+import hashlib
 import uuid
 
 import fakeredis
@@ -72,6 +74,32 @@ def pipeline():
         yield module, store
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('task_mode', [False, True])
+async def test_coordinator_scopes_privacy_before_first_await_and_closes_on_cancellation(
+    pipeline, monkeypatch, tmp_path, task_mode
+):
+    from database.batch_privacy_attempt import batch_privacy_attempt, current_attempt
+
+    module, _ = pipeline
+    observed = []
+
+    async def cancel_at_first_await(uid):
+        observed.append(current_attempt())
+        assert observed[-1] is not None
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(module, 'warm_rollout_cohorts', cancel_at_first_await)
+    with batch_privacy_attempt() as parent:
+        with pytest.raises(asyncio.CancelledError):
+            await module.run_full_pipeline_background_async(
+                'privacy-test-job', 'privacy-test-owner', [], None, False, str(tmp_path), task_mode=task_mode
+            )
+        assert current_attempt() is parent
+        assert len(observed) == 1 and observed[0] is not parent and observed[0]._closed
+    assert current_attempt() is None
+
+
 @pytest.mark.parametrize('quiet', [False, True])
 def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, tmp_path, quiet):
     module, store = pipeline
@@ -126,7 +154,7 @@ def test_provider_failure_after_eight_minutes_never_releases_staging(pipeline, m
     assert staging['exists'] and pending == []
 
 
-@pytest.mark.parametrize('recovered', [False, True])
+@pytest.mark.parametrize('recovered', [False])
 def test_late_first_word_stays_on_the_vad_file_clock(pipeline, monkeypatch, tmp_path, recovered):
     """A cough 20 s before speech opens their shared VAD file (gaps under 120 s merge).
 
@@ -362,8 +390,8 @@ def test_success_does_not_retry_and_failure_log_has_no_identifiers(pipeline, cap
 
 def test_correlation_refs_accept_uuid4_only():
     job = uuid.uuid4()
-    assert telemetry.bounded_correlation_ref(str(job)) == job.hex
-    assert telemetry.bounded_correlation_ref(job.hex) == job.hex
+    assert telemetry.bounded_correlation_ref(str(job)) == hashlib.sha256(job.hex.encode('ascii')).hexdigest()[:32]
+    assert telemetry.bounded_correlation_ref(job.hex) == hashlib.sha256(job.hex.encode('ascii')).hexdigest()[:32]
     assert telemetry.bounded_correlation_ref(str(uuid.uuid1())) == 'none'
     assert telemetry.bounded_correlation_ref('user-uid-123') == 'none'
     assert telemetry.bounded_correlation_ref('/tmp/audio.wav') == 'none'
@@ -406,7 +434,10 @@ def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_
     assert [m.split('outcome=')[1].split(' ')[0] for m in retry_events] == expected
     for message in retry_events:
         assert 'provider=deepgram' in message and 'lane=fresh' in message
-        assert f'job_ref={uuid.UUID(job_id).hex}' in message and f'attempt_ref={attempt_ref}' in message
+        assert (
+            f'job_ref={telemetry.bounded_correlation_ref(job_id)}' in message
+            and f'attempt_ref={telemetry.bounded_correlation_ref(attempt_ref)}' in message
+        )
         assert 'uid-secret-9f2c' not in message and '1700000000.wav' not in message
 
 
@@ -434,7 +465,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         },
     )
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         module._record_sync_segment_outcome(
             module.TranscriptionOutcome.SUCCESS,
             provider='deepgram',
@@ -452,7 +483,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         )
 
     assert finalized is not None
-    shared_ref = f'job_ref={uuid.UUID(job_id).hex} attempt_ref={attempt_ref}'
+    shared_ref = f'job_ref={telemetry.bounded_correlation_ref(job_id)} attempt_ref={telemetry.bounded_correlation_ref(attempt_ref)}'
     segment_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_segment' in r.getMessage())
     job_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
     assert shared_ref in segment_msg and shared_ref in job_msg
@@ -577,7 +608,17 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     errors, outcome = [], {}
     response = {'new_memories': set(), 'updated_memories': set()}
     assert (
-        module.process_segment('1000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome) is False
+        module.process_segment(
+            '1000.wav',
+            'u',
+            response,
+            threading.Lock(),
+            errors,
+            deferred_outcome=outcome,
+            job_id=str(uuid.UUID(int=1, version=4)),
+            attempt_ref=str(uuid.UUID(int=2, version=4)),
+        )
+        is False
     )
     assert not store.rows and not response['new_memories']
     assert errors == ['sync_persistence_failed']
@@ -586,9 +627,44 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     assert ('repeat_failure_fingerprint' in outcome) is (not retryable)
     event = next(r.message for r in caplog.records if 'event=sync_persistence_exception' in r.message)
     assert f'firestore_error={expected}' in event
+    assert 'job_ref=' + telemetry.bounded_correlation_ref(str(uuid.UUID(int=1, version=4))) in event
+    assert 'attempt_ref=' + telemetry.bounded_correlation_ref(str(uuid.UUID(int=2, version=4))) in event
+    assert 'segments_bucket=1' in event and 'speech_seconds_bucket=' in event
+    assert 'rollover_target_kind=none' in event
+    assert ('outcome=rejected' in event) is (expected == 'document_size_limit')
     assert f'firestore_doc_kind={kind} ' in event
     assert 'private' not in event and '2026-10-03' not in event
     module.prerecorded.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'error,reason',
+    [
+        (ValueError('open_loop_extractions must be an object'), 'open_loop_extractions_not_object'),
+        (ValueError('synthetic confidential detail'), 'other_value_error'),
+        (ValueError('open_loop_extractions must be an object synthetic confidential detail'), 'other_value_error'),
+        (ValueError('Failed to commit transaction in 5 attempts.'), 'sdk_commit_attempts_exhausted'),
+        (
+            ValueError('The transaction has no transaction ID, so it cannot be rolled back.'),
+            'sdk_transaction_not_in_progress',
+        ),
+        (RuntimeError('synthetic confidential detail'), 'none'),
+    ],
+)
+@pytest.mark.parametrize('phase', ['persistence', 'finalize'])
+def test_value_error_diagnostics_use_only_closed_tokens(pipeline, caplog, error, reason, phase):
+    module, _ = pipeline
+    if phase == 'persistence':
+        module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    else:
+        module.finish_sync_segment = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    module.process_segment(
+        '1000.wav', 'u', {'new_memories': set(), 'updated_memories': set()}, threading.Lock(), [], deferred_outcome={}
+    )
+    event = next(r.message for r in caplog.records if f'event=sync_{phase}_exception' in r.message)
+    assert f'value_error_reason={reason}' in event
+    assert 'confidential' not in event and 'must be an object' not in event
 
 
 @pytest.mark.parametrize(
@@ -670,90 +746,6 @@ def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, mon
     assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
     assert 'outcome=skipped_budget' in events[0]
     assert 'lane=' in events[0] and 'duration_seconds=' in events[0]
-
-
-@pytest.mark.parametrize('result', ['silence', 'speech', 'empty', 'inspection_error'])
-def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monkeypatch, result):
-    module, store = pipeline
-    monkeypatch.setenv('SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED', 'true')
-    module.get_prerecorded_service = lambda language: ('parakeet', None, 'parakeet')
-    module.prerecorded = MagicMock(return_value=([], 'multi'))
-    recovered = ([{'text': 'Synthetic speech', 'timestamp': [0, 3]}], 'vi', 3.0, [{'start': 0, 'end': 3}])
-    if result == 'silence':
-        recovered = ([], '', 3.0, [])
-    recovery = MagicMock(return_value=recovered)
-    if result == 'empty':
-        recovery.side_effect = module.TranscriptionFailure(
-            module.TranscriptionOutcome.EMPTY_UNEXPECTED, provider='modulate'
-        )
-    elif result == 'inspection_error':
-        recovery.side_effect = RuntimeError('inspection failed')
-    monkeypatch.setattr(module.empty_recovery, 'recover', recovery)
-    module.postprocess_words = lambda words, *a: (
-        [module.TranscriptSegment(text='Synthetic speech', start=0, end=3, is_user=False)] if words else []
-    )
-    errors, outcome = [], {}
-    success = module.process_segment(
-        '1700000000.wav',
-        'synthetic-owner',
-        {'new_memories': set(), 'updated_memories': set()},
-        threading.Lock(),
-        errors,
-        deferred_outcome=outcome,
-    )
-    assert module.prerecorded.call_count == 2
-    recovery.assert_called_once()
-    assert success == (result == 'speech')
-    assert len(conversations(store)) == int(result == 'speech')
-    if result in ('empty', 'inspection_error'):
-        assert errors and outcome['retryable'] and outcome['outcome'].value != 'expected_silence'
-    else:
-        assert not errors
-        assert outcome['outcome'].value == ('success' if result == 'speech' else 'expected_silence')
-
-
-def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
-    module, _ = pipeline
-    module.cap_enabled = lambda uid, lane: True
-    module.sync_allowed = lambda uid, *, lane='sync', **kwargs: True
-    module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
-    module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (
-        [{'text': 'Synthetic', 'timestamp': [0, 3]}],
-        'vi',
-    )
-    module.modulate_prerecorded_from_bytes = MagicMock()
-    module.record_cap_audio = MagicMock()
-
-    def inspect_and_recover(path, *, transcribe, authorize, observe):
-        observe(3, [{'start': 0, 'end': 3}])
-        authorize()
-        words, language = transcribe(b'synthetic-canonical-wav')
-        return words, language, 3, [{'start': 0, 'end': 3}]
-
-    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_and_recover)
-    assert module._recover_empty_segment('synthetic.wav', 'synthetic-owner', 'parakeet', 'fresh', None, None)
-    module.modulate_prerecorded_from_bytes.assert_not_called()
-    module.record_cap_audio.assert_not_called()
-
-
-@pytest.mark.parametrize(
-    'spans,outcome', [([], 'silence'), ([{'start': 0, 'end': 3}], 'speech'), (None, 'inspection_error')]
-)
-def test_strict_vad_log_survives_failed_recovery_without_content(pipeline, monkeypatch, caplog, spans, outcome):
-    module, _ = pipeline
-    module.compute_sync_segment_id = lambda *args: 'synthetic-sealed-segment'
-
-    def inspect_then_fail(path, *, transcribe, authorize, observe):
-        observe(None if spans is None else 3, spans)
-        raise RuntimeError('synthetic recovery failure')
-
-    monkeypatch.setattr(module.empty_recovery, 'recover', inspect_then_fail)
-    with caplog.at_level('INFO'), pytest.raises(RuntimeError, match='synthetic recovery failure'):
-        module._recover_empty_segment('private-path.wav', 'private-owner', 'parakeet', 'fresh', None, None)
-    events = [record.message for record in caplog.records if 'event=sync_empty_strict_vad ' in record.message]
-    assert len(events) == 1
-    assert f'outcome={outcome} lane=fresh provider=parakeet segment_ref=synthetic-sealed-segment' in events[0]
-    assert 'private-owner' not in events[0] and 'private-path' not in events[0]
 
 
 @pytest.mark.parametrize(

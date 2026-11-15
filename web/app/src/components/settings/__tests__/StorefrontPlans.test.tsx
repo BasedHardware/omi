@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseStorefront, type PlanStorefront } from '@/lib/planStorefront';
 
 const api = vi.hoisted(() => ({
@@ -23,6 +23,16 @@ import {
   BudgetUpsellBanner,
   StorefrontPanel,
 } from '@/components/settings/storefront/StorefrontHost';
+
+beforeEach(() => {
+  Object.values(api).forEach((fn) => fn.mockReset());
+  vi.stubGlobal('open', vi.fn());
+  window.localStorage.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const GOLDEN_DIR = resolve(process.cwd(), '../../backend/tests/fixtures/storefront_v2');
 function golden(name: string): PlanStorefront {
@@ -59,7 +69,7 @@ describe('StorefrontPlans', () => {
     const onSelect = renderPlans(golden('free_settings'));
     fireEvent.click(screen.getByRole('radio', { name: 'Yearly · 2 months free' }));
     const plus = screen.getByTestId('storefront-tier-plus');
-    expect(within(plus).getByText('$16.66/month')).toBeTruthy();
+    expect(within(plus).getByText('US$16.66/month')).toBeTruthy();
     fireEvent.click(within(plus).getByRole('button', { name: 'Get Plus' }));
     expect(onSelect.mock.calls[0][1].id).toBe('price_plus_year');
   });
@@ -106,16 +116,11 @@ describe('StorefrontPlans', () => {
 });
 
 describe('StorefrontPanel purchase routing', () => {
-  beforeEach(() => {
-    Object.values(api).forEach((fn) => fn.mockReset());
-    vi.stubGlobal('open', vi.fn());
-  });
-
   it('same-tier annual requires backend confirmation before any billing call', async () => {
     api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
     api.upgradeSubscription.mockResolvedValue({ status: 'success' });
     render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
-    const label = 'Switch to yearly · save $39.98';
+    const label = 'Switch to yearly · save US$39.98';
     fireEvent.click(await screen.findByRole('button', { name: label }));
     expect(
       await screen.findByText('Your monthly plan continues until Nov 1'),
@@ -187,11 +192,6 @@ describe('StorefrontPanel purchase routing', () => {
 });
 
 describe('BudgetUpsellBanner', () => {
-  beforeEach(() => {
-    Object.values(api).forEach((fn) => fn.mockReset());
-    window.localStorage.clear();
-  });
-
   it('stays dark while the contextual gate is off', async () => {
     const readGate = vi.fn(async () => false);
     const { container } = render(

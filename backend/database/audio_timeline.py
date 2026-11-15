@@ -49,6 +49,11 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
     Only a real mapping is a metadata document: a GCS blob carries ``None`` or
     a dict, and anything else (an ORM/test double answering attribute probes)
     is not span evidence and must fail closed to the legacy listing behavior.
+
+    A well-formed ``v2_playback_start`` — finite and never ahead of the raw
+    span start, since skew normalization only moves capture starts back onto
+    the server clock — rides along as ``playback_start`` for playback wall
+    math; malformed values leave the span on the raw capture clock.
     """
     if not isinstance(metadata, dict):
         return None
@@ -60,7 +65,14 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
         return None
     if samples <= 0 or rate <= 0:
         return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
+    span = {'start': start, 'samples': samples, 'sample_rate': rate}
+    try:
+        playback_start = float(metadata['v2_playback_start'])
+    except (KeyError, TypeError, ValueError):
+        return span
+    if math.isfinite(playback_start) and playback_start <= start:
+        span['playback_start'] = playback_start
+    return span
 
 
 def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:

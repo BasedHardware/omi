@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:omi/utils/local_day_rollover.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,9 +10,15 @@ import 'package:omi/backend/http/api/review.dart' as review_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
+import 'package:omi/pages/activity/past_processing_section.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/review/recent_changes_page.dart';
 import 'package:omi/pages/review/review_page.dart';
@@ -42,6 +50,7 @@ class ActivityPage extends StatefulWidget {
     this.probeDreamReport,
     this.pendingWork,
     this.captureWedgeMonitor,
+    this.reprocessConversation,
   });
 
   final RecentRecapsLoader? loadRecaps;
@@ -51,6 +60,7 @@ class ActivityPage extends StatefulWidget {
 
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
+  final Future<ServerConversation?> Function(String id)? reprocessConversation;
 
   /// Injectable for tests and visual audits; defaults to [CaptureWedgeMonitor.instance].
   final CaptureWedgeMonitor? captureWedgeMonitor;
@@ -98,6 +108,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   /// Null until a recap load succeeds: a failed load must not clear a bell the user never saw.
   DateTime? _shownThrough;
   StreamSubscription<void>? _arrivals;
+  LocalDayRollover? _dayRollover;
+
+  void _scheduleDayRollover() {
+    _dayRollover?.cancel();
+    _dayRollover = LocalDayRollover(() {
+      if (mounted) setState(() {});
+    });
+  }
 
   /// Rebuild when capture attention arrives or leaves: an empty feed otherwise
   /// commits the build to the empty-state branch, where nothing listens to the
@@ -113,6 +131,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     _previousVisitMs = _seen.seenAtMs;
     _captureMonitor.addListener(_onCaptureAttentionChanged);
+    _pendingWork.addListener(_onCaptureAttentionChanged);
+    _scheduleDayRollover();
     // A daily-summary notification while Activity is on screen shows here, not only on Home.
     _arrivals = recapArrivals.listen((_) => _refresh());
     _refresh();
@@ -121,13 +141,18 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   /// A recap made while the app was in the background shows here on return, not just on Home.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _refresh();
+    if (state == AppLifecycleState.resumed) {
+      _scheduleDayRollover();
+      _refresh();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _captureMonitor.removeListener(_onCaptureAttentionChanged);
+    _pendingWork.removeListener(_onCaptureAttentionChanged);
+    _dayRollover?.cancel();
     _arrivals?.cancel();
     final shown = _shownThrough;
     if (shown != null) _seen.markSeen(through: shown);
@@ -147,7 +172,7 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _loading = _items.isEmpty;
       _failed = false;
     });
-    final startedAt = DateTime.now();
+    final startedAt = clock.now();
     final results = await Future.wait<Object>([
       (widget.loadRecaps ?? _loadActivityRecaps)(),
       (widget.loadChanges ?? review_api.getReviewChanges)(),
@@ -228,13 +253,41 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
-    final attention = NeedsAttentionSection(store: _pendingWork, captureMonitor: _captureMonitor);
-    final hasAttention =
-        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor);
+    final provider = context.watch<ConversationProvider?>();
+    final failures = _pendingWork.homeProcessingToday
+        ? failedActivityConversations(
+            pending: _pendingWork.pendingForActivity,
+            conversations: [
+              ...?provider?.searchedConversations,
+              ...?provider?.processingConversations,
+              ...?provider?.conversations
+            ],
+            episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
+            attentionIds: _pendingWork.attentionConversationIds,
+          )
+        : <ServerConversation>[];
+    final attention = NeedsAttentionSection(
+        store: _pendingWork,
+        captureMonitor: _captureMonitor,
+        failedConversations: failures,
+        reprocess: widget.reprocessConversation);
+    final processing = _pendingWork.homeProcessingToday
+        ? pastProcessingConversations(
+            pending: _pendingWork.pendingForActivity,
+            episodes: context.watch<EpisodeProvider?>()?.homeEpisodes ?? const [],
+            conversations: [
+              ...?provider?.processingConversations,
+              ...?provider?.conversations,
+            ],
+            attentionIds: _pendingWork.attentionConversationIds,
+          )
+        : <ServerConversation>[];
+    final hasAttention = processing.isNotEmpty ||
+        NeedsAttentionSection.hasContent(_pendingWork, context.watch<SyncProvider?>(), _captureMonitor, failures);
     final Widget body;
     if (_loading) {
       body = const OmiLoadingState();
-    } else if (_failed) {
+    } else if (_failed && !hasAttention) {
       body = OmiErrorState(message: l.activityLoadFailed, onRetry: _refresh);
     } else if (_items.isEmpty && !hasAttention) {
       // Still pullable: a recap that lands while the page is open is one pull away.
@@ -294,12 +347,13 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xxl),
           children: [
-            if (_partial)
+            if (_partial || _failed)
               Padding(
                 padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
                 child: OmiPartialNotice(message: l.activityLoadFailed, onRetry: _refresh),
               ),
             attention,
+            PastProcessingSection(conversations: processing),
             for (final (header, items) in groups) ...[
               _DayHeader(label: header),
               _ActivityGroup(
@@ -346,7 +400,14 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
     }
     return Scaffold(
       appBar: AppBar(leading: const OmiBackButton(), title: Text(l.activity)),
-      body: body,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const CaptureContinuityDogfoodBanner(),
+          const OnDeviceQueueBanner(),
+          Expanded(child: body),
+        ],
+      ),
     );
   }
 }

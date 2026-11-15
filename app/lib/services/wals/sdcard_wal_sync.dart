@@ -1,4 +1,5 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/devices/ring_protocol.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -13,6 +14,7 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds;
 
 class SDCardWalSyncImpl implements SDCardWalSync {
   List<Wal> _wals = [];
@@ -22,6 +24,31 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
+
+  // A device rejection is terminal for this connection, including later auto-sync wakes.
+  int? _readRejectedStatus;
+  // WalSyncs keeps unknown firmware detached; this layer only refuses confirmed ring firmware.
+  bool get _usesLegacySdcard => !RingProtocol.isRingBufferFirmware(_device?.firmwareRevision);
+
+  String get _readRejection =>
+      'SD read rejected by device: status=0x${_readRejectedStatus!.toRadixString(16).padLeft(2, '0')}';
+
+  /// Fail rejected commands before treating any bytes as audio or arming a stall timer.
+  bool _handleReadRejection(List<int> value, Completer<bool> completer) {
+    final int status;
+    if (value.length == 2 && value[0] == RingProtocol.notifyAck) {
+      status = value[1];
+    } else if (value.length == 1 && value[0] != 4 && value[0] != 100) {
+      status = value[0];
+    } else {
+      return false;
+    }
+    if (status == 0) return false;
+    _readRejectedStatus = status;
+    Logger.debug(_readRejection);
+    completer.complete(false);
+    return true;
+  }
 
   bool _isCancelled = false;
   bool _isSyncing = false;
@@ -35,6 +62,25 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   static final Version _timestampMarkerMinVersion = Version.parse("3.0.16");
+
+  /// How far past "now" a device timestamp may sit and still count as a real
+  /// clock: one day absorbs pendant clock skew without reopening the door to
+  /// the years-away garbage that split real recordings into fragments.
+  static const int _markerFutureToleranceSeconds = 24 * 60 * 60;
+
+  /// Whether a decoded timestamp marker can name a real recording time. The
+  /// window matches the backend's filename gate (>= 2024-01-01, not beyond
+  /// now): once the packet walk desynchronizes, audio bytes decode as markers
+  /// with garbage epochs — years in the future were rejected at upload as
+  /// 1-second fragments, and garbage in the past uploaded silently under a
+  /// wrong date. An implausible marker is ignored so the recording keeps the
+  /// app-estimated clock instead of splitting.
+  @visibleForTesting
+  static bool markerEpochPlausible(int epoch, {DateTime? now}) {
+    if (epoch < walMinPlausibleTimerStartSeconds) return false;
+    final ceiling = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000 + _markerFutureToleranceSeconds;
+    return epoch <= ceiling;
+  }
 
   /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
   /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
@@ -163,7 +209,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<List<Wal>> _getMissingWals() async {
-    if (_device == null) {
+    if (_device == null || !_usesLegacySdcard) {
       return [];
     }
     String deviceId = _device!.id;
@@ -194,9 +240,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       // Use device-provided recording start timestamp if available (firmware >= 3.0.16), otherwise estimate
       int timerStart;
       String? clockRun;
-      if (_supportsTimestampMarkers() && storageFiles.length >= 3 && storageFiles[2] > 0) {
-        timerStart = storageFiles[2];
+      final listedStart = storageFiles.length >= 3 ? storageFiles[2] : 0;
+      if (_supportsTimestampMarkers() && markerEpochPlausible(listedStart)) {
+        timerStart = listedStart;
       } else {
+        if (listedStart > 0) {
+          DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': listedStart, 'source': 'listing'});
+        }
         timerStart = DateTime.now().millisecondsSinceEpoch ~/ 1000 - seconds;
         clockRun = Wal.newClockRun();
       }
@@ -236,11 +286,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   @override
   Future<List<Wal>> getMissingWals() async {
+    if (!_usesLegacySdcard) return [];
     return _wals.where((w) => w.status == WalStatus.miss && w.storage == WalStorage.sdcard).toList();
   }
 
   @override
   Future start() async {
+    if (!_usesLegacySdcard) return;
     final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
     // Re-add the syncing WAL if it was lost
@@ -319,6 +371,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     var chunkSize = sdcardChunkSizeSecs * 100;
     await _storageStream?.cancel();
     final completer = Completer<bool>();
+    String? readRejection;
     bool hasError = false;
     bool sawEndSignal = false;
     bool parseGap = false;
@@ -329,6 +382,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
+        if (_handleReadRejection(value, completer)) {
+          readRejection = _readRejection;
+          return;
+        }
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -343,32 +400,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         });
 
+        // Preserve the legacy accepted/end statuses. A zero two-byte ACK is
+        // also an acceptance, never an audio packet or a parsing gap.
+        if (value.length == 2 && value[0] == RingProtocol.notifyAck) return;
         if (value.length == 1) {
-          Logger.debug('returned $value');
-          if (value[0] == 0) {
-            Logger.debug('good to go');
-          } else if (value[0] == 3) {
-            Logger.debug('bad file size. finishing...');
-            hasError = true;
-            if (!completer.isCompleted) completer.complete(false);
-          } else if (value[0] == 4) {
-            Logger.debug('file size is zero. going to next one....');
+          if (value[0] != 0) {
             sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else if (value[0] == 100) {
-            Logger.debug('end');
-            sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else {
-            Logger.debug('Error bit returned');
-            hasError = true;
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
+            completer.complete(true);
           }
           return;
         }
@@ -419,6 +457,9 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool sawEnd = false;
     try {
       sawEnd = await completer.future;
+      // Keep this attempt's rejection even if disconnect resets the connection
+      // latch while stream cancellation is awaiting native cleanup.
+      if (readRejection != null) throw StateError(readRejection!);
     } catch (e) {
       rethrow;
     } finally {
@@ -482,6 +523,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     List<MapEntry<int, int>> timestampMarkers = [];
     await _storageStream?.cancel();
     final completer = Completer<bool>();
+    String? readRejection;
     bool hasError = false;
     bool sawEndSignal = false;
     bool parseGap = false;
@@ -494,6 +536,10 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       deviceId,
       onStorageBytesReceived: (List<int> value) {
         if (value.isEmpty || hasError || completer.isCompleted) return;
+        if (_handleReadRejection(value, completer)) {
+          readRejection = _readRejection;
+          return;
+        }
 
         if (!firstDataReceived) {
           firstDataReceived = true;
@@ -508,32 +554,13 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           }
         });
 
+        // Preserve the legacy accepted/end statuses. A zero two-byte ACK is
+        // also an acceptance, never an audio packet or a parsing gap.
+        if (value.length == 2 && value[0] == RingProtocol.notifyAck) return;
         if (value.length == 1) {
-          Logger.debug('returned $value');
-          if (value[0] == 0) {
-            Logger.debug('good to go');
-          } else if (value[0] == 3) {
-            Logger.debug('bad file size. finishing...');
-            hasError = true;
-            if (!completer.isCompleted) completer.complete(false);
-          } else if (value[0] == 4) {
-            Logger.debug('file size is zero. going to next one....');
+          if (value[0] != 0) {
             sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else if (value[0] == 100) {
-            Logger.debug('end');
-            sawEndSignal = true;
-            if (!completer.isCompleted) {
-              completer.complete(true);
-            }
-          } else {
-            Logger.debug('Error bit returned');
-            hasError = true;
-            if (!completer.isCompleted) {
-              completer.complete(false);
-            }
+            completer.complete(true);
           }
           return;
         }
@@ -562,9 +589,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
                   (value[packageOffset + 3] << 16) |
                   (value[packageOffset + 4] << 24);
               packageOffset += 5;
-              if (epoch > 0) {
+              if (markerEpochPlausible(epoch)) {
                 timestampMarkers.add(MapEntry(bytesData.length, epoch));
                 Logger.debug('Timestamp marker: epoch=$epoch at frame ${bytesData.length}');
+              } else {
+                // Audio bytes that decoded like a marker: ignoring it keeps the
+                // estimated clock and the recording whole instead of splitting
+                // it into fragments dated years away.
+                DebugLogManager.logEvent('implausible_timestamp_marker_ignored', {'epoch': epoch});
+                Logger.debug('Ignored implausible timestamp marker: epoch=$epoch');
               }
               continue;
             }
@@ -660,6 +693,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     bool sawEnd = false;
     try {
       sawEnd = await completer.future;
+      if (readRejection != null) throw StateError(readRejection!);
     } catch (e) {
       rethrow;
     } finally {
@@ -710,6 +744,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   }
 
   Future<SyncLocalFilesResponse> _syncWal(final Wal wal, Function(int offset, double speedKBps)? updates) async {
+    if (!_usesLegacySdcard) throw StateError('Legacy SD read unavailable on ring-buffer firmware');
+    if (_readRejectedStatus != null) throw StateError(_readRejection);
     Logger.debug("SDCard sync (two-phase): ${wal.id} byte offset: ${wal.storageOffset} ts ${wal.timerStart}");
 
     if (_localSync == null) {
@@ -770,6 +806,8 @@ class SDCardWalSyncImpl implements SDCardWalSync {
       }
       rethrow;
     }
+
+    if (_readRejectedStatus != null) throw StateError(_readRejection);
 
     if (chunksDownloaded == 0) {
       Logger.debug("SDCard: No chunks downloaded");
@@ -958,6 +996,12 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   @override
   void setDevice(BtDevice? device) async {
     _device = device;
+    _readRejectedStatus = null;
+    if (!_usesLegacySdcard) {
+      _wals = [];
+      listener.onWalUpdated();
+      return;
+    }
     final syncingWal = _wals.where((w) => w.isSyncing).firstOrNull;
     _wals = await _getMissingWals();
     // Re-add the syncing WAL if it was lost

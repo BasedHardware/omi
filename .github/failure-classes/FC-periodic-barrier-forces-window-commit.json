@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-periodic-barrier-forces-window-commit",
+  "violated_contract": "A periodic relay or transcript barrier must not force a storage window to commit at the polling cadence. Custody acknowledgements must follow immutable window receipts while live delivery continues independently; otherwise a one-second relay multiplies object writes and privacy-authority reads that belong at the sixty-second pack boundary.",
+  "canonical_prevention": "Separate the gate for scheduled commits from explicit window flush boundaries. Retain original audio through the active window and defer client coverage publication behind an accepted-frame checkpoint. Test many relay cycles against actual storage call counts, plus crash, disconnect, failed earlier commits and continuous transcript arrival.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_audio_durable_outbox.py",
+    "backend/tests/unit/test_listen_capture_coverage.py"
+  ],
+  "evidence_prs": [23641],
+  "scope_hints": [
+    "backend/utils/other/live_audio_archive.py",
+    "backend/routers/listen/coverage.py",
+    "backend/utils/listen_pusher_session.py"
+  ],
+  "status": "open"
+}

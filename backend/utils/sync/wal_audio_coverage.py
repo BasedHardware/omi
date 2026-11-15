@@ -36,6 +36,7 @@ from utils.sync.audio_coverage import (
     validated_live_ranges,
 )
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
+from utils.sync.capture_clock import is_early_capture_time
 from utils.sync.lineage_diagnostics import classify_generation_row
 from utils.sync.recording_session_target import clean_text, source_value
 
@@ -230,6 +231,9 @@ def apply_wal_audio_coverage(
                     'incomplete': source_incomplete,
                     'coverage_trimmed': True,
                 }
+                clock_origin = (frame_map or {}).get('capture_clock_at', float(base_timestamp))
+                if is_early_capture_time(clock_origin):
+                    frame_maps[derivative_path]['capture_clock_at'] = clock_origin
                 wav_paths.append(derivative_path)
     except Exception as e:
         _remove_generated(generated)
@@ -458,6 +462,12 @@ def build_sync_source_frame_maps(
                 wav_channels=decoded_wav.getnchannels(),
             )
         if mapping is not None:
+            try:
+                clock_origin = get_timestamp_from_path(wav_path)
+            except (IndexError, ValueError):
+                clock_origin = None
+            if clock_origin is not None and is_early_capture_time(clock_origin):
+                mapping['capture_clock_at'] = clock_origin
             source_frame_maps[wav_path] = mapping
     return source_frame_maps
 

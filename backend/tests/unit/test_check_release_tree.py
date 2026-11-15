@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 
 import check_release_tree as crt  # noqa: E402
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
 
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()

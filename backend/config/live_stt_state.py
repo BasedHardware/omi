@@ -87,6 +87,16 @@ def cost_lease_key(target, language: str) -> str:
     return f'{COST_PREFIX}:{stage()}:{fingerprint}:lease:{target.id}:{language}'
 
 
+def cost_reset_key(target) -> str:
+    """One durable, content-free reset generation floor per target identity."""
+    return cost_key(target, 'operator-reset-generation')
+
+
+def cost_surge_key(target) -> str:
+    """Expiring source-bench deadline, independent of gate recovery/reset."""
+    return cost_key(target, 'failover-surge-until')
+
+
 def fleet_prefix(family: str, *, account: bool = False, endpoint: str | None = None) -> str:
     if account:
         fingerprint = _digest('live-stt-fleet-v2-account', family, family_credential(family))

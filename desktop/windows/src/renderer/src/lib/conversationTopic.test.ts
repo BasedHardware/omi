@@ -24,6 +24,17 @@ describe('generateConversationTopic', () => {
     })
   })
 
+  it('passes the capture language so the backend can keep short titles deterministic', async () => {
+    omiPost.mockResolvedValue({ data: { emoji: '', title: 'Bonjour' } })
+
+    await generateConversationTopic('Bonjour, on déjeune demain', 'fr')
+
+    expect(omiPost).toHaveBeenCalledWith('/v1/conversations/topic', {
+      transcript: 'Bonjour, on déjeune demain',
+      conversation_language: 'fr'
+    })
+  })
+
   it('stays null on an empty transcript, an empty topic, or a failed call', async () => {
     expect(await generateConversationTopic('   ')).toBeNull()
     expect(omiPost).not.toHaveBeenCalled()

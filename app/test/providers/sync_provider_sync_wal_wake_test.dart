@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -186,6 +187,41 @@ void main() {
     provider.dispose();
   });
 
+  test('a network switch mid-upload re-arms recovery instead of a red sync error', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    // iOS EADDRNOTAVAIL exactly as package:http surfaces it from the upload.
+    final syncs = _FakeSyncs([wal])
+      ..nextError = http.ClientException(
+        "Can't assign requested address",
+        Uri.parse('https://api.omi.me/v2/sync-local-files?audio_start_seconds=1792927415.0'),
+      );
+    final wakes = <WakeTrigger>[];
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: true,
+      waitForWalReady: (_) async {},
+      startRecovery: () async {},
+      wakeTransfer: (trigger) async {
+        wakes.add(trigger);
+      },
+    );
+    await provider.initialized;
+
+    await provider.syncWal(wal);
+
+    expect(provider.syncState.hasError, isFalse);
+    expect(provider.syncError, isNull, reason: 'the raw socket error must not reach the sync card');
+    expect(provider.syncState.isIdle, isTrue);
+    expect(wal.status, WalStatus.miss);
+    expect(wakes, [WakeTrigger.cooldownElapsed]);
+    provider.dispose();
+  });
+
   test('permanent localUploadFailures still surface SyncStatus.error', () async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -269,7 +305,7 @@ void main() {
     SyncRateLimiter.instance.clear();
 
     final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
-    final other = Wal(timerStart: 2000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.uploadRejected)
+    final other = Wal(timerStart: 2000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss)
       ..retryCount = walMaxAutoRetries
       ..lastRetryAt = 1900;
     final hang = Completer<SyncLocalFilesResponse?>();
@@ -296,7 +332,8 @@ void main() {
 
     expect(syncs.syncWalCalls, 1, reason: 'contended syncWal must not start a parallel upload');
     expect(wakes, [WakeTrigger.userRetry]);
-    expect(other.status, WalStatus.miss, reason: 'coalescing a refused-row retry must actually admit that row');
+    expect(other.status, WalStatus.miss,
+        reason: 'coalescing an exhausted transient retry must actually admit that row');
     expect(other.retryCount, 0);
     expect(other.lastRetryAt, 0);
 

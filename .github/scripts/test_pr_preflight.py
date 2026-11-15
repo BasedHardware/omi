@@ -709,6 +709,8 @@ class SelectionTests(unittest.TestCase):
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",
+                "docs-site-gate",
+                "docs-volatile-facts",
             },
         )
 

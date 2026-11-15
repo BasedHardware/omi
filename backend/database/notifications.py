@@ -20,6 +20,7 @@ from google.cloud import firestore
 from google.cloud.firestore import DELETE_FIELD
 from config.daily_summary_depth import VALID_DAILY_SUMMARY_DEPTHS, normalize_daily_summary_depth
 from ._client import db, get_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from .cache import get_memory_cache
 from .firestore_index_registry import DAILY_SUMMARY_RECIPIENTS_QUERY
 from .firestore_transaction_retry import run_with_transaction_contention_retry
@@ -35,12 +36,12 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
-def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> None:
+def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) -> bool:
     """
     Store token in subcollection with device key as document ID
     Structure: users/{uid}/fcm_tokens/{device_key}
     Also maintains time_zone in main user document for backward compatibility
-    Migrates legacy fcm_token to subcollection
+    Migrates legacy fcm_token to subcollection. Returns False for a superseded write.
     """
     device_key = data.get('device_key', 'unknown_default')
     token = data.get('fcm_token')
@@ -48,8 +49,38 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
+    token_ref = user_ref.collection('fcm_tokens').document(device_key)
+    token_patch = {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}
+    schedule_patch = {'time_zone': time_zone} if is_schedulable_time_zone(time_zone) else {}
+    registration_order = data.get('registration_order')
 
-    # Step 1: Migrate legacy token if exists
+    if registration_order is not None:
+
+        @firestore.transactional
+        def save_ordered(transaction):
+            token_snapshot = token_ref.get(transaction=transaction)
+            current = _typed_doc(token_snapshot) if token_snapshot.exists else {}
+            previous = current.get('registration_order')
+            if previous is not None and registration_order <= previous:
+                # A transport retry may repeat the accepted POST. Its timezone
+                # must not overwrite a newer schedule setting on that retry.
+                return registration_order == previous and (token, time_zone) == (
+                    current.get('token'),
+                    current.get('time_zone'),
+                )
+            user_snapshot = user_ref.get(transaction=transaction)
+            defaults = daily_summary_schedule_defaults(_typed_doc(user_snapshot) if user_snapshot.exists else {})
+            transaction.set(token_ref, {**token_patch, 'registration_order': registration_order}, merge=True)
+            if defaults or schedule_patch:
+                transaction.set(user_ref, {**defaults, **schedule_patch}, merge=True)
+            return True
+
+        if not run_with_transaction_contention_retry(
+            client.transaction, save_ordered, operation_name='notification_token_registration'
+        ):
+            return False
+
+    # Migrate legacy tokens only after an ordered registration is accepted.
     user_doc = user_ref.get()
     user_data: Dict[str, Any] = {}
     if getattr(user_doc, "exists", False):
@@ -62,7 +93,7 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
                 t for t in (_typed_doc(d).get('token') for d in user_ref.collection('fcm_tokens').stream())
             ]
 
-            if legacy_token not in existing_tokens:
+            if legacy_token not in existing_tokens and (registration_order is None or device_key != 'unknown_default'):
                 # Migrate to unknown_default
                 user_ref.collection('fcm_tokens').document('unknown_default').set(
                     {
@@ -86,15 +117,12 @@ def save_token(uid: str, data: Dict[str, Any], *, firestore_client: Any = None) 
             if unknown_token == token:
                 unknown_ref.delete()
 
-    # Step 3: Save new token to subcollection
-    user_ref.collection('fcm_tokens').document(device_key).set(
-        {'token': token, 'time_zone': time_zone, 'created_at': firestore.SERVER_TIMESTAMP}, merge=True
-    )
-
-    # Migration's earlier snapshot must not decide which schedule fields are
-    # absent: another client can opt out while its token is being registered.
-    schedulable_tz = time_zone if is_schedulable_time_zone(time_zone) else None
-    _update_summary_schedule(uid, {'time_zone': schedulable_tz} if schedulable_tz else {}, firestore_client=client)
+    if registration_order is None:
+        # Released clients still use the unversioned request. Read schedule
+        # defaults transactionally so migration cannot undo a concurrent opt-out.
+        token_ref.set(token_patch, merge=True)
+        _update_summary_schedule(uid, schedule_patch, firestore_client=client)
+    return True
 
 
 def get_user_time_zone(uid: str) -> Optional[str]:
@@ -105,6 +133,23 @@ def get_user_time_zone(uid: str) -> Optional[str]:
         tz = user_data.get('time_zone')
         return str(tz) if tz is not None else None
     return None
+
+
+def get_cached_user_time_zone(uid: str) -> Optional[str]:
+    """The stored IANA zone for read-time labels, reused for 10 minutes per process.
+
+    Projected field read only. A missing zone is cached as absent too, so Home
+    rows without one never re-read per row. Callers treat ``None`` as UTC.
+    """
+
+    def fetch() -> str:
+        doc = db.collection('users').document(uid).get(field_paths=['time_zone'])
+        if getattr(doc, "exists", False):
+            tz = _typed_doc(doc).get('time_zone')
+            return str(tz) if tz else ''
+        return ''
+
+    return get_memory_cache().get_or_fetch(f"home_time_zone:{uid}", fetch, ttl=600) or None
 
 
 def set_user_time_zone(uid: str, time_zone: str, *, firestore_client: Any = None) -> None:
@@ -438,11 +483,14 @@ def get_users_for_daily_summary_indexed(
                 field_filter_factory=FieldFilter,
             )
             for user_doc in query.stream():
+                uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
                 legacy_value = user_data.get('fcm_token')
                 users.append(
                     (
-                        str(user_doc.id),
+                        uid,
                         DeferredTokens(str(legacy_value) if legacy_value else None),
                         user_data.get('time_zone'),
                     )
@@ -475,6 +523,8 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
             for user_doc in query.stream():
                 uid = str(user_doc.id)
+                if account_deletion_blocks_user_work(uid):
+                    continue
                 user_data = _typed_doc(user_doc)
 
                 # Collect tokens from subcollection

@@ -1,4 +1,5 @@
 import io
+import math
 import os
 import struct
 import subprocess
@@ -7,6 +8,7 @@ import types
 import wave
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -1415,3 +1417,150 @@ def test_batch_incompatible_profile_preserves_established_owner_on_cached_reproc
     assert all(s.is_user and s.speaker_identity_status == 'user' for s in conv.transcript_segments)
     assert len({s.speaker_id for s in conv.transcript_segments}) == 1
     assert env[1].calls == calls
+
+
+def _span_chunk(path, start, seconds):
+    return {
+        'path': path,
+        'generation': 1,
+        'timestamp': start,
+        'span': {'start': start, 'samples': seconds * stage.SAMPLE_RATE, 'sample_rate': stage.SAMPLE_RATE},
+    }
+
+
+def _manifest(*pieces):
+    return [
+        {
+            'chunk_timestamps': [start for start, _ in pieces],
+            'chunk_spans': [{'start': start, 'end': start + seconds} for start, seconds in pieces],
+        }
+    ]
+
+
+def _per_window_session(monkeypatch, chunks, reads):
+    class Session:
+        def __init__(self, *args):
+            self.deadline = float('inf')
+            self.chunks = chunks
+            self.limit_hit = False
+            self.reason = 'none'
+            self.cache = {}
+
+        def in_budget(self):
+            return True
+
+        def release_pcm(self):
+            self.cache.clear()
+
+        def fetch(self, path):
+            reads.append(path)
+            seconds = next(c['span']['samples'] for c in chunks if c['path'] == path) // stage.SAMPLE_RATE
+            return b'\x00\x00' * (seconds * stage.SAMPLE_RATE)
+
+    monkeypatch.setattr(stage, 'AudioChunkReadSession', Session)
+
+
+def _windows(*bounds):
+    segments = [SimpleNamespace(id=f's{i}') for i in range(len(bounds))]
+    placements = {f's{i}': stage.AudioPlacement(b, 'capture_span') for i, b in enumerate(bounds)}
+    return segments, placements
+
+
+def test_unreconciled_extents_name_only_the_disputed_audio():
+    chunks = [_span_chunk('a', 100.0, 10), _span_chunk('b', 110.0, 10), _span_chunk('late', 500.0, 10)]
+    expected = stage._manifest_inventory(_manifest((100.0, 10), (110.0, 10), (300.0, 10)))
+    assert stage._unreconciled_extents(expected, chunks) == [(300.0, 310.0), (500.0, 510.0)]
+    # Same timestamp, different length: both claims stay disputed.
+    resized = stage._manifest_inventory(_manifest((100.0, 10), (110.0, 20), (500.0, 10)))
+    assert stage._unreconciled_extents(resized, chunks) == [(110.0, 130.0), (110.0, 120.0)]
+    # The listed name and the span must both agree with the manifest entry.
+    renamed = [{**_span_chunk('moved', 300.0, 10), 'span': _span_chunk('moved', 100.0, 10)['span']}]
+    one = stage._manifest_inventory(_manifest((100.0, 10)))
+    assert stage._unreconciled_extents(one, renamed) == [(100.0, 110.0), (100.0, 110.0)]
+    # A manifest entry without a span has an unknown end, so it stays unbounded.
+    spanless = [{'chunk_timestamps': [100.0, 110.0, 500.0, 700.0]}]
+    assert stage._unreconciled_extents(stage._manifest_inventory(spanless), chunks[:1])[-1] == (700.0, math.inf)
+
+
+@pytest.mark.parametrize(
+    'label,listed,manifest,verified,reads',
+    [
+        # The manifest names audio that is gone: only its windows abstain.
+        ('deleted', [('a', 100.0, 10)], [(100.0, 10), (300.0, 10)], {'s0'}, ['a']),
+        # An object the manifest never recorded, away from both windows.
+        (
+            'unrecorded',
+            [('a', 100.0, 10), ('b', 300.0, 10), ('x', 900.0, 10)],
+            [(100.0, 10), (300.0, 10)],
+            {'s0', 's1'},
+            ['a', 'b'],
+        ),
+        # An object the manifest never recorded, inside a window, is never decoded.
+        ('intruder', [('a', 100.0, 10), ('b', 300.0, 10), ('x', 305.0, 10)], [(100.0, 10), (300.0, 10)], {'s0'}, ['a']),
+    ],
+)
+def test_serve_refuses_only_windows_touching_an_inventory_dispute(
+    monkeypatch, label, listed, manifest, verified, reads
+):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
+    seen = []
+    _per_window_session(monkeypatch, [_span_chunk(*c) for c in listed], seen)
+    pending, placements = _windows((101.0, 104.0), (301.0, 308.0))
+    session = stage._verified_read_session(
+        'u1', SimpleNamespace(id='c1', transcript_segments=[]), _manifest(*manifest), pending, placements, float('inf')
+    )
+    assert session.verified_segment_ids == verified
+    assert seen == reads
+
+
+def test_serve_with_nothing_reconciled_still_refuses_the_recording(monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
+    reasons = []
+    monkeypatch.setattr(stage, 'resolver_reason', reasons.append)
+    seen = []
+    _per_window_session(monkeypatch, [_span_chunk('x', 100.0, 10)], seen)
+    pending, placements = _windows((101.0, 104.0))
+    # A file with no chunk_timestamps proves nothing about the listed object.
+    session = stage._verified_read_session(
+        'u1', SimpleNamespace(id='c1', transcript_segments=[]), [{}], pending, placements, float('inf')
+    )
+    assert session is None and seen == []
+    assert reasons == ['inventory_pair_mismatch']
+
+
+def test_outside_the_serve_cohort_a_count_mismatch_refuses_globally(monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'shadow')
+    reasons = []
+    monkeypatch.setattr(stage, 'resolver_reason', reasons.append)
+    seen = []
+    _per_window_session(monkeypatch, [_span_chunk('a', 100.0, 10)], seen)
+    pending, placements = _windows((101.0, 104.0))
+    session = stage._verified_read_session(
+        'u1',
+        SimpleNamespace(id='c1', transcript_segments=[]),
+        _manifest((100.0, 10), (300.0, 10)),
+        pending,
+        placements,
+        float('inf'),
+    )
+    assert session is None and seen == []
+    assert reasons == ['inventory_count_mismatch']
+
+
+@pytest.mark.parametrize('mode,widened', [('serve', True), ('shadow', False)])
+def test_only_the_serve_cohort_widens_the_read_budget(monkeypatch, mode, widened):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', mode)
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SERVE_PERCENT', '0')
+    _per_window_session(monkeypatch, [_span_chunk('a', 100.0, 10)], [])
+    pending, placements = _windows((101.0, 104.0))
+    session = stage._verified_read_session(
+        'u1',
+        SimpleNamespace(id='c1', transcript_segments=[]),
+        _manifest((100.0, 10)),
+        pending,
+        placements,
+        float('inf'),
+    )
+    assert session.verified_segment_ids == {'s0'}
+    assert getattr(session, 'max_downloads', None) == (stage.PER_WINDOW_MAX_DOWNLOADS if widened else None)
+    assert getattr(session, 'max_pcm_bytes', None) == (stage.PER_WINDOW_MAX_PCM_BYTES if widened else None)

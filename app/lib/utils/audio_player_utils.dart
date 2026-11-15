@@ -1,45 +1,22 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter_sound/flutter_sound.dart';
-import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/share_sheet.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/app_globals.dart';
-import 'package:omi/utils/audio/wav_combiner.dart';
+import 'package:omi/utils/audio/wal_wav_worker.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Parse length-prefixed binary frames: [4-byte LE uint32 length][payload] per frame.
-/// Used by both Opus and PCM WAL binary files.
-@visibleForTesting
-List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
-  List<Uint8List> frames = [];
-  int offset = 0;
-
-  while (offset < data.length - 4) {
-    final lengthBytes = data.sublist(offset, offset + 4);
-    final length = ByteData.sublistView(Uint8List.fromList(lengthBytes)).getUint32(0, Endian.little);
-    offset += 4;
-
-    if (offset + length > data.length) break;
-
-    final frameData = data.sublist(offset, offset + length);
-    frames.add(Uint8List.fromList(frameData));
-    offset += length;
-  }
-
-  return frames;
-}
+export 'package:omi/utils/audio/wal_wav_worker.dart' show OpusFrameDecoder;
 
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
@@ -59,6 +36,13 @@ class AudioPlayerUtils extends ChangeNotifier {
   StreamSubscription<PlaybackDisposition>? _positionSubscription;
 
   final Map<String, String> _audioFileCache = {};
+  String? _lastWorkerIsolateName;
+
+  @visibleForTesting
+  OpusFrameDecoder? debugOpusFrameDecoder;
+
+  @visibleForTesting
+  String? get lastWorkerIsolateName => _lastWorkerIsolateName;
 
   String? get currentPlayingId => _currentPlayingId;
   bool get isProcessingAudio => _isProcessingAudio;
@@ -204,13 +188,13 @@ class AudioPlayerUtils extends ChangeNotifier {
       throw Exception('Unable to create shareable audio file');
     }
 
-    final result = await Share.shareXFiles(
-      [XFile(audioFilePath)],
+    final result = await SharePlus.instance.share(ShareParams(
+      files: [XFile(audioFilePath, mimeType: 'audio/wav')],
       text:
           'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toString().split('.')[0]}',
       // No widget to anchor to here; the fallback is only required to be non-zero.
       sharePositionOrigin: shareSheetOrigin(),
-    );
+    ));
 
     if (result.status == ShareResultStatus.success) {
       Logger.debug('Audio file shared successfully');
@@ -219,23 +203,46 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   /// One WAV for a whole recording, oldest file first: a recording can be hundreds of short files,
   /// and sharing them one at a time is not practical. Files with no audio on the phone are left out.
+  /// Per-file decode and WAV combination run in a background isolate so multi-hour recordings do
+  /// not block the UI isolate; the caller opens the share sheet on the main isolate.
   @visibleForTesting
   Future<File?> writeRecordingWav(List<Wal> wals, {required String outputPath}) async {
-    final parts = <File>[];
-    for (final wal in [...wals]..sort((a, b) => a.timerStart.compareTo(b.timerStart))) {
-      if (!canPlayOrShare(wal)) continue;
-      final path = await _getOrCreateAudioFile(wal, forSharing: true);
-      if (path != null) parts.add(File(path));
+    final sorted = [...wals]..sort((a, b) => a.timerStart.compareTo(b.timerStart));
+    final playable = sorted.where(canPlayOrShare).toList();
+    if (playable.isEmpty) return null;
+
+    final tempDir = await getTemporaryDirectory();
+    final items = <WalWavWorkItem>[];
+    for (final wal in playable) {
+      final item = await _prepareWalWavWorkItem(wal, tempDir: tempDir, forSharing: true);
+      if (item != null) items.add(item);
     }
-    if (parts.isEmpty) return null;
-    return WavCombiner.combineWavFiles(parts, outputPath);
+    if (items.isEmpty) return null;
+
+    final result = await compute(
+      buildRecordingWavInIsolate,
+      RecordingWavJob(items: items, outputPath: outputPath, tempDirectory: tempDir.path),
+      debugLabel: 'writeRecordingWav',
+    );
+    _lastWorkerIsolateName = result.isolateName;
+    return result.path == null ? null : File(result.path!);
   }
 
   Future<void> shareRecordingAsAudio(List<Wal> wals) async {
     final start = wals.map((w) => w.timerStart).reduce((a, b) => a < b ? a : b);
     final tempDir = await getTemporaryDirectory();
-    final file = await writeRecordingWav(wals, outputPath: '${tempDir.path}/omi_recording_$start.wav');
-    if (file == null) throw Exception('No audio on this phone for this recording');
+    final shareDir = await tempDir.createTemp('omi-recording-');
+    File? file;
+    try {
+      file = await writeRecordingWav(wals, outputPath: '${shareDir.path}/omi_recording_$start.wav');
+    } catch (_) {
+      await shareDir.delete(recursive: true);
+      rethrow;
+    }
+    if (file == null) {
+      await shareDir.delete(recursive: true);
+      throw Exception('No audio on this phone for this recording');
+    }
     await SharePlus.instance.share(ShareParams(
       files: [XFile(file.path, mimeType: 'audio/wav')],
       text: 'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(start * 1000).toString().split('.')[0]}',
@@ -243,13 +250,17 @@ class AudioPlayerUtils extends ChangeNotifier {
     ));
   }
 
-  Future<String?> _getOrCreateAudioFile(Wal wal, {bool forSharing = false}) async {
+  Future<WalWavWorkItem?> _prepareWalWavWorkItem(
+    Wal wal, {
+    required Directory tempDir,
+    bool forSharing = false,
+  }) async {
     final cacheKey = forSharing ? '${wal.id}_share' : wal.id;
 
     if (!forSharing && _audioFileCache.containsKey(cacheKey)) {
       final cachedPath = _audioFileCache[cacheKey]!;
-      if (File(cachedPath).existsSync()) {
-        return cachedPath;
+      if (await File(cachedPath).exists()) {
+        return WalWavWorkItem.cached(walId: wal.id, cachedWavPath: cachedPath);
       }
     }
 
@@ -257,176 +268,55 @@ class AudioPlayerUtils extends ChangeNotifier {
     // the waveform loaded) instead of decoding the whole recording again.
     if (forSharing) {
       final playbackCached = _audioFileCache[wal.id];
-      if (playbackCached != null && File(playbackCached).existsSync()) {
-        return playbackCached;
+      if (playbackCached != null && await File(playbackCached).exists()) {
+        return WalWavWorkItem.cached(walId: wal.id, cachedWavPath: playbackCached);
       }
     }
 
-    final audioFilePath = await _getAudioFilePath(wal);
-    if (audioFilePath == null) return null;
-
-    String? processedFilePath;
-    if (wal.codec.isOpusSupported()) {
-      processedFilePath = await _decodeOpusToWav(wal, audioFilePath, forSharing: forSharing);
-    } else {
-      processedFilePath = await _convertPcmToWav(wal, audioFilePath, forSharing: forSharing);
+    // Resolve platform directories here; frame traversal and all byte conversion belong to the worker.
+    String? audioFilePath;
+    if (wal.filePath != null && wal.filePath!.isNotEmpty) {
+      final path = await Wal.getFilePath(wal.filePath);
+      if (path != null && await File(path).exists()) audioFilePath = path;
     }
+    if (audioFilePath == null && wal.data.isEmpty) return null;
+
+    final isOpus = wal.codec.isOpusSupported();
+    final bitsPerSample = isOpus ? 16 : (wal.codec == BleAudioCodec.pcm16 ? 16 : 8);
+
+    return WalWavWorkItem.decode(
+      walId: wal.id,
+      inputPath: audioFilePath,
+      memoryFrames: audioFilePath == null ? wal.data : const [],
+      tempDirectory: tempDir.path,
+      isOpus: isOpus,
+      sampleRate: wal.sampleRate,
+      channels: wal.channel,
+      bitsPerSample: bitsPerSample,
+      opusFrameDecoder: debugOpusFrameDecoder,
+    );
+  }
+
+  Future<String?> _getOrCreateAudioFile(Wal wal, {bool forSharing = false}) async {
+    final cacheKey = forSharing ? '${wal.id}_share' : wal.id;
+    final tempDir = await getTemporaryDirectory();
+    final item = await _prepareWalWavWorkItem(wal, tempDir: tempDir, forSharing: forSharing);
+    if (item == null) return null;
+    if (item.cachedWavPath != null) return item.cachedWavPath;
+
+    final result = await compute(
+      decodeWalWorkItemInIsolate,
+      item,
+      debugLabel: 'decodeWalAudio',
+    );
+    _lastWorkerIsolateName = result.isolateName;
+    final processedFilePath = result.path;
 
     if (processedFilePath != null && !forSharing) {
       _audioFileCache[cacheKey] = processedFilePath;
     }
 
     return processedFilePath;
-  }
-
-  Future<String?> _getAudioFilePath(Wal wal) async {
-    if (wal.filePath != null && wal.filePath!.isNotEmpty) {
-      final fullPath = await Wal.getFilePath(wal.filePath);
-      if (fullPath != null) {
-        final file = File(fullPath);
-        if (file.existsSync()) return fullPath;
-      }
-    }
-
-    if (wal.data.isNotEmpty) {
-      return await _createTempFileFromMemoryData(wal);
-    }
-
-    return null;
-  }
-
-  Future<String?> _createTempFileFromMemoryData(Wal wal) async {
-    final tempDir = await getTemporaryDirectory();
-    final tempFilePath = '${tempDir.path}/temp_${wal.id}_${DateTime.now().millisecondsSinceEpoch}.bin';
-
-    List<int> data = [];
-    for (int i = 0; i < wal.data.length; i++) {
-      var frame = wal.data[i];
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-
-    final file = File(tempFilePath);
-    await file.writeAsBytes(data);
-    return tempFilePath;
-  }
-
-  Future<String?> _decodeOpusToWav(Wal wal, String opusFilePath, {bool forSharing = false}) async {
-    final file = File(opusFilePath);
-    if (!file.existsSync()) return null;
-
-    final opusData = await file.readAsBytes();
-    final opusFrames = parseLengthPrefixedFrames(opusData);
-
-    if (opusFrames.isEmpty) return null;
-
-    final decoder = SimpleOpusDecoder(sampleRate: wal.sampleRate, channels: wal.channel);
-
-    List<Uint8List> pcmFrames = [];
-    for (final opusFrame in opusFrames) {
-      try {
-        final pcmFrame = decoder.decode(input: opusFrame);
-        pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
-      } catch (e) {
-        Logger.warning('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${wal.id}: $e');
-      }
-    }
-
-    if (pcmFrames.isEmpty) return null;
-
-    final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
-    final combinedPcm = Uint8List(totalLength);
-    int writeOffset = 0;
-    for (final frame in pcmFrames) {
-      combinedPcm.setRange(writeOffset, writeOffset + frame.length, frame);
-      writeOffset += frame.length;
-    }
-
-    return await _createWavFile(pcmData: combinedPcm, wal: wal, bitsPerSample: 16, forSharing: forSharing);
-  }
-
-  Future<String?> _convertPcmToWav(Wal wal, String pcmFilePath, {bool forSharing = false}) async {
-    final file = File(pcmFilePath);
-    if (!file.existsSync()) return null;
-
-    final pcmFileData = await file.readAsBytes();
-    final pcmFrames = parseLengthPrefixedFrames(pcmFileData);
-
-    if (pcmFrames.isEmpty) return null;
-
-    final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
-    final combinedPcm = Uint8List(totalLength);
-    int writeOffset = 0;
-    for (final frame in pcmFrames) {
-      combinedPcm.setRange(writeOffset, writeOffset + frame.length, frame);
-      writeOffset += frame.length;
-    }
-
-    final bitsPerSample = wal.codec == BleAudioCodec.pcm16 ? 16 : 8;
-    return await _createWavFile(pcmData: combinedPcm, wal: wal, bitsPerSample: bitsPerSample, forSharing: forSharing);
-  }
-
-  Future<String> _createWavFile({
-    required Uint8List pcmData,
-    required Wal wal,
-    required int bitsPerSample,
-    bool forSharing = false,
-  }) async {
-    final tempDir = await getTemporaryDirectory();
-    final fileName = forSharing
-        ? wal.getFileName().replaceAll('.bin', '.wav')
-        : 'audio_${DateTime.now().millisecondsSinceEpoch}.wav';
-    final wavFilePath = '${tempDir.path}/$fileName';
-
-    final wavData = _createWavHeader(
-      pcmData: pcmData,
-      sampleRate: wal.sampleRate,
-      channels: wal.channel,
-      bitsPerSample: bitsPerSample,
-    );
-
-    await File(wavFilePath).writeAsBytes(wavData);
-    return wavFilePath;
-  }
-
-  Uint8List _createWavHeader({
-    required Uint8List pcmData,
-    required int sampleRate,
-    required int channels,
-    required int bitsPerSample,
-  }) {
-    const int wavHeaderSize = 44;
-    final int frameSize = ((bitsPerSample + 7) ~/ 8) * channels;
-    final int fileSize = wavHeaderSize + pcmData.length;
-
-    final ByteData header = ByteData(wavHeaderSize);
-    const Endian endian = Endian.little;
-
-    header.setUint32(4, fileSize - 8, endian);
-    header.setUint32(16, 16, endian);
-    header.setUint16(20, 1, endian);
-    header.setUint16(22, channels, endian);
-    header.setUint32(24, sampleRate, endian);
-    header.setUint32(28, sampleRate * frameSize, endian);
-    header.setUint16(32, frameSize, endian);
-    header.setUint16(34, bitsPerSample, endian);
-    header.setUint32(40, pcmData.length, endian);
-
-    final Uint8List headerBytes = header.buffer.asUint8List();
-    headerBytes.setAll(0, ascii.encode('RIFF'));
-    headerBytes.setAll(8, ascii.encode('WAVE'));
-    headerBytes.setAll(12, ascii.encode('fmt '));
-    headerBytes.setAll(36, ascii.encode('data'));
-
-    final Uint8List wavFile = Uint8List(fileSize);
-    wavFile.setAll(0, headerBytes);
-    wavFile.setAll(wavHeaderSize, pcmData);
-
-    return wavFile;
   }
 
   Future<void> seekToPosition(Duration position) async {
@@ -460,7 +350,7 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     if (_audioFileCache.containsKey(cacheKey)) {
       final cachedPath = _audioFileCache[cacheKey]!;
-      if (File(cachedPath).existsSync()) {
+      if (await File(cachedPath).exists()) {
         return cachedPath;
       }
     }

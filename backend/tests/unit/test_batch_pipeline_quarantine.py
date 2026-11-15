@@ -67,7 +67,7 @@ async def test_pump_drains_already_ready_sibling_when_last_lease_quarantines(mon
     leases = {v.item.segment_id: v for v in queue.pull(0, 2)}
     queue.complete(WorkResult('later', 'gs://synthetic/later'), leases['later'].token, 1)
     queue.defer('poison', leases['poison'].token, 1, 1)
-    worker = Mock()
+    worker = Mock(spec=['process_batch'])
     worker.process_batch.return_value = []
     pump = Pump(queue, worker, capacity=lambda: PoolCapacity(time.time(), 8))
     assert await pump.run_once() == 1
@@ -156,12 +156,87 @@ def test_persisted_sibling_leaves_sweep_without_success_or_claim_release(monkeyp
     assert store.hold_for_quarantine('good', binding, 100)
     assert store.hold_for_quarantine('good', binding, 101)
     entry = client.rows[('batch_pipeline_dev_results', 'good')]
-    assert entry['projection_state'] == 'quarantine_held'
+    assert entry['projection_state'] == 'ready'
     assert entry['projection'] == before[('batch_pipeline_dev_results', 'good')]['projection']
     assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
     assert store.prepare_accounting(binding, 102) is None
     assert ('batch_pipeline_dev_results', 'bad') not in client.rows
     assert all(not t.creates and not t.sets for t in client.transactions)
+
+
+def ready_sibling_fixture():
+    client, store, old = projection_fixture()
+    binding = replace(old, segment_ids=(*old.segment_ids, 'other'))
+    job = deepcopy(client.rows[('batch_pipeline_dev_jobs', 'good')])
+    job['segment_id'] = 'other'
+    client.rows[('batch_pipeline_dev_jobs', 'other')] = job
+    entry = deepcopy(client.rows[('batch_pipeline_dev_results', 'good')])
+    entry['segment_id'] = 'other'
+    client.rows[('batch_pipeline_dev_results', 'other')] = entry
+    for sid in binding.segment_ids:
+        client.rows[('batch_pipeline_dev_jobs', sid)]['projection_binding'] = asdict(binding)
+    client.rows[('users', binding.owner_id, 'sync_content_ledger', binding.content_id)]['batch_pipeline'][
+        'segment_ids'
+    ] = list(binding.segment_ids)
+    return client, store, binding
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_quarantine_hold_settles_ready_sibling_hints_in_one_transaction(monkeypatch, enabled):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', enabled)
+    client, store, binding = ready_sibling_fixture()
+    for sid in ('good', 'other'):
+        client.rows[('batch_pipeline_dev_results', sid)]['projection_state'] = 'persisted'
+    before = deepcopy(client.rows)
+    assert store.hold_for_quarantine('good', binding, 100)
+    assert client.rows[('batch_pipeline_dev_results', 'good')]['projection_state'] == 'ready'
+    other = client.rows[('batch_pipeline_dev_results', 'other')]
+    assert other['projection_state'] == ('ready' if enabled == 'true' else 'persisted')
+    for sid in binding.segment_ids:
+        assert client.rows[('batch_pipeline_dev_jobs', sid)] == before[('batch_pipeline_dev_jobs', sid)]
+    assert other['projection'] == before[('batch_pipeline_dev_results', 'other')]['projection']
+    # CI writer invariant: only pre-fix legacy hints may be held without a
+    # quarantined receipt/part. This transaction must never create a new ghost.
+    for (collection, *_), row in client.rows.items():
+        if collection == 'batch_pipeline_dev_results' and row.get('projection_state') == 'quarantine_held':
+            assert any(
+                part.get('state') == 'quarantined'
+                for part in [row.get('projection') or {}, *(row.get('projection_parts') or {}).values()]
+            )
+    assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
+    assert all(not t.creates and not t.sets for t in client.transactions)
+
+
+@pytest.mark.parametrize('change', ['binding', 'owner', 'entry_owner', 'segment'])
+def test_group_hold_fails_closed_before_any_write_for_foreign_ready_sibling(monkeypatch, change):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    client, store, binding = ready_sibling_fixture()
+    job = client.rows[('batch_pipeline_dev_jobs', 'other')]
+    entry = client.rows[('batch_pipeline_dev_results', 'other')]
+    if change == 'binding':
+        job['projection_binding']['run_token'] = 'synthetic-foreign'
+        job['projection_binding']['run_epoch'] = 2
+    elif change == 'owner':
+        job['owner_id'] = 'synthetic-foreign'
+    elif change == 'entry_owner':
+        entry['owner_key'] = 'synthetic-foreign'
+    else:
+        entry['segment_id'] = 'synthetic-foreign'
+    before = deepcopy(client.rows)
+    with pytest.raises(ProjectionBlocked, match='ready sibling binding mismatch'):
+        store.hold_for_quarantine('good', binding, 100)
+    assert client.rows == before
+
+
+def test_group_hold_never_hides_unfinished_persisted_side_effects(monkeypatch):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    client, store, binding = ready_sibling_fixture()
+    entry = client.rows[('batch_pipeline_dev_results', 'other')]
+    entry.update(projection_state='persisted', projection={'state': 'persisted'})
+    before = deepcopy(entry)
+    assert store.hold_for_quarantine('good', binding, 100)
+    assert entry == before
 
 
 @pytest.mark.parametrize('change', ['binding', 'privacy', 'not_ready', 'pending', 'ledger'])
@@ -205,7 +280,7 @@ def test_quarantine_counter_and_recovery_hold_emit_once(monkeypatch, caplog):
 
 def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(monkeypatch):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
-    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '1')
+    monkeypatch.setenv('BATCH_PIPELINE_MAX_ATTEMPTS', '5')
     memory = MemoryStore()
     queue = Scheduler(memory)
     queue.enqueue(replace(item('bad', owner='synthetic-owner'), privacy_generation=0), 0)
@@ -218,8 +293,10 @@ def test_quarantine_transaction_reads_before_writes_and_telemetry_cannot_escape(
     monkeypatch.setattr(
         'utils.batch_pipeline.scheduler.logger.error', Mock(side_effect=RuntimeError('synthetic logger failure'))
     )
-    assert queue.fail('bad', lease.token, 1)
-    assert client.rows[('batch_pipeline_dev_jobs', 'bad')]['state'] == 'quarantined'
+    assert queue.fail('bad', lease.token, 1, worker_failure={'stage': 'vad_windows', 'reason': 'unsupported_language'})
+    quarantined = client.rows[('batch_pipeline_dev_jobs', 'bad')]
+    assert quarantined['state'] == 'quarantined' and quarantined['worker_failure']['reason'] == 'unsupported_language'
+    assert quarantined['audio_uri'] == 'gs://synthetic/bad'
     assert not queue.fail('bad', lease.token, 2)
 
 

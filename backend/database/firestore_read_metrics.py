@@ -60,6 +60,7 @@ class FirestoreReadSite(StrEnum):
     PUBLIC_CONVERSATION_OWNER_CACHE = 'public_conversation_owner_cache'
     PUBLIC_SHARED_CHAT = 'public_shared_chat'
     SMART_MERGE = 'smart_merge'
+    CAPTURE_GROUP_NOTES = 'capture_group_notes'
     UNATTRIBUTED = 'unattributed'
 
 

@@ -82,7 +82,7 @@ def test_translation_caller_returns_result_after_failed_cache_fill(monkeypatch, 
     store = RedisTranslationStore(lambda: client)
     cache = TranslationCache(store, NoopTranslationMetrics())
     profile = TranslationProfile(
-        providers=(TranslationProvider.google,),
+        providers=(TranslationProvider.luna,),
         nllb_url='',
         nllb_timeout_seconds=1,
         cache_ttl_seconds=60,
@@ -90,7 +90,7 @@ def test_translation_caller_returns_result_after_failed_cache_fill(monkeypatch, 
     )
     providers = Mock()
     providers.translate.return_value = ProviderBatch(
-        provider=TranslationProvider.google,
+        provider=TranslationProvider.luna,
         translations=(ProviderTranslation('Hello my friend.', 'es'),),
     )
     engine = TranslationEngine(cache, providers, lambda: profile)

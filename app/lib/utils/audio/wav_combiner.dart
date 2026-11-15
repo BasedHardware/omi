@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/audio/pcm_wav_header.dart';
 
 class WavMetadata {
   final int sampleRate;
@@ -35,45 +36,51 @@ class WavCombiner {
       throw Exception('No valid WAV files to combine');
     }
 
-    if (validFiles.length == 1) {
-      final outputFile = File(outputPath);
-      await validFiles.first.copy(outputPath);
-      return outputFile;
-    }
-
-    final isCompatible = await validateCompatibility(metadataList);
-    if (!isCompatible) {
+    if (!await validateCompatibility(metadataList)) {
       throw Exception('WAV files have incompatible formats');
     }
-
-    final firstMetadata = metadataList.first;
-    final combinedDataSize = metadataList.fold<int>(0, (sum, metadata) => sum + metadata.dataSize);
-
-    final outputFile = File(outputPath);
-    final sink = outputFile.openWrite();
-
+    final first = metadataList.first;
+    final size = metadataList.fold<int>(0, (sum, metadata) => sum + metadata.dataSize);
+    final header = pcmWavHeader(
+      sampleRate: first.sampleRate,
+      channels: first.channels,
+      bitsPerSample: first.bitsPerSample,
+      dataSize: size,
+    );
+    // Publish only after every stream and close succeeds. Failure never truncates a previous
+    // complete export; staging is beside the destination so rename stays on one filesystem.
+    final staging = await File(outputPath).parent.createTemp('.omi-wav-');
     try {
-      final header = _createWavHeader(
-        sampleRate: firstMetadata.sampleRate,
-        channels: firstMetadata.channels,
-        bitsPerSample: firstMetadata.bitsPerSample,
-        dataSize: combinedDataSize,
-      );
-      sink.add(header);
-
-      for (final file in validFiles) {
-        final stream = file.openRead(44);
-        await sink.addStream(stream);
+      final file = File('${staging.path}/complete.wav');
+      if (validFiles.length == 1) {
+        await validFiles.first.copy(file.path);
+      } else {
+        final sink = file.openWrite();
+        try {
+          sink.add(header);
+          for (var i = 0; i < validFiles.length; i++) {
+            await sink.addStream(validFiles[i].openRead(44, 44 + metadataList[i].dataSize));
+          }
+        } finally {
+          await sink.close();
+        }
       }
+      return await file.rename(outputPath);
     } finally {
-      await sink.close();
+      await staging.delete(recursive: true);
     }
-
-    return outputFile;
   }
 
   static Future<WavMetadata> getMetadata(File file) async {
-    final bytes = await file.readAsBytes();
+    final handle = await file.open();
+    late Uint8List bytes;
+    late int fileSize;
+    try {
+      bytes = await handle.read(44);
+      fileSize = await handle.length();
+    } finally {
+      await handle.close();
+    }
 
     if (bytes.length < 44) {
       throw Exception('Invalid WAV file: too small');
@@ -94,6 +101,7 @@ class WavCombiner {
     final bitsPerSample = _readUint16(bytes, 34);
     final dataSize = _readUint32(bytes, 40);
 
+    if (dataSize > fileSize - 44) throw const FormatException('Truncated WAV payload');
     return WavMetadata(sampleRate: sampleRate, channels: channels, bitsPerSample: bitsPerSample, dataSize: dataSize);
   }
 
@@ -119,59 +127,6 @@ class WavCombiner {
     }
 
     return true;
-  }
-
-  static Uint8List _createWavHeader({
-    required int sampleRate,
-    required int channels,
-    required int bitsPerSample,
-    required int dataSize,
-  }) {
-    final byteRate = sampleRate * channels * (bitsPerSample ~/ 8);
-    final blockAlign = channels * (bitsPerSample ~/ 8);
-    final fileSize = 36 + dataSize;
-
-    final header = ByteData(44);
-
-    header.setUint8(0, 'R'.codeUnitAt(0));
-    header.setUint8(1, 'I'.codeUnitAt(0));
-    header.setUint8(2, 'F'.codeUnitAt(0));
-    header.setUint8(3, 'F'.codeUnitAt(0));
-
-    header.setUint32(4, fileSize, Endian.little);
-
-    header.setUint8(8, 'W'.codeUnitAt(0));
-    header.setUint8(9, 'A'.codeUnitAt(0));
-    header.setUint8(10, 'V'.codeUnitAt(0));
-    header.setUint8(11, 'E'.codeUnitAt(0));
-
-    header.setUint8(12, 'f'.codeUnitAt(0));
-    header.setUint8(13, 'm'.codeUnitAt(0));
-    header.setUint8(14, 't'.codeUnitAt(0));
-    header.setUint8(15, ' '.codeUnitAt(0));
-
-    header.setUint32(16, 16, Endian.little);
-
-    header.setUint16(20, 1, Endian.little);
-
-    header.setUint16(22, channels, Endian.little);
-
-    header.setUint32(24, sampleRate, Endian.little);
-
-    header.setUint32(28, byteRate, Endian.little);
-
-    header.setUint16(32, blockAlign, Endian.little);
-
-    header.setUint16(34, bitsPerSample, Endian.little);
-
-    header.setUint8(36, 'd'.codeUnitAt(0));
-    header.setUint8(37, 'a'.codeUnitAt(0));
-    header.setUint8(38, 't'.codeUnitAt(0));
-    header.setUint8(39, 'a'.codeUnitAt(0));
-
-    header.setUint32(40, dataSize, Endian.little);
-
-    return header.buffer.asUint8List();
   }
 
   static int _readUint16(Uint8List bytes, int offset) {

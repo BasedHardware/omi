@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-independent-searches-share-retry-admission",
+  "violated_contract": "Independent single-attempt searches within one bounded context gather must each be admitted against the gather deadline. They must not consume a shared two-attempt list-read retry allowance or inherit its one-second retry-admission deadline.",
+  "canonical_prevention": "Give each explicitly single-attempt logical search its own operation admission state while retaining the caller's absolute deadline, process allowance and circuit. Exercise three searches through the real decorated service and locked provider SDK objects with only HTTP transports replaced, and check that later searches remain admissible after the list retry window closes.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_episode_retrieval_runtime.py",
+    "backend/tests/unit/test_memory_read_resilience.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/read_resilience.py",
+    "backend/utils/episodes/composer_context.py"
+  ],
+  "status": "open"
+}

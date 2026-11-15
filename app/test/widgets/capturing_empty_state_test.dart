@@ -92,6 +92,8 @@ class _QuietCapture extends CaptureProvider {
   String? get liveCaptureSource => 'omi';
   @override
   bool get pendantCaptureVerified => false;
+  @override
+  bool get pendantReconnectInFlight => false;
 }
 
 CaptureProvider _hermeticCapture() {

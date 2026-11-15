@@ -42,9 +42,11 @@ def world(monkeypatch):
     monkeypatch.delenv('COMMITMENT_FOLLOWUP_TASKS_QUEUE', raising=False)
     with stub_modules(fakes):
         notifications = load_module_fresh('utils.notifications', str(BACKEND / 'utils/notifications.py'))
+        monkeypatch.setattr(notifications, 'account_deletion_blocks_user_work', lambda _uid: False)
         load_module_fresh('utils.mcp_data', str(BACKEND / 'utils/mcp_data.py'))
         actions = load_module_fresh('utils.mcp_action_items', str(BACKEND / 'utils/mcp_action_items.py'))
         dispatcher = load_module_fresh('utils.notification_dispatch', str(BACKEND / 'utils/notification_dispatch.py'))
+        monkeypatch.setattr(dispatcher, 'account_deletion_blocks_user_work', lambda _uid: False)
         refresh = load_module_fresh(
             'utils.conversations.action_item_refresh', str(BACKEND / 'utils/conversations/action_item_refresh.py')
         )
@@ -76,6 +78,28 @@ def task(task_id='task-1', **fields):
         'conversation_id': 'conversation-1',
         **fields,
     }
+
+
+def test_mcp_legacy_projection_omits_explicitly_null_reminder_fields(world):
+    result = world.actions.clean_action_item(task(due=None, reminder_origin=None, creation_receipt=None))
+    assert set(result) == PUBLIC_KEYS
+
+
+def test_mcp_reminder_projection_preserves_date_precision_and_creation_evidence(world):
+    due = {'kind': 'date', 'date': '2030-01-01', 'timezone': 'UTC'}
+    origin = {
+        'policy_revision': 'explicit-reminders-v1',
+        'input_revision': 'synthetic-input',
+        'speaker_evidence_revision': 'synthetic-speakers',
+        'extracted_at': DUE.isoformat(),
+    }
+    receipt = {'actor': {'uid': 'synthetic-owner'}, 'history_coverage': 'reminder_creation_only'}
+    result = world.actions.clean_action_item(
+        task(due_at=None, due=due, reminder_origin=origin, creation_receipt=receipt, private_metadata='not-public')
+    )
+    assert set(result) == PUBLIC_KEYS | {'due', 'reminder_origin', 'creation_receipt'}
+    assert result['due_at'] is None and result['due'] == due
+    assert result['reminder_origin'] == origin and result['creation_receipt'] == receipt
 
 
 @pytest.mark.parametrize('status', ['cancelled', 'superseded'])

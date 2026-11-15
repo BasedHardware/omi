@@ -5,19 +5,19 @@ import XCTest
 @MainActor
 final class ScreenTaskFlagRefreshCadenceTests: XCTestCase {
   func testFirstTickAlwaysReloads() {
-    XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(enabled: false, now: 0, last: nil))
+    XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(now: 0, last: nil))
   }
 
-  func testEnabledFlagKeepsThirtySecondCadence() {
-    XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(enabled: true, now: 130, last: 100))
-  }
-
-  func testDisabledFlagReloadsOnlyEveryThirtyMinutes() {
-    let interval = ScreenTaskFlagRefresh.disabledReloadInterval
+  func testFlagReloadsOnlyEveryThirtyMinutes() {
+    let interval = ScreenTaskFlagRefresh.flagReloadInterval
     XCTAssertEqual(interval, 1800)
-    XCTAssertFalse(ScreenTaskFlagRefresh.shouldReloadFlags(enabled: false, now: 130, last: 100))
-    XCTAssertFalse(
-      ScreenTaskFlagRefresh.shouldReloadFlags(enabled: false, now: 100 + interval - 1, last: 100))
-    XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(enabled: false, now: 100 + interval, last: 100))
+    XCTAssertFalse(ScreenTaskFlagRefresh.shouldReloadFlags(now: 130, last: 100))
+    XCTAssertFalse(ScreenTaskFlagRefresh.shouldReloadFlags(now: 100 + interval - 1, last: 100))
+    XCTAssertTrue(ScreenTaskFlagRefresh.shouldReloadFlags(now: 100 + interval, last: 100))
+  }
+
+  func testAnalyticsOptOutWithholdsCachedFlagRenewal() {
+    XCTAssertTrue(ScreenTaskFlagRefresh.renewsFlagLease(analyticsOptedOut: false))
+    XCTAssertFalse(ScreenTaskFlagRefresh.renewsFlagLease(analyticsOptedOut: true))
   }
 }

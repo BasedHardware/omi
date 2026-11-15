@@ -100,7 +100,7 @@
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
     "@sentry/electron": "^7.15.0",
-    "axios": "~1.18.0",
+    "axios": "~1.20.0",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -118,7 +118,7 @@
     "three-instanced-uniforms-mesh": "^0.52.4",
     "three-stdlib": "^2.36.1",
     "ws": "^8.21.0",
-    "zod": "^4.4.3",
+    "zod": "^4.6.6",
     "@mediapipe/tasks-audio": "0.10.35"
   },
   "devDependencies": {
@@ -153,7 +153,7 @@
     "react-dom": "^19.2.1",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3",
-    "vite": "^7.2.6",
+    "vite": "^7.3.7",
     "vitest": "^3.2.4"
   }
 }

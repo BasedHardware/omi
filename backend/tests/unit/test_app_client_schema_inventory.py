@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path, PureWindowsPath
 
+import pytest
+
 from scripts import inventory_app_client_schemas
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -19,8 +21,15 @@ def test_repo_relative_path_uses_forward_slashes_on_windows(monkeypatch):
     assert inventory_app_client_schemas.repo_relative_path(windows_root / 'app/lib/model.dart') == 'app/lib/model.dart'
 
 
-def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
-    report = inventory_app_client_schemas.build_report(SPEC_PATH)
+@pytest.fixture(scope='module')
+def repository_report():
+    # The immutable checkout scan is shared setup; each test keeps its own
+    # contract assertions over the complete real inventory.
+    return inventory_app_client_schemas.build_report(SPEC_PATH)
+
+
+def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos(repository_report):
+    report = repository_report
 
     generated_backed_paths = {item['path'] for item in report['generated_backed_adapter_files']}
     remaining_manual_paths = {item['path'] for item in report['remaining_manual_dart_json_schema_files']}
@@ -339,6 +348,55 @@ bool isSyncRecoveryWindowExceededResponse(Response response) {
     ]
 
 
+def test_sync_error_reason_classification_is_exact_to_helper_and_file(tmp_path, monkeypatch):
+    api_dir = tmp_path / 'api'
+    schema_dir = tmp_path / 'schema'
+    api_dir.mkdir()
+    schema_dir.mkdir()
+    (api_dir / 'conversations.dart').write_text(
+        """
+String? syncUploadErrorReason(Response response) {
+  final decoded = jsonDecode(response.body);
+  final value = decoded['detail'];
+  if (value is String) return value.length > 200 ? value.substring(0, 200) : value;
+  return null;
+}
+dynamic decodeOrdinaryResponse(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    (api_dir / 'other.dart').write_text(
+        """
+dynamic syncUploadErrorReason(Response response) {
+  return jsonDecode(response.body);
+}
+""",
+        encoding='utf-8',
+    )
+    # Translate the real production registrations into the fixture directory;
+    # do not inject a test-only exemption that would pass without the fix.
+    registered = frozenset(
+        (api_dir / path.name, function)
+        for path, function in inventory_app_client_schemas.NON_REST_RESPONSE_DECODER_FUNCTIONS
+    )
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_API_DIR', api_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'APP_SCHEMA_DIR', schema_dir)
+    monkeypatch.setattr(inventory_app_client_schemas, 'MODEL_REST_DTO_FILES', ())
+    monkeypatch.setattr(inventory_app_client_schemas, 'LOCAL_NON_REST_SCHEMA_FILES', frozenset())
+    monkeypatch.setattr(inventory_app_client_schemas, 'NON_REST_RESPONSE_DECODER_FUNCTIONS', registered)
+
+    sites = inventory_app_client_schemas.scan_dart_decode_sites()
+
+    assert [(site.path.name, site.kind, site.context) for site in sites] == [
+        ('conversations.dart', 'jsonDecode', 'error_discriminator'),
+        ('conversations.dart', 'field_access', 'error_discriminator'),
+        ('conversations.dart', 'jsonDecode', 'response_decode'),
+        ('other.dart', 'jsonDecode', 'response_decode'),
+    ]
+
+
 def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     result = subprocess.run(
         [
@@ -358,8 +416,8 @@ def test_inventory_strict_raw_decode_site_gate_fails_with_actionable_sites():
     assert re.search(r'app/lib/backend/schema/app\.dart:\d+ \(field_access\)', result.stdout)
 
 
-def test_inventory_openapi_route_response_decode_migration_complete():
-    report = inventory_app_client_schemas.build_report(SPEC_PATH)
+def test_inventory_openapi_route_response_decode_migration_complete(repository_report):
+    report = repository_report
     response_violations = [item for item in report['app_operation_manifest'] if item['raw_response_decode_site_count']]
     assert not response_violations
     voice_operation = next(

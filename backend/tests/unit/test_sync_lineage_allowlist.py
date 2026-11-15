@@ -23,6 +23,7 @@ import yaml
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
 from utils import rollout_cohorts
+from utils.sync import assignment
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
 from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
@@ -240,7 +241,7 @@ def _prepare_coordinate(module, stubs, monkeypatch, config, *, processed=(), par
     )
 
     async def run():
-        await module._run_full_pipeline_background_async(
+        await module.run_full_pipeline_background_async(
             'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
         )
         return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
@@ -333,6 +334,8 @@ async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypa
 
 
 def _pinned_append(monkeypatch, config, store=None):
+    # Content parity comparisons must use one scheduling instant.
+    monkeypatch.setattr(assignment.time, 'time', lambda: 1760000000.0)
     configure(monkeypatch, config, 'u')
     store = store or seeded_store([generation(L, audio_timeline={'version': 2})])
     origin = gen_start(L)
@@ -519,7 +522,7 @@ async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audi
     pipeline._update_sync_job_for_run = checkpoint
     pipeline._add_processed_segment_for_run = lambda *_args: events.append(('processed', None))
     pipeline._reprocess_merged_conversations = lambda *_a, **_k: None
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
     )
     assert len(captured) == 4
@@ -621,3 +624,23 @@ async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting
         expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
         assert targets == expected
         assert reads == ['uid'] * (2 if expired else 1)
+
+
+@pytest.fixture(autouse=True)
+def stable_recording_arrival(monkeypatch):
+    from datetime import datetime, timezone
+    from database import conversation_recorded_time
+
+    class ArrivalType(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+
+    class FixedArrival(datetime, metaclass=ArrivalType):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 20, tzinfo=timezone.utc).astimezone(tz)
+
+    monkeypatch.setattr(conversation_recorded_time, 'datetime', FixedArrival)
+    from database import conversations
+
+    monkeypatch.setattr(conversations, 'datetime', FixedArrival)

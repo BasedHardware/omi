@@ -56,6 +56,9 @@ _DROP_FIELDS = frozenset(
         'policy',  # metadata, not part of the pre-E1 external behavior trace
         'policy_source',
         'policy_parts',
+        # Slice D's per-vendor attempt ledger (tokens, timings): metadata like 'policy'. Its rules
+        # are pinned by test_batch_provider_failover.py; provider_intent stays in the trace.
+        'provider_attempts',
         'segment_id',
         'segment_ids',
         'log_tail',
@@ -398,6 +401,15 @@ def _config(name: str, *, seed: int = 7, workload: dict | None = None, **changes
     return replace(SimConfig(name=name, seed=seed, horizon_seconds=2 * 3600.0), workload=spec, **changes)
 
 
+# The provider traces admit late uploads as catch-up and pin that path: release on, and the
+# 10-minute bar the traces were recorded with (provider admission now defaults to a day).
+_PROVIDER_BACKLOG_RELEASE = {
+    'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED': 'true',
+    # The characterization traces predate the metered lane: they record the unmetered release.
+    'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': 'false',
+    'BATCH_PIPELINE_PROVIDER_FRESH_CAPTURE_LAG_SECONDS': '600',
+}
+
 GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # Speech only, healthy fleet: admitted -> ready -> leased -> committed -> projected.
     'healthy': lambda: _config('healthy'),
@@ -429,7 +441,6 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     # 10-18: creation at percent zero must not acquire a 120s obligation after a ramp.
     'policy_window': lambda: _config(
         'policy_window',
-        flags={'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
         summary_seconds=300.0,
         summary_sigma=0.0,
     ),
@@ -451,11 +462,25 @@ GOLDEN_CONFIGS: dict[str, Callable[[], SimConfig]] = {
     ),
     # C8 with legacy draining: a language Parakeet cannot serve is admitted to the provider-STT stage,
     # never leased by a GPU pump, pays exactly one vendor call per unit and merges in capture order.
-    'provider_stt_ja': lambda: _config('provider_stt_ja', language='ja', legacy_sync='draining'),
-    'provider_stt_unsupported': lambda: _config('provider_stt_unsupported', language='sw', legacy_sync='draining'),
+    # These uploads are admitted more than the fresh lag after capture, so they are catch-up rows:
+    # the traces pin the release path (commit and projection), which is opt-in in production.
+    'provider_stt_ja': lambda: _config(
+        'provider_stt_ja', language='ja', legacy_sync='draining', flags=_PROVIDER_BACKLOG_RELEASE
+    ),
+    'provider_stt_unsupported': lambda: _config(
+        'provider_stt_unsupported', language='sw', legacy_sync='draining', flags=_PROVIDER_BACKLOG_RELEASE
+    ),
     # BYOK routes like everyone (David, 10-19): Parakeet, no vendor spend; the admission policy
     # records provider_reason=byok so the keyless dispatch re-check never re-holds it.
     'provider_stt_byok': lambda: _config('provider_stt_byok', byok=True, legacy_sync='draining', trace_policy=True),
+    # Unknown language reaches the real worker barrier, then fenced recovery.
+    'legacy_retirement_multi': lambda: _config(
+        'legacy_retirement_multi', language='multi', worker_language='und', legacy_sync='draining'
+    ),
+    # The real intake normalizes an unrecognized und preference to multi.
+    'legacy_retirement_und': lambda: _config(
+        'legacy_retirement_und', language='multi', worker_language='und', legacy_sync='draining'
+    ),
     # Provider errors for a window: retries exhaust attempts -> quarantine -> one paid recovery each.
     'provider_failure_quarantine': lambda: _config(
         'provider_failure_quarantine',

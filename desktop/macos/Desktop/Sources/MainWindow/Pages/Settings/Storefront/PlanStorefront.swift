@@ -163,27 +163,35 @@ struct PlanStorefront: Equatable {
 
   // MARK: - Policy
 
-  private static let ladder = ["basic", "plus", "operator", "architect"]
+  /// Omi Pro, the only plan sold; every retired plan may switch to it.
+  static let omiProPlanId = "unlimited_v2"
 
-  /// basic < plus < operator < architect; nil off the ladder or unknown. `pro` is the
-  /// retained wire alias for Architect.
+  private static let ladder = ["basic", "plus", "operator", "architect", omiProPlanId]
+
+  /// basic < plus < operator < architect < Omi Pro; nil off the ladder or unknown. `pro`
+  /// is the retained wire alias for Architect.
   static func ladderRank(_ planId: String?) -> Int? {
     guard let planId else { return nil }
     return ladder.firstIndex(of: planId == "pro" ? "architect" : planId)
   }
 
-  /// Neo/Unlimited and ids this client does not recognize.
+  /// Neo and ids this client does not recognize.
   private static func offLadder(_ planId: String?) -> Bool { planId != nil && ladderRank(planId) == nil }
 
   var cancelScheduled: Bool { current?.cancelAtPeriodEnd == true }
 
   /// The single checkout boundary for rendering and every click. Paid subscribers may move
   /// up the ladder; the only same-tier purchase is monthly to yearly from a monthly price.
-  /// Legacy prices, off-ladder plans and unknown plan ids never check out. While a
-  /// cancellation is scheduled the only purchase is resubscribing on the current price.
+  /// Legacy prices, off-ladder plans and unknown plan ids never check out, except that a
+  /// retired plan may switch to Omi Pro. While a cancellation is scheduled the only
+  /// purchase is resubscribing on the current price.
   func checkoutDecision(tier: Tier, price: Price, livePlanId: String? = nil) -> CheckoutDecision {
-    if !showSubscriptionUi || usage.kind == .transcription || current?.legacy == true { return .refuse }
-    if Self.offLadder(current?.planId) || Self.offLadder(livePlanId) || Self.offLadder(tier.planId) {
+    let switchingToOmiPro =
+      tier.planId == Self.omiProPlanId && current?.planId != Self.omiProPlanId && livePlanId != Self.omiProPlanId
+    if !showSubscriptionUi { return .refuse }
+    if !switchingToOmiPro && (usage.kind == .transcription || current?.legacy == true) { return .refuse }
+    if Self.offLadder(tier.planId) { return .refuse }
+    if !switchingToOmiPro && (Self.offLadder(current?.planId) || Self.offLadder(livePlanId)) {
       return .refuse
     }
     guard tier.action != .none, tier.prices.contains(price), let priceId = price.id else { return .refuse }

@@ -1,3 +1,10 @@
+// The capture-status card shown above the conversations list: streaming pill,
+// offline recording timer, paused indicator, and local-STT recovery notices.
+//
+// This is a projection of provider state, not a capture owner -- when a live
+// episode row is showing the streaming capture the card defers to it, and the
+// one-second elapsed timer is a cheap no-op while no offline session is active
+// so it can keep ticking behind disabled TickerModes.
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
@@ -227,7 +234,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool isDeviceRecording = liveSource != null && liveSource != 'phone';
     // Keep automatic repair and legitimate pendant sleep quiet. In particular,
     // never animate a Listening timer solely because a restored link is ready.
-    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified;
+    // An exhausted recovery is not a wait: it reads as the failure it is.
+    final noAudio = isDeviceRecording && !provider.isPaused && provider.pendantCaptureActionRequired;
+    final unverified = isDeviceRecording && !provider.isPaused && !provider.pendantCaptureVerified && !noAudio;
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
@@ -272,6 +281,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     final displayState = liveCaptureDisplayState(
       audioInterrupted: micTaken,
       paused: isPaused,
+      pendantNoAudio: noAudio,
+      pendantUnverified: unverified,
       transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
       reconnecting: interruption == CaptureInterruption.recovering,

@@ -3,9 +3,17 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 enable_language(C ASM) # OPUS
 
 project(omi)
+include(cmake/safe-mode-build.cmake)
+zephyr_linker_sources(SECTIONS src/safe_mode.ld)
 
 file(GLOB app_sources
     src/main.c
+    src/diagnostics.c
+    src/diagnostics_packet.c
+    src/boot_telemetry.c
+    src/boot_telemetry_logic.c
+    src/safe_mode.c
+    src/safe_mode_devices.c
     src/mic.c
     src/battery.c
     src/led.c
@@ -23,12 +31,21 @@ if(CONFIG_OMI_ENABLE_T5838_AAD)
     # Hardware AAD is integrated into mic.c; t5838_aad.c is the low-level driver.
     list(APPEND app_sources src/t5838_aad.c)
 endif()
+
+if(CONFIG_OMI_SDHC_SPI_CMD12_FIX)
+    # Zephyr's SPI SD host driver with the CMD12 reply fix, built instead of the stock one.
+    list(APPEND app_sources src/sdfix/sdhc_spi_cmd12_fix.c)
+endif()
 file(GLOB core_sources
     src/lib/core/config.h
     src/lib/core/codec.c
+    src/lib/core/custody.c
     src/lib/core/transport.c
+    src/lib/core/battery_guard.c
     src/lib/core/button.c
+    src/lib/core/capture_mute.c
     src/lib/core/monitor.c
+    src/lib/core/unit_id.c
 )
 
 if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)

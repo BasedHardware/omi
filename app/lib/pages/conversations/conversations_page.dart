@@ -1,3 +1,12 @@
+import 'package:clock/clock.dart';
+import 'package:omi/utils/local_day_rollover.dart';
+// The conversations list page: paged list with filter-keyed load-more state,
+// plus the capture-status surfaces stacked above it (processing card, held
+// audio, on-device queue banners).
+//
+// The page stays alive across tab switches (AutomaticKeepAliveClientMixin), so
+// scroll position and pagination survive background sync mutations; load-more
+// state is keyed by the active filter and resets deliberately on filter change.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -8,18 +17,20 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
-import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
-import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
+import 'home_rows.dart';
+import 'home_rows_health.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
@@ -36,10 +47,16 @@ import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
+import 'package:omi/pages/home/widgets/home_daily_recaps_setting.dart';
+import 'package:omi/models/subscription.dart';
+import 'package:omi/pages/home/widgets/payment_issue_row.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
+
+part 'conversations_processing_rows.dart';
 
 String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTime? end) {
   final dates = OmiDateFormat.of(context);
@@ -49,7 +66,16 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, processing, conversation, recording, groupSpacer }
+enum _ConversationListRowKind {
+  topSpacer,
+  dateHeader,
+  liveEpisode,
+  processing,
+  conversation,
+  recording,
+  heldRecording,
+  groupSpacer,
+}
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -149,6 +175,8 @@ List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
   required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  // Locked rows keep their index in the server's list, which the builder reads back.
+  Map<DateTime, List<int>> heldByDate = const {},
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -161,7 +189,8 @@ List<_ConversationListRow> _buildConversationListRows({
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
     };
-    if (entries.isEmpty) continue;
+    final held = heldByDate[date] ?? const <int>[];
+    if (entries.isEmpty && held.isEmpty) continue;
 
     if (!hasRenderedDate) {
       rows.add((
@@ -206,6 +235,17 @@ List<_ConversationListRow> _buildConversationListRows({
       }
     }
 
+    for (final index in held) {
+      rows.add((
+        kind: _ConversationListRowKind.heldRecording,
+        date: date,
+        isFirst: false,
+        conversation: null,
+        recording: null,
+        conversationIndex: index,
+      ));
+    }
+
     rows.add((
       kind: _ConversationListRowKind.groupSpacer,
       date: date,
@@ -222,67 +262,6 @@ List<_ConversationListRow> _buildConversationListRows({
 
 /// [rows] with the live episode right under today's header. With no today in the list,
 /// the episode opens Today itself, carrying its own header.
-List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTime now, _ConversationListRowKind kind) {
-  if (rows.isEmpty) return rows;
-  final today = DateTime(now.year, now.month, now.day);
-  final header = rows.indexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == today);
-  _ConversationListRow todayRow(_ConversationListRowKind kind, {bool isFirst = false}) =>
-      (kind: kind, date: today, isFirst: isFirst, conversation: null, recording: null, conversationIndex: -1);
-  if (header >= 0) {
-    var at = header + 1;
-    while (at < rows.length && rows[at].kind == _ConversationListRowKind.liveEpisode) {
-      at++;
-    }
-    return [...rows.take(at), todayRow(kind), ...rows.skip(at)];
-  }
-  final opened = rows.indexWhere((r) => r.kind == kind);
-  if (opened >= 0) return rows;
-  // A row that already opened Today (the live episode) carries the header; sit right under it.
-  final todayOpener = rows.indexWhere(
-    (r) => r.date == today && r.isFirst && r.kind != _ConversationListRowKind.topSpacer,
-  );
-  if (todayOpener >= 0) {
-    return [...rows.take(todayOpener + 1), todayRow(kind), ...rows.skip(todayOpener + 1)];
-  }
-  // rows.first is the list's top spacer.
-  return [
-    rows.first,
-    todayRow(kind, isFirst: true),
-    todayRow(_ConversationListRowKind.groupSpacer),
-    for (final r in rows.skip(1))
-      r.kind == _ConversationListRowKind.dateHeader && r.isFirst
-          ? (kind: r.kind, date: r.date, isFirst: false, conversation: null, recording: null, conversationIndex: -1)
-          : r,
-  ];
-}
-
-/// One row per conversation still processing, right under Today's live row: the conversation the
-/// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
-List<_ConversationListRow> _withProcessingRows(
-  List<_ConversationListRow> rows,
-  List<ServerConversation> processing,
-  DateTime now,
-) {
-  if (processing.isEmpty) return rows;
-  final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
-  final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
-  if (at < 0) return rows;
-  final slot = marked[at];
-  return [
-    ...marked.take(at),
-    for (var i = 0; i < processing.length; i++)
-      (
-        kind: _ConversationListRowKind.processing,
-        date: slot.date,
-        isFirst: slot.isFirst && i == 0,
-        conversation: processing[i],
-        recording: null,
-        conversationIndex: -1,
-      ),
-    ...marked.skip(at + 1),
-  ];
-}
-
 /// [byDate] without the conversations Home leaves to the daily recap (background notes,
 /// David 2026-10-23). Days left empty drop out when the rows are built.
 Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<ServerConversation>> byDate) => {
@@ -313,7 +292,7 @@ List<ServerConversation>? _lockedRunAt(List<_ConversationListRow> rows, int inde
   return [for (var i = index; i < end; i++) rows[i].conversation!];
 }
 
-/// Home: the live capture row, the Daily Recaps row, then every conversation, newest first, loading
+/// Home: the live capture row, the Daily Recaps row (when on), then every conversation, newest first, loading
 /// more as it scrolls. Search, folders, starred and places live in the search overlay the header's
 /// search button opens, so this list is never filtered in place.
 class ConversationsPage extends StatefulWidget {
@@ -334,27 +313,71 @@ class ConversationsPage extends StatefulWidget {
   State<ConversationsPage> createState() => _ConversationsPageState();
 }
 
-class _ConversationsPageState extends State<ConversationsPage> with AutomaticKeepAliveClientMixin {
+class _ConversationsPageState extends State<ConversationsPage>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   TextEditingController textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<HomeDailyRecapsState> _recapsKey = GlobalKey<HomeDailyRecapsState>();
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
+  bool _initialOverlayPending = false;
+  Completer<void>? _initialOverlayReady;
+  ({String owner, HomeEpisodeLayout layout})? _fallbackHomeLayout;
+  final Set<String> _paintedStandaloneIds = {};
+  bool _homeTabActive = true;
+  bool _wasBackgrounded = false;
+  HomeProvider? _watchedHome;
+
+  void _releaseHomeLayout() {
+    _fallbackHomeLayout = null;
+    _paintedStandaloneIds.clear();
+  }
+
+  void _onHomeProviderChanged() {
+    final home = _watchedHome;
+    if (home == null) return;
+    final active = home.selectedIndex == HomeProvider.homeTab;
+    if (active == _homeTabActive) return;
+    _homeTabActive = active;
+    // Re-entering Home releases an outage-era grouping. With nothing held,
+    // a tab switch must not rebuild this page (tab_switch perf budget).
+    if (active && (_fallbackHomeLayout != null || _paintedStandaloneIds.isNotEmpty) && mounted) {
+      setState(_releaseHomeLayout);
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final home = context.read<HomeProvider?>();
+    if (identical(home, _watchedHome)) return;
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = home;
+    _homeTabActive = home == null || home.selectedIndex == HomeProvider.homeTab;
+    home?.addListener(_onHomeProviderChanged);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _wasBackgrounded = true;
+    if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      _scheduleDayRollover();
+      if (mounted) setState(_releaseHomeLayout);
+    }
+  }
 
   @override
   bool get wantKeepAlive => true;
 
   /// Rebuilds Home at local midnight so the pending row moves under the new Today.
-  Timer? _dayTimer;
+  LocalDayRollover? _dayTimer;
 
   void _scheduleDayRollover() {
-    final now = DateTime.now();
-    final next = DateTime(now.year, now.month, now.day + 1);
-    _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
-      if (!mounted) return;
-      setState(() {});
-      _scheduleDayRollover();
+    _dayTimer?.cancel();
+    _dayTimer = LocalDayRollover(() {
+      if (mounted) setState(() {});
     });
   }
 
@@ -367,6 +390,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _wasBackgrounded = lifecycle == AppLifecycleState.paused || lifecycle == AppLifecycleState.hidden;
+    HomeDailyRecapsSetting.reload();
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
     unawaited(_pendingWork.refresh());
@@ -376,13 +403,44 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       final episodes = context.read<EpisodeProvider?>();
       if (episodes != null) unawaited(episodes.refreshLive());
       final conversationProvider = context.read<ConversationProvider>();
+      episodes?.observeHomeConversations(conversationProvider);
+      final today = DateUtils.dateOnly(clock.now());
+      final initialFrom = conversationProvider.groupedConversations.keys.fold<DateTime>(
+        today.subtract(const Duration(days: 7)),
+        (oldest, day) => day.isBefore(oldest) ? day : oldest,
+      );
+      _initialOverlayPending = widget.requestInitialLoad && episodes != null;
+      Future<bool> loadOverlay(DateTime from) =>
+          episodes!.refreshHome(from, today.add(const Duration(days: 1)), bootstrap: true).onError((error, stack) {
+            Logger.error('Initial Home overlay failed: $error');
+            return false;
+          });
+      var overlay = _initialOverlayPending ? loadOverlay(initialFrom) : Future.value(true);
+      var overlayFrom = initialFrom;
       try {
-        if (widget.requestInitialLoad && conversationProvider.conversations.isEmpty) {
-          await conversationProvider.getInitialConversations();
-        } else if (widget.requestInitialLoad) {
-          // Still check for daily summaries even if conversations are cached
+        if (widget.requestInitialLoad) {
+          await conversationProvider.getInitialConversations(checkDailySummaries: false);
+          if (!mounted) return;
           _scheduleDeferred(conversationProvider.checkHasDailySummaries);
+          // The first page may reach beyond seven days. Cover its actual range
+          // under the same single deadline, rather than exposing older members.
+          final days = conversationProvider.groupedConversations.keys;
+          final oldest = days.isEmpty ? today : days.reduce((a, b) => a.isBefore(b) ? a : b);
+          if (episodes != null && oldest.isBefore(initialFrom)) {
+            overlayFrom = oldest;
+            overlay = loadOverlay(oldest);
+          }
+          final settled = _settleInitialOverlay(overlay, () => loadOverlay(overlayFrom));
+          unawaited(
+            settled.whenComplete(() {
+              if (mounted) setState(() => _initialOverlayPending = false);
+            }),
+          );
+          await settled.timeout(const Duration(milliseconds: 500), onTimeout: () {});
         }
+      } catch (error, stack) {
+        Logger.error('Initial Home conversations failed: $error\n$stack');
+        _initialOverlayPending = false;
       } finally {
         if (mounted) setState(() => _isBootstrapping = false);
       }
@@ -409,6 +467,47 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
       }
     });
     _deferred.add(timer);
+  }
+
+  /// Retry failed history before publishing source rows; persistent failure keeps
+  /// the last cached projection after a short deadline. All timers leave with Home.
+  Future<void> _settleInitialOverlay(Future<bool> first, Future<bool> Function() retry) {
+    final ready = _initialOverlayReady = Completer<void>();
+    Timer? deadline;
+    void finish() {
+      if (ready.isCompleted) return;
+      deadline?.cancel();
+      _deferred.remove(deadline);
+      ready.complete();
+    }
+
+    Future<void> attempt(Future<bool> read, int retries) async {
+      final complete = await read;
+      if (ready.isCompleted || !mounted) return;
+      if (complete) {
+        finish();
+      } else {
+        if (deadline == null) {
+          deadline = Timer(const Duration(seconds: 2), () {
+            if (ready.isCompleted || !mounted) return;
+            // A retry may still publish after this deadline. Pin only layout so
+            // that result cannot regroup rows the reader has already seen.
+            _fallbackHomeLayout = (
+              owner: SharedPreferencesUtil().uid,
+              layout: HomeEpisodeLayout(context.read<EpisodeProvider?>()?.homeEpisodes ?? const []),
+            );
+            finish();
+          });
+          _deferred.add(deadline!);
+        }
+        if (retries > 0) {
+          _scheduleDeferred(() => attempt(retry(), retries - 1));
+        }
+      }
+    }
+
+    unawaited(attempt(first, 2));
+    return ready.future;
   }
 
   bool _requestMoreIfNeeded(ConversationProvider provider) {
@@ -473,8 +572,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _watchedHome?.removeListener(_onHomeProviderChanged);
+    _watchedHome = null;
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
+    if (_initialOverlayReady != null && !_initialOverlayReady!.isCompleted) {
+      _initialOverlayReady!.complete();
+    }
+    _initialOverlayReady = null;
     for (final timer in _deferred) {
       timer.cancel();
     }
@@ -574,13 +680,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final hiddenByLive = episodeLive ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
+        final defaultHome = !convoProvider.hasActiveSearch &&
+            !_hasActiveFilter(convoProvider) &&
+            !convoProvider.showShortConversations &&
+            !convoProvider.showDiscardedConversations &&
+            !convoProvider.isSelectionModeActive;
+        final hiddenByLive =
+            episodeLive && defaultHome ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
-            convoProvider.selectedFolderId == null &&
-            !convoProvider.showStarredOnly;
+        final bool showRecordings =
+            !convoProvider.hasActiveSearch && convoProvider.selectedFolderId == null && !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
@@ -604,9 +715,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
-        final mergedDates = <DateTime>{...convoProvider.groupedConversations.keys, ...recordingsByDate.keys}.toList()
-          ..sort((a, b) => b.compareTo(a));
-        final conversationsByDate = hiddenByLive.isEmpty
+        var conversationsByDate = hiddenByLive.isEmpty
             ? convoProvider.groupedConversations
             : {
                 for (final entry in convoProvider.groupedConversations.entries)
@@ -615,29 +724,170 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       if (!hiddenByLive.contains(c.id)) c,
                   ],
               };
+        if (!defaultHome && _pendingWork.homeProcessingToday) {
+          final today = localHomeDay(clock.now());
+          conversationsByDate = {
+            for (final entry in conversationsByDate.entries)
+              entry.key: [
+                for (final c in entry.value)
+                  if (!isFailedHomeConversation(c) &&
+                      (!showRecordings ||
+                          convoProvider.isSelectionModeActive ||
+                          localHomeDay(c.startedAt ?? c.createdAt) == today ||
+                          !{HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(c))))
+                    c,
+              ],
+          };
+        }
+        final projectedEpisodes = <String, HomeRow>{};
+        final projectedMemberIds = <String>{...hiddenByLive};
+        final projectedProcessingIds = <String>{};
+        if (defaultHome) {
+          final today = clock.now();
+          final days = conversationsByDate.keys;
+          final from = days.isEmpty
+              ? DateTime(today.year, today.month, today.day - 7)
+              : days.reduce((a, b) => a.isBefore(b) ? a : b);
+          final to = DateTime(today.year, today.month, today.day + 1);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && episodesOn && !_isBootstrapping && !_initialOverlayPending) {
+              unawaited(episodes!.refreshHome(from, to));
+            }
+          });
+          final latestEpisodes = episodes?.homeEpisodes ?? const [];
+          final heldLayout = _fallbackHomeLayout;
+          final holdingLayout = heldLayout != null && heldLayout.owner == SharedPreferencesUtil().uid;
+          final paintEpisodes = holdingLayout
+              ? heldLayout.layout.apply(latestEpisodes, standaloneIds: _paintedStandaloneIds)
+              : latestEpisodes;
+          // Home and live snapshots can disagree about the latest membership.
+          // The same live episode owns its closed members in both insertion paths.
+          for (final episode in paintEpisodes) {
+            if (episode.live &&
+                (episodeLive && episode.id == episodes?.live?.id ||
+                    episode.conversationIds.any(hiddenByLive.contains))) {
+              projectedMemberIds.addAll(episode.conversationIds);
+            }
+          }
+          final listed = [for (final list in conversationsByDate.values) ...list];
+          final listedIds = {for (final c in listed) c.id};
+          final projected = buildHomeRows(
+            // Just-ended rows fold into the same Processing run as everything else unfinished.
+            [
+              ...listed,
+              for (final c in snapshot.processingConversations)
+                if (!listedIds.contains(c.id) && !hiddenByLive.contains(c.id)) c,
+            ],
+            paintEpisodes,
+            enabled: episodesOn,
+            groupAwaitingTranscript: true,
+            now: clock.now(),
+            processingTodayOnly: _pendingWork.homeProcessingToday,
+            activityOnlyFailures: _pendingWork.homeProcessingToday,
+            processingTitle: context.l10n.wrappedProcessingDefault,
+            finishingTitle: context.l10n.episodeFinishingUp,
+            liveConversationIds: hiddenByLive,
+            liveEpisodeId: episodeLive ? episodes?.live?.id : null,
+            deletedIds: {...convoProvider.memoriesToDelete.keys, ...(episodes?.hiddenHomeMembers ?? const <String>{})},
+            knownConversations: snapshot.conversations,
+            processingConversations: snapshot.processingConversations,
+          );
+          conversationsByDate = {};
+          for (final row in projected) {
+            (conversationsByDate[row.day] ??= []).add(row.conversation);
+            projectedMemberIds.addAll(row.episodeConversationIds);
+            if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
+            if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
+            if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+              if (row.episode == null) {
+                _paintedStandaloneIds.add(row.conversation.id);
+              } else if (row.episode!.id.isEmpty) {
+                // An unassigned Processing run is also an already-painted row.
+                _paintedStandaloneIds.addAll(row.episodeConversationIds);
+              }
+            }
+          }
+          if (holdingLayout && !_isBootstrapping && !_initialOverlayPending) {
+            _paintedStandaloneIds.addAll(snapshot.processingConversations
+                .where((row) => !projectedMemberIds.contains(row.id))
+                .map((row) => row.id));
+          }
+        }
+        // Only the default view: a search or folder shows what it matched.
+        final usage = context.watch<UsageProvider?>()?.subscription;
+        final heldRecordings = showRecordings && !convoProvider.isSelectionModeActive
+            ? lockedHeldRecordings(usage?.heldAudio, usage?.processingBacklog)
+            : const <HeldAudioRecording>[];
+        final heldMore = (usage?.heldAudio?.count ?? 0) - heldRecordings.length;
+        final heldByDate = <DateTime, List<int>>{};
+        for (final (index, recording) in heldRecordings.indexed) {
+          final started = DateTime.fromMillisecondsSinceEpoch(recording.startedAt * 1000);
+          (heldByDate[DateUtils.dateOnly(started)] ??= []).add(index);
+        }
+        final mergedDates = <DateTime>{...conversationsByDate.keys, ...recordingsByDate.keys, ...heldByDate.keys}
+            .toList()
+          ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
+          heldByDate: heldByDate,
         );
+        final localToday = localHomeDay(clock.now());
         final withLive =
-            episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+            episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
         // Only the default view: a search or folder shows what it matched.
         final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
-            ? _withProcessingRows(withLive, snapshot.processingConversations, DateTime.now())
+            ? _withProcessingRows(
+                withLive,
+                [
+                  for (final c in snapshot.processingConversations)
+                    if (!projectedMemberIds.contains(c.id) &&
+                        (!_pendingWork.homeProcessingToday ||
+                            (!isFailedHomeConversation(c) && localHomeDay(c.startedAt ?? c.createdAt) == localToday)))
+                      c,
+                ],
+                clock.now())
             : withLive;
+
+        if (showRecordings &&
+            !convoProvider.isSelectionModeActive &&
+            !convoProvider.showDiscardedConversations &&
+            !isShowingConversationSkeleton) {
+          final visible = conversationRows
+              .where((row) =>
+                  row.kind == _ConversationListRowKind.conversation ||
+                  row.kind == _ConversationListRowKind.liveEpisode ||
+                  row.kind == _ConversationListRowKind.processing ||
+                  row.kind == _ConversationListRowKind.recording)
+              .length;
+          HomeRowsHealth.note(visible);
+        }
 
         return RefreshIndicator(
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             _lastLoadMoreRequestKey = null;
             unawaited(_pendingWork.refresh());
+            // Pull-to-refresh is an explicit layout boundary. Keep the held
+            // projection until both reads finish, so provider notifications
+            // during this refresh cannot expose half of the new grouping.
+            episodes?.invalidateHome();
             if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
+            final today = DateUtils.dateOnly(clock.now());
+            final from = convoProvider.groupedConversations.keys.fold<DateTime>(
+              today.subtract(const Duration(days: 7)),
+              (oldest, day) => day.isBefore(oldest) ? day : oldest,
+            );
+            final history = episodes == null
+                ? Future.value(true)
+                : episodes.refreshHome(from, today.add(const Duration(days: 1)), force: true);
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             await Future.wait([
               convoProvider.getInitialConversations(),
+              history,
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
               // Review's entry hides when caught up; a pull is how a hidden one comes back.
@@ -645,6 +895,11 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   when review.availability != ReviewAvailability.off)
                 review.load(),
             ]);
+            final historyReady = await history;
+            if (mounted && historyReady) {
+              if (_initialOverlayReady case final ready? when !ready.isCompleted) ready.complete();
+              setState(_releaseHomeLayout);
+            }
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -657,19 +912,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               SliverToBoxAdapter(
                 child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive),
               ),
-              const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
+              // A declined renewal the user can still pay: one row, Update opens Stripe's billing portal.
+              const SliverToBoxAdapter(child: PaymentIssueRow()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard()),
+              // Opt-in from Developer Settings. Hidden, the row is not mounted, so nothing is fetched.
               SliverToBoxAdapter(
-                child: widget.loadRecaps == null
-                    ? HomeDailyRecaps(key: _recapsKey)
-                    : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: HomeDailyRecapsSetting.listenable,
+                  builder: (context, shown, _) => !shown
+                      ? const SizedBox.shrink()
+                      : widget.loadRecaps == null
+                          ? HomeDailyRecaps(key: _recapsKey)
+                          : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
+                ),
               ),
-              // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
-              const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
-              const SliverToBoxAdapter(child: HeldAudioHomeSection()),
               // With no list yet, the live episode opens Today itself.
               if (episodeLive && builtRows.isEmpty)
                 SliverToBoxAdapter(
@@ -678,7 +937,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        DateListItem(date: DateUtils.dateOnly(DateTime.now()), isFirst: true),
+                        DateListItem(date: DateUtils.dateOnly(clock.now()), isFirst: true),
                         const LiveEpisodeRow(),
                       ],
                     ),
@@ -686,7 +945,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               // Typed HTTP status precedes empty/loading/hero so an outage is
               // never the new-account empty state. Unset (data) keeps production.
-              if (showTypedStatus &&
+              // The skeleton is Home's only loading state: it stays up until the first
+              // episode read settles, so no second loader replaces it.
+              if (_isBootstrapping || _initialOverlayPending)
+                _buildLoadingShimmer()
+              else if (showTypedStatus &&
+                  conversationsByDate.values.every((list) => list.isEmpty) &&
                   snapshot.conversations.isEmpty &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
@@ -696,6 +960,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(child: ConversationApiStatus(provider: convoProvider)),
                 )
               else if (_nonDiscardedConversationCount(convoProvider) == 0 &&
+                  conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasProcessingConversations &&
                   !hasRecordings &&
                   !isShowingConversationSkeleton &&
@@ -714,7 +979,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty &&
+              else if (conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   !isShowingConversationSkeleton)
@@ -735,7 +1000,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ),
                   ),
                 )
-              else if (convoProvider.groupedConversations.isEmpty &&
+              else if (conversationsByDate.values.every((list) => list.isEmpty) &&
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   isShowingConversationSkeleton)
@@ -764,6 +1029,13 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     switch (row.kind) {
                       case _ConversationListRowKind.topSpacer:
                         return const SizedBox(height: 10);
+                      case _ConversationListRowKind.heldRecording:
+                        final held = heldRecordings[row.conversationIndex];
+                        return HeldRecordingLockedRow(
+                          key: ValueKey('held_${held.id}'),
+                          recording: held,
+                          more: row.conversationIndex == heldRecordings.length - 1 ? heldMore : 0,
+                        );
                       case _ConversationListRowKind.dateHeader:
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
@@ -789,6 +1061,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           ],
                         );
                       case _ConversationListRowKind.conversation:
+                        if (projectedProcessingIds.contains(row.conversation!.id)) {
+                          final projectedRow = projectedEpisodes[row.conversation!.id];
+                          return ProcessingConversationRow(
+                            key: ValueKey('processing_${row.conversation!.id}'),
+                            conversation: row.conversation!,
+                            episode: projectedRow?.episode,
+                            step: projectedRow?.step ?? HomeStep.writingNotes,
+                            count: projectedRow?.count ?? 1,
+                          );
+                        }
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
                         final lockedRun = _lockedRunAt(conversationRows, index);
@@ -805,7 +1087,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
-                          fillingSeconds: filling[row.conversation!.id],
+                          fillingSeconds: homeRowFilling(
+                            filling,
+                            row.conversation!.id,
+                            projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
+                          ),
+                          homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);

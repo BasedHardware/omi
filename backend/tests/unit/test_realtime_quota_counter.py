@@ -395,7 +395,6 @@ async def _run_relay(
     monkeypatch.setattr(omni_relay, 'extract_byok_from_websocket', lambda _ws: dict(validated))
     monkeypatch.setattr(omni_relay, 'validate_byok_websocket_keys', lambda _uid, keys: (dict(keys), None))
     monkeypatch.setattr(omni_relay, 'set_validated_byok_keys', lambda _keys, _uid: None)
-    monkeypatch.setattr(omni_relay, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(omni_relay.users_db, 'is_byok_active', lambda _uid: byok)
     monkeypatch.setattr(omni_relay, 'get_chat_quota_snapshot', snapshot)
     monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: store)
@@ -640,7 +639,6 @@ async def test_a_cancelled_handler_drains_its_pumps_and_releases_its_slot(monkey
     monkeypatch.setattr(omni_relay, 'extract_byok_from_websocket', lambda _ws: {})
     monkeypatch.setattr(omni_relay, 'validate_byok_websocket_keys', lambda _uid, keys: ({}, None))
     monkeypatch.setattr(omni_relay, 'set_validated_byok_keys', lambda _keys, _uid: None)
-    monkeypatch.setattr(omni_relay, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(omni_relay.users_db, 'is_byok_active', lambda _uid: False)
     monkeypatch.setattr(omni_relay, 'get_chat_quota_snapshot', lambda *_a, **_k: _allowed(PlanType.basic))
     monkeypatch.setattr(omni_relay, 'get_customer_firestore_client', lambda: _Store())
@@ -972,7 +970,6 @@ async def test_minting_a_session_debits_nothing(monkeypatch) -> None:
 @pytest.mark.parametrize('byok_active', [False, True])
 def test_no_mint_at_zero_remaining_on_a_hard_capped_plan_byok_or_not(monkeypatch, byok_active) -> None:
     """The hub hands out Omi's key; a user's Anthropic BYOK must not buy a managed OpenAI session past the cap."""
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(subscription.users_db, 'is_byok_active', lambda *_a, **_k: byok_active)
     monkeypatch.setattr(subscription, 'request_has_byok_provider', lambda *_a, **_k: True)
     monkeypatch.setattr(subscription, 'get_customer_firestore_client', lambda: object())
@@ -997,7 +994,6 @@ def test_no_mint_at_zero_remaining_on_a_hard_capped_plan_byok_or_not(monkeypatch
 
 
 def test_an_overage_plan_still_mints(monkeypatch) -> None:
-    monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *_a, **_k: False)
     monkeypatch.setattr(subscription.users_db, 'is_byok_active', lambda *_a, **_k: False)
     monkeypatch.setattr(subscription, 'get_customer_firestore_client', lambda: object())
     monkeypatch.setattr(

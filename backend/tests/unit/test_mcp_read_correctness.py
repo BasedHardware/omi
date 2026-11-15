@@ -15,7 +15,7 @@ from utils.mcp_data import clean_action_item
 import utils.mcp_dates as dates
 from utils.mcp_dates import local_date_window, offset_timestamp, resolve_timezone
 from utils.mcp_server.handlers import conversations, memories, other
-from utils.mcp_server.helpers import conversation_card
+from utils.mcp_server.helpers import bounded_transcript_segments, conversation_card, public_transcript_timing
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
@@ -36,12 +36,71 @@ def card(cid, text='x'):
     }
 
 
+@pytest.mark.parametrize(
+    'start,end,expected',
+    [
+        (-285.0, -42.0, (0.0, 0.0)),
+        ('-285', '-42', (0, 0)),
+        (-0.25, 1.5, (0.0, 1.5)),
+        ('-0.25', 1.5, (0, 1.5)),
+        (0, 2, (0, 2)),
+        (1.25, 3.5, (1.25, 3.5)),
+    ],
+)
+def test_mcp_read_clamps_pre_origin_offsets_without_changing_storage(start, end, expected):
+    source = [{'id': 'synthetic-segment', 'text': 'synthetic', 'speaker_id': 0, 'start': start, 'end': end}]
+    projected, truncated = bounded_transcript_segments(source, max_segments=10, max_chars=100)
+    assert (projected[0]['start'], projected[0]['end']) == expected
+    assert projected[0]['text'] == 'synthetic'
+    assert source[0]['start'] == start and source[0]['end'] == end
+    assert not truncated
+
+
+def test_mcp_pre_origin_projection_preserves_fetch_bounds_and_conversation_origin(monkeypatch):
+    stored = card('synthetic-conversation')
+    stored['transcript_segments'] = [
+        {'text': 'before', 'start': -10, 'end': -2},
+        {'text': 'crossing', 'start': -1, 'end': 2},
+        {'text': 'after', 'start': 2, 'end': 3},
+    ]
+    monkeypatch.setattr(conversations, 'fetch_conversation_for_detail', lambda *a, **k: stored)
+    result = conversations.get_conversation_by_id(
+        OWNER, {'conversation_id': stored['id'], 'max_segments': 2, 'max_chars': 100}
+    )
+    projected = result['conversation']
+    assert result['truncated']
+    assert projected['started_at'] == stored['started_at']
+    assert [(s['start'], s['end']) for s in projected['transcript_segments']] == [(0, 0), (0, 2)]
+    assert stored['transcript_segments'][0]['start'] == -10
+
+
+def test_mcp_pre_origin_projection_keeps_text_budget():
+    source = [{'text': 'synthetic', 'start': -10, 'end': -2}, {'text': 'later', 'start': 1, 'end': 2}]
+    projected, truncated = bounded_transcript_segments(source, max_segments=10, max_chars=5)
+    assert truncated and len(projected) == 1
+    assert len(projected[0]['text']) <= 5
+    assert projected[0]['start'] == projected[0]['end'] == 0
+
+
+def test_mcp_snippet_seconds_and_milliseconds_use_the_same_nonnegative_projection():
+    source = {'text': 'synthetic', 'start': -2.5, 'end': 1.25, 'start_ms': -2500, 'end_ms': 1250}
+    projected = public_transcript_timing(source)
+    assert projected == {'text': 'synthetic', 'start': 0, 'end': 1.25, 'start_ms': 0, 'end_ms': 1250}
+    assert source['start'] == -2.5 and source['start_ms'] == -2500
+
+
+@pytest.mark.parametrize('unknown', [None, False, 'unplaced'])
+def test_mcp_timing_projection_does_not_invent_unknown_clock_metadata(unknown):
+    source = {'text': 'synthetic', 'start': unknown, 'end': 1.25}
+    assert public_transcript_timing(source) == source
+
+
 def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):
     rows = [{'id': 'new', 'content': 'Synthetic fact', 'updated_at': NOW, 'created_at': NOW}]
     read = MagicMock(return_value=(rows, 237))
     monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
     result = memories.memories_page_core(OWNER, limit=20, updated_after=NOW, cursor_kind='test')
-    assert result['memories'] == rows
+    assert result['memories'] == [{**rows[0], 'source_at': None, 'extracted_at': None}]
     assert not result['has_more'] and not result['scan_truncated']
     assert result['scanned_count'] == 237 and result['matched_count'] == 1
     assert read.call_args.kwargs['filters']['updated_after'] == NOW
@@ -109,13 +168,16 @@ def test_batch_honors_twenty_ids_under_large_unicode_payload(monkeypatch):
         'get_mcp_conversations_by_id',
         lambda *a, **k: [card(cid, '漢' * 24000) for cid in ids],
     )
-    result = conversations.get_conversations_by_ids(OWNER, {'conversation_ids': ids})
-    assert [item['id'] for item in result['conversations']] == ids
-    assert result['omitted_ids'] == []
+    result = conversations.get_conversations_by_ids(
+        OWNER, {'conversation_ids': ids, 'max_chars': 4000, 'fields': ['transcript_segments', 'structured.title']}
+    )
+    assert 0 < len(result['conversations']) < len(ids)
+    assert result['omitted_ids'] == ids[len(result['conversations']) :]
     assert result['truncated'] is True
     assert tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
     for item in result['conversations']:
-        assert item['structured'] == item['conversation']['structured']
+        assert 'structured' not in item
+        assert len(item['conversation']['transcript_segments'][0]['text']) == 4000
 
 
 def test_batch_pathological_metadata_accounts_for_omissions_and_resumes(monkeypatch):
@@ -219,7 +281,9 @@ def test_group_by_reads_whole_window_not_two_hundred_row_page(monkeypatch):
         OWNER, {'start_date': '2026-10-22', 'end_date': '2026-10-22', 'group_by': 'day', 'limit': 200}
     )
     assert result['buckets'][0]['count'] == 500
-    assert result['coverage']['complete_window'] is True
+    assert result['coverage']['complete_window'] is False
+    assert result['coverage']['query_complete'] is True
+    assert result['coverage']['capture_completeness'] == 'unknown'
     assert 'next_cursor' not in result
 
 
@@ -526,7 +590,8 @@ def test_screen_grouping_ignores_even_stale_cursors_with_note(monkeypatch, group
     resumed = other.get_screen_activity(OWNER, {'group_by': group_by, 'cursor': 'old-or-invalid-cursor'})
     assert resumed['buckets'] == first['buckets']
     assert sum(row['count'] for row in resumed['buckets']) == 501
-    assert 'cursor ignored' in resumed['note'] and resumed['coverage']['complete_window']
+    assert 'cursor ignored' in resumed['note'] and resumed['coverage']['query_complete']
+    assert resumed['coverage']['complete_window'] is False
     assert 'next_cursor' not in resumed
 
 
@@ -555,3 +620,82 @@ def test_duplicate_ids_and_omissions_always_advance_cursor(monkeypatch):
         assert cursor not in tokens
         tokens.add(cursor)
     assert seen == ['a', 'b', 'c', 'd'] and cursor is None
+
+
+def test_screen_device_bounds_do_not_claim_sync_watermarks(monkeypatch):
+    rows = [
+        {'timestamp': '2026-10-22 01:00:00.000', 'clientDeviceId': 'device-a'},
+        {'timestamp': '2026-10-22 05:00:00.000', 'clientDeviceId': 'device-b'},
+        {'timestamp': '2026-10-22 13:00:00.000', 'clientDeviceId': 'device-a'},
+    ]
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    coverage = other.get_screen_activity(OWNER, {'group_by': 'hour'})['coverage']
+    assert coverage['query_complete'] is True
+    assert coverage['complete_window'] is False
+    assert coverage['devices'] == [
+        {
+            'device_id': 'device-a',
+            'first_observed_at': rows[0]['timestamp'],
+            'last_observed_at': rows[2]['timestamp'],
+            'synced_through': None,
+        },
+        {
+            'device_id': 'device-b',
+            'first_observed_at': rows[1]['timestamp'],
+            'last_observed_at': rows[1]['timestamp'],
+            'synced_through': None,
+        },
+    ]
+
+
+def test_summary_snapshot_exposes_cutoff_and_unknown_visible_total():
+    result = summary_read_payload({'created_at': NOW, 'stats': {'memories_created': 7}, 'read_contract_version': 2})
+    assert result['covers_until'] == NOW
+    assert result['stats']['stored_memories_created'] == 7
+    assert result['stats']['fetchable_memories_created'] is None
+
+
+def test_dotted_card_projection_and_aliases():
+    from utils.mcp_server.helpers import select_card_fields
+
+    value = {'id': 'synthetic', 'structured': {'title': 'Plan', 'overview': 'Details'}, 'discarded': False}
+    assert select_card_fields(value, ['structured.title', 'discarded']) == {
+        'id': 'synthetic',
+        'structured': {'title': 'Plan'},
+        'discarded': False,
+    }
+    assert select_card_fields(value, ['title'])['structured'] == {'title': 'Plan'}
+
+
+def test_shared_mcp_memory_list_projects_source_time(monkeypatch):
+    row = {
+        'id': 'synthetic-memory',
+        'content': 'A durable synthetic fact',
+        'created_at': NOW,
+        'evidence': [{'captured_at': (NOW - timedelta(days=5)).isoformat(), 'created_at': NOW.isoformat()}],
+    }
+    monkeypatch.setattr(memories, 'read_filtered_mcp_memories', lambda *a, **k: ([row], 1))
+    result = memories.memories_page_core(OWNER, limit=10, updated_after=NOW, cursor_kind='get_memories')
+    assert result['memories'][0]['source_at'] == row['evidence'][0]['captured_at']
+    assert result['memories'][0]['extracted_at'] is None
+
+
+def test_device_observation_bounds_compare_instants_across_dst_offsets():
+    rows = [
+        {'timestamp': '2026-11-01T01:50:00-04:00', 'clientDeviceId': 'synthetic'},
+        {'timestamp': '2026-11-01T01:10:00-05:00', 'clientDeviceId': 'synthetic'},
+    ]
+    coverage = other.screen_activity_db.observed_device_coverage(list(reversed(rows)))[0]
+    assert coverage['first_observed_at'] == rows[0]['timestamp']
+    assert coverage['last_observed_at'] == rows[1]['timestamp']
+    assert coverage['synced_through'] is None
+
+
+def test_non_generated_summary_has_no_generation_coverage_claim():
+    for status in ('failed', 'no_recordings', 'pending'):
+        result = summary_read_payload({'status': status, 'created_at': NOW})
+        assert result['generated_at'] is None
+        assert result['covers_until'] is None
+        assert result['coverage_basis'] == 'unavailable; no generated summary'
+    stored = summary_read_payload({'status': 'failed', 'coverage_basis': 'explicit producer basis'})
+    assert stored['coverage_basis'] == 'explicit producer basis'

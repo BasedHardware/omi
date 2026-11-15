@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, Response
 from google.cloud import firestore
 
+from config.app_channel import APP_CHANNEL_HEADER
+from config.episodes import client_channel_admitted, home_step_projection_enabled
+from config.home_processing import ownership_enabled
 from database import processing_attention as store
+from database import sync_jobs
 from database._client import db, run_transactional
 from models.pending_work import (
     AttentionItemsPage,
@@ -21,18 +25,38 @@ from models.pending_work import (
     SeenRequest,
 )
 from utils.other import endpoints as auth
+from utils.episodes import home_processing
 
 router = APIRouter(tags=['processing'])
 
 
-@router.get('/v1/pending-work', response_model=PendingWorkSnapshot)
-def pending_work(uid: str = Depends(auth.get_current_user_uid)):
-    from database.sync_jobs import pending_sync_jobs
-
+@router.get('/v1/pending-work', response_model=PendingWorkSnapshot, response_model_exclude_unset=True)
+def pending_work(
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+    home_ownership: Optional[str] = Header(None, alias=home_processing.OWNERSHIP_HEADER),
+):
     attention = store.list_items(uid, limit=store.LIMIT)
+    owner = home_processing.live_owner(uid) if home_ownership == '1' and client_channel_admitted(channel) else None
+    represented: set[str] = set((owner or {}).get('conversation_ids') or ())
+
+    def excluded(row: dict[str, Any]) -> bool:
+        if not home_processing.owns_recording(owner, row):
+            return False
+        represented.add(row['id'])  # Include temporal attach gaps in sync dedupe.
+        return True
+
+    conversations = store.pending_conversations(uid, exclude=excluded) if owner else store.pending_conversations(uid)
+    if ownership_enabled(uid):
+        represented.update(cid for item in conversations for cid in item['conversation_ids'])
+        syncs = sync_jobs.pending_sync_jobs(uid, listed_conversation_ids=represented)
+        syncs = home_processing.suppress_owned_syncs(uid, syncs, owner, represented)
+    else:
+        syncs = sync_jobs.pending_sync_jobs(uid)
     return {
         'enabled': True,
-        'items': store.pending_conversations(uid) + pending_sync_jobs(uid),
+        'home_processing_today': home_step_projection_enabled(),
+        'items': conversations + syncs,
         'attention_unseen_count': sum(not item['seen'] for item in attention),
     }
 

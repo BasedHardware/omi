@@ -31,13 +31,18 @@ from utils.translation import (
 )
 from utils.translation_core.metrics import get_translation_metrics
 from config.translation import (
+    TranslationProvider,
     resolve_ondemand_config,
     resolve_translation_profile,
     viewed_translation_profile,
 )
 from utils.translation_core.planner import TranslationMode
 from utils.translation_demand import DemandPolicy, TranslationDemand
-from utils.translation_language import detect_language_with_confidence, expected_foreign_language
+from utils.translation_language import (
+    NLLB_SUPPORTED_TARGET_LANGUAGES,
+    detect_language_with_confidence,
+    expected_foreign_language,
+)
 from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
 
@@ -128,8 +133,14 @@ class TranslationCoordinator:
     ## Cost Note
 
     Because we send full text (not delta), each evolving segment generates
-    multiple translations of overlapping content. Current cost: ~$4,282/mo
-    for 284M characters. Target (with DD-008 fixes): ~$1,900–2,500/mo.
+    multiple overlapping translations, so cost scales with redundant chars.
+    Translation runs on Luna (feature 'translation', gpt-6-luna). The priced
+    source of truth is llm_gateway/config/cost_rate_cards.yaml card
+    openai.gpt-6-luna.2026-09-22: $0.10/M input and $0.60/M output tokens,
+    and the gateway ledger records actual spend. At ~4 chars/token the
+    translated text alone is ~$0.025/M chars in and ~$0.15/M chars out, before
+    prompt overhead. The old "$4,282/mo for 284M chars" figure was the Google
+    Translate V3 era and no longer applies.
 
     ## Key Trade-off
 
@@ -165,6 +176,7 @@ class TranslationCoordinator:
         self._result_context: dict[tuple[str, str], tuple[str, str, object | None]] = {}
         self._decision_metrics = get_translation_metrics()
         self._conversation_id: Optional[str] = None
+        self._unsupported_target_logged = False
 
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
@@ -200,6 +212,20 @@ class TranslationCoordinator:
             return DemandPolicy.legacy_unknown
         return self.demand.snapshot().policy
 
+    def _target_language_supported(self) -> bool:
+        """Whether the active provider lane can serve this session's target.
+
+        The viewed policy is Luna-only and serves any target; every other lane
+        dispatches to the session service's primary provider, and an NLLB
+        primary rejects targets outside NLLB_SUPPORTED_TARGET_LANGUAGES with a
+        400 on every call.
+        """
+        if self.target_base in NLLB_SUPPORTED_TARGET_LANGUAGES:
+            return True
+        if self._admission() == DemandPolicy.viewed:
+            return True
+        return self.translation_service.primary_provider() != TranslationProvider.nllb
+
     def result_context(self, segment_id: str, conversation_id: str) -> tuple[str, str, object | None] | None:
         return self._result_context.get((conversation_id, segment_id))
 
@@ -221,6 +247,17 @@ class TranslationCoordinator:
             removed_ids: Segment IDs that were removed (merged away).
             conversation_id: Current conversation ID.
         """
+        if updated_segments and not self._target_language_supported():
+            self._decision_metrics.decision(self.target_language, 'skip', 'unsupported_target')
+            if not self._unsupported_target_logged:
+                logger.warning(
+                    'Skipping live translation for this session: target language %r is not supported'
+                    ' by the NLLB provider chain',
+                    self.target_language,
+                )
+                self._unsupported_target_logged = True
+            return
+
         if not self._active and not self._flushing:
             return
 

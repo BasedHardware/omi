@@ -74,6 +74,24 @@ def test_stale_own_task_uses_the_related_task_title():
     _assert_contract(card)
 
 
+def test_strong_task_link_renders_the_your_task_clause():
+    """A model-asserted task link asks about the task in the task's own words
+    and says so — the clause is what makes Done evidence about the task."""
+    loop, card = _card(
+        kind='own_commitment',
+        who=None,
+        what='',  # card_view sets the task title as `what` for strong links
+        related_task={
+            'title': 'send Tyler the bullets for the Stably write-up',
+            'opened_on': '2026-10-22T09:00:00+00:00',  # a Thursday
+        },
+        started_at='2026-10-22T09:00:00+00:00',
+    )
+    assert card.question.startswith('Did you send Tyler the bullets for the Stably write-up')
+    assert card.question.endswith('(your task from Thursday)?')
+    _assert_contract(card)
+
+
 def test_observed_defect_keeps_the_imperative_next_step():
     loop, card = _card(
         kind='issue_or_blocker',

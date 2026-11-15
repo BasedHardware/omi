@@ -1,3 +1,9 @@
+// Transcription control on AppState: toggle semantics, audio recording mode,
+// and the microphone/system-audio permission flows behind them.
+//
+// The toggle writes AssistantSettings.audioRecordingMode rather than directly
+// starting or stopping capture -- the persisted mode is the intent that capture
+// reconciliation restores across launches and settings syncs.
 @preconcurrency import AVFoundation
 import Combine
 import SwiftUI

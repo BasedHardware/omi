@@ -441,14 +441,15 @@ class _CountQuery:
     changes membership when a ``created_at`` bound already requires the field.
     """
 
-    def __init__(self, docs, record, filters=(), orders=()):
+    def __init__(self, docs, record, filters=(), orders=(), limit_count=None):
         self._docs = docs
         self._record = record
         self._filters = filters
         self._orders = orders
+        self._limit_count = limit_count
 
     def _copy(self, **overrides):
-        params = {'filters': self._filters, 'orders': self._orders}
+        params = {'filters': self._filters, 'orders': self._orders, 'limit_count': self._limit_count}
         params.update(overrides)
         return _CountQuery(self._docs, self._record, **params)
 
@@ -460,12 +461,15 @@ class _CountQuery:
         name = getattr(direction, 'name', None) or str(direction)
         return self._copy(orders=(*self._orders, (field_path, name)))
 
+    def limit(self, value):
+        return self._copy(limit_count=value)
+
     def _matched(self):
         docs = [doc for doc in self._docs if all(_count_filter_match(doc, f) for f in self._filters)]
         matched_unordered = len(docs)
         for field, _direction in self._orders:
             docs = [doc for doc in docs if field in doc]
-        return matched_unordered, docs
+        return matched_unordered, docs[: self._limit_count]
 
     def stream(self):
         return iter(_CountDoc(doc) for doc in self._matched()[1])

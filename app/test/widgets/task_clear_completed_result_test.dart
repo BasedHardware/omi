@@ -39,10 +39,23 @@ class _TaskServer {
   }) async =>
       ActionItemsResponse(actionItems: _tasks);
 
+  final singleDeletes = <String>[];
+  final bulkRequests = <List<String>>[];
+
   Future<bool> delete(String id) async {
+    singleDeletes.add(id);
     if (!accept) return false;
     deleted.add(id);
     return true;
+  }
+
+  /// Clearing a section is one batch request: concurrent single deletes for one owner
+  /// contend on the server's per-owner vector route document.
+  Future<List<String>?> bulkDelete(List<String> ids) async {
+    bulkRequests.add(List.of(ids));
+    if (!accept) return null;
+    deleted.addAll(ids);
+    return ids;
   }
 }
 
@@ -55,9 +68,15 @@ void main() {
   });
   tearDown(Env.clearApiBaseUrlOverrideForTesting);
 
+  late _TaskServer server;
+
   Future<ActionItemsProvider> clearCompleted(WidgetTester tester, {required bool accept}) async {
-    final server = _TaskServer(accept: accept);
-    final provider = ActionItemsProvider(getActionItems: server.list, deleteActionItemRequest: server.delete);
+    server = _TaskServer(accept: accept);
+    final provider = ActionItemsProvider(
+      getActionItems: server.list,
+      deleteActionItemRequest: server.delete,
+      bulkDeleteActionItemsRequest: server.bulkDelete,
+    );
     addTearDown(provider.dispose);
     await tester.pumpWidget(await buildTypedActionItemsScreen(provider));
     await provider.ensureLoaded();
@@ -79,6 +98,8 @@ void main() {
 
     expect(provider.actionItems.map((item) => item.id), unorderedEquals(['task-1', 'task-2']));
     expect(find.text('Failed to delete task'), findsOneWidget);
+    expect(server.bulkRequests, hasLength(1));
+    expect(server.singleDeletes, isEmpty);
   });
 
   testWidgets('accepted deletes clear the section without a complaint', (tester) async {
@@ -86,5 +107,9 @@ void main() {
 
     expect(provider.actionItems, isEmpty);
     expect(find.text('Failed to delete task'), findsNothing);
+    expect(server.bulkRequests.map((ids) => ids.toSet()), [
+      {'task-1', 'task-2'}
+    ]);
+    expect(server.singleDeletes, isEmpty);
   });
 }

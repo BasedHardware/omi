@@ -44,6 +44,7 @@ FIELDS = (
 API = '/api/v1/provisioning/alert-rules'
 RECEIVER = 'Omi - Services Alerting (Telegram)'
 CANARY_UIDS = ('omi-datasource-prometheus', 'omi-datasource-cloud-monitoring', 'omi-datasource-gmp')
+EXPRESSION_DATASOURCES = ('__expr__', '-100')
 
 
 def index_rules(payload: object) -> dict[str, dict]:
@@ -105,6 +106,43 @@ def comparable(rule: dict) -> dict:
     return result
 
 
+def regenerate_export(path: Path) -> None:
+    """Offline only: preserve existing rule order, append new UIDs in split-source order."""
+    sources = []
+    for source in sorted((path.parent / 'alerts').glob('*.json')):
+        sources.extend(json.loads(source.read_text()))
+    indexed = index_rules(sources)
+    previous = index_rules(json.loads(path.read_text())) if path.exists() else {}
+    ordered = [indexed.pop(uid) for uid in previous if uid in indexed]
+    ordered.extend(indexed.values())
+    path.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + '\n')
+
+
+def invalid_query_windows(rule: dict) -> list[str]:
+    """Grafana rejects an empty relative time range on a datasource-backed query.
+
+    Grafana's ``AlertQuery.PreSave`` accepts a query when it is an expression or
+    when ``relativeTimeRange.from`` is strictly greater than ``to``. A ``0s`` to
+    ``0s`` window on a real datasource fails provisioning with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062), so
+    reject it offline before any API call.
+    """
+    errors = []
+    for query in rule.get('data') or []:
+        if not isinstance(query, dict) or query.get('datasourceUid') in EXPRESSION_DATASOURCES:
+            continue
+        window = query.get('relativeTimeRange')
+        start = window.get('from') if isinstance(window, dict) else None
+        end = window.get('to') if isinstance(window, dict) else None
+        numeric = all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (start, end))
+        if not numeric or start <= end:
+            errors.append(
+                f'{rule.get("uid")}: query {query.get("refId")} has an invalid relative time range '
+                f'[From: {start}, To: {end}]; a datasource query needs from > to'
+            )
+    return errors
+
+
 def load_rules(path: Path) -> dict[str, dict]:
     rules = index_rules(json.loads(path.read_text()))
     sources = []
@@ -119,6 +157,9 @@ def load_rules(path: Path) -> dict[str, dict]:
             raise ValueError(f'{uid}: missing stable alert identity')
         if rule.get('notification_settings', {}).get('receiver') != RECEIVER:
             raise ValueError(f'{uid}: unexpected notification receiver')
+    errors = [error for rule in rules.values() for error in invalid_query_windows(rule)]
+    if errors:
+        raise ValueError('\n'.join(errors))
     return rules
 
 
@@ -333,9 +374,16 @@ def main() -> int:
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup-file', type=Path)
     parser.add_argument('--lint', action='store_true')
+    parser.add_argument('--regenerate', action='store_true', help='offline: rebuild combined export from split sources')
     parser.add_argument('--probe-datasources', action='store_true', help='read-only canary queries through Grafana')
     args = parser.parse_args()
     try:
+        if args.regenerate:
+            if args.apply or args.backup_file or args.probe_datasources:
+                raise ValueError('regeneration is offline only')
+            regenerate_export(args.rules)
+            print(f'Regenerated {len(load_rules(args.rules))} combined/split alert definitions')
+            return 0
         rules = load_rules(args.rules)
         if args.probe_datasources and (args.lint or args.apply or args.backup_file):
             raise ValueError('datasource probes are read-only and cannot be combined with other modes')

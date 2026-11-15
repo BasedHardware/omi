@@ -20,6 +20,8 @@ def resolve_live_continuation(
     timeout: int,
     proposed: dict[str, str] | None = None,
     firestore_client: Any = None,
+    language: str | None = None,
+    allow_server_batch: bool = True,
 ) -> dict[str, str] | None:
     result, retired = listen_continuations.resolve_live_continuation(
         uid,
@@ -30,6 +32,8 @@ def resolve_live_continuation(
         timeout=timeout,
         proposed=proposed,
         firestore_client=firestore_client,
+        language=language,
+        allow_server_batch=allow_server_batch,
     )
     if retired:
         # Only empty generations are removed; transcript/photo content and its

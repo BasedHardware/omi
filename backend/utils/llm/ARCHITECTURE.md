@@ -127,6 +127,13 @@ writer and the storage contract live in `utils/open_loops/` (see its README).
 The agentic lane's hand-written submit schema does not request these fields yet,
 so long agent-written meetings currently extract none.
 
+The open-loop daily pass (PR 2) runs as a fail-open sibling step of the daily
+recap job (`utils/other/notifications`): one usage-tracked call on the
+`open_loop_daily` lane (Luna, reasoning pinned low) per user per local day,
+over the recap's own render of the day plus the loop store (`store.py` rules:
+expiry, task-aware dedupe — link, never drop — cooldown, ≤3 value-≥3 slots).
+Cards persist per day server-side and are not served until PR 3.
+
 `NOTES_PACKET_V2_MODE` and `STT_LANGUAGE_HINTS_MODE` are read exclusively through
 `config/refactor_modes.py`. Both default to shadow, with no serving cohort in a
 manifest. `off` restores legacy output. Shadow records only counts/sizes, never

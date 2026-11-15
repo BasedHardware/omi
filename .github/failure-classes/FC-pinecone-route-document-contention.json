@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-pinecone-route-document-contention",
+  "violated_contract": "Concurrent same-owner vector mutations must settle acknowledged provider writes despite transient contention on the shared route document, without replaying provider IO or weakening migration fences.",
+  "canonical_prevention": "Serialize short same-owner serving transactions within each process using bounded lock stripes, retry confirmed atomic aborts with fresh transactions and bounded jitter, and retain durable uncertainty after exhausted settlement. Prove concurrent deletes against the Firestore emulator and guard exhausted admission and settlement at the provider boundary.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_pinecone_partition_state.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/pinecone_partition_state.py"
+  ],
+  "status": "open"
+}

@@ -103,6 +103,17 @@
       "semantic_review": "Candidate only: confirm producer, retained business labels, exporter delay and per-consumer PromQL before acceptance"
     },
     {
+      "id": "omi_conversation_relevance_decision_total",
+      "producer": "native-gmp-candidate",
+      "local_metric": "omi_conversation_relevance_decision_total",
+      "managed_metric": "omi_conversation_relevance_decision_total",
+      "local_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (rate(omi_conversation_relevance_decision_total{job=\"cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[10m]))",
+      "managed_query": "sum without (job, instance, exported_instance, exported_job, project_id, project, location, cluster, namespace, pod, container, endpoint, service, prometheus, prometheus_replica, monitored_resource) (rate(omi_conversation_relevance_decision_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",service_name=~\"backend|backend-sync|backend-sync-backfill|backend-integration\"}[10m]))",
+      "relative_tolerance": 0.05,
+      "absolute_tolerance": 0.001,
+      "semantic_review": "Candidate only: compare backend plus sync services; retain service_name and trigger/verdict/decided_by/reason, and compare 10-minute rates with the one-minute exporter offset"
+    },
+    {
       "id": "omi_conversation_summary_vector_upserts_total",
       "producer": "native-gmp-candidate",
       "local_metric": "omi_conversation_summary_vector_upserts_total",

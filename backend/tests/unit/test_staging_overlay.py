@@ -59,6 +59,7 @@ def test_staging_enrichment_routes_to_its_queue_on_backend_sync(composer):
         env = config['env']
         assert env['ENRICHMENT_ROUTE']['value'] == 'enrichment_queue'
         assert env['ENRICHMENT_TASKS_QUEUE']['value'] == 'staging-enrichment'
+        assert env['ENRICHMENT_FRESH_TASKS_QUEUE']['value'] == 'staging-enrichment-fresh'
         handler = env['ENRICHMENT_TASKS_HANDLER_URL']['value']
         assert handler.startswith('https://backend-sync-staging-') and handler.endswith('/v2/enrichment/run')
         assert env['ENRICHMENT_TASKS_OIDC_AUDIENCE']['value'] == handler

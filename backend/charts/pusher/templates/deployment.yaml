@@ -70,6 +70,10 @@ spec:
                 name: {{ $runtimeConfigMapName | quote }}
           {{- with .Values.env }}
           env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
             {{- range . }}
             {{- $entry := deepCopy . }}
             {{- $valueFrom := get $entry "valueFrom" }}

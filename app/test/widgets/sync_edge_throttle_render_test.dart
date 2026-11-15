@@ -62,7 +62,7 @@ class _User extends ChangeNotifier implements UserProvider {
 }
 
 void main() {
-  testWidgets('Offline Sync renders a neutral edge pause without a global busy banner', (tester) async {
+  testWidgets('Offline Sync shows no pause for an edge throttle that clears by itself', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     tester.view.physicalSize = const Size(390, 844);
@@ -124,7 +124,8 @@ void main() {
           )),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Syncing paused briefly — it will resume automatically'), findsOneWidget);
+    // David, 11-02: "remove the syncing paused briefly since it's not actionable by the user".
+    expect(find.text('Syncing paused briefly — it will resume automatically'), findsNothing);
     expect(find.textContaining('Omi servers are busy'), findsNothing);
     expect(tester.takeException(), isNull);
     if (evidence.isNotEmpty) {

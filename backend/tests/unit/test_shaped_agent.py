@@ -216,6 +216,34 @@ def test_loop_enforces_budgets(budget, expected, tool_count):
     assert execute.await_count == tool_count
 
 
+def test_cached_tool_calls_can_be_free_without_loosening_the_default_budget():
+    execute = AsyncMock(side_effect=[[], shaped.LoopStop('submitted')])
+    model = AsyncMock(
+        side_effect=[
+            shaped.Turn(tool_calls=('cached',) * 30, charged_tool_calls=0),
+            shaped.Turn(tool_calls=('submit',), charged_tool_calls=1),
+        ]
+    )
+    result = asyncio.run(
+        shaped.run_loop(shaped.Mount(tools=('tool',), budget=shaped.Budget(turns=3, tool_calls=1)), [], model, execute)
+    )
+    assert result.reason == 'finished' and result.value == 'submitted' and result.tool_calls == 1
+    assert execute.await_count == 2
+
+
+@pytest.mark.parametrize('charge', [-1, 2, True, 0.5])
+def test_loop_rejects_invalid_tool_call_charges(charge):
+    execute = AsyncMock()
+    model = AsyncMock(return_value=shaped.Turn(tool_calls=('call',), charged_tool_calls=charge))
+    with pytest.raises(ValueError, match='tool-call charge'):
+        asyncio.run(
+            shaped.run_loop(
+                shaped.Mount(tools=('tool',), budget=shaped.Budget(turns=3, tool_calls=3)), [], model, execute
+            )
+        )
+    execute.assert_not_awaited()
+
+
 def test_loop_stops_without_tool_calls():
     model = AsyncMock(return_value=shaped.Turn(value='done'))
     result = asyncio.run(shaped.run_loop(shaped.Mount(budget=shaped.Budget(turns=10)), [], model))

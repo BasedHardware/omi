@@ -15,7 +15,7 @@ def set_person_pinned(person_id: str, value: bool, uid: str = Depends(auth.get_c
     person = people_db.set_person_pinned(uid, person_id, value)
     if person is None:
         raise HTTPException(status_code=404, detail='Person not found')
-    people = Person.deserialize_many_safe([person])
+    people = Person.deserialize_many_safe([person.model_dump(exclude_unset=True)])
     if not people:
         raise HTTPException(status_code=404, detail='Person not found')
     return people[0]

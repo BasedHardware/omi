@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 import database.action_items_cache as action_items_cache
+import database.action_item_versions as action_item_versions
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
@@ -27,6 +28,8 @@ def _no_outbound_reminders(monkeypatch):
 
 @pytest.fixture
 def fake_db(monkeypatch):
+    ticket_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_item_versions, '_redis', lambda: ticket_redis)
     database = StrictFirestore()
     database.rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
         'workflow_mode': 'read',
@@ -58,7 +61,7 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(integration_outbox_db, 'db', database)
     monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
-    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(candidate_service, 'account_deletion_blocks_user_work', lambda uid: False)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -1851,3 +1854,207 @@ def test_candidate_reminder_uses_saved_task_lifecycle(monkeypatch, status, compl
             'deleted': deleted,
         }
     ]
+
+
+def reminder_proposal(**overrides):
+    origin = {
+        'input_revision': 'synthetic-input-v1',
+        'speaker_evidence_revision': 'synthetic-speaker-v1',
+        'source_at': '2026-11-01T10:00:00Z',
+        'extracted_at': '2026-11-02T10:00:00Z',
+    }
+    values = dict(
+        task_change={
+            'description': 'Renew the library card',
+            'owner': 'user',
+            'due': {
+                'kind': 'date',
+                'date': '2027-01-15',
+                'timezone': 'Asia/Ho_Chi_Minh',
+                'expression': 'January fifteenth',
+                'year_basis': 'next_future_occurrence',
+            },
+        },
+        reminder_origin=origin,
+        evidence_refs=[
+            {
+                'kind': 'conversation',
+                'id': 'synthetic-conversation',
+                'scope': 'canonical',
+                'transcript_segment_ids': ['synthetic-turn-1'],
+            }
+        ],
+    )
+    values.update(overrides)
+    return task_create_proposal(**values)
+
+
+def test_reminder_accept_atomic_creation_receipt_and_wire_precision(fake_db):
+    from models.action_item import ActionItemResponse
+
+    candidate = candidates_db.create_candidate(
+        'user-1', reminder_proposal(), idempotency_key='synthetic-reminder', account_generation=3
+    )
+    assert not any('action_items' in path for path in fake_db.rows)
+    receipt = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    row = fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)]
+    assert row['due_at'] is None
+    assert row['due']['date'] == '2027-01-15'
+    assert row['conversation_id'] == 'synthetic-conversation'
+    audit = row['creation_receipt']
+    assert audit['actor_id'] == 'user-1'
+    assert audit['actor_kind'] == 'authenticated_owner'
+    assert audit['revision'] == 1
+    assert audit['history_coverage'] == 'reminder_creation_only'
+    assert 'description' not in audit
+    stored_candidate = candidates_db.get_candidate('user-1', candidate.candidate_id)
+    assert stored_candidate.creation_receipt == audit
+    outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', candidate.candidate_id)]
+    assert outbox['policy_revision'] == 'explicit-reminders-v1'
+    wire = ActionItemResponse.model_validate(row).model_dump(mode='json')
+    assert wire['due_at'] is None
+    assert wire['due']['kind'] == 'date'
+    assert wire['description'] == 'Renew the library card'  # owner-editable text stays exact
+    second = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    assert not second.newly_resolved
+    assert fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)] == row
+
+
+def test_reminder_retry_identity_preserves_completed_task_and_distinct_events(fake_db):
+    proposal = reminder_proposal()
+    candidate = candidates_db.create_candidate(
+        'user-1', proposal, idempotency_key='synthetic-reminder', account_generation=3
+    )
+    later_origin = {**proposal.reminder_origin.model_dump(), 'extracted_at': datetime.now(timezone.utc)}
+    retried = candidates_db.create_candidate(
+        'user-1',
+        reminder_proposal(reminder_origin=later_origin),
+        idempotency_key='synthetic-reminder',
+        account_generation=3,
+    )
+    assert retried.candidate_id == candidate.candidate_id
+    resolved = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'action_items', resolved.task_id)
+    fake_db.rows[path].update(description='Manually revised task', completed=True, status='completed')
+    before = deepcopy(fake_db.rows[path])
+    repeated = candidates_db.create_candidate(
+        'user-1',
+        reminder_proposal(
+            evidence_refs=[
+                {
+                    'kind': 'conversation',
+                    'id': 'synthetic-conversation',
+                    'scope': 'canonical',
+                    'transcript_segment_ids': ['synthetic-turn-2'],
+                }
+            ]
+        ),
+        idempotency_key='synthetic-repeat-44s',
+        account_generation=3,
+    )
+    assert repeated.candidate_id == candidate.candidate_id
+    assert fake_db.rows[path] == before
+    separate = candidates_db.create_candidate(
+        'user-1',
+        reminder_proposal(
+            evidence_refs=[{'kind': 'conversation', 'id': 'different-synthetic-day', 'scope': 'canonical'}]
+        ),
+        idempotency_key='synthetic-next-day',
+        account_generation=3,
+    )
+    assert separate.candidate_id != candidate.candidate_id
+    other_date = candidates_db.create_candidate(
+        'user-1',
+        reminder_proposal(
+            task_change={
+                'description': 'Renew the library card',
+                'owner': 'user',
+                'due': {'kind': 'date', 'date': '2027-01-16', 'timezone': 'Asia/Ho_Chi_Minh'},
+            }
+        ),
+        idempotency_key='synthetic-other-date',
+        account_generation=3,
+    )
+    assert other_date.candidate_id != candidate.candidate_id
+
+
+def test_reminder_rollback_suppresses_only_undelivered_owned_intents(fake_db, monkeypatch):
+    candidate = candidates_db.create_candidate(
+        'user-1', reminder_proposal(), idempotency_key='synthetic-reminder', account_generation=3
+    )
+    resolved = candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    task_path = ('users', 'user-1', 'action_items', resolved.task_id)
+    task_before = deepcopy(fake_db.rows[task_path])
+    monkeypatch.setenv('ACTION_ITEM_REMINDER_REDESIGN_ENABLED', 'false')
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch(
+            'user-1', candidate.candidate_id, account_generation=3, firestore_client=fake_db
+        )
+        is None
+    )
+    outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', candidate.candidate_id)]
+    assert outbox['status'] == 'suppressed'
+    assert outbox['resolution_reason'] == 'reminder_policy_disabled'
+    assert fake_db.rows[task_path] == task_before
+    # Existing tasks/receipts stay readable and accepting the same Candidate stays idempotent.
+    assert (
+        candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3).task_id
+        == resolved.task_id
+    )
+
+
+def test_reminder_rollback_before_provider_attempt_cancels_claimed_intent(fake_db, monkeypatch):
+    candidate = candidates_db.create_candidate(
+        'user-1', reminder_proposal(), idempotency_key='synthetic-reminder', account_generation=3
+    )
+    candidates_db.resolve_task_candidate('user-1', candidate.candidate_id, account_generation=3)
+    lease = integration_outbox_db.claim_candidate_integration_dispatch(
+        'user-1', candidate.candidate_id, account_generation=3, firestore_client=fake_db
+    )
+    assert lease
+    monkeypatch.setenv('ACTION_ITEM_REMINDER_REDESIGN_ENABLED', 'false')
+    assert not integration_outbox_db.note_candidate_integration_provider_attempt(
+        'user-1', candidate.candidate_id, lease_token=lease, outcome='in_doubt', firestore_client=fake_db
+    )
+    outbox = fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', candidate.candidate_id)]
+    assert outbox['status'] == 'suppressed'
+    assert outbox.get('provider_attempt_outcome') == 'not_sent'
+
+
+def test_reminder_repeats_preserve_each_exact_source_revision(fake_db):
+    def proposal(turn):
+        return reminder_proposal(
+            evidence_refs=[
+                {
+                    'kind': 'conversation',
+                    'id': 'synthetic-conversation',
+                    'scope': 'canonical',
+                    'transcript_segment_ids': [f'synthetic-turn-{turn}'],
+                    'version': f'synthetic-input-{turn}',
+                }
+            ]
+        )
+
+    first = candidates_db.create_candidate(
+        'user-1', proposal(1), idempotency_key='synthetic-repeat-1', account_generation=3
+    )
+    second = candidates_db.create_candidate(
+        'user-1', proposal(2), idempotency_key='synthetic-repeat-2', account_generation=3
+    )
+    assert first.candidate_id == second.candidate_id
+    assert [(ref.transcript_segment_ids, ref.version) for ref in second.evidence_refs] == [
+        (['synthetic-turn-1'], 'synthetic-input-1'),
+        (['synthetic-turn-2'], 'synthetic-input-2'),
+    ]
+    receipt = candidates_db.resolve_task_candidate('user-1', first.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'action_items', receipt.task_id)
+    fake_db.rows[path].update(description='Owner revised this', status='completed', completed=True)
+    before = deepcopy(fake_db.rows[path])
+    third = candidates_db.create_candidate(
+        'user-1', proposal(3), idempotency_key='synthetic-repeat-3', account_generation=3
+    )
+    assert third.candidate_id == first.candidate_id
+    assert len(third.evidence_refs) == 3
+    assert third.evidence_refs[2].transcript_segment_ids == ['synthetic-turn-3']
+    assert third.evidence_refs[2].version == 'synthetic-input-3'
+    assert fake_db.rows[path] == before

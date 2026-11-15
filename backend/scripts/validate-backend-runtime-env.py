@@ -56,7 +56,7 @@ from scripts.runtime_env_validation.manifest import (  # noqa: E402
     _manifest_literal_env_value,
     _validate_gke,
     _validate_manifest_shape,
-    _validate_memory_maintenance_job_contract,
+    _validate_memory_job_retirement,
     _validate_prerecorded_stt_contract,
     _validate_stt_serving_model_policy,
     _validate_sync_ledger_fence_mode,
@@ -115,7 +115,7 @@ __all__ = [
     '_validate_gke',
     '_validate_listen_finalization_dispatch_contract',
     '_validate_manifest_shape',
-    '_validate_memory_maintenance_job_contract',
+    '_validate_memory_job_retirement',
     '_validate_prerecorded_stt_contract',
     '_validate_stt_serving_model_policy',
     '_validate_sync_backfill_co_deploy',
@@ -132,6 +132,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description='Validate backend runtime env manifests against GKE and Cloud Run.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--integration-canary-state', type=Path)
+    parser.add_argument('--integration-canary-source')
     parser.add_argument(
         '--cloud-run-state',
         type=Path,
@@ -167,6 +169,8 @@ def main() -> int:
         check_workflows=args.check_workflows,
         workflow_root=args.workflow_root,
         strict_provisional=args.strict_provisional,
+        integration_canary_state=args.integration_canary_state,
+        integration_canary_source=args.integration_canary_source,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)

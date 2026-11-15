@@ -487,6 +487,11 @@ async def connect_configured_chain(
             return (routing_models or {}).get('parakeet') or 'parakeet'
         return DEFAULT_IDS.get(service.value) or service.value
 
+    def pin_dial_generations(socket, generations) -> None:
+        outcome = getattr(socket, 'leg_outcome', None)
+        if isinstance(outcome, LiveLegOutcome):
+            outcome.generations = generations
+
     async def _restore_configured_chain() -> tuple[STTSocket, STTService]:
         record_fallback(
             component='stt_selection',
@@ -582,10 +587,15 @@ async def connect_configured_chain(
         circuit = target_circuit(target, _circuit_for_primary(service))
         on_success, on_close = circuit.deferred_result_callbacks()
         socket = None
+        dial_generations = None
         try:
+            dial_generations = health.cost_generations(
+                attempt_identity(service, target), bounded_language(routing_language)
+            )
             token = connecting_target.set(target)
             try:
                 socket = await connect()
+                pin_dial_generations(socket, dial_generations)
             finally:
                 connecting_target.reset(token)
             if socket is None:
@@ -686,9 +696,10 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                None,
+                dial_generations,
                 health.record_session,
             )
+            rejected_outcome.generations = dial_generations
             rejected_outcome.claim(reason, connect=True)
             if socket is not None and rejected_outcome.connection_cause is None:
                 rejected_outcome.connection_cause = getattr(socket, 'connection_cause', None)
@@ -784,6 +795,7 @@ async def connect_configured_chain(
     ) -> tuple[STTSocket, STTService] | None:
         nonlocal origin, prior_reason, prior_capacity_subtype, prior_outcome, attempted
         socket = None
+        dial_generations = None
         recovery = current_recovery.get()
         dial_budget = recovery.dial_budget() if recovery is not None else None
 
@@ -819,14 +831,19 @@ async def connect_configured_chain(
                 await asyncio.sleep(slept)
                 if dial_budget is not None:
                     dial_budget = max(0.001, dial_budget - slept)
+            dial_generations = health.cost_generations(
+                attempt_identity(service, target), bounded_language(routing_language)
+            )
             token = connecting_target.set(target)
             try:
                 if dial_budget is not None:
                     async with asyncio.timeout(dial_budget):
                         socket = await connect()
+                        pin_dial_generations(socket, dial_generations)
                         serving = socket is not None and await fallback_socket_is_serving(socket)
                 else:
                     socket = await connect()
+                    pin_dial_generations(socket, dial_generations)
                     serving = socket is not None and await fallback_socket_is_serving(socket)
             finally:
                 connecting_target.reset(token)
@@ -946,9 +963,10 @@ async def connect_configured_chain(
                 ),
                 bounded_language(routing_language),
                 routing_uid,
-                None,
+                dial_generations,
                 health.record_session,
             )
+            rejected_outcome.generations = dial_generations
             rejected_outcome.claim(reason, connect=True)
             if retry_dial:
                 rejected_outcome.evidence = False

@@ -41,6 +41,7 @@ from database.apps import (
     get_popular_apps_db,
 )
 from database.auth import get_user_name
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.conversations import get_conversations
 from database._client import db as firestore_db
 from utils.memory.memory_service import MemoryService
@@ -85,6 +86,29 @@ from utils.marketplace_reviewers import parse_marketplace_reviewers, is_marketpl
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def active_app_creator_records(records):
+    """Filter cached or fresh marketplace records against deletion authority."""
+
+    def creator_uid(record):
+        return record.get('uid') if isinstance(record, dict) else getattr(record, 'uid', None)
+
+    owners = {uid for record in records if isinstance((uid := creator_uid(record)), str)}
+    blocked_owners = set()
+    for uid in owners:
+        try:
+            if account_deletion_blocks_user_work(uid):
+                blocked_owners.add(uid)
+        except Exception as error:
+            logger.warning(
+                'marketplace app hidden because deletion authority is unavailable type=%s', type(error).__name__
+            )
+            blocked_owners.add(uid)
+    return [
+        record for record in records if not isinstance((uid := creator_uid(record)), str) or uid not in blocked_owners
+    ]
+
 
 _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
 MarketplaceAppReviewUIDs: List[str] = parse_marketplace_reviewers(_reviewers_env)
@@ -359,7 +383,7 @@ def get_popular_apps() -> List[App]:
         return apps
 
     # Singleflight: only ONE request fetches, others wait
-    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
+    return active_app_creator_records(memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or [])
 
 
 def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
@@ -417,6 +441,7 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         if app_id not in seen_ids:
             seen_ids.add(app_id)
             all_apps.append(record)
+    all_apps = active_app_creator_records(all_apps)
     apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -466,11 +491,17 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | No
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         logger.info('get_app_cache_by_id from cache')
+        creator_uid = cached_app.get('uid')
+        if isinstance(creator_uid, str) and account_deletion_blocks_user_work(creator_uid):
+            return None
         if cached_app['private'] and cached_app.get('uid') != uid and not (uid and is_tester(uid)):
             return None
         return cached_app
     app = get_app_by_id_db(app_id)
     if not app:
+        return None
+    creator_uid = app.get('uid')
+    if isinstance(creator_uid, str) and account_deletion_blocks_user_work(creator_uid):
         return None
     if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
@@ -481,6 +512,9 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | No
 def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[str, Any] | None:
     app = get_app_by_id_db(app_id)
     if not app:
+        return None
+    creator_uid = app.get('uid')
+    if isinstance(creator_uid, str) and account_deletion_blocks_user_work(creator_uid):
         return None
     if app['private'] and app.get('uid') != uid and not (uid and is_tester(uid)):
         return None
@@ -579,7 +613,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         return apps
 
     # Singleflight: only ONE request fetches, others wait
-    return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
+    return active_app_creator_records(memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or [])
 
 
 def set_app_review(app_id: str, uid: str, review: Dict[str, Any]) -> Dict[str, str]:
@@ -1173,7 +1207,7 @@ def sort_apps_by_installs_only(apps: List[App]) -> List[App]:
 
 
 def sort_apps_by_installs(apps: List[App]) -> List[App]:
-    """Sort apps by computed score in descending order.
+    """Sort apps by computed score in descending order, breaking ties by install count.
 
     Score formula: ((rating_avg / 5) ** 2) * log(1 + rating_count) * sqrt(log(1 + installs))
     This balances review quality, review quantity, and popularity.
@@ -1182,7 +1216,7 @@ def sort_apps_by_installs(apps: List[App]) -> List[App]:
     for app in apps:
         app.score = compute_app_score(app)
 
-    return sorted(apps, key=lambda a: a.score or 0, reverse=True)
+    return sorted(apps, key=lambda a: (a.score or 0, max(0, a.installs or 0)), reverse=True)
 
 
 def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:

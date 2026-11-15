@@ -189,6 +189,21 @@ def _question(loop: Mapping[str, Any]) -> str:
     return f'Did you {_lead_in(what)}'
 
 
+def _task_clause(loop: Mapping[str, Any]) -> str:
+    """The "(your task from Thu)" tail a strongly task-linked card carries.
+
+    It is what makes the question self-evidently about the tracked task, so a
+    Done answer can complete it (see ``store.card_view`` / the service's
+    completion gate). Only the strong-link shape (``related_task`` with an
+    ``opened_on`` day) carries it; the ask-only fallback task title does not.
+    """
+    task = loop.get('related_task')
+    if not isinstance(task, Mapping) or not task.get('title'):
+        return ''
+    opened = _as_date(task.get('opened_on'))
+    return f' (your task from {_WEEKDAYS[opened.weekday()]})' if opened is not None else ''
+
+
 def build_card(loop: Mapping[str, Any], *, tz: Optional[str], now: Optional[datetime] = None) -> OpenLoopCard:
     """The deterministic template card; no model, no I/O."""
     weekday = _weekday(loop.get('started_at'), tz)
@@ -196,7 +211,11 @@ def build_card(loop: Mapping[str, Any], *, tz: Optional[str], now: Optional[date
     zone = _zone(tz)
     today = (now or datetime.now(timezone.utc)).astimezone(zone).date()
 
-    question = _question(loop)[: QUESTION_MAX_CHARS - 1].rstrip(' ,;:') + '?'
+    body = _question(loop)
+    task_tail = _task_clause(loop)
+    if task_tail:
+        body = body[: QUESTION_MAX_CHARS - 1 - len(task_tail)].rstrip(' ,;:') + task_tail
+    question = body[: QUESTION_MAX_CHARS - 1].rstrip(' ,;:') + '?'
     why_now = _why_now(loop, tz, today)
     source = f'{title} ({weekday})'
     context = f"From {weekday}'s {title}"
@@ -256,6 +275,11 @@ def llm_polisher(uid: str) -> Optional[Callable[[OpenLoopCard, Mapping[str, Any]
             'template_question': card.question,
             'template_context_line': card.context_line,
         }
+        # A strongly task-linked card must keep naming the task in its own
+        # words — the Done-completion gate checks the final text for it.
+        task = loop.get('related_task')
+        if isinstance(task, Mapping) and task.get('title'):
+            payload['related_task_title'] = task.get('title')
         with track_usage(uid, Features.OPEN_LOOP_CARD):
             response = model.invoke(
                 [

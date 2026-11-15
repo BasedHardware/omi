@@ -38,8 +38,15 @@ _RUNTIME_MODULES = (
     "utils.memory.canonical_memory_adapter",
     "utils.memory.required_promotion",
     "utils.memory.canonical_required_processing",
+    "utils.memory.required_intake",
     "utils.memory.short_term_promotion",
 )
+
+
+@pytest.fixture(autouse=True)
+def _manual_processor_ownership(monkeypatch):
+    # This suite explicitly drives required normalization and retry clocks.
+    monkeypatch.setenv('MEMORY_REQUIRED_INTAKE_ENABLED', 'false')
 
 
 def _load_runtime() -> None:
@@ -117,7 +124,7 @@ class _Document:
         self.db = db
         self.path = path
 
-    def get(self, transaction=None):
+    def get(self, transaction=None, **_kwargs):
         if self.path not in self.db.docs:
             return _Snapshot(None, exists=False)
         return _Snapshot(self.db.docs[self.path])

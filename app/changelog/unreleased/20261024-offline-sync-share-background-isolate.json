@@ -1,0 +1,4 @@
+{
+  "change": "Sharing an Offline Sync recording no longer freezes the app while decoding and combining audio",
+  "platforms": ["ios", "android"]
+}

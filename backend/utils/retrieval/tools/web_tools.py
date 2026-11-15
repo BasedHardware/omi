@@ -162,7 +162,18 @@ def _extract_json_ld(html: str) -> str:
 def _is_private_ip(ip_str: str) -> bool:
     try:
         ip = ipaddress.ip_address(ip_str)
-        return any(ip in net for net in _PRIVATE_NETWORKS)
+        mapped = getattr(ip, 'ipv4_mapped', None)
+        if mapped is not None:
+            ip = mapped
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+            or any(ip in net for net in _PRIVATE_NETWORKS)
+        )
     except ValueError:
         return True  # unparseable → treat as blocked
 
@@ -174,7 +185,7 @@ async def _hostname_is_public(hostname: str) -> bool:
         results = await loop.getaddrinfo(hostname, None)
         if not results:
             return False
-        return not any(_is_private_ip(r[4][0]) for r in results)
+        return not any(_is_private_ip(str(r[4][0])) for r in results)
     except Exception:
         return False
 

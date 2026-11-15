@@ -140,6 +140,7 @@ def checked_job(store, sid, uid, key):
 
 
 def inspect_unit(store, artifacts, sid, uid, key):
+    from utils.batch_pipeline.contracts import held_silence_allowed
     from utils.batch_pipeline.contracts import WorkItem
     from utils.batch_pipeline.recovery_disposition import inspect_audio
 
@@ -151,6 +152,8 @@ def inspect_unit(store, artifacts, sid, uid, key):
     _, _, spans = inspect_audio(item, audio)
     # Drop all raw buffers before the next unit. No temporary files/caches.
     del audio
+    if not spans:
+        require(held_silence_allowed(job, 0), 'held_speech_blocks_silence')
     return 'speech' if spans else 'silent'
 
 
@@ -158,7 +161,12 @@ def apply_silent(store, artifacts, sid, uid, key, approved_digest, *, server_fla
     from database.batch_pipeline_policy import UnpinnedPolicyRefused
     from database.batch_pipeline_quarantine_recovery import SilenceDispositionStore
     from utils.batch_pipeline.contracts import WorkItem
-    from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, result_outcome
+    from utils.batch_pipeline.recovery_disposition import (
+        inspect_audio,
+        silence_payload,
+        result_outcome,
+        result_vad_evidence,
+    )
 
     job = checked_job(store, sid, uid, key)
     if (job.get('silence_disposition') or {}).get('state') == 'completed':
@@ -174,10 +182,17 @@ def apply_silent(store, artifacts, sid, uid, key, approved_digest, *, server_fla
     token = job['silence_disposition']['token']
     uri = artifacts.find_recovery_result(item, token)
     if uri:
-        require(result_outcome(artifacts.load_result(item, uri)) == 'silence', 'different_artifact_outcome')
+        payload = artifacts.load_result(item, uri)
+        require(result_outcome(payload) == 'silence', 'different_artifact_outcome')
     else:
-        uri = artifacts.persist_recovery_result(item, silence_payload(duration), token)
-    require(protocol.complete_silence(sid, token, approved_digest, uri, time.time()), 'completion_fenced')
+        payload = silence_payload(duration)
+        uri = artifacts.persist_recovery_result(item, payload, token)
+    require(
+        protocol.complete_silence(
+            sid, token, approved_digest, uri, time.time(), measured_held_vad_speech_seconds=result_vad_evidence(payload)
+        ),
+        'completion_fenced',
+    )
     return 'applied_silence'
 
 

@@ -8,6 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
 import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/http/api/account_deletion.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/services/account_deletion_data.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/env/environment_profile.dart';
 import 'package:omi/app_globals.dart';
@@ -28,13 +31,17 @@ import 'package:omi/utils/platform/platform_service.dart';
 /// it returned after the destination account has been established.
 Future<ProviderLinkResult?> completeProviderLinkAndMigrate({
   required Future<ProviderLinkResult?> Function() linkProvider,
-  required Future<bool> Function(String sourceUid, String sourceToken) migrate,
+  required Future<bool> Function(String sourceUid, String sourceToken, AuthSessionSnapshot destination) migrate,
 }) async {
   final result = await linkProvider();
   final source = result?.anonymousSourceMigration;
   final destinationUid = result?.destinationUid;
   if (source != null && destinationUid != null && destinationUid != source.uid) {
-    await migrate(source.uid, source.token);
+    final destination = result!.destinationSession;
+    if (destination == null || destination.ownerUid != destinationUid) {
+      throw StateError('Migration destination session is missing');
+    }
+    await migrate(source.uid, source.token, destination);
   }
   return result;
 }
@@ -64,7 +71,42 @@ class AuthenticationProvider extends BaseProvider {
     if (initializeListeners) _initializeAuthListeners();
   }
 
+  static const _pendingDeletionUidsKey = 'pendingDeletionOwnerUids';
+  String _startupUid = '';
+  String? _deletionStatusUid;
+  Future<ApiResult<AccountDeletionStatus>>? _deletionStatus;
+
+  Future<ApiResult<AccountDeletionStatus>> checkAccountDeletion({bool refresh = false}) {
+    final uid = _auth.currentUser?.uid;
+    if (refresh || uid != _deletionStatusUid || _deletionStatus == null) {
+      _deletionStatusUid = uid;
+      _deletionStatus = _readDeletionStatusForOwner(uid);
+    }
+    return _deletionStatus!;
+  }
+
+  Future<ApiResult<AccountDeletionStatus>> _readDeletionStatusForOwner(String? uid) async {
+    if (uid == null || uid.isEmpty) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    final prefs = SharedPreferencesUtil();
+    final result = await readAccountDeletionForSignIn(
+      allowCachedOfflineAccount: canUseCachedAccountOffline(
+        uid: uid,
+        startupUid: _startupUid,
+        pendingUid: prefs.getStringList(_pendingDeletionUidsKey).contains(uid) ? uid : '',
+        onboardingCompleted: prefs.onboardingCompleted,
+      ),
+    );
+    if (_auth.currentUser?.uid != uid) return const ApiFailure(ApiProblem(ApiProblemKind.authTerminal));
+    if (result case ApiSuccess<AccountDeletionStatus>(:final data)) {
+      final pending = prefs.getStringList(_pendingDeletionUidsKey).toSet();
+      final changed = data.pendingDeletion ? pending.add(uid) : pending.remove(uid);
+      if (changed) await prefs.saveStringList(_pendingDeletionUidsKey, pending.toList());
+    }
+    return result;
+  }
+
   void _initializeAuthListeners() {
+    _startupUid = SharedPreferencesUtil().uid;
     // DEBUG: Log initial state
     Logger.debug(
       'DEBUG AuthProvider: Initial currentUser=${_auth.currentUser?.uid}, isAnonymous=${_auth.currentUser?.isAnonymous}',
@@ -78,6 +120,10 @@ class AuthenticationProvider extends BaseProvider {
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
         );
         this.user = user;
+        if (user == null) {
+          _deletionStatus = null;
+          _deletionStatusUid = null;
+        }
         // Only update SharedPreferences if Firebase has a user
         // Don't clear cached credentials - allows fallback for dev builds
         if (user != null) {
@@ -248,13 +294,6 @@ class AuthenticationProvider extends BaseProvider {
   Future<String?> _getIdToken() async {
     try {
       final token = await AuthService.instance.getIdToken();
-      NotificationService.instance.saveNotificationToken();
-      try {
-        final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
-        unawaited(syncUserTimeZoneServer(timeZone: timeZone));
-      } catch (e) {
-        Logger.debug('Failed to sync device timezone: $e');
-      }
 
       Logger.debug('Firebase token retrieved successfully');
       return token;
@@ -299,6 +338,17 @@ class AuthenticationProvider extends BaseProvider {
       );
       if (credential.additionalUserInfo?.isNewUser == true) {
         PlatformManager.instance.analytics.accountCreated(authProvider: authProvider);
+      }
+      final deletion = await checkAccountDeletion(refresh: true);
+      if (_auth.currentUser?.uid != newUid) return;
+      if (deletion case ApiSuccess<AccountDeletionStatus>(data: final status) when !status.pendingDeletion) {
+        NotificationService.instance.saveNotificationToken();
+        try {
+          final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+          unawaited(syncUserTimeZoneServer(timeZone: timeZone));
+        } catch (e) {
+          Logger.debug('Failed to sync device timezone: $e');
+        }
       }
       notifyListeners();
       onSignIn();
@@ -352,40 +402,10 @@ class AuthenticationProvider extends BaseProvider {
   Future<void> linkWithApple() async {
     setLoading(true);
     try {
-      final appleProvider = AppleAuthProvider();
-      try {
-        await FirebaseAuth.instance.currentUser?.linkWithProvider(appleProvider);
-      } catch (e) {
-        if (e is FirebaseAuthException && e.code == 'credential-already-in-use') {
-          // Get existing user credentials
-          final existingCred = e.credential;
-          final oldUserId = FirebaseAuth.instance.currentUser?.uid;
-          final sourceToken = await FirebaseAuth.instance.currentUser?.getIdToken();
-
-          // Sign out current anonymous user
-          await AuthService.instance.signOutForAccountSwitch();
-
-          // Sign in with existing account
-          await FirebaseAuth.instance.signInWithCredential(existingCred!);
-          final newUserId = FirebaseAuth.instance.currentUser?.uid;
-          if (newUserId != null) AuthService.instance.markAuthenticatedUser(newUserId);
-          await AuthService.instance.getIdToken();
-
-          SharedPreferencesUtil().onboardingCompleted = false;
-          SharedPreferencesUtil().uid = newUserId ?? '';
-          SharedPreferencesUtil().email = FirebaseAuth.instance.currentUser?.email ?? '';
-          SharedPreferencesUtil().givenName = FirebaseAuth.instance.currentUser?.displayName?.split(' ')[0] ?? '';
-          if (oldUserId != null && newUserId != null && sourceToken != null) {
-            await migrateAppOwnerId(oldUserId, sourceToken);
-          }
-          return;
-        }
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ??
-              'Failed to link with Apple, please try again.',
-        );
-        rethrow;
-      }
+      await completeProviderLinkAndMigrate(
+        linkProvider: AuthService.instance.linkWithApple,
+        migrate: migrateAppOwnerId,
+      );
     } catch (e) {
       Logger.debug('Error linking with Apple: $e');
       AppSnackbar.showSnackbarError(
@@ -397,7 +417,7 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
-  Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
-    return await apps_api.migrateAppOwnerId(oldId, sourceToken);
+  Future<bool> migrateAppOwnerId(String oldId, String sourceToken, AuthSessionSnapshot destination) async {
+    return await apps_api.migrateAppOwnerId(oldId, sourceToken, destination: destination);
   }
 }

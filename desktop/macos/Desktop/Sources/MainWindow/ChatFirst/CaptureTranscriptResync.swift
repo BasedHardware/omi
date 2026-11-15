@@ -170,7 +170,8 @@ extension ServerConversation {
       id: id, createdAt: createdAt, updatedAt: updatedAt, startedAt: startedAt, finishedAt: finishedAt,
       structured: structured, transcriptSegments: segments, transcriptSegmentsIncluded: transcriptSegmentsIncluded,
       geolocation: geolocation, photos: photos, appsResults: appsResults, source: source, language: language,
-      audioFiles: audioFiles, conversationAudio: conversationAudio, status: status, discarded: discarded,
+      audioFiles: audioFiles, conversationAudio: conversationAudio, status: status, homeStep: homeStep,
+      discarded: discarded,
       deleted: deleted, isLocked: isLocked, visibility: visibility, starred: starred, folderId: folderId,
       inputDeviceName: inputDeviceName,
       deferred: deferred, captureGroup: captureGroup)

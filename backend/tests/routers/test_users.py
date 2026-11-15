@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from config.plan_catalog import LADDER_V1_PRICE_BINDINGS, RECOGNIZED_STRIPE_PRICE_PLAN_TYPES
+from routers import account_deletion as deletion_router
 from routers import users as users_router
 from services.users import data_export
 from utils import byok, subscription as subscription_utils
@@ -32,20 +33,91 @@ def _task_auth(retry_count=0):
 
 def test_delete_account_delegates_to_service():
     start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
-    request = users_router.DeleteAccountRequest(reason='reason', reason_details='details')
+    request = deletion_router.DeleteAccountRequest(reason='reason', reason_details='details')
 
-    with patch.object(users_router, 'start_account_deletion', start_account_deletion):
-        result = users_router.delete_account(request=request, uid='uid1')
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
+        result = deletion_router.delete_account(request=request, uid='uid1')
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
-    start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details')
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason='reason', reason_details='details', grace=False, erase_now=False
+    )
+
+
+def test_delete_account_forwards_explicit_grace_opt_in():
+    start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
+
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
+        result = deletion_router.delete_account(request=deletion_router.DeleteAccountRequest(), grace=True, uid='uid1')
+
+    assert result == {'status': 'ok', 'message': 'Account deletion started'}
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason=None, reason_details=None, grace=True, erase_now=False
+    )
+
+
+def test_delete_account_forwards_explicit_erase_now():
+    start_account_deletion = MagicMock(
+        return_value={
+            'status': 'ok',
+            'message': 'Account deletion started',
+            'pending_deletion': False,
+            'wipe_at': None,
+        }
+    )
+    request = deletion_router.DeleteAccountRequest(erase_now=True)
+
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
+        result = deletion_router.delete_account(request=request, uid='uid1')
+
+    assert result['pending_deletion'] is False
+    start_account_deletion.assert_called_once_with(
+        'uid1', reason=None, reason_details=None, grace=False, erase_now=True
+    )
+
+
+def test_account_deletion_status_endpoint_returns_pending_deadline_and_loss_summary():
+    payload = {
+        'status': 'pending_deletion',
+        'pending_deletion': True,
+        'wipe_at': datetime(2026, 11, 11, tzinfo=timezone.utc),
+        'loss_summary': {
+            'held_recordings': 2,
+            'held_audio_seconds': 300,
+            'backlog_conversations': 4,
+            'backlog_seconds': 600,
+        },
+    }
+    with patch.object(deletion_router, 'account_deletion_status', return_value=payload):
+        result = deletion_router.get_account_deletion_status_endpoint(uid='uid1')
+
+    assert result == payload
+
+
+def test_restore_account_endpoint_rejects_non_restorable_state():
+    with patch.object(
+        deletion_router, 'restore_account_deletion', return_value={'status': 'window_expired', 'restored': False}
+    ):
+        with pytest.raises(HTTPException) as exc:
+            deletion_router.restore_account_deletion_endpoint(uid='uid1')
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == {'code': 'account_deletion_not_restorable', 'status': 'window_expired'}
 
 
 def test_delete_account_maps_unexpected_service_error_to_500():
     start_account_deletion = MagicMock(side_effect=Exception('boom'))
-    with patch.object(users_router, 'start_account_deletion', start_account_deletion):
+    with patch.object(deletion_router.auth, 'enforce_account_deletion_http_access'), patch.object(
+        deletion_router, 'start_account_deletion', start_account_deletion
+    ):
         with pytest.raises(HTTPException) as exc:
-            users_router.delete_account(request=users_router.DeleteAccountRequest(), uid='uid1')
+            deletion_router.delete_account(request=deletion_router.DeleteAccountRequest(), uid='uid1')
 
     assert exc.value.status_code == 500
     assert exc.value.detail == 'Could not delete account. Please try again.'
@@ -214,7 +286,7 @@ def test_run_account_deletion_wipe_drops_unknown_or_ambiguous_job_without_mutati
 
 def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monkeypatch):
     """The durable marker bridges a lost enqueue acknowledgement without a duplicate wipe."""
-    service_globals = users_router.start_account_deletion.__globals__
+    service_globals = deletion_router.start_account_deletion.__globals__
     state = {'status': None, 'job_id': None, 'enqueue_attempts': 0, 'wipe_runs': 0}
 
     def persist_intent(_uid):
@@ -249,12 +321,18 @@ def test_persisted_wipe_recovers_after_enqueue_crash_and_handler_runs_once(monke
         claim_deletion_wipe=lambda _uid: 'uid1',
     )
     monkeypatch.setitem(service_globals, 'users_db', users_db)
+    monkeypatch.setitem(
+        service_globals,
+        'deletion_grace_db',
+        types.SimpleNamespace(promote_grace_to_immediate=lambda _uid: None),
+    )
     monkeypatch.setitem(service_globals, 'auth', types.SimpleNamespace(delete_account=lambda _uid: None))
+    monkeypatch.setitem(service_globals, '_run_immediate_deletion_steps', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'assert_account_deletion_permitted', lambda _uid: None)
     monkeypatch.setitem(service_globals, 'is_account_deletion_dispatch_enabled', lambda: True)
     monkeypatch.setitem(service_globals, 'enqueue_account_deletion_wipe', enqueue_task)
 
-    assert users_router.start_account_deletion('uid1')['status'] == 'ok'
+    assert deletion_router.start_account_deletion('uid1', erase_now=True)['status'] == 'ok'
 
     assert state == {'status': 'failed', 'job_id': 'job-1', 'enqueue_attempts': 1, 'wipe_runs': 0}
 
@@ -545,6 +623,8 @@ def test_subscription_endpoint_falls_back_to_basic_when_no_valid_subscription():
     ), patch.object(
         users_router, 'get_monthly_usage_for_subscription', MagicMock(return_value={})
     ), patch.object(
+        users_router.users_db, 'get_stripe_customer_id', MagicMock(return_value=None)
+    ), patch.object(
         users_router, 'get_paid_plan_definitions', MagicMock(return_value=[])
     ), patch.object(
         users_router, 'should_hide_subscription_ui', MagicMock(return_value=False)
@@ -610,7 +690,6 @@ def _mock_desktop_quota_storage(monkeypatch, *, enrolled, questions):
         return enrolled
 
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', is_byok_active)
-    monkeypatch.setattr(subscription_utils, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(
         subscription_utils.users_db,
         'get_user_valid_subscription',
@@ -897,14 +976,14 @@ def test_subscription_snapshot_survives_a_resolver_that_cannot_read_its_dependen
     and the snapshot the endpoint already built is still returned."""
     import utils.subscription as subscription_module
 
-    with patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
+    with patch.object(
+        subscription_module, 'get_byok_key', side_effect=RuntimeError('firestore unavailable')
+    ), patch.object(users_router.users_db, 'is_byok_active', MagicMock(return_value=True)), patch.object(
         users_router, 'request_has_llm_byok_key', MagicMock(return_value=True)
     ), patch.object(
         users_router, 'get_byok_key', MagicMock(side_effect=lambda p: 'dg-key' if p == 'deepgram' else None)
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(side_effect=RuntimeError('firestore unavailable'))
     ), patch.object(
         users_router.users_db,
         'get_user_valid_subscription',
@@ -959,8 +1038,6 @@ def test_an_expired_paid_subscription_is_downgraded_to_basic_by_the_real_lookup(
     with patch.object(genuine_users_db, 'get_user_subscription', MagicMock(return_value=expired_plus)), patch.object(
         subscription_module.users_db, 'get_user_valid_subscription', genuine_users_db.get_user_valid_subscription
     ), patch.object(subscription_module.users_db, 'is_byok_active', MagicMock(return_value=False)), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
-    ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
         subscription_module, 'get_monthly_usage_for_subscription', MagicMock(return_value={'transcription_seconds': 0})
@@ -993,8 +1070,6 @@ def test_llm_only_byok_snapshot_reads_monthly_usage_once_for_snapshot_and_allowa
         users_router, 'get_monthly_usage_for_subscription', usage_reads
     ), patch.object(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
-    ), patch.object(
-        subscription_module, 'is_trial_paywalled', MagicMock(return_value=False)
     ), patch.object(
         subscription_module, 'get_byok_key', MagicMock(return_value=None)
     ), patch.object(
@@ -1108,6 +1183,7 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     plan = users_router.PlanType.basic if reason == 'subscription_inactive' else users_router.PlanType.plus
     cap = 18_000 if plan is users_router.PlanType.basic else 90_000
     subscription = users_router.Subscription(plan=plan, status=users_router.SubscriptionStatus.active)
+    monkeypatch.setattr(users_router.users_db, 'get_stripe_customer_id', lambda uid: None)
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription)
     monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
@@ -1136,16 +1212,15 @@ def test_closed_real_allowance_preserves_finite_snapshot_budget(monkeypatch, rea
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(
-        subscription_module,
-        'is_trial_paywalled',
-        (
-            MagicMock(side_effect=RuntimeError('dependency unavailable'))
-            if reason == 'allowance_unavailable'
-            else lambda *args, **kwargs: False
-        ),
-    )
-    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+
+    def allowance_key(provider):
+        if reason == 'allowance_unavailable':
+            raise RuntimeError('dependency unavailable')
+        return None
+
+    monkeypatch.setattr(subscription_module, 'get_byok_key', allowance_key)
+    if reason == 'allowance_unavailable':
+        monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: True)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     response = users_router.get_user_subscription_endpoint(
         # Shipped clients do not declare the new six-plan capability.
@@ -1191,7 +1266,7 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(users_router.users_db, 'is_byok_active', lambda uid: False)
     monkeypatch.setattr(users_router, 'get_user_subscription', lambda uid: subscription.model_copy())
     monkeypatch.setattr(users_router, 'get_user_valid_subscription', lambda uid: subscription.model_copy())
-    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args: None)
+    monkeypatch.setattr(users_router, 'reconcile_basic_plan_with_stripe', lambda *args, **kwargs: None)
     monkeypatch.setattr(users_router, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 10})
     monkeypatch.setattr(users_router, 'get_paid_plan_definitions', lambda *args, **kwargs: [])
     monkeypatch.setattr(users_router, 'should_hide_subscription_ui', lambda *args: False)
@@ -1208,7 +1283,6 @@ def test_subscription_http_negotiates_catalog_ids_before_response_validation(
     monkeypatch.setattr(
         users_router, 'resolve_transcription_allowance', subscription_module.resolve_transcription_allowance
     )
-    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda *args, **kwargs: False)
     monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
     monkeypatch.setenv('MARKETPLACE_APP_REVIEWERS', '')
     app = FastAPI()

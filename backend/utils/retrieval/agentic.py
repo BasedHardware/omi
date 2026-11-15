@@ -88,6 +88,12 @@ from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, 
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor, start_background_task
+from utils.retrieval.transcript_recall import (
+    TRANSCRIPT_RECALL_INSTRUCTIONS,
+    UNVERIFIED_TRANSCRIPT_ANSWER,
+    begin_transcript_recall,
+    transcript_recall_unverified,
+)
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.prompt_cache import gpt56_explicit_cache_enabled, EXPLICIT_CACHE_OPTIONS
 from utils.chat_followup import (
@@ -510,6 +516,10 @@ async def execute_independent_tool_calls(
     validated: list = []
     stub_after = False
     for call in tool_calls:
+        # A cost/context fence may prevent this explicit read from running.
+        # Collected summaries alone must not become transcript evidence.
+        if name_of(call) == 'search_conversations_tool' and input_of(call).get('transcript_query') is not None:
+            begin_transcript_recall(configurable)
         try:
             safety_guard.validate_tool_call(name_of(call), input_of(call), collected_results=collected)
             warning = safety_guard.should_warn_user()
@@ -1240,6 +1250,7 @@ async def _run_openai_agent_stream(
             text_before_attempt = len(full_response)
             iteration_text: list[str] = []
             chunks: list[Any] = []
+            hold_unverified_recall = transcript_recall_unverified(configurable)
 
             try:
                 usage_token = None
@@ -1251,6 +1262,11 @@ async def _run_openai_agent_stream(
                         chunks.append(chunk)
                         text = openai_content_text(getattr(chunk, 'content', ''))
                         if not text:
+                            continue
+                        if hold_unverified_recall:
+                            # Keep tool-call continuation working, but never
+                            # stream an invented follow-on fact after a miss.
+                            iteration_text.append(text)
                             continue
                         if first_text_in_iteration and loop_iteration > 1 and full_response:
                             last_char = full_response[-1][-1] if full_response[-1] else ''
@@ -1304,6 +1320,9 @@ async def _run_openai_agent_stream(
             )
 
         if not tool_calls:
+            if hold_unverified_recall:
+                prefix = '\n\n' if full_response else ''
+                await put_answer_text(callback, full_response, prefix + UNVERIFIED_TRANSCRIPT_ANSWER)
             break
 
         tool_results = await execute_independent_tool_calls(
@@ -1619,6 +1638,8 @@ for a preference the user directly asserted, not one inferred from context.
 Say a memory was updated only when the tool reports "Preference updated";
 an additional save is not an update. Do not claim a write after a tool error.
 </chat_memory_and_files>"""
+
+    system_prompt += TRANSCRIPT_RECALL_INSTRUCTIONS
 
     # Instruct the model to use fetch_url_tool for any direct URL in the conversation.
     system_prompt += """

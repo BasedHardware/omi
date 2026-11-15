@@ -44,6 +44,9 @@ env:
 
 jobs:
   dispatch:
+    # Schedule and dispatch both run the main copy; CODEMAGIC_API_TOKEN lives
+    # in the release environment, not at repo level.
+    environment: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

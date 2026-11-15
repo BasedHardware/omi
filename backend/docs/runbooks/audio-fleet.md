@@ -68,7 +68,7 @@ zones still needs Ready probes and the existing load/health qualification. Use
 fallback only for the N4 shortfall; floors are fleet totals, not additive floors
 for primary and fallback. Capacity planning uses requests and allocatable nodes:
 listen requests 1 CPU/1.5Gi (about three pods/N4 node before other workloads),
-pusher 0.7 CPU/4.5Gi (about two pods/node). Include the LLM gateway sharing listen
+pusher 0.45 CPU/2Gi (about three pods/node after DaemonSet requests; memory limits must keep co-located limit sums under allocatable). Include the LLM gateway sharing listen
 labels, kube/system overhead, HPA maxima (listen 60), and one-node loss. Confirm
 actual bin-packing with Pending events before evacuation.
 
@@ -414,6 +414,10 @@ reverify both named addresses and their Gateway Programmed conditions immediatel
 before deployment. Preserve the `/parakeet` prefix. Switch listen, all four Cloud
 Run services and pusher in both environments in one caller commit. Deploy through
 `gcp_backend.yml`, `gcp_backend_listen_helm.yml` and `gcp_backend_pusher.yml`.
+Status 2026-11-05: the dev Gateway VIP was deleted, so the dev half of this
+switch is unavailable until the Gateway is reinstalled and requalified; dev
+callers run on the legacy Ingress endpoints (see
+[internal-gateway-callers](../internal-gateway-callers.md)).
 
 Use [internal-gateway README](../../charts/internal-gateway/README.md)'s route
 installation/verification helpers. Require Accepted/ResolvedRefs, Attached policies,

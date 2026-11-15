@@ -113,6 +113,7 @@ Future<Widget> buildTypedConversationScreen(
   LocalRecordingsProvider? recordingsProvider,
   ThemeData? theme,
   bool initializePreferences = true,
+  bool requestInitialLoad = false,
   RecentRecapsLoader loadRecaps = _noRecaps,
   PendingWorkStore? pendingWork,
 }) async {
@@ -157,7 +158,7 @@ Future<Widget> buildTypedConversationScreen(
       ],
       child: Scaffold(
           body: ConversationsPage(
-        requestInitialLoad: false,
+        requestInitialLoad: requestInitialLoad,
         loadRecaps: loadRecaps,
         pendingWork: pendingWork ?? inertPendingWorkStore(),
       )),

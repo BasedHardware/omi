@@ -738,7 +738,9 @@ def test_conversations_count_filtered_date_ranges_have_declared_descending_compo
 def test_conversations_in_folder_has_the_prod_observed_composite(monkeypatch):
     """Prod FailedPrecondition on 2026-09-23 came from this folder list query."""
     recorder = []
-    monkeypatch.setattr(folders_db, 'db', _StreamRecordingFirestore(recorder, collection_name='conversations'))
+    monkeypatch.setattr(
+        folders_db, 'get_firestore_client', lambda: _StreamRecordingFirestore(recorder, collection_name='conversations')
+    )
 
     folders_db.get_conversations_in_folder('index-contract-user', 'folder-123')
 

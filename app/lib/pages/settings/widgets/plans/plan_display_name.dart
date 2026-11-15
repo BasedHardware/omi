@@ -11,11 +11,11 @@ String? planTitleForTier(String tierId, List<SubscriptionPlan> availablePlans) {
   const names = {
     'basic': 'Free',
     'plus': 'Plus',
-    'operator': 'Pro',
+    'operator': 'Operator',
     'architect': 'Architect',
     'pro': 'Architect',
     'unlimited': 'Neo',
-    'unlimited_v2': 'Unlimited'
+    'unlimited_v2': 'Omi Pro'
   };
   final knownName = names[tierId];
   if (knownName != null) return knownName;

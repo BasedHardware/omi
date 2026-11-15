@@ -4,6 +4,7 @@ import ast
 from dataclasses import FrozenInstanceError, replace
 import hashlib
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -85,15 +86,94 @@ def test_cohort_registry_and_live_switch_contract():
     rows = yaml.load((ROOT / 'config/feature-flags.yaml').read_text(), Loader=loader)['flags']
     by_key = {row['key']: row for row in rows}
     for key in KILL_SWITCHES:
-        assert by_key[key]['lifecycle'] == 'ops_kill'
-        assert kill_switch(key, flags={})
-        assert not kill_switch(key, flags={key: 'false'})
+        # Live default-off controls may be cohort ramps or permanent opt-in knobs;
+        # default-on controls remain incident kill switches in the registry.
+        if KILL_SWITCHES[key]:
+            assert by_key[key]['lifecycle'] == 'ops_kill'
+        else:
+            assert by_key[key]['lifecycle'] in {'ops_kill', 'config_switch', 'rollout'}
+        assert kill_switch(key, flags={}) is KILL_SWITCHES[key]
+        disabled = (
+            'off'
+            if key
+            in {
+                'BATCH_ALLOWANCE_PARK_ENABLED',
+                'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+                'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+                'PROJECTION_DRAIN_CLAIM_AWARE',
+                'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+                'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
+                'PROJECTION_PRIVACY_REFUSAL_RESUME',
+            }
+            else 'false'
+        )
+        assert not kill_switch(key, flags={key: disabled})
     assert 'nested' in by_key['BATCH_LIVE_STT_RETIRE_PERCENT']['notes'].lower()
     with pytest.raises(ValueError):
         kill_switch('BATCH_PIPELINE_ENABLED')
     assert kill_switch(
         'BATCH_PIPELINE_LEADER_LEASE_ENABLED', flags={'BATCH_PIPELINE_LEADER_LEASE_ENABLED': 'unexpected'}
     )
+
+
+def test_default_off_switches_stay_off_in_serve_mode():
+    """The serve-mode parser must not turn an unset default-off lever on."""
+    for key, default in KILL_SWITCHES.items():
+        if default:
+            continue
+        assert kill_switch(key, flags={'CAPTURE_COVERAGE_MODE': 'serve'}) is False, key
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
+        'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
+        'PROJECTION_DRAIN_CLAIM_AWARE',
+        'PROJECTION_DRAIN_PRIVACY_BACKOFF',
+        'PROJECTION_PRIVACY_REFUSAL_RESUME',
+    ],
+)
+@pytest.mark.parametrize(
+    'value,expected',
+    [
+        ('off', False),
+        ('false', True),
+        ('0', True),
+        ('no', True),
+        ('on', True),
+        (None, True),
+        (' OFF ', False),
+        (' FaLsE ', True),
+        (' 0 ', True),
+        (' No ', True),
+    ],
+)
+@pytest.mark.parametrize('source', ['flags', 'environ'])
+def test_projection_kill_switch_off_only_contract_and_warning(monkeypatch, caplog, name, value, expected, source):
+    flags = {} if value is None else {name: value}
+    with caplog.at_level(logging.WARNING, logger='config.policy.kill_switches'):
+        if source == 'environ':
+            if value is None:
+                monkeypatch.delenv(name, raising=False)
+            else:
+                monkeypatch.setenv(name, value)
+            assert kill_switch(name) is expected
+        else:
+            assert kill_switch(name, flags=flags) is expected
+    normalized = value.strip().lower() if value is not None else None
+    expected_warnings = (
+        [
+            (
+                'config.policy.kill_switches',
+                logging.WARNING,
+                f"only 'off' disables {name}; value '{normalized}' keeps it ON",
+            )
+        ]
+        if normalized in {'false', '0', 'no'}
+        else []
+    )
+    assert caplog.record_tuples == expected_warnings
 
 
 @pytest.fixture(scope='module')
@@ -156,46 +236,11 @@ def test_legacy_fallback_persists_across_stages(monkeypatch):
 def test_summary_obligation_uses_creation_policy_after_ramp(monkeypatch):
     from config.summary_guarantee import first_summary_pending
 
-    policy = resolve_stage_policy(
-        'owner',
-        'first_summary',
-        flags={'FIRST_SUMMARY_DEADLINE_ENABLED': 'true', 'FIRST_SUMMARY_DEADLINE_PERCENT': '0'},
-    )
+    policy = FirstSummaryPolicy(first_summary_enabled=False)
     row = {'uid': 'owner', 'first_summary_policy': policy.to_dict(), 'first_pending_at': 1}
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     assert not first_summary_pending(row)
     row['first_summary_policy'] = replace(policy, first_summary_enabled=True).to_dict()
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     assert first_summary_pending(row)
-
-
-@pytest.fixture(scope='module')
-def policy_window_result():
-    from testing.pipeline_sim.sim import simulate
-    from testing.pipeline_sim.trace import GOLDEN_CONFIGS
-
-    return simulate(GOLDEN_CONFIGS['policy_window']())
-
-
-def test_policy_window_is_graded_under_the_creation_policy(policy_window_result):
-    from testing.pipeline_sim.scorer import score
-
-    result = policy_window_result
-    assert any(
-        record.summary_completed_at - record.summary_pending_at > 120
-        for record in result.records
-        if record.summary_completed_at
-    )
-    result.config.flags['FIRST_SUMMARY_DEADLINE_PERCENT'] = '100'
-    sample = score(result)
-    assert sample['first_summary_checked_conversations'] == 0
-    assert sample['first_summary_deadline_breaches'] == 0
-    # Counterfactual: today's contract would misgrade the same observations.
-    for record in result.records:
-        if record.first_summary_policy:
-            record.first_summary_policy = replace(record.first_summary_policy, first_summary_enabled=True)
-    assert score(result)['first_summary_deadline_breaches'] > 0
 
 
 @pytest.fixture
@@ -237,21 +282,12 @@ def test_existing_cohort_membership_stays_correlated():
             flags={
                 'BATCH_PIPELINE_ENABLED': 'true',
                 'BATCH_PIPELINE_PERCENT': '25',
-                'FIRST_SUMMARY_DEADLINE_ENABLED': 'true',
-                'FIRST_SUMMARY_DEADLINE_PERCENT': '25',
                 'TRANSCRIPTION_FINAL_PASS_DIARIZER': 'pyannote_shadow',
                 'TRANSCRIPTION_FINAL_PASS_PERCENT': '25',
             },
         )
-        assert (
-            policy.batch_enabled
-            == resolve_stage_policy(
-                uid,
-                'first_summary',
-                flags={'FIRST_SUMMARY_DEADLINE_ENABLED': 'true', 'FIRST_SUMMARY_DEADLINE_PERCENT': '25'},
-            ).first_summary_enabled
-            == policy.final_pass_enabled
-        )
+        assert policy.batch_enabled == policy.final_pass_enabled
+        assert resolve_stage_policy(uid, 'first_summary', flags={}).first_summary_enabled
 
 
 @pytest.fixture
@@ -433,7 +469,7 @@ def test_getter_guard_covers_new_directories_and_import_aliases():
         'utils/a_new_unit_handler.py',
     )
     assert not stage_policy_reads(
-        "from utils.sync import legacy_fresh\nlegacy_fresh.enabled_for('owner')",
+        "from utils.sync import stage\nstage.production_stage()",
         'routers/sync.py',
     )
 

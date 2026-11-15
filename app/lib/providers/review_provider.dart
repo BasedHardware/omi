@@ -7,8 +7,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/http/api/review.dart' as api;
+import 'package:omi/backend/http/api/open_loops.dart' as open_loops_api;
 import 'package:omi/backend/http/api/speaker_tag_prompts.dart' as speaker_api;
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/open_loops.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/flavors.dart';
@@ -16,6 +18,9 @@ import 'package:omi/utils/logger.dart';
 
 typedef ReviewItemsLoader = Future<ApiResult<ReviewItemsResponse>> Function();
 typedef ReviewAnswerSender = Future<ApiResult<int>> Function(ReviewItem item, ReviewAnswer answer);
+typedef OpenLoopCardsLoader = Future<ApiResult<OpenLoopCardsResponse>> Function();
+typedef OpenLoopAnswerSender = Future<ApiResult<OpenLoopAnswerResult>> Function(
+    OpenLoopCard card, OpenLoopAction action);
 typedef ReviewClipLoader = Future<ApiResult<Uint8List>> Function(SpeakerItem speaker);
 typedef ReleaseChannelReporter = Future<ApiResult<void>> Function(String channel, {int? appBuild});
 typedef ReviewProjectsLoader = Future<ApiResult<List<EntityRef>>> Function();
@@ -26,6 +31,10 @@ typedef ReviewClipPlayer = Future<bool> Function(String itemId, Uint8List wav);
 
 /// Whether the Review surface exists for this account. Unknown until the first load answers.
 enum ReviewAvailability { unknown, on, off }
+
+/// The outcome of one open-loop card answer, per request: a 409 (answered on
+/// another device) stays gone and is reported differently from a send failure.
+enum OpenLoopAnswerStatus { saved, conflict, failed }
 
 /// The few questions Omi needs the user to answer, shared by the Home entry card, the Review page,
 /// and the same cards shown in context (a transcript, a person page).
@@ -40,6 +49,8 @@ class ReviewProvider extends ChangeNotifier {
     ReviewClipPlayer? playClip,
     ReviewProjectsLoader? loadProjects,
     ConversationEntitiesLoader? loadConversationEntities,
+    OpenLoopCardsLoader? loadOpenLoopCards,
+    OpenLoopAnswerSender? sendOpenLoopAnswer,
     bool Function()? isEligible,
     ReleaseChannelReporter? reportChannel,
     String Function()? releaseChannel,
@@ -52,6 +63,8 @@ class ReviewProvider extends ChangeNotifier {
         _loadConversationEntities = loadConversationEntities ?? api.getConversationEntities,
         _loadProjects = loadProjects ?? api.getProjectEntities,
         _sendAnswer = sendAnswer ?? api.answerReviewItem,
+        _loadOpenLoopCards = loadOpenLoopCards ?? open_loops_api.getOpenLoopCards,
+        _sendOpenLoopAnswer = sendOpenLoopAnswer ?? open_loops_api.answerOpenLoopCard,
         _loadClip = loadClip ?? _defaultLoadClip,
         _playClipOverride = playClip;
 
@@ -62,6 +75,8 @@ class ReviewProvider extends ChangeNotifier {
   bool _channelReported = false;
   final ReviewItemsLoader _loadItems;
   final ReviewAnswerSender _sendAnswer;
+  final OpenLoopCardsLoader _loadOpenLoopCards;
+  final OpenLoopAnswerSender _sendOpenLoopAnswer;
   final ReviewClipLoader _loadClip;
   final ReviewClipPlayer? _playClipOverride;
   final ReviewProjectsLoader _loadProjects;
@@ -72,6 +87,10 @@ class ReviewProvider extends ChangeNotifier {
 
   ReviewAvailability availability = ReviewAvailability.unknown;
   List<ReviewItem> items = const [];
+
+  /// The day's open-loop cards ("Questions for you"), outside the attention
+  /// budget: at most the few the daily pass wrote, aging out with the day.
+  List<OpenLoopCard> openLoopCards = const [];
   int remainingToday = 0;
   bool loading = false;
   bool loadFailed = false;
@@ -134,12 +153,17 @@ class ReviewProvider extends ChangeNotifier {
     // Availability comes from the server, including Store builds and auto-only changes.
     if (!_isEligible()) {
       availability = ReviewAvailability.off;
+      openLoopCards = const [];
       _notify();
       return;
     }
     loading = true;
     _notify();
-    switch (await _loadItems()) {
+    final (itemsResult, cardsResult) = await (
+      _loadItems(),
+      _loadOpenLoopCards(),
+    ).wait;
+    switch (itemsResult) {
       case ApiSuccess(:final data):
         availability = ReviewAvailability.on;
         items = data.items;
@@ -149,11 +173,21 @@ class ReviewProvider extends ChangeNotifier {
         if (problem.kind == ApiProblemKind.notFound || problem.kind == ApiProblemKind.forbidden) {
           availability = ReviewAvailability.off;
           items = const [];
+          openLoopCards = const [];
           remainingToday = 0;
         } else {
           loadFailed = true;
         }
         Logger.debug('review items unavailable: $problem');
+    }
+    // Cards load independently: without them the page simply looks as before.
+    switch (cardsResult) {
+      case ApiSuccess(:final data):
+        // The cards share the Review surface — when it is off, none can exist.
+        if (availability != ReviewAvailability.off) openLoopCards = data.cards;
+      case ApiFailure(:final problem):
+        // Keep the previous cards on a failed refresh; a failed first load stays empty.
+        Logger.debug('open loop cards unavailable: $problem');
     }
     loading = false;
     _notify();
@@ -193,6 +227,31 @@ class ReviewProvider extends ChangeNotifier {
         }
         _notify();
         return false;
+    }
+  }
+
+  /// Sends an open-loop card answer. The card leaves the list immediately; on
+  /// failure only that card comes back, at its original position — a concurrent
+  /// answer or reload that changed the list meanwhile is kept, never rolled
+  /// back with a stale snapshot. A 409 means the card was answered elsewhere
+  /// and stays gone.
+  Future<OpenLoopAnswerStatus> answerOpenLoop(OpenLoopCard card, OpenLoopAction action) async {
+    final index = openLoopCards.indexWhere((c) => c.cardId == card.cardId);
+    if (index < 0) return OpenLoopAnswerStatus.failed;
+    openLoopCards = [...openLoopCards]..removeAt(index);
+    _notify();
+    switch (await _sendOpenLoopAnswer(card, action)) {
+      case ApiSuccess():
+        return OpenLoopAnswerStatus.saved;
+      case ApiFailure(:final problem):
+        Logger.debug('open loop answer failed: $problem');
+        if (problem.statusCode == 409) return OpenLoopAnswerStatus.conflict;
+        if (!openLoopCards.any((c) => c.cardId == card.cardId)) {
+          final at = index <= openLoopCards.length ? index : openLoopCards.length;
+          openLoopCards = [...openLoopCards]..insert(at, card);
+        }
+        _notify();
+        return OpenLoopAnswerStatus.failed;
     }
   }
 

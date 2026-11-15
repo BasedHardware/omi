@@ -1,10 +1,11 @@
 import json
 import logging
 import struct
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
-from fastapi.websockets import WebSocket, WebSocketDisconnect
+from fastapi.websockets import WebSocket
 
 from database import conversation_finalization_jobs as finalization_jobs_db
 from services.conversation_finalization import final_attempt_failed
@@ -12,6 +13,11 @@ from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
 from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
+from config.conversation_processing_retry import (
+    DETERMINISTIC_PROCESSING_FAILURE,
+    PROCESSING_BURST_ATTEMPTS,
+)
+from utils.conversations.processing_retry import processing_failure_code
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
@@ -20,6 +26,7 @@ from utils.conversations.finalizer import (
 )
 from utils.durable_queue_policy import ProcessOutcome, QueuePolicy, decide_attempt
 from utils.executors import db_executor, run_blocking
+from utils.observability.fallback import record_fallback
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
@@ -83,11 +90,27 @@ async def process_conversation_task(
         data.extend(bytes(json.dumps(result), "utf-8"))
         try:
             await websocket.send_bytes(bytes(data))
-        except (RuntimeError, WebSocketDisconnect):
+        except Exception:
             logger.info(
                 'pusher finalization result undeliverable after source close uid=%s conversation=%s',
                 uid,
                 conversation_id,
+            )
+            record_fallback(
+                component='pusher', from_mode='none', to_mode='none', reason='unavailable', outcome='degraded'
+            )
+
+    def record_completed(outcome: Literal['success', 'stale'], claim: Mapping[str, Any]) -> None:
+        # The transaction has committed. Optional journey publication cannot
+        # release that completed lease or re-enter the processing transaction.
+        try:
+            record_capture_finalization_terminal(outcome, claim.get('created_at'))
+            record_conversation_finalization_client_terminal(
+                'cancelled' if outcome == 'stale' else outcome, claim, client_kind=client_kind
+            )
+        except Exception:
+            record_fallback(
+                component='pusher', from_mode='none', to_mode='none', reason='unavailable', outcome='degraded'
             )
 
     job_id: Optional[str] = None
@@ -95,8 +118,8 @@ async def process_conversation_task(
     lease_epoch: Optional[int] = None
     attempt_count: int = 0
 
-    async def record_failure(failure_code: str) -> bool:
-        """Release the lease. Returns whether this was the terminal attempt.
+    async def record_failure(failure_code: str) -> str:
+        """Release the lease and return its durable disposition.
 
         Inline dispatch has no Cloud Tasks worker to exhaust the attempt budget,
         so the claimed attempt count is the only bound on a deterministically
@@ -104,22 +127,22 @@ async def process_conversation_task(
         `processing` forever and be re-finalized by every later session.
         """
         if job_id is None or generation is None or lease_epoch is None:
-            return False
+            return 'conflict'
         this_try = _processing_attempt_number(attempt_count)
-        terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal
+        terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal or (
+            failure_code == DETERMINISTIC_PROCESSING_FAILURE and this_try >= PROCESSING_BURST_ATTEMPTS
+        )
         try:
             if terminal:
-                marked_dead_letter = await run_blocking(
+                return await run_blocking(
                     db_executor,
                     final_attempt_failed,
                     job_id,
                     generation,
                     lease_epoch,
                     this_try,
+                    failure_code=failure_code,
                 )
-                if not marked_dead_letter:
-                    return False
-                return True
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,
@@ -137,8 +160,11 @@ async def process_conversation_task(
                 failure_code,
                 terminal,
             )
-            return False
-        return False
+            record_fallback(
+                component='pusher', from_mode='none', to_mode='none', reason='unavailable', outcome='degraded'
+            )
+            return 'conflict'
+        return 'retry'
 
     try:
         if not finalization_job_id or dispatch_generation is None:
@@ -234,15 +260,15 @@ async def process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
         if disposition == ConversationFinalizationDisposition.fenced:
-            record_capture_finalization_terminal('stale', claim.get('created_at'))
-            record_conversation_finalization_client_terminal('cancelled', claim, client_kind=client_kind)
+            record_completed('stale', claim)
             await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
-        record_capture_finalization_terminal('success', claim.get('created_at'))
-        record_conversation_finalization_client_terminal('success', claim, client_kind=client_kind)
+        record_completed('success', claim)
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError as error:
-        terminal = await record_failure('processing_failed')
+        failure_code = processing_failure_code(error) if error.code == 'processing_failed' else error.code
+        failure_disposition = await record_failure(failure_code)
+        terminal = failure_disposition == 'dead_letter'
         byok_class = byok_failure_class_of(error)
         # Severity follows the fault origin, mirroring the session-side
         # reclassification of the will-retry branch (listen_pusher_session,
@@ -262,11 +288,19 @@ async def process_conversation_task(
             byok_class or 'none',
         )
         try:
-            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})
+            await send_result(
+                {
+                    'conversation_id': conversation_id,
+                    'error': 'job_queued' if failure_disposition == 'requeued' else failure_code,
+                    'terminal': terminal,
+                }
+            )
         except Exception:
             pass
-    except Exception:
-        terminal = await record_failure('worker_failed')
+    except Exception as error:
+        failure_code = processing_failure_code(error)
+        failure_disposition = await record_failure(failure_code)
+        terminal = failure_disposition == 'dead_letter'
         log = logger.error if terminal else logger.warning
         log(
             'pusher finalization task failed uid=%s conversation=%s failure=worker_failed terminal=%s',
@@ -275,6 +309,12 @@ async def process_conversation_task(
             terminal,
         )
         try:
-            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})
+            await send_result(
+                {
+                    'conversation_id': conversation_id,
+                    'error': 'job_queued' if failure_disposition == 'requeued' else failure_code,
+                    'terminal': terminal,
+                }
+            )
         except Exception:
             pass

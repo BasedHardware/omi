@@ -226,6 +226,7 @@ def _install_recording_vector_db(monkeypatch):
     fake_index = _RecordingIndex()
 
     monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
     monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
@@ -568,6 +569,7 @@ def test_canonical_archive_layer_round_trip(monkeypatch):
 def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     monkeypatch.setattr(vector_db, "index", _FailingIndex())
+    monkeypatch.setattr(vector_db, "owner_index", lambda raw, uid, **kwargs: raw)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
     monkeypatch.setattr(vector_db, "external_write_fence", _allow_external_provider_write)
     sys.modules["database.vector_db"] = vector_db
@@ -731,3 +733,73 @@ def test_backfill_idempotent_skip_never_bypasses_normal_outbox(monkeypatch):
     assert row_result.vector_sync_failed is False
     assert row_result.keyword_sync_succeeded is True
     assert fake_index.upserts == []
+
+
+def test_canonical_writer_routes_by_authoritative_owner(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    scoped_index = _RecordingIndex()
+    routes = []
+
+    def route(raw_index, uid, **kwargs):
+        assert raw_index is fake_index
+        routes.append((uid, kwargs))
+        return scoped_index
+
+    monkeypatch.setattr(vector_db, 'owner_index', route)
+    item = _item(uid='owner-1')
+    vector_db.upsert_canonical_memory_vector(item)
+    assert routes == [('owner-1', {'index_name': vector_db._pinecone_index_name})] * 2
+    assert fake_index.deletes == fake_index.upserts == []
+    assert len(scoped_index.deletes) == len(scoped_index.upserts) == 1
+    assert scoped_index.deletes[0] == {
+        'ids': None,
+        'filter': vector_db.build_canonical_memory_vector_delete_filter(item.uid, item.memory_id),
+        'namespace': vector_db.MEMORIES_NAMESPACE,
+    }
+    assert scoped_index.upserts[0]['namespace'] == vector_db.MEMORIES_NAMESPACE
+    assert scoped_index.upserts[0]['vectors'][0]['metadata']['uid'] == item.uid
+    assert scoped_index.upserts[0]['vectors'][0]['id'] == vector_db.canonical_memory_provider_id(
+        item.uid, item.memory_id
+    )
+
+
+def test_account_purge_covers_every_feature_and_retained_copy(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    deleted = []
+    verified = []
+
+    def route(raw_index, uid, **kwargs):
+        assert raw_index is fake_index and uid == 'owner-1'
+        return SimpleNamespace(
+            delete_all_copies=lambda **kw: deleted.append(kw),
+            verify_empty_all_copies=lambda **kw: verified.append(kw),
+        )
+
+    monkeypatch.setattr(vector_db, 'owner_index', route)
+    vector_db.delete_all_user_vector_copies('owner-1')
+    assert {call['namespace'] for call in deleted} == {
+        'ns1',
+        'ns2',
+        'ns3',
+        'ns4',
+        'ns_x',
+        'ns_tchunks',
+        'workstream-association-v1',
+    }
+    assert all(call['filter'] == {'uid': 'owner-1'} for call in deleted)
+    assert verified == deleted
+
+
+def test_account_purge_propagates_retained_copy_verification_failure(monkeypatch):
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+
+    def not_empty(**kwargs):
+        raise RuntimeError('retained copy is not empty')
+
+    monkeypatch.setattr(
+        vector_db,
+        'owner_index',
+        lambda *args, **kwargs: SimpleNamespace(delete_all_copies=lambda **kw: None, verify_empty_all_copies=not_empty),
+    )
+    with pytest.raises(RuntimeError, match='retained copy is not empty'):
+        vector_db.delete_all_user_vector_copies('owner-1')

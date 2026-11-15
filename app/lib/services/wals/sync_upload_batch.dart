@@ -131,9 +131,102 @@ String? _walLocationBatchKey(Wal wal) {
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
 
+/// The upload grouping key shared by every WAL of one recording: conversation,
+/// recording session, batch family and location — exactly the tuple
+/// [nextSyncUploadBatch] groups a batch by. The drain's per-recording share
+/// cap counts batches with this key.
+String recordingGroupKey(Wal wal) =>
+    '${wal.conversationId}|${wal.recordingSessionId}|${isMobileStandardBatchWal(wal)}|${_walLocationBatchKey(wal) ?? ''}';
+
+/// Gap at which two id-less recordings on one device count as separate runs.
+/// Chunks of one file are exactly contiguous; the chunker's floor division can
+/// shave a second off a computed run boundary.
+const _deviceRunGapToleranceSeconds = 5;
+
+/// Per-WAL share-cap group keys for [wals]: WALs carrying a conversation or
+/// recording-session identity keep [recordingGroupKey]. Id-less WALs — device
+/// imports (StorageSync → persistDeviceChunk, and the legacy SD card path)
+/// carry neither id, so their tuple key is the same null|null|false| for every
+/// recording on every device — instead key by contiguous audio run on one
+/// device, which is the recording boundary the cap means to count (#14688).
+///
+/// Pass the full WAL list, not the drain's candidates: uploaded members stay
+/// listed, so a run's key (anchored at its first chunk) stays stable while the
+/// run uploads, defers and re-enters later passes. A batch may still span a
+/// run boundary — [nextSyncUploadBatch] merges id-less WALs up to its audio
+/// budget — but it counts toward its first member's run, and a deferred run
+/// never rides along while it waits: the drain drops deferred groups from the
+/// candidate list until nothing else is pending, at which point they resume.
+Map<Wal, String> recordingGroupKeys(List<Wal> wals) {
+  final keys = <Wal, String>{};
+  final byDevice = <String, List<Wal>>{};
+  for (final wal in wals) {
+    if (wal.conversationId != null || wal.recordingSessionId != null) {
+      keys[wal] = recordingGroupKey(wal);
+    } else {
+      byDevice.putIfAbsent(wal.device, () => []).add(wal);
+    }
+  }
+  for (final entry in byDevice.entries) {
+    final run = entry.value..sort((a, b) => a.timerStart.compareTo(b.timerStart));
+    var runStart = run.first.timerStart;
+    var runEnd = run.first.timerStart + run.first.seconds;
+    for (final wal in run) {
+      if (wal.timerStart > runEnd + _deviceRunGapToleranceSeconds) {
+        runStart = wal.timerStart;
+        runEnd = wal.timerStart + wal.seconds;
+      } else if (wal.timerStart + wal.seconds > runEnd) {
+        runEnd = wal.timerStart + wal.seconds;
+      }
+      keys[wal] = 'device-run|${entry.key}|$runStart';
+    }
+  }
+  return keys;
+}
+
+/// Batches one recording may consume before a drain with other recordings
+/// waiting moves on to them (36 × 300s = 3h of audio). Oldest-first ordering
+/// is kept for the 30-day backfill deadline, but a pathological recording
+/// (hours of overnight noise) otherwise monopolizes every interrupted pass —
+/// each restart re-enters it at the head — and the small recordings behind it
+/// starve (#14688). A drain with nothing else pending keeps its full-pass
+/// order, so a lone backlog is never throttled.
+const maxBatchesPerRecordingPerDrain = 36;
+
+/// Valid audio leads, but continuous arrivals may not starve unknown clocks.
+/// The ledger persists this class budget on waiting WALs across drains and
+/// restarts, independently of a session containing both trusted and unknown clocks.
+const maxValidBatchesBeforeClockRecovery = 36;
+
+/// How long a recording's spent share keeps counting across drain passes. A
+/// rate-limit break ends a pass before the cap fires; with a pass-local
+/// counter the oldest recording could spend 35 batches of every pass and
+/// starve the rest without ever deferring (#14688). The window outlasts the
+/// server's rate-limit cooldowns, and entries expire so a share measured
+/// days ago stops deferring a backlog that is now alone.
+const drainRecordingShareWindowSeconds = 24 * 3600;
+
+/// Upload priority for a pending set: live capture first (newest first), then
+/// the historical backlog oldest first, then unknown/future clocks. Untrusted
+/// clocks remain eligible for recovery, without spending valid audio's turn or
+/// contaminating its request with an invalid-date refusal.
+///
+/// Live capture keeps newest-first because only it can still claim a capture
+/// manifest and reach its still-running conversation. Everything older is
+/// racing a hard server deadline — `SYNC_BACKFILL_MAX_AGE_SECONDS` (30 days),
+/// after which the upload is refused with `backfill_lookback_exceeded` and the
+/// recording can never sync. A drain that is interrupted (rate-limit break,
+/// cancelled run, app backgrounding) truncates from the tail, so ordering
+/// history newest-first starved exactly the recordings with the least recovery
+/// time left; oldest-first makes every interruption cost the newest audio,
+/// which has the most slack, instead.
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
-      final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
+      final aClass = walCaptureTimeClass(a.$1, nowSeconds);
+      final bClass = walCaptureTimeClass(b.$1, nowSeconds);
+      if (aClass != bClass) return aClass.index.compareTo(bClass.index);
+      final aLive = aClass == WalCaptureTimeClass.live;
+      final byStart = aLive ? b.$1.timerStart.compareTo(a.$1.timerStart) : a.$1.timerStart.compareTo(b.$1.timerStart);
       return byStart != 0 ? byStart : a.$2.compareTo(b.$2);
     });
   if (indexed.isEmpty) return const [];
@@ -146,6 +239,8 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
         (wal) =>
             wal.conversationId == conversationId &&
             wal.recordingSessionId == recordingSessionId &&
+            (walClockPriorityOff ||
+                walCaptureTimeClass(wal, nowSeconds) == walCaptureTimeClass(ordered.first, nowSeconds)) &&
             isMobileStandardBatchWal(wal) == isMobileStandardBatchWal(ordered.first) &&
             _walLocationBatchKey(wal) == locationKey,
       )

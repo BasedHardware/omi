@@ -36,6 +36,19 @@ on:
         description: 'batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree'
         required: false
         default: ''
+      preserve_live_worker:
+        description: 'Prod batch-pipeline-worker only: CAS image-only update, preserving the entire live runtime spec; siblings are verified but never rolled'
+        required: false
+        default: false
+        type: boolean
+      worker_live_baseline:
+        description: 'Preserve-live only: admitted JSON from worker_image_only.py inventory (target identity/spec hash and all shared-image consumer bindings)'
+        required: false
+        default: ''
+      worker_rollback_receipt:
+        description: 'Preserve-live rollback only: saved safe receipt; requires its exact prior digest and full merged source SHA at or above f3902ec'
+        required: false
+        default: ''
       break_glass_lock:
         description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
         required: false
@@ -72,10 +85,32 @@ jobs:
     timeout-minutes: 75
     steps:
       - name: Validate Environment Input
+        env:
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          SOURCE_REF: ${{ inputs.branch }}
+          CANDIDATE_DIGEST: ${{ inputs.image_digest }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
+          fi
+          if [[ "$PRESERVE_LIVE" == true ]]; then
+            [[ "${{ inputs.environment }}" == prod && "$SERVICE" == batch-pipeline-worker && -n "$LIVE_BASELINE" ]] || {
+              echo "preserve_live_worker requires prod, batch-pipeline-worker and an admitted inventory" >&2
+              exit 1
+            }
+          elif [[ -n "$LIVE_BASELINE" ]]; then
+            echo "worker_live_baseline requires preserve_live_worker" >&2
+            exit 1
+          fi
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            [[ "$PRESERVE_LIVE" == true && "$BREAK_GLASS_LOCK" != true && "$SOURCE_REF" =~ ^[abcdef0-9]{40}$ && "$CANDIDATE_DIGEST" =~ ^sha256:[abcdef0-9]{64}$ ]] || {
+              echo "Rollback requires preserve-live, the shared lock, a full merged source SHA and an explicit prior digest" >&2
+              exit 1
+            }
           fi
 
       # To workaround "no space left on device" issue of GitHub-hosted runner
@@ -93,6 +128,7 @@ jobs:
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_REF: ${{ github.event.inputs.branch }}
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
         run: |
           set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" == prod ]]; then
@@ -103,9 +139,45 @@ jobs:
               source_sha="$DEPLOY_REF"
             fi
             git merge-base --is-ancestor "$source_sha" origin/main
+            if [[ "$PRESERVE_LIVE" == true ]]; then
+              # Apply the same immutable source floor to forward and reverse image moves.
+              git merge-base --is-ancestor f3902ec5435809d95ac7c15f6be7e9f056564d3d "$source_sha"
+            fi
             git checkout --detach "$source_sha"
           fi
           echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+
+      - name: Checkout immutable worker image-only control
+        if: inputs.preserve_live_worker == true
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/worker-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: /.github/scripts/worker_image_only.py
+
+      - name: Verify serving Firestore indexes
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ steps.vars.outputs.source_sha }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: omi-ci-index-check@based-hardware.iam.gserviceaccount.com
 
       - name: Resolve deployment target
         id: target
@@ -247,6 +319,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Deploy Diarizer to GKE cluster using Helm
+        if: inputs.preserve_live_worker != true
         env:
           DEPLOY_NAMESPACE: ${{ vars.ENV }}-omi-backend
           TARGET_CHART: ${{ steps.target.outputs.chart }}
@@ -271,6 +344,37 @@ jobs:
               -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"
           fi
 
+      # Uses workflow-owned controls even when the runtime source predates this mode.
+      # Default success() is intentional: never write after a failed source/index/image gate.
+      - name: Deploy worker image preserving live runtime
+        if: inputs.preserve_live_worker == true
+        env:
+          LIVE_BASELINE: ${{ inputs.worker_live_baseline }}
+          ROLLBACK_RECEIPT: ${{ inputs.worker_rollback_receipt }}
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
+        run: |
+          set -euo pipefail
+          umask 077
+          echo "$LIVE_BASELINE" > "$RUNNER_TEMP/worker-live-baseline.json"
+          rollback_args=()
+          if [[ -n "$ROLLBACK_RECEIPT" ]]; then
+            echo "$ROLLBACK_RECEIPT" > "$RUNNER_TEMP/worker-rollback-receipt.json"
+            rollback_args=(--rollback-receipt "$RUNNER_TEMP/worker-rollback-receipt.json")
+          fi
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py deploy \
+            --baseline "$RUNNER_TEMP/worker-live-baseline.json" \
+            --image "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            "${rollback_args[@]}" \
+            --receipt "$RUNNER_TEMP/worker-image-receipt.json" | tee "$RUNNER_TEMP/worker-image-diff.json"
+          {
+            echo '### Worker image-only diff and rollback identity'
+            echo '```json'
+            cat "$RUNNER_TEMP/worker-image-diff.json"
+            echo '```'
+            echo 'Shared-image siblings remain on the admitted bindings. Existing repair-flags reapply and release canary gates remain required.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Every call here is bounded so the step always ends with a verdict and the
       # always() summary/notify steps run. batch-pipeline-worker is Recreate with a
       # 1500 s drain, so its wait covers drain plus GPU startup. A lost runner (run
@@ -282,6 +386,7 @@ jobs:
           DEPLOY_ENV: ${{ vars.ENV }}
           TARGET_RELEASE: ${{ steps.target.outputs.release_name }}
           EXPECTED_DIGEST: ${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}
+          PRESERVE_LIVE: ${{ inputs.preserve_live_worker }}
         run: |
           rollout_timeout=600s
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
@@ -290,20 +395,57 @@ jobs:
             # Batch install runbook's rollout wait: one T4 replica on the dedicated pool.
             rollout_timeout=900s
           fi
+          # Siblings start together; share the wait budget so two slow rollouts
+          # cannot overrun this step's 45-minute deadline before diagnostics.
+          rollout_deadline=$((SECONDS + ${rollout_timeout%s}))
           if ! kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$TARGET_RELEASE" --timeout="$rollout_timeout"; then
             timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE" || true
             exit 1
           fi
           if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+            image_path='{.spec.template.spec.containers[0].image}'
+            if [[ "$PRESERVE_LIVE" == true ]]; then
+              image_path='{.spec.template.spec.containers[?(@.name=="worker")].image}'
+            fi
             deployed_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$TARGET_RELEASE" --request-timeout=30s \
-              -o jsonpath='{.spec.template.spec.containers[0].image}')"
+              -o "jsonpath=$image_path")"
             if [[ "$deployed_image" != *"@$EXPECTED_DIGEST" ]]; then
               echo "::error::deploy/$TARGET_RELEASE rolled out $deployed_image, not the expected digest $EXPECTED_DIGEST"
               exit 1
             fi
             echo "deploy/$TARGET_RELEASE is ready on $EXPECTED_DIGEST"
           fi
+          # The T4 stockout fallback keeps its operator-set replicas across upgrades;
+          # when it is serving, it must roll out the same digest too.
+          if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
+            fallback="$TARGET_RELEASE-t4"
+            fallback_replicas="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+              --ignore-not-found -o jsonpath='{.spec.replicas}')"
+            if [[ -n "$fallback_replicas" && "$fallback_replicas" != "0" ]]; then
+              fallback_remaining=$((rollout_deadline - SECONDS))
+              if (( fallback_remaining <= 0 )); then
+                echo "::error::rollout budget exhausted before verifying deploy/$fallback"
+                exit 1
+              fi
+              kubectl -n "$DEPLOY_NAMESPACE" rollout status "deploy/$fallback" --timeout="${fallback_remaining}s" || exit 1
+              if [[ -n "${EXPECTED_DIGEST:-}" ]]; then
+                fallback_image="$(kubectl -n "$DEPLOY_NAMESPACE" get "deploy/$fallback" --request-timeout=30s \
+                  -o jsonpath='{.spec.template.spec.containers[0].image}')"
+                if [[ "$fallback_image" != *"@$EXPECTED_DIGEST" ]]; then
+                  echo "::error::deploy/$fallback rolled out $fallback_image, not the expected digest $EXPECTED_DIGEST"
+                  exit 1
+                fi
+              fi
+              echo "deploy/$fallback ($fallback_replicas replicas) is ready"
+            fi
+          fi
           timeout 120 python3 backend/scripts/deploy_status_report.py --env "$DEPLOY_ENV" --include-gke --gke-service "$SERVICE"
+
+      - name: Verify preserved worker runtime and sibling bindings
+        if: inputs.preserve_live_worker == true
+        run: |
+          python3 .github/worker-workflow/.github/scripts/worker_image_only.py verify \
+            --receipt "$RUNNER_TEMP/worker-image-receipt.json"
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

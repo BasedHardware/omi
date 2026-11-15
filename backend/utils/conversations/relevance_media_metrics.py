@@ -24,6 +24,8 @@ _CHECKS = frozenset(
         'recap',
         'action_items',
         'boundary_write',
+        'owner_memory_source',
+        'owner_memory_segments',
     )
 )
 
@@ -34,3 +36,14 @@ def observe(check: str, outcome: str) -> None:
     SHADOW.labels(check=check, outcome=reason_label(ReasonFamily.PARITY, outcome, RefactorShadowOutcome)).inc()
     outcome = outcome if outcome in {member.value for member in RefactorShadowOutcome} else 'unknown'
     logger.info('event=refactor_shadow lane=V2 check=%s outcome=%s', check, outcome)
+
+
+def observe_owner_memory_admission(total_segments: int, admitted_segments: int) -> None:
+    """Serving-cohort attempts, not unique memories or labeled speaker accuracy.
+
+    Reuse the exported bounded family. No account, conversation or voice ID is
+    a metric label. Retries count as attempts; compare equal lookback windows.
+    """
+    observe('owner_memory_source', 'agree' if admitted_segments else 'disagree')
+    SHADOW.labels(check='owner_memory_segments', outcome='agree').inc(admitted_segments)
+    SHADOW.labels(check='owner_memory_segments', outcome='disagree').inc(total_segments - admitted_segments)

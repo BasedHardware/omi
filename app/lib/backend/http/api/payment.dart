@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
@@ -100,10 +101,40 @@ Future<bool> acceptRetentionOffer() async {
   return response != null && response.statusCode == 200;
 }
 
-Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
+/// The monthly-to-yearly switch for this reader; with [preview], Stripe's charge today and renewal
+/// date. Null when it cannot be read: the offer is optional and never throws into its host screen.
+Future<wire.GeneratedYearlySwitchResponse?> getYearlySwitch({bool preview = false}) async {
+  try {
+    final response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/payments/yearly-switch${preview ? '?preview=true' : ''}',
+      headers: {},
+      method: 'GET',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return null;
+    return wire.GeneratedYearlySwitchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [switchNow] charges a monthly-to-yearly change today (prorated) instead of scheduling it: only
+/// [expectedAmountDue], the amount the yearly-switch preview showed at its [prorationDate].
+Future<Map<String, dynamic>?> upgradeSubscription({
+  required String priceId,
+  String? promotionCode,
+  bool switchNow = false,
+  int? prorationDate,
+  int? expectedAmountDue,
+}) async {
   final body = <String, dynamic>{'price_id': priceId};
   if (promotionCode != null && promotionCode.trim().isNotEmpty) {
     body['promotion_code'] = promotionCode.trim();
+  }
+  if (switchNow) {
+    body['switch_now'] = true;
+    body['proration_date'] = prorationDate;
+    body['expected_amount_due'] = expectedAmountDue;
   }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',
@@ -122,6 +153,26 @@ Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, Stri
   if (response.statusCode == 400 || response.statusCode == 402 || response.statusCode == 409) {
     return _paymentError(response);
   }
+  return null;
+}
+
+/// Moves a declined yearly renewal to the same plan's monthly price, charged now (backend
+/// `utils/monthly_switch.py`). The server charges only [expectedAmount]. Returns the response map on
+/// success, `error`/`status_code` on 402 (declined, nothing changed) or 409 (not available), else null.
+Future<Map<String, dynamic>?> switchPaymentIssueToMonthly(
+    {required String priceId, required int expectedAmount}) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/payments/payment-issue/monthly-switch',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'price_id': priceId, 'expected_amount': expectedAmount}),
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return wire.GeneratedPaymentStatusMessageResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>)
+        .toJson();
+  }
+  if (response.statusCode == 402 || response.statusCode == 409) return _paymentError(response);
   return null;
 }
 
@@ -191,4 +242,29 @@ Future<Map<String, dynamic>?> cancelAppSubscription(String appId) async {
     return jsonResponse;
   }
   return null;
+}
+
+/// Applies only to the existing subscription. No price, interval or checkout input.
+/// Never retain the code or display/log free-form server responses.
+Future<ApiResult<bool>> redeemSubscriptionCode(String code, {ApiSend? send, bool Function()? canSend}) async {
+  final trimmed = code.trim();
+  if (trimmed.isEmpty || trimmed.length > 64) {
+    return const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 400));
+  }
+  return executeApi<bool>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v1/payments/redeem-code',
+      method: 'POST',
+      body: jsonEncode({'code': trimmed}),
+    ),
+    send: send,
+    canSend: canSend,
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map || decoded['status'] != 'applied') {
+        throw const FormatException('Expected applied redemption');
+      }
+      return true;
+    },
+  );
 }

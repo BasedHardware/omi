@@ -37,13 +37,40 @@ node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators:
 # CI passes ``--state-dir`` (and any other runner argument) to the listen-pusher
 # runner only, never to the subsequent pytest command.  Appending after ``&&``
 # would leak the flag into pytest, which does not understand it.
+lifecycle_only=false
+if [[ "${1:-}" == "--lifecycle-only" ]]; then
+  lifecycle_only=true
+  shift
+fi
 runner_args=""
+lifecycle_args=""
+lifecycle_state=""
+next_is_state=false
 for argument in "$@"; do
   printf -v escaped_argument ' %q' "$argument"
   runner_args+="$escaped_argument"
+  if [[ "$next_is_state" == true ]]; then
+    lifecycle_state="$argument"
+    next_is_state=false
+  elif [[ "$argument" == --state-dir ]]; then
+    next_is_state=true
+  elif [[ "$argument" == --state-dir=* ]]; then
+    lifecycle_state="${argument#--state-dir=}"
+  elif [[ "$argument" == --keep ]]; then
+    lifecycle_args+=" --keep"
+  fi
 done
+if [[ -n "$lifecycle_state" ]]; then
+  printf -v escaped_state ' %q' "$lifecycle_state/lifecycle-sim"
+  lifecycle_args+=" --state-dir$escaped_state"
+fi
 
-runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v"
+if [[ "$lifecycle_only" == true ]]; then
+  npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
+    "PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${runner_args}"
+  exit 0
+fi
 
+runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v && PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${lifecycle_args} --extra-test-module testing/lifecycle_properties/test_properties.py"
 npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
   "$runner_command"

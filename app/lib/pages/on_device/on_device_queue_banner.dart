@@ -400,7 +400,8 @@ class _OsAssetProgressState extends State<_OsAssetProgress> {
 }
 
 /// The status line of a recording waiting on this phone, or null when the on-device flag is off
-/// or on-device transcription does not apply (not chosen and usage remains).
+/// or on-device transcription does not apply (not chosen and usage remains). A wait for a charger
+/// is not a row status: it is the Offline Sync page's quiet line ([OnDeviceChargerWaitLine]).
 Widget? onDeviceRecordingChip(BuildContext context, OnDeviceTranscriptionController controller, {required bool atCap}) {
   if (!controller.isActive) return null;
   final l10n = context.l10n;
@@ -414,8 +415,42 @@ Widget? onDeviceRecordingChip(BuildContext context, OnDeviceTranscriptionControl
   if (controller.isTranscribing) {
     return OnDeviceStatusChip(icon: Icons.graphic_eq, label: l10n.onDeviceTranscribing);
   }
-  if (settings.schedule == OnDeviceSchedule.whileCharging) {
-    return OnDeviceStatusChip(icon: Icons.bolt, label: l10n.onDeviceWaitingForCharger, color: OmiColors.warning);
-  }
+  if (settings.schedule == OnDeviceSchedule.whileCharging) return null;
   return OnDeviceStatusChip(icon: Icons.schedule, label: l10n.onDeviceWaitingToTranscribe, color: OmiColors.warning);
+}
+
+/// Offline Sync's quiet status line while on-device recordings wait for a charger; renders nothing
+/// otherwise. Recording rows do not name the charger wait.
+class OnDeviceChargerWaitLine extends StatelessWidget {
+  const OnDeviceChargerWaitLine({super.key, this.controller});
+
+  final OnDeviceTranscriptionController? controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = this.controller ?? OnDeviceTranscriptionController.instance;
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        if (!controller.isActive || controller.isTranscribing) return const SizedBox.shrink();
+        final settings = controller.settings;
+        final status = controller.model.status;
+        if (!settings.enabled || !status.isSupported || !status.isInstalled) return const SizedBox.shrink();
+        if (settings.schedule != OnDeviceSchedule.whileCharging) return const SizedBox.shrink();
+        final waiting = context.watch<LocalRecordingsProvider?>()?.recordings.any(
+                  (r) => r.state == LocalRecordingState.pending,
+                ) ??
+            false;
+        if (!waiting) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.xxs, OmiSpacing.sm, OmiSpacing.xxs, 0),
+          child: Text(
+            context.l10n.onDeviceWaitingForCharger,
+            key: const Key('offline_sync_charger_wait'),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          ),
+        );
+      },
+    );
+  }
 }

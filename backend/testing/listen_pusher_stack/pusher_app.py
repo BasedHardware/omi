@@ -72,6 +72,7 @@ finalizer.process_conversation = _offline_process_conversation
 finalizer.extract_memories = _offline_extract_memories
 finalizer.trigger_external_integrations = _offline_trigger_integrations
 
+from utils import pusher_audio_projection
 from routers import pusher as pusher_router  # noqa: E402  (patch finalizer first)
 
 _receive_bytes = pusher_router.WebSocket.receive_bytes
@@ -102,7 +103,7 @@ def _offline_create_audio_files(*_args: Any, **_kwargs: Any) -> list[Any]:
 
 
 pusher_router.upload_audio_chunks_batch = _offline_store_audio_chunks
-pusher_router.conversations_db.create_audio_files_from_chunks = _offline_create_audio_files
+pusher_audio_projection.conversations_db.create_audio_files_from_chunks = _offline_create_audio_files
 
 
 def _frame_metadata(data: bytes, direction: str) -> dict[str, Any]:

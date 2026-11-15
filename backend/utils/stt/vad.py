@@ -145,7 +145,9 @@ def vad_is_empty(
             return len(cached) == 0
 
     segments: Optional[List[Dict[str, Any]]] = None
-    hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    hosted_vad_url = None if gpu_fleet_off() else os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
             with open(file_path, 'rb') as file:
@@ -269,7 +271,9 @@ async def async_vad_is_empty(
             return len(exists) == 0
 
     segments: Optional[List[Dict[str, Any]]] = None
-    hosted_vad_url = os.getenv('HOSTED_VAD_API_URL')
+    from config.live_stt_gpu_fleet import gpu_fleet_off
+
+    hosted_vad_url = None if gpu_fleet_off() else os.getenv('HOSTED_VAD_API_URL')
     if hosted_vad_url:
         try:
             file_data = await run_blocking(storage_executor, _read_file, file_path)

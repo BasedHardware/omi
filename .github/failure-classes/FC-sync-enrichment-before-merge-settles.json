@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-enrichment-before-merge-settles",
+  "violated_contract": "Automatic full processing of sync capture must wait for a bounded quiet merge window, and a held donor must transfer its obligation without processing content that will be merged away.",
+  "canonical_prevention": "One durable trailing-edge enrichment obligation per canonical conversation, current-content admission, revision-fenced completion receipts, a maximum hold and a capped material late-content policy; explicit user ends bypass the automatic wait.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_sync_processing_hold.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/sync/", "backend/utils/enrichment/"],
+  "status": "open"
+}

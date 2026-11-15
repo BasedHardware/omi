@@ -101,7 +101,7 @@ async def upload_device_diagnostics(payload: DiagnosticsUpload, uid: str = Depen
         parsed = json.loads(body)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=400, detail='Diagnostics bundle must be JSON') from exc
-    if not isinstance(parsed, dict) or parsed.get('schema_version') != 2:
+    if not isinstance(parsed, dict) or parsed.get('schema_version') not in (2, 3):
         raise HTTPException(status_code=400, detail='Unsupported diagnostics schema')
     ticket = await run_blocking(storage_executor, device_diagnostics_storage.save_bundle, uid, body)
     return DiagnosticsReceipt(ticket=ticket)

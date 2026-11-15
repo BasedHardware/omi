@@ -1,3 +1,4 @@
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/needs_attention_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -17,7 +19,7 @@ import 'package:omi/services/wals/wal.dart';
 
 /// Failures stay behind the bell; catch-up work alone never lights its dot.
 
-class _IdleSync extends ChangeNotifier implements SyncProvider {
+class _IdleSync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   @override
   List<Wal> get allWals => const [];
   @override
@@ -81,6 +83,30 @@ Widget _app(Widget child, {ConversationProvider? conversations, SyncProvider? sy
     );
 
 void main() {
+  testWidgets('one server job counts each recording on the day row', (tester) async {
+    final now = DateTime(2026, 11, 7, 12);
+    final store = await _store(pending: [
+      PendingWorkItem(
+          id: 'sync:j',
+          kind: 'sync_job',
+          state: 'transcribing',
+          conversationIds: const ['c1'],
+          recordingCount: 3,
+          startedAt: now),
+    ]);
+    await tester.pumpWidget(MultiProvider(
+      providers: [ChangeNotifierProvider<SyncProvider>.value(value: _IdleSync())],
+      child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: OnTheWayPage(multiFileSync: true, pendingWork: store, clock: () => now)),
+    ));
+    expect(find.text('3 recordings'), findsOneWidget);
+    expect(find.text('1 recording'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    store.dispose();
+  });
+
   group('Needs attention', () {
     testWidgets('lists failed conversations with Try Again and Retry all', (tester) async {
       final retried = <String>[];

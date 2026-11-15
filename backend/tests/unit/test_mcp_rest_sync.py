@@ -1064,11 +1064,11 @@ class TestSyncedWriterTimestamps:
 
         docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
         _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
-        import database.account_deletion_marker as marker
+        from database import _client
 
         miss = SimpleNamespace(exists=False, to_dict=lambda: None)
         monkeypatch.setattr(
-            marker,
+            _client,
             'get_data_plane_firestore_client',
             lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
         )
@@ -1105,3 +1105,25 @@ class TestSyncedWriterTimestamps:
         data = doc_ref.update.call_args[0][0]
         assert data["completed"] is True
         assert isinstance(data["updated_at"], datetime)
+
+
+def test_rest_memory_source_time_survives_response_model(monkeypatch, client):
+    monkeypatch.setattr(
+        rest.mcp_memory_handlers,
+        'memories_page_core',
+        lambda *a, **k: {
+            'memories': [
+                {
+                    'id': 'synthetic',
+                    'content': 'Synthetic durable fact',
+                    'category': 'system',
+                    'source_at': '2026-06-01T00:00:00Z',
+                    'extracted_at': None,
+                }
+            ],
+        },
+    )
+    response = client.get('/v1/mcp/memories')
+    assert response.status_code == 200
+    assert response.json()[0]['source_at'] == '2026-06-01T00:00:00Z'
+    assert response.json()[0]['extracted_at'] is None

@@ -6,7 +6,8 @@
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_notes_tier_escalation.py",
     "backend/tests/unit/test_one_shot_notes_meeting_context.py",
-    "backend/tests/unit/test_call_tile_identity.py"
+    "backend/tests/unit/test_call_tile_identity.py",
+    "backend/tests/unit/test_notes_speaker_identity_contract.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

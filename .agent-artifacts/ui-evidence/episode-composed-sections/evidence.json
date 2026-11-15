@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-episode-composed-light.png",
+      "platform": "mobile-ios",
+      "description": "Composed episode page (fictional data): lede, one section per moment with points and details, transcript buttons, follow-ups",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-episode-composed-dark.png",
+      "platform": "mobile-ios",
+      "description": "The same composed episode page in dark mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

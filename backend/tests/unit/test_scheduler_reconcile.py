@@ -45,6 +45,18 @@ class FakeSession:
         return Response({})
 
 
+def test_dream_sweep_targets_backfill_with_its_sync_oidc_audience():
+    jobs = reconcile.load_manifest()['environments']['prod']['jobs']
+    dream = next(job for job in jobs if job['name'] == 'dream-agent-sweep-hourly')
+    target = dream['target']
+    assert target['uri'].split('/')[2].startswith('backend-sync-backfill-')
+    assert target['uri'] == target['oidc']['audience'].removesuffix('/v2/sync-jobs/run') + '/v2/dream-agent/sweep'
+    assert dream['schedule'] == '0,30 * * * *' and dream['attempt_deadline'] == '1740s'
+    cap_hold = next(job for job in jobs if job['name'] == 'cap-hold-durable-redrive')
+    assert cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-')
+    assert not cap_hold['target']['uri'].split('/')[2].startswith('backend-sync-backfill-')
+
+
 def test_secret_headers_are_resolved_in_memory_and_never_in_diff_output():
     session = FakeSession()
     manifest = reconcile.load_manifest()
@@ -90,34 +102,48 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "dream-agent-canary-half-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "frame-request-retention-hourly",
-        "memory-maintenance-hourly",
         "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
+        "batch-stock-census",
         "cap-hold-durable-redrive",
+        "app-review-config-sweep-hourly",
         "candidate-integration-sweep",
         "dream-agent-canary-half-hourly",
         "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",
         "enrichment-maintenance",
+        "error-class-alerts-sweep",
         "finops-unit-cost-daily",
         "frame-request-retention-hourly",
         "messaging-maintenance-hourly",
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
+        "omi-admin-wall-warm",
         "omi-tv-rollup-daily",
         "sync-backfill-uid-sequencer",
     }
-    for jobs in (dev_jobs, prod_jobs):  # C4: planned until /v2/enrichment/sweep serves on backend-integration
-        assert jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    # C4: prod is active (Plan C prod activation; it also sweeps the provider-stt outbox); dev stays planned.
+    assert dev_jobs["enrichment-maintenance"]["lifecycle"] == "planned"
+    assert "lifecycle" not in prod_jobs["enrichment-maintenance"]
+    assert prod_jobs["enrichment-maintenance"]["state"] == "ENABLED"
+    assert prod_jobs["app-review-config-sweep-hourly"]["lifecycle"] == "planned"
+    assert prod_jobs["app-review-config-sweep-hourly"]["state"] == "PAUSED"
     assert dev_jobs["enrichment-maintenance"]["state"] == "PAUSED"  # dev shares prod Firestore
+    assert dev_jobs["error-class-alerts-sweep"]["state"] == "PAUSED"  # logging.read not granted in dev
     rollup = prod_jobs["omi-tv-rollup-daily"]
     assert rollup["lifecycle"] == "planned"
     assert rollup["state"] == "PAUSED"
     assert rollup["target"]["oauth"]["service_account"] == (
         "finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com"
     )
+
+    warm = prod_jobs["omi-admin-wall-warm"]  # Omi TV legs fill off the viewing path
+    assert warm["state"] == "ENABLED"
+    assert warm["target"]["uri"] == "https://admin.omi.me/api/internal/wall-warm"
+    assert warm["target"]["headers"]["x-cron-secret"]["secret"] == "WEB_ADMIN_CRON_SECRET"
 
     assert "agent-vm-reconciler-5m" not in dev_jobs
     assert "candidate-integration-sweep" not in dev_jobs
@@ -307,7 +333,7 @@ def test_check_reports_unlisted_job_without_deleting():
     ]
 
 
-def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_manifest():
+def test_owner_scheduler_checks_are_scoped_and_central_reconcile_supports_planned_job_selection():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
@@ -316,8 +342,6 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
         ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_frame_request_retention_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
-        ".github/workflows/gcp_memory_maintenance_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
-        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_notifications_job.yml": "--check --jobs notifications-job-scheduler-trigger",
     }
     for relative_path, scoped_args in owner_checks.items():
@@ -341,8 +365,26 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     assert "owner: .github/workflows/gcp_scheduler_reconcile.yml" in admin_job
 
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
-    assert '--project "$PROJECT_ID" --check' in central
-    assert '--project "$PROJECT_ID" --check --jobs' not in central
+    assert "Optional space-separated declared job names" in central
+    assert 'JOBS: ${{ github.event.inputs.jobs }}' in central
+    assert "SELECTED_JOBS=()" in central
+    assert "JOB_ARGS=()" in central
+    assert 'read -r -a SELECTED_JOBS <<< "$JOBS"' in central
+    assert 'JOB_ARGS=(--jobs "${SELECTED_JOBS[@]}")' in central
+    assert '--project "$PROJECT_ID" --apply "${JOB_ARGS[@]}"' in central
+    assert '--project "$PROJECT_ID" --check "${JOB_ARGS[@]}"' in central
+
+
+def test_scheduler_cli_parses_unfiltered_and_multiple_job_selections_without_io():
+    prefix = ["--environment", "dev", "--project", "based-hardware-dev"]
+
+    unfiltered = reconcile._parser().parse_args([*prefix, "--check"])
+    assert unfiltered.jobs is None
+
+    selected = reconcile._parser().parse_args(
+        [*prefix, "--apply", "--jobs", "app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
+    )
+    assert selected.jobs == ["app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
 
 
 def test_notifications_cadence_covers_every_local_hour_boundary():

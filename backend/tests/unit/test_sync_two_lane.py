@@ -49,11 +49,15 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     now = 2_000_000_000
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
+    monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda name: int(name.split('.')[0]))
 
     fresh = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id='device-1', now=now)
     historical = lanes.classify_sync_lane([f'{now - 8 * 86400}.opus'], client_device_id='device-1', now=now)
-    future = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # Phone-clock skew inside the shared tolerance stays trusted fresh audio...
+    skewed = lanes.classify_sync_lane([f'{now + 301}.opus'], client_device_id='device-1', now=now)
+    # ...while stamps beyond it remain untrusted backfill.
+    future = lanes.classify_sync_lane([f'{now + 601}.opus'], client_device_id='device-1', now=now)
     invalid = lanes.classify_sync_lane(['invalid.opus'], client_device_id='device-1', now=now)
     legacy = lanes.classify_sync_lane([f'{now - 60}.opus'], client_device_id=None, now=now)
 
@@ -61,6 +65,9 @@ def test_lane_classification_fresh_backfill_and_untrusted(monkeypatch):
     assert fresh.trust == lanes.CaptureTimeTrust.DEVICE_BOUND
     assert historical.lane == lanes.SyncLane.BACKFILL
     assert historical.reason == 'historical_capture'
+    assert skewed.lane == lanes.SyncLane.FRESH
+    assert skewed.trust is lanes.CaptureTimeTrust.DEVICE_BOUND
+    assert skewed.newest_capture_at <= now
     assert future.lane == lanes.SyncLane.BACKFILL
     assert future.trust == lanes.CaptureTimeTrust.UNTRUSTED
     assert invalid.lane == lanes.SyncLane.BACKFILL
@@ -375,8 +382,8 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert '--max=${{ steps.live-max-scale.outputs.max_scale }}' in action
     assert '--concurrency=6' in action
     assert '--cpu=2' in action
-    # 2026-10-24 right-sizing: prod worker 8->4 GiB (live 06:06Z); dev keeps 8 GiB.
-    assert "--memory=${{ inputs.project_id == 'based-hardware' && '4Gi' || '8Gi' }}" in action
+    # margin-20: prod 2Gi (7d max bucket <=1.149GiB at concurrency 6); dev keeps 8Gi.
+    assert "--memory=${{ inputs.project_id == 'based-hardware' && '2Gi' || '8Gi' }}" in action
     assert 'gcloud run services add-iam-policy-binding backend-sync-backfill' in action
     # Runtime ops owns the cap; both deploy paths preserve it rather than reset it.
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
@@ -443,6 +450,14 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     assert 'dispatch' not in iam['if'] and 'platform' in iam['if']
     assert 'dispatch' not in ttl['if'] and 'platform' in ttl['if']
+    # One platform step provisions and then verifies the TTL policy for both
+    # ledgers. The capture lifecycle ledger is content-free and derived; its rows
+    # carry their own expires_at, and without the policy nothing removes them.
+    for group in ('sync_content_ledger', 'pipeline_ledger'):
+        assert ttl['run'].count(f'--collection-group={group}') == 2, group  # enable, then verify
+    assert ttl['run'].count('--enable-ttl') == 2
+    assert ttl['run'].count("grep '/fields/expires_at$'") == 2
+    assert 'delete' not in ttl['run'] and '--disable-ttl' not in ttl['run']
     assert 'dispatch' not in budget['if'] and 'platform' in budget['if']
     assert 'dispatch' in queue['if'] and 'platform' in queue['if']
     assert 'dispatch' in abort['if'] and 'platform' in abort['if']

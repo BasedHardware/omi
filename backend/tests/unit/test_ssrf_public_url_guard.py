@@ -23,8 +23,10 @@ import pytest
 from utils.http_client import (
     UnsafeWebhookURLError,
     assert_public_http_url,
+    assert_public_http_url_all,
     pin_to_resolved_ip,
     safe_request_target,
+    safe_request_targets,
 )
 
 # Real, unambiguously-public resolvers. NOT the TEST-NET documentation ranges
@@ -36,8 +38,14 @@ PUBLIC_IP_B = '1.1.1.1'
 
 
 def _addrinfo(*ips: str) -> list[tuple]:
-    """Build a fake socket.getaddrinfo() return value for the given IPv4 literals."""
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 0)) for ip in ips]
+    """Build a fake socket.getaddrinfo() return value for the given IPv4/IPv6 literals."""
+    rows: list[tuple] = []
+    for ip in ips:
+        if ':' in ip:
+            rows.append((socket.AF_INET6, socket.SOCK_STREAM, 6, '', (ip, 0, 0, 0)))
+        else:
+            rows.append((socket.AF_INET, socket.SOCK_STREAM, 6, '', (ip, 0)))
+    return rows
 
 
 def _mock_resolve(monkeypatch, *ips: str):
@@ -98,6 +106,12 @@ def test_rejects_when_getaddrinfo_returns_no_addresses(monkeypatch):
         # wrongly accepted as "public".
         ('100.64.0.1', 'CGNAT/RFC6598 (100.64/10) -- not flagged by ipaddress'),
         ('100.127.255.254', 'CGNAT/RFC6598 upper boundary'),
+        ('::ffff:100.64.0.1', 'IPv4-mapped CGNAT/RFC6598 (::ffff:100.64/10)'),
+        ('::ffff:100.127.255.254', 'IPv4-mapped CGNAT/RFC6598 upper boundary'),
+        ('::ffff:127.0.0.1', 'IPv4-mapped loopback'),
+        ('::ffff:10.1.2.3', 'IPv4-mapped RFC1918 private'),
+        ('::ffff:169.254.169.254', 'IPv4-mapped link-local / cloud metadata'),
+        ('::ffff:0.0.0.0', 'IPv4-mapped unspecified'),
         ('224.0.0.1', 'multicast'),
         ('240.0.0.1', 'reserved'),
         ('0.0.0.0', 'unspecified'),
@@ -107,6 +121,10 @@ def test_rejects_non_public_addresses(monkeypatch, unsafe_ip, label):
     _mock_resolve(monkeypatch, unsafe_ip)
     with pytest.raises(UnsafeWebhookURLError, match='non-public address'):
         assert_public_http_url('https://webhook.example.com/callback')
+    with pytest.raises(UnsafeWebhookURLError, match='non-public address'):
+        assert_public_http_url_all('https://webhook.example.com/callback')
+    with pytest.raises(UnsafeWebhookURLError, match='non-public address'):
+        safe_request_targets('https://webhook.example.com/callback')
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +152,12 @@ def test_accepts_addresses_just_outside_the_cgnat_range(monkeypatch):
     assert assert_public_http_url('https://edge-low.example.com/hook') == '100.63.255.255'
     _mock_resolve(monkeypatch, '100.128.0.0')
     assert assert_public_http_url('https://edge-high.example.com/hook') == '100.128.0.0'
+    _mock_resolve(monkeypatch, '::ffff:8.8.8.8')
+    assert assert_public_http_url('https://mapped-public.example.com/hook') == '::ffff:8.8.8.8'
+    _mock_resolve(monkeypatch, '::ffff:100.63.255.255')
+    assert assert_public_http_url('https://mapped-edge-low.example.com/hook') == '::ffff:100.63.255.255'
+    _mock_resolve(monkeypatch, '::ffff:100.128.0.0')
+    assert assert_public_http_url('https://mapped-edge-high.example.com/hook') == '::ffff:100.128.0.0'
 
 
 # ---------------------------------------------------------------------------

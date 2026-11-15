@@ -12,13 +12,16 @@ final class TestPeripheral {
 final class TestCentral {
     var state: CBManagerState = .poweredOn
     var connects = 0
+    var disconnects = 0
     var scanning = false
     var startDelays: [Double] = []
     func connect(_ peripheral: TestPeripheral, options: [String: Any]?) {
         connects += 1
         startDelays.append((options?[CBConnectPeripheralOptionStartDelayKey] as? NSNumber)?.doubleValue ?? 0)
     }
-    func cancelPeripheralConnection(_ peripheral: TestPeripheral) { peripheral.state = .disconnected }
+    func cancelPeripheralConnection(_ peripheral: TestPeripheral) {
+        disconnects += 1
+    }
     func retrievePeripherals(withIdentifiers: [UUID]) -> [TestPeripheral] { [] }
     func stopScan() { scanning = false }
     func scanForPeripherals(withServices: [CBUUID], options: [String: Any]) { scanning = true }
@@ -162,6 +165,25 @@ final class ManagerHarness {
         return (manager, peripheral, uuid)
     }
     static func main() {
+        // A terminal service-discovery failure must retire an OS-connected but
+        // unusable saved link, then leave the reconnect delay with CoreBluetooth.
+        do {
+            let (manager, peripheral, uuid) = fixture()
+            peripheral.state = .connected
+            manager.readyRequests.insert(uuid)
+            manager.reportDiscoveryFailure(peripheral: peripheral, uuid: uuid, reason: "timeout")
+            precondition(manager.centralManager.disconnects == 1, "unusable connected link was left in place")
+            precondition(peripheral.state == .connected, "CoreBluetooth state should change on its callback")
+            let retryAt = manager.savedSetupRetryAfter[uuid]!
+            precondition(retryAt - manager.queue.now == OmiBleConnectionPolicy.savedRetryDelay(attempt: 1), "setup retry cooldown missing")
+
+            // The platform disconnect callback owns the delayed reconnect. This
+            // works after suspension because issueConnect sets the OS delay.
+            peripheral.state = .disconnected
+            manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
+            precondition(manager.centralManager.connects == 1, "saved link was not reissued")
+            precondition(manager.centralManager.startDelays[0] == OmiBleConnectionPolicy.savedRetryDelay(attempt: 1), "OS retry delay missing")
+        }
         // Each capture down path must submit an OS request before ANY timer runs.
         for failToConnect in [false, true] {
             let (manager, peripheral, uuid) = fixture()
@@ -172,7 +194,7 @@ final class ManagerHarness {
                 manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
             }
             precondition(manager.centralManager.connects == 1, "capture down callback stranded on timer")
-            precondition(manager.savedRetryAttempts[uuid, default: 0] == (failToConnect ? 1 : 0))
+            precondition(manager.savedRetryAttempts[uuid, default: 0] == (failToConnect ? 1 : 0), "capture retry attempt counter changed")
         }
         // Repeated real failures before the watchdog fires still leave a request.
         do {
@@ -180,9 +202,9 @@ final class ManagerHarness {
             for failure in 1...3 {
                 manager.captureReconnects[uuid] = OmiCaptureReconnect()
                 manager.centralManager(manager.centralManager, didFailToConnect: peripheral, error: nil)
-                precondition(manager.centralManager.connects == failure)
-                precondition(manager.savedRetryAttempts[uuid] == failure)
-                precondition(manager.centralManager.startDelays.last == OmiBleConnectionPolicy.savedRetryDelay(attempt: failure))
+                precondition(manager.centralManager.connects == failure, "connect request count mismatch at failure \(failure)")
+                precondition(manager.savedRetryAttempts[uuid] == failure, "retry attempt mismatch at failure \(failure)")
+                precondition(manager.centralManager.startDelays.last == OmiBleConnectionPolicy.savedRetryDelay(attempt: failure), "retry delay mismatch at failure \(failure)")
             }
             manager.centralManager(manager.centralManager, didDiscover: peripheral, advertisementData: [:], rssi: -50)
             precondition(manager.centralManager.startDelays.last == 0, "discovery must skip radio backoff")
@@ -218,15 +240,16 @@ final class ManagerHarness {
             let (manager, peripheral, uuid) = fixture()
             for failure in 1...10 {
                 peripheral.state = .connected
-                manager.reportDiscoveryFailure(uuid: uuid, reason: "timeout")
+                manager.reportDiscoveryFailure(peripheral: peripheral, uuid: uuid, reason: "timeout")
                 let delay = OmiBleConnectionPolicy.savedRetryDelay(attempt: failure)
                 let count = manager.centralManager.connects
                 manager.disconnectPeripheral(uuid: uuid) // Non-user Dart release after terminal GATT failure.
                 precondition(manager.savedReconnect.contains(uuid))
                 precondition(manager.centralManager.connects == count)
+                peripheral.state = .disconnected
                 manager.centralManager(manager.centralManager, didDisconnectPeripheral: peripheral, error: nil)
                 precondition(manager.centralManager.connects == count + 1, "OS must own delayed setup retry")
-                precondition(manager.centralManager.startDelays.last == delay)
+                precondition(manager.centralManager.startDelays.last == delay, "OS did not own setup cooldown")
                 manager.queue.now += delay / 2 // Timers deliberately remain suspended.
                 manager.issueConnect(peripheral, uuid: uuid, source: "transport_release")
                 precondition(manager.centralManager.startDelays.last == delay / 2)

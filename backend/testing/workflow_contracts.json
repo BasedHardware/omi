@@ -44,6 +44,27 @@
   },
   "workflows": [
     {
+      "id": "empty_capture_operator_recovery",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/capture_empty_recovery.py",
+        "backend/utils/conversations/empty_capture_recovery.py",
+        "backend/scripts/capture_empty_recovery_privacy.py"
+      ],
+      "tests": [
+        "tests/unit/test_empty_capture_recovery.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "dry run performs no product writes or paid transcription and emits counts only",
+        "whole-document update-time preconditions preserve concurrent transcripts and user edits",
+        "standard and enhanced transcripts retain their persisted protection level",
+        "one durable claim prevents duplicate paid attempts on rerun",
+        "only measured zero-speech short rows can be reversibly discarded with private write-ahead undo",
+        "partial or unreadable retained audio never proves silence"
+      ]
+    },
+    {
       "id": "task_candidate_resolution",
       "risk": "high",
       "sources": [
@@ -193,6 +214,21 @@
         "pending text is visible only to the first-party memory list and never to agent, developer, MCP, search, vector, or KG reads",
         "processing, review, and promotion use revision/content CAS and rebase after unrelated head advances",
         "negative user review remains authoritative across all derived projection rebuilds"
+      ]
+    },
+    {
+      "id": "gpu_worker_deployment_gate",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_diarizer.yml"
+      ],
+      "tests": [
+        "tests/unit/test_record_seal_cluster_repair_deploy.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the immutable Firestore control checkout and serving-index gate remain unconditional and source-bound",
+        "worker builds, digest promotion and every deployment writer follow the serving-index gate"
       ]
     },
     {
@@ -358,8 +394,7 @@
         "backend/models/memory_promotion.py",
         "backend/utils/memory/canonical_consolidation.py",
         "backend/jobs/short_term_lifecycle_worker.py",
-        "backend/utils/memory/short_term_promotion.py",
-        "backend/utils/memory/canonical_short_term_maintenance_cron.py"
+        "backend/utils/memory/short_term_promotion.py"
       ],
       "tests": [
         "tests/unit/test_atomic_apply.py",
@@ -367,7 +402,6 @@
         "tests/unit/test_canonical_consolidation_apply.py",
         "tests/unit/test_short_term_lifecycle_firestore_store.py",
         "tests/unit/test_ws_b_short_term_lifecycle.py",
-        "tests/unit/test_canonical_short_term_maintenance_cron.py",
         "tests/unit/test_memory_outbox_worker.py"
       ],
       "checks": [
@@ -477,12 +511,23 @@
         "backend/routers/developer.py",
         "backend/utils/sync/pipeline.py",
         "backend/utils/conversations/process_conversation.py",
+        "backend/config/notes_short_clip.py",
+        "backend/utils/llm/notes_short_clip.py",
+        "backend/utils/llm/notes_short_clip_policy.py",
+        "backend/utils/conversations/minimum_derived.py",
         "backend/utils/app_integrations.py",
         "backend/utils/conversations/merge_conversations.py",
         "backend/utils/imports/limitless.py"
       ],
       "tests": [
         "tests/unit/test_conversation_lifecycle_contract.py",
+        "tests/unit/test_short_clip_floor.py",
+        "tests/unit/test_short_clip_rollout.py",
+        "tests/unit/test_short_clip_authority.py",
+        "tests/unit/test_short_clip_summary_debt.py",
+        "tests/unit/test_summary_delivery.py",
+        "tests/unit/test_notes_packet_v2.py",
+        "tests/unit/test_structured_emoji_never_defaults_to_brain.py",
         "tests/unit/test_finalization_decision.py",
         "tests/unit/test_check_conversation_lifecycle_writes.py",
         "tests/unit/test_conversation_finalization_jobs.py",
@@ -583,8 +628,6 @@
         ".github/actions/transcription-release-candidate-probe/**",
         ".github/workflows/gcp_backend*.yml",
         ".github/workflows/gcp_llm_gateway.yml",
-        ".github/workflows/gcp_memory_maintenance_job.yml",
-        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
         ".github/workflows/gcp_notifications_job.yml",
         ".github/workflows/gcp_x_connector_sync_job.yml",
         ".github/workflows/sync_ledger_fence_cutover.yml",
@@ -603,7 +646,6 @@
         "backend/scripts/firebase_release_probe_token.py",
         "backend/scripts/transcription_capability_probe.py",
         "backend/scripts/pre-deploy-check.sh",
-        "backend/scripts/validate_memory_maintenance_scheduler.py",
         "backend/scripts/validate_x_connector_sync_scheduler.py",
         "backend/scripts/scheduler_reconcile.py",
         "backend/scripts/validate-backend-runtime-env.py"
@@ -624,7 +666,6 @@
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
-        "tests/unit/test_validate_memory_maintenance_scheduler.py",
         "tests/unit/test_validate_x_connector_sync_scheduler.py",
         "tests/unit/test_scheduler_reconcile.py",
         "tests/unit/test_verify_sync_ledger_fence_transition.py"
@@ -668,6 +709,7 @@
         "tests/unit/test_verify_pusher_rollout_budget.py",
         "tests/unit/test_verify_pusher_live_deployment_gate.py",
         "tests/unit/test_verify_pusher_promotion_evidence.py",
+        "tests/unit/test_verify_pusher_release_source.py",
         "tests/unit/test_verify_pusher_dev_observability.py",
         "tests/unit/test_pusher_deployment_control_workflow.py",
         "tests/unit/test_pusher_auto_deploy_paths.py",
@@ -683,6 +725,7 @@
         "Pusher's Kubernetes progress deadline and CI rollout wait both cover every configured healthy-availability wave at the committed HPA ceiling",
         "a chart change to Pusher startup/readiness/min-ready, HPA, or RollingUpdate inputs cannot silently make a healthy rollout appear failed",
         "production Pusher deploys only an exact digest attested by a successful automatic development rollout and never rebuilds that production artifact",
+        "an explicit production runtime pin must match its eligible development-qualified source and cannot downgrade immutable workflow controls or the Pusher/shared ConfigMap policy",
         "production Pusher promotion fails before any registry, config, or Helm mutation unless the exact source, image, rendered chart, live config, and live development deployment receipt agree",
         "development qualification exercises the deployed public listen route with the isolated Firebase release-probe principal and versioned real-audio fixture, then requires durable terminal finalization plus authenticated conversation read-back",
         "semantic-probe and separately protected attributable-canary outcomes must be explicit identity-bound PASS receipts with closed windows and samples; missing, NOT_RUN, failed, or contradictory evidence halts promotion",
@@ -833,7 +876,7 @@
       ],
       "checks": [],
       "invariants": [
-        "production Grafana changes require explicit prod dispatch with the production Environment secret",
+        "production alert changes require explicit prod dispatch with the production Environment secret; dashboard JSON applies to prod on push from the no-reviewer grafana-dashboards-prod environment",
         "alert upserts retain unknown live rules, preserve provenance, back up before writes, and verify complete definitions",
         "dashboard imports preserve folders and authenticated requests never follow redirects",
         "GMP addition preserves local sources, HPA routing, recording rules and the history warmup pin",

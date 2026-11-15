@@ -35,6 +35,7 @@ class PersonFact:
     relationship: Optional[str] = None
     notes: Optional[str] = None
     aliases: tuple[str, ...] = ()
+    emails: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,8 @@ def render_meeting_context_pack(pack: Optional[MeetingContextPack]) -> str:
         detail = fact.relationship or ''
         if fact.aliases:
             detail = f'{detail}; aka {", ".join(fact.aliases)}' if detail else f'aka {", ".join(fact.aliases)}'
+        if fact.emails:
+            detail = f'{detail}; {", ".join(fact.emails)}' if detail else f'{", ".join(fact.emails)}'
         if detail:
             line += f' ({detail})'
         if fact.notes:

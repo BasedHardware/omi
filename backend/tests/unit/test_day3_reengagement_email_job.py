@@ -155,3 +155,31 @@ def test_display_name_for_reads_through_get_user_from_uid(monkeypatch, day3_job)
 
     assert job._display_name_for('uid-a') == 'name-uid-a'
     assert job._display_name_for('uid-missing') is None
+
+
+@pytest.mark.parametrize('fail', [False, True])
+def test_main_logs_terminal_probe_totals_on_success_and_error(monkeypatch, day3_job, caplog, fail):
+    import json
+    import logging
+    from database.firestore_document_probe import FIRESTORE_BILLED_READS_BY_CALLER
+
+    def run():
+        FIRESTORE_BILLED_READS_BY_CALLER.labels('other', 'lookup', 'tests:day3_terminal').inc(2)
+        if fail:
+            raise RuntimeError('synthetic job failure')
+
+    monkeypatch.setattr(day3_job, '_init_firebase', lambda: None)
+    monkeypatch.setattr(day3_job, 'run_day3_reengagement_email_job', run)
+    caplog.set_level(logging.INFO, logger='utils.observability.firestore_probe_export')
+    if fail:
+        with pytest.raises(RuntimeError, match='synthetic job failure'):
+            day3_job.main()
+    else:
+        day3_job.main()
+    samples = [json.loads(r.message) for r in caplog.records if r.name == 'utils.observability.firestore_probe_export']
+    assert any(
+        s.get('labels', {}).get('caller') == 'tests:day3_terminal'
+        and s['service'] == 'day3-reengagement-email-job'
+        and s['value'] >= 2
+        for s in samples
+    )

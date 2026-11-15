@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-light.png",
+      "platform": "mobile-android",
+      "description": "Home Light; headless Flutter production widgets with fictional fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-home-dark.png",
+      "platform": "mobile-android",
+      "description": "Home Dark; headless Flutter production widgets with fictional fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-episode-light.png",
+      "platform": "mobile-android",
+      "description": "Episode Light; headless Flutter production widgets with fictional fixture data; refreshed with the shared conversation overflow menu for episode-wide Delete and Undo",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-episode-dark.png",
+      "platform": "mobile-android",
+      "description": "Episode Dark; headless Flutter production widgets with fictional fixture data; refreshed with the shared conversation overflow menu for episode-wide Delete and Undo",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-home-chrome-light.png",
+      "platform": "mobile-android",
+      "description": "Full Home Light; production Home widgets and existing HomeFrame chrome, Today live episode and Yesterday rows, fictional fixture data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

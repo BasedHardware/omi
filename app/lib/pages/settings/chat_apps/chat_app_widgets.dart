@@ -411,7 +411,7 @@ Uri? chatAppProofUri({
     channel,
     resolved,
     startToken: channel == ChatChannel.telegram ? startToken : null,
-    body: channel == ChatChannel.imessage ? body : null,
+    body: channel == ChatChannel.telegram ? null : body,
     platform: platform,
   );
 }
@@ -441,7 +441,12 @@ Uri? chatAppUri(
         'sms:$number${separator}body=${Uri.encodeComponent(body)}',
       );
     case ChatChannel.whatsapp:
-      return null;
+      // Click-to-chat takes the number as digits only, with the country code.
+      final digits = endpoint.address.replaceAll(RegExp(r'[^0-9]'), '');
+      if (digits.isEmpty) return null;
+      // %20, not form-encoded +: WhatsApp shows a literal + in the prefilled text.
+      if (body == null) return Uri(scheme: 'https', host: 'wa.me', path: digits);
+      return Uri.parse('https://wa.me/$digits?text=${Uri.encodeComponent(body)}');
   }
 }
 

@@ -73,6 +73,30 @@ class AreaScan:
     warnings: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
     error: str | None = None
+    skipped: str | None = None
+
+
+def _sparse_excluded(root: Path, relative: str) -> bool:
+    """True when `relative` is tracked but not materialised by sparse-checkout.
+
+    skip-worktree entries ('S ' from `git ls-files -t`) are excluded by the
+    cone, not deleted: an area skipped for that reason carries no signal for
+    this ratchet because none of its files can have changed in this worktree,
+    and CI's dense checkout still enforces it. A user deletion keeps its 'H '
+    tag and keeps failing closed.
+    """
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-t", "--", relative],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    lines = completed.stdout.splitlines()
+    return bool(lines) and all(line.startswith("S ") for line in lines)
 
 
 # ---------------------------------------------------------------------------
@@ -160,6 +184,8 @@ def scan_flutter(root: Path) -> AreaScan:
     lib = root / FLUTTER_LIB_REL
     entry = lib / FLUTTER_ENTRY
     if not entry.is_file():
+        if _sparse_excluded(root, f"{FLUTTER_LIB_REL}/{FLUTTER_ENTRY}"):
+            return AreaScan("flutter", skipped="flutter area is outside this checkout's sparse scope; the dense CI run enforces it")
         return AreaScan("flutter", error=f"flutter entry {FLUTTER_LIB_REL}/{FLUTTER_ENTRY} is missing; nothing to anchor reachability")
     is_ignored = _ignore_predicate(root)
     if is_ignored(entry):
@@ -213,6 +239,8 @@ PY_STMT = re.compile(
 def scan_backend(root: Path) -> AreaScan:
     backend = root / BACKEND_REL
     if not backend.is_dir():
+        if _sparse_excluded(root, BACKEND_REL):
+            return AreaScan("backend", skipped="backend area is outside this checkout's sparse scope; the dense CI run enforces it")
         return AreaScan("backend", error="backend/ is missing; nothing to scan")
     is_ignored = _ignore_predicate(root)
     files: dict[str, Path] = {}
@@ -347,6 +375,8 @@ def scan_ts(root: Path, area: str, area_root_rel: str, entry_specs: list[str],
     aliases = aliases or {}
     base = root / area_root_rel / "src"
     if not base.is_dir():
+        if _sparse_excluded(root, f"{area_root_rel}/src"):
+            return AreaScan(area, skipped=f"{area} area is outside this checkout's sparse scope; the dense CI run enforces it")
         return AreaScan(area, error=f"{area_root_rel}/src is missing; nothing to scan")
     is_ignored = _ignore_predicate(root)
     files: dict[str, Path] = {}
@@ -539,6 +569,8 @@ def check_area(root: Path, area: str) -> tuple[list[str], list[str], AreaScan]:
     """Return (failures, warnings, scan) for one area in check mode."""
     scan = scan_area(root, area)
     warnings = list(scan.warnings)
+    if scan.skipped:
+        return [], warnings, scan
     if scan.error:
         return [scan.error], warnings, scan
     floor, floor_warnings = load_baseline(root, area)
@@ -570,6 +602,8 @@ def check_area(root: Path, area: str) -> tuple[list[str], list[str], AreaScan]:
 def update_baseline_area(root: Path, area: str) -> tuple[list[str], list[str], AreaScan]:
     scan = scan_area(root, area)
     warnings = list(scan.warnings)
+    if scan.skipped:
+        return [], warnings, scan
     if scan.error:
         return [scan.error], warnings, scan
     allowed, allow_errors = load_allowlist(root, area)
@@ -615,6 +649,8 @@ def main() -> int:
             print(f"dead-code[{area}]: FAILED, {len(failures)} problem(s):")
             for failure in failures:
                 print(f"  - {failure}")
+        elif scan.skipped:
+            print(f"dead-code[{area}]: skipped ({scan.skipped})")
         elif not args.update_baseline:
             print(f"dead-code[{area}]: ok ({len(scan.dead)} unreachable file(s) at the baseline/allowlist floor)")
     if exit_code:

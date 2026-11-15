@@ -13,10 +13,14 @@ import time
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
+from config.batch_pipeline import merge_head_wait_seconds, provider_merge_membership_enabled
 from database.outbox import Outbox, OutboxKind, outbox_for
+from utils.batch_pipeline.provider_drain import OwnerDrainCoalescer
 from utils.batch_pipeline.provider_stt import ProviderSttConsumer
+from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import run_blocking, sync_executor
-from utils.workers.consumer import Result, http_response, run_push
+from utils.sync.stage import current_stage
+from utils.workers.consumer import Result, http_response, run_push, run_push_async
 
 ROUTE = '/v2/batch-pipeline/provider-stt/run'
 _BOUNDED_ID = 128
@@ -57,6 +61,44 @@ def run_delivery(
     )
 
 
+async def _run_sync(fn, *args, **kwargs):
+    return await run_blocking(sync_executor, fn, *args, **kwargs)
+
+
+async def _drain_owner(owner_id: str) -> None:
+    service = await _run_sync(serving_for_stage, current_stage())
+    await service.drain_settled_async(owner_id)
+
+
+# Per process; created on first use so importing this router constructs nothing.
+_owner_drains: OwnerDrainCoalescer | None = None
+
+
+def wake_owner_merge(owner_id: str) -> None:
+    """The settled-unit hook: one coalesced ordered-merge drain for the owner (kill-switched)."""
+    global _owner_drains
+    if not provider_merge_membership_enabled():
+        return
+    if _owner_drains is None:
+        _owner_drains = OwnerDrainCoalescer(_drain_owner, head_wait=merge_head_wait_seconds)
+    _owner_drains.request(owner_id)
+
+
+async def run_delivery_async(
+    row_id: str, wake_token: str, *, consumer: ProviderSttConsumer | None = None, outbox: Outbox | None = None
+) -> Result:
+    """The serving delivery: store/GCS/VAD work on the sync executor, the vendor call awaited on the
+    event loop (Velma batch is synchronous-only, so its open request must not hold a thread)."""
+    return await run_push_async(
+        consumer or ProviderSttConsumer(settled=wake_owner_merge),
+        outbox or await _run_sync(outbox_for, OutboxKind.PROVIDER_STT),
+        row_id,
+        wake_token,
+        now=time.time(),
+        run_sync=_run_sync,
+    )
+
+
 @router.post(ROUTE, include_in_schema=False)
 async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_provider_stt_task)):
     try:
@@ -71,5 +113,4 @@ async def run_provider_stt(request: Request, _retry_count: int = Depends(verify_
         or not _bounded(body['wake_token'])
     ):
         return _malformed()
-    result = await run_blocking(sync_executor, run_delivery, body['row_id'], body['wake_token'])
-    return http_response(result)
+    return http_response(await run_delivery_async(body['row_id'], body['wake_token']))

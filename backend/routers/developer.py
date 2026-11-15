@@ -1,3 +1,12 @@
+"""Developer-platform API (/v1/dev/*): transcript ingestion into conversations,
+plus memories, action items, facts, folders, apps and people for SDK clients.
+
+This is a released-client surface: request/response shapes are consumed by the
+shipped Python CLI SDK (sdks/python-cli) and external tooling, and the
+from-segments intake carries capture evidence lineage, so compatibility rules
+apply here that do not apply to app-facing routes.
+"""
+
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (
@@ -6,6 +15,7 @@ from routers.developer_segments_models import (
     CaptureEvidenceLineage,
     CaptureEvidenceLineageUnit,
 )
+import hashlib
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -32,6 +42,7 @@ from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
 from models.daily_summary import DailySummariesResponse, DailySummaryResponse
+from utils.daily_summary_validation import DailySummaryUnavailable, read_daily_summary_page, require_daily_summary
 from utils.client_device import resolve_client_device_from_request
 from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import list_developer_goals, normalize_goal_history_entry, normalize_goal_response
@@ -86,6 +97,10 @@ from utils.observability.external_lists import (
 )
 from utils.observability.firestore_request_reads import ReadComponent, read_component
 from utils import external_list_reads as external_lists
+from utils import external_polling_cache as polling_cache
+from utils.developer_item_reads import read_conversation_item
+from utils.conversations import transcribing_hold
+from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
@@ -100,7 +115,6 @@ from utils.conversations.projection_payload import (
 )
 from utils.conversations.transcript_hash import (
     stored_transcript_segment,
-    transcript_sha256,
     transcript_sha256_for_binding,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -1246,13 +1260,13 @@ def get_developer_daily_summaries(
     status = 500
     returned_count = 0
     try:
-        summaries = daily_summaries_db.get_daily_summaries(
-            auth.uid,
-            limit=limit,
-            offset=offset,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        try:
+            summaries = read_daily_summary_page(
+                auth.uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date, request=request
+            )
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         returned_count = len(summaries)
         status = 200
         return {'summaries': summaries}
@@ -1283,13 +1297,26 @@ def get_developer_daily_summary(
     status = 500
     returned_count = 0
     try:
+        negative_key = polling_cache.negative_key(request, auth.uid, auth, summary_id)
+        if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+            status = 404
+            raise HTTPException(
+                404, detail='Daily summary not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'}
+            )
         summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if summary is None and negative_key:
+            polling_cache.remember_missing(external_lists._redis(), negative_key)
         if not summary:
             status = 404
             raise HTTPException(status_code=404, detail='Daily summary not found')
+        try:
+            validated = require_daily_summary(summary, uid=auth.uid, operation='developer_detail')
+        except DailySummaryUnavailable:
+            status = 503
+            raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
         status = 200
         returned_count = 1
-        return summary
+        return validated
     finally:
         _audit_developer_read(
             request=request,
@@ -1326,17 +1353,16 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not folder or not folder.get('id'):
+        if not folder or not folder.id:
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            DeveloperFolder.model_validate(folder)
-            valid_folders.append(folder)
+            DeveloperFolder.model_validate(folder.model_dump(exclude_unset=True))
+            valid_folders.append(folder.model_dump(exclude_unset=True))
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
-                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
+                f"Skipping invalid folder doc {folder.id} for uid {uid}: " f"missing/invalid fields {invalid_fields}"
             )
             continue
     return valid_folders
@@ -1510,7 +1536,11 @@ def get_conversations(
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
         budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not home_transcription_presentation_gate_enabled()
+            else None
+        )
         if cached is not None:
             status = 200
             returned_count = len(json.loads(bytes(cached.body)))
@@ -1529,7 +1559,13 @@ def get_conversations(
                     end_dt=end_date,
                     categories=[c.value for c in category_list],
                     cursor_kind="developer_conversations",
-                    extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    extra_field_paths=[
+                        "structured",
+                        "source",
+                        "geolocation",
+                        "folder_id",
+                        *transcribing_hold.READ_FIELDS,
+                    ],
                     **budget_kwargs,
                 )
             except ToolExecutionError as exc:
@@ -1545,6 +1581,7 @@ def get_conversations(
                 limit + 1,
                 offset,
                 include_discarded=False,
+                presentation=True,
                 statuses=["completed"],
                 start_date=start_date,
                 end_date=end_date,
@@ -1569,6 +1606,7 @@ def get_conversations(
         # Filter out locked conversations completely
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
+        unlocked_conversations = [transcribing_hold.project(row) for row in unlocked_conversations]
         for conv in unlocked_conversations:
             conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript
@@ -1716,60 +1754,45 @@ def get_conversation_endpoint(
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
     ignore_unknown_query(request, {"include_transcript"}, response)
-    auth = uid
-    uid = auth.uid
-    status = 500
-    returned_count = None
-    try:
-        if include_transcript:
-            check_conversation_transcript_read_limit(auth, request=request)
-
-        conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation or conversation.get('deleted', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        # Filter out locked conversations
-        if conversation.get('is_locked', False):
-            status = 404
-            returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
-
-        from utils.mcp_server.helpers import conversation_participants
-
-        conversation.update(conversation_participants(conversation, include_display=False))
-        conversation['transcript_included'] = include_transcript
-
-        # Remove transcript_segments if not requested
-        if not include_transcript:
-            conversation.pop('transcript_segments', None)
-        else:
-            populate_speaker_names(uid, [conversation], preserve_api_values=True)
-
-        populate_folder_names(uid, [conversation])
-
-        status = 200
-        returned_count = 1
-        return conversation
-    except HTTPException as e:
-        status = e.status_code
-        returned_count = 0 if returned_count is None else returned_count
-        raise
-    finally:
-        _audit_developer_read(
-            request=request,
-            auth=auth,
-            operation='get_conversation',
-            status=status,
-            include_transcript=include_transcript,
-            returned_count=returned_count,
-            resource_id=conversation_id,
-        )
+    return read_conversation_item(
+        conversation_id,
+        include_transcript,
+        uid,
+        request,
+        conversations_db=conversations_db,
+        cache_client=external_lists._redis,
+        check_transcript=check_conversation_transcript_read_limit,
+        populate_speaker_names=populate_speaker_names,
+        populate_folder_names=populate_folder_names,
+        audit=_audit_developer_read,
+    )
 
 
 def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
+
+
+# Recording facts that identify a blank-id upload: the same values hash to one
+# conversation across retries, different recordings hash apart. Routing fields a
+# retry may legitimately resend differently (folder, calendar context, client
+# projection, finalization reason) are deliberately absent so a retry lands on
+# the first attempt's conversation instead of forking a duplicate.
+_BLANK_SESSION_ID_IDENTITY_FIELDS = frozenset(
+    {'source', 'started_at', 'finished_at', 'language', 'geolocation', 'transcript_segments'}
+)
+
+
+def _derived_client_session_id(uid: str, request: CreateConversationFromTranscriptRequest) -> str:
+    """Stable retry identity for uploads whose client persisted a blank session id.
+
+    These clients resend byte-identical requests (BasedHardware/omi#15500), so a
+    digest of the recording's own facts is identical on every retry while a
+    different recording — different segments or clock — digests apart.
+    """
+    payload = dict(request.model_dump(mode='json', by_alias=False, include=_BLANK_SESSION_ID_IDENTITY_FIELDS))
+    payload['uid'] = uid
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return f'derived:{digest}'
 
 
 def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
@@ -1874,16 +1897,13 @@ def _bind_projection_to_segments(
     row must bind through ``transcript_sha256_for_binding``, which refuses a
     legacy row whose identity was written before canonicalization: there, a
     matching digest would not imply matching rendered attribution. Request
-    segments are not stored yet -- they are canonicalized on write -- so they
-    bind with the plain client-reproducible digest.
+    segments have already been canonicalized by ingest. Both paths share the
+    fail-closed scope guard without changing the client-reproducible encoding.
     """
-    if stored:
-        expected = transcript_sha256_for_binding(segments or [])
-        if expected is None:
-            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
-            return None
-    else:
-        expected = transcript_sha256(segments or [])
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical' if stored else 'unsafe_ingest_binding', raw)
+        return None
     if expected != projection.transcript_sha256:
         _log_client_projection_rejected('hash_mismatch', raw)
         return None
@@ -2048,6 +2068,14 @@ def _ingest_conversation_from_segments(
 
     if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    # A sent-blank client_session_id must not take the unkeyed create path: these
+    # clients resend byte-identical requests, so a lost 200 followed by the retry
+    # would fork a duplicate conversation (Luna review of #23886). Derive the
+    # stable id the client failed to send; an id that was never sent keeps the
+    # plain create path.
+    if request.client_session_id is None and request.sent_blank_client_session_id:
+        request = request.model_copy(update={'client_session_id': _derived_client_session_id(uid, request)})
 
     request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
     if covered_response is not None:
@@ -2674,14 +2702,28 @@ def get_goals(
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+    request: Request = None,
 ):
     """
     Get a single goal by ID.
 
     - **goal_id**: The ID of the goal to retrieve
     """
-    goals = goals_db.get_all_goals(uid, include_inactive=True)
-    goal = next((g for g in goals if g.get('id') == goal_id), None)
+    negative_key = polling_cache.negative_key(request, uid, auth, goal_id)
+    if negative_key and polling_cache.missing(external_lists._redis(), negative_key):
+        raise HTTPException(404, detail='Goal not found', headers={'X-Omi-List-Cache': 'negative; max-age=10'})
+    if negative_key:
+        try:
+            goal = goals_db.get_goal_by_id(uid, goal_id)
+        except (AttributeError, TypeError, ValueError):
+            goal = None  # List projection also hides corrupt rows; never cache them as absent.
+        else:
+            if goal is None:
+                polling_cache.remember_missing(external_lists._redis(), negative_key)
+    else:
+        goals = goals_db.get_all_goals(uid, include_inactive=True)
+        goal = next((g for g in goals if g.get('id') == goal_id), None)
 
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found")

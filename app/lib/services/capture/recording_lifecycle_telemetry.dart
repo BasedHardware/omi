@@ -1,6 +1,7 @@
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
+import 'package:omi/utils/logger.dart';
 
 typedef RecordingTelemetryEmitter = void Function(String eventName, Map<String, dynamic> properties);
 typedef RecordingIdFactory = String Function();
@@ -190,6 +191,11 @@ class RecordingLifecycleTelemetry {
   }
 
   void failStart({required String failureClass}) {
+    Logger.debug(
+      '[Capture] start failed: failure_class=$failureClass source=$_source '
+      'prepared=${_recordingId != null} started=$_startedEmitted '
+      'audio_observed=$_audioObserved audio_bytes=$_audioBytes connections=$_connections',
+    );
     if (_recordingId == null) return;
     if (_startedEmitted) {
       complete(reason: 'pipeline_closed');

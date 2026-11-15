@@ -18,13 +18,19 @@ import yaml
 
 from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
 from utils.agent_capabilities.session import serialized_bytes
-from utils.dream_verify import evidence
+from utils.dream_verify import INSTRUCTIONS as VERIFIER_INSTRUCTIONS, batches
 
 RATE_CARD_FILE = Path(__file__).resolve().parents[1] / 'llm_gateway' / 'config' / 'cost_rate_cards.yaml'
 BYTES_PER_TOKEN = 3.5
 TOKENS_PER_MILLION = 1_000_000
 # Verifier run_loop refuses a call once fewer than this many tokens remain.
 VERIFIER_CALL_FLOOR = 1024
+# dream_verify.batches' evidence ceiling, and the falsifier/audit suffix plus seed framing.
+VERIFIER_BATCH_BYTES = 24000
+VERIFIER_FRAMING_BYTES = 512
+# Most of a pass budget the next-turn verification headroom may take. At the
+# smallest production tier (375k) this still funds one full 24000-byte batch.
+HOLD_HEADROOM_SHARE = 0.1
 
 
 def estimate_tokens(nbytes):
@@ -194,17 +200,34 @@ def conservative_attempt_micro(provider, model, input_tokens, completion_tokens)
 
 
 def verification_reserve_tokens(staged, *, completion_tokens):
-    """Token hold for two verifier calls, computed from staged evidence only.
+    """Token hold for verifying staged evidence: two calls per verifier batch.
 
-    Each call is charged the evidence-byte estimate plus its bounded completion,
-    and at least the verifier's 1024-token start floor. Nothing is held during
-    the main loop.
+    Batches follow ``dream_verify.batches`` at its 24000-byte evidence ceiling;
+    each call is charged its batch bytes, the framed instructions and its bounded
+    completion, and at least the verifier's 1024-token start floor. Oversized
+    items are never sent, so they reserve nothing.
     """
     if not staged:
         return 0
-    evidence_bytes = sum(serialized_bytes(evidence(item)) for item in staged)
-    per_call = max(VERIFIER_CALL_FLOOR, estimate_tokens(evidence_bytes) + max(0, int(completion_tokens)))
-    return per_call * 2
+    return sum(_batch_call_tokens(serialized_bytes(batch), completion_tokens) * 2 for batch in batches(staged))
+
+
+def verification_hold_tokens(staged, *, completion_tokens, pass_tokens):
+    """Main-loop hold: the staged reserve plus headroom for what the next turn may stage.
+
+    A turn can return proposals and finish together, after the hold was computed,
+    so the hold also pays for one more full batch, up to a share of the pass budget
+    so a small pass is not starved before it stages anything.
+    """
+    headroom = min(
+        2 * _batch_call_tokens(VERIFIER_BATCH_BYTES, completion_tokens), int(pass_tokens * HOLD_HEADROOM_SHARE)
+    )
+    return verification_reserve_tokens(staged, completion_tokens=completion_tokens) + max(0, headroom)
+
+
+def _batch_call_tokens(batch_bytes, completion_tokens):
+    framed = batch_bytes + len(VERIFIER_INSTRUCTIONS.encode()) + VERIFIER_FRAMING_BYTES
+    return max(VERIFIER_CALL_FLOOR, estimate_tokens(framed) + max(0, int(completion_tokens)))
 
 
 def charge_attempts(attempts, *, ceiling, provider, model):

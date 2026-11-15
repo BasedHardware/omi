@@ -235,7 +235,12 @@ async def test_cost_result_written_counter_increments_after_a_cas_commit(monkeyp
     from utils.stt.live_gate import GateState
 
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
-    health = FleetHealth(clock=lambda: 1000.0)
+
+    class Redis:
+        async def mget(self, keys):
+            return [None] * len(keys)
+
+    health = FleetHealth(clock=lambda: 1000.0, redis_client=Redis())
     monkeypatch.setattr(health, '_check_identity', lambda: 'stable')
 
     async def server_now(_identity):
@@ -336,6 +341,8 @@ async def test_cost_bench_post_commit_identity_check_error_is_not_a_drop(monkeyp
     monkeypatch.setenv('STT_ROUTING_MODE', 'shadow')
 
     class Redis:
+        committed = False
+
         async def time(self):
             return (1000, 0)
 
@@ -343,15 +350,15 @@ async def test_cost_bench_post_commit_identity_check_error_is_not_a_drop(monkeyp
             return None
 
         async def eval(self, *_args):
+            self.committed = True
             return 1
 
-    health = FleetHealth(clock=lambda: 1000.0, redis_client=Redis())
+    redis = Redis()
+    health = FleetHealth(clock=lambda: 1000.0, redis_client=redis)
     health._identity = 'stable'
-    checks = {'count': 0}
 
     def check_identity():
-        checks['count'] += 1
-        if checks['count'] == 5:
+        if redis.committed:
             raise RuntimeError('synthetic post-commit identity read failure')
         return 'stable'
 

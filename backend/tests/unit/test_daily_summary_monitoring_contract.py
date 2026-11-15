@@ -110,19 +110,24 @@ def test_recap_log_metrics_extract_bounded_labels(tmp_path):
 def test_feature_health_row_carries_the_daily_recap_outcome():
     doc = json.loads(DASHBOARD.read_text())
     top = doc['panels']
-    feature_row = top.index(next(p for p in top if p['title'] == 'Feature health — did the user get an outcome?'))
+    feature_row = top.index(
+        next(p for p in top if p['title'] == 'Feature health — user result where we can measure it')
+    )
     next_row = next(i for i, p in enumerate(top) if i > feature_row and p['type'] == 'row')
     stats = top[feature_row + 1 : next_row]
     recap = [p for p in stats if p['title'].startswith(('Daily recap', 'Recap'))]
-    assert [p['title'] for p in recap] == [
-        'Daily recap generation (3h)',
+    assert [p['title'] for p in recap] == ['Recap generation (last 3h)']
+    recap_row = next(p for p in top if p['title'] == 'Daily recaps — generation and delivery job health')
+    detail = recap_row['panels'][:3]
+    assert [p['title'] for p in detail] == [
         'Daily recaps generated (24h)',
         'Recap generation failures (3h)',
         'Recap job passes (1h, expect 4)',
     ]
+    recap = recap + detail
     success = recap[0]
     assert success['fieldConfig']['defaults']['unit'] == 'percent'
-    assert success['fieldConfig']['defaults']['thresholds']['steps'][1] == {'color': 'orange', 'value': 90}
+    assert success['fieldConfig']['defaults']['thresholds']['steps'][2] == {'color': 'orange', 'value': 90}
     assert success['fieldConfig']['defaults']['noValue'] == 'no recaps due'
     assert recap[1]['fieldConfig']['defaults']['thresholds']['steps'] == [
         {'color': 'red', 'value': None},
@@ -148,7 +153,7 @@ def test_recap_dashboard_row_and_no_grid_overlap():
     doc = json.loads(DASHBOARD.read_text())
     row = next(p for p in doc['panels'] if p['title'] == 'Daily recaps — generation and delivery job health')
     assert row['collapsed'] is True
-    panels = row['panels']
+    panels = row['panels'][3:]
     assert [p['title'] for p in panels] == [
         'Recap outcomes per 15 minutes',
         'Cohort passes: all vs incomplete',
@@ -161,6 +166,14 @@ def test_recap_dashboard_row_and_no_grid_overlap():
         for expr in _cloud_monitoring_exprs(panel['targets']):
             assert _referenced_log_metrics(expr) <= provisioned
     assert panels[0]['fieldConfig']['defaults']['custom']['stacking']['mode'] == 'none'
+    generation, reasons, delivery = _cloud_monitoring_exprs(panels[0]['targets'])
+    assert 'sum by (reason, error_type)' in reasons
+    assert 'reason="generation_error"' not in reasons, 'all reasons, including unlabelled legacy failures, must remain'
+    assert '"reason", "unspecified reason", "reason", "^$"' in reasons
+    assert '"error_type", "unlabelled error", "error_type", "^$"' in reasons
+    assert 'error_type!="DailySummaryDeliveryError"' in reasons
+    assert 'error_type="DailySummaryDeliveryError"' in delivery
+    assert 'delivery only' in delivery
     assert panels[-1]['targets'][0]['instant'] is True
     assert 'max' not in panels[-1]['fieldConfig']['defaults'], 'cohort age must not inherit a percent clamp'
     for panel in panels[2:]:

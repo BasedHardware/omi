@@ -25,7 +25,7 @@ SAMPLE_RATE = 16000
 MAX_SECONDS = 30.0
 MIN_SECONDS = 1.0
 SHORT_SECONDS = 6.0
-LONG_THRESHOLD = 0.95
+LONG_THRESHOLD = 0.985
 SHORT_THRESHOLD = 0.985
 
 # TDT v3 (nvidia/parakeet-tdt-0.6b-v3) languages; keep equal to the backend's
@@ -36,6 +36,10 @@ PARAKEET_LANGUAGES = frozenset('bg hr cs da nl en et fi fr de el hu it lt lv mt 
 _WHISPER_ALIASES = {'iw': 'he', 'jw': 'jv', 'yue': 'zh'}
 
 MODEL_IDS = {'whisper-base': 'openai/whisper-base'}
+
+
+def lid_only_enabled() -> bool:
+    return os.getenv('PARAKEET_LID_ONLY', 'false').strip().lower() in {'true', '1', 'yes', 'on'}
 
 
 def configured_model() -> str:
@@ -102,7 +106,7 @@ def to_mono_16k(samples: np.ndarray, sample_rate: int) -> np.ndarray:
 
 
 class WhisperLanguageId:
-    """Whisper encoder plus one decoder step; softmax over language tokens only. GPU worker thread only."""
+    """Whisper encoder plus one decoder step; softmax over language tokens only. Worker thread only."""
 
     def __init__(self, model_key: str, device: str) -> None:
         import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv

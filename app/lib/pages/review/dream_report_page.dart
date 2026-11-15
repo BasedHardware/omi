@@ -10,8 +10,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 typedef DreamReportLoader = Future<ApiResult<DreamReport>> Function();
 typedef DreamRunner = Future<ApiResult<DreamRun>> Function();
 
-/// What the background agent looked at and what it would change, newest pass first, with a Run
-/// Now for dogfooding. Reached from Review only for accounts in the dream cohort.
+/// What the background agent looked at and what it changed, newest pass first, with a Run Now
+/// button. Reached from Review only for accounts in the dream cohort.
 class DreamReportPage extends StatefulWidget {
   const DreamReportPage({super.key, this.loadReport, this.runNow});
 
@@ -113,7 +113,6 @@ class _DreamReportPageState extends State<DreamReportPage> {
                 _RunCard(
                   key: ValueKey('dream_run_${run.runId}'),
                   run: run,
-                  live: report.live,
                   expanded: run.runId == _expandedRunId,
                   onToggle: () => setState(() => _expandedRunId = run.runId == _expandedRunId ? null : run.runId),
                 ),
@@ -146,29 +145,17 @@ class _StatusCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(report.live ? Icons.auto_fix_high : Icons.visibility_outlined,
-                  size: 18, color: OmiColors.textSecondary),
-              const SizedBox(width: OmiSpacing.sm),
-              Expanded(
-                child: Text(
-                  report.live ? l10n.dreamReportLiveBanner : l10n.dreamReportShadowBanner,
-                  style: OmiType.subhead,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          Text(
-            [
-              l10n.dreamReportPasses(report.passesToday, report.passesLimit),
-              l10n.dreamReportQueued(report.queuedChanges),
-            ].join(' · '),
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
+          if (report.live) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.auto_fix_high, size: 18, color: OmiColors.textSecondary),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(child: Text(l10n.dreamReportLiveBanner, style: OmiType.subhead)),
+              ],
+            ),
+            const SizedBox(height: OmiSpacing.sm),
+          ],
           Row(
             children: [
               OmiButton.secondary(
@@ -196,10 +183,9 @@ class _StatusCard extends StatelessWidget {
 }
 
 class _RunCard extends StatelessWidget {
-  const _RunCard({super.key, required this.run, required this.live, required this.expanded, required this.onToggle});
+  const _RunCard({super.key, required this.run, required this.expanded, required this.onToggle});
 
   final DreamRun run;
-  final bool live;
   final bool expanded;
   final VoidCallback onToggle;
 
@@ -256,7 +242,7 @@ class _RunCard extends StatelessWidget {
               ),
             ),
           ),
-          if (expanded) _RunDetail(run: run, live: live),
+          if (expanded) _RunDetail(run: run),
         ],
       ),
     );
@@ -275,28 +261,27 @@ IconData _editIcon(String kind) => switch (kind) {
     };
 
 class _RunDetail extends StatelessWidget {
-  const _RunDetail({required this.run, required this.live});
+  const _RunDetail({required this.run});
 
   final DreamRun run;
-  final bool live;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final secondary = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
-    final children = <Widget>[
-      Text(
-        [
-          l10n.dreamReportStats(run.recordsRead, run.tokens),
-          '\$${run.costUsd.toStringAsFixed(3)}',
-          if (run.dirtyDropped > 0) l10n.dreamReportDropped(run.dirtyDropped),
-        ].join(' · '),
-        style: secondary,
-      ),
+    final children = <Widget>[];
+    // Each edit carries its own outcome: only an applied one reads as fixed, whatever the report's mode.
+    final applied = [
+      for (final edit in run.edits)
+        if (edit.applied) edit
     ];
-    if (run.edits.isNotEmpty) {
-      children.add(ReviewSectionLabel(label: live ? l10n.dreamReportFixed : l10n.dreamReportWouldFix));
-      for (final edit in run.edits) {
+    final proposed = [
+      for (final edit in run.edits)
+        if (!edit.applied) edit
+    ];
+    for (final (label, edits) in [(l10n.dreamReportFixed, applied), (l10n.dreamReportWouldFix, proposed)]) {
+      if (edits.isEmpty) continue;
+      children.add(ReviewSectionLabel(label: label));
+      for (final edit in edits) {
         children.add(_EditRow(edit: edit));
       }
     }
@@ -326,18 +311,6 @@ class _RunDetail extends StatelessWidget {
             ),
         ],
       ));
-    }
-    if (run.feedback.isNotEmpty || run.privacyRejected > 0) {
-      children.add(ReviewSectionLabel(label: l10n.dreamReportFeedback));
-      for (final item in run.feedback) {
-        children.add(_Line(
-          icon: Icons.outbox_outlined,
-          text: '${item.component} · ${item.failureClass} · ${item.count}',
-        ));
-      }
-      if (run.privacyRejected > 0) {
-        children.add(_Line(icon: Icons.shield_outlined, text: l10n.dreamReportPrivacyHeld(run.privacyRejected)));
-      }
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),

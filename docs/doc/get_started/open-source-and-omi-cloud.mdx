@@ -1,0 +1,50 @@
+---
+title: "Open source and Omi Cloud"
+icon: "code-branch"
+description: "What is open in this repository, what the hosted Omi service adds, and how to control your own data."
+---
+
+## What is open
+
+Everything needed to run and build on Omi lives in [BasedHardware/omi](https://github.com/BasedHardware/omi), under the [MIT License](https://github.com/BasedHardware/omi/blob/main/LICENSE):
+
+| Component | In the repo |
+|-----------|-------------|
+| Mobile apps | `app/` — Flutter app for iOS and Android |
+| Backend | `backend/` — the API, processing, and MCP server |
+| Desktop apps | `desktop/` — the macOS app, plus community-maintained ports |
+| Firmware | `omi/firmware/` — DevKit and consumer (CV1) firmware |
+| Hardware files | schematics, Gerbers, KiCad sources, and mechanical files — see [Open Hardware Files](/doc/hardware/consumer/index) |
+| Apps platform | `plugins/` — open-source community apps |
+
+## What Omi Cloud adds
+
+Omi Cloud is the hosted service the apps use: the backend at `api.omi.me`, the app store, firmware updates, and the processing that turns audio into conversations and memories. A free account covers the core loop, and paid plans add more usage and features. Current plans are on [omi.me](https://www.omi.me/#pricing).
+
+The Developer API, MCP server, CLI, and SDKs all run against Omi Cloud with your own account. You can read, fork, and modify everything in the repository.
+
+## Can I run it myself? Can I control my data?
+
+The source is all here, and contributors run the backend locally for development ([Backend setup](/doc/developer/backend/Backend_Setup)). Running your own production copy of Omi is not supported or documented.
+
+If what you want is control over where your data goes, use these instead:
+
+<CardGroup cols={2}>
+  <Card title="Bring your own key" icon="key" href="/doc/get_started/byok_and_custom_transcription">
+    Use your own model keys, or run transcription on your phone or your own server
+  </Card>
+  <Card title="Export & deletion" icon="shield-check" href="https://help.omi.me">
+    Export your conversations or delete your account from the app
+  </Card>
+</CardGroup>
+
+## License and legal
+
+<CardGroup cols={2}>
+  <Card title="License" icon="file-contract" href="/doc/info/License">
+    MIT. Read the full text
+  </Card>
+  <Card title="Privacy" icon="shield" href="/doc/info/Privacy">
+    How Omi handles your data
+  </Card>
+</CardGroup>

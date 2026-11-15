@@ -84,6 +84,24 @@ final class OnDeviceMeetingIdentityCallTileTests: XCTestCase {
     }
   }
 
+  func testFilteredTilesSurviveTheMeetingUploadWithAShortOwnerProfileName() throws {
+    let rows = (0..<4).map {
+      meetRow(
+        "Decision Mill\nBest Trending Abliterated Mod\nmeet.google.com/abc-defg-hij\nRobert Ream\nDavid Zhang",
+        minute: $0)
+    }
+    let interval = DateInterval(start: rows[0].timestamp, duration: 600)
+    let payload = try XCTUnwrap(
+      OnDeviceMeetingIdentityExtractor.payload(
+        from: rows, overlapping: interval, ownerNames: ["David"]))
+    XCTAssertEqual(payload.participants.compactMap(\.name), ["Robert Ream"])
+    XCTAssertEqual(payload.observedCallTiles?.compactMap(\.name), ["Robert Ream"])
+    let body = try payload.wireBody
+    let sources = try XCTUnwrap(body["participant_sources"] as? [String: Any])
+    let tiles = try XCTUnwrap(sources["observed_call_tiles"] as? [[String: String]])
+    XCTAssertEqual(tiles, [["name": "Robert Ream"]])
+  }
+
   // The incident, owner, and agent cases also run inline so this rule is covered in any checkout.
 
   func testBareRepeatedTileNameBecomesAParticipant() {

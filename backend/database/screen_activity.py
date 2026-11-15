@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional, Tuple, Union, cast
 
 from google.cloud import firestore
 
-from models.screen_activity import ScreenActivityCoverage
+from models.screen_activity import ScreenActivityCoverage, ScreenDeviceCoverage
 
 from ._client import data_plane_db as db
 import logging
@@ -197,6 +197,37 @@ def get_screen_activity_page(
     return results[:limit], len(results) > limit
 
 
+def observed_device_coverage(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Observed bounds are not acknowledgements of complete capture or sync."""
+    devices: Dict[str, Dict[str, Any]] = {}
+    moments: Dict[str, Tuple[str, str]] = {}
+    for row in rows:
+        device = str(row.get('clientDeviceId') or row.get('deviceName') or 'unknown')
+        stamp = row.get('timestamp')
+        if not isinstance(stamp, str) or not stamp:
+            continue
+        try:
+            stamp_key = normalize_screen_activity_timestamp(stamp)
+        except ValueError:
+            continue
+        bounds = devices.setdefault(
+            device,
+            {
+                'device_id': device,
+                'first_observed_at': stamp,
+                'last_observed_at': stamp,
+                'synced_through': None,
+            },
+        )
+        first, last = moments.setdefault(device, (stamp_key, stamp_key))
+        if stamp_key < first:
+            bounds['first_observed_at'] = stamp
+        if stamp_key > last:
+            bounds['last_observed_at'] = stamp
+        moments[device] = (min(first, stamp_key), max(last, stamp_key))
+    return [devices[key] for key in sorted(devices)]
+
+
 def get_screen_activity_summary(
     uid: str,
     start_date: Optional[DateInput] = None,
@@ -230,6 +261,16 @@ def get_screen_activity_summary(
         first_observed_at=rows[0].get('timestamp') if rows else None,
         last_observed_at=rows[-1].get('timestamp') if rows else None,
     )
+
+    coverage.devices = [
+        ScreenDeviceCoverage(
+            device_id=device['device_id'],
+            first_observed_at=device['first_observed_at'],
+            last_observed_at=device['last_observed_at'],
+            synced_through=None,
+        )
+        for device in observed_device_coverage(rows)
+    ]
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:

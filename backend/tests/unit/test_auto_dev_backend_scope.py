@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[3]
 WORKFLOW_PATH = ROOT / '.github/workflows/gcp_backend_auto_dev.yml'
 
 
+pytestmark = pytest.mark.usefixtures('isolated_git_env')
+
+
 def _load_admission_script():
     path = ROOT / '.github/scripts/verify_auto_backend_release_admission.py'
     spec = importlib.util.spec_from_file_location('verify_auto_backend_release_admission', path)

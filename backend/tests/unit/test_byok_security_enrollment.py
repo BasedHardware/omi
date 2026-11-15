@@ -137,7 +137,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,
@@ -196,7 +196,7 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
         monkeypatch.setattr(users, 'get_user_subscription', lambda _uid: subscription, raising=False)
-        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription: None)
+        monkeypatch.setattr(users, 'reconcile_basic_plan_with_stripe', lambda _uid, _subscription, **kwargs: None)
         monkeypatch.setattr(users, 'get_user_valid_subscription', lambda _uid: subscription, raising=False)
         monkeypatch.setattr(
             users,
@@ -244,7 +244,6 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
         monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
-        monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
         monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid, **kwargs: paid)
         monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
         monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
@@ -334,7 +333,6 @@ class TestRequestHasLLMByokKey:
         from models.users import PlanType
         from utils import subscription
 
-        monkeypatch.setattr(subscription, 'is_trial_paywalled', lambda *args, **kwargs: False)
         monkeypatch.setattr(subscription.users_db, 'get_user_valid_subscription', lambda *args, **kwargs: None)
         monkeypatch.setattr(
             subscription.user_usage_db,

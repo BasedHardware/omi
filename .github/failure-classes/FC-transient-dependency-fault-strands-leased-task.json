@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-transient-dependency-fault-strands-leased-task",
+  "violated_contract": "A Cloud Tasks consumer that holds an outbox lease must classify a transient dependency fault (Firestore Aborted/DeadlineExceeded/Unavailable, an LLM-gateway 429/5xx or timeout) as an expected retry: release the lease and answer 409, so the queue's own retry claims the row again. Letting the fault propagate as a 500 keeps the lease; the queue's retry lands inside it, is answered BUSY 200 and consumed, and the obligation waits for the maintenance sweep while the 5xx rate gates capacity changes.",
+  "canonical_prevention": "Match transient faults by type across the exception cause chain (never message text) at the consumer boundary and return the RETRY dependency outcome, which releases the lease. Keep unexpected exceptions as 500 with the lease kept. A route-level regression test drives each transient type and a non-transient status and asserts the HTTP status and the row's lease.",
+  "canonical_prevention_artifact": [
+    "backend/utils/enrichment/consumer.py",
+    "backend/tests/unit/test_enrichment_route.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/enrichment/**",
+    "backend/utils/workers/**"
+  ],
+  "status": "open"
+}

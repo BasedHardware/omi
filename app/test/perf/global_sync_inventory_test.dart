@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:developer' show Timeline;
+import 'package:omi/utils/analytics/lag_work_registry.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,29 +29,44 @@ class _CountingWal extends Wal {
   }
 
   @override
-  set timerStart(int value) => _start = value;
+  set timerStart(int value) {
+    _start = value;
+    super.timerStart = value;
+  }
 }
 
 class _Syncs {
   final List<Wal> wals;
   _Syncs(this.wals);
   int inventoryReads = 0;
+  List<Wal>? _snapshot;
   Completer<List<Wal>>? blockedRead;
   Future<List<Wal>> getAllWals() async {
     inventoryReads++;
     final blocked = blockedRead;
     if (blocked != null) return blocked.future;
-    return List.of(wals);
+    final previous = _snapshot;
+    if (previous == null ||
+        previous.length != wals.length ||
+        List.generate(wals.length, (i) => !identical(wals[i], previous[i])).any((changed) => changed)) {
+      _snapshot = List.unmodifiable(wals);
+    }
+    return _snapshot!; // Match production's membership snapshots and in-place state updates.
   }
 
   final entered = Completer<void>();
   final finished = Completer<SyncLocalFilesResponse?>();
   FlashSyncStallReason get flashStallReason => FlashSyncStallReason.none;
   void clearUserData() {}
+  SyncLocalFilesResponse? get accumulatedResponse => null;
+  void cancelSync() {}
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) {
     entered.complete();
     return finished.future;
   }
+
+  void Function(IWalSyncProgressListener progress)? onSyncWal;
+  Future<void> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async => onSyncWal?.call(progress!);
 }
 
 class _WalService implements IWalService {
@@ -87,6 +104,66 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+
+  testWidgets('production refresh work is tagged until a blocked inventory read completes', (tester) async {
+    final syncs = _Syncs([]);
+    final provider = SyncProvider(walService: _WalService(syncs), uploadGate: _gate(), startBackgroundSync: false);
+    addTearDown(provider.dispose);
+    await provider.initialized;
+    final blocked = syncs.blockedRead = Completer<List<Wal>>();
+    final refresh = provider.refreshWals();
+    await tester.pump();
+    expect(lagWork.overlapping(Timeline.now, Timeline.now), contains('walLoad'));
+    blocked.complete([]);
+    syncs.blockedRead = null;
+    await refresh;
+    expect(lagWork.overlapping(Timeline.now, Timeline.now), isNot(contains('walLoad')));
+  });
+
+  for (final fail in [false, true]) {
+    testWidgets('production phase tags close on ${fail ? "error" : "cancel and completion"}', (tester) async {
+      final syncs = _Syncs([]);
+      final provider = SyncProvider(walService: _WalService(syncs), uploadGate: _gate(), startBackgroundSync: false);
+      addTearDown(provider.dispose);
+      await provider.initialized;
+      final sync = provider.syncWals();
+      await tester.pump();
+      expect(syncs.entered.isCompleted, isTrue);
+      provider.onWalSyncedProgress(0, phase: SyncPhase.downloadingFromDevice);
+      expect(lagWork.overlapping(Timeline.now, Timeline.now), containsAll(['sync', 'syncDownload']));
+      provider.onWalSyncedProgress(0.5, phase: SyncPhase.uploadingToCloud);
+      final tags = lagWork.overlapping(Timeline.now, Timeline.now);
+      expect(tags, contains('syncUpload'));
+      expect(tags, isNot(contains('syncDownload')));
+      if (fail) {
+        syncs.finished.completeError(StateError('synthetic upload failed'));
+      } else {
+        provider.cancelSync();
+        expect(lagWork.overlapping(Timeline.now, Timeline.now), isNot(contains('syncUpload')));
+        syncs.finished.complete(null);
+      }
+      await sync;
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(lagWork.overlapping(Timeline.now, Timeline.now),
+          isNot(anyOf(contains('sync'), contains('syncUpload'), contains('syncDownload'))));
+    });
+  }
+
+  testWidgets('a direct device transfer after a finished sync opens no phase tag', (tester) async {
+    final syncs = _Syncs([]);
+    final provider = SyncProvider(walService: _WalService(syncs), uploadGate: _gate(), startBackgroundSync: false);
+    addTearDown(provider.dispose);
+    await provider.initialized;
+    final sync = provider.syncWals();
+    await tester.pump();
+    syncs.finished.complete(null);
+    await sync;
+    syncs.onSyncWal = (progress) => progress.onWalSyncedProgress(1.0);
+    await provider.transferWalToPhone(
+        Wal(timerStart: 1, codec: BleAudioCodec.opus, storage: WalStorage.sdcard, status: WalStatus.miss, seconds: 30));
+    expect(lagWork.overlapping(Timeline.now, Timeline.now),
+        isNot(anyOf(contains('sync'), contains('syncUpload'), contains('syncDownload'))));
   });
 
   testWidgets('slow background reads stay single-flight and deliver the trailing event', (tester) async {
@@ -327,8 +404,8 @@ void main() {
         }
         shellBuilds = 0;
         for (var event = 0; event < 20; event++) {
-          // Services publish new list containers containing the same mutable
-          // WALs on every progress update, not just membership changes.
+          // Production reuses membership snapshots across progress updates;
+          // mutations to a WAL still notify the incremental derived views.
           wals.first.syncSpeedKBps = event.toDouble();
           await provider.refreshWals();
           await tester.pump();

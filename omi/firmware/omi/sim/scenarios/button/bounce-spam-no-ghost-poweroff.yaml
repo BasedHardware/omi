@@ -1,0 +1,11 @@
+id: button/bounce-spam-no-ghost-poweroff
+summary: Rapid contact bounce (20 ms edges for 1 s) must not power off or mute.
+tags: [guard]
+timeline:
+  - {t: 5000, tap: [20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+                    20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+                    20, 20, 20, 20, 20, 20, 20, 20, 20]}
+end: 12000
+expect:
+  boots:
+    - {exit: stop, is_off: false, muted: 0}

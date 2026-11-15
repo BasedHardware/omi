@@ -36,6 +36,8 @@ def _load_playback(request):
     ):
         setattr(storage_module, name, MagicMock())
     storage_module._PRECACHE_FILE_SEM = MagicMock()
+    storage_module.get_playback_failure_retry_epoch = MagicMock(return_value=None)
+    storage_module.is_playback_unavailable.return_value = False
     with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module
@@ -45,6 +47,20 @@ def _load_playback(request):
 class FakeRequest:
     def __init__(self, headers=None):
         self.headers = headers or {}
+
+
+@pytest.mark.parametrize('pending', [False, True])
+def test_empty_batch_audio_distinguishes_durable_metadata_debt(monkeypatch, pending):
+    from utils.sync import playback_metadata
+
+    def repair(*args):
+        if pending:
+            raise TimeoutError
+        return {'audio_files': []}
+
+    monkeypatch.setattr(playback_metadata, 'refresh_on_open', repair)
+    result = playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'})
+    assert result == ({'audio_files': [], 'poll_after_ms': 5000} if pending else {'audio_files': []})
 
 
 class FakeFuture:
@@ -359,3 +375,25 @@ def test_build_playback_artifact_encodes_mp3(monkeypatch):
 
     monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', lambda *args, **kwargs: b'')
     assert playback.build_playback_artifact('u', 'c', [1.0]) == b''
+
+
+def test_all_close_switches_off_preserves_empty_playback_without_new_io(monkeypatch):
+    from database import record_projection_rebuild
+    from utils.sync import playback_metadata
+
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'false')
+    read = MagicMock(side_effect=AssertionError('rollback must not read metadata debt'))
+    write = MagicMock(side_effect=AssertionError('rollback must not write metadata debt'))
+    monkeypatch.setattr(record_projection_rebuild, 'pending', read)
+    monkeypatch.setattr(record_projection_rebuild, 'mark_many', write)
+    monkeypatch.setattr(playback_metadata, 'refresh_on_open', read)
+    assert playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'}) == {
+        'audio_files': []
+    }
+    read.assert_not_called()
+    write.assert_not_called()

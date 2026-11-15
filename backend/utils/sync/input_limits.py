@@ -22,6 +22,11 @@ MAX_BACKFILL_SECONDS = 3600
 MAX_BACKFILL_FRAMES = 360000
 MAX_FRAME_BYTES = 65536
 OPUS_FRAME_SAMPLES = frozenset((40, 80, 160, 320, 640, 960, 1280, 1920))
+PROBE_MAX_FILES = 8
+PROBE_MAX_RAW_BYTES = 2 * 1024**2
+PROBE_MAX_AUDIO_BYTES = 4 * 1024**2
+PROBE_MAX_SECONDS = 60
+PROBE_MAX_FRAMES = 4096
 
 
 class BackfillInputLimitExceeded(ValueError):
@@ -47,13 +52,18 @@ def sync_pcm_format(filename: str) -> tuple[int, int] | None:
     return rate, width
 
 
-def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
+def _validate(streams: Iterable[tuple[str, BinaryIO]], *, probe_only: bool = False) -> None:
+    max_files = PROBE_MAX_FILES if probe_only else MAX_BACKFILL_FILES
+    max_raw = PROBE_MAX_RAW_BYTES if probe_only else MAX_BACKFILL_RAW_BYTES
+    max_audio = PROBE_MAX_AUDIO_BYTES if probe_only else MAX_BACKFILL_AUDIO_BYTES
+    max_seconds = PROBE_MAX_SECONDS if probe_only else MAX_BACKFILL_SECONDS
+    max_frames = PROBE_MAX_FRAMES if probe_only else MAX_BACKFILL_FRAMES
     raw_bytes = audio_bytes = frames = 0
     seconds = 0.0
     count = 0
     for filename, stream in streams:
         count += 1
-        if count > MAX_BACKFILL_FILES:
+        if count > max_files:
             raise BackfillInputLimitExceeded('backfill file count exceeded')
         frame_samples = 0
         pcm = sync_pcm_format(filename)
@@ -71,7 +81,7 @@ def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
         try:
             stream.seek(0, os.SEEK_END)
             raw_bytes += stream.tell()
-            if raw_bytes > MAX_BACKFILL_RAW_BYTES:
+            if raw_bytes > max_raw:
                 raise BackfillInputLimitExceeded('backfill encoded batch limit exceeded')
             stream.seek(0)
             while True:
@@ -90,12 +100,7 @@ def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
                 duration = samples / rate
                 audio_bytes += max(length, (samples * 32000 + rate - 1) // rate) if pcm else samples * 2
                 seconds += duration
-                if (
-                    raw_bytes > MAX_BACKFILL_RAW_BYTES
-                    or audio_bytes > MAX_BACKFILL_AUDIO_BYTES
-                    or seconds > MAX_BACKFILL_SECONDS
-                    or frames > MAX_BACKFILL_FRAMES
-                ):
+                if raw_bytes > max_raw or audio_bytes > max_audio or seconds > max_seconds or frames > max_frames:
                     raise BackfillInputLimitExceeded('backfill batch resource limit exceeded')
                 if len(stream.read(length)) != length:
                     break
@@ -103,6 +108,23 @@ def _validate(streams: Iterable[tuple[str, BinaryIO]]) -> None:
             stream.seek(position)
     if count == 0:
         raise BackfillInputLimitExceeded('backfill batch empty')
+
+
+def validate_language_probe_paths(paths: list[str]) -> None:
+    """Refuse a large upload before duplicate decode; never qualify a truncated prefix.
+
+    The same codec-aware expansion proof as backfill, with a smaller closed
+    resource profile. Accepted files still use the unchanged canonical decoder.
+    """
+    if len(paths) > PROBE_MAX_FILES or sum(os.path.getsize(path) for path in paths) > PROBE_MAX_RAW_BYTES:
+        raise BackfillInputLimitExceeded('language qualification encoded input limit exceeded')
+
+    def streams():
+        for path in paths:
+            with open(path, 'rb') as file:
+                yield os.path.basename(path), file
+
+    _validate(streams(), probe_only=True)
 
 
 def validate_backfill_uploads(files: list[UploadFile]) -> None:

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Index one user's existing transcripts into the transcript-chunk namespace.
 
-Chat and conversation search still query transcript-chunk vectors, but no
-processing path writes them: the never-enabled indexing step was removed (#20959).
-Stored history therefore has no chunks, and a detail spoken only in a transcript
-stays unfindable (#20629).
+Legacy semantic conversation search can query transcript-chunk vectors, but
+normal processing does not maintain this index after #20959. Direct transcript
+recall now reads saved old/new text without an index (#20629); this script is
+the separately approved repair for legacy semantic chunk coverage.
 
 This writes chunks with ``upsert_transcript_chunk_vectors``, built exactly as the
 search readers rebuild them (``started_at`` or ``created_at``), so every indexed

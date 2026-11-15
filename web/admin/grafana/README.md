@@ -82,6 +82,15 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   fallback labelled "SaaS est.". Measured SaaS is labelled "SaaS measured
   (Mercury)" and drawn as a solid blue-grey segment. Unsourced lines are named
   in the reason, never dropped.
+  The cost chart groups its legend into GCP, LLM, STT actual, STT est/model,
+  measured SaaS, estimated SaaS and Revenue; provider amounts remain in the
+  tooltip and the API. These presentation groups preserve the existing dollars
+  and keep estimates/models distinct from actual spend.
+  Variable margin uses the fresh hourly meter first, then a metered live day,
+  then the latest settled day's existing calculation. Its visible source line
+  names the mode and date. A missing latest-day revenue book stays unavailable;
+  the reducer never borrows an older non-null margin. Missing prior MRR/ARPMAU
+  comparisons read `history gap`; a zero prior still has no percentage delta.
 - Cold-load rules match the wall and converge across Cloud Run instances
   (`lib/wall-series-store.ts`). Each leg's last-good value, retry schedule and
   the day's successful reads live in one doc in the admin Firestore payload cache
@@ -107,6 +116,23 @@ Charts read the admin-authenticated `GET /api/omi/stats/wall/series/<name>`
   Request-path store calls are bounded at 2 s; a fresh process's first read,
   which also opens the Firestore channel, at 4.5 s, so a new revision serves
   the last good instead of "—".
+- Legs are filled off the viewing path. Scheduler `omi-admin-wall-warm`
+  (`backend/deploy/scheduler/jobs.yaml`, every 10 min) calls
+  `POST /api/internal/wall-warm` (`x-cron-secret`), which refreshes the snapshot
+  and runs every leg to completion under the same leases (`warmSeries`). Legs
+  are keyed per UTC day, so the day's ~60 PostHog reads start right after
+  midnight UTC instead of when the first person opens the board. Before this
+  job, on 2026-10-28 the first view at 08:06Z waited about 11 minutes. Once
+  every leg is complete for the day, a tick only reads the store. Its response
+  lists each leg's day, completeness and controlled reason.
+- Cost legs read `omi_finops` tables through `GCP_BILLING_SA_JSON`
+  (omi-admin-billing-ro). That identity has **table-level** grants, so a new
+  table in a query needs `roles/bigquery.dataViewer` on that table.
+  `ADMIN_FINOPS_TABLES` in `lib/wall-finops.ts` lists every table the admin
+  reads; `admin-finops-grants.test.ts` keeps the list complete. A denied or
+  missing table now names itself in the leg reason (`bigQueryFailure`). Before
+  this, five ungranted tables showed up as "table not created" or "key lacks
+  scope", and every margin tile was blank.
 - Cohort charts roll daily: week-one activation and capture always end 8 days
   back, retained-if-activated 38 days back. The series carry a `maturing` /
   `retainedMaturing` frame (newest closed cohort → now) that the board draws as

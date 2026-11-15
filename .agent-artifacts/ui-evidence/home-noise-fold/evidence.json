@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-noise-folded.png",
+      "platform": "mobile-ios",
+      "description": "Home: a day's noise clips folded into one quiet line",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-noise-revealed.png",
+      "platform": "mobile-ios",
+      "description": "Home: folded clips revealed in time order, with Hide",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

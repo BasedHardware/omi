@@ -48,7 +48,8 @@ def save_token(
     token_data: Dict[str, Any] = data.model_dump()
     token_data['device_key'] = device_key
 
-    notification_db.save_token(uid, token_data)
+    if notification_db.save_token(uid, token_data) is False:
+        raise HTTPException(status_code=409, detail='Push token registration was superseded')
     # Analytics-only lifecycle signal (Firestore stays the eligibility source of
     # truth): a recent `registered` event is how churn/re-engagement analysis
     # knows a uid had a deliverable push token as of a date. Low cardinality —

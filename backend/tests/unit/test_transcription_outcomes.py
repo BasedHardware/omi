@@ -422,13 +422,23 @@ def test_sync_intake_records_created_and_merged(mock_counter, caplog):
     mock_counter.labels.return_value = child
 
     with caplog.at_level('INFO', logger='utils.observability.transcription'):
-        record_sync_intake_outcome(created=True)
-        record_sync_intake_outcome(created=False)
+        record_sync_intake_outcome(created=True, projected_size_bucket='700_800k')
+        record_sync_intake_outcome(created=False, projected_size_bucket='900k_1m')
 
     assert [call.kwargs for call in mock_counter.labels.call_args_list] == [
-        {'outcome': 'created'},
-        {'outcome': 'merged'},
+        {'outcome': 'created', 'projected_size_bucket': '700_800k'},
+        {'outcome': 'merged', 'projected_size_bucket': '900k_1m'},
     ]
     assert child.inc.call_count == 2
     assert 'omi_sync_intake outcome=created' in caplog.text
     assert 'omi_sync_intake outcome=merged' in caplog.text
+
+
+@patch('utils.observability.transcription.OMI_SYNC_INTAKE_TOTAL')
+def test_sync_intake_size_label_never_accepts_arbitrary_input(mock_counter, caplog):
+    with caplog.at_level('INFO', logger='utils.observability.transcription'):
+        record_sync_intake_outcome(created=True, projected_size_bucket='not-a-bucket')
+    mock_counter.labels.assert_not_called()
+    assert 'omi_sync_intake outcome=created' in caplog.text
+    assert 'not-a-bucket' not in caplog.text
+    assert 'projected_size_bucket=' not in caplog.text

@@ -67,6 +67,8 @@ class FairUseState(BaseModel):
     violation_count_30d: int = 0
     last_violation_at: Optional[datetime] = None
     throttle_until: Optional[datetime] = None
+    warning_until: Optional[datetime] = None
+    stage_entered_at: Optional[datetime] = None
     restrict_until: Optional[datetime] = None
     last_classifier_score: float = 0.0
     last_classifier_type: UsageType = UsageType.NONE

@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.81.1",
-    "@playwright/mcp": "^0.0.68",
+    "@playwright/mcp": "^0.0.83",
     "@zed-industries/claude-agent-acp": "^0.18.0",
     "zod": "^4.0.0"
   },

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Performance-only conversation cache hydration; no new UI surface or WAL policy. Physical before/after qualification remains queued on the draft PR."
+}

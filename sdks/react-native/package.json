@@ -94,7 +94,8 @@
     "brace-expansion": "~2.1.2",
     "fast-uri": "~3.1.4",
     "js-yaml": "~4.3.0",
-    "shell-quote": "~1.9.0"
+    "shell-quote": "~1.11.0",
+    "ip-address": "^10.7.1"
   },
   "engines": {
     "node": ">= 16.0.0"

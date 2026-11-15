@@ -60,9 +60,9 @@ final class PlanStorefrontTests: XCTestCase {
     let data = try Self.golden("plus_monthly_yearly_toggle")
     XCTAssertEqual(
       Self.buttons(data, .month),
-      ["operator": "Upgrade to Pro", "plus": "Switch to yearly · save $39.98", "architect": "Upgrade to Architect"])
+      ["operator": "Upgrade to Pro", "plus": "Switch to yearly · save US$39.98", "architect": "Upgrade to Architect"])
     let plus = try XCTUnwrap(data.tiers.first(where: \.isCurrent))
-    XCTAssertEqual(data.offeredPrice(plus, interval: .month)?.headline, "$19.99/month")
+    XCTAssertEqual(data.offeredPrice(plus, interval: .month)?.headline, "US$19.99/month")
     XCTAssertEqual(
       data.offeredPrice(plus, interval: .month)?.confirmLines.first, "Your monthly plan continues until Nov 1")
   }
@@ -79,7 +79,7 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertFalse(capped.showsBudgetNudge)
     XCTAssertEqual(
       Self.buttons(capped, .month),
-      ["architect": "Upgrade to Architect", "plus": "", "operator": "Switch to yearly · save $99.98"])
+      ["architect": "Upgrade to Architect", "plus": "", "operator": "Switch to yearly · save US$99.98"])
     XCTAssertEqual(capped.partitionedTiers.primary.map(\.planId), ["architect", "operator"])
     XCTAssertFalse(try Self.golden("pro_settings").tiers.map(\.planId).contains("architect"))
     XCTAssertFalse(try Self.golden("pro_budget80").tiers.map(\.planId).contains("architect"))
@@ -123,6 +123,33 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertEqual(free.shouldGate(.proactiveAgent), free.usage.proGates.contains("proactive_agent"))
     XCTAssertFalse(try Self.golden("pro_budget_cap").shouldGate(.proactiveAgent))
     XCTAssertFalse(try Self.golden("legacy_neo").shouldGate(.proactiveAgent))
+
+    var omiPro = try Self.raw("free_pro_gate_proactive")
+    var current = try XCTUnwrap(omiPro["current"] as? [String: Any])
+    current["plan_id"] = "unlimited_v2"
+    omiPro["current"] = current
+    XCTAssertFalse(try Self.decode(omiPro).shouldGate(.proactiveAgent))
+    XCTAssertFalse(try Self.decode(omiPro).shouldGate(.screenContext))
+  }
+
+  func testOmiProIsPurchasable() throws {
+    let data = try Self.golden("single_plan_omi_pro")
+    XCTAssertEqual(Self.buttons(data), ["unlimited_v2": "Get Unlimited", "basic": ""])
+    XCTAssertEqual(Self.buttons(data, .year)["unlimited_v2"], "Get Unlimited")
+  }
+
+  func testRetiredPlanMaySwitchOnlyToOmiPro() throws {
+    var payload = try Self.raw("legacy_neo")
+    var tiers = try XCTUnwrap(payload["tiers"] as? [[String: Any]])
+    let omiPro = try XCTUnwrap((Self.raw("single_plan_omi_pro")["tiers"] as? [[String: Any]])?.first)
+    tiers.append(omiPro)
+    tiers[1]["action"] = "checkout"
+    tiers[1]["cta_label"] = "Get Pro"
+    payload["tiers"] = tiers
+
+    let buttons = Self.buttons(try Self.decode(payload))
+    XCTAssertEqual(buttons["unlimited_v2"], "Get Unlimited")
+    XCTAssertEqual(buttons["operator"], "", "retired plans never sell, even if offered")
   }
 
   func testRejectsOtherSchemaVersions() throws {
@@ -137,7 +164,7 @@ final class PlanStorefrontTests: XCTestCase {
     tiers[0]["action"] = "trial"
     tiers[0]["future_field"] = ["nested": true]
     var prices = try XCTUnwrap(tiers[2]["prices"] as? [[String: Any]])
-    prices.append(["interval": "week", "amount_minor": 1, "currency": "usd", "headline": "$1/week"])
+    prices.append(["interval": "week", "amount_minor": 1, "currency": "usd", "headline": "US$1/week"])
     tiers[2]["prices"] = prices
     tiers.append(
       tiers[3].merging(["tier_id": "galaxy:ladder_v2", "plan_id": "galaxy", "name": "Galaxy"]) { $1 })
@@ -163,7 +190,7 @@ final class PlanStorefrontTests: XCTestCase {
     XCTAssertEqual(data.checkoutDecision(tier: pro, price: month), .checkout)
     let plus = try XCTUnwrap(data.tiers.first(where: \.isCurrent))
     let forgedPrice = PlanStorefront.Price(
-      id: "price_plus_month", interval: .month, amountMinor: 1999, currency: "usd", headline: "$19.99/month",
+      id: "price_plus_month", interval: .month, amountMinor: 1999, currency: "usd", headline: "US$19.99/month",
       subline: nil, renewalLine: nil, monthsFree: nil, ctaLabel: nil)
     let forged = PlanStorefront.Tier(
       tierId: plus.tierId, planId: plus.planId, name: plus.name, recommended: false, isCurrent: true,

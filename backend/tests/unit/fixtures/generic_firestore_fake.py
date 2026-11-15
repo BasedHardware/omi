@@ -1,7 +1,7 @@
 """A small in-memory Firestore fake shared by the day-3 re-engagement tests.
 
 Unlike ``tests/unit/fake_firestore.py`` (which no-ops every filter) this fake
-actually evaluates ``==`` / ``>=`` / ``<`` / ``<=`` / ``in`` predicates against
+actually evaluates ``==`` / ``>=`` / ``>`` / ``<`` / ``<=`` / ``in`` predicates against
 a flat ``{path: data}`` store, so query-shape bugs (wrong operator, wrong
 field, wrong window) show up as wrong test results instead of passing
 trivially. It supports the same recursive
@@ -17,6 +17,7 @@ Deliberately not a generic Firestore emulator: unsupported query shapes raise
 from __future__ import annotations
 
 import copy
+import warnings
 from typing import Any, Dict, Optional
 
 
@@ -81,6 +82,15 @@ class FakeQuery:
     ):
         if filter is not None:
             field, operation, value = filter.field_path, filter.op_string, filter.value
+        else:
+            # Mirror google-cloud-firestore >= 2.20: positional filter arguments emit
+            # this exact UserWarning, so tests can surface regressions to the
+            # positional form with ``warnings.simplefilter('error', UserWarning)``.
+            warnings.warn(
+                "Detected filter using positional arguments. Prefer using the 'filter' keyword argument instead.",
+                UserWarning,
+                stacklevel=2,
+            )
         assert field is not None and operation is not None
         return FakeQuery(
             self._db,
@@ -120,6 +130,8 @@ class FakeQuery:
             return actual == value
         if operation == '>=':
             return actual is not None and actual >= value
+        if operation == '>':
+            return actual is not None and actual > value
         if operation == '<':
             return actual is not None and actual < value
         if operation == '<=':

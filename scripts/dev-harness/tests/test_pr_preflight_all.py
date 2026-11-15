@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.git_test_env import clean_git_env
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ORCHESTRATOR = REPO_ROOT / "scripts" / "pr_preflight_all.py"
 WRAPPER = REPO_ROOT / "scripts" / "pr-preflight"
@@ -60,6 +62,7 @@ def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(
         ["git", "-c", "user.name=Preflight Test", "-c", "user.email=preflight-test@example.com", *args],
         cwd=repo,
+        env=clean_git_env(),
         check=True,
         stdout=subprocess.PIPE,
         text=True,
@@ -99,7 +102,7 @@ def _build_slow_repo(base: Path) -> tuple[Path, str]:
 def _gate_env(**extra: str) -> dict[str, str]:
     # The outer harness may export GIT_* (hooks) and OMI_PREFLIGHT_* knobs; a
     # fixture repository must run without either leaking in (#11183 class).
-    env = {key: value for key, value in os.environ.items() if not key.startswith(("GIT_", "OMI_PREFLIGHT_"))}
+    env = {key: value for key, value in clean_git_env().items() if not key.startswith("OMI_PREFLIGHT_")}
     env["OMI_PREFLIGHT_BACKGROUND"] = "0"
     env.update(extra)
     return env

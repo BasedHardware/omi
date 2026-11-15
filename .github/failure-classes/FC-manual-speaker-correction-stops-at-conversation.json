@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-manual-speaker-correction-stops-at-conversation",
+  "violated_contract": "An explicit speaker correction for a recording must reach every occurrence of that same scoped stream voice, survive processing and rollover, and remain editable while regeneration is in flight. A conversation-local receipt and a busy gate leave most of a split recording unchanged or discard the correction.",
+  "canonical_prevention": "Resolve recording membership at the authenticated server boundary, join only equal scope and canonical stream labels, revalidate targets inside each existing receipt transaction, and retain the latest scoped decision for rollover. Batch selected lines in one request. Keep optimistic labels editable while generations fence old summary results and serialize live persistence. Bound discovery and selections before writes, exclude discarded rows at discovery and commit, reconcile per-member outcomes, make same-value recording retries read-only, and retain a default-on switch with explicit legacy fallback.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_recording_speakers.py",
+    "app/test/providers/recording_speaker_assignment_test.dart",
+    "app/test/widgets/recording_speaker_selection_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/recording_speakers.py",
+    "app/lib/pages/conversation_detail/conversation_recording_speakers.dart",
+    "app/lib/services/capture/capture_speaker_assignment.dart"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,41 @@
+version: 2
+name: conversation-discarded-restore
+tier: manual
+description: Hidden conversations remain recoverable through list, search, transcript and explicit restore
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Apps.swift
+  - desktop/macos/Desktop/Sources/AppState.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationConversationRecordingActions.swift
+preconditions:
+  - named_non_production_bundle_ui_lane
+  - loopback_backend_and_auth_firestore_emulators_with_synthetic_data_only
+  - synthetic_discarded_media_and_noise_rows_with_retained_audio_and_transcript
+  - backend_restore_honors_explicit_user_kept_choice
+steps:
+  - id: S1
+    name: Show discarded across list and search
+    do: "Navigate to Conversations. Confirm synthetic hidden rows are absent. Open Filter and choose Show discarded (or call action conversations_discarded enabled=true, the same filter controller). Confirm a visible Including discarded chip, Discarded row tags, matching count and the hidden rows. Search for their synthetic marker and confirm matching hidden results. Remove the chip during search and confirm hidden results disappear."
+    expect:
+      text_visible:
+        - Including discarded
+        - Discarded
+  - id: S2
+    name: Read retained source and restore from the mounted detail
+    do: "Enable Show discarded and open a synthetic hidden row. Confirm the restore banner and no derived summary/action items. View Transcript and inspect retained text; open retained audio when present. Press Restore Conversation (or action conversation_detail_prompt prompt=restore, which invokes the mounted button handler). Wait for canonical discarded=false and a confirmation. Return to the list, disable Show discarded, and confirm the restored card is visible. Refresh and reopen it to prove the full canonical state survives the cache."
+    expect:
+      text_visible:
+        - Conversation restored
+  - id: S3
+    name: Failed restore and account switch
+    do: "With a synthetic backend failure, try Restore from the row menu and confirm the row remains discarded and an actionable failure notice appears. Retry after recovery. Suspend a restore response, switch synthetic accounts, then release it; confirm no previous-account row or cache write appears. Repository regressions exercise the same rejection and account-generation fences."
+    expect:
+      text_visible:
+        - Couldn't restore conversation

@@ -87,7 +87,7 @@
       },
       "blocked_line": "Resubscribe first to change plans",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/month",
         "headline_year": "{amount}/month",
         "subline_year": "{amount} billed yearly · {free}",
@@ -215,7 +215,7 @@
       },
       "blocked_line": "أعد الاشتراك أولاً لتغيير الخطط",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/شهرياً",
         "headline_year": "{amount}/شهرياً",
         "subline_year": "{amount} تُفوتر سنوياً · {free}",
@@ -356,7 +356,7 @@
       },
       "blocked_line": "Спачатку падпішыцеся зноў, каб змяніць план",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/месяц",
         "headline_year": "{amount}/месяц",
         "subline_year": "{amount} за год · {free}",
@@ -489,7 +489,7 @@
       },
       "blocked_line": "Първо се абонирайте отново, за да смените плана",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/месец",
         "headline_year": "{amount}/месец",
         "subline_year": "{amount} се таксува годишно · {free}",
@@ -610,7 +610,7 @@
       },
       "blocked_line": "প্ল্যান বদলাতে আগে আবার সাবস্ক্রাইব করুন",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/মাস",
         "headline_year": "{amount}/মাস",
         "subline_year": "বার্ষিক {amount} বিল হয় · {free}",
@@ -736,7 +736,7 @@
       },
       "blocked_line": "Prvo se ponovo pretplatite da biste promijenili plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mjesečno",
         "headline_year": "{amount}/mjesečno",
         "subline_year": "{amount} naplaćeno godišnje · {free}",
@@ -867,7 +867,7 @@
       },
       "blocked_line": "Torna a subscriure't primer per canviar de pla",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mes",
         "headline_year": "{amount}/mes",
         "subline_year": "{amount} facturats cada any · {free}",
@@ -993,7 +993,7 @@
       },
       "blocked_line": "Pro změnu plánu se nejprve znovu předplaťte",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/měsíc",
         "headline_year": "{amount}/měsíc",
         "subline_year": "{amount} fakturováno ročně · {free}",
@@ -1124,7 +1124,7 @@
       },
       "blocked_line": "Abonnér igen først for at skifte plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/måned",
         "headline_year": "{amount}/måned",
         "subline_year": "{amount} faktureres årligt · {free}",
@@ -1245,7 +1245,7 @@
       },
       "blocked_line": "Abonnieren Sie zuerst erneut, um den Plan zu ändern",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/Monat",
         "headline_year": "{amount}/Monat",
         "subline_year": "{amount} jährlich abgerechnet · {free}",
@@ -1366,7 +1366,7 @@
       },
       "blocked_line": "Εγγραφείτε ξανά πρώτα για να αλλάξετε πρόγραμμα",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/μήνα",
         "headline_year": "{amount}/μήνα",
         "subline_year": "{amount} χρεώνονται ετησίως · {free}",
@@ -1487,7 +1487,7 @@
       },
       "blocked_line": "Vuelve a suscribirte primero para cambiar de plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mes",
         "headline_year": "{amount}/mes",
         "subline_year": "{amount} facturado al año · {free}",
@@ -1608,7 +1608,7 @@
       },
       "blocked_line": "Plaani muutmiseks telli kõigepealt uuesti",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/kuu",
         "headline_year": "{amount}/kuu",
         "subline_year": "{amount} aastas arveldatud · {free}",
@@ -1729,7 +1729,7 @@
       },
       "blocked_line": "برای تغییر طرح ابتدا دوباره اشتراک بگیرید",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/ماه",
         "headline_year": "{amount}/ماه",
         "subline_year": "{amount} به‌صورت سالانه صورتحساب می‌شود · {free}",
@@ -1850,7 +1850,7 @@
       },
       "blocked_line": "Tilaa ensin uudelleen, jos haluat vaihtaa pakettia",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/kk",
         "headline_year": "{amount}/kk",
         "subline_year": "{amount} laskutetaan vuodessa · {free}",
@@ -1971,7 +1971,7 @@
       },
       "blocked_line": "Réabonnez-vous d'abord pour changer de forfait",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mois",
         "headline_year": "{amount}/mois",
         "subline_year": "{amount} facturés annuellement · {free}",
@@ -2092,7 +2092,7 @@
       },
       "blocked_line": "הירשם מחדש קודם כדי לשנות תוכנית",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/חודש",
         "headline_year": "{amount}/חודש",
         "subline_year": "{amount} בחיוב שנתי · {free}",
@@ -2213,7 +2213,7 @@
       },
       "blocked_line": "योजना बदलने के लिए पहले फिर से सदस्यता लें",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/महीना",
         "headline_year": "{amount}/महीना",
         "subline_year": "{amount} सालाना बिल होता है · {free}",
@@ -2334,7 +2334,7 @@
       },
       "blocked_line": "Za promjenu plana najprije se ponovno pretplatite",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mjesec",
         "headline_year": "{amount}/mjesec",
         "subline_year": "{amount} naplaćuje se godišnje · {free}",
@@ -2455,7 +2455,7 @@
       },
       "blocked_line": "A csomag módosításához először fizessen elő újra",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/hó",
         "headline_year": "{amount}/hó",
         "subline_year": "{amount} éves számlázással · {free}",
@@ -2576,7 +2576,7 @@
       },
       "blocked_line": "Berlangganan lagi terlebih dahulu untuk mengganti paket",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/bulan",
         "headline_year": "{amount}/bulan",
         "subline_year": "{amount} ditagih setahun sekali · {free}",
@@ -2697,7 +2697,7 @@
       },
       "blocked_line": "Riattiva prima l'abbonamento per cambiare piano",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mese",
         "headline_year": "{amount}/mese",
         "subline_year": "{amount} fatturati annualmente · {free}",
@@ -2818,7 +2818,7 @@
       },
       "blocked_line": "プランを変更するには、先に再度サブスクリプションを開始してください",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/月",
         "headline_year": "{amount}/月",
         "subline_year": "年額 {amount} · {free}",
@@ -2939,7 +2939,7 @@
       },
       "blocked_line": "ಯೋಜನೆಗಳನ್ನು ಬದಲಿಸಲು ಮೊದಲು ಮತ್ತೆ ಸಬ್‌ಸ್ಕ್ರೈಬ್ ಮಾಡಿ",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/ತಿಂಗಳು",
         "headline_year": "{amount}/ತಿಂಗಳು",
         "subline_year": "ವಾರ್ಷಿಕವಾಗಿ {amount} ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ · {free}",
@@ -3060,7 +3060,7 @@
       },
       "blocked_line": "플랜을 변경하려면 먼저 다시 구독하세요",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/월",
         "headline_year": "{amount}/월",
         "subline_year": "연간 {amount} 청구 · {free}",
@@ -3187,7 +3187,7 @@
       },
       "blocked_line": "Norėdami keisti planą, pirmiausia prenumeruokite iš naujo",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mėn.",
         "headline_year": "{amount}/mėn.",
         "subline_year": "{amount} mokama kasmet · {free}",
@@ -3325,7 +3325,7 @@
       },
       "blocked_line": "Lai mainītu plānus, vispirms abonējiet atkārtoti",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount} mēnesī",
         "headline_year": "{amount} mēnesī",
         "subline_year": "{amount} maksā reizi gadā · {free}",
@@ -3460,7 +3460,7 @@
       },
       "blocked_line": "Прво обновете ја претплатата за да можете да ги менувате плановите",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/месец",
         "headline_year": "{amount}/месец",
         "subline_year": "{amount} се наплатува годишно · {free}",
@@ -3589,7 +3589,7 @@
       },
       "blocked_line": "योजना बदलण्यासाठी आधी पुन्हा सदस्यत्व घ्या",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/महिना",
         "headline_year": "{amount}/महिना",
         "subline_year": "वार्षिक {amount} बिल · {free}",
@@ -3710,7 +3710,7 @@
       },
       "blocked_line": "Langgan semula dahulu untuk menukar pelan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/bulan",
         "headline_year": "{amount}/bulan",
         "subline_year": "{amount} dibayar setahun · {free}",
@@ -3831,7 +3831,7 @@
       },
       "blocked_line": "Abonneer je eerst opnieuw om van abonnement te wisselen",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/maand",
         "headline_year": "{amount}/maand",
         "subline_year": "{amount} per jaar gefactureerd · {free}",
@@ -3952,7 +3952,7 @@
       },
       "blocked_line": "Abonner på nytt først for å endre abonnement",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/måned",
         "headline_year": "{amount}/måned",
         "subline_year": "{amount} faktureres årlig · {free}",
@@ -4079,7 +4079,7 @@
       },
       "blocked_line": "Najpierw wznów subskrypcję, aby zmienić plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mies.",
         "headline_year": "{amount}/mies.",
         "subline_year": "{amount} płatne rocznie · {free}",
@@ -4212,7 +4212,7 @@
       },
       "blocked_line": "Assine novamente primeiro para mudar de plano",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mês",
         "headline_year": "{amount}/mês",
         "subline_year": "{amount} cobrado anualmente · {free}",
@@ -4333,7 +4333,7 @@
       },
       "blocked_line": "Abonează-te din nou mai întâi ca să schimbi planul",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/lună",
         "headline_year": "{amount}/lună",
         "subline_year": "{amount} facturat anual · {free}",
@@ -4454,7 +4454,7 @@
       },
       "blocked_line": "Сначала оформите подписку снова, чтобы сменить тариф",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/месяц",
         "headline_year": "{amount}/месяц",
         "subline_year": "{amount} оплачивается раз в год · {free}",
@@ -4575,7 +4575,7 @@
       },
       "blocked_line": "Ak chcete zmeniť plán, najprv sa znova predplaťte",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mesiac",
         "headline_year": "{amount}/mesiac",
         "subline_year": "{amount} fakturované ročne · {free}",
@@ -4696,7 +4696,7 @@
       },
       "blocked_line": "Za spremembo načrta se najprej znova naročite",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/mesec",
         "headline_year": "{amount}/mesec",
         "subline_year": "{amount} zaračunano letno · {free}",
@@ -4817,7 +4817,7 @@
       },
       "blocked_line": "Прво се поново претплатите да бисте променили план",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/месец",
         "headline_year": "{amount}/месец",
         "subline_year": "{amount} се наплаћује годишње · {free}",
@@ -4938,7 +4938,7 @@
       },
       "blocked_line": "Prenumerera igen först för att byta plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/månad",
         "headline_year": "{amount}/månad",
         "subline_year": "{amount} faktureras årsvis · {free}",
@@ -5059,7 +5059,7 @@
       },
       "blocked_line": "திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செலுத்துங்கள்",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/மாதம்",
         "headline_year": "{amount}/மாதம்",
         "subline_year": "{amount} ஆண்டுக்கு கட்டணம் · {free}",
@@ -5180,7 +5180,7 @@
       },
       "blocked_line": "ప్లాన్ మార్చడానికి ముందుగా మళ్లీ సబ్‌స్క్రైబ్ చేయండి",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/నెల",
         "headline_year": "{amount}/నెల",
         "subline_year": "{amount} వార్షికంగా బిల్ చేయబడుతుంది · {free}",
@@ -5301,7 +5301,7 @@
       },
       "blocked_line": "สมัครสมาชิกอีกครั้งก่อนเพื่อเปลี่ยนแผน",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/เดือน",
         "headline_year": "{amount}/เดือน",
         "subline_year": "{amount} เรียกเก็บรายปี · {free}",
@@ -5422,7 +5422,7 @@
       },
       "blocked_line": "Mag-subscribe ulit muna para mapalitan ang plan",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/buwan",
         "headline_year": "{amount}/buwan",
         "subline_year": "{amount} kada taon · {free}",
@@ -5543,7 +5543,7 @@
       },
       "blocked_line": "Plan değiştirmek için önce yeniden abone olun",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/ay",
         "headline_year": "{amount}/ay",
         "subline_year": "Yıllık {amount} · {free}",
@@ -5664,7 +5664,7 @@
       },
       "blocked_line": "Спершу поновіть підписку, щоб змінити план",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/місяць",
         "headline_year": "{amount}/місяць",
         "subline_year": "{amount} на рік · {free}",
@@ -5785,7 +5785,7 @@
       },
       "blocked_line": "پلان تبدیل کرنے کے لیے پہلے دوبارہ سبسکرائب کریں",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/مہینہ",
         "headline_year": "{amount}/مہینہ",
         "subline_year": "{amount} سالانہ بل کیا جاتا ہے · {free}",
@@ -5906,7 +5906,7 @@
       },
       "blocked_line": "Hãy đăng ký lại trước để thay đổi gói",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/tháng",
         "headline_year": "{amount}/tháng",
         "subline_year": "{amount} thanh toán hằng năm · {free}",
@@ -6027,7 +6027,7 @@
       },
       "blocked_line": "请先重新订阅，再更改套餐",
       "prices": {
-        "headline_free": "$0",
+        "headline_free": "US$0",
         "headline_month": "{amount}/月",
         "headline_year": "{amount}/月",
         "subline_year": "年付 {amount} · {free}",

@@ -35,6 +35,7 @@ Future<void> _pumpSheet(
   required List<Person> people,
   List<TranscriptSegment> segments = const [],
   SpeakerLabelSuggestionEvent? suggestion,
+  Future<bool> Function()? onNotAPerson,
   Future<bool> Function(
     int speakerId,
     String personId,
@@ -56,6 +57,7 @@ Future<void> _pumpSheet(
             segmentId: 'seg0',
             segments: [_seg('seg0'), ...segments],
             suggestion: suggestion,
+            onNotAPerson: onNotAPerson,
             onSpeakerAssigned: onSpeakerAssigned ?? (_, __, ___, ____, _____) async => false,
           ),
         ),
@@ -72,6 +74,29 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+  testWidgets('Not a Person excludes without calling person assignment and retains retry on failure', (tester) async {
+    var exclusions = 0;
+    var assignments = 0;
+    await _pumpSheet(
+      tester,
+      people: [],
+      onNotAPerson: () async {
+        exclusions++;
+        return false;
+      },
+      onSpeakerAssigned: (_, __, ___, ____, _____) async {
+        assignments++;
+        return false;
+      },
+    );
+    final option = find.byKey(const Key('name_speaker_not_a_person'));
+    expect(option, findsOneWidget);
+    await tester.tap(option);
+    await tester.pumpAndSettle();
+    expect(exclusions, 1);
+    expect(assignments, 0);
+    expect(option, findsOneWidget);
   });
   testWidgets('Someone else excludes the rejected near match and requires an explicit choice', (tester) async {
     final assignments = <String>[];
@@ -303,6 +328,39 @@ void main() {
     expect(find.text('Tag Speaker 1'), findsOneWidget);
     await tester.tap(find.byType(OmiCloseButton));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('whole recording sheet selects only the exact scoped voice', (tester) async {
+    final selected = <List<String>>[];
+    final a = _seg('a')..speakerIdScope = 's1';
+    final b = _seg('b')..speakerIdScope = 's2';
+    final other = _seg('other')
+      ..speaker = 'SPEAKER_2'
+      ..speakerId = 2
+      ..speakerIdScope = 's1';
+    await tester.pumpWidget(ChangeNotifierProvider(
+        create: (_) => PeopleProvider(),
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: NameSpeakerBottomSheet(
+                speakerId: 0,
+                segmentId: 'a',
+                segments: [a, b, other],
+                defaultApplyToSpeaker: true,
+                wholeRecording: true,
+                onSpeakerAssigned: (_, __, ___, ids, whole) async {
+                  selected.add(ids);
+                  return true;
+                }),
+          ),
+        )));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
+    await tester.pumpAndSettle();
+    expect(selected.single, ['a']);
   });
 
   testWidgets('live default tags a single in-progress bubble as speaker-wide including later speech', (tester) async {

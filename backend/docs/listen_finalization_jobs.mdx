@@ -44,7 +44,7 @@ from distinct failing conversations before interpreting an HTTP 500 rate.
 | `queued` | Intent persisted; no worker currently holds the lease. | Cloud Tasks delivery or reconciler replay for platform keys; stale BYOK ownership returns to `blocked_byok`. |
 | `leased` | One pusher/finalizer worker owns the current claim epoch. | A duplicate delivery returns retryable conflict; an expired platform-key lease can be reclaimed with a new epoch; expired BYOK ownership returns to `blocked_byok`. |
 | `completed` | The persisted conversation is terminally completed and the job is acknowledged. | No replay. |
-| `dead_letter` | The configured final Cloud Tasks attempt failed. | Inspect and explicitly replay after resolving the cause. |
+| `dead_letter` | The configured final Cloud Tasks attempt failed, or the one delayed budget requeue was exhausted. | Inspect and explicitly replay after resolving the cause. |
 | `blocked_byok` | The conversation requires request-scoped BYOK credentials. | A user must present valid keys again to resume the inline pusher path. |
 
 The live pusher frame may carry request-scoped BYOK keys, but that frame is
@@ -75,6 +75,7 @@ LISTEN_FINALIZATION_TASKS_INVOKER_SA=<cloud-tasks-invoker-service-account>
 LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS=5
 HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT=1500
 LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
+LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS=2700
 ```
 
 `SYNC_TASKS_PROJECT` and `SYNC_TASKS_LOCATION` are shared Cloud Tasks client
@@ -124,34 +125,144 @@ deliveries and live pusher session handoffs do not consume worker slots.
 When an exhausted worker sees a committed fanout, it completes the fenced job
 without rerunning processing; the dead-letter transaction refuses that state.
 
-This first migration deliberately excludes `POST /v1/conversations` (the
-Redis current-conversation pointer), `reprocess`, and routes that create a
-conversation while processing request content. Their identity and generation
-contracts need their own durable-admission migration.
+Mobile `POST /v1/conversations` (Process Now / Wrap up) resolves the Redis
+current-conversation pointer once, then uses the exact-ID finalizer when Cloud
+Tasks dispatch is enabled. The admission and projection fences are identical,
+and an unavailable queue returns 503 before mutation. A lost enqueue ACK leaves
+the outbox queued for reconciliation. A newer Redis pointer is not removed.
+BYOK keeps the request-scoped inline path because its credentials cannot be
+persisted or passed to the task worker. Deployments configured for inline
+listen dispatch retain the existing synchronous path.
+
+`reprocess` and routes that create a conversation while processing request
+content remain separate admissions.
+
+## Budget-free delayed requeue and dead-letter observability
+
+When a job's durable attempt budget is exhausted for the first time
+(`attempt_count >= LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS` and
+`budget_requeue_count == 0`), the final-attempt hub grants exactly one delayed
+requeue instead of dead-lettering immediately. The grant transaction writes
+`budget_requeue_count: 1` and `budget_requeued_at`, resets `attempt_count`,
+`worker_claim_count`, and `task_retry_count` to zero (the same reset set as the
+manual replay recipe), and parks `reconcile_after_at` at
+`now + LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS` (default 2700 s,
+clamped to 300–14400 s). No task is enqueued at grant time: the parked row is
+invisible to the replay candidates query until its `reconcile_after_at` falls
+due, and the existing reconciler then mints the next dispatch generation and
+enqueues it, exactly as for any retryable failure. The exhausted Cloud Tasks
+delivery is acknowledged with `{'status': 'delayed_requeue'}` so the queue does
+not redeliver it into the parked row.
+
+Exactly-once: the `budget_requeue_count >= 1` refusal and the increment live
+inside the same fenced Firestore transaction as the lease check, so a duplicate
+or racing caller gets `conflict`/`already_requeued` and never a second grant.
+A second exhaustion of the requeued life (`budget_requeue_count >= 1`) is
+terminal: dead-letter with the observability emit below, and the reconciler
+closes such a queued row delivery-independently within one pass even if no
+final worker delivery ever arrives.
+
+Refused the requeue (dead-letter immediately, exactly as before this
+mechanism): `requires_byok` rows (the pusher path claims BYOK; a requeue could
+never execute without the user's keys), `invalid_job`, and
+`recovery_structure_unavailable` (the immediate-terminal policies: a retry
+gives the same answer).
+
+Accepted early-attempt surfaces, both bounded by the second budget: a live
+pusher session may claim the parked row before the delay elapses, and if a
+worker dies between the grant commit and the task ACK, Cloud Tasks redelivers
+the un-ACKed exhausted task, which claims the parked row and erodes the park to
+an early attempt. Known gap: budget burn from killed workers raises
+`worker_claim_count` but not a queued row's `attempt_count`, so the reconciler
+side of the terminal can miss that shape; the worker claim-time pre-check
+still closes it on the next delivery, and
+`listen_finalization_oldest_nonterminal_age_seconds` keeps aging visibility.
+
+Every terminal dead-letter now emits one ERROR log line
+(`listen finalization dead_letter terminal=True job_hash=… cause=… source=worker|reconciler`)
+and increments `omi_conversation_finalization_dead_letter_total` by bounded
+cause class; granted requeues increment
+`omi_conversation_finalization_budget_requeues_total`. The pre-existing
+`listen_finalization_dead_letter_total` keeps counting the worker-path subset.
 
 ## Reconciliation and runbook
 
-`reconcile_listen_finalization_jobs()` runs at backend startup and every five
-minutes. It only enqueues work when Cloud Tasks dispatch is enabled. The
+`reconcile_listen_finalization_jobs()` runs at backend startup and defaults to a
+60-second periodic cadence when quiet finalization is enabled, as it is in the
+production values. With quiet finalization disabled, the default is 300 seconds.
+`LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS` overrides either default. It
+only enqueues work when Cloud Tasks dispatch is enabled. The
 reconciler reads a server-side bounded page of due jobs using
 `reconcile_after_at`; terminal jobs do not retain that field. It transactionally
 increments `dispatch_generation` for platform-key jobs, then enqueues a new named task.
 For BYOK jobs it instead revokes expired live-session ownership to `blocked_byok`,
 without dispatching or processing the job. An old
-delivery becomes `stale_generation` and must not execute. Status totals use
-Firestore aggregation counts and overdue-age sampling is bounded, so historical
-terminal jobs cannot turn periodic reconciliation into an ever-growing scan.
+delivery becomes `stale_generation` and must not execute. Most status/outcome
+counts retain a fixed projection-shard fan-in. **Dead-letter stock instead uses a
+server-side COUNT on `status == dead_letter` across every generation**, including
+pre-release rows without `projection_generation`. A second COUNT selects
+`status == dead_letter`, `last_failure_code == byok_session_abandoned`, and
+`terminal_at` in the closed interval `[now - 24h, now]`. It survives a process
+crash between conversion commit and counter increment, and counts each currently
+matching job document once. A replay out of dead_letter removes that job from the
+count; this is a rolling inventory, not a permanent event ledger.
+
+Both aggregations run only on the existing summary publisher at startup and on
+the reconciliation cadence above (60 seconds by default with production values),
+never on a request path. They download aggregate results, not job documents;
+Firestore COUNT reads scale with matching index entries (about one billed read
+per 1,000). Oldest ages read at most one indexed row per status. Dead-letter age
+uses the stored `terminal_at` status-entry timestamp; historical rows missing it
+remain counted in stock but cannot contribute a known time in dead_letter.
+Blocked-BYOK has no `blocked_at` or `status_changed_at` in the job writer, and
+`updated_at` is mutable bookkeeping, so its age explicitly remains since
+`created_at`, not time in blocked_byok. Queued/leased clocks are unchanged.
+Aggregate replicated gauges with `max()`, never `sum()`. The status/terminal-at
+age index and status/failure-code/terminal-at window index are declared in the
+Firestore registry and generated manifest; the rollout lead must verify READY
+before deploying this publisher.
 
 Operational signals:
 
 | Metric | Action threshold |
 | --- | --- |
 | `listen_finalization_oldest_nonterminal_age_seconds` | Oldest `queued` + `leased` job (system-owned work); alert on sustained age above the queue/lease budget. |
-| `listen_finalization_oldest_blocked_byok_age_seconds` | Oldest job waiting for the user to reconnect with keys; informational, no alert. |
+| `listen_finalization_oldest_blocked_byok_age_seconds` | Informational above 3 days; page above 7 days (both sustained 15 minutes). Reconnect with valid user keys before the 14-day abandonment bound. |
 | `listen_finalization_jobs{status="queued"}` / `{status="leased"}` | Alert on sustained backlog, not a single recovery. |
 | `listen_finalization_retries_total` | Investigate a rate increase with queue/worker error rates. |
-| `listen_finalization_dead_letter_total` / `{status="dead_letter"}` | Page for terminal failures; they require explicit replay. |
+| `listen_finalization_dead_letter_total` | Existing arrival-surge alert: more than 50 terminal worker failures in 1 hour, sustained 15 minutes. Inspect the cause before approved recovery. |
+| `listen_finalization_jobs{status="dead_letter"}` | Informational above 1,000 jobs for 15 minutes; assign triage and record disposition. |
+| `listen_finalization_oldest_dead_letter_age_seconds` | Informational above 7 days for 15 minutes; triage the oldest terminal captures. |
+| `listen_finalization_byok_session_abandoned_last_24h` | Informational when the document-derived last-24h count is greater than zero; count affected conversations and record disposition. |
+| `listen_finalization_byok_session_abandoned_total` | Best-effort fast signal only; it has a post-commit crash gap and is not the daily alert source. |
+| `omi_conversation_finalization_dead_letter_total` | Terminal dead-letters by bounded cause class (worker and reconciler paths). Alert-candidate: the ERROR line `listen finalization dead_letter terminal=True`. |
+| `omi_conversation_finalization_budget_requeues_total` | Attempt-budget exhaustion requeues granted, by cause class. |
 | `omi_fallback_total{component="pusher",reason="enqueue_failed"}` | Investigate task configuration or task API availability. |
+
+All five dwell/stock/conversion alerts are owned by `two-lane-lead`. The
+informational rules use the existing `severity=warning`, `tier=agent`,
+`audience=agent` routing; only the 7-day BYOK rule uses `severity=critical`,
+`tier=page`, `audience=human`. Missing summary data remains `NoData`; the existing
+summary-freshness alerts distinguish a stalled publisher from a healthy empty queue.
+
+| Alert UID | Runbook action |
+| --- | --- |
+| `omi-finalization-byok-dwell-info` | Inspect blocked jobs and arrange reconnect outreach with valid BYOK keys before day 14. Never use Omi credentials. |
+| `omi-finalization-byok-dwell-page` | The first deploy will page on the existing 13-day backlog. On-call should do nothing beyond confirming automatic conversion at day 14. Do not replay jobs or alter the bound. |
+| `omi-finalization-dead-letter-stock` | Assign triage, classify failure codes, fix the cause, and record a disposition for affected jobs. Use the approved recovery procedure below. |
+| `omi-finalization-dead-letter-age` | Triage oldest captures and record disposition, including explicit reprocess where a summary is missing. A retained terminal row can keep this alert firing after triage; do not delete rows merely to clear it. |
+| `omi-finalization-byok-abandoned` | Review `byok_session_abandoned` conversions in the last day, count affected conversations, and arrange explicit reprocessing with valid user keys. Record the outcome. |
+
+The 2026-11-03 latch audit reported 363 blocked BYOK jobs (oldest 13 days) and
+2,000+ dead letters (bounded probe cap). The all-generation dead-letter COUNT
+includes those historical rows, so the informational stock threshold of 1,000
+fires at that supplied baseline. These are supplied audit observations,
+not a new production read. **The first deploy will page on the existing 13-day
+blocked-BYOK backlog. On-call should do nothing beyond confirming automatic
+conversion at 14 days.** The seven-day page remains enabled.
+
+Alerts surface missing summaries; they neither replay jobs nor change transitions or the fourteen-day bound. The rollout lead owns
+monitoring provisioning and deployment.
 
 To recover a terminal job safely:
 
@@ -166,7 +277,9 @@ To recover a terminal job safely:
    recovery, fence the exact job/revision in a Firestore transaction before
    transitioning `dead_letter` to `queued`, incrementing its generation and
    clearing its lease and resetting `attempt_count`, `worker_claim_count`, and
-   `task_retry_count` to zero. Record the approved operator action in the incident.
+   `task_retry_count` to zero. `budget_requeue_count` is NOT reset by this
+   recipe (an operator replay is not another automatic requeue life). Record
+   the approved operator action in the incident.
    Enqueue only the opaque new job id/generation and verify the missing effect.
 
 Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK
@@ -217,9 +330,36 @@ clears that preserved instant and refreshes activity. Unknown-age rows and live
 leases remain excluded. No new index is required.
 
 After the bound, eligible jobs become `dead_letter` with
-`last_failure_code=byok_session_abandoned`. The still-bound, non-deferred
+`last_failure_code=byok_session_abandoned`. Each committed conversion increments
+`listen_finalization_byok_session_abandoned_total` in the sweep, including
+bookkeeping-only conversions. Fenced/skipped/error outcomes do not increment it.
+Like other process counters, this is a best-effort post-commit observation, not
+a durable audit ledger; a process crash between commit and increment can miss an
+event. The daily alert instead uses `listen_finalization_byok_session_abandoned_last_24h`,
+recomputed from committed job documents by the summary publisher. Existing outcome
+counters remain available separately. The still-bound, non-deferred
 `processing` conversation becomes `completed` atomically, retaining the recording
 for explicit reprocessing. Projection deltas include `blocked_byok -1` when
 applicable. Status, generation, epoch and activity checks fence reconnect and
 reclaim races: a stale scan cannot terminate a newly resumed owner, and a live
 session cannot resume an already dead-lettered job.
+
+
+## Quiet recording clocks and mobile optimism
+
+`finished_at` on a live `in_progress` row is a legacy activity/speech watermark,
+not proof that the person ended it. It is populated while recording. Disconnect
+recovery still observes the configured continuation timeout and recording lease;
+setting this field alone must not finalize an active recording. In lifecycle-v2
+serve mode, candidate selection **and the transactional quiet-admission fence**
+use `last_speech_at` through `speech_clock`, including rows without the legacy
+field. The existing quiet obligation and finalization outbox make admission
+idempotent across duplicate wakes and interrupted producers.
+
+The mobile Home pending list contains both server processing/merging rows and
+a local Process Now placeholder (`id=0`). The placeholder carries the known
+server conversation ID when available, probes its lifecycle on a bounded timer,
+and yields to its actual status regardless of title or emoji. An unknown or
+unreachable target expires after two minutes, even offline; refresh can then
+show the real row. That local deadline never cancels server work or declares it
+complete. A completed transcript-only response belongs in the normal list.

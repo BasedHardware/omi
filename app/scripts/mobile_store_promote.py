@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Promote a specifically identified, already-uploaded mobile build to store review."""
+"""Promote specifically identified mobile builds through Apple and Google release tracks."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -19,6 +21,46 @@ APP_ID = "6502156163"
 PACKAGE_NAME = "com.friend.ios"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
+BUILD_ID_RE = re.compile(r"^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$")
+BUILD_TAG_RE = re.compile(
+    r"^v(?P<version>(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"\+(?P<build>[1-9][0-9]{0,9})-(?:mobile|android)-cm$"
+)
+# Codemagic android-internal-auto runs on 2026-10-28 at 03:18Z, 05:55Z and
+# 06:24Z uploaded their bundles, then failed at Publishing with "Setting
+# release for Google Play track internal failed. Changes cannot be sent for
+# review automatically. Please set the query parameter changesNotSentForReview
+# to true." Hold every Play commit for the Play Console -> Publishing overview
+# -> Send changes for review press. The daily train reads this flag to park the
+# exposure ladder because held hops are invisible to the Play API. Play's
+# 2026-10-27 error said this parameter must not be set; keep this switch aligned
+# with the current Play response and both Codemagic publishing blocks.
+CHANGES_NOT_SENT_FOR_REVIEW = True
+PLAY_EDIT_CREATE_ATTEMPTS = 5
+
+
+def record_review_submission(platform: str, version: str, version_code: str | None = None) -> None:
+    """Best-effort receipt for a successful store submission; never fail the release."""
+    receipt_path = os.environ.get("APP_REVIEW_CONFIG_SUBMISSION_RECEIPT")
+    if not receipt_path:
+        return
+    try:
+        path = Path(receipt_path)
+        records: list[dict[str, str]] = []
+        if path.exists() and path.stat().st_size:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(previous, list):
+                records = [row for row in previous if isinstance(row, dict)]
+        record = {"platform": platform, "version": version}
+        record["submitted_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if version_code is not None:
+            record["version_code"] = version_code
+        records.append(record)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+        temporary.replace(path)
+    except (OSError, TypeError, ValueError):
+        print("WARN: app-review receipt could not be recorded; store submission already succeeded", file=sys.stderr)
 
 
 # A version in any of these states is in Apple's hands or approved and waiting.
@@ -55,6 +97,19 @@ def version_parts(version: str) -> tuple[int, int, int]:
 def require_build(value: str | None, label: str) -> str:
     if value is None or not BUILD_RE.fullmatch(value):
         raise PromotionError(f"{label} must be a positive integer")
+    return value
+
+
+def require_build_id(value: str | None, label: str = "CM_BUILD_ID") -> str:
+    if value is None or not BUILD_ID_RE.fullmatch(value):
+        raise PromotionError(f"{label} must be a UUID")
+    return value.lower()
+
+
+def require_build_tag(value: str | None, version: str, label: str = "CM_TAG") -> str:
+    match = BUILD_TAG_RE.fullmatch(value or "")
+    if match is None or match.group("version") != version or int(match.group("build")) > 2_100_000_000:
+        raise PromotionError(f"{label} must be a valid Android release tag for {version}")
     return value
 
 
@@ -109,7 +164,9 @@ def cli_json(*args: str) -> object:
         result = subprocess.run(command, capture_output=True, text=True, check=True, timeout=60)
         return json.loads(result.stdout)
     except subprocess.CalledProcessError as exc:
-        raise PromotionError(f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}") from exc
+        raise PromotionError(
+            f"App Store Connect lookup failed: {' '.join(args[:3])}\n{(exc.stderr or '')[-2000:]}"
+        ) from exc
     except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
         raise PromotionError("App Store Connect build lookup failed") from exc
 
@@ -338,7 +395,9 @@ def select_play_release(
 
 
 PRODUCTION_NAME_VERSION_RE = re.compile(
-    r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))(?:\s*\(.*\))?\s*$"
+    r"^\s*v?((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))"
+    r"(?:\+[1-9][0-9]{0,9}-(?:mobile|ios|android)-cm)?"
+    r"(?:\s*\(.*\)|\s*\[[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\])?\s*$"
 )
 
 
@@ -346,8 +405,10 @@ def production_release_version(name: str) -> str | None:
     """Return the X.Y.Z a Play production release name carries, if any.
 
     Play Console labels a production release by its build name and may suffix the
-    version code ("1.0.552 (1246)"); older or hand-named releases may carry no
-    version at all. Only a recognised version participates in the ordering check.
+    version code ("1.0.552 (1246)"). Codemagic internal releases use their
+    versioned tag and build UUID ("v1.0.552+1246-android-cm [UUID]"). Older or
+    hand-named releases may carry no version; only a recognised version
+    participates in the ordering check.
     """
     match = PRODUCTION_NAME_VERSION_RE.fullmatch(name)
     return match.group(1) if match else None
@@ -366,10 +427,27 @@ def play_edit() -> tuple[object, str]:
             json.loads(credentials_raw), scopes=["https://www.googleapis.com/auth/androidpublisher"]
         )
         client = build("androidpublisher", "v3", credentials=credentials, cache_discovery=False)
-        edit_id = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()["id"]
     except Exception as exc:
         raise PromotionError("Google Play authentication failed") from exc
-    return client, edit_id
+    for attempt in range(PLAY_EDIT_CREATE_ATTEMPTS):
+        try:
+            response = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()
+            edit_id = response.get("id") if isinstance(response, dict) else None
+            if not isinstance(edit_id, str) or not edit_id:
+                raise PromotionError("Google Play edit creation returned an invalid response")
+            return client, edit_id
+        except PromotionError:
+            raise
+        except Exception as exc:
+            response = getattr(exc, "resp", None)
+            status = getattr(response, "status", None)
+            if status is None:
+                status = getattr(exc, "status_code", None)
+            if status == 409 and attempt + 1 < PLAY_EDIT_CREATE_ATTEMPTS:
+                time.sleep(2**attempt)
+                continue
+            raise PromotionError("Google Play edit creation failed") from exc
+    raise PromotionError("Google Play edit creation failed after bounded retries")
 
 
 def play_track(client: object, edit_id: str, track: str) -> object:
@@ -379,12 +457,118 @@ def play_track(client: object, edit_id: str, track: str) -> object:
         raise PromotionError(f"Google Play {track} track lookup failed") from exc
 
 
+def promote_internal_android_to_alpha(
+    client: object, edit_id: str, version: str, build_number: str, build_tag: str, build_id: str
+) -> None:
+    """Promote only this Codemagic run's completed internal release to alpha."""
+    version_parts(version)
+    build_number = require_build(build_number, "BUILD_NUMBER")
+    build_tag = require_build_tag(build_tag, version)
+    build_id = require_build_id(build_id)
+    expected_name = f"{build_tag} [{build_id}]"
+    try:
+        internal = play_track(client, edit_id, "internal")
+        alpha = play_track(client, edit_id, "alpha")
+        if not isinstance(internal, dict) or internal.get("track") != "internal":
+            raise PromotionError("Google Play internal track lookup failed")
+        if not isinstance(alpha, dict) or alpha.get("track") != "alpha":
+            raise PromotionError("Google Play alpha track lookup failed")
+        releases = internal.get("releases", [])
+        if not isinstance(releases, list):
+            raise PromotionError("Google Play internal track releases are invalid")
+
+        matches: list[dict[str, object]] = []
+        for release in releases:
+            if not isinstance(release, dict):
+                raise PromotionError("Google Play internal release is invalid")
+            codes = release_codes(release)
+            if build_number not in codes:
+                continue
+            name = release.get("name")
+            if codes != [build_number] or name != expected_name or release.get("status") != "completed":
+                raise PromotionError("Play internal release does not match this exact completed build")
+            matches.append(release)
+        if len(matches) != 1:
+            raise PromotionError("Play internal track has no unique release for this Codemagic build")
+
+        alpha_releases = alpha.get("releases", [])
+        if not isinstance(alpha_releases, list):
+            raise PromotionError("Google Play alpha track releases are invalid")
+        expected_releases: list[dict[str, object]] = []
+        matching_alpha_releases = 0
+        for release in alpha_releases:
+            if not isinstance(release, dict):
+                raise PromotionError("Google Play alpha release is invalid")
+            codes = release_codes(release)
+            if build_number not in codes:
+                expected_releases.append(dict(release))
+                continue
+            if codes != [build_number] or release.get("name") != expected_name or release.get("status") != "completed":
+                raise PromotionError("Play alpha already contains a conflicting release for this build")
+            matching_alpha_releases += 1
+            if matching_alpha_releases > 1:
+                raise PromotionError("Play alpha contains duplicate releases for this Codemagic build")
+
+        promoted_release = dict(matches[0])
+        promoted_release["status"] = "completed"
+        promoted_release.pop("userFraction", None)
+        expected_releases.append(promoted_release)
+        updated = (
+            client.edits()
+            .tracks()
+            .update(
+                packageName=PACKAGE_NAME,
+                editId=edit_id,
+                track="alpha",
+                body={"track": "alpha", "releases": expected_releases},
+            )
+            .execute()
+        )
+        if (
+            not isinstance(updated, dict)
+            or updated.get("track") != "alpha"
+            or updated.get("releases") != expected_releases
+        ):
+            raise PromotionError("Play alpha update response did not preserve releases and match this build")
+        # Play rejects changesNotSentForReview whenever the parameter is
+        # present at all, so pass it only while held-changes mode is on.
+        commit_kwargs: dict[str, object] = {"packageName": PACKAGE_NAME, "editId": edit_id}
+        if CHANGES_NOT_SENT_FOR_REVIEW:
+            commit_kwargs["changesNotSentForReview"] = True
+        client.edits().commit(**commit_kwargs).execute()
+    except PromotionError:
+        try:
+            client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        except Exception:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        except Exception:
+            pass
+        detail = f": {exc}" if str(exc).strip() else ""
+        raise PromotionError(f"Google Play rejected exact internal-to-alpha promotion{detail}") from exc
+
+
+def discard_play_edit(client: object, edit_id: str) -> None:
+    """Best-effort abandonment after a failed operation; preserve the root error."""
+    try:
+        client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+    except Exception:
+        print("WARN: uncommitted Play edit cleanup failed; the edit will expire", file=sys.stderr)
+
+
 def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     client, edit_id = play_edit()
-    alpha = play_track(client, edit_id, "alpha")
-    production = play_track(client, edit_id, "production")
-    select_play_release(alpha, production, version, build_number)
-    return client, edit_id
+    try:
+        alpha = play_track(client, edit_id, "alpha")
+        production = play_track(client, edit_id, "production")
+        select_play_release(alpha, production, version, build_number)
+        return client, edit_id
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
 
 
 PLAY_RELEASE_STATUSES = ("completed", "draft", "inProgress", "halted")
@@ -397,19 +581,55 @@ def submit_android(
     build_number: str,
     notes: str,
     *,
-    status: str = "completed",
+    status: str | None = None,
     user_fraction: float | None = None,
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
     release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
+) -> None:
+    """Submit production changes, abandoning their edit on any failure."""
+    try:
+        _submit_android_edit(
+            client,
+            edit_id,
+            version,
+            build_number,
+            notes,
+            status=status,
+            user_fraction=user_fraction,
+            extra_codes=extra_codes,
+            base_release=base_release,
+            release_name=release_name,
+            retained_releases=retained_releases,
+        )
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
+
+
+def _submit_android_edit(
+    client: object,
+    edit_id: str,
+    version: str,
+    build_number: str,
+    notes: str,
+    *,
+    status: str | None = None,
+    user_fraction: float | None = None,
+    extra_codes: Sequence[str] = (),
+    base_release: dict[str, object] | None = None,
+    release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
 ) -> None:
     """Write one production release for the given code(s).
 
     status "completed" = fully live; "draft" = Play Console draft; "inProgress"
     = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
     Play Console as a post-release brake. userFraction is rejected for
-    completed/draft releases; a completed release cannot later be halted, so
-    decide the exposure path before writing. extra_codes carries any
+    completed/draft releases; when status is omitted, held-review mode writes a
+    draft and ordinary mode writes completed. A completed release cannot later
+    be halted, so decide the exposure path before writing. extra_codes carries any
     additional versionCodes an existing in-flight release already had (a
     multi-APK rollout must not lose its variants when the track is rewritten).
     base_release is that existing server-returned release: advancing it keeps
@@ -418,7 +638,15 @@ def submit_android(
     the derived single-locale notes are used only when it carries none.
     release_name overrides the written name (defaults to the bare version);
     the daily train uses it to stamp a gate receipt into the name.
+    retained_releases are other server-returned releases that must stay on the
+    track unchanged: Play's tracks.update replaces the whole releases list,
+    so the completed base release under a staged rollout must be carried
+    explicitly or it leaves the track. Only completed or draft releases may be
+    retained (one staged release per PUT), and their version codes must not
+    overlap the written release's.
     """
+    if status is None:
+        status = "draft" if CHANGES_NOT_SENT_FOR_REVIEW else "completed"
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
     if user_fraction is not None and status not in ("inProgress", "halted"):
@@ -430,15 +658,18 @@ def submit_android(
     codes = [build_number, *extra_codes]
     if len(set(codes)) != len(codes):
         raise PromotionError("Play release version codes must be unique")
+    for retained in retained_releases:
+        if not isinstance(retained, dict) or retained.get("status") not in ("completed", "draft"):
+            raise PromotionError("retained Play releases must be server-returned completed or draft releases")
+        if set(codes) & set(release_codes(retained)):
+            raise PromotionError("Play release version codes must be unique across written and retained releases")
     existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
     preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
     release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
     release["name"] = release_name if release_name is not None else version
     release["versionCodes"] = codes
     release["status"] = status
-    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [
-        {"language": "en-US", "text": notes}
-    ]
+    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [{"language": "en-US", "text": notes}]
     release.pop("userFraction", None)
     if status != "inProgress" and "countryTargeting" in release:
         # Google permits countryTargeting only on an inProgress release;
@@ -454,17 +685,24 @@ def submit_android(
             packageName=PACKAGE_NAME,
             editId=edit_id,
             track="production",
-            body={"track": "production", "releases": [release]},
+            body={"track": "production", "releases": [release, *(dict(retained) for retained in retained_releases)]},
         ).execute()
-        client.edits().commit(packageName=PACKAGE_NAME, editId=edit_id).execute()
+        # changesNotSentForReview follows CHANGES_NOT_SENT_FOR_REVIEW: while
+        # Play refuses automated review submission, every committed edit is
+        # held until a human clicks Send for review in Play Console ->
+        # Publishing overview (the runbook's only manual step in that mode);
+        # otherwise Play auto-sends changes for review and rejects the
+        # parameter whenever it is present at all.
+        commit_kwargs: dict[str, object] = {"packageName": PACKAGE_NAME, "editId": edit_id}
+        if CHANGES_NOT_SENT_FOR_REVIEW:
+            commit_kwargs["changesNotSentForReview"] = True
+        client.edits().commit(**commit_kwargs).execute()
     except Exception as exc:
         # Surface Play's own API message (error code + field-level detail) inside
         # the train log; a bare "rejected" line cost a 2026-10-19 1%->10% ladder
         # hop its root cause — the train only printed this static string.
         detail = f": {exc}" if str(exc).strip() else ""
-        raise PromotionError(
-            f"Google Play rejected exact-code promotion to production{detail}"
-        ) from exc
+        raise PromotionError(f"Google Play rejected exact-code promotion to production{detail}") from exc
 
 
 def main() -> int:
@@ -474,8 +712,22 @@ def main() -> int:
     parser.add_argument("--version", required=True)
     parser.add_argument("--ios-build")
     parser.add_argument("--android-build")
+    parser.add_argument("--build-tag")
+    parser.add_argument("--build-id")
     args = parser.parse_args()
     try:
+        if args.confirm == "promote-internal-to-alpha":
+            if args.platform != "android" or args.ios_build:
+                raise PromotionError("internal-to-alpha promotion requires Android only")
+            build_number = require_build(args.android_build, "BUILD_NUMBER")
+            build_tag = require_build_tag(args.build_tag, args.version)
+            build_id = require_build_id(args.build_id)
+            client, edit_id = play_edit()
+            promote_internal_android_to_alpha(client, edit_id, args.version, build_number, build_tag, build_id)
+            print(
+                f"Promoted Android {args.version} ({build_number}) from internal to alpha; held for review submission"
+            )
+            return 0
         if args.confirm != "submit-for-review":
             raise PromotionError("CONFIRM must be exactly submit-for-review")
         version_parts(args.version)
@@ -496,8 +748,10 @@ def main() -> int:
         android_target = prepare_android(args.version, args.android_build) if android else None
         if ios_build:
             submit_ios(ios_build, ios_notes, locales=ios_live_locales())
+            record_review_submission("ios", args.version)
         if android_target:
             submit_android(*android_target, args.version, args.android_build, android_notes)
+            record_review_submission("android", args.version, args.android_build)
     except PromotionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

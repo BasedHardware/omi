@@ -392,6 +392,14 @@ class ServerConversation {
   ConversationStatus status;
   bool discarded;
   final bool deleted;
+  final String? syncMergedInto;
+
+  /// The server's content classification ('conversation', 'media', 'noise'); noise and media
+  /// rows the server discarded are the clips Home folds into one line per day.
+  final String? contentKind;
+  bool get isFoldedNoise => discarded && (contentKind == 'media' || contentKind == 'noise');
+  bool get isMergedDonor => syncMergedInto != null && syncMergedInto!.isNotEmpty;
+  bool get isHiddenFromDefaultList => discarded || deleted || isMergedDonor;
   final bool isLocked;
   bool starred;
   String? folderId;
@@ -417,11 +425,28 @@ class ServerConversation {
   final bool summaryRetryable;
   final bool processingDeferred;
 
+  /// Server-authored Home step for a row still being processed: 'transcribing',
+  /// 'writing_notes' or 'failed'. Null on finished rows and from older servers.
+  final String? homeStep;
+
+  /// Authoritative episode membership, including before the episode list arrives.
+  final String? episodeId;
+
   /// Coverage projected from the server capture receipt; absent on legacy rows.
   final String? captureCoverage;
 
+  /// Voices whose whole-voice `not_a_person` decision still wins the server's
+  /// manual speaker receipt. Server-authored receipt authority; null when the
+  /// conversation carries no manual speaker decision.
+  final List<int>? excludedSpeakers;
+
   // local label
   bool isNew = false;
+
+  /// Local, never serialized: the transcript was kept from an earlier detail read because a list
+  /// refresh carried none (see [keepingTranscriptOf]). It may be out of date, so the detail page
+  /// re-reads the conversation instead of trusting it.
+  bool transcriptCarried = false;
 
   ServerConversation({
     required this.id,
@@ -440,6 +465,8 @@ class ServerConversation {
     this.conversationAudio,
     this.discarded = false,
     this.deleted = false,
+    this.syncMergedInto,
+    this.contentKind,
     this.source,
     this.language,
     this.externalIntegration,
@@ -456,7 +483,65 @@ class ServerConversation {
     this.summaryRetryable = false,
     this.processingDeferred = false,
     this.captureCoverage,
+    this.excludedSpeakers,
+    this.homeStep,
+    this.episodeId,
   });
+
+  /// List rows omit transcript_segments ("unknown/not loaded, not an empty transcript"), while the
+  /// detail page loads the transcript once and reads it back from the provider's list. A refreshed
+  /// row with no transcript therefore keeps the one [loaded] already has. A locked row is redacted
+  /// on purpose and keeps nothing.
+  ServerConversation keepingTranscriptOf(ServerConversation? loaded) {
+    if (transcriptSegments.isNotEmpty || isLocked) return this;
+    if (loaded == null || loaded.transcriptSegments.isEmpty) return this;
+    return withTranscriptSegments(loaded.transcriptSegments)..transcriptCarried = true;
+  }
+
+  /// This conversation with [segments] as its transcript; every other field is carried over.
+  ServerConversation withTranscriptSegments(List<TranscriptSegment> segments) => _copy(transcriptSegments: segments);
+
+  /// Carry Home's list-only presentation through a detail refresh without losing its content.
+  ServerConversation withHomeStep(String step) => _copy(homeStep: step)..transcriptCarried = transcriptCarried;
+
+  ServerConversation _copy({List<TranscriptSegment>? transcriptSegments, String? homeStep}) => ServerConversation(
+        id: id,
+        createdAt: createdAt,
+        onDeviceProvenance: onDeviceProvenance,
+        clientProcessing: clientProcessing,
+        structured: structured,
+        startedAt: startedAt,
+        finishedAt: finishedAt,
+        transcriptSegments: transcriptSegments ?? this.transcriptSegments,
+        appResults: appResults,
+        suggestedSummarizationApps: suggestedSummarizationApps,
+        geolocation: geolocation,
+        photos: photos,
+        audioFiles: audioFiles,
+        conversationAudio: conversationAudio,
+        discarded: discarded,
+        deleted: deleted,
+        syncMergedInto: syncMergedInto,
+        contentKind: contentKind,
+        source: source,
+        language: language,
+        externalIntegration: externalIntegration,
+        calendarEvent: calendarEvent,
+        status: status,
+        isLocked: isLocked,
+        starred: starred,
+        folderId: folderId,
+        visibility: visibility,
+        siriVisibilityValid: siriVisibilityValid,
+        matchSnippets: matchSnippets,
+        captureGroup: captureGroup,
+        speakerResolution: speakerResolution,
+        summaryRetryable: summaryRetryable,
+        processingDeferred: processingDeferred,
+        captureCoverage: captureCoverage,
+        homeStep: homeStep ?? this.homeStep,
+        episodeId: episodeId,
+      )..isNew = isNew;
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
@@ -492,10 +577,12 @@ class ServerConversation {
       structured: structured,
       geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
+      syncMergedInto: json['sync_merged_into'] as String?,
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
       processingDeferred: json['processing_deferred'] == true,
+      homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       onDeviceProvenance:
           json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
       clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
@@ -507,11 +594,13 @@ class ServerConversation {
     Structured? structured,
     Geolocation? geolocation,
     bool deleted = false,
+    String? syncMergedInto,
     bool siriVisibilityValid = true,
     bool? processingDeferred,
     List<TranscriptMatchSnippet>? matchSnippets,
     Map<String, dynamic>? onDeviceProvenance,
     Map<String, dynamic>? clientProcessing,
+    String? homeStep,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
@@ -535,10 +624,12 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
+      contentKind: generated.contentKind,
       source:
           generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
+      syncMergedInto: syncMergedInto,
       externalIntegration:
           generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
@@ -557,6 +648,9 @@ class ServerConversation {
       summaryRetryable: generated.summaryRetryable == true,
       processingDeferred: processingDeferred ?? generated.toJson()['processing_deferred'] == true,
       captureCoverage: generated.captureCoverage,
+      excludedSpeakers: generated.excludedSpeakers,
+      homeStep: homeStep,
+      episodeId: generated.episodeId,
     );
   }
 
@@ -578,6 +672,7 @@ class ServerConversation {
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
       'discarded': discarded,
+      'sync_merged_into': syncMergedInto,
       'deleted': deleted,
       // Cache/webhook payloads use the wire value (for example `sdcard`),
       // not Dart's enum rendering (`ConversationSource.sdcard`).
@@ -595,12 +690,16 @@ class ServerConversation {
       'speaker_resolution': speakerResolution?.toJson(),
       if (summaryRetryable) 'summary_retryable': true,
       if (processingDeferred) 'processing_deferred': true,
+      // home_step belongs to the fetch that produced it; never persist a stale projection.
+      if (episodeId != null) 'episode_id': episodeId,
       if (captureCoverage != null) 'capture_coverage': captureCoverage,
+      if (excludedSpeakers != null) 'excluded_speakers': excludedSpeakers,
     };
   }
 
   wire.GeneratedConversation toGenerated() {
     return wire.GeneratedConversation(
+      episodeId: episodeId,
       id: id,
       createdAt: createdAt,
       startedAt: startedAt,
@@ -616,6 +715,7 @@ class ServerConversation {
       photos: photos.map((photo) => photo.toGenerated()).toList(),
       audioFiles: audioFiles.map((audioFile) => audioFile.toGenerated()).toList(),
       discarded: discarded,
+      contentKind: contentKind,
       source: source?.name,
       language: language,
       externalData: externalIntegration?.toJson(),
@@ -629,6 +729,7 @@ class ServerConversation {
       speakerResolution: speakerResolution?.toGenerated(),
       summaryRetryable: summaryRetryable ? true : null,
       captureCoverage: captureCoverage,
+      excludedSpeakers: excludedSpeakers,
     );
   }
 

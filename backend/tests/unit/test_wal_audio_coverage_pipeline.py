@@ -170,7 +170,7 @@ async def _run_batch(module, stubs, tmp_path, *, claims=True, session=ORIGIN, ra
         task_mode=True,
         capture_evidence_claims={BIN_NAME: _claim()} if claims is True else claims,
     )
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage', 'uid', [f'/tmp/{raw_name}'], 'omi', False, str(tmp_path / 'job'), **kwargs
     )
 
@@ -367,7 +367,7 @@ def _wire_real(
 
 
 async def _run_real(pipeline, tmp_path, *, target_conversation_id=None, session=ORIGIN, claims='default'):
-    await pipeline._run_full_pipeline_background_async(
+    await pipeline.run_full_pipeline_background_async(
         'job-coverage',
         'u',
         [f'/tmp/{BIN_NAME}'],
@@ -734,7 +734,7 @@ async def test_clock_skewed_filename_still_preserves_receipt_only_audio(coordina
         task_mode=True,
         capture_evidence_claims=claims,
     )
-    await module._run_full_pipeline_background_async(
+    await module.run_full_pipeline_background_async(
         'job-coverage-skew', 'uid', [f'/tmp/{skewed}.bin'], 'omi', False, str(wav_dir / 'job'), **kwargs
     )
     assert len(state.vad_seen) == 1

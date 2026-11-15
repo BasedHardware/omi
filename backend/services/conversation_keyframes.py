@@ -14,6 +14,7 @@ from typing import Any, Callable
 from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
+from database.account_deletion_marker import account_deletion_blocks_user_work
 from database.firestore_index_registry import (
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
@@ -87,6 +88,8 @@ def _select_screen_pages(
 
 def ensure_conversation_keyframe_job(uid: str, conversation: Any, *, firestore_client: Any | None = None) -> bool:
     """Persist one idempotent desktop keyframe intent; return whether eligible."""
+    if account_deletion_blocks_user_work(uid):
+        return False
     source = getattr(getattr(conversation, "source", None), "value", getattr(conversation, "source", None))
     started = getattr(conversation, "started_at", None)
     finished = getattr(conversation, "finished_at", None)
@@ -128,6 +131,8 @@ def reconcile_conversation_keyframe_jobs(
     limit: int = 16,
 ) -> int:
     """Select and enqueue one deterministic eligible frame for pending jobs."""
+    if account_deletion_blocks_user_work(uid):
+        return 0
     client = firestore_client or get_data_plane_firestore_client()
     user = client.collection("users").document(uid)
     jobs = CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY.build(
@@ -235,6 +240,8 @@ def prune_expired_conversation_keyframe_jobs(
 
     if not 1 <= limit <= 128:
         raise ValueError("keyframe job cleanup limit is outside the bounded window")
+    if account_deletion_blocks_user_work(uid):
+        return 0
     current = _utc(now or datetime.now(timezone.utc))
     rows = (
         (firestore_client or get_data_plane_firestore_client())

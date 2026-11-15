@@ -20,10 +20,29 @@ install_loopback_tasks_client()
 
 from database import recording_sessions  # noqa: E402
 from main import app  # noqa: E402
+from testing.listen_pusher_stack.cloud_tasks import rest_finalization_admission  # noqa: E402
 from routers.listen.conversations import LiveConversationController  # noqa: E402
+from testing.lifecycle_sim.listener_faults import install_boundary_fault  # noqa: E402
+from testing.lifecycle_sim.faults import BOUNDARY_PHASES  # noqa: E402
 
 RECORDING_LIFECYCLE_FAULT_ENV = 'OMI_STACK_RECORDING_LIFECYCLE_FAULT'
 _RECORDING_LIFECYCLE_FAULT_KEYS = frozenset({'uid', 'recording_session_id', 'conversation_id', 'phase'})
+
+
+@app.middleware('http')
+async def label_rest_finalization(request, call_next):
+    # Starlette propagates request context into its sync route worker. Keep
+    # background retries visible without counting them as one of the four
+    # concurrent public admissions this harness deliberately coordinates.
+    token = rest_finalization_admission.set(
+        request.method == 'POST'
+        and request.url.path.startswith('/v1/conversations/')
+        and request.url.path.endswith('/finalize')
+    )
+    try:
+        return await call_next(request)
+    finally:
+        rest_finalization_admission.reset(token)
 
 
 def _install_recording_lifecycle_fault() -> None:
@@ -35,6 +54,9 @@ def _install_recording_lifecycle_fault() -> None:
         selector = json.loads(raw_selector)
     except json.JSONDecodeError as error:
         raise RuntimeError(f'{RECORDING_LIFECYCLE_FAULT_ENV} must be valid JSON') from error
+    if isinstance(selector, dict) and selector.get('phase') in BOUNDARY_PHASES:
+        install_boundary_fault(selector, state_dir=Path(os.environ['OMI_STACK_STATE_DIR']))
+        return
     if not isinstance(selector, dict) or set(selector) != _RECORDING_LIFECYCLE_FAULT_KEYS:
         raise RuntimeError(
             f'{RECORDING_LIFECYCLE_FAULT_ENV} must contain exactly ' + str(sorted(_RECORDING_LIFECYCLE_FAULT_KEYS))

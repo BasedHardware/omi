@@ -81,6 +81,19 @@ def _paid_cohort(uid):
     return in_paid_ramp(uid) or uid in allowlist_uids()
 
 
+# A dry hunt (nothing applied) doubles the owner's next hunt interval, up to 8x.
+HUNT_BACKOFF_MAX_DOUBLINGS = 3
+
+
+def backed_off_hunt_interval(size_bucket, dry_hunts):
+    """Hunt interval after consecutive dry hunts; a hunt that applies anything resets the streak."""
+    try:
+        streak = max(0, min(HUNT_BACKOFF_MAX_DOUBLINGS, int(dry_hunts or 0)))
+    except (TypeError, ValueError):
+        streak = 0
+    return hunt_interval(size_bucket) * (2**streak)
+
+
 def hunt_interval(size_bucket):
     """Idle time before a pass with no dirty work hunts again; 24h (6h heavy) unless overridden."""
     default = 6.0 if size_bucket == 'heavy' else 24.0
@@ -191,6 +204,10 @@ class Caps:
     tokens_per_minute: int = 2000000
     undo_rate: float = 0.2
     undo_min_samples: int = 10
+    # A low-volume owner never reaches undo_min_samples; this many undos of one kind
+    # among changes applied in the last undo_recent_days pause that kind for them.
+    undo_recent_count: int = 3
+    undo_recent_days: int = 7
     anonymous_k: int = 20
     manual_runs: int = 3
     # Main-lane reply ceiling. Gemini 3.x counts thinking inside it, so 4096 truncated medium-effort turns.
@@ -208,6 +225,8 @@ class Caps:
             tokens_per_minute=int(number('DREAM_AGENT_TOKENS_PER_MINUTE', 2000000)),
             undo_rate=number('DREAM_AGENT_UNDO_RATE', 0.2),
             undo_min_samples=int(number('DREAM_AGENT_UNDO_MIN_SAMPLES', 10)),
+            undo_recent_count=max(1, int(number('DREAM_AGENT_UNDO_RECENT_COUNT', 3))),
+            undo_recent_days=max(1, int(number('DREAM_AGENT_UNDO_RECENT_DAYS', 7))),
             anonymous_k=max(2, int(number('DREAM_AGENT_FEEDBACK_K', 20))),
             manual_runs=int(number('DREAM_AGENT_MANUAL_RUNS_PER_DAY', 3)),
         )

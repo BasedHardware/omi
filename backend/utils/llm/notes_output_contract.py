@@ -114,7 +114,7 @@ def check_notes(
         check.add(
             'evidence',
             'Unsupported speaker identity: People names and lookup results are spelling data. '
-            'Use a resolved voice binding, conversation calendar/tile roster or user correction; '
+            'Use a resolved voice binding, server-provided screen_speaker_bindings entry or user correction; '
             'otherwise say a speaker, hedge names as heard and lead the title with the topic.',
         )
     if contract_v2:

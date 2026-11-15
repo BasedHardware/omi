@@ -1,0 +1,128 @@
+{
+  "schema": "omi.retention/v1",
+  "_doc": "The one threshold source for audio-bucket retention, both ways. Floor: every lifecycle Delete that can reach a protected prefix has age >= max(hold days) + margin_days; a hold with days=null (or a pending ruling) forbids any age Delete there. Ceiling: soft delete, versioning and cache max ages a bucket may not exceed. Read by backend/scripts/check_sync_staging_lifecycle.py (release prerequisite; floors enforce, ceilings report) and by the workspace's infra/rollout/bin/retention_check.py and drift.sh (git show origin/main:<this file>). 11-01: a whole-bucket 7-day Delete on the batch staging bucket removed 161 failed_held sync uploads held 8+ days, the only server copy.",
+  "margin_days": 7,
+  "batch_staging_delete_age_days": 30,
+  "holds": {
+    "allowance_hold_retry_max": {
+      "days": 1,
+      "code": {"path": "backend/config/batch_pipeline.py", "pattern": "^ALLOWANCE_HOLD_RETRY_MAX_SECONDS = 86400$"}
+    },
+    "vendor_failover_held_stale_grace_max": {
+      "days": 1,
+      "code": {"path": "backend/config/batch_pipeline_vendor_failover.py", "pattern": "^HELD_STALE_GRACE_SECONDS_MAX = 86400(\\.0)?$"}
+    },
+    "scheduler_requeue_delay_max": {
+      "days": 1,
+      "code": {"path": "backend/utils/batch_pipeline/scheduler.py", "pattern": "min\\(86400, value\\)"}
+    },
+    "artifact_cleanup_after_projection": {
+      "days": 1,
+      "code": {"path": "backend/utils/batch_pipeline/retention.py", "pattern": "^ARTIFACT_RETENTION = timedelta\\(hours=24\\)$"}
+    },
+    "upload_pending": {
+      "days": 0.03,
+      "code": {"path": "backend/utils/batch_pipeline/upload_policy.py", "pattern": "^UPLOAD_PENDING_SECONDS = 30 \\* 60$"}
+    },
+    "batch_finalization_alarm": {
+      "days": 0.0833,
+      "finalization_target_seconds": 1800,
+      "finalization_alarm_seconds": 7200,
+      "deadline": null,
+      "decided_by": "David",
+      "ruling": "bus:6be2e1 2026-11-02T06:09Z",
+      "control_verified": false,
+      "control": "A 2 h alarm by age since enqueue that also covers units that never finalize (failed_held, quarantined, stuck before transcript), installed and verified (lane alarm2h). Until then this hold is unbounded.",
+      "note": "David: no 21-day deadline; most audio within 30 min of finalization, alarm at 2 h (lane alarm2h owns the alarm). failed_held/quarantined units still have no TTL in code (utils/batch_pipeline/retention.py: accepted audio must not silently expire) and never finalize, so only an age-since-enqueue alarm reaches them. Once that control is verified, the floor counts this hold until a human is alarmed (days = finalization_alarm_seconds) plus margin_days for the response, so a 30-day staging Delete leaves ~30 days after the alarm."
+    },
+    "staging_custody": {
+      "days": null,
+      "note": "Accepted sync staging is held until durable custody (docs/runbooks/audio-cleanup-custody.md); no TTL, so no age Delete may reach it."
+    },
+    "source_audio": {
+      "days": null,
+      "note": "Capture audio of record is retained indefinitely except authorized privacy deletion (David 2026-10-15, storage-lifecycle/FORWARD.md)."
+    },
+    "lake_space_content": {
+      "days": null,
+      "note": "Space lake content is removed only by explicit conversation/account deletion; no time-based expiry."
+    },
+    "speech_profile": {
+      "days": null,
+      "note": "A user's speech profile lives until the user or account deletion removes it."
+    }
+  },
+  "ceiling_sources": {
+    "erasure_immediate": "docs/runbooks/audio-cleanup-custody.md: privacy erasure must remain possible immediately (no retention lock, holds, or soft-deleted copies)",
+    "voice_evidence": "utils/batch_pipeline/artifacts.py verify_voice_retention: soft delete must be 0",
+    "lake_forward": "storage-lifecycle/lake-forward.json: versioning disabled and soft delete 0 at creation; data-access audit logs required.",
+    "canonical_forward": "storage-lifecycle/FORWARD.md: versioning disabled and soft delete 0 at creation",
+    "declared_caches": "storage-lifecycle/prod.json: merged/ Delete 3 d, playback/ Delete 30 d",
+    "user_controlled_voice": "David 2026-11-12: raw voice for accounts that stay is retained until the user deletes it; automatic expiry of live source audio is forbidden. Explicit user/account privacy deletion remains allowed."
+  },
+  "buckets": {
+    "syncing-local": {
+      "env": "BUCKET_TEMPORAL_SYNC_LOCAL",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["staging_custody"],
+      "ceiling": {"soft_delete_seconds_max": 0, "noncurrent_cleanup": true, "ruling": "pending",
+                  "source": ["erasure_immediate"]}
+    },
+    "omi-audio-derived-uc1": {
+      "env": "BUCKET_AUDIO_DERIVED",
+      "project": "based-hardware",
+      "protected_prefixes": ["syncing/"],
+      "holds": ["staging_custody"],
+      "ceiling": {"soft_delete_seconds_max": 0, "source": ["erasure_immediate", "voice_evidence"]}
+    },
+    "based-hardware-batch-pipeline-staging": {
+      "env": "BUCKET_BATCH_PIPELINE",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
+                "artifact_cleanup_after_projection", "upload_pending", "batch_finalization_alarm"],
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
+    },
+    "based-hardware-dev-batch-pipeline-staging": {
+      "env": "BUCKET_BATCH_PIPELINE",
+      "project": "based-hardware-dev",
+      "protected_prefixes": [""],
+      "holds": ["allowance_hold_retry_max", "vendor_failover_held_stale_grace_max", "scheduler_requeue_delay_max",
+                "artifact_cleanup_after_projection", "upload_pending", "batch_finalization_alarm"],
+      "ceiling": {"soft_delete_seconds_max": 0, "max_age_days": {"": 30}, "source": ["voice_evidence"]}
+    },
+    "omi-private-cloud-sync": {
+      "env": "BUCKET_PRIVATE_CLOUD_SYNC",
+      "project": "based-hardware",
+      "note": "2026-11-02: David dropped the existing-stock Coldline-to-Archive proposal (large one-time operation cost); prod.json and validate_storage_lifecycle.py permit only the Coldline transition. The rollout handoff reports only playback Delete 30 d and batch Coldline live. prod.json still declares merged/ Delete 3 d and noncurrent .opus.enc Delete; a prod apply would install both, pending explicit clearance. The new-empty-bucket canonical-forward policy is separate.",
+      "protected_prefixes": ["chunks/"],
+      "holds": ["source_audio"],
+      "ceiling": {"soft_delete_seconds_max": 0, "retain_until_user_deletes": ["chunks/", "raw-live/"],
+                  "max_age_days": {"merged/": 3, "playback/": 30}, "noncurrent_cleanup": true,
+                  "ruling": "pending", "source": ["erasure_immediate", "declared_caches", "user_controlled_voice"]}
+    },
+    "speech-profiles": {
+      "env": "BUCKET_SPEECH_PROFILES",
+      "project": "based-hardware",
+      "protected_prefixes": [""],
+      "holds": ["speech_profile"],
+      "ceiling": {"soft_delete_seconds_max": 0, "ruling": "pending", "source": ["erasure_immediate"]}
+    },
+    "object-lake (BUCKET_OBJECT_LAKE, not provisioned)": {
+      "env": "BUCKET_OBJECT_LAKE",
+      "provisioned": false,
+      "protected_prefixes": ["v1/spaces/"],
+      "holds": ["lake_space_content"],
+      "ceiling": {"soft_delete_seconds_max": 0, "versioning": false, "source": ["lake_forward"]}
+    },
+    "canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)": {
+      "env": "BUCKET_CANONICAL_AUDIO",
+      "provisioned": false,
+      "protected_prefixes": [""],
+      "holds": ["source_audio"],
+      "ceiling": {"soft_delete_seconds_max": 0, "versioning": false, "retain_until_user_deletes": [""],
+                  "source": ["canonical_forward", "user_controlled_voice"]}
+    }
+  }
+}

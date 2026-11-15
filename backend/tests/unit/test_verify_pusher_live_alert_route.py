@@ -23,6 +23,24 @@ def verifier() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(SCRIPT)))
 
 
+def test_batch_delivery_and_queue_safety_rules_use_the_existing_import_and_live_gate(verifier):
+    expected = {
+        'omi-batch-unit-unpublished-2h',
+        'omi-batch-timeliness-sample-stale',
+        'omi-batch-timeliness-scan-blind',
+        'omi-batch-queue-safety-blind',
+    }
+    imported = verifier.load_live_stt_import_rules(production=True)
+    gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
+    assert expected <= imported.keys()
+    assert expected <= gated
+    for uid in expected - {'omi-batch-timeliness-sample-stale', 'omi-batch-timeliness-scan-blind'}:
+        rule = imported[uid]
+        assert rule['labels']['tier'] == 'page'
+        assert rule['labels']['audience'] == 'human'
+        assert not rule['notification_settings'].get('mute_time_intervals')
+
+
 def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dict]]:
     rules = copy.deepcopy(verifier._committed_rules())
     datasource = {"status": "OK", "message": "Data source is working"}
@@ -37,6 +55,10 @@ def _inputs(verifier: SimpleNamespace) -> tuple[dict, dict, dict, dict, list[dic
                 {"metric": {"__name__": name, "job": job}, "value": [1, "1"]}
                 for name in verifier.REQUIRED_METRICS
                 for job in verifier.REQUIRED_JOBS
+            ]
+            + [
+                {"metric": {"__name__": name, "job": "pusher-metrics"}, "value": [1, "1"]}
+                for name in verifier.PUSHER_RECEIVE_METRICS
             ]
         },
     }
@@ -60,7 +82,7 @@ def test_accepts_exact_active_rule_healthy_datasource_and_receiver(verifier: Sim
     ("mutation", "expected"),
     [
         ("rule", "does not match"),
-        ("paused", "unpaused"),
+        ("paused", "isPaused"),
         ("datasource", "health is not OK"),
         ("pusher", "scrape targets are not both healthy"),
         ("metrics", "telemetry sources are missing"),
@@ -200,6 +222,33 @@ def test_prepublish_does_not_deadlock_on_a_not_yet_deployed_metric_family(verifi
         )
         == []
     )
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        'omi_pusher_record_close_abandoned_outstanding',
+        'omi_pusher_record_close_outstanding_refusals_total',
+        'pusher_socket_frames_total',
+        'pusher_receive_work_stalls_total',
+        'pusher_receive_work_stalled_handlers',
+        'pusher_receive_work_duration_seconds_count',
+        'pusher_socket_closed_total',
+    ],
+)
+def test_postrollout_requires_every_receive_metric_from_pusher_not_listen(verifier, missing):
+    rules, datasource, up, telemetry, points = _inputs(verifier)
+    telemetry['data']['result'] = [
+        item for item in telemetry['data']['result'] if item['metric']['__name__'] != missing
+    ]
+    telemetry['data']['result'].append(
+        {'metric': {'__name__': missing, 'job': 'backend-listen-metrics'}, 'value': [1, '1']}
+    )
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='postrollout') == [
+        'live Prometheus pusher receive-work telemetry sources are missing or incomplete'
+    ]
+    assert verifier.validate_live_route(rules, datasource, up, telemetry, points, phase='prepublish') == []
+    assert missing in verifier.METRIC_COVERAGE_QUERY
 
 
 def test_serving_check_keeps_min_over_non_deleting_targets_and_does_not_use_max() -> None:
@@ -793,6 +842,16 @@ def test_import_fails_closed_when_a_referenced_mute_timing_is_uncommitted(
         verifier._run_live_stt_import("https://monitor.omi.me", "secret")
 
 
+# Ruling699300 / PR #24938 deliberately pauses these gated backlog pages.
+# Pin that disposition independently; do not infer this set
+# from current isPaused values, which would hide a new accidental pause.
+APPROVED_PAUSED_GATED_UIDS = {
+    'omi-batch-unit-unpublished-2h',
+    'omi-record-pending-dwell',
+    'omi-enrichment-fresh-dwell',
+}
+
+
 def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
     verifier: SimpleNamespace, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -806,11 +865,16 @@ def test_live_stt_fleet_scope_reports_only_the_import_allowlist(
         "https://monitor.omi.me", "secret", 1, "gated", alert_set="live-stt"
     )
     assert failures == []
+    assert {uid for uid, rule in committed.items() if rule.get('isPaused') is True} == APPROVED_PAUSED_GATED_UIDS
     count = len(committed)
+    matching = count
     assert set(verifier.RULE_UIDS) <= set(committed)
-    assert report[0] == (f"FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}")
+    assert report[0] == (
+        f"FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}"
+    )
     assert "COMMITTED_BUT_ABSENT (0): -" in report
     assert "LIVE_BUT_UNCOMMITTED (0): -" in report
+    assert f"PRESENT_BUT_PAUSED (3): {', '.join(sorted(APPROVED_PAUSED_GATED_UIDS))}" in report
 
 
 @pytest.mark.parametrize(("exists", "method"), [(False, "POST"), (True, "PUT")])
@@ -926,6 +990,44 @@ def test_classify_present_but_paused(verifier: SimpleNamespace) -> None:
     assert coverage.live_and_matching == ()
 
 
+@pytest.mark.parametrize('committed_paused', [False, True])
+@pytest.mark.parametrize('live_paused', [False, True, None, 'true', 0, 1])
+def test_pause_state_must_match_committed_source(verifier, committed_paused, live_paused):
+    expected = _live_rule(next(iter(verifier._committed_rules().values())), isPaused=committed_paused)
+    uid = expected['uid']
+    live = _live_rule(expected, isPaused=live_paused)
+    if live_paused is None:
+        live.pop('isPaused')
+    matches = live_paused is committed_paused
+    errors = verifier.rule_definition_errors(uid, live, expected)
+    assert errors == ([] if matches else [f'live alert rule {uid} isPaused does not match the committed rule'])
+
+    coverage = verifier.classify_fleet_coverage({uid: expected}, {uid: live})
+    assert coverage.live_and_matching == ((uid,) if matches else ())
+    assert coverage.present_but_paused == ((uid,) if live_paused is not False else ())
+    assert coverage.present_but_divergent == (() if matches else (f'{uid} (isPaused)',))
+    report = verifier.format_fleet_report(coverage, committed_count=1, gated_uids=(uid,))
+    assert f'PRESENT_BUT_DIVERGENT ({0 if matches else 1}):' in ' '.join(report)
+    for fail_on in ('gated', 'all'):
+        failures = verifier.fleet_gate_failures(coverage, (uid,), fail_on)
+        assert failures == ([] if matches else [f'live alert rule {uid} (isPaused) does not match the committed rule'])
+
+
+def test_committed_pause_does_not_hide_other_definition_drift_or_absence(verifier):
+    expected = _live_rule(next(iter(verifier._committed_rules().values())), isPaused=True)
+    uid = expected['uid']
+    live = _live_rule(expected, title='wrong')
+    assert verifier.rule_definition_errors(uid, live, expected) == [
+        f'live alert rule {uid} title does not match the committed rule'
+    ]
+    coverage = verifier.classify_fleet_coverage({uid: expected}, {uid: live})
+    assert verifier.fleet_gate_failures(coverage, (uid,), 'gated') == [
+        f'live alert rule {uid} (title) does not match the committed rule'
+    ]
+    absent = verifier.classify_fleet_coverage({uid: expected}, {})
+    assert verifier.fleet_gate_failures(absent, (uid,), 'gated') == [f'live alert rule {uid} is absent from Grafana']
+
+
 def test_classify_present_but_divergent(verifier: SimpleNamespace) -> None:
     expected = next(iter(verifier._committed_rules().values()))
     live = _live_rule(expected, title="wrong", condition="wrong")
@@ -939,7 +1041,7 @@ def test_paused_and_divergent_rule_is_listed_in_both_buckets(verifier: SimpleNam
     live = _live_rule(expected, isPaused=True, title="wrong")
     coverage = verifier.classify_fleet_coverage({expected["uid"]: expected}, {expected["uid"]: live})
     assert coverage.present_but_paused == (expected["uid"],)
-    assert coverage.present_but_divergent == (f"{expected['uid']} (title)",)
+    assert coverage.present_but_divergent == (f"{expected['uid']} (title,isPaused)",)
 
 
 def test_fleet_fail_on_none_is_silent_when_ungated_rules_are_missing(verifier: SimpleNamespace) -> None:
@@ -1282,7 +1384,7 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     monkeypatch.setitem(verifier.load_live_stt_import_rules.__globals__, 'load_all_committed_rules', lambda: canonical)
     development = verifier.load_live_stt_import_rules(production=False)
     gated = verifier.load_gated_uids(canonical)
-    assert set(development) == set(gated)
+    assert set(development) == set(gated) - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
     assert set(verifier.RULE_UIDS) <= set(development)
     assert set(verifier.DATASOURCE_CANARY_UIDS).isdisjoint(development)
     assert all(rule['execErrState'] != 'KeepLast' for rule in development.values())
@@ -1296,6 +1398,27 @@ def test_development_loader_restores_errors_without_mutating_sources(verifier, m
     production = verifier.load_live_stt_import_rules()
     assert set(verifier.DATASOURCE_CANARY_UIDS) <= set(production)
     assert any(rule['execErrState'] == 'KeepLast' for rule in production.values())
+
+
+def test_production_native_queries_never_cross_into_development(verifier):
+    production = verifier.load_live_stt_import_rules()
+    development = verifier.load_live_stt_import_rules(production=False)
+    for uid in verifier.PRODUCTION_ONLY_IMPORT_UIDS:
+        assert uid in production and uid not in development
+        node = production[uid]['data'][0]
+        model = node['model']
+        if 'promQLQuery' in model:
+            assert model['promQLQuery']['projectName'] == 'based-hardware'
+            assert model['timeSeriesList']['projectName'] == 'based-hardware'
+        else:
+            # Prometheus-shaped production-only rules read a datasource that only
+            # the production overlay creates (the GMP Cloud Run shadow).
+            assert node['datasourceUid'] == 'gmp-cloud-run'
+    # The production filter is a detached transformation, including when used
+    # by the read-back gate rather than the importer.
+    transformed = verifier._development_rules(production)
+    assert {uid: rule for uid, rule in transformed.items() if uid not in verifier.DATASOURCE_CANARY_UIDS} == development
+    assert set(verifier.PRODUCTION_ONLY_IMPORT_UIDS) <= set(production)
 
 
 @pytest.mark.parametrize('target', ['https://monitor.omiapi.com', 'https://custom.invalid'])
@@ -1324,7 +1447,7 @@ def test_nonproduction_import_never_installs_or_reads_production_canaries(verifi
     )
     assert verifier._run_live_stt_import(target, 'dummy-token') == []
     gated = set(verifier.load_gated_uids(verifier.load_all_committed_rules()))
-    assert set(writes) == gated
+    assert set(writes) == gated - set(verifier.PRODUCTION_ONLY_IMPORT_UIDS)
     assert set(verifier.RULE_UIDS) <= set(writes)
     assert all(rule['execErrState'] != 'KeepLast' for rule in writes.values())
     assert all(writes[uid]['execErrState'] == 'Error' for uid in verifier.RULE_UIDS)
@@ -1340,9 +1463,13 @@ def test_development_fleet_does_not_require_production_canaries(verifier, monkey
         'https://monitor.omiapi.com', 'dummy-token', 1, 'gated', alert_set='live-stt'
     )
     assert failures == []
+    assert {uid for uid, rule in development.items() if rule.get('isPaused') is True} == APPROVED_PAUSED_GATED_UIDS
     count = len(development)
+    matching = count
     assert set(verifier.RULE_UIDS) <= set(development)
-    assert report[0] == f'FLEET committed={count} live={count} gated={count} matching={count} gated_matching={count}'
+    assert (
+        report[0] == f'FLEET committed={count} live={count} gated={count} matching={matching} gated_matching={matching}'
+    )
 
 
 def test_development_fleet_rejects_unprotected_keep_last(verifier, monkeypatch):

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Perf harness (successful-upload window, sparse-window scoring, semantics knob) and local lag diagnostics: mobile_lag_stall now names the sync/upload/reconcile work in flight. No user-visible behavior change."
+}

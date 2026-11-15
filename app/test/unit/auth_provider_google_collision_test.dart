@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/auth/auth_token_result.dart';
 
 void main() {
   test(
@@ -10,7 +11,7 @@ void main() {
       final migrations = <(String, String)>[];
 
       Future<ProviderLinkResult?> googleCollisionHelper() async {
-        return resolveProviderCredentialCollision(
+        final result = await resolveProviderCredentialCollision(
           sourceUid: 'anonymous-source',
           sourceIsAnonymous: true,
           captureSourceToken: () async {
@@ -22,11 +23,17 @@ void main() {
             return 'linked-destination';
           },
         );
+        return ProviderLinkResult(
+            destinationUid: result.destinationUid,
+            destinationSession: const AuthSessionSnapshot(ownerUid: 'linked-destination', generation: 7),
+            anonymousSourceMigration: result.anonymousSourceMigration);
       }
 
       await completeProviderLinkAndMigrate(
         linkProvider: googleCollisionHelper,
-        migrate: (sourceUid, sourceToken) async {
+        migrate: (sourceUid, sourceToken, destination) async {
+          expect(destination.generation, 7);
+          expect(destination.ownerUid, 'linked-destination');
           expect(destinationEstablished, isTrue);
           migrations.add((sourceUid, sourceToken));
           return true;

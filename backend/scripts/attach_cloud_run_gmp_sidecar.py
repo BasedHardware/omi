@@ -63,6 +63,13 @@ SYNC_SERVICES = frozenset({'backend-sync', 'backend-sync-backfill', 'backend-int
 # Dev services.replace --dry-run accepts app=2 + collector=0.08 (total=2.08),
 # gen2 and cpu-throttling=false. 128Mi is the minimum accepted memory limit.
 SYNC_COLLECTOR_LIMITS = {'cpu': '0.08', 'memory': '128Mi'}
+# Backend's broad 30s scrape needs more memory than sync. Seven-day native
+# per-container metrics peaked at 1.60 CPU-seconds/minute at hourly p99; keep
+# 0.25 CPU (15 CPU-seconds/minute) and the existing 512Mi memory limit.
+BACKEND_COLLECTOR_CPU = '0.25'
+# Desktop's collector peaked at 1.15 CPU-seconds/minute at hourly p99 over
+# 2026-10-20..26. Keep 15 CPU-seconds/minute and the existing 512Mi limit.
+DESKTOP_COLLECTOR_CPU = '0.25'
 
 ConfigDict = dict[str, Any]
 
@@ -390,7 +397,13 @@ def patch_service(
     config_secret_version: str,
     desktop_backend_liveness_probe: bool = False,
     config_content: str | None = None,
+    backend_collector_cpu: str = BACKEND_COLLECTOR_CPU,
+    desktop_collector_cpu: str = DESKTOP_COLLECTOR_CPU,
 ) -> ConfigDict:
+    if backend_collector_cpu not in {BACKEND_COLLECTOR_CPU, '1'}:
+        raise ValueError('backend collector CPU must be 0.25 or 1')
+    if desktop_collector_cpu not in {DESKTOP_COLLECTOR_CPU, '1'}:
+        raise ValueError('desktop collector CPU must be 0.25 or 1')
     patched = cast(ConfigDict, json.loads(json.dumps(service)))
     patched.pop('status', None)
     metadata = cast(ConfigDict, patched.setdefault('metadata', {}))
@@ -458,7 +471,13 @@ def patch_service(
             'limits': (
                 dict(SYNC_COLLECTOR_LIMITS)
                 if metadata.get('name') in SYNC_SERVICES
-                else {'cpu': '1', 'memory': '512Mi'}
+                else {
+                    'cpu': {
+                        'backend': backend_collector_cpu,
+                        'desktop-backend': desktop_collector_cpu,
+                    }.get(metadata.get('name'), '1'),
+                    'memory': '512Mi',
+                }
             )
         },
         'livenessProbe': {
@@ -823,6 +842,8 @@ def attach_sidecar(args: argparse.Namespace) -> None:
         config_secret_version=config_secret_version,
         desktop_backend_liveness_probe=args.desktop_backend_liveness_probe,
         config_content=config_content,
+        backend_collector_cpu=getattr(args, 'backend_collector_cpu', BACKEND_COLLECTOR_CPU),
+        desktop_collector_cpu=getattr(args, 'desktop_collector_cpu', DESKTOP_COLLECTOR_CPU),
     )
 
     path: Path | None = None
@@ -1080,6 +1101,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--config', type=Path)
     parser.add_argument('--config-secret', default='cloud-run-gmp-config')
     parser.add_argument('--config-secret-version', help='Numeric version prepared before revision mutation.')
+    parser.add_argument(
+        '--backend-collector-cpu',
+        choices=(BACKEND_COLLECTOR_CPU, '1'),
+        default=BACKEND_COLLECTOR_CPU,
+        help='Backend service collector CPU; 1 restores the previous allocation. Other services retain their profiles.',
+    )
+    parser.add_argument(
+        '--desktop-collector-cpu',
+        choices=(DESKTOP_COLLECTOR_CPU, '1'),
+        default=DESKTOP_COLLECTOR_CPU,
+        help='Desktop-backend collector CPU; 1 restores the previous allocation. Other services retain their profiles.',
+    )
     parser.add_argument(
         '--config-env',
         action='store_true',

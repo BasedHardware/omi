@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-failed-probe-permits-mutating-recovery",
+  "violated_contract": "A failed state probe cannot authorize a mutating recovery. Onboarding caught graph read errors, including canonical unavailability and a replaced account, and treated them like a successfully read empty legacy graph before sending a rebuild POST.",
+  "canonical_prevention": "Keep the probe and recovery orchestration at the API owner. Propagate probe failures; permit legacy rebuild only after a successful empty non-canonical read, retain canonical conflict as terminal, and exercise request ordering through the production HTTP client against a loopback server.",
+  "canonical_prevention_artifact": [
+    "app/lib/backend/http/api/knowledge_graph_api.dart",
+    "app/test/unit/knowledge_graph_prebuild_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/http/api/knowledge_graph_api.dart",
+    "app/lib/pages/onboarding/wrapper.dart"
+  ],
+  "status": "open"
+}

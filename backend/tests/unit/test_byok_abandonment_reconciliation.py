@@ -32,6 +32,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock
 
+from utils.conversations.relevance_rules import RULES_VERSION
 from database import conversation_finalization_jobs as jobs
 from database import conversation_terminal_title as terminal_title
 from services import conversation_finalization as service
@@ -364,6 +365,14 @@ def test_stranded_job_and_its_processing_conversation_reach_one_atomic_terminal(
             'status': 'completed',
             'finalization_status': 'dead_letter',
             'structured': {'title': 'Recording', 'overview': ''},
+            'discarded': False,
+            'relevance_decision': {
+                'verdict': 'keep',
+                'decided_by': 'policy',
+                'reason': 'byok_abandoned_default',
+                'trigger': 'byok_abandoned',
+                'rules_version': RULES_VERSION,
+            },
         },
     )
     # Firestore requires every transactional read before the first write.
@@ -380,7 +389,9 @@ def test_abandoned_conversation_gets_its_first_sentence_title_and_keeps_a_real_o
     kept = _bound_conversation({'structured': {'title': 'Existing', 'overview': 'x'}})
     transaction = _OrderedTransaction()
     _abandon(transaction, _Ref('job-1', _stranded_job()), kept, projection=_Collection())
-    assert transaction.updates[1] == (kept, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    assert transaction.updates[1][0] is kept
+    assert transaction.updates[1][1]['status'] == 'completed'
+    assert transaction.updates[1][1]['relevance_decision']['reason'] == 'byok_abandoned_default'
 
 
 def test_abandonment_at_the_document_limit_still_closes_the_conversation_without_growth():
@@ -393,7 +404,9 @@ def test_abandonment_at_the_document_limit_still_closes_the_conversation_without
     disposition = _abandon(transaction, _Ref('job-1', _stranded_job()), near_limit, projection=_Collection())
 
     assert disposition == {'status': 'abandoned', 'conversation_outcome': 'closed'}
-    assert transaction.updates[1] == (near_limit, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    assert transaction.updates[1][0] is near_limit
+    assert transaction.updates[1][1]['status'] == 'completed'
+    assert transaction.updates[1][1]['relevance_decision']['reason'] == 'byok_abandoned_default'
 
 
 def test_terminal_moves_the_projection_shard_deltas():
@@ -737,3 +750,20 @@ def test_candidates_include_just_reclaimed_job_without_resetting_abandonment_age
     sweep = jobs.get_abandoned_byok_job_candidates(abandoned_after=_ABANDONED_AFTER, firestore_client=client)
     assert [row['job_id'] for row in sweep['candidates']] == ['reclaimed']
     assert sweep['candidates'][0]['last_activity_at'] == _STRANDED_AT
+
+
+def test_conversion_counter_counts_only_committed_abandonments(monkeypatch):
+    _advance, abandon = _install(monkeypatch, [_candidate(str(i)) for i in range(4)])
+    abandon.side_effect = [
+        {'status': 'abandoned', 'conversation_outcome': 'closed'},
+        {'status': 'abandoned', 'conversation_outcome': 'none'},
+        {'status': 'fenced', 'conversation_outcome': 'none'},
+        RuntimeError('firestore unavailable'),
+    ]
+    counter = service.LISTEN_FINALIZATION_BYOK_SESSION_ABANDONED_TOTAL
+    before = counter._value.get()
+
+    result = service.reconcile_abandoned_byok_finalization_jobs()
+
+    assert result == {'abandoned': 2, 'conversations_closed': 1, 'skipped': 1, 'error': 1}
+    assert counter._value.get() - before == 2

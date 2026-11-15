@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-dropped-connection-classified-as-permanent",
+  "violated_contract": "A request whose connection dies in transit (network switch, lost route, TCP timeout, damaged TLS record) is a transient failure: it is never reported as a crash, never surfaced as a permanent sync error, keeps the recording queued, and its retry runs on a socket opened on the current network. package:http delivers these as a bare ClientException carrying only the OS error text (dart:io rewraps the socket error as HttpException), so a classifier keyed on the SocketException type misses them; on iOS a Wi-Fi/cellular switch under a reused keep-alive socket arrives as \"Can't assign requested address\" (EADDRNOTAVAIL, errno 49) and was the top iOS Crashlytics issue (434 users in 8 days to 2026-10-29).",
+  "canonical_prevention": "Classify transport failures by the shape the HTTP stack actually delivers (the bare ClientException OS messages, matched only on ClientException so file errors stay reportable), and drop pooled keep-alive sockets after a transport failure or a network change so retries never reuse a socket bound to a vanished address.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/transient_network_error_test.dart",
+    "app/test/unit/http_pool_manager_network_switch_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/http/shared.dart",
+    "app/lib/backend/http/http_pool_manager.dart",
+    "app/lib/services/wals/local_wal_sync.dart"
+  ],
+  "status": "open"
+}

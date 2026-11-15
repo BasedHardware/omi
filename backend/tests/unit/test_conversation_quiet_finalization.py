@@ -13,6 +13,7 @@ from google.cloud import firestore
 from starlette.websockets import WebSocketState
 
 from database import conversation_finalization_jobs as jobs
+from database import recording_sessions
 from database import conversation_quiet_checks as checks
 from routers import conversation_finalization as worker
 from services import conversation_finalization as service
@@ -290,7 +291,7 @@ def test_account_deletion_fences_recovery_admission(store, monkeypatch):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     store.rows[('account_deletions', 'synthetic')] = {'wipe_status': 'running'}
     _advance(monkeypatch, 361)
-    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'refused_account_deleting'
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'account_pending_deletion'
     assert 'finalization_job_id' not in store.rows[ROW]
 
 
@@ -400,6 +401,7 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
 
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(service, 'is_listen_finalization_tasks_configured', lambda: True)
     monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
     monkeypatch.setattr(
         service.jobs_db,
@@ -500,50 +502,145 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
 
 
+from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
+
+
+@pytest.mark.parametrize('legacy_finish', [None, NOW + timedelta(hours=1)])
+def test_quiet_run_admits_speech_only_or_stale_heartbeat_row_once(store, monkeypatch, legacy_finish):
+    """Exercise the whole check -> admission path, including its second quiet fence."""
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    row = store.rows[ROW]
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    if legacy_finish is None:
+        row.pop('finished_at')
+    else:
+        row['finished_at'] = legacy_finish
+    store.rows[SESSION]['lease_expires_at'] = NOW - timedelta(seconds=1)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 1, firestore_client=store) == 'queued'
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[ROW]['finalization_revision'] == 1
+    assert quiet.run(job_id, 1, firestore_client=store) == 'stale'
+    assert quiet.run(job_id, _job(store)['dispatch_generation'], firestore_client=store) == 'done'
+    assert store.rows[ROW]['finalization_revision'] == 1
+
+
 def _oversized_write_rejection():
     from google.api_core.exceptions import InvalidArgument
 
-    return InvalidArgument(
-        "400 Document 'projects/p/databases/(default)/documents/users/synthetic/conversations/old' cannot be "
-        "written because its size (1,048,631 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+
+def _size_limit_error(conversation_id: str) -> Exception:
+    return FirestoreInvalidArgument(
+        "400 Document 'projects/based-hardware/databases/(default)/documents/users/synthetic/"
+        f"conversations/{conversation_id}' cannot be written because its size (1,048,679 bytes) "
+        'exceeds the maximum allowed size of 1,048,576 bytes.'
     )
 
 
-def test_oversized_conversation_retires_the_quiet_check_instead_of_retrying_forever(store, monkeypatch):
-    """#23341: the 1 MiB refusal is permanent, so the check must stop re-waking and the worker must not 5xx."""
+def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_forever(store, monkeypatch):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     _advance(monkeypatch, 361)
 
-    def refuse(*args, **kwargs):
-        raise _oversized_write_rejection()
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
 
-    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    closed = {}
+
+    def record_close(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=None, recovery_cutoff=None
+    ):
+        closed['args'] = (uid, conversation_id, quiet_for)
+        closed['client'] = firestore_client
+        closed['recovery_fences'] = recovery_fences
+        closed['recovery_cutoff'] = recovery_cutoff
+        return 'closed'
+
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
     job_id = checks.quiet_check_id('synthetic', 'old')
-    assert quiet.run(job_id, 1, firestore_client=store) == 'document_size_limit'
+    assert quiet.run(job_id, 1, firestore_client=store) == 'oversized_closed'
+    uid, conversation_id, quiet_for = closed['args']
+    assert (uid, conversation_id) == ('synthetic', 'old')
+    # The terminal close must use the same client the check and admission used,
+    # and re-assert the recovery fences the failed admission passed.
+    assert closed['client'] is store
+    assert closed['recovery_fences'] is True
+    assert quiet_for is None
+    # The terminal fence is the check's own recovery cutoff passed through as
+    # an absolute instant: reconstructing it as a duration at close time would
+    # shift the fence forward by the failed admission's latency.
+    from models.conversation_continuity import continuation_timeout
+
+    evaluated_at = NOW + timedelta(seconds=361)
+    expected_cutoff = evaluated_at - timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
+    assert closed['recovery_cutoff'] == expected_cutoff
+    job = _job(store)
+    assert job['status'] == 'quiet_done'
+    assert job['last_failure_code'] == 'document_size_limit'
+    assert 'finalization_job_id' not in store.rows[ROW]
+    # The successor wake this run dispatched before admission is now inert.
+    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
+
+
+def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
+
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'recent_write')
+    fallback = MagicMock()
+    monkeypatch.setattr(quiet, 'record_fallback', fallback)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_recent_write'
+    # A refused close is ordinary fencing, not a degraded terminal: the fallback
+    # metric must not count it.
+    fallback.assert_not_called()
+    assert _job(store)['status'] == 'waiting_quiet'
+    assert _job(store)['dispatch_generation'] == 2
+
+
+def test_size_rejection_naming_another_document_holds_the_check_without_touching_the_row(store, monkeypatch):
+    """#23341 containment: any permanent size rejection must stop the 5xx storm.
+
+    A 400 naming another document cannot be fixed by closing this conversation,
+    so the check retires as held and the row keeps its in_progress status.
+    """
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(
+        lifecycle,
+        'request_finalization',
+        lambda *a, **k: (_ for _ in ()).throw(_size_limit_error('other-conversation')),
+    )
+    close = MagicMock(side_effect=AssertionError("another document's rejection must not close this row"))
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', close)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'document_size_limit'
+    close.assert_not_called()
     job = _job(store)
     assert job['status'] == 'quiet_done'
     assert job['last_failure_code'] == 'document_size_limit'
     assert (
         job['reconcile_after_at'] is firestore.DELETE_FIELD
     )  # the fixture keeps the sentinel; Firestore drops the field
-    # The successor wake this run dispatched before admission is now inert.
-    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
-    # User data stays: the conversation row is neither touched nor terminalized here.
     assert store.rows[ROW]['status'] == 'in_progress'
     assert store.rows[ROW]['transcript_segments'] == [{'text': 'synthetic fixture'}]
 
 
-def test_other_invalid_argument_rejections_still_surface(store, monkeypatch):
-    from google.api_core.exceptions import InvalidArgument
-
+@pytest.mark.parametrize(
+    'error',
+    [
+        FirestoreInvalidArgument('400 some other 400'),
+        ValueError('unrelated'),
+    ],
+)
+def test_non_size_rejections_still_raise(store, monkeypatch, error):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     _advance(monkeypatch, 361)
-
-    def refuse(*args, **kwargs):
-        raise InvalidArgument('400 synthetic unrelated rejection')
-
-    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
-    with pytest.raises(InvalidArgument):
+    monkeypatch.setattr(lifecycle, 'request_finalization', lambda *a, **k: (_ for _ in ()).throw(error))
+    with pytest.raises(type(error)):
         quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
     assert _job(store)['status'] == checks.QUIET_CHECK_STATUS
 
@@ -553,9 +650,10 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
     _advance(monkeypatch, 361)
 
     def refuse(*args, **kwargs):
-        raise _oversized_write_rejection()
+        raise _size_limit_error('old')
 
     monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(quiet.lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'closed')
     actual = quiet.run
     monkeypatch.setattr(quiet, 'run', lambda jid, gen: actual(jid, gen, firestore_client=store))
     app = FastAPI()
@@ -570,7 +668,7 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
             '/v1/conversation-finalization-jobs/run',
             json={'job_id': payload['job_id'], 'dispatch_generation': _job(store)['dispatch_generation']},
         )
-    assert (first.status_code, first.json()['status']) == (200, 'document_size_limit')
+    assert (first.status_code, first.json()['status']) == (200, 'oversized_closed')
     assert (second.status_code, second.json()['status']) == (200, 'stale')
     assert (successor.status_code, successor.json()['status']) == (200, 'stale')
 
@@ -677,3 +775,200 @@ def test_stale_terminal_check_removes_even_future_checkpoint(store):
     result = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
     assert result['status'] == 'stale'
     assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('v2', ['off', 'serve'])
+@pytest.mark.parametrize('active', [False, True])
+@pytest.mark.parametrize('shape', ['unowned', 'received', 'empty', 'unknown', 'tokens'])
+def test_quiet_empty_exit_branch_matrix(store, monkeypatch, enabled, v2, active, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', str(enabled))
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', v2)
+    row = store.rows[ROW]
+    row.update(has_content=False, transcript_segments=[])
+    if shape != 'unowned':
+        row.update(record_lane_owner='batch_live_v1', server_batch_only=True, server_batch_audio_closed=True)
+        if shape != 'unknown':
+            row['server_batch_audio_received'] = shape == 'received'
+        if shape == 'tokens':
+            row['record_upload_sessions'] = {'pending': True}
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 121 if active else 301)
+    before = dict(_job(store))
+    result = checks.evaluate_quiet_check(
+        checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store, empty_storage_proof=lambda *a: True
+    )
+    if (not enabled or shape != 'empty') and not active and v2 == 'off':
+        assert result == {'status': 'done', 'reason': 'no_content'}
+        assert _job(store) == {
+            **before,
+            'status': 'quiet_done',
+            'reconcile_after_at': firestore.DELETE_FIELD,
+            'updated_at': checks._now(),
+        }
+    else:
+        parked = enabled and not active and v2 == 'serve' and shape in {'received', 'unknown'}
+        expected = 'done' if parked else ('deferred' if active else 'empty_ready')
+        assert result['status'] == expected
+        if parked:
+            assert result['exit'] == 'record_orphan_repair'
+            assert _job(store)['status'] == 'quiet_done'
+        else:
+            assert _job(store)['dispatch_generation'] == 2
+            assert _job(store)['due_at'] > checks._now()
+    assert store.rows[ROW] == row
+
+
+def test_quiet_received_never_calls_delete_even_in_v2_serve(store, monkeypatch):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_received=True,
+        server_batch_audio_closed=True,
+    )
+    cleanup = MagicMock(side_effect=AssertionError('custody must never be deleted'))
+    monkeypatch.setattr(lifecycle, 'delete_empty_recording_conversation', cleanup)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    assert _job(store)['last_failure_code'] == 'record_orphan_repair'
+    cleanup.assert_not_called()
+
+
+def test_quiet_empty_switch_is_dark_and_fail_closed(monkeypatch):
+    monkeypatch.delenv('QUIET_EMPTY_EXIT_ENABLED', raising=False)
+    assert not checks.quiet_empty_exit_enabled()
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'typo')
+    assert not checks.quiet_empty_exit_enabled()
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_sessions': {'racing': True}},
+        {'record_upload_failed': True},
+        {'server_batch_audio_received': True},
+        {'server_batch_audio_closed': False},
+    ],
+)
+def test_quiet_empty_delete_rechecks_proven_empty_after_evaluation(store, monkeypatch, change):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    row = store.rows[ROW]
+    row.update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    calls = []
+
+    def proof(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 1:
+            row.update(change)
+        return True
+
+    monkeypatch.setattr(quiet, '_empty_storage_proof', proof)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'deferred'
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('shape', ['token', 'raw_chunks'])
+def test_unowned_expired_row_takes_base_path_without_storage_or_delete(store, monkeypatch, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    store.rows[ROW].update(has_content=False, transcript_segments=[])
+    if shape == 'token':
+        store.rows[ROW]['record_upload_sessions'] = {'pending': True}
+    from utils.other import storage
+
+    retained = [{'timestamp': 100, 'path': 'synthetic-retained-chunk', 'size': 20}] if shape == 'raw_chunks' else []
+    listing = MagicMock(return_value=retained)
+    monkeypatch.setattr(storage, 'list_audio_chunks', listing)
+    raw_delete = MagicMock(side_effect=AssertionError('retained audio is immutable'))
+    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', raw_delete)
+    proof = MagicMock(return_value=False)
+    monkeypatch.setattr(quiet, '_empty_storage_proof', proof)
+    cleanup = MagicMock(side_effect=AssertionError('base refuses this row'))
+    monkeypatch.setattr(lifecycle, 'delete_empty_recording_conversation', cleanup)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    proof.assert_not_called()
+    listing.assert_not_called()
+    cleanup.assert_not_called()
+    raw_delete.assert_not_called()
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('shape', ['lease_unknown', 'lease_invalid', 'markerless'])
+def test_undecidable_quiet_check_has_terminal_named_exit(store, monkeypatch, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=shape != 'markerless',
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    if shape in {'lease_unknown', 'markerless'}:
+        del store.rows[SESSION]
+    elif shape == 'lease_invalid':
+        store.rows[SESSION]['lease_expires_at'] = 'invalid'
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    jid = checks.quiet_check_id('synthetic', 'old')
+    result = checks.evaluate_quiet_check(jid, 1, firestore_client=store)
+    assert result == {'status': 'done', 'reason': 'operator_review', 'exit': 'record_orphan_repair'}
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['dispatch_generation'] == 1
+    # The narrow fixture retains DELETE_FIELD; production removes this index.
+    assert _job(store).pop('reconcile_after_at') is firestore.DELETE_FIELD
+    assert not checks.ensure_quiet_check_progress(jid, firestore_client=store)
+    assert ROW in store.rows
+
+
+def test_owned_empty_storage_refusal_restores_base_off_exit(store, monkeypatch):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    proof = MagicMock(return_value=False)
+    result = checks.evaluate_quiet_check(
+        checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store, empty_storage_proof=proof
+    )
+    assert result == {'status': 'done', 'reason': 'no_content'}
+    proof.assert_called_once()
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('objects', [[], [{'timestamp': 100, 'path': 'synthetic-raw', 'size': 20}]])
+def test_quiet_empty_storage_proof_reads_archive_and_raw(store, monkeypatch, objects):
+    from utils.other import storage
+
+    store.rows[('users', 'synthetic')] = {'private_cloud_sync_enabled': True}
+    store.rows[ROW].update(record_lane_owner='batch_live_v1', private_cloud_sync_enabled=True)
+    listing = MagicMock(return_value=objects)
+    monkeypatch.setattr(storage, 'list_audio_chunks', listing)
+    assert quiet._empty_storage_proof(store.transaction(), 'synthetic', 'old', firestore_client=store) is (not objects)
+    listing.assert_called_once_with(
+        'synthetic', 'old', max_count=4096, require_archive=True, include_raw=True, source_metadata=True
+    )
