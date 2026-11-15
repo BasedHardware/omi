@@ -190,6 +190,14 @@ per-replica path. Queue age still needs a designated
 transactional job claims and recovery cadence are unchanged. See
 [Firestore spend guard](runbooks/firestore-spend-guard.md).
 
+Upload-coalescing discovery uses a separate strict namespace lease: one scanner
+per fleet, including when producers are OFF so existing holds drain. The advisory
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED` bypass does not disable this role. Ownership
+errors skip discovery; cursor, heartbeat and new claims check the acquisition
+token transactionally. Existing 120s group custody leases and privacy/erasure
+checks remain authoritative for already claimed audio. See
+[coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
+
 ## Retained seal proof rules
 
 `RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
