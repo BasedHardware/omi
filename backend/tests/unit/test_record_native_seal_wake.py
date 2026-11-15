@@ -34,7 +34,12 @@ def test_native_seal_preserves_claim_and_only_wakes_known_retry(records, clock):
     if clock in {'due', 'retry'}:
         assert records.rows[job_path]['available_at'] == 0
         assert records.rows[job_path]['record_intake_retry_at'] is None
-        assert len(records.transactions[-1].updates) == 2
+        seal_tx = next(
+            tx
+            for tx in records.transactions
+            if any(path == PATH and patch.get('record_audio_closed') for path, patch in tx.updates)
+        )
+        assert len(seal_tx.updates) == 2
     elif clock != 'unknown':
         assert records.rows[job_path]['available_at'] == available
     else:
@@ -85,3 +90,47 @@ def test_native_wake_kill_switch_and_foreign_job_are_preserved(records, monkeypa
     monkeypatch.setenv('PUSHER_RECORD_SEAL_WAKE_ENABLED', 'false')
     seal_record_audio('uid-at', 'record', firestore_client=records)
     assert records.rows[path]['available_at'] == now + 900
+
+
+@pytest.mark.parametrize('ledger_fails', [False, True])
+def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monkeypatch, ledger_fails):
+    from database import pipeline_ledger
+
+    monkeypatch.setenv('PIPELINE_LEDGER', 'true')
+    now = time.time()
+    _, key = record_identity('uid-at', 'record')
+    job_path = ('batch_pipeline_prod_jobs', key)
+    records.rows[job_path] = dict(
+        owner_id='uid-at',
+        conversation_id='record',
+        state='record_pending',
+        enqueued_at=now - 30,
+        available_at=now + 900,
+        record_intake_retry_at=now + 900,
+    )
+    original = pipeline_ledger._commit
+    observed = []
+
+    def after_seal(*args, **kwargs):
+        assert records.rows[PATH]['record_audio_closed'] is True
+        assert records.rows[job_path]['available_at'] == 0
+        observed.append(True)
+        if ledger_fails:
+            raise OSError('synthetic ledger failure after authoritative seal')
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline_ledger, '_commit', after_seal)
+    assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
+    assert observed == [True]
+    seal_tx = next(
+        tx
+        for tx in records.transactions
+        if any(path == PATH and patch.get('record_audio_closed') for path, patch in tx.updates)
+    )
+    assert (job_path, {'available_at': 0, 'record_intake_retry_at': None}) in seal_tx.updates
+    later = records.transactions[records.transactions.index(seal_tx) + 1 :]
+    assert all(path != job_path for tx in later for path, _ in tx.updates)
+    if not ledger_fails:
+        assert any(path[:3] == ('users', 'uid-at', 'pipeline_ledger') for tx in later for path, _ in tx.sets)
+    assert records.rows[job_path]['available_at'] == 0
+    assert records.rows[PATH]['record_audio_closed'] is True
