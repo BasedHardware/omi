@@ -57,6 +57,7 @@ from utils.sync.staging_custody import add_staging_derivatives, cleanup_sync_sta
 from utils.sync import conversation_turn as conversation_turn_lease
 
 from database import conversations as conversations_db
+from database import capture_end as capture_end_db
 from database.summary_processing import claim_from_snapshot
 from utils.conversations.summary_delivery import (
     repair_fenced,
@@ -1125,7 +1126,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(
+                conversation_data,
+                context,
+                now=time.time(),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
+            )
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
@@ -1870,6 +1876,10 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
         annotate_identity(incoming, client_device_id, recording_session_id)
+        if capture_time_offset > 0:
+            # The stored times above are shifted by this much; the end-of-recording
+            # proof needs it to compare the row with the phone's own clock.
+            incoming['_sync_capture_clock_offset'] = capture_time_offset
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
         if lineage_eligible:
