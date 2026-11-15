@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/home_rows_health.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -134,6 +135,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
         ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+        if (compact) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
         ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
         ChangeNotifierProvider<AppProvider>.value(value: apps),
         ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
@@ -144,6 +146,9 @@ Future<void> main() async {
       ],
       child: MaterialApp(
           debugShowCheckedModeBanner: false,
+          theme: buildOmiTheme(brightness: Brightness.light),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Stack(fit: StackFit.expand, children: [
             home,
             Positioned(

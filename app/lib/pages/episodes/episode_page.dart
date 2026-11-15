@@ -5,6 +5,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -102,6 +103,11 @@ class EpisodePage extends StatelessWidget {
     final dates = OmiDateFormat.of(context);
     final history = context.watch<ConversationProvider?>();
     final episodes = context.watch<EpisodeProvider?>();
+    final cards = context.watch<HomeFeedProvider?>();
+    final cardSteps = {
+      for (final card in cards?.items ?? [])
+        if (card.kind == 'conversation' && card.homeStep != null) card.detailId: card.homeStep!,
+    };
     final hidden = episodes?.hiddenHomeMembers ?? const <String>{};
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
@@ -145,7 +151,13 @@ class EpisodePage extends StatelessWidget {
     final retained = {
       for (final member in processingAggregate ? opened.members : episode.members) member.id: member,
     };
-    final members = [for (final member in retained.values) known[member.id] ?? member]
+    final members = [
+      for (final member in retained.values)
+        if (processingAggregate && cardSteps[member.id] != null)
+          (known[member.id] ?? member).withHomeStep(cardSteps[member.id]!)
+        else
+          known[member.id] ?? member,
+    ]
         .where(
           (m) =>
               !m.discarded &&

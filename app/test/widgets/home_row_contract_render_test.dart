@@ -197,6 +197,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     screen = MultiProvider(providers: [
       ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
       ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+      if (feed != null) ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
       ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
       ChangeNotifierProvider<AppProvider>.value(value: apps),
       ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
@@ -249,6 +250,7 @@ void main() {
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final fixture = HomeReadyMembersFixture(DateTime.now());
     var composed = false;
+    var newlyReady = false;
     final feed = HomeFeedProvider(
         owner: () => 'fixture',
         fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
@@ -283,7 +285,7 @@ void main() {
                           emoji: '',
                           preview: member.structured.overview,
                           status: 'completed',
-                          homeStep: member.homeStep,
+                          homeStep: newlyReady && member.id == fixture.members[2].id ? 'ready' : member.homeStep,
                           starred: false,
                           isLocked: false,
                           hasTasks: false,
@@ -315,6 +317,11 @@ void main() {
     for (final member in fixture.members.skip(2)) {
       expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
     }
+    newlyReady = true;
+    await feed.refresh();
+    await tester.pump();
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[3].id}')), findsOneWidget);
     final history =
         Provider.of<ConversationProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
     final deleted = <String>[];
@@ -328,14 +335,16 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+    expect(find.text('Delete 1 Conversation?'), findsOneWidget);
     await tester.tap(find.text('Delete').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
-    expect(history.memoriesToDelete.keys.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    expect(history.memoriesToDelete.keys.toSet(), {fixture.members[3].id});
     // The typed Home fixture nests Scaffolds; invoke the rendered Undo action
     // directly. The standalone destructive-scope suite verifies its tap path.
-    tester.widget<SnackBarAction>(find.byType(SnackBarAction)).onPressed();
+    tester
+        .widget<TextButton>(find.descendant(of: find.byType(SnackBarAction), matching: find.byType(TextButton)))
+        .onPressed!();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(history.memoriesToDelete, isEmpty);
@@ -350,6 +359,7 @@ void main() {
     expect(find.text('Ready recording 2'), findsNothing);
     expect(find.byType(ProcessingConversationRow), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+    debugDefaultTargetPlatformOverride = null;
   });
 
   TestWidgetsFlutterBinding.ensureInitialized();
