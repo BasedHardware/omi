@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -665,9 +666,22 @@ def validate_runtime_env(
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
+    integration_canary_state: Path | None = None,
+    integration_canary_source: str | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
+    if integration_canary_state or integration_canary_source:
+        if env != 'prod' or not (integration_canary_state and integration_canary_source):
+            return [ValidationError(env, 'integration canary requires bound prod source/state')]
+        from scripts.runtime_env_canary_ops import compose
+
+        try:
+            env_config = compose(
+                env_config, json.loads(integration_canary_state.read_text()), integration_canary_source
+            )
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'integration canary ops evidence invalid')]
     errors = _validate_manifest_shape(env_config, env)
     errors.extend(_validate_directory_routing_bindings(env, env_config))
     errors.extend(validate_mentor_pipeline(scope=env, config=env_config))

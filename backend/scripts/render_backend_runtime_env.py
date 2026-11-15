@@ -205,6 +205,8 @@ def main() -> int:
         help='render only this Cloud Run job and the shared network flags; services remain full-environment only',
     )
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument('--integration-canary-state', type=Path)
+    parser.add_argument('--integration-canary-source')
     parser.add_argument(
         '--state-output',
         type=Path,
@@ -227,6 +229,19 @@ def main() -> int:
     manifest = _load_yaml(args.manifest)
     environments = _as_config_dict(manifest['environments']) or {}
     env_config = _as_config_dict(environments[args.env]) or {}
+    if args.integration_canary_state or args.integration_canary_source:
+        if (
+            args.env != 'prod'
+            or args.job
+            or args.desktop_state_output
+            or not (args.integration_canary_state and args.integration_canary_source)
+        ):
+            parser.error('integration canary requires a full prod render and bound source/state')
+        from scripts.runtime_env_canary_ops import compose
+
+        env_config = compose(
+            env_config, json.loads(args.integration_canary_state.read_text()), args.integration_canary_source
+        )
 
     if args.desktop_state_output:
         desktop_state = _render_desktop_backend_state(env_config)
@@ -335,8 +350,12 @@ def main() -> int:
             )
         )
     if args.state_output:
+        state = _render_cloud_run_state(env_config)
+        if args.integration_canary_state:
+            for service, service_config in env_config['cloud_run']['services'].items():
+                state['services'][service]['forbidden_env'] = list(service_config.get('forbidden_env', []))
         args.state_output.write_text(
-            json.dumps(_render_cloud_run_state(env_config), indent=2, sort_keys=True) + '\n',
+            json.dumps(state, indent=2, sort_keys=True) + '\n',
             encoding='utf-8',
         )
     for name, value in rendered_outputs:

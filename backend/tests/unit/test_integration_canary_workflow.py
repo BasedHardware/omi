@@ -1,0 +1,375 @@
+"""Exercise the ruled deployment boundary and actual serving-ops composition."""
+
+from copy import deepcopy
+from pathlib import Path
+import json
+import os
+import re
+import runpy
+import subprocess
+
+import pytest
+import yaml
+
+from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, compose
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def snapshot():
+    return {
+        'source': SOURCE,
+        'services': {
+            s: {
+                'revision': {
+                    'spec': {
+                        'containers': [
+                            {
+                                'name': 'app',
+                                'ports': [{'containerPort': 8080}],
+                                'env': [
+                                    {'name': 'SYNC_TASKS_QUEUE', 'value': f'{s}-fresh'},
+                                    {'name': 'BATCH_PIPELINE_PERCENT', 'value': '25'},
+                                    {
+                                        'name': 'SYNC_JOB_SECRET',
+                                        'valueFrom': {'secretKeyRef': {'name': 'ops-ref', 'key': '4'}},
+                                    },
+                                    {'name': BACKOFF, 'value': 'true'},
+                                    {'name': PROVIDER, 'value': 'false'},
+                                    {'name': 'UNOWNED', 'value': 'private-live'},
+                                ],
+                            },
+                            {'name': 'collector', 'env': [{'name': 'SYNC_TASKS_QUEUE', 'value': 'wrong-container'}]},
+                        ]
+                    }
+                }
+            }
+            for s in SERVICES
+        },
+    }
+
+
+def config():
+    return {
+        'cloud_run': {
+            'services': {
+                s: {
+                    'env': {
+                        'SYNC_TASKS_QUEUE': {'value': 'stale'},
+                        'UNOWNED': {'value': 'source'},
+                        'BATCH_PIPELINE_RETIRED': {'value': 'old'},
+                    },
+                    'secrets': {'SYNC_TASKS_QUEUE': {'secret': 'old', 'version': '1'}},
+                    'forbidden_env': ['BATCH_PIPELINE_RETIRED'],
+                }
+                for s in SERVICES
+            }
+        }
+    }
+
+
+def test_serving_ops_fresh_queue_secret_and_dispositions_are_composed_without_mutating_inputs():
+    original, live = config(), snapshot()
+    before = deepcopy((original, live))
+    result = compose(original, live, SOURCE)
+    assert (original, live) == before
+    for s in SERVICES:
+        role = result['cloud_run']['services'][s]
+        env = role['env']
+        assert env['SYNC_TASKS_QUEUE']['value'] == f'{s}-fresh'
+        assert 'SYNC_TASKS_QUEUE' not in role['secrets']
+        assert env['BATCH_PIPELINE_PERCENT']['value'] == '25'
+        assert role['secrets']['SYNC_JOB_SECRET'] == {'secret': 'ops-ref', 'version': '4'}
+        assert env['UNOWNED']['value'] == 'source'
+        assert env['OMI_BACKEND_RELEASE_SHA']['value'] == SOURCE
+        assert {k: env[k]['value'] for k in QUALITY} == QUALITY
+        assert env[PROVIDER]['value'] == 'false'
+        if s in ('backend-sync', 'backend-integration'):
+            assert env[BACKOFF]['value'] == 'false'
+        else:
+            assert BACKOFF not in env and BACKOFF in role['forbidden_env']
+
+
+@pytest.mark.parametrize('failure', ['source', 'scope', 'duplicate', 'ingress', 'secret', 'quality-conflict'])
+def test_bad_snapshot_or_manifest_conflict_refuses(failure):
+    source, live = config(), snapshot()
+    if failure == 'source':
+        live['source'] = 'a' * 40
+    elif failure == 'scope':
+        del live['services']['backend-sync']
+    elif failure == 'duplicate':
+        live['services']['backend']['revision']['spec']['containers'][0]['env'] *= 2
+    elif failure == 'ingress':
+        live['services']['backend']['revision']['spec']['containers'][1]['ports'] = [{'containerPort': 8081}]
+    elif failure == 'secret':
+        live['services']['backend']['revision']['spec']['containers'][0]['env'][2]['value'] = 'conflicting'
+    else:
+        source['cloud_run']['services']['backend']['forbidden_env'].append(next(iter(QUALITY)))
+    with pytest.raises(ValueError):
+        compose(source, live, SOURCE)
+
+
+def test_workflow_keeps_native_admission_and_exact_pin_selects_canary_without_new_public_mode():
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    assert workflow['concurrency']['cancel-in-progress'] is False
+    assert 'prod-train' in workflow['concurrency']['group']
+    deploy = workflow['jobs']['deploy']
+    assert 'firestore_readiness' in deploy['needs']
+    assert deploy['environment']
+    action = next(s for s in deploy['steps'] if s.get('uses') == './.github/actions/deploy-backend-stack')
+    assert SOURCE in action['with']['integration_canary']
+    assert "environment == 'prod'" in action['with']['integration_canary']
+    boundary = workflow['jobs']['validate-production-boundary']['steps'][0]['run']
+    assert SOURCE in boundary and 'SKIP_ELIGIBILITY' in boundary and 'BREAK_GLASS_LOCK' in boundary
+
+
+def test_workflow_stages_before_first_deploy_and_never_reclones_integration_after_canary():
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    steps = action['runs']['steps']
+
+    def named(name):
+        return next(s for s in steps if s['name'] == name)
+
+    prep = named('Capture ruled integration canary baseline and serving ops')
+    first_deploy = next(s for s in steps if s.get('uses') == 'google-github-actions/deploy-cloudrun@v3')
+    assert steps.index(prep) < steps.index(first_deploy)
+    candidate = named('Create ruled integration candidate by CAS from serving configuration')
+    assert 'candidate' in candidate['run'] and 'runtime-state' in candidate['run']
+    normal = named('Deploy ${{ inputs.service }}-integration to Cloud Run')
+    assert "integration_canary != 'true'" in normal['if']
+    attach = named('Attach Managed Prometheus to sync and integration candidates')
+    assert 'integration_canary' in attach['run'] and 'continue' in attach['run']
+    verify = named('Accept no-traffic Cloud Run candidate')
+    assert '--candidate' in verify['run'] and '--cloud-run-only' in verify['run']
+    assert 'integration-canary-prepare.outputs.release_vector_args' in verify['run']
+    shift = named('Shift Cloud Run traffic to validated revisions')['run']
+    assert shift.index('" promote') < shift.index('--to-revisions=${{ steps.capture-backend-integration')
+    assert '--state "$RUNNER_TEMP/integration-canary-private.json"' in shift
+    assert 'fold' not in shift
+    restore = [s for s in steps if s['name'] == 'Restore Cloud Run traffic snapshot after failed promotion'][-1]['run']
+    assert ' rollback ' in restore or '" rollback' in restore
+    assert '--exclude-service backend-integration' in restore
+
+
+def test_snapshot_restore_exclusion_does_not_touch_integration():
+    module = runpy.run_path(str(ROOT / 'backend/scripts/cloud_run_traffic_snapshot.py'))
+    snap = {
+        'project': 'based-hardware',
+        'region': 'us-central1',
+        'services': {
+            s: {
+                'spec': {'traffic': [{'revisionName': s + '-old', 'percent': 100}]},
+                'status': {'latestReadyRevisionName': s + '-old'},
+            }
+            for s in SERVICES
+        },
+    }
+    calls = []
+
+    def fetcher(**kw):
+        s = kw['service']
+        calls.append(('read', s))
+        return {
+            'spec': {'traffic': [{'revisionName': s + '-old', 'percent': 100}]},
+            'status': {'traffic': [{'revisionName': s + '-old', 'percent': 100}]},
+        }
+
+    result = module['restore_snapshot'](
+        snap,
+        runner=lambda cmd: calls.append(('write', cmd[4])),
+        fetcher=fetcher,
+        exclude_services=['backend-integration'],
+    )
+    assert result['result'] == 'pass'
+    assert result['excluded_services'] == ['backend-integration']
+    assert all(s != 'backend-integration' for _, s in calls)
+    with pytest.raises(ValueError):
+        module['restore_snapshot'](snap, exclude_services=['unknown'])
+
+
+def step_script(name, values=None):
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    script = [s['run'] for s in action['runs']['steps'] if s['name'] == name][-1]
+    context = {
+        'inputs.integration_canary': 'true',
+        'inputs.deploy_profile': 'manual',
+        'inputs.environment': 'prod',
+        'inputs.runtime_env': 'prod',
+        'inputs.deploy_targets': 'cloud-run-only',
+        'inputs.deploy_gateway': 'false',
+        'inputs.service': 'backend',
+        'inputs.project_id': 'based-hardware',
+        'inputs.region': 'us-central1',
+        'inputs.admitted_sha': SOURCE,
+        'steps.capture-backend-revision.outputs.revision': 'backend-new',
+        'steps.capture-backend-sync-revision.outputs.revision': 'sync-new',
+        'steps.sync-backfill.outputs.revision': 'backfill-new',
+        'steps.capture-backend-integration-revision.outputs.revision': 'integration-new',
+    }
+    context.update(values or {})
+    return re.sub(r'\$\{\{\s*(.*?)\s*\}\}', lambda match: context[match[1]], script)
+
+
+@pytest.mark.parametrize(
+    'changed',
+    [
+        {'inputs.environment': 'development'},
+        {'inputs.admitted_sha': 'a' * 40},
+        {'inputs.project_id': 'other'},
+        {'inputs.integration_canary': 'yes'},
+        {'inputs.deploy_targets': 'all'},
+    ],
+)
+def test_actual_profile_shell_refuses_unruled_scope(changed, tmp_path):
+    result = subprocess.run(
+        ['bash', '-c', step_script('Validate deploy profile boundary', changed)],
+        env=dict(os.environ, SERVICE_IMAGES='', GITHUB_WORKSPACE=str(ROOT)),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+    assert 'Invalid ruled integration canary boundary.' in result.stderr
+
+
+def test_actual_profile_shell_accepts_ruled_normal_admission():
+    result = subprocess.run(
+        ['bash', '-c', step_script('Validate deploy profile boundary')],
+        env=dict(os.environ, SERVICE_IMAGES='', GITHUB_WORKSPACE=str(ROOT)),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('canary', ['true', 'false'])
+def test_actual_traffic_shell_routes_only_through_controller_for_ruled_source(canary, tmp_path):
+    # Execute the actual action shell with fake transport executables. This
+    # exercises branch/order and fail-fast behavior, without any provider IO.
+    log = tmp_path / 'calls'
+    for executable in ('gcloud', 'python3'):
+        path = tmp_path / executable
+        path.write_text('#!/bin/sh\nprintf "%s\\n" "$0 $*" >> "$CALLS"\n')
+        path.chmod(0o700)
+    result = subprocess.run(
+        [
+            'bash',
+            '-c',
+            step_script('Shift Cloud Run traffic to validated revisions', {'inputs.integration_canary': canary}),
+        ],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            CALLS=str(log),
+            DEPLOY_CONTROL_SCRIPTS='/controls',
+            RUNNER_TEMP=str(tmp_path),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0
+    calls = log.read_text().splitlines()
+    assert len(calls) == 4
+    assert all('update-traffic ' + role in calls[i] for i, role in enumerate(SERVICES[:3]))
+    if canary == 'true':
+        assert 'integration_canary_controller.py promote --state' in calls[-1]
+        assert not any('update-traffic backend-integration' in call for call in calls)
+    else:
+        assert 'update-traffic backend-integration' in calls[-1] and 'integration-new=100' in calls[-1]
+
+
+def test_other_services_still_restore_when_integration_rollback_refuses_foreign_drift(tmp_path):
+    log = tmp_path / 'calls'
+    path = tmp_path / 'python3'
+    path.write_text(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CALLS"\n'
+        'case "$1" in *integration_canary_controller.py) exit 42;; esac\n'
+    )
+    path.chmod(0o700)
+    result = subprocess.run(
+        ['bash', '-c', step_script('Restore Cloud Run traffic snapshot after failed promotion')],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            CALLS=str(log),
+            DEPLOY_CONTROL_SCRIPTS='/controls',
+            RUNNER_TEMP=str(tmp_path),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 42
+    calls = log.read_text().splitlines()
+    assert len(calls) == 2
+    assert 'integration_canary_controller.py rollback' in calls[0]
+    assert 'cloud_run_traffic_snapshot.py restore' in calls[1]
+    assert '--exclude-service backend-integration' in calls[1]
+
+
+def test_actual_renderer_and_native_cloud_validator_share_same_canary_composition(monkeypatch, tmp_path):
+    from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
+
+    module = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
+    base = config()
+    for role in base['cloud_run']['services'].values():
+        role['env'].pop('BATCH_PIPELINE_RETIRED')
+    module['main'].__globals__['_load_yaml'] = lambda path: {'environments': {'prod': base}}
+    snapshot_path = tmp_path / 'private.json'
+    snapshot_path.write_text(json.dumps(snapshot()))
+    state_path, output = tmp_path / 'state.json', tmp_path / 'output'
+    monkeypatch.setenv('GITHUB_OUTPUT', str(output))
+    monkeypatch.setattr(
+        'sys.argv',
+        [
+            'render',
+            '--env',
+            'prod',
+            '--state-output',
+            str(state_path),
+            '--integration-canary-state',
+            str(snapshot_path),
+            '--integration-canary-source',
+            SOURCE,
+        ],
+    )
+    assert module['main']() == 0
+    state = json.loads(state_path.read_text())
+    for s in SERVICES:
+        entries = {entry['name']: entry for entry in state['services'][s]['env']}
+        assert entries['SYNC_TASKS_QUEUE']['value'] == s + '-fresh'
+        assert entries['OMI_BACKEND_RELEASE_SHA']['value'] == SOURCE
+        assert state['services'][s]['forbidden_env']
+    effective = compose(base, snapshot(), SOURCE)
+    assert not _validate_cloud_run(effective, state, strict_provisional=True)
+
+
+def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(tmp_path):
+    state = {
+        'source': SOURCE,
+        'image': 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64,
+        'phase': 'traffic_25',
+        'services': {'env': 'not-for-artifacts'},
+        'intent': {'kind': 'traffic_100', 'status': 'uncertain', 'before': {'env': 'not-for-artifacts'}},
+        'baseline': {'end': 1800, 'share': 0.005, 'cpu_p95': 0.8, 'rows': ['not-for-artifacts']},
+        'health': {'state': 'immature', 'provider_body': 'not-for-artifacts'},
+        'moves': [{'percent': 25, 'verified_at': 2000, 'extra': 'not-for-artifacts'}],
+    }
+    (tmp_path / 'integration-canary-private.json').write_text(json.dumps(state))
+    result = subprocess.run(
+        ['bash', '-c', step_script('Record ruled integration canary metadata receipt')],
+        env=dict(os.environ, RUNNER_TEMP=str(tmp_path)),
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    text = (tmp_path / 'artifacts/integration-canary-receipt.json').read_text()
+    assert 'not-for-artifacts' not in text + result.stdout + result.stderr
+    receipt = json.loads(text)
+    assert receipt['source'] == SOURCE and receipt['health']['state'] == 'immature'
+    assert 'services' not in receipt and 'rows' not in receipt['baseline']
+    assert receipt['intent']['status'] == 'uncertain' and 'before' not in receipt['intent']
