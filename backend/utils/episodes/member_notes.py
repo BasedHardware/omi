@@ -152,20 +152,23 @@ def before_model(uid, conversation, trigger, *, finalization_fence=None):
     }
     if not _bounded_retry(row):
         return
+    if not _aged_job(uid, row):
+        return
     try:
         owner = episodes.get_episode_owner_snapshot(uid, conversation.id)
     except Exception as error:
         _unavailable('owner_unavailable', error)
-        return  # Preserve main's eager processing on an unavailable ownership gate.
+        raise LiveMemberNotesDeferred('live_episode_notes', time.time() + 60) from error
     if not owner or owner.get('status') != 'live' or conversation.id not in owned_member_ids(owner):
         return
-    if not _aged_job(uid, row):
-        return
+    detail_lease = None
     try:
-        if demand_processing.client().get(_key(uid, conversation.id)):
-            return  # A recording-detail request retains its independent budget.
+        detail_lease = demand_processing.client().get(_key(uid, conversation.id))
     except Exception as error:
         _unavailable('lease_unavailable', error)
+    if detail_lease:
+        # The detail worker owns this obligation; this finalizer must not pay.
+        raise LiveMemberNotesDeferred('live_episode_notes', time.time() + 60)
     if not live_member_notes.claim(
         uid, conversation.id, finalization_fence, getattr(conversation, 'sync_content_revision', None)
     ):

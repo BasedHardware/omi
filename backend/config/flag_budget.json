@@ -24,7 +24,6 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 296,
   "names": {
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {
       "owner": "Goal: Pipeline",
@@ -620,8 +619,8 @@
     },
     "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED": {
       "owner": "q12-live-notes",
-      "review_by": "2026-12-14",
-      "registry": "config/feature-flags.yaml"
+      "registry": "config/feature-flags.yaml",
+      "review_by": "2026-12-14"
     },
     "HOSTED_LID_API_URL": {
       "owner": "planscost",

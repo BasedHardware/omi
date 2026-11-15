@@ -124,15 +124,43 @@ def test_old_job_recording_detail_keeps_its_independent_escalation(deferred, mon
     member_notes.open_recording('synthetic', row)
     enqueue.assert_called_once()
     redis.set.assert_called_once()
-    redis.get.return_value = '1'
-    permit = Mock(side_effect=AssertionError('explicit detail uses ordinary processing'))
+
+
+def test_aged_finalizer_defers_to_detail_lease_without_paying(deferred, monkeypatch):
+    _, job, _ = deferred
+    job['created_at'] = NOW - timedelta(seconds=181)
+    monkeypatch.setattr(member_notes.demand_processing, 'client', lambda: SimpleNamespace(get=lambda key: '1'))
+    permit = Mock()
     monkeypatch.setattr(permits, 'claim', permit)
-    member_notes.before_model(
-        'synthetic',
-        SimpleNamespace(id='first', source='omi'),
-        ProcessingTrigger.CAPTURE_END,
-        finalization_fence=('job', 1, 2),
-    )
+    model = Mock()
+    with pytest.raises(member_notes.LiveMemberNotesDeferred):
+        member_notes.before_model(
+            'synthetic',
+            SimpleNamespace(id='first', source='omi'),
+            ProcessingTrigger.CAPTURE_END,
+            finalization_fence=('job', 1, 2),
+        )
+        model()
+    model.assert_not_called()
+    permit.assert_not_called()
+
+
+def test_aged_finalizer_defers_when_owner_read_fails_without_paying(deferred, monkeypatch):
+    _, job, _ = deferred
+    job['created_at'] = NOW - timedelta(seconds=181)
+    monkeypatch.setattr(episodes, 'get_episode_owner_snapshot', Mock(side_effect=TimeoutError('synthetic')))
+    permit = Mock()
+    monkeypatch.setattr(permits, 'claim', permit)
+    model = Mock()
+    with pytest.raises(member_notes.LiveMemberNotesDeferred):
+        member_notes.before_model(
+            'synthetic',
+            SimpleNamespace(id='first', source='omi'),
+            ProcessingTrigger.CAPTURE_END,
+            finalization_fence=('job', 1, 2),
+        )
+        model()
+    model.assert_not_called()
     permit.assert_not_called()
 
 
