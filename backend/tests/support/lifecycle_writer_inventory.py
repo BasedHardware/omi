@@ -3298,6 +3298,15 @@ FIELD_SITES = {
             ),
         )
     ],
+    # Per-blocker scheduling metadata only; no recording lifecycle transition.
+    'utils/episodes/compose_wait.py': [
+        (
+            'observation_updates',
+            'compose_transcript_wait_observations',
+            'dict(observations)',
+            ('compose_transcript_wait_observations', 'compose_transcript_wait_started_at'),
+        ),
+    ],
     'utils/episodes/composer.py': [
         (
             '_compose',

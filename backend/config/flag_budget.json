@@ -584,6 +584,11 @@
       "review_by": "2026-12-10",
       "registry": "config/feature-flags.yaml"
     },
+    "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED": {
       "owner": "quality-lead",
       "review_by": "2026-12-15",

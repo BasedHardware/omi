@@ -1,8 +1,11 @@
 """Affirmative terminal evidence is distinct from an empty transcript still in flight."""
 
+from datetime import datetime, timedelta
 from typing import Any, Mapping
 
-from config.episode_composition import settled_terminal_enabled
+from config.episode_composition import anchored_wait_enabled, settled_terminal_enabled
+from config.episodes import episode_compose_transcript_wait_seconds
+from utils.episodes.policy import utc
 from utils.conversations.fragment_visibility import is_completed_below_floor
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
@@ -27,3 +30,53 @@ def empty_terminal_result(row: Mapping[str, Any]) -> bool:
 
 def settled_terminal(row: Mapping[str, Any]) -> bool:
     return settled_terminal_enabled() and empty_terminal_result(row)
+
+
+OBSERVATIONS = 'compose_transcript_wait_observations'
+
+
+def member_deadline(
+    row: Mapping[str, Any],
+    episode: Mapping[str, Any],
+    cid: str,
+    due: datetime,
+    now: datetime,
+    observations: dict[str, Any],
+) -> datetime:
+    """A blocker generation's first observation cannot be renewed by another member."""
+    if not anchored_wait_enabled():
+        return due
+    pending = utc(row.get('home_transcription_pending_at')) or utc(row.get('episode_transcription_pending_at'))
+    previous = (episode.get(OBSERVATIONS) or {}).get(cid)
+    observed = None
+    if isinstance(previous, Mapping) and utc(previous.get('pending_at')) == pending:
+        observed = utc(previous.get('observed_at'))
+    if previous is None and cid in (episode.get('compose_transcript_wait_members') or []):
+        observed = utc(episode.get('compose_transcript_wait_started_at'))
+    observed = observed or now
+    observations[cid] = {'pending_at': pending, 'observed_at': observed}
+    return min(due, observed + timedelta(seconds=episode_compose_transcript_wait_seconds()))
+
+
+def stored_deadline(episode: Mapping[str, Any], legacy: datetime | None) -> datetime | None:
+    if not anchored_wait_enabled() or legacy is None:
+        return legacy
+    observations = episode.get(OBSERVATIONS) or {}
+    seconds = timedelta(seconds=episode_compose_transcript_wait_seconds())
+    deadlines = [legacy]
+    for cid in episode.get('compose_transcript_wait_members') or []:
+        entry = observations.get(cid)
+        if isinstance(entry, Mapping):
+            deadlines.extend(at + seconds for key in ('observed_at', 'pending_at') if (at := utc(entry.get(key))))
+    return min(deadlines)
+
+
+def observation_updates(observations: Mapping[str, Any], waiting: list[str], now: datetime) -> dict[str, Any]:
+    if not anchored_wait_enabled():
+        return {'compose_transcript_wait_started_at': now}
+    return {
+        OBSERVATIONS: dict(observations),
+        'compose_transcript_wait_started_at': min(
+            (observations[cid]['observed_at'] for cid in waiting if cid in observations), default=now
+        ),
+    }

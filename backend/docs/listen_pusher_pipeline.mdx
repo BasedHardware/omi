@@ -9965,3 +9965,5 @@ Prepared EOF/deadline recovery still blocks default-on admission. See the
 ### Episode transcript-wait repairs
 
 `EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED` defaults on: completed affirmative empty-terminal results with no recovered summary or renewed debt are settled for episode composition. Empty text alone does not qualify. Off restores the prior transcript wait; late transcript evidence still schedules recomposition. The all-members-complete gate and episode boundaries are unchanged. See [rollout contract](listen_pusher_pipeline/changes/2026-11-15-episode-wait-repairs.md).
+
+`EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED` defaults on. `compose_transcript_wait_observations` is an internal member-ID map of pending-generation and first-observed timestamps. Continuing blockers retain their cap across unrelated joins; a new generation gets its own limit. New readers cap legacy waits using those observations; old images ignore the map. Off restores aggregate wait-start renewal.

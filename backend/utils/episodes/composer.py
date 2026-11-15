@@ -787,8 +787,8 @@ def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
     until = _utc(episode.get('compose_transcript_wait_until'))
     started = _utc(episode.get('compose_transcript_wait_started_at'))
     if until and started:
-        return min(until, started + timedelta(seconds=episode_compose_transcript_wait_seconds()))
-    return until
+        until = min(until, started + timedelta(seconds=episode_compose_transcript_wait_seconds()))
+    return compose_wait.stored_deadline(episode, until)
 
 
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
@@ -811,6 +811,7 @@ def _members(
     revisions: Optional[dict[str, Optional[datetime]]] = None,
     waiting_until: Optional[list[datetime]] = None,
     waiting_members: Optional[list[str]] = None,
+    wait_observations: Optional[dict[str, Any]] = None,
 ) -> tuple[str, list[dict[str, Any]]]:
     """('ok' | 'waiting', retained visible members sorted by start)."""
     members = []
@@ -826,6 +827,15 @@ def _members(
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
         due = _transcript_wait_until(row)
+        if due:
+            due = compose_wait.member_deadline(
+                row,
+                episode,
+                cid,
+                due,
+                datetime.now(timezone.utc),
+                wait_observations if wait_observations is not None else {},
+            )
         if due and due > datetime.now(timezone.utc):
             if waiting_until is not None:
                 waiting_until.append(due)
@@ -1164,9 +1174,16 @@ def _compose(
     member_revisions: dict[str, Optional[datetime]] = {}
     waiting_until: list[datetime] = []
     waiting_members: list[str] = []
+    wait_observations: dict[str, Any] = {}
     wait_observed_at = datetime.now(timezone.utc)
     state, members = _members(
-        uid, episode, c, revisions=member_revisions, waiting_until=waiting_until, waiting_members=waiting_members
+        uid,
+        episode,
+        c,
+        revisions=member_revisions,
+        waiting_until=waiting_until,
+        waiting_members=waiting_members,
+        wait_observations=wait_observations,
     )
     if state == 'waiting':
         if waiting_until:
@@ -1176,6 +1193,9 @@ def _compose(
                 _utc(episode.get('compose_transcript_wait_until')) != due
                 or episode.get('compose_pending_membership') != sorted(_retained_ids(episode))
                 or episode.get('compose_transcript_wait_members') != waiting_members
+                or (
+                    compose_wait.anchored_wait_enabled() and episode.get(compose_wait.OBSERVATIONS) != wait_observations
+                )
             ):
                 written = _write(
                     uid,
@@ -1184,7 +1204,7 @@ def _compose(
                     {
                         'compose_pending_since': episode.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
-                        'compose_transcript_wait_started_at': wait_observed_at,
+                        **compose_wait.observation_updates(wait_observations, waiting_members, wait_observed_at),
                         'compose_transcript_wait_members': waiting_members,
                         'compose_pending_membership': sorted(_retained_ids(episode)),
                     },
