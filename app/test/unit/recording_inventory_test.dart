@@ -132,4 +132,18 @@ void main() {
     expect((result['buckets'] as Map)['main_index']['rows_with_missing_file'], 0);
     expect(result['unique_missing_file_references'], 0);
   });
+  test('malformed rows and absent disk references cannot assert a complete orphan census', () async {
+    await file('audio_private-orphan.bin', [1]);
+    await json('wals.json', {
+      'wals': [
+        'private-malformed-row',
+        {...row('ignored'), 'file_path': null}
+      ]
+    });
+    final result = await captureRecordingInventory(documents: dir.path, phoneSeconds: now, memoryBuckets: {});
+    expect(result['invalid_minimum_schema_rows'], 1);
+    expect(result['rows_without_file_reference'], 1);
+    expect(result['orphan_census_complete'], false);
+    expect(jsonEncode(result), isNot(contains('private')));
+  });
 }

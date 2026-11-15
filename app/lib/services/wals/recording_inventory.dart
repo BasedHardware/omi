@@ -34,10 +34,11 @@ class _Metadata {
 }
 
 class _Decoded {
-  _Decoded(this.rows, this.error, {this.loaderEvents = const []});
+  _Decoded(this.rows, this.error, {this.loaderEvents = const [], this.invalidRows = 0});
   final List<RecordingInventoryRow> rows;
   final String? error;
   final List<Map<String, Object?>> loaderEvents;
+  final int invalidRows;
 }
 
 const _statuses = {
@@ -129,7 +130,8 @@ _Decoded _decode(Uint8List bytes, String kind) {
             ? _row(row)
             : const RecordingInventoryRow(
                 status: 'unknown', captureSeconds: null, audioSeconds: null, indexBytes: 0, disk: false)
-    ], null);
+    ], null,
+        invalidRows: rows.where((row) => row is! Map || row['timer_start'] is! int || row['codec'] is! String).length);
   } catch (_) {
     return _Decoded([], 'unreadable');
   }
@@ -287,7 +289,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
   final buckets = Map<String, List<RecordingInventoryRow>>.of(memoryBuckets);
   final indexFiles = <Map<String, Object?>>[], references = <String>{};
   final loaderEvents = <Map<String, Object?>>[];
-  var unreadable = 0, changed = 0;
+  var unreadable = 0, changed = 0, invalidRows = 0;
   for (final meta in metadata) {
     final details = <String, Object?>{
       'kind': meta.kind,
@@ -313,6 +315,8 @@ Future<Map<String, Object?>> captureRecordingInventory(
     details['read_result'] = result.error ?? 'readable';
     if (result.error != null) unreadable++;
     details['rows'] = result.error == null ? result.rows.length : null;
+    details['invalid_minimum_schema_rows'] = result.invalidRows;
+    invalidRows += result.invalidRows;
     indexFiles.add(details);
     loaderEvents.addAll(result.loaderEvents);
     buckets.putIfAbsent(meta.kind, () => []).addAll(result.rows);
@@ -361,6 +365,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
   // Paths, basenames, row IDs, account IDs and raw JSON never leave this function.
   return offUiIsolate(() {
     final summaries = <String, Object?>{};
+    var unresolvedReferences = 0;
     const allowedBuckets = {
       'active',
       'retired',
@@ -383,6 +388,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
       summary['readable_source_files'] = sources.where((f) => f['read_result'] == 'readable').length;
       summary['unreadable_source_files'] = sources.where((f) => f['read_result'] != 'readable').length;
       summaries[entry.key] = summary;
+      unresolvedReferences += summary['rows_without_file_reference']! as int;
       if (entry.key == 'ownership_receipts' || entry.key == 'boot_journal') continue;
       for (final row in entry.value) {
         final ref = _reference(row, documents);
@@ -428,13 +434,20 @@ Future<Map<String, Object?>> captureRecordingInventory(
       'index_files': indexFiles,
       'directories': directories,
       'unreadable_metadata_files': unreadable,
+      'invalid_minimum_schema_rows': invalidRows,
+      'rows_without_file_reference': unresolvedReferences,
       'metadata_changed_during_read': changed,
       'file_stat_errors': statErrors,
       'symlinks_skipped': linksSkipped,
       'orphan_scope': 'unreferenced_by_readable_indexes_journals_preferences_and_memory_snapshot',
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
-      'orphan_census_complete':
-          unreadable == 0 && changed == 0 && statErrors == 0 && linksSkipped == 0 && directoryErrors.isEmpty,
+      'orphan_census_complete': unreadable == 0 &&
+          invalidRows == 0 &&
+          unresolvedReferences == 0 &&
+          changed == 0 &&
+          statErrors == 0 &&
+          linksSkipped == 0 &&
+          directoryErrors.isEmpty,
       'missing_file_scope': 'not_observed_as_regular_file_in_scanned_directories',
       'unique_missing_file_references': references.where((ref) => !audio.containsKey(ref)).length,
       'creation_time_availability': 'not_recorded_in_wal_schema_or_portable_dart_filestat',
