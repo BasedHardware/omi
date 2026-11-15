@@ -127,6 +127,10 @@ class WalFileManager {
           'live_ring_id',
           'live_ordinal_start',
           'live_ordinal_end',
+          'download_ring_id',
+          'download_seq_start',
+          'download_seq_end',
+          'download_file_bytes',
         ]) {
           if (entry[key] != null && entry[key] is! int) throw const FormatException();
         }

@@ -157,3 +157,40 @@ copy. The ordinary live path's process-local epochs are still not serialized.
 This replaces re-download only where those exact proofs survive; it adds no
 firmware command, server receipt or weaker sample-durability rule. See CUSTODY.md
 for the default-on batch kill switch and recovery guard.
+
+## 7. Download proof survives read/session lifetime (app-only)
+
+For capability-scoped downloads, each file's WAL index transaction includes
+`download_ring_id`, exact exclusive `download_seq_start` / `download_seq_end`,
+`download_file_bytes`, and the existing device and account owner. Audio is
+fsynced before this index commit. These coordinates reconstruct proof after a
+crash between index commit and custody save; discovering an unindexed file does
+not supply proof. A separate atomic, serialized per-device/ring receipt journal
+also retains completed ranges after their live BLE epoch ends. Epoch changes
+fence commands, not the identity of already-indexed downloaded samples.
+
+Every release revalidates the persisted index, file length/frame count, owner,
+ring and exact sequence interval. A fresh pass restores proof and replays its
+contiguous prefix before refreshing INFO and choosing READ start. Missing,
+truncated, foreign or unindexed refs invalidate their own ranges; no later range
+bridges an unproven hole. A confirmed ADVANCE moves the in-memory validation
+floor so later chunks do not reopen every older WAL. Download receipts remain
+until fresh INFO confirms read_seq, preserving replay after lost/ambiguous ACKs.
+Known validated spans inside a READ may be skipped to avoid another file; that
+snapshot alone never authorizes ADVANCE, whose refs are validated again. A chunk
+never joins audio on opposite sides of a skipped span. Malformed packed audio
+retains the record; an exact-fit terminal frame is saved in full.
+
+One read owner remains held through STOP, queued notification processing,
+in-flight index saves and final exact-prefix ADVANCE. Cancellation completes the
+read wait; a new pass cannot overlap its settling work. First-data (5 seconds)
+and DATA-silence (15 seconds) deadlines remain. Continuing ring DATA renews an
+ordinary coordinator pass; there is no total 30-minute ring-read limit. The OS
+periodic capture-fenced window retains its existing hard limit. Legacy firmware
+retains its original completion/ADVANCE rules.
+
+Default-on rollback: `--dart-define=OMI_RING_DRAIN_RECOVERY_OFF=true` restores the
+previous download-proof, decoder, ownership and timeout behavior. It does not
+control the independent batch-proof switch. No v1 wire command or capability is
+added. Historical phone files without exact ring mapping cannot be retrofitted
+from timestamps, sample similarity or live ordinals alone.

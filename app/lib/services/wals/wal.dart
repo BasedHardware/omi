@@ -642,6 +642,40 @@ class Wal {
   /// A replayed journal is recoverable audio, not yet a persisted index row.
   bool recoveredBatchJournal = false;
 
+  // Ring download coordinates commit atomically with the WAL index. They are
+  // independent of transient BLE epochs and survive a crash before custody save.
+  int? _downloadRingId;
+  int? get downloadRingId => _downloadRingId;
+  set downloadRingId(int? value) {
+    if (_downloadRingId == value) return;
+    _downloadRingId = value;
+    _changed();
+  }
+
+  int? _downloadSeqStart;
+  int? get downloadSeqStart => _downloadSeqStart;
+  set downloadSeqStart(int? value) {
+    if (_downloadSeqStart == value) return;
+    _downloadSeqStart = value;
+    _changed();
+  }
+
+  int? _downloadSeqEnd;
+  int? get downloadSeqEnd => _downloadSeqEnd;
+  set downloadSeqEnd(int? value) {
+    if (_downloadSeqEnd == value) return;
+    _downloadSeqEnd = value;
+    _changed();
+  }
+
+  int? _downloadFileBytes;
+  int? get downloadFileBytes => _downloadFileBytes;
+  set downloadFileBytes(int? value) {
+    if (_downloadFileBytes == value) return;
+    _downloadFileBytes = value;
+    _changed();
+  }
+
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? _geolocation;
   Geolocation? get geolocation => _geolocation;
@@ -922,6 +956,10 @@ class Wal {
     int? liveOrdinalEnd,
     String? batchLiveSession,
     String? liveDeviceId,
+    int? downloadRingId,
+    int? downloadSeqStart,
+    int? downloadSeqEnd,
+    int? downloadFileBytes,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -970,6 +1008,10 @@ class Wal {
         _liveOrdinalEnd = liveOrdinalEnd,
         _batchLiveSession = batchLiveSession,
         _liveDeviceId = liveDeviceId,
+        _downloadRingId = downloadRingId,
+        _downloadSeqStart = downloadSeqStart,
+        _downloadSeqEnd = downloadSeqEnd,
+        _downloadFileBytes = downloadFileBytes,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -1028,6 +1070,10 @@ class Wal {
       liveOrdinalEnd: json['live_ordinal_end'],
       batchLiveSession: json['batch_live_session'],
       liveDeviceId: json['live_device_id'],
+      downloadRingId: json['download_ring_id'],
+      downloadSeqStart: json['download_seq_start'],
+      downloadSeqEnd: json['download_seq_end'],
+      downloadFileBytes: json['download_file_bytes'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -1088,6 +1134,10 @@ class Wal {
       if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
       if (batchLiveSession != null) 'batch_live_session': batchLiveSession,
       if (liveDeviceId != null) 'live_device_id': liveDeviceId,
+      if (downloadRingId != null) 'download_ring_id': downloadRingId,
+      if (downloadSeqStart != null) 'download_seq_start': downloadSeqStart,
+      if (downloadSeqEnd != null) 'download_seq_end': downloadSeqEnd,
+      if (downloadFileBytes != null) 'download_file_bytes': downloadFileBytes,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1151,6 +1201,10 @@ class Wal {
     h = _mixFingerprint(h, liveOrdinalEnd ?? -1);
     h = _mixFingerprint(h, batchLiveSession?.hashCode ?? 0);
     h = _mixFingerprint(h, liveDeviceId?.hashCode ?? 0);
+    h = _mixFingerprint(h, downloadRingId ?? 0);
+    h = _mixFingerprint(h, downloadSeqStart ?? -1);
+    h = _mixFingerprint(h, downloadSeqEnd ?? -1);
+    h = _mixFingerprint(h, downloadFileBytes ?? -1);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);

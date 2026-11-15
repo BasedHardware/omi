@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/batch_ring_proof.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart';
+export 'package:omi/services/wals/ring_drain_policy.dart' show ringDrainRecoveryEnabled;
 
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
@@ -25,6 +27,10 @@ class CustodyWalRef {
   final String? batchLiveSession;
   final String? liveDeviceId;
   final String? ownerUid;
+  final int? downloadRingId;
+  final int? downloadSeqStart;
+  final int? downloadSeqEnd;
+  final String? downloadDeviceId;
 
   const CustodyWalRef({
     required this.fileName,
@@ -36,6 +42,10 @@ class CustodyWalRef {
     this.batchLiveSession,
     this.liveDeviceId,
     this.ownerUid,
+    this.downloadRingId,
+    this.downloadSeqStart,
+    this.downloadSeqEnd,
+    this.downloadDeviceId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -48,12 +58,23 @@ class CustodyWalRef {
         if (batchLiveSession != null) 'batch_session': batchLiveSession,
         if (liveDeviceId != null) 'live_device': liveDeviceId,
         if (ownerUid != null) 'owner': ownerUid,
+        if (downloadRingId != null) 'download_ring': downloadRingId,
+        if (downloadSeqStart != null) 'download_start': downloadSeqStart,
+        if (downloadSeqEnd != null) 'download_end': downloadSeqEnd,
+        if (downloadDeviceId != null) 'download_device': downloadDeviceId,
       };
 
   static CustodyWalRef? fromJson(Object? json) {
     if (json is! Map) return null;
     final file = json['file'], bytes = json['bytes'], frames = json['frames'];
     if (file is! String || bytes is! int || frames is! int) return null;
+    if (json.containsKey('download_ring') &&
+        (json['download_ring'] is! int ||
+            json['download_start'] is! int ||
+            json['download_end'] is! int ||
+            json['download_device'] is! String)) {
+      return null;
+    }
     int? asInt(Object? v) => v is int ? v : null;
     return CustodyWalRef(
       fileName: file,
@@ -65,6 +86,10 @@ class CustodyWalRef {
       batchLiveSession: json['batch_session'] as String?,
       liveDeviceId: json['live_device'] as String?,
       ownerUid: json['owner'] as String?,
+      downloadRingId: asInt(json['download_ring']),
+      downloadSeqStart: asInt(json['download_start']),
+      downloadSeqEnd: asInt(json['download_end']),
+      downloadDeviceId: json['download_device'] as String?,
     );
   }
 }
@@ -281,18 +306,41 @@ typedef CustodyWalValidator = Future<bool> Function(CustodyWalRef ref);
 
 Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
   try {
-    final wals = await WalFileManager.loadIndexedWals();
     Wal? indexed;
-    for (final wal in wals) {
-      final name =
-          (wal.filePath != null && wal.filePath!.isNotEmpty) ? wal.filePath!.split('/').last : wal.getFileName();
+    for (final wal in await WalFileManager.loadIndexedWals()) {
+      final name = (wal.filePath ?? wal.getFileName()).split('/').last;
       if (name == ref.fileName) {
         indexed = wal;
         break;
       }
     }
+    return _validateIndexedWal(ref, indexed);
+  } catch (_) {
+    return false;
+  }
+}
+
+Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
+  try {
     if (indexed == null) return false;
     if (indexed.storage != WalStorage.disk || indexed.totalFrames != ref.frames) return false;
+    if (ref.ownerUid != null && (indexed.ownerUid != ref.ownerUid || SharedPreferencesUtil().uid != ref.ownerUid)) {
+      return false;
+    }
+    if (ref.downloadRingId != null &&
+        (!ringDrainRecoveryEnabled ||
+            ref.ownerUid == null ||
+            ref.ownerUid!.isEmpty ||
+            ref.downloadSeqStart == null ||
+            ref.downloadSeqEnd == null ||
+            ref.downloadSeqEnd! <= ref.downloadSeqStart! ||
+            indexed.downloadFileBytes != ref.bytes ||
+            indexed.downloadRingId != ref.downloadRingId ||
+            indexed.downloadSeqStart != ref.downloadSeqStart ||
+            indexed.downloadSeqEnd != ref.downloadSeqEnd ||
+            indexed.device != ref.downloadDeviceId)) {
+      return false;
+    }
     if (ref.batchLiveSession != null &&
         (!batchRingProofEnabled ||
             indexed.batchLiveSession != ref.batchLiveSession ||
@@ -311,7 +359,7 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
     final file = File(path);
     if (!file.existsSync()) return false;
     final matches = (await file.length()) == ref.bytes;
-    return matches && (ref.batchLiveSession == null || SharedPreferencesUtil().uid == ref.ownerUid);
+    return matches && (ref.ownerUid == null || SharedPreferencesUtil().uid == ref.ownerUid);
   } catch (e) {
     Logger.debug('PendantRingCustody: WAL validation failed for ${ref.fileName}: $e');
     return false;
@@ -418,6 +466,21 @@ class PendantRingCustody {
 
   static final PendantRingCustody shared = PendantRingCustody();
 
+  Future<CustodyWalValidator> _validationSnapshot() async {
+    if (!ringDrainRecoveryEnabled || _walValidator != walFileManagerCustodyValidator) return _walValidator;
+    try {
+      // One persisted index snapshot per validation operation, never a cache
+      // carried to another ACK. File bytes and ownership are still checked.
+      final indexed = <String, Wal>{
+        for (final wal in await WalFileManager.loadIndexedWals())
+          (wal.filePath ?? wal.getFileName()).split('/').last as String: wal,
+      };
+      return (ref) => _validateIndexedWal(ref, indexed[ref.fileName]);
+    } catch (_) {
+      return (_) async => false;
+    }
+  }
+
   _DeviceCustody? _state(String deviceId, int epoch) {
     final s = _devices[deviceId];
     return (s != null && s.epoch == epoch) ? s : null;
@@ -466,8 +529,13 @@ class PendantRingCustody {
     final ringId = (caps & RingProtocol.capRingId) != 0 ? info.ringId : null;
 
     if (ringId != null) {
+      await _saveQueue;
       final persisted = await _store.load(deviceId);
       if (!_isSession(state, deviceId, epoch, token)) return;
+      if (ringDrainRecoveryEnabled && persisted?.ringId == ringId) {
+        persisted!.reportedReadSeq = info.readSeq;
+        persisted.lastAdvancedSeq = info.readSeq;
+      }
       final valid = persisted != null && persisted.ringId == ringId && await _validateCheckpoint(persisted);
       if (!_isSession(state, deviceId, epoch, token)) return;
       if (valid) {
@@ -485,14 +553,23 @@ class PendantRingCustody {
     }
     state.checkpoint.reportedReadSeq = info.readSeq;
     state.checkpoint.reportedWriteSeq = info.writeSeq;
+    if (ringDrainRecoveryEnabled) state.checkpoint.lastAdvancedSeq = info.readSeq;
     if (info.readSeq > state.checkpoint.durableSeq) state.checkpoint.durableSeq = info.readSeq;
+
+    if (ringDrainRecoveryEnabled && ringId != null) {
+      await restoreDownloadedRanges(deviceId, epoch, ringId, reportedReadSeq: info.readSeq);
+      if (!_isSession(state, deviceId, epoch, token)) return;
+    }
 
     if (batchRingProofEnabled && ringId != null && state.checkpoint._batchSessions.isNotEmpty) {
       await _restoreBatchProofs(state, deviceId, epoch, token);
       if (!_isSession(state, deviceId, epoch, token)) return;
     }
 
-    final frontier = state.checkpoint.durableSeq;
+    final frontier = ringDrainRecoveryEnabled
+        ? (await validatedAdvanceTarget(deviceId, epoch, ringId) ?? info.readSeq)
+        : state.checkpoint.durableSeq;
+    if (!_isSession(state, deviceId, epoch, token)) return;
     if (ringId != null &&
         !state.incarnationInvalid &&
         frontier > info.readSeq &&
@@ -502,8 +579,7 @@ class PendantRingCustody {
       final status = await replayAdvance(frontier);
       if (!_isSession(state, deviceId, epoch, token)) return;
       if (status == RingProtocol.ackOk) {
-        state.checkpoint.lastAdvancedSeq = frontier;
-        await _persist(state.checkpoint);
+        await markAdvanced(deviceId, epoch, frontier);
       } else if (status == RingProtocol.ackRingIdMismatch) {
         noteMismatch(deviceId, epoch);
       }
@@ -645,12 +721,89 @@ class PendantRingCustody {
     int endSeq,
     List<CustodyWalRef> wals,
   ) async {
-    final state = _state(deviceId, epoch);
+    if (endSeq <= startSeq || ringId == 0) return;
+    final proof = RingRangeProof(startSeq: startSeq, endSeq: endSeq, wals: List.of(wals));
+    if (!_downloadRangeMatches(proof, deviceId, ringId)) return;
+    if (ringDrainRecoveryEnabled) {
+      // A completed file/index transaction outlives its BLE epoch. This receipt
+      // is only a claim: every ref is validated again before any ADVANCE.
+      await _store.updateDownloadedRanges(deviceId, ringId, (ranges) {
+        ranges.removeWhere((r) => r.startSeq == startSeq && r.endSeq == endSeq);
+        ranges.add(proof);
+      });
+    }
+    final state = ringDrainRecoveryEnabled ? _devices[deviceId] : _state(deviceId, epoch);
     if (state == null || state.incarnationInvalid || state.checkpoint.ringId != ringId || endSeq <= startSeq) {
       return;
     }
-    state.checkpoint.ringRanges.add(RingRangeProof(startSeq: startSeq, endSeq: endSeq, wals: wals));
+    state.checkpoint.ringRanges.add(proof);
     _foldProvenRanges(state);
+    await _persist(state.checkpoint);
+  }
+
+  bool _downloadRangeMatches(RingRangeProof range, String deviceId, int ringId) => range.wals.every((ref) =>
+      ref.downloadRingId == null ||
+      (ref.downloadRingId == ringId &&
+          ref.downloadDeviceId == deviceId &&
+          ref.downloadSeqStart != null &&
+          ref.downloadSeqEnd != null &&
+          ref.downloadSeqStart! <= range.startSeq &&
+          ref.downloadSeqEnd! >= range.endSeq));
+
+  /// Re-read the durable receipt journal even on an existing BLE epoch. An old
+  /// read may have finished its disk transaction after that epoch was replaced.
+  Future<void> restoreDownloadedRanges(String deviceId, int epoch, int ringId, {required int reportedReadSeq}) async {
+    if (!ringDrainRecoveryEnabled) return;
+    final state = _state(deviceId, epoch);
+    if (state == null || state.incarnationInvalid || state.checkpoint.ringId != ringId) return;
+    final token = state.sessionToken;
+    final ranges = await _store.updateDownloadedRanges(deviceId, ringId, (ranges) {
+      // Only INFO confirms that receipt metadata is no longer needed. Keep it
+      // across a lost/delayed/ambiguous command ACK and every session teardown.
+      ranges.removeWhere((r) => r.endSeq <= reportedReadSeq);
+    });
+    if (_walValidator == walFileManagerCustodyValidator) {
+      // The index is itself the crash journal for the interval between audio /
+      // index commit and the separate custody checkpoint write.
+      for (final wal in await WalFileManager.loadIndexedWals()) {
+        final start = wal.downloadSeqStart, end = wal.downloadSeqEnd;
+        if (wal.ownerUid == null ||
+            wal.ownerUid!.isEmpty ||
+            wal.device != deviceId ||
+            wal.downloadRingId != ringId ||
+            start == null ||
+            end == null ||
+            wal.downloadFileBytes == null ||
+            wal.downloadFileBytes! <= 0 ||
+            start < 0 ||
+            end <= start ||
+            end <= reportedReadSeq ||
+            wal.storage != WalStorage.disk) {
+          continue;
+        }
+        final name = (wal.filePath ?? wal.getFileName()).split('/').last as String;
+        final ref = CustodyWalRef(
+            fileName: name,
+            bytes: wal.downloadFileBytes!,
+            frames: wal.totalFrames,
+            ownerUid: wal.ownerUid,
+            downloadRingId: ringId,
+            downloadSeqStart: start,
+            downloadSeqEnd: end,
+            downloadDeviceId: deviceId);
+        final proof = RingRangeProof(startSeq: start, endSeq: end, wals: [ref]);
+        if (!ranges.any((r) => jsonEncode(r.toJson()) == jsonEncode(proof.toJson()))) ranges.add(proof);
+      }
+    }
+    if (token == null || !_isSession(state, deviceId, epoch, token) || state.checkpoint.ringId != ringId) return;
+    for (final range in ranges) {
+      if (range.endSeq <= state.checkpoint.reportedReadSeq) continue;
+      if (!state.checkpoint.ringRanges.any((r) => jsonEncode(r.toJson()) == jsonEncode(range.toJson()))) {
+        state.checkpoint.ringRanges.add(range);
+      }
+    }
+    await _validateCheckpoint(state.checkpoint);
+    if (!_isSession(state, deviceId, epoch, token) || state.checkpoint.ringId != ringId) return;
     await _persist(state.checkpoint);
   }
 
@@ -690,6 +843,12 @@ class PendantRingCustody {
   }
 
   bool _batchAuthorityValid(_DeviceCustody state, int target) {
+    for (final range in state.checkpoint.ringRanges) {
+      if (range.endSeq <= state.checkpoint.reportedReadSeq || range.startSeq >= target) continue;
+      for (final ref in range.wals) {
+        if (ref.ownerUid != null && SharedPreferencesUtil().uid != ref.ownerUid) return false;
+      }
+    }
     for (final range in state.checkpoint.liveRanges) {
       if (range.endSeq <= state.checkpoint.reportedReadSeq || range.startSeq >= target) continue;
       for (final ref in range.wals) {
@@ -722,8 +881,9 @@ class PendantRingCustody {
     for (final r in state.checkpoint.liveRanges) {
       if (r.endSeq > from && r.startSeq < target) refs.addAll(r.wals);
     }
+    final validate = await _validationSnapshot();
     for (final w in refs) {
-      final ok = await _walValidator(w);
+      final ok = await validate(w);
       final s = _state(deviceId, epoch);
       if (s == null || !identical(s.sessionToken, token) || s.checkpoint.ringId != cpRingId) return null;
       if (!ok) {
@@ -765,11 +925,24 @@ class PendantRingCustody {
     final state = _state(deviceId, epoch);
     if (state == null) return;
     if (seq > state.checkpoint.lastAdvancedSeq) state.checkpoint.lastAdvancedSeq = seq;
+    if (ringDrainRecoveryEnabled) {
+      // An OK ACK proves the device is at least here. Do not re-open every old
+      // WAL/index for each subsequent chunk (quadratic I/O on a long read).
+      if (seq > state.checkpoint.reportedReadSeq) state.checkpoint.reportedReadSeq = seq;
+      _foldProvenRanges(state);
+    }
     if (markSeq != null) state.checkpoint.lastAdvancedMarkSeq = markSeq;
     await _persist(state.checkpoint);
   }
 
   bool hasConnection(String deviceId, int epoch) => _state(deviceId, epoch)?.connected ?? false;
+
+  int? acknowledgedReadSeqFor(String deviceId, int epoch, int ringId) {
+    final state = _state(deviceId, epoch);
+    return state != null && !state.incarnationInvalid && state.checkpoint.ringId == ringId
+        ? state.checkpoint.reportedReadSeq
+        : null;
+  }
 
   bool isIncarnationInvalid(String deviceId, int epoch) => _state(deviceId, epoch)?.incarnationInvalid ?? false;
 
@@ -965,6 +1138,12 @@ class PendantRingCustody {
       return;
     }
     if (cp.ringId != null && info.ringId == null) return;
+    if (ringDrainRecoveryEnabled && info.readSeq < cp.reportedReadSeq) {
+      // A fresh device report wins over a command ACK. Rebuild from receipts
+      // rather than trusting the old in-memory high-water mark.
+      cp.durableSeq = info.readSeq;
+      cp.lastAdvancedSeq = info.readSeq;
+    }
     cp.reportedReadSeq = info.readSeq;
     if (info.readSeq > cp.durableSeq) cp.durableSeq = info.readSeq;
     cp.reportedWriteSeq = info.writeSeq;
@@ -1056,6 +1235,34 @@ class PendantRingCustody {
   }
 
   Future<bool> _validateCheckpoint(RingCustodyCheckpoint cp) async {
+    final validate = await _validationSnapshot();
+    if (ringDrainRecoveryEnabled) {
+      // A deleted/foreign/unindexed WAL invalidates its own range, not every
+      // unrelated downloaded range. Never carry durableSeq across that hole.
+      cp.liveRanges.removeWhere((r) => r.endSeq <= cp.reportedReadSeq);
+      cp.ringRanges.removeWhere((r) => r.endSeq <= cp.reportedReadSeq);
+      for (final range in List.of(cp.liveRanges)) {
+        for (final ref in range.wals) {
+          if (!await validate(ref)) {
+            cp.liveRanges.remove(range);
+            break;
+          }
+        }
+      }
+      for (final range in List.of(cp.ringRanges)) {
+        if (cp.ringId == null || !_downloadRangeMatches(range, cp.deviceId, cp.ringId!)) {
+          cp.ringRanges.remove(range);
+          continue;
+        }
+        for (final ref in range.wals) {
+          if (!await validate(ref)) {
+            cp.ringRanges.remove(range);
+            break;
+          }
+        }
+      }
+      cp.durableSeq = cp.reportedReadSeq;
+    }
     var provable = cp.reportedReadSeq;
     var moved = true;
     while (moved) {
@@ -1075,9 +1282,13 @@ class PendantRingCustody {
     }
     if (cp.durableSeq > provable) cp.durableSeq = provable;
     if (cp.lastAdvancedSeq > provable) cp.lastAdvancedSeq = provable;
+    if (ringDrainRecoveryEnabled) {
+      cp.durableSeq = provable;
+      return true;
+    }
     for (final r in [...cp.liveRanges, ...cp.ringRanges]) {
       for (final w in (r is LiveRangeProof ? r.wals : (r as RingRangeProof).wals)) {
-        if (!await _walValidator(w)) return false;
+        if (!await validate(w)) return false;
       }
     }
     return true;
@@ -1184,6 +1395,47 @@ class PendantCustodyStore {
     });
     _ioQueue = task.catchError((_) {});
     return task;
+  }
+
+  /// Atomic, serialized read/modify/write, separate from session snapshots.
+  /// A stale session checkpoint can never overwrite a completed download receipt.
+  Future<List<RingRangeProof>> updateDownloadedRanges(
+    String deviceId,
+    int ringId, [
+    void Function(List<RingRangeProof>)? update,
+  ]) {
+    final result = <RingRangeProof>[];
+    final task = _ioQueue.then((_) async {
+      final dir = await _directory();
+      final target = File('${_filePath(dir, deviceId)}.downloads.$ringId');
+      if (await target.exists()) {
+        try {
+          final json = jsonDecode(await target.readAsString());
+          if (json is Map && json['device'] == deviceId && json['ring'] == ringId && json['ranges'] is List) {
+            for (final raw in json['ranges']) {
+              final range = RingRangeProof.fromJson(raw);
+              if (range != null) result.add(range);
+            }
+          }
+        } catch (error) {
+          Logger.debug('PendantCustodyStore: unreadable download receipts: $error');
+        }
+      }
+      if (update == null) return;
+      update(result);
+      await dir.create(recursive: true);
+      final tmp = File('${target.path}.tmp');
+      await tmp.writeAsString(
+          jsonEncode({
+            'device': deviceId,
+            'ring': ringId,
+            'ranges': [for (final range in result) range.toJson()],
+          }),
+          flush: true);
+      await tmp.rename(target.path);
+    });
+    _ioQueue = task.catchError((_) {});
+    return task.then((_) => result);
   }
 
   Future<void> delete(String deviceId) {

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:fake_async/fake_async.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart' show waitForRingRead, decodeCustodyRingAudio;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -30,6 +32,8 @@ class _FakeLocalSync implements LocalWalSync {
   _FakeLocalSync();
 
   bool failIndexSave = false;
+  Completer<void>? indexGate;
+  int indexAttempts = 0;
   final added = <Wal>[];
 
   @override
@@ -37,6 +41,8 @@ class _FakeLocalSync implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async {
+    indexAttempts++;
+    await indexGate?.future;
     if (failIndexSave) throw const FileSystemException('index write failed');
     added.add(wal);
   }
@@ -71,6 +77,8 @@ class _FakeRingDevice implements DeviceConnection {
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
   final advances = <_Advance>[];
+  final reads = <int>[];
+  int stopCalls = 0;
   final _firstAdvance = Completer<void>();
   final _readReady = Completer<void>();
   int ackStatus = RingProtocol.ackOk;
@@ -103,13 +111,17 @@ class _FakeRingDevice implements DeviceConnection {
 
   @override
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+    reads.add(startSeq);
     if (!_readReady.isCompleted) _readReady.complete();
     if (readError != null) throw readError!;
     return true;
   }
 
   @override
-  Future<bool> stopStorageSync() async => true;
+  Future<bool> stopStorageSync() async {
+    stopCalls++;
+    return true;
+  }
 
   @override
   Future<RingCommandAck?> advanceRingCustody(
@@ -118,6 +130,19 @@ class _FakeRingDevice implements DeviceConnection {
     required int? expectedRingId,
   }) async {
     advances.add(_Advance(newReadSeq, expectedEpoch, expectedRingId));
+    if (ackStatus == RingProtocol.ackOk && newReadSeq > ringInfo.readSeq) {
+      final previous = ringInfo;
+      ringInfo = RingInfo(
+          readSeq: newReadSeq,
+          writeSeq: previous.writeSeq,
+          capacityPackets: previous.capacityPackets,
+          droppedPackets: previous.droppedPackets,
+          packetSize: previous.packetSize,
+          advertisedCaps: previous.advertisedCaps,
+          contractVersion: previous.contractVersion,
+          ringId: previous.ringId,
+          infoBytes: previous.infoBytes);
+    }
     if (!_firstAdvance.isCompleted) _firstAdvance.complete();
     return RingCommandAck(status: ackStatus);
   }
@@ -473,4 +498,148 @@ void main() {
     await card.controller.close();
     await sync.stop();
   });
+
+  Future<void> until(bool Function() ready) async {
+    final watch = Stopwatch()..start();
+    while (!ready() && watch.elapsed < const Duration(seconds: 10)) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(ready(), isTrue, reason: 'synthetic pendant did not reach the expected boundary');
+  }
+
+  test('cancel during index save stops read, settles exact tail, and ACKs before releasing ownership', () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 66, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync()..indexGate = Completer<void>();
+    final wal = ringWal(records: 61);
+    final sync = syncWith(local, card, wal);
+    final pending = sync.syncWal(wal: wal);
+    final checked = expectLater(pending, throwsException);
+    await card.readReady;
+    card.emit(_readBegin(5, 61));
+    for (var i = 0; i < 60; i++) {
+      card.emit(_record(frameSizes: List.filled(100, 1)));
+    }
+    await until(() => local.indexAttempts == 1);
+    sync.cancelSync();
+    await until(() => card.stopCalls > 0);
+    expect(sync.isSyncing, isTrue);
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(card.reads, [5]);
+    local.indexGate!.complete();
+    await checked;
+    expect(card.advances.map((a) => a.seq), [65]);
+    expect(local.added.single.totalFrames, 6000);
+    expect(sync.isSyncing, isFalse);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('old-epoch disk completion is replayed before next READ, with no second audio file', () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 66, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync()..indexGate = Completer<void>();
+    final wal = ringWal(records: 61);
+    final sync = syncWith(local, card, wal);
+    final custody = custodies.last;
+    final pending = sync.syncWal(wal: wal);
+    final checked = expectLater(pending, throwsException);
+    await card.readReady;
+    card.emit(_readBegin(5, 61));
+    for (var i = 0; i < 60; i++) {
+      card.emit(_record(frameSizes: List.filled(100, 1)));
+    }
+    await until(() => local.indexAttempts == 1);
+    custody.endConnection('devkit-1', 7);
+    card.custodyEpochValue = 8;
+    sync.cancelSync();
+    local.indexGate!.complete();
+    await checked;
+    expect(card.advances, isEmpty, reason: 'old-epoch command is fenced');
+    expect(local.added, hasLength(1));
+    local.indexGate = null;
+    final next = sync.syncWal(wal: wal);
+    await until(() => card.reads.length == 2);
+    expect(card.advances.map((a) => a.seq), [65]);
+    expect(card.reads, [5, 65], reason: 'durable [5,65) is ACKed before choosing new READ start');
+    card.emit(_readBegin(65, 1));
+    card.emit(_record());
+    card.emit(_done(0, 66));
+    await next;
+    expect(local.added, hasLength(2), reason: 'only the one new record creates a file');
+    expect(local.added.last.totalFrames, 1);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('31 minutes of an owned read never abandons its completion future', () {
+    fakeAsync((time) {
+      final done = Completer<bool>();
+      bool? result;
+      waitForRingRead(done.future).then((value) => result = value);
+      time.elapse(const Duration(minutes: 31));
+      expect(result, isNull, reason: 'the reader DATA-silence watchdog owns cancellation, not elapsed total time');
+      done.complete(false); // the same completion used by cancel / silence / EOF
+      time.flushMicrotasks();
+      expect(result, isFalse);
+    });
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('custody decoder keeps a terminal exact-fit frame and refuses truncated nonzero tails', () {
+    expect(decodeCustodyRingAudio([2, 17, 18]), [
+      [17, 18]
+    ]);
+    expect(decodeCustodyRingAudio([1, 17, 0, 0]), [
+      [17]
+    ]);
+    expect(decodeCustodyRingAudio(List.filled(440, 0)), isEmpty);
+    expect(() => decodeCustodyRingAudio([1, 17, 2, 18]), throwsFormatException);
+    expect(() => decodeCustodyRingAudio([1]), throwsFormatException);
+  });
+
+  test('malformed ring tail retains the record and never creates reclaim proof', () async {
+    final card =
+        _FakeRingDevice(ringInfo: _info(caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync();
+    final wal = ringWal();
+    final sync = syncWith(local, card, wal);
+    final pending = sync.syncWal(wal: wal);
+    final checked = expectLater(pending, throwsException);
+    await card.readReady;
+    card.emit(_readBegin(5, 1));
+    final bad = _record();
+    bad[bad.length - 1] = 2; // claims two bytes beyond the record boundary
+    card.emit(bad);
+    card.emit(_done(0, 6));
+    await checked;
+    expect(card.advances, isEmpty);
+    expect(local.added, isEmpty);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('kill switch OFF retains the original 30-minute read timeout', () {
+    fakeAsync((time) {
+      final done = Completer<bool>();
+      Object? error;
+      waitForRingRead(done.future).then((_) {}, onError: (Object value) {
+        error = value;
+      });
+      time.elapse(const Duration(minutes: 30));
+      expect(error, isA<TimeoutException>());
+      done.complete(false);
+      time.flushMicrotasks();
+    });
+  }, skip: ringDrainRecoveryEnabled);
+
+  test('disconnected connection lookup defers without starting a read or completing the virtual row', () async {
+    final wal = ringWal();
+    final sync = RingStorageSyncImpl(_Listener(), connectionResolver: (_) async => null)..testWals = [wal];
+    sync.setLocalSync(_FakeLocalSync());
+    sync.setDevice(BtDevice(id: 'devkit-1', name: 'Omi', type: DeviceType.omi, rssi: -40));
+    await sync.syncAll();
+    expect(wal.status, WalStatus.miss);
+    expect(sync.isSyncing, isFalse);
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
 }

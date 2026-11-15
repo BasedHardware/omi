@@ -20,6 +20,9 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? sampleRate,
     String? deviceModel,
     WalStorage originalStorage = WalStorage.sdcard,
+    int? downloadRingId,
+    int? downloadSeqStart,
+    int? downloadSeqEnd,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
     final data = encodeWalFrames(frames);
@@ -62,6 +65,10 @@ extension DeviceChunkPersistence on LocalWalSync {
           seconds: seconds ?? (fps > 0 ? frames.length ~/ fps : 0),
           totalFrames: frames.length,
           originalStorage: originalStorage,
+          downloadRingId: downloadRingId,
+          downloadSeqStart: downloadSeqStart,
+          downloadSeqEnd: downloadSeqEnd,
+          downloadFileBytes: downloadRingId != null ? data.length : null,
           clockRun: clockRun);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
