@@ -419,7 +419,7 @@ def test_completed_section_survives_noncooperative_timeout_and_late_results(monk
         release.wait(1)
         return [{'title': 'late result'}]
 
-    original_load = create_autospec(lambda deadline: ('profile', 'memories'))
+    original_load = create_autospec(lambda deadline: ('profile', 'memories'), return_value=('profile', 'memories'))
     monkeypatch.setattr(
         composer_context_budget, '_submit', create_autospec(composer_context_budget._submit, side_effect=submit)
     )
@@ -429,10 +429,47 @@ def test_completed_section_survives_noncooperative_timeout_and_late_results(monk
         started = time.monotonic()
         result = context.gather_with_defaults(UID, MEMBERS, original_load, 'fallback')
         assert time.monotonic() - started < 0.5
-        assert result[0] == 'fallback' and 'Avery' in result[1] and 'late result' not in result[1]
+        assert (
+            result[0] == 'profile'
+            and 'memories' in result[1]
+            and 'Avery' in result[1]
+            and 'late result' not in result[1]
+        )
     finally:
         release.set()
         for future in futures:
             future.result(timeout=1)
     assert 'late result' not in result[1]
-    original_load.assert_not_called()
+    original_load.assert_called_once()
+
+
+def test_memory_keeps_full_budget_and_defaults_use_only_remaining_time(store, monkeypatch):
+    from config.episodes import COMPOSER_CONTEXT_MAX_READS
+    from utils.other.list_budget import ListReadBudget
+
+    client, rows, _ = store
+    populate(rows)
+    monkeypatch.setattr(
+        sources, 'get_firestore_client', create_autospec(sources.get_firestore_client, return_value=client)
+    )
+    deadlines = []
+    original_people = sources.people
+
+    def people(uid, ids, budget, *, firestore_client=None):
+        assert deadlines and budget.deadline == deadlines[0]
+        assert budget.reads == 0 and budget.maximum == 48
+        return original_people(uid, ids, budget, firestore_client=firestore_client)
+
+    def memory(deadline):
+        deadlines.append(deadline)
+        budget = ListReadBudget(
+            deadline_monotonic=deadline, max_documents=COMPOSER_CONTEXT_MAX_READS, strict_documents=True
+        )
+        budget.charge(640)
+        assert budget.remaining_documents == 0
+        return 'profile', 'memory block'
+
+    monkeypatch.setattr(sources, 'people', create_autospec(sources.people, side_effect=people))
+    result = context.gather_with_defaults(UID, MEMBERS, memory, 'fallback')
+    assert all(heading in result[1] for heading in context.HEADINGS)
+    assert 'memory block' in result[1]

@@ -1,6 +1,7 @@
 """Bounded owner background for episode notes; transcript remains the event authority.
 
-Uses authoritative hydration and stricter composer-only legacy eligibility.
+Owner ruling 2026-11-15: all account-owned memory attribution/categories are background.
+Uses shared chat quality/lock checks; never another account or deleted data.
 Retrieval failure or the one overall deadline omits all memories.
 """
 
@@ -20,7 +21,7 @@ from config.episodes import (
     COMPOSER_MEMORY_QUERY_TOKENS,
     COMPOSER_CONTEXT_MAX_READS,
 )
-from models.knowledge_ledger_policy import LEDGER_SCHEMA_VERSION, is_prompt_memory_eligible
+from models.knowledge_ledger_policy import is_prompt_memory_visible
 
 logger = logging.getLogger(__name__)
 _STOP = frozenset(
@@ -105,41 +106,48 @@ def retrieval_query(members: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _memory_data(memory: Any) -> Mapping[str, Any]:
-    # Defaults such as subject_attribution=unknown are not explicit legacy evidence.
+    # Preserve known attribution for rendering; missing values remain unknown.
     return memory if isinstance(memory, Mapping) else memory.model_dump(exclude_unset=True)
 
 
 def composer_memory_eligible(memory: Any) -> bool:
-    """Stricter than chat's legacy bridge; never widen the shared admission policy."""
+    """Owner ruling 2026-11-15: attribution is information, never an admission gate.
+
+    Reuse chat's quality/paywall predicate. Its separate canonical self-profile
+    slot predicate is inappropriate for attributed background about other people.
+    Account ownership and canonical suppression remain enforced by MemoryService.
+    """
     data = _memory_data(memory)
-    row = SimpleNamespace(
-        **{'is_locked': False, 'user_review': None, 'invalid_at': None, 'ledger_schema_version': None, **data}
+    row = SimpleNamespace(**{'is_locked': False, 'user_review': None, 'invalid_at': None, **data})
+    return bool(
+        is_prompt_memory_visible(row)
+        and not any(data.get(k) for k in ('deleted', 'is_deleted', 'deleted_at'))
+        and data.get('source_state') not in {'tombstoned', 'purged'}
+        and data.get('status') not in {'tombstoned', 'deleted', 'purged', 'superseded'}
     )
-    if not is_prompt_memory_eligible(row):
-        return False
-    # Legacy categories/manual creation do not prove who a fact is about.
-    # In particular, "interesting" extraction captures other people's wisdom.
-    # Require explicit fact + primary-owner scope + owner attribution stamps.
-    legacy = data.get('ledger_schema_version') != LEDGER_SCHEMA_VERSION
-    for field, safe in (
-        ('kind', {'fact'}),
-        ('subject_scope', {'primary_user'}),
-        ('subject_attribution', {'user'}),
-    ):
-        value = data.get(field)
-        if (legacy or field in data) and getattr(value, 'value', value) not in safe:
-            return False
-    return True
 
 
-def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any]) -> str:
-    """IDF overlap over <=1000 vetted candidates; retain at most 20 relevant facts."""
+def _memory_label(data: Mapping[str, Any]) -> str:
+    fields = [
+        ('category', 'category'),
+        ('kind', 'kind'),
+        ('subject_scope', 'subject'),
+        ('subject_attribution', 'attribution'),
+    ]
+    labels = [f'{label}={getattr(data.get(key), "value", data.get(key)) or "unknown"}' for key, label in fields]
+    date = data.get('created_at') or data.get('valid_at') or data.get('updated_at')
+    labels.append('date=' + (str(date)[:10] if date else 'unknown'))
+    return '; '.join(labels)
+
+
+def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any], *, uid: str | None = None) -> str:
+    """IDF overlap over <=1000 account-owned candidates; at most 20 attributed background rows."""
     topics, entities, frequent = _episode_terms(members)
     query = topics | entities | frequent
     candidates = []
     for memory in list(memories)[:1000]:
         data = _memory_data(memory)
-        if not composer_memory_eligible(memory):
+        if (uid and data.get('uid') not in (None, uid)) or not composer_memory_eligible(memory):
             continue
         content = str(data.get('content') or '').strip()
         if content:
@@ -155,33 +163,55 @@ def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[A
             for t in overlap
         ) / math.sqrt(max(1, len(terms)))
         if score > 0:
-            subject = data.get('subject_scope') or data.get('subject_attribution')
-            attribution = getattr(subject, 'value', subject) or 'legacy_unspecified'
-            ranked.append((-score, index, f'- [{attribution}] {bounded_text(content, 700)}'))
+            ranked.append((-score, index, f'- [{_memory_label(data)}] {bounded_text(content, 700)}'))
     body = '\n'.join(text for _, _, text in sorted(ranked)[:20])
     return bounded_text(body, COMPOSER_MEMORY_TOKENS)
 
 
+def retrieval_queries(members: Sequence[Mapping[str, Any]]) -> list[str]:
+    """At most three deterministic searches; no planning model turn."""
+    topics, entities, frequent = _episode_terms(members)
+    queries = [retrieval_query(members)]
+    if entities:
+        queries.append('People and ongoing projects: ' + ', '.join(sorted(entities)))
+    if frequent or topics:
+        queries.append('Previous context and commitments about: ' + ', '.join(sorted(frequent | topics)))
+    return list(
+        dict.fromkeys(bounded_text(q, COMPOSER_MEMORY_QUERY_TOKENS, encoding='cl100k_base') for q in queries if q)
+    )[:3]
+
+
 def _search_memories(uid: str, members: Sequence[Mapping[str, Any]], *, budget: Any = None) -> list[Any]:
-    # Same hydrated, privacy-fenced vector facade as chat's search_memories_tool.
-    # Never trust vector metadata as authoritative content or bypass tombstone checks.
+    # Owner ruling 2026-11-15: search every account-owned category/tier and both
+    # storage generations through the same authoritative universal service.
     from database._client import db
     from utils.memory.memory_service import MemoryService
 
-    query = retrieval_query(members)
-    if not query:
-        return []
-    matches = MemoryService(db_client=db).search(
-        uid,
-        query,
-        limit=20,
-        candidate_limit=60,
-        result_filter=composer_memory_eligible,
-        vector_only=True,
-        budget=budget,
-        single_attempt=True,
-    )
-    return [match.memory for match in matches]
+    service = MemoryService(db_client=db)
+    found = {}
+    for query in retrieval_queries(members):
+        if budget is not None:
+            budget.check()
+        matches = service.search(
+            uid,
+            query,
+            limit=10,
+            candidate_limit=10,
+            result_filter=composer_memory_eligible,
+            vector_only=True,
+            owner_summary=True,
+            budget=budget,
+            single_attempt=True,
+        )
+        if budget is not None:
+            budget.check()
+        for match in matches:
+            data = _memory_data(match.memory)
+            if data.get('uid') not in (None, uid):
+                continue
+            identity = data.get('id') or data.get('memory_id') or data.get('content')
+            found.setdefault(str(identity), match.memory)
+    return list(found.values())
 
 
 def _list_memories(uid: str, budget: Any) -> list[Any]:
@@ -268,7 +298,7 @@ def gather(
             if not memories:
                 memories = _list_memories(uid, budget)
             budget.check()
-            block = relevant_memories(members, memories)
+            block = relevant_memories(members, memories, uid=uid)
             budget.check()
             return render(), block
         except Exception:

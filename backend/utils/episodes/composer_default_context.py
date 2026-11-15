@@ -1,7 +1,8 @@
 """Deterministic account background, isolated from transcript producers.
 
 The default block has its own read cap, but uses the existing gather's one
-absolute deadline and worker. Successful sections survive unrelated failures.
+absolute deadline and worker. Memory retrieval keeps its full time and read
+allowance. Successful sections survive unrelated failures.
 """
 
 from __future__ import annotations
@@ -241,37 +242,43 @@ def gather_with_defaults(
     load: Callable[[float], tuple[str, str]],
     fallback_profile: str,
 ) -> tuple[str, str]:
-    """One worker/deadline, unchanged legacy behavior when the switch is off.
+    """One worker/deadline; memory keeps its full time and read allowance.
 
-    Publish completed sections before legacy memory retrieval. If that optional
-    retrieval fails or hangs, its original fallback still applies, while the
-    completed deterministic sections remain usable. Freeze at caller return so
-    non-cooperative late workers cannot change a compose's background.
+    Run existing retrieval first, then use only remaining time for defaults.
+    Preserve an on-time memory result even if a later default source hangs.
+    Completed defaults survive retrieval failure. Freeze at caller return so
+    late workers cannot change this compose's background.
     """
     if not enabled():
         return bounded_gather(load, fallback_profile)
     lock = threading.Lock()
     sections: dict[str, Sequence[Mapping[str, Any]]] = {}
     accepting = True
+    memory_result: tuple[str, str] | None = None
 
     def wrapped(deadline: float) -> tuple[str, str]:
-        # This module and its Firestore imports are reached only by the composer
-        # task, never by projection/intake/seal imports.
-        from utils.episodes import composer_default_context_io as sources
-
-        def publish(heading: str, rows: Sequence[Mapping[str, Any]]) -> None:
+        nonlocal memory_result
+        try:
+            result = load(deadline)
             with lock:
                 if accepting and time.monotonic() < deadline:
-                    sections[heading] = rows
+                    memory_result = result
+            return result
+        finally:
+            # Composer task only; never reached by intake/seal/projection.
+            from utils.episodes import composer_default_context_io as sources
 
-        budget = ReadBudget(deadline)
-        collect(uid, members, budget, sources=sources, publish=publish)
-        budget.section_deadline = None
-        budget.check()
-        return load(deadline)
+            def publish(heading: str, rows: Sequence[Mapping[str, Any]]) -> None:
+                with lock:
+                    if accepting and time.monotonic() < deadline:
+                        sections[heading] = rows
+
+            collect(uid, members, ReadBudget(deadline), sources=sources, publish=publish)
 
     profile, memories = bounded_gather(wrapped, fallback_profile)
     with lock:
         accepting = False
+        if memory_result is not None:
+            profile, memories = memory_result
         block = render(with_memory_facts(sections, memories))
     return profile, '\n\n'.join(part for part in (block, memories) if part)

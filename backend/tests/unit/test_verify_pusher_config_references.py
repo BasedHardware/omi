@@ -514,3 +514,17 @@ def test_accepts_referenced_secret_key_from_key_only_output(monkeypatch, preflig
 
     monkeypatch.setattr(preflight.subprocess, "run", fake_run)
     assert preflight.verify("safe-ns", {("secret", "safe-name", "REQUIRED_KEY")}) == []
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
+    root = SCRIPT.parents[2]
+    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments'][environment]
+    classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
+    key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
+    assert key in classification
+    for host in [manifest['gke']['backend-listen'], *manifest['cloud_run']['services'].values()]:
+        assert host['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert key not in manifest['gke']['pusher']['env']
+    cohost = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    assert key in cohost['_BATCH_PIPELINE_LISTEN_ONLY']

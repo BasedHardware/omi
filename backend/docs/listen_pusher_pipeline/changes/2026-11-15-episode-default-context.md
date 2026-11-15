@@ -14,7 +14,9 @@ contract is in `config/feature-flags.yaml` and `backend/deploy/runtime_env/`.
 Set it false and roll the same image to restore the earlier context gather.
 It changes neither composer version/fingerprint nor transcript-ready receipts.
 
-The block shares the existing gather's eight-second deadline and worker. Each
+The block shares the existing gather's eight-second deadline and worker. Existing profile/memory retrieval runs first with its full
+640-read allowance; the additional 48-read block uses only remaining time. A
+completed memory result survives a later default-section timeout. Each
 section has at most 1.25 seconds of that remaining budget, fails empty without
 retry, and cannot withdraw another completed section. Every RPC reserves reads
 before starting; all four sections together consume at most 48 document reads,

@@ -1,4 +1,4 @@
-"""Composer search stays canonical, budgeted, and separate from chat defaults."""
+"""Owner-summary searches expand account context; chat defaults stay unchanged."""
 
 from types import SimpleNamespace
 from unittest.mock import Mock, create_autospec
@@ -17,7 +17,7 @@ def budget(documents=160):
     return ListReadBudget(deadline_monotonic=1000, max_documents=documents, clock=lambda: 990)
 
 
-def test_composer_vector_only_does_not_query_history_or_typesense(monkeypatch):
+def test_default_vector_only_does_not_query_history_or_typesense(monkeypatch):
     repo = MemoryService(db_client=Mock())
     bounded = budget()
     repo._canonical.search = create_autospec(repo._canonical.search, return_value=[], spec_set=True)
@@ -203,3 +203,120 @@ def test_profile_projection_matches_real_document_client_signature(monkeypatch):
     monkeypatch.setattr(_client, 'db', client)
     assert composer_context_io.profile('synthetic', budget()) == {'profile_text': 'Gardener.'}
     owner.get.assert_called_once_with(field_paths=['ai_user_profile'], timeout=10, retry=None)
+
+
+def test_owner_summary_search_includes_historical_only_after_canonical_success():
+    repo = MemoryService(db_client=Mock())
+    bounded = budget(640)
+    repo._canonical.search = create_autospec(repo._canonical.search, return_value=[], spec_set=True)
+    repo.history.search = create_autospec(repo.history.search, return_value=[], spec_set=True)
+    assert (
+        repo.search('synthetic', 'garden', vector_only=True, owner_summary=True, budget=bounded, single_attempt=True)
+        == []
+    )
+    assert repo._canonical.search.call_args.kwargs['owner_summary'] is True
+    assert repo.history.search.call_args.kwargs['budget'] is bounded
+    repo._canonical.search.side_effect = RuntimeError('canonical unavailable')
+    repo.history.search.reset_mock()
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException):
+        repo.search('synthetic', 'garden', vector_only=True, owner_summary=True, budget=bounded, single_attempt=True)
+    repo.history.search.assert_not_called()
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+def test_owner_summary_vector_calls_match_real_proxy_and_scope_signatures(monkeypatch, legacy):
+    from utils.llm.clients import _OpenAIEmbeddingsProxy
+    from database.pinecone_partition_index import OwnerIndex
+
+    embeddings = create_autospec(_OpenAIEmbeddingsProxy, instance=True, spec_set=True)
+    embeddings.embed_query.return_value = [0.1]
+    owner = create_autospec(OwnerIndex, instance=True, spec_set=True)
+    owner.query.return_value = {'matches': []}
+    monkeypatch.setattr(vector_db, 'index', object())
+    monkeypatch.setattr(vector_db, 'embeddings', embeddings)
+    monkeypatch.setattr(
+        vector_db, 'owner_index', create_autospec(vector_db.owner_index, return_value=owner, spec_set=True)
+    )
+    if legacy:
+        assert vector_db.find_similar_memories('synthetic', 'garden', timeout_seconds=8) == []
+    else:
+        assert not vector_db.query_memory_vector_candidates(
+            'synthetic', 'garden', timeout_seconds=8, owner_summary=True
+        ).hits
+    embeddings.embed_query.assert_called_once_with('garden')
+    options = owner.query.call_args.kwargs
+    assert {'uid': {'$eq': 'synthetic'}} in options['filter']['$and']
+    assert 0 < options['_request_timeout'] <= 8
+    if not legacy:
+        assert all(
+            'restricted_sensitivity' not in clause and 'memory_layer' not in clause
+            for clause in options['filter']['$and']
+        )
+
+
+def test_owner_summary_hydration_includes_archive_and_attribution_but_not_deleted_or_other_accounts(monkeypatch):
+    from datetime import datetime, timezone
+    from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer
+    from models.memory_evidence import SourceState
+    from models.product_memory import MemoryAccessPolicy
+
+    rows = [
+        MemoryItem.model_construct(
+            uid=uid,
+            memory_id=label,
+            content='Garden ' + label,
+            status=status,
+            source_state=SourceState.active,
+            tier=MemoryLayer.archive,
+            promotion=promotion,
+            valid_to=None,
+        )
+        for uid, label, status, promotion in [
+            ('synthetic', 'archive', MemoryItemStatus.active, {}),
+            (
+                'synthetic',
+                'third-party',
+                MemoryItemStatus.active,
+                {'source_attribution': {'subject_attribution': 'third_party'}},
+            ),
+            ('synthetic', 'locked', MemoryItemStatus.active, {'is_locked': True}),
+            ('synthetic', 'rejected', MemoryItemStatus.active, {'user_review': False}),
+            ('synthetic', 'deleted', MemoryItemStatus.tombstoned, {}),
+            ('other', 'cross-account', MemoryItemStatus.active, {}),
+        ]
+    ]
+    monkeypatch.setattr(
+        canonical,
+        'fetch_authoritative_product_memory_items_by_ids',
+        create_autospec(fetch_authoritative_product_memory_items_by_ids, return_value=rows, spec_set=True),
+    )
+    hydration = canonical._hydrate_bounded_ledger_search_items(
+        'synthetic',
+        [row.memory_id for row in rows],
+        db_client=Mock(),
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=datetime.now(timezone.utc),
+        device_scope='all',
+        client_device_id=None,
+        owner_summary=True,
+        budget=budget(640),
+    )
+    assert set(hydration.survivor_items_by_id) == {'archive', 'third-party'}
+
+
+def test_owner_summary_projection_preserves_attribution_without_changing_chat_defaults():
+    raw = {
+        'memory_id': 'same',
+        'content': 'Garden advice',
+        'category': 'system',
+        'subject_attribution': 'third_party',
+        'kind': 'document',
+        'subject_scope': 'third_party',
+    }
+    shared = canonical.search_result_to_memorydb('synthetic', raw)
+    summary = canonical.search_result_to_memorydb('synthetic', raw, owner_summary=True)
+    assert shared.category.value == 'interesting' and shared.subject_attribution.value == 'unknown'
+    assert summary.category.value == 'system' and summary.subject_attribution.value == 'third_party'
+    assert summary.kind.value == 'document' and summary.subject_scope.value == 'third_party'
