@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองอีกครั้ง",
     "authenticationFailed": "การยืนยันตัวตนล้มเหลว กรุณาลองอีกครั้ง",
     "authFailedToSignInWithApple": "ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง",
+    "authAppleSignInFailedUseGoogle": "ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google",
     "authFailedToRetrieveToken": "ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง",
     "authUnexpectedErrorFirebase": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ ข้อผิดพลาด Firebase กรุณาลองอีกครั้ง",
     "authUnexpectedError": "เกิดข้อผิดพลาดที่ไม่คาดคิดขณะเข้าสู่ระบบ กรุณาลองอีกครั้ง",

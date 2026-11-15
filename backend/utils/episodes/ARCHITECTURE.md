@@ -268,8 +268,15 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
-- Background close/finalize triggers wait for ten quiet minutes, capped at 25
-  minutes from the first pending arrival. `compose_pending_since` and
+- A pending member transcript waits for `episode_compose_transcript_wait_seconds()`
+  (20 minutes by default), measured from its pending stamp. After expiry the
+  episode can compose the available speech; a later transcript receipt schedules
+  one refresh for its new evidence. `EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS`
+  overrides the deadline (clamped to 0–86400 seconds); setting it to 21600 restores
+  the former six-hour wait without a build.
+- Background close/finalize triggers wait for `COMPOSER_SETTLE_SECONDS` (two
+  quiet minutes), capped at `COMPOSER_MAX_SETTLE_SECONDS` (five minutes) from
+  the first pending arrival. `compose_pending_since` and
   `compose_activity_at` track arrival time without changing recorded boundaries.
   A tracked async task requeues process-local due work without occupying composer
   workers; shutdown cancels it. Finalizes and reads recover pending work after

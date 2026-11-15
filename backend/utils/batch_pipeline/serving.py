@@ -1,5 +1,6 @@
 """Serving-side lease API. Authentication is at the router; all IO is lazy."""
 
+import random
 import asyncio
 from functools import lru_cache
 from datetime import datetime, timezone
@@ -31,6 +32,7 @@ from utils.batch_pipeline.live import drain_recordings
 from utils.batch_pipeline.projection import HELD_PARTIAL_PAGE, Projector, error_type
 from utils.executors import db_executor, run_blocking, start_background_task, sync_executor
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
+from config.batch_pipeline_leader import UPLOAD_COALESCING_SCAN, UPLOAD_COALESCING_SCAN_TTL
 from utils.batch_pipeline.leader import QUEUE_METRICS, SERVING_MAINTENANCE, LeaderLease
 from utils.batch_pipeline.held_dead_letter import HeldDeadLetter, ProjectionHeldDeadLetter
 from utils.batch_pipeline.ready_discovery import ReadyDiscovery
@@ -575,10 +577,18 @@ def start_serving_from_env():
     async def drain_upload_holds():
         from utils.batch_pipeline.upload_coalescing import drain as drain_uploads
 
+        leader = None
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=random.uniform(0, 2))
+        except asyncio.TimeoutError:
+            pass
+
         while not stop.is_set():
             try:
                 service = await run_blocking(sync_executor, serving_for_stage, current_stage())
-                await drain_uploads(service.store)
+                if leader is None:
+                    leader = LeaderLease(service.store, UPLOAD_COALESCING_SCAN, ttl_seconds=UPLOAD_COALESCING_SCAN_TTL)
+                await drain_uploads(service.store, leader=leader)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'event=batch_coalescing outcome=scan_retry exception_type=%s', type(error).__name__

@@ -1316,9 +1316,12 @@ def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage)
     script.write_text(
         'import runpy, sys, types\n'
         f'entry = runpy.run_path({str(entrypoint)!r})\n'
+        'probe_server = entry["repair_probe_server"]\n'
+        'entry["main"].__globals__["repair_probe_server"] = lambda: probe_server(port=0, addr="127.0.0.1")\n'
         'def boom(**kwargs):\n'
         f'    raise RuntimeError({private!r})\n'
         'def ok(**kwargs):\n'
+        '    kwargs.get("before", lambda: None)()\n'
         '    return {"event": "record_seal_repair", "outcome": "ok", "rows": 0}\n'
         f'if {stage!r} == "run":\n'
         '    entry["repair"].run = boom\n'

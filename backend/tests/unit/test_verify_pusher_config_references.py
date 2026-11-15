@@ -30,6 +30,21 @@ def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
     return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
+@pytest.fixture(autouse=True)
+def fast_safe_yaml_for_contract_fixtures(monkeypatch):
+    # Identical safe schema; avoid Python tokenization of full chart/manifests.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
+
+
+@pytest.fixture(scope='module')
+def intake_priority_bindings():
+    root = SCRIPT.parents[2]
+    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments']
+    classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
+    cohost = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    return manifest, classification, cohost['_BATCH_PIPELINE_LISTEN_ONLY']
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -189,16 +204,30 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED": "true",
+        "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED": "true",
+        "EPISODE_COMPOSER_CONTEXT_ENABLED": "true",
+        "EPISODE_COMPOSER_DETAIL_ENABLED": "true",
+        "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED": "true",
+        "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED": "true",
+        "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED": "true",
         # Dev-only canary (lead2 2afa3e); prod stays "0".
         "PUSHER_STORAGE_PCM_BUDGET_MB": "512",
         "CONVERSATION_TERMINAL_FAMILY_MODE": "on",
         "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED": "true",
         "SYNC_RECORD_COVERAGE_WAIT_MEMO": "true",
+        "SYNC_RECORD_WAIT_MEMO_FIRST": "true",
+        "SYNC_RECORD_DECODE_FAILURE_MEMO": "true",
         "HOME_TRANSCRIPTION_PRESENTATION_GATE": "true",
         "HOME_TRANSCRIPTION_DEADLINE_SECONDS": "7200",
         "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",
         "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
         "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": "false",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT": "100",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S": "",
+        "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": "true",
+        "PUSHER_RECORD_SEAL_WAKE_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
         "RECORD_SEAL_OVERLAP_TRIM_ENABLED": "true",
         "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
@@ -508,3 +537,40 @@ def test_accepts_referenced_secret_key_from_key_only_output(monkeypatch, preflig
 
     monkeypatch.setattr(preflight.subprocess, "run", fake_run)
     assert preflight.verify("safe-ns", {("secret", "safe-name", "REQUIRED_KEY")}) == []
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_post_seal_controls_are_listen_only_rendered_bindings(environment, preflight):
+    root = SCRIPT.parents[2]
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    module = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    for key in flags:
+        assert key in module['LISTEN_ONLY_ALLOWED'][environment]
+    values = yaml.safe_load(
+        (root / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml').read_text()
+    )
+    listen = {entry['name']: entry.get('value') for entry in values['env']}
+    pusher = yaml.safe_load((root / f'backend/charts/pusher/{environment}_omi_pusher_values.yaml').read_text())
+    assert set(flags).isdisjoint(entry['name'] for entry in pusher['env'])
+    assert set(flags).isdisjoint(preflight.literal_pusher_values(preflight.rendered_pusher_deployment(environment)))
+    expected = dict.fromkeys(flags, 'true')
+    expected['RECORD_FRESH_MERGE_ENABLED'] = 'false'
+    expected['RECORD_NOTES_EAGER_ENABLED'] = 'false'
+    assert {key: listen[key] for key in flags} == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment, intake_priority_bindings):
+    manifests, classification, listen_only = intake_priority_bindings
+    manifest = manifests[environment]
+    key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
+    assert key in classification
+    for host in [manifest['gke']['backend-listen'], *manifest['cloud_run']['services'].values()]:
+        assert host['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+    assert key not in manifest['gke']['pusher']['env']
+    assert key in listen_only

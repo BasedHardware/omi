@@ -145,20 +145,56 @@ env:
 
 jobs:
   validate-production-boundary:
+    outputs:
+      integration_only: ${{ steps.boundary.outputs.integration_only }}
+      integration_image: ${{ steps.boundary.outputs.integration_image }}
+      post_wrap_guard: ${{ steps.boundary.outputs.post_wrap_guard }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
           SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
+          RELEASE_SHA: ${{ github.event.inputs.release_sha }}
+          SKIP_ELIGIBILITY: ${{ github.event.inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
         run: |
           set -euo pipefail
+          INTEGRATION_ONLY=false
+          INTEGRATION_IMAGE=''
+          POST_WRAP_GUARD=internal
+          if [[ "$SERVICE_IMAGES" == integration-canary=* ]]; then
+            INTEGRATION_IMAGE="${SERVICE_IMAGES#integration-canary=}"
+            if [[ "$INTEGRATION_IMAGE" == *,post_wrap_guard=* ]]; then
+              POST_WRAP_GUARD="${INTEGRATION_IMAGE##*,post_wrap_guard=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,post_wrap_guard=*}"
+            fi
+            [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+               "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true && "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ &&
+               "$INTEGRATION_IMAGE" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
+               ("$POST_WRAP_GUARD" == internal || "$POST_WRAP_GUARD" == external) ]] || {
+              echo 'Integration-only requires exact admitted source/digest and normal production gates.' >&2
+              exit 1
+            }
+            INTEGRATION_ONLY=true
+          fi
+          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" >> "$GITHUB_OUTPUT"
+          if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
+                "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
+            [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+               "$BREAK_GLASS_LOCK" != true ]] || {
+              echo 'The ruled integration canary requires normal cloud-run-only admission and lock.' >&2
+              exit 1
+            }
+          fi
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'." >&2
             exit 1
@@ -722,6 +758,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Deploy backend stack
+        timeout-minutes: ${{ needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4' && 90 || 360 }}
         uses: ./.github/actions/deploy-backend-stack
         env:
           LADDER_V1_PLUS_MONTH_PRICE_ID: ${{ vars.LADDER_V1_PLUS_MONTH_PRICE_ID }}
@@ -732,6 +769,11 @@ jobs:
           LADDER_V1_ARCHITECT_YEAR_PRICE_ID: ${{ vars.LADDER_V1_ARCHITECT_YEAR_PRICE_ID }}
         with:
           deploy_profile: manual
+          # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
+          integration_canary: ${{ github.event.inputs.environment == 'prod' && (needs.validate-production-boundary.outputs.integration_only == 'true' || needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4') && 'true' || 'false' }}
+          integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
+          integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
+          post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.

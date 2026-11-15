@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Не вдалося увійти через Google, спробуйте ще раз.",
     "authenticationFailed": "Помилка автентифікації. Будь ласка, спробуйте ще раз.",
     "authFailedToSignInWithApple": "Не вдалося увійти через Apple, спробуйте ще раз.",
+    "authAppleSignInFailedUseGoogle": "Не вдалося увійти через Apple. Спробуйте ще раз або продовжте з Google.",
     "authFailedToRetrieveToken": "Не вдалося отримати токен Firebase, спробуйте ще раз.",
     "authUnexpectedErrorFirebase": "Неочікувана помилка під час входу, помилка Firebase, спробуйте ще раз.",
     "authUnexpectedError": "Неочікувана помилка під час входу, спробуйте ще раз",

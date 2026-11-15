@@ -71,7 +71,14 @@ def complete(lane, item, binding):
 def test_finalize_racing_projection_and_replay_preserve_one_visible_record(lane):
     item, binding, live = native(lane, status='processing')
     register_recording(lane.uid, live, store=lane.store, now=0)
+    # Current admission requires completed finalization. Admit a completed row,
+    # then reproduce a later finalizer race at the projection boundary.
+    reference = lane.user.collection('conversations').document('live-record')
+    with pytest.raises(ValueError, match='barrier not closed'):
+        complete(lane, item, binding)
+    reference.update({'status': 'completed'})
     complete(lane, item, binding)
+    reference.update({'status': 'processing'})
     with pytest.raises(SyncAssignmentConflict, match='finalize'):
         lane.projector.project(item.segment_id)
     reference = lane.user.collection('conversations').document('live-record')
@@ -204,6 +211,10 @@ async def test_pre_enable_capture_holds_wal_until_finalizer_reserves_owner(lane,
         is not None
     )
     register_recording(lane.uid, live, store=lane.store, now=0)
+    # Ownership alone cannot bypass the current completed-finalization barrier.
+    with pytest.raises(ValueError, match='barrier not closed'):
+        admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)
+    reference.update({'status': 'completed'})
     admit(lane.store, [item], binding, 0, namespace=lane.store.namespace)
     jobs = list(lane.client.collection(lane.store.namespace + '_jobs').stream())
     assert len(jobs) == 1 and jobs[0].to_dict()['state'] == 'ready'
@@ -276,6 +287,9 @@ def test_stale_finalizer_and_late_socket_cannot_overwrite_record(lane):
     # Internal markers do not round-trip through the public model dump. The
     # canonical finalizer must retain both the route and pusher's close receipt.
     processed = Conversation(**live).model_dump()
+    # The completed finalizer must satisfy main's kept-summary receipt fence;
+    # this case tests stale record ownership, not empty summary acceptance.
+    processed['structured']['overview'] = 'Synthetic finalized summary.'
     assert 'record_lane_owner' not in processed
     assert lane.conversations.persist_processing_result_with_lifecycle(lane.uid, processed)
     current = lane.user.collection('conversations').document('live-record').get().to_dict()
@@ -303,8 +317,8 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
         monkeypatch.setattr(projection_claims, '_redis_client', lambda: redis)
         assign = lane.projector.assign_record_silence
 
-        def lost_reply(item, binding, session):
-            assign(item, binding, session)
+        def lost_reply(item, binding, session, **kwargs):
+            assign(item, binding, session, **kwargs)
             # The receipt committed; surface a competing projector's replay
             # before completion and verify the remaining obligations resume.
             lane.projector.store.check(session)
