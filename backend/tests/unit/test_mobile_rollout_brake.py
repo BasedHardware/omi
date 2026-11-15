@@ -421,7 +421,7 @@ class BrakeTests(unittest.TestCase):
         for workflow in ["mobile_rollout_watch.yml", "mobile_daily_train.yml"]:
             self.assertIn(f"actions/workflows/{workflow}", paths)
 
-    def test_scheduler_pause_check_uses_existing_read_only_cloud_identity(self):
+    def test_scheduler_pause_check_uses_cloud_scheduler_scope_and_exact_job_request(self):
         response = Mock()
         response.json.return_value = {"state": "PAUSED"}
         with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": '{"type":"service_account"}'}):
@@ -435,8 +435,9 @@ class BrakeTests(unittest.TestCase):
 
         credentials_factory.assert_called_once_with(
             {"type": "service_account"},
-            scopes=["https://www.googleapis.com/auth/cloud-platform.read-only"],
+            scopes=["https://www.googleapis.com/auth/cloud-scheduler"],
         )
+        session_factory.assert_called_once_with(credentials_factory.return_value)
         session_factory.return_value.get.assert_called_once_with(
             "https://cloudscheduler.googleapis.com/v1/projects/based-hardware/locations/us-central1/"
             "jobs/app-review-config-sweep-hourly",
@@ -449,16 +450,31 @@ class BrakeTests(unittest.TestCase):
             with self.assertRaisesRegex(brake.BrakeError, "cannot verify app-review-config-sweep-hourly"):
                 brake.scheduler_job_json()
 
-    def test_scheduler_pause_check_fails_closed_when_existing_identity_is_unauthorized(self):
-        response = Mock()
-        response.raise_for_status.side_effect = RuntimeError("403 forbidden")
-        with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": '{"type":"service_account"}'}):
-            with patch("google.oauth2.service_account.Credentials.from_service_account_info", return_value=object()):
-                with patch("google.auth.transport.requests.AuthorizedSession") as session_factory:
-                    session_factory.return_value.get.return_value = response
+    def test_scheduler_pause_check_fails_closed_for_unverified_responses(self):
+        cases = (
+            (RuntimeError("403 forbidden"), {"state": "PAUSED"}),
+            (None, ValueError("invalid JSON")),
+            (None, ["PAUSED"]),
+        )
+        for status_error, body in cases:
+            with self.subTest(status_error=status_error, body=body):
+                response = Mock()
+                response.raise_for_status.side_effect = status_error
+                if isinstance(body, Exception):
+                    response.json.side_effect = body
+                else:
+                    response.json.return_value = body
+                with patch.dict(brake.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": '{"type":"service_account"}'}):
+                    with patch(
+                        "google.oauth2.service_account.Credentials.from_service_account_info", return_value=object()
+                    ):
+                        with patch("google.auth.transport.requests.AuthorizedSession") as session_factory:
+                            session_factory.return_value.get.return_value = response
 
-                    with self.assertRaisesRegex(brake.BrakeError, "cannot verify app-review-config-sweep-hourly"):
-                        brake.scheduler_job_json()
+                            with self.assertRaisesRegex(
+                                brake.BrakeError, "cannot verify app-review-config-sweep-hourly"
+                            ):
+                                brake.scheduler_job_json()
 
     def test_default_quiescence_helpers_are_resolved_at_call_time(self):
         paths = []
