@@ -52,13 +52,14 @@ void main() {
     expect(unseen.single.episode!.members.single.id, member.id,
         reason: 'the placeholder page must use its real target, even before the first list read');
   });
-  test('existing Home capability off restores contiguous runs', () {
+  test('Home capability off keeps one aggregate across finished rows', () {
     final rows = buildHomeRows([
       _recording('new', 30),
       _recording('ready', 20, step: 'ready'),
       _recording('old', 10),
-    ], [], enabled: false, groupAwaitingTranscript: true, singleProcessingRow: false);
-    expect(rows.map((row) => row.isProcessing), [true, false, true]);
+    ], [], enabled: false, groupAwaitingTranscript: true, processingTodayOnly: false);
+    expect(rows.map((row) => row.isProcessing), [true, false]);
+    expect(rows.first.count, 2);
   });
   for (final n in [0, 1, 3]) {
     for (final m in [0, 1, 4]) {

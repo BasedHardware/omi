@@ -152,6 +152,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     HomeFeedProvider? feed,
     CaptureProvider? capture,
     bool withNavigation = false,
+    bool capability = true,
     List<ServerConversation> detailItems = const [],
     void Function(String)? onDetailFetch,
     List<ServerConversation> processing = const []}) async {
@@ -170,8 +171,8 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     episodes.dispose();
   });
   final store = PendingWorkStore(
-      loadPending: () async => const ApiSuccess(
-          PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+      loadPending: () async => ApiSuccess(PendingWorkSnapshot(
+          enabled: capability, items: [], attentionUnseenCount: 0, homeProcessingToday: capability)),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
   await store.refresh();
   addTearDown(store.dispose);
@@ -246,6 +247,47 @@ void _expectAbsent(List<String> titles) {
 double _top(WidgetTester tester, Finder finder) => tester.getTopLeft(finder).dy;
 
 void main() {
+  testWidgets('older-server capability-off Home renders one neutral aggregate under Listening', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final fixture = HomeOneProcessingFixture(now);
+    final episodes = EpisodeProvider(
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
+        fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
+        lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)));
+    await episodes.refreshLive();
+    ServerConversation pending(String id, DateTime at) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        status: ConversationStatus.processing,
+        structured: Structured('Draft title', ''));
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    final boundary = await _pumpHome(
+        tester,
+        [
+          pending('new', now.subtract(const Duration(minutes: 10))),
+          fixture.finished,
+          pending('old', now.subtract(const Duration(days: 1)))
+        ],
+        episodeProvider: episodes,
+        capture: capture,
+        capability: false,
+        processing: [pending('local', now.subtract(const Duration(minutes: 20)))]);
+    expect(find.byType(ProcessingConversationRow), findsOneWidget);
+    final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+    expect(row.count, 3);
+    expect(row.step.name, 'transcribing');
+    expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+    expect(find.textContaining('Writing notes'), findsNothing);
+    expect(find.text('Listening now'), findsOneWidget);
+    expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+    await _capture(tester, boundary, '009-mobile-ios-older-server-one-row');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
   for (final compact in [false, true]) {
     testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -753,7 +795,8 @@ void main() {
     expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Middle finished review'), findsOneWidget);
     expect(find.text(_processing), findsOneWidget);
-    expect(find.textContaining(_transcribing), findsNWidgets(0));
+    expect(find.text('Transcribing… · 2 recordings'), findsOneWidget,
+        reason: 'a provisional title without a server step does not prove note writing');
     // All pending recordings share the first row; finished work keeps its own row.
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));

@@ -593,6 +593,15 @@ the top of Today without live capture. It represents every pending recording
 and closed episode for that day, even across finished rows. Finished episodes
 keep their own rows; terminal failures never enter the processing aggregate.
 The aggregate's page must retain links to every source episode and recording.
+The one-row invariant holds before capability negotiation and through 404/read
+errors. Server capability controls date/failure policy, never the row limit.
+Without confirmed day policy, pending work across days joins Today's one row;
+unknown steps say Transcribing and subtitles show a pending recording count.
+Processing Delete rechecks its initially displayed IDs against current cards,
+owners and conversations after confirmation. Any changed scope cancels the
+whole action with a notice; Undo only receives the exact current records that
+were staged. A READY member or composed replacement cannot be deleted through
+a stale processing confirmation.
 
 This is a client presentation contract. The episode API preserves distinct
 episode IDs and membership, and the conversation list preserves `episode_id`.
