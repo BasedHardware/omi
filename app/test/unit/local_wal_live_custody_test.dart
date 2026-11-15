@@ -374,7 +374,8 @@ void main() {
     await pump();
     expect(saves, 2);
     expect(await WalFileManager.loadWals(), hasLength(1));
-    expect(await custody.isDurableLiveRecord('dev', 42, 3), isTrue);
+    expect(await custody.isDurableLiveRecord('dev', 42, 3), !ringDrainRecoveryEnabled,
+        reason: 'confirmed ACK retires the acknowledged range from future validation work');
     expect(conn.advances, hasLength(1));
     expect(conn.advances.single.seq, 5);
     expect(conn.advances.single.ringId, 42);
