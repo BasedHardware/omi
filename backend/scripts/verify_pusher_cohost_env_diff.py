@@ -35,6 +35,15 @@ ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
+    "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED",
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
+    # Episode context, completeness and notes run on both cohosts. Missing bindings refuse the roll.
+    "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED",
+    "EPISODE_COMPOSER_CONTEXT_ENABLED",
+    "EPISODE_COMPOSER_DETAIL_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED",
+    "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED",
     "MEMORY_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
     "CLIENT_SUMMARIES_AT_CAP_ENABLED",
@@ -108,6 +117,10 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Only main.py admits native record units; pusher never assigns GPU queue priority.
         'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -138,6 +151,14 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_RECOVERY_MODE',
         'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
+    }
+)
+_RECORD_LATENCY_LISTEN_ONLY = frozenset(
+    {
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
@@ -403,6 +424,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUSHER_STORAGE_PCM_BUDGET_MB",
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
         }
     ),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
@@ -410,6 +432,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
             # Only pusher owns closed recording workers and their eviction proof.
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",
             "PUSHER_ABANDON_EVICTED_TOKENS",
@@ -590,6 +613,10 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 f"[{env}] envFrom ConfigMap set differs: pusher={sorted(pusher_from)} "
                 f"listen={sorted(listen_from)} — co-hosts must share the same bulk source"
             )
+
+        for flag in sorted(_RECORD_LATENCY_LISTEN_ONLY):
+            if flag not in listen_env:
+                errors.append(f"[{env}] record latency flag {flag} missing on backend-listen")
 
         publisher = "FSR_QUEUE_AGE_PUBLISHER"
         pusher_publisher = pusher_env.get(publisher)

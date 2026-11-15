@@ -27,6 +27,7 @@ from config.batch_pipeline import (
     projection_drain_privacy_backoff_seconds,
     serving_projection_sweep_enabled,
 )
+from config.record_latency import record_followup_wake_enabled
 
 # Which recurring projection sweep this process runs, set by the serving
 # runtime while its loop is alive: 'pump', 'serving' (its sweep still obeys
@@ -400,6 +401,15 @@ class OwnerDrains:
                 if walk.followups:
                     # Owed rows join behind the next follow-up discovery page.
                     self.projector.owe_followups(walk.followups)
+                if walk.eager_followups and record_followup_wake_enabled():
+                    # The persisted receipt is the outbox. A recent sealed
+                    # single-unit record need not await another discovery page;
+                    # the existing slots, coalescing and privacy fences apply.
+                    await self.projector.start_followups(walk.eager_followups, discover=False)
+                    with self.projector.handoff:
+                        self.projector.chain_followups = [
+                            sid for sid in self.projector.chain_followups if sid not in walk.eager_followups
+                        ]
                 self.projector.schedule_index_flush()
                 if not walk.more:
                     break
