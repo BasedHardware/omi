@@ -9936,3 +9936,15 @@ instrumentation never invents their first lease timestamp.
 The Home histogram admits only recordings ended within 30 minutes and notes
 written at or after that end. Old Home history, untrusted/future end clocks and
 prior in-recording notes do not contaminate the post-seal latency cohort.
+
+### Staged source-frame close protocol
+
+`PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` remains default off. The experimental wire
+now requires `record_close_protocol=3` and an exact version-3 capability; v2
+peers keep the existing closure path. With both sides opted in, a source-frame
+reservation pins archive and relay ownership and commit joins the retired
+binding's original archive before its ordered audio watermark. Successor
+creation is not a close prerequisite. Each attempt has a five-second bound and
+the pending handshake a thirty-second deadline; expiry preserves custody fences.
+Prepared EOF/deadline recovery still blocks default-on admission. See the
+[Q12-S boundary note](./listen_pusher_pipeline/changes/2026-11-15-q12-s-source-close-boundary.md).
