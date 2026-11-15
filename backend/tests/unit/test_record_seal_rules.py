@@ -195,7 +195,22 @@ def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source):
     assert repair.apply_seals(store, plan, plan['plan_sha256']) == {'upload_failed_cleared': 1}
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['record_upload_failed'] is False
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True, 'record_upload_failed': False})]
+    seal_tx = next(
+        tx
+        for tx in client.transactions
+        if any(path == PATH and patch.get('record_audio_closed') for path, patch in tx.updates)
+    )
+    assert seal_tx.updates == [
+        (
+            PATH,
+            {
+                'record_audio_closed': True,
+                'record_upload_failed': False,
+                'record_admitted_at': client.rows[PATH]['record_admitted_at'],
+            },
+        )
+    ]
+    assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['stage'] == 'sealed'
 
 
 @pytest.mark.parametrize(
