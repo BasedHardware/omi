@@ -55,6 +55,7 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.llm.summary_embeddings import embed_query_once
 from utils.observability.fallback import record_fallback
 
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -582,7 +583,7 @@ def find_similar_memories(
     if owner_summary and deadline is None:
         raise ValueError('owner summary requires a deadline')
     vector = (
-        embeddings.embed_query_once(content, deadline_monotonic=deadline)
+        embed_query_once(content, deadline_monotonic=deadline)
         if owner_summary and deadline is not None
         else embeddings.embed_query(content)
     )
@@ -822,7 +823,7 @@ def query_memory_vector_candidates(
     if owner_summary and deadline is None:
         raise ValueError('owner summary requires a deadline')
     vector = (
-        embeddings.embed_query_once(query, deadline_monotonic=deadline)
+        embed_query_once(query, deadline_monotonic=deadline)
         if owner_summary and deadline is not None
         else embeddings.embed_query(query)
     )

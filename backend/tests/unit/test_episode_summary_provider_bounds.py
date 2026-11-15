@@ -13,7 +13,7 @@ import pytest
 from pinecone.config.openapi_configuration import Configuration
 
 from database.summary_vector_transport import SummaryVectorIndex
-from utils.llm import clients
+from utils.llm import summary_embeddings as clients
 
 
 @contextmanager
@@ -101,19 +101,17 @@ def test_real_embedding_sdk_one_attempt_no_key_fallback_and_deadline(monkeypatch
     monkeypatch.setattr(clients.httpx, 'AsyncClient', client)
     monkeypatch.setattr(clients, '_require_client_budget', lambda *args, **kwargs: None)
     monkeypatch.setattr(clients, 'get_byok_key', lambda *args: None)
-    monkeypatch.setattr(clients._OpenAIEmbeddingsProxy, '_gateway_mode', lambda self: gateway)
+    monkeypatch.setattr(clients, '_embeddings_gateway_mode', lambda: gateway)
     from utils.llm import gateway_client
 
     monkeypatch.setattr(gateway_client, '_gateway_headers', lambda **kwargs: {})
     monkeypatch.setattr(gateway_client, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
-    proxy = clients._OpenAIEmbeddingsProxy('text-embedding-3-large', None, {})
     started = time.monotonic()
     duration = 0.3 if stall else 2
     with pytest.raises(Exception):
-        proxy.embed_query_once('garden', deadline_monotonic=started + duration)
+        clients.embed_query_once('garden', deadline_monotonic=started + duration)
     assert len(calls) == 1
     assert not active
-    assert proxy._default is None and proxy._ctor_kwargs == {}
     assert 0 < calls[0].extensions['timeout']['read'] <= duration
     if stall:
         assert time.monotonic() - started < duration * 2

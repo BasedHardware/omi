@@ -3503,12 +3503,11 @@ class MemoryService:
             # canonical checks (owner ruling 2026-11-15), never as an error fallback.
             historical: List[MemorySearchMatch] = []
         else:
+            historical_options: Dict[str, Any] = {}
+            if owner_summary and budget is not None:
+                historical_options.update(budget=budget, owner_summary=True)
             historical = self.history.search(
-                uid,
-                query,
-                limit=candidate_cap,
-                device_scope_request=device_scope_request,
-                **({'budget': budget, 'owner_summary': True} if owner_summary and budget is not None else {}),
+                uid, query, limit=candidate_cap, device_scope_request=device_scope_request, **historical_options
             )
         by_id: Dict[str, MemorySearchMatch] = {}
         for match in canonical:
