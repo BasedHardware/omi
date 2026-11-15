@@ -84,7 +84,10 @@ def test_promo_free_checkout_disables_adaptive_pricing(trial_period_days, custom
     assert params['adaptive_pricing'] == {'enabled': False}
     assert params['currency'] == 'usd'
     assert params['locale'] == 'auto'
-    assert params['custom_text']['submit']['message'] == 'All amounts are in USD (US dollars).'
+    message = params['custom_text']['submit']['message']
+    assert message.endswith('All amounts are in USD (US dollars).')
+    # A trial session also states the first charge above the button.
+    assert message.startswith('No charge today.') == bool(trial_period_days)
 
 
 def test_adaptive_pricing_pin_is_unconditional():

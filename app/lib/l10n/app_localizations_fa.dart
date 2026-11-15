@@ -13401,6 +13401,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'کد Omi Pro دارید؟ آن را در صفحه بعد وارد کنید.';
+
+  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override

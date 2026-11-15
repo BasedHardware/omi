@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Jaarlijks gefactureerd",
     "paywallTrialSaveAmount": "Bespaar {amount}",
     "paywallTrialCta": "Start voor {price}",
+    "paywallTrialCodeHint": "Heb je een Omi Pro-code? Voer die in op het volgende scherm.",
     "paywallTrialCancelNote": "Annuleer op elk moment. Geen kosten, geen boetes.",
     "paywallMonthlyFallbackTitle": "Nog niet klaar voor een heel jaar?",
     "paywallMonthlyFallbackTrialBody": "Begin dan maandelijks. Dezelfde {days} dagen gratis, daarna {price} per maand. Altijd opzegbaar.",

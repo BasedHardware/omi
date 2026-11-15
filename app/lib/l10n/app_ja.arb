@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "年額課金",
     "paywallTrialSaveAmount": "{amount}お得",
     "paywallTrialCta": "{price}で始める",
+    "paywallTrialCodeHint": "Omi Pro のコードをお持ちですか？次の画面で入力してください。",
     "paywallTrialCancelNote": "いつでもキャンセル可能。手数料や違約金なし。",
     "paywallMonthlyFallbackTitle": "1年はまだ早いですか？",
     "paywallMonthlyFallbackTrialBody": "代わりに月額プランで始めましょう。同じく{days}日間無料、その後は月額{price}。いつでもキャンセルできます。",

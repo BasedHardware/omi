@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Facturado anualmente",
     "paywallTrialSaveAmount": "Ahorra {amount}",
     "paywallTrialCta": "Empezar por {price}",
+    "paywallTrialCodeHint": "¿Tienes un código de Omi Pro? Agrégalo en la siguiente pantalla.",
     "paywallTrialCancelNote": "Cancela en cualquier momento. Sin cargos ni penalizaciones.",
     "paywallMonthlyFallbackTitle": "¿Aún no te decides por un año?",
     "paywallMonthlyFallbackTrialBody": "Empieza con el plan mensual. Los mismos {days} días gratis, después {price} al mes. Cancela cuando quieras.",

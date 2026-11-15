@@ -13410,6 +13410,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Onko sinulla Omi Pro -koodi? Syötä se seuraavalla näytöllä.';
+
+  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override

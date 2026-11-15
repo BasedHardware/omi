@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Rēķins katru gadu",
     "paywallTrialSaveAmount": "Ietaupiet {amount}",
     "paywallTrialCta": "Sākt par {price}",
+    "paywallTrialCodeHint": "Vai jums ir Omi Pro kods? Ievadiet to nākamajā ekrānā.",
     "paywallTrialCancelNote": "Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.",
     "paywallMonthlyFallbackTitle": "Vesels gads pagaidām par daudz?",
     "paywallMonthlyFallbackTrialBody": "Sāciet ar mēneša plānu. Tās pašas {days} dienas bez maksas, pēc tam {price} mēnesī. Atceliet jebkurā brīdī.",

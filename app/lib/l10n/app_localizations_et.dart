@@ -13400,6 +13400,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Kas sul on Omi Pro kood? Sisesta see järgmisel ekraanil.';
+
+  @override
   String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
 
   @override

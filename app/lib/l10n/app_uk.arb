@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Оплата щорічно",
     "paywallTrialSaveAmount": "Заощадьте {amount}",
     "paywallTrialCta": "Почати за {price}",
+    "paywallTrialCodeHint": "Маєте код Omi Pro? Введіть його на наступному екрані.",
     "paywallTrialCancelNote": "Скасувати будь-коли. Без комісій, без штрафів.",
     "paywallMonthlyFallbackTitle": "Поки не готові на цілий рік?",
     "paywallMonthlyFallbackTrialBody": "Почніть із місячного плану. Ті самі {days} днів безкоштовно, потім {price} на місяць. Скасувати можна будь-коли.",

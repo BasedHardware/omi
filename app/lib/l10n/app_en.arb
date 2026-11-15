@@ -16121,6 +16121,10 @@
             }
         }
     },
+    "paywallTrialCodeHint": "Have an Omi Pro code? Add it on the next screen.",
+    "@paywallTrialCodeHint": {
+        "description": "Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next"
+    },
     "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"

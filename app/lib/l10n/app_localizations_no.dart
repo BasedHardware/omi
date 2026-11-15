@@ -13407,6 +13407,9 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kode? Skriv den inn på neste skjerm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt når som helst. Ingen gebyrer, ingen straff.';
 
   @override
