@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-job-step-exits-zero-without-running",
+  "violated_contract": "A pipeline step that is launched as a subprocess must do its work when launched, and a missing output must not be indistinguishable from a skipped one. pull_vendor_balance.py defined pull() but had no command-line entry point, so the daily finops job's balance step exited 0 writing no artifact and the loader treated the missing artifact as dark; omi_finops.vendor_balance_snapshot was never created and the Omi TV Soniox line stayed on a dated constant for weeks.",
+  "canonical_prevention": "Every finops pull script has a main() guarded by __main__, and a subprocess test runs it the way the job does and asserts it leaves an artifact (ready or skipped with a reason).",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_finops_vendor_balance.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/scripts/finops/pull_vendor_balance.py"
+  ],
+  "status": "open"
+}

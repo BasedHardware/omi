@@ -825,7 +825,7 @@ async def test_recovery_keeps_original_origin_through_real_dispatch(
     if selected:
         lane = 'sync' if origin == 'legacy' else origin
         assert recovery.process_segment.call_args.kwargs['cap_dispatch_lane'] == lane
-        recovery.sync_allowed.assert_called_with('synthetic', lane=lane)
+        recovery.sync_allowed.assert_called_with('synthetic', lane=lane, backfill=False)
         assert meta.get('origin') == (None if origin == 'legacy' else origin)
     else:
         recovery.cap_hold.read_audio.assert_not_called()

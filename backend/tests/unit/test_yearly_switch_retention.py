@@ -122,7 +122,9 @@ def test_concurrent_eligible_hosts_only_one_delivery(monkeypatch):
     assert sum(delivered) == 1 and len(db.docs) == 1
 
 
-def test_http_admission_and_config_execute_real_routes_with_local_fixtures(monkeypatch):
+@pytest.fixture
+def retention_http(monkeypatch):
+    # Cold router imports and ASGI startup are setup, not admission CPU work.
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     import database.conversations as conversations
@@ -143,10 +145,15 @@ def test_http_admission_and_config_execute_real_routes_with_local_fixtures(monke
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: uid_for('treatment')
     with TestClient(app) as http:
-        assert http.get('/v1/payments/yearly-switch-retention').json()['eligible'] is True
-        assert not db.docs  # Config reads never consume an opportunity.
-        assert http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()['eligible'] is True
-        assert http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()['eligible'] is False
-        assert http.post('/v1/payments/yearly-switch-retention?placement=cancel').json()['eligible'] is False
-        assert http.post('/v1/payments/yearly-switch-retention?placement=other').status_code == 422
+        yield http, db, count
+
+
+def test_http_admission_and_config_execute_real_routes_with_local_fixtures(retention_http):
+    http, db, count = retention_http
+    assert http.get('/v1/payments/yearly-switch-retention').json()['eligible'] is True
+    assert not db.docs  # Config reads never consume an opportunity.
+    assert http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()['eligible'] is True
+    assert http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()['eligible'] is False
+    assert http.post('/v1/payments/yearly-switch-retention?placement=cancel').json()['eligible'] is False
+    assert http.post('/v1/payments/yearly-switch-retention?placement=other').status_code == 422
     assert count.call_args.kwargs['statuses'] == ['completed']

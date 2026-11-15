@@ -132,6 +132,31 @@ def test_shared_gpu_reservation_is_followed_through_the_owners_job(stores):
     assert _postgres(shadow, 'gpus', 'gpu-a') == {'token': '', 'lease_until': 0.0, 'released_token': 't1'}
 
 
+@pytest.mark.parametrize('released', [False, True])
+def test_the_copy_never_holds_a_gpu_reservations_segment(stores, released):
+    """Purge leaves the reservation in the primary, and both the lease and its release keep the segment id."""
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-gpu-id'
+    customer.add_user(uid)
+    rows = _owner_rows(uid, 'gp2')
+    rows[0][2]['shared_gpu_key'] = 'gpu-b'
+    lease = {'token': 't2', 'segment_id': 'gp2', 'lease_until': 99.0}
+    _write(dual, [*rows, ('gpus', 'gpu-b', lease)])
+    assert _postgres(shadow, 'gpus', 'gpu-b') == {'token': 't2', 'lease_until': 99.0}  # the ordinary mirror path
+    for table, name, _ in rows:
+        primary.delete(table, name)
+    if released:  # the release commits in the primary and its mirror copy is dropped
+        primary.apply(('gpus', 'gpu-b'), {**lease, 'token': '', 'lease_until': 0.0, 'released_token': 't2'})
+
+    dual.purge_owner_now(uid)
+    copy = _postgres(shadow, 'gpus', 'gpu-b')
+    assert copy and 'segment_id' not in copy
+    assert primary.run(lambda tx: tx.get('gpus', 'gpu-b'))['segment_id'] == 'gp2'  # the primary keeps it, by design
+    from database.jobstore.dual_store import compare
+
+    assert compare(primary.run(lambda tx: tx.get('gpus', 'gpu-b')), copy, 'gpus').value == 'match'
+
+
 def test_purge_waits_for_a_mirror_copy_that_read_the_pre_purge_primary(stores):
     """A copy that read the primary before the purge but has not committed must not survive the purge."""
     import threading
@@ -210,3 +235,50 @@ def test_a_failed_reconcile_raises_so_the_deletion_retries(stores, monkeypatch):
     monkeypatch.setattr(dual, 'copy_current', fail)
     with pytest.raises(RuntimeError):
         dual.purge_owner_now(uid)
+
+
+@pytest.mark.parametrize('cached', [False, True])
+def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monkeypatch, cached):
+    from database import batch_pipeline_shadow_hook as hook
+    from database.jobstore import dual_store
+
+    customer, primary, shadow, dual = stores
+    uid = 'synthetic-cold'
+    customer.add_user(uid)
+    key = privacy_owner_key(uid)
+    rows = _owner_rows(uid, 'cold') + [
+        ('merge_holds', key, {'held': True}),
+        ('pull_claims', scheduler_control_key(key), {'token': 'old', 'expires_at': 20}),
+        # Keyed by owner like merge_holds; erasure must not depend on the document naming its owner.
+        ('allowance_holds', key, {'active': True, 'check_at': 1.0}),
+    ]
+    _write(dual, rows)
+    for table, name, _ in rows:
+        primary.delete(table, name)
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+    monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
+    monkeypatch.delenv('JOBSTORE_SHADOW_NAMESPACES', raising=False)
+    monkeypatch.setattr(dual_store, '_SHADOWED', {dual.namespace: dual} if cached else {})
+    if not cached:
+        monkeypatch.setenv('JOBSTORE_PG_HOST', 'synthetic-target-not-dialed')
+        # Restart path: only the configured cold-copy target remains; no active mirror.
+        from database.jobstore.connection import Pool
+        from database.jobstore.postgres_store import PostgresStore
+
+        cold_pool = Pool('', connect=postgres_connect())
+        cold = PostgresStore(dual.namespace, pool=cold_pool, customer_client=None)
+        monkeypatch.setattr(dual_store, '_configured_copy', lambda _primary: dual_store.DualStore(primary, cold))
+    assert hook.purge_owner(dual.namespace, uid) >= len(rows)
+    if cached:
+        assert not any(_postgres(shadow, table, name) for table, name, _ in rows)
+    else:
+        # The one-shot erasure handle closes its pool, so inspect with a fresh handle.
+        from database.jobstore.connection import Pool
+        from database.jobstore.postgres_store import PostgresStore
+
+        pool = Pool('', connect=postgres_connect())
+        try:
+            copy = PostgresStore(dual.namespace, pool=pool, customer_client=None)
+            assert not any(_postgres(copy, table, name) for table, name, _ in rows)
+        finally:
+            pool.close()

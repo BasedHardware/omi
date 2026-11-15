@@ -1,6 +1,28 @@
 """Process capacity for record admission; never part of a job's policy snapshot."""
 
 import os
+from datetime import datetime
+import math
+
+from config.batch_pipeline import Priority, FRESH_CAPTURE_LAG_SECONDS
+
+
+def record_intake_age_priority_enabled() -> bool:
+    return os.getenv('RECORD_INTAKE_AGE_PRIORITY_ENABLED', 'true').strip().lower() not in {'false', 'off', '0'}
+
+
+def record_intake_priority(finished_at, now: float) -> Priority:
+    """Use the recording's end, so a long recording just ended stays fresh."""
+    if not record_intake_age_priority_enabled():
+        return Priority.FRESH
+    if not isinstance(finished_at, datetime) or finished_at.tzinfo is None:
+        return Priority.RECENT  # Unknown clocks must not fill the fresh ring.
+    age = now - finished_at.timestamp()
+    if not math.isfinite(age) or age < 0:
+        return Priority.RECENT
+    if age <= FRESH_CAPTURE_LAG_SECONDS:
+        return Priority.FRESH
+    return Priority.RECENT if age <= 604800 else Priority.DEEP
 
 
 def _drain_setting(name: str, default: int, maximum: int) -> int:
@@ -54,3 +76,11 @@ def barrier_retry_delay(age_seconds: float) -> int:
         if age_seconds < limit:
             return delay
     return BARRIER_RETRY_MAX_SECONDS
+
+
+def record_drain_idle_without_progress_enabled() -> bool:
+    """A full page that admitted nothing keeps the idle wait instead of rescanning at once.
+
+    Kill switch: RECORD_DRAIN_IDLE_WITHOUT_PROGRESS=off restores "every full page runs again".
+    """
+    return os.getenv('RECORD_DRAIN_IDLE_WITHOUT_PROGRESS', 'on').strip().lower() != 'off'

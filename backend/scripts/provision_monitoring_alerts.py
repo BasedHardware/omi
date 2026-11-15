@@ -44,6 +44,7 @@ FIELDS = (
 API = '/api/v1/provisioning/alert-rules'
 RECEIVER = 'Omi - Services Alerting (Telegram)'
 CANARY_UIDS = ('omi-datasource-prometheus', 'omi-datasource-cloud-monitoring', 'omi-datasource-gmp')
+EXPRESSION_DATASOURCES = ('__expr__', '-100')
 
 
 def index_rules(payload: object) -> dict[str, dict]:
@@ -117,6 +118,31 @@ def regenerate_export(path: Path) -> None:
     path.write_text(json.dumps(ordered, indent=2, ensure_ascii=False) + '\n')
 
 
+def invalid_query_windows(rule: dict) -> list[str]:
+    """Grafana rejects an empty relative time range on a datasource-backed query.
+
+    Grafana's ``AlertQuery.PreSave`` accepts a query when it is an expression or
+    when ``relativeTimeRange.from`` is strictly greater than ``to``. A ``0s`` to
+    ``0s`` window on a real datasource fails provisioning with
+    ``invalid relative time range [From: 0s, To: 0s]`` (SCA-2055/SCA-2062), so
+    reject it offline before any API call.
+    """
+    errors = []
+    for query in rule.get('data') or []:
+        if not isinstance(query, dict) or query.get('datasourceUid') in EXPRESSION_DATASOURCES:
+            continue
+        window = query.get('relativeTimeRange')
+        start = window.get('from') if isinstance(window, dict) else None
+        end = window.get('to') if isinstance(window, dict) else None
+        numeric = all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in (start, end))
+        if not numeric or start <= end:
+            errors.append(
+                f'{rule.get("uid")}: query {query.get("refId")} has an invalid relative time range '
+                f'[From: {start}, To: {end}]; a datasource query needs from > to'
+            )
+    return errors
+
+
 def load_rules(path: Path) -> dict[str, dict]:
     rules = index_rules(json.loads(path.read_text()))
     sources = []
@@ -131,6 +157,9 @@ def load_rules(path: Path) -> dict[str, dict]:
             raise ValueError(f'{uid}: missing stable alert identity')
         if rule.get('notification_settings', {}).get('receiver') != RECEIVER:
             raise ValueError(f'{uid}: unexpected notification receiver')
+    errors = [error for rule in rules.values() for error in invalid_query_windows(rule)]
+    if errors:
+        raise ValueError('\n'.join(errors))
     return rules
 
 

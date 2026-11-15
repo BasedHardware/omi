@@ -32,6 +32,10 @@ const Set<String> kPreferencesKeptOnSignOut = {
   'omiButtonActionsEnabled',
   'companionAssociationPrompted',
   'autoSyncOfflineRecordings',
+  'batchAudioDir',
+  // Disk migration receipts survive with their owner-stamped source recordings.
+  'localRecordingJobs',
+  'localRecordingJobsCorrupt',
   // Display and phone behaviour
   fcmRegistrationOrderKey,
   SharedPreferencesUtil.appearanceDefaultMigrationKey,

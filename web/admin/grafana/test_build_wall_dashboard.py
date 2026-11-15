@@ -137,7 +137,7 @@ class WallV2Contract(unittest.TestCase):
             self.assertEqual(set(colors), {f".*{GOOD_MARK}.*", f".*{BAD_MARK}.*"})
 
     def test_cost_stack_counts_every_line_and_marks_estimates(self):
-        from build_wall_dashboard import ESTIMATE, ESTIMATE_OPACITY, MEASURED
+        from build_wall_dashboard import ESTIMATE_OPACITY
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
@@ -147,16 +147,20 @@ class WallV2Contract(unittest.TestCase):
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
                   for o in cost["fieldConfig"]["overrides"]}
-        for name in ESTIMATE:
+        for name in ("STT est/model", "SaaS est."):
             self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
-        # The measured stack carries ONLY measured dollars per provider; modelled
-        # Modulate and the dated constants stay sand-colored estimate series.
-        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est.", "Modulate modelled"})
-        self.assertEqual(set(MEASURED), {"STT measured", "STT cash (Mercury)", "SaaS measured (Mercury)"})
-        for name in MEASURED:
-            self.assertIn(name, styled)
-            self.assertNotIn("custom.fillOpacity", styled[name])
+        visible = set(styled) - {name for name, props in styled.items()
+                                 if props.get("custom.hideFrom", {}).get("legend")}
+        self.assertEqual(visible, {"GCP", "LLM", "STT actual", "STT est/model",
+                                   "SaaS measured (Mercury)", "SaaS est.", "Revenue"})
+        # Provider detail must be hoverable but never stacked a second time.
+        for name in ("Vertex LLM", "OpenAI", "Anthropic", "STT measured",
+                     "STT cash (Mercury)", "Modulate modelled", "STT est."):
+            self.assertEqual(styled[name]["custom.stacking"]["mode"], "none")
+            self.assertEqual(styled[name]["custom.hideFrom"], {"legend": True, "tooltip": False, "viz": False})
+            self.assertEqual(styled[name]["custom.lineWidth"], 0)
+            self.assertEqual(styled[name]["custom.fillOpacity"], 0)
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
         # Under the plot, never beside it: Health is a narrow column, and a right
         # legend squeezed the 35-day stack and revenue line into a sliver.
@@ -244,6 +248,10 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual((target["url"], target["root_selector"]), (UPTIME_URL, "frames.daily"))
         fields = [c["selector"] for c in target["columns"]]
         self.assertEqual(fields, ["date", "all", "capture", "saved", "chat", "ptt"])
+        # the sidecar emits the UTC day as epoch milliseconds; a plain "timestamp" column parses
+        # that to null and the panel reads "Data outside time range"
+        date_col = next(c for c in target["columns"] if c["selector"] == "date")
+        self.assertEqual(date_col["type"], "timestamp_epoch")
         custom = panel["fieldConfig"]["defaults"]["custom"]
         self.assertFalse(custom["spanNulls"])  # a day without attempts is a gap, not 0%
         hues = {p["value"]["fixedColor"] for o in panel["fieldConfig"]["overrides"] for p in o["properties"]
@@ -318,7 +326,7 @@ class WallV2Contract(unittest.TestCase):
     def test_variable_margin_tile_big_number_sparkline_and_target(self):
         from build_wall_dashboard import STATUS_GOOD
         board = load("omi-tv-v2")
-        tile = next(p for p in board["panels"] if p["title"] == "Variable margin (live est.)")
+        tile = next(p for p in board["panels"] if p["title"] == "Variable margin")
         # The big number is the latest margin % (today's live estimate), with
         # the 60-day daily series as the stat's own sparkline; the goal is the
         # threshold (green at/above).
@@ -331,8 +339,12 @@ class WallV2Contract(unittest.TestCase):
         # explicit no-value marker, not an older non-null margin (Luna r3 P2).
         self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
         self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
-        # No live estimate (or no MRR book) shows no value, never a settled number as live.
-        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no live est.")
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no margin")
+        source = next(p for p in board["panels"] if p["targets"][0]["root_selector"] == "frames.variableMarginSource")
+        self.assertEqual(source["gridPos"]["y"], tile["gridPos"]["y"] + tile["gridPos"]["h"])
+        self.assertEqual(source["gridPos"]["w"], tile["gridPos"]["w"])
+        self.assertEqual(source["gridPos"]["h"], 1)
+        self.assertIn("Settled", tile["description"])
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])

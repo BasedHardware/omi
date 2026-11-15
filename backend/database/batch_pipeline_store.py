@@ -27,6 +27,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_DUE_FIELD,
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
+from database.batch_pipeline_projection_finish_backfill import backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -58,6 +59,8 @@ class Transaction(Protocol):
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
     def first_ready_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -65,6 +68,7 @@ class Transaction(Protocol):
 
 class Store(Protocol):
     def run(self, body: Callable[[Transaction], T]) -> T: ...
+    def projection_finish_backfill_complete(self) -> bool: ...
     def due(self, state: str, now: float, limit: int) -> list[str]: ...
     def oldest(self, priority: int, *, ready_only: bool) -> float | None: ...
     def oldest_retry(self, priority: int) -> float | None: ...
@@ -82,13 +86,20 @@ class Store(Protocol):
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]: ...
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
+    def allowance_owners(self, now: float, limit: int) -> list[str]: ...
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]: ...
 
 
 # Reads that bypass the view cache and go through the raw transaction, by kind.
 _DIRECT_READ_KINDS = {
     'first_pending': 'jobs_query',
     'first_ready_pending': 'jobs_query',
+    'fresh_first_pending': 'jobs_query',
+    'fresh_first_ready_pending': 'jobs_query',
     'ready_predecessor': 'jobs_query',
     'service_frontier': 'control_query',
     'check_privacy': 'privacy',
@@ -193,6 +204,12 @@ class FirestoreTransaction:
     def first_ready_pending(self, owner_key: str) -> dict | None:
         return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=False, transaction=self.transaction)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return fresh_first_pending(self.client, self.namespace, owner_key, ready=True, transaction=self.transaction)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
@@ -231,9 +248,9 @@ class FirestoreTransaction:
             raise RuntimeError('batch transaction write budget exceeded')
         guarded = set()
         for (table, key), value in self.writes.items():
-            if table not in {'jobs', 'results'}:
+            if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
-            job = value if table == 'jobs' else self.get('jobs', key)
+            job = self.get('jobs', key) if table == 'results' else value
             identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
             if identity in guarded:
                 continue
@@ -254,6 +271,26 @@ class FirestoreTransaction:
 
 
 class FirestoreStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        return [
+            doc.id
+            for doc in self.client.collection(f'{self.namespace}_allowance_holds')
+            .where('active', '==', True)
+            .where('check_at', '<=', now)
+            .order_by('check_at')
+            .limit(max(1, min(limit, 100)))
+            .stream()
+        ]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        query = self.client.collection(f'{self.namespace}_jobs').where('state', '==', 'allowance_held')
+        if owner_key is not None:
+            query = query.where('owner_key', '==', owner_key)
+        query = query.order_by('capture_at').order_by('segment_id')
+        if after is not None:
+            query = query.start_after({'capture_at': after[0], 'segment_id': after[1]})
+        return [doc.id for doc in query.limit(max(1, min(limit, 100))).stream()]
+
     def __init__(self, namespace: str, *, firestore_client: Any = None):
         # Require a stage-qualified name; never infer dev from the customer project.
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'} and not re.fullmatch(
@@ -423,8 +460,23 @@ class FirestoreStore:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
         return fresh_pending(self.client, self.namespace, owner_key, limit)
 
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        return ready_owners(
+            self.client,
+            self.namespace,
+            after_owner_key,
+            limit,
+            ceiling_owner_key=ceiling_owner_key,
+            descending=descending,
+        )
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         return held_merge_owners(self.client, self.namespace, limit, after=after)
+
+    def projection_finish_backfill_complete(self) -> bool:
+        return backfill_complete(self.client, self.namespace)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -582,6 +634,36 @@ def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict |
     return docs[0].to_dict() if docs else None
 
 
+def ready_owners(
+    client: Any,
+    namespace: str,
+    after_owner_key: str | None,
+    limit: int,
+    *,
+    ceiling_owner_key: str | None = None,
+    descending: bool = False,
+) -> list[tuple[str, str | None]]:
+    # Seek past the entire owner, never through its potentially huge block.
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('state', '==', 'result_ready')
+        .where('merge_pending', '==', True)
+        .order_by('owner_key', direction='DESCENDING' if descending else 'ASCENDING')
+    )
+    if ceiling_owner_key is not None:
+        query = query.where('owner_key', '<=', ceiling_owner_key)
+    owners = []
+    for _ in range(max(1, min(limit, 100))):
+        page = query if after_owner_key is None else query.where('owner_key', '>', after_owner_key)
+        docs = list(page.limit(1).stream())
+        if not docs:
+            break
+        row = docs[0].to_dict()
+        after_owner_key = row['owner_key']
+        owners.append((after_owner_key, row.get('owner_id')))
+    return owners
+
+
 def held_merge_owners(
     client: Any, namespace: str, limit: int, *, after: str | None = None
 ) -> list[tuple[str, str | None]]:
@@ -601,6 +683,24 @@ def held_merge_owners(
         job = first_pending(client, namespace, mark.id, skip_terminal=False)
         owners.append((mark.id, job.get('owner_id') if job else None))
     return owners
+
+
+def fresh_first_pending(client: Any, namespace: str, owner_key: str, *, ready: bool, transaction: Any) -> dict | None:
+    query = (
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('fresh_capture', '==', True)
+    )
+    if ready:
+        query = query.where('state', '==', 'result_ready')
+    return next(
+        (
+            doc.to_dict()
+            for doc in query.order_by('capture_at').order_by('segment_id').limit(1).stream(transaction=transaction)
+        ),
+        None,
+    )
 
 
 def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
@@ -662,7 +762,9 @@ def promote_record_recoveries(client: Any, namespace: str, now: float, limit: in
     return promoted
 
 
-def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -> list[str]:
+def due(
+    client: Any, namespace: str, state: str, now: float, limit: int = 100, *, promote_recoveries: bool = True
+) -> list[str]:
     if state not in {'leased', 'retry', 'result_ready', 'record_pending', record_recovery_gate.WAITING_STATE}:
         raise ValueError('only recoverable states may be scanned')
     field = {
@@ -672,7 +774,7 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
         'record_pending': 'available_at',
         record_recovery_gate.WAITING_STATE: 'available_at',
     }[state]
-    if state == 'record_pending':
+    if state == 'record_pending' and promote_recoveries:
         promote_record_recoveries(client, namespace, now, limit)
     docs = (
         client.collection(f'{namespace}_jobs')
@@ -690,6 +792,11 @@ def due(client: Any, namespace: str, state: str, now: float, limit: int = 100) -
 # beyond the bound. The observer and pager report that incomplete scan as
 # blindness; retiring holds themselves stays with the custody track.
 OLDEST_POLICY_HOLD_SCAN_LIMIT = 500
+
+
+def allowance_held_count(client: Any, namespace: str) -> int:
+    """Hourly leader census, outside the pending-work sample and never a row walk."""
+    return int(client.collection(f'{namespace}_jobs').where('state', '==', 'allowance_held').count().get()[0][0].value)
 
 
 def is_allowance_policy_hold(job: dict[str, Any]) -> bool:
@@ -893,7 +1000,9 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
 
 # 2-hour timeliness alarm (David, 2026-11-02). Indexes: jobs (state, enqueued_at), the capacity index, jobs
 # (priority, retry_started_at), jobs (state, recovery_state, enqueued_at) and results (projection_state, committed_at).
-TIMELINESS_ACTIVE_STATES = ('leased', 'result_ready')
+# provider_running is in-flight vendor work; provider_pending stays out (allowance holds park it for a
+# day) and is exported by the provider-stage stock gauges instead.
+TIMELINESS_ACTIVE_STATES = ('leased', 'provider_running', 'result_ready')
 TIMELINESS_UNCOMMITTED_STATES = (*TIMELINESS_ACTIVE_STATES, 'ready', 'retry', 'vendor_held')
 TIMELINESS_HOLD_SCAN_LIMIT = 20
 TIMELINESS_PROJECTION_SCAN_LIMIT = 50

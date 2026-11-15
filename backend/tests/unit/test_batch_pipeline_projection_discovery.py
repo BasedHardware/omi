@@ -172,3 +172,197 @@ def test_due_before_mode_resets_the_cursor_and_seeds_on_the_clock(monkeypatch):
     # A cursor from the due ordering is not reused in the legacy ordering.
     assert scan.next(limit=2) == ['legacy']
     assert scan.due_mode is False and scan.after is None
+
+
+# --- the newest-commits half page (2026-11-13) --------------------------------------------------
+
+
+def recent_scanner(monkeypatch, rows, *, now=10_000.0, window='900', point=0.0, striping='off', stripe=0):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', striping)
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', window)
+    monkeypatch.setattr(projection_discovery, 'projection_discovery_stripe', lambda: stripe)
+    clock = {'now': now, 'point': point}
+    monkeypatch.setattr(projection_discovery.time, 'time', lambda: clock['now'])
+    query = ResultQuery(rows)
+    store = Mock()
+    store.projection_page.side_effect = lambda **kw: projection_page(query, 'synthetic', **kw)
+    scan = ProjectionDiscovery(store, states=('pending',), recent=True)
+    scan.random = lambda: clock['point']
+    return scan, clock
+
+
+def backlog_and_new(old=400, new=6, now=10_000.0):
+    rows = {f'old{i:03d}': {'committed_at': 100.0 + i, 'projection_state': 'pending'} for i in range(old)}
+    rows.update(
+        {f'new{i:03d}': {'committed_at': now - 60.0 + i / 4, 'projection_state': 'pending'} for i in range(new)}
+    )
+    return rows
+
+
+def news(page):
+    return [name for name in page if name.startswith('new')]
+
+
+def test_a_new_commit_is_discovered_on_the_first_page_behind_a_long_backlog(monkeypatch):
+    """2026-11-13: with 154,000 pending rows a new commit waited about 15 minutes to be paged."""
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new())
+    page = scan.next(100)
+    assert page[:6] == [f'new{i:03d}' for i in range(6)]
+    # The page is no larger, and the main cursor still walks the backlog from its head.
+    assert len(page) == 100 and page[6] == 'old000'
+
+
+def test_the_main_cursor_still_visits_every_backlog_row_while_new_commits_fill_their_half(monkeypatch):
+    rows = backlog_and_new(old=400, new=120)
+    scan, clock = recent_scanner(monkeypatch, rows)
+    seen, sizes = set(), []
+    for tick in range(9):
+        # A full half page of new commits on every tick, as when commits never stop.
+        rows.update(
+            {
+                f'new{tick}x{i:02d}': {'committed_at': clock['now'] - 1.0 + i / 100, 'projection_state': 'pending'}
+                for i in range(50)
+            }
+        )
+        clock['point'] = 1.0 - 2.0 / 900
+        page = scan.next(100)
+        sizes.append(len(page))
+        seen.update(page)
+        clock['now'] += 20.0
+    assert {name for name in rows if name.startswith('old')} <= seen
+    assert max(sizes) <= 100
+
+
+def test_a_row_is_offered_by_the_recent_read_once_per_process_and_a_restart_adds_one(monkeypatch):
+    """Review round 2: a still-pending recent row was re-offered on every tick of the window."""
+    # Enough backlog that the main cursor does not reach the new rows inside the test.
+    rows = backlog_and_new(old=8000, new=6)
+    scan, clock = recent_scanner(monkeypatch, rows)
+    offers = 0
+    for _ in range(60):  # 20 minutes of ticks; the rows stay pending throughout.
+        offers += scan.next(100).count('new000')
+        clock['now'] += 20.0
+    assert offers == 1
+    # A restarted process has an empty memory: one more offer, then none.
+    again = ProjectionDiscovery(scan.store, states=('pending',), recent=True)
+    again.random = lambda: 0.0
+    clock['now'] = 10_000.0
+    assert [again.next(100).count('new000') for _ in range(3)] == [1, 0, 0]
+
+
+def test_rows_already_offered_still_count_against_the_page(monkeypatch):
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new(old=4000, new=120))
+    first = scan.next(100)
+    assert news(first) == first[:50] == [f'new{i:03d}' for i in range(50)]
+    second = scan.next(100)
+    # The same 50 rows were read again and not offered again; the page read no more rows.
+    assert news(second) == [] and len(second) == 50
+    assert [call.kwargs['limit'] for call in scan.store.projection_page.call_args_list] == [50, 50, 50, 50]
+
+
+def test_each_tick_reads_from_a_different_point_of_the_window(monkeypatch):
+    scan, clock = recent_scanner(monkeypatch, backlog_and_new(old=4000, new=200))
+    first = news(scan.next(100))
+    clock['point'] = (900 - 60 + 25) / 900  # 25 s into the minute the new rows span.
+    second = news(scan.next(100))
+    assert first[0] == 'new000' and second[0] == 'new100' and not set(first) & set(second)
+
+
+def test_recent_off_and_default_construction_keep_the_single_cursor(monkeypatch):
+    scan, clock = recent_scanner(monkeypatch, backlog_and_new(), window='0', striping='on')
+    assert scan.next(100)[0] == 'old000'
+    clock['now'] += 10_000.0
+    scan.next(100)
+    assert scan.stripe == 0 and scan.store.projection_page.call_count == 3  # One seed read, no restart.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', '900')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
+    plain = ProjectionDiscovery(scan.store, states=('pending',))
+    assert plain.next(100)[0] == 'old000'
+
+
+def test_a_failed_recent_query_costs_only_that_half_page(monkeypatch):
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new())
+    real = scan.store.projection_page.side_effect
+    calls = []
+
+    def flaky(**kw):
+        calls.append(kw)
+        if len(calls) == 1:
+            raise RuntimeError('query unavailable')
+        return real(**kw)
+
+    scan.store.projection_page.side_effect = flaky
+    fallbacks = []
+    monkeypatch.setattr(projection_discovery, 'record_fallback', lambda **labels: fallbacks.append(labels))
+    page = scan.next(100)
+    assert page[0] == 'old000' and len(page) == 100 and scan.offered == {}
+    # The lost half page is recorded, not silent.
+    assert [(f['component'], f['from_mode'], f['to_mode'], f['reason']) for f in fallbacks] == [
+        ('firestore_read', 'recent_discovery', 'main_cursor', 'unavailable')
+    ]
+
+
+@pytest.mark.parametrize('striping', ['off', 'on'])
+def test_rows_read_before_a_failed_main_query_are_offered_on_the_next_tick(monkeypatch, striping):
+    scan, _ = recent_scanner(monkeypatch, backlog_and_new(old=400, new=120), striping=striping)
+    real = scan.store.projection_page.side_effect
+    calls = []
+
+    def flaky(**kw):
+        calls.append(kw)
+        # The main query is the last one of the first tick (after the seed read when striped).
+        if len(calls) == (3 if striping == 'on' else 2):
+            raise RuntimeError('query unavailable')
+        return real(**kw)
+
+    scan.store.projection_page.side_effect = flaky
+    with pytest.raises(RuntimeError):
+        scan.next(100)
+    assert scan.offered == {} and scan.after is None and scan.seeded is False
+    assert news(scan.next(100))[:50] == [f'new{i:03d}' for i in range(50)]
+
+
+def test_a_main_cursor_that_never_wraps_restarts_at_a_new_random_point(monkeypatch):
+    """Review round 2: rows before every process's start point waited for a wrap that never came."""
+    rows = {f'old{i:03d}': {'committed_at': 1_000.0 + 10 * i, 'projection_state': 'pending'} for i in range(900)}
+    scan, clock = recent_scanner(monkeypatch, rows, striping='on', stripe=2048, window='1')
+    assert scan.next(20)[0] == 'old450'  # Seeded half way between the oldest row and now.
+    clock['now'] += projection_discovery.MAIN_PASS_SECONDS - 1
+    assert scan.next(20)[0] == 'old470'
+    clock['now'] += 2  # A whole pass period without reaching the newest row.
+    clock['point'] = 0.75
+    first = scan.next(20)[0]
+    assert scan.stripe == 0.75 * 4096 and first not in ('old000', 'old490')
+    # The clock restarts with the pass: no second restart on the next tick.
+    assert scan.next(20)[0] != first and scan.stripe == 0.75 * 4096
+
+
+def test_one_restart_in_eight_begins_at_the_oldest_row(monkeypatch):
+    """Review round 3: a random point almost never lands on the head of the log."""
+    rows = {f'old{i:03d}': {'committed_at': 1_000.0 + 10 * i, 'projection_state': 'pending'} for i in range(900)}
+    scan, clock = recent_scanner(monkeypatch, rows, striping='on', stripe=2048, window='1')
+    scan.next(20)
+    starts = []
+    for draw in (0.124, 0.126, 0.0, 0.5):
+        clock['now'] += projection_discovery.MAIN_PASS_SECONDS + 1
+        clock['point'] = draw
+        starts.append(scan.next(20)[0])
+    assert [name == 'old000' for name in starts] == [True, False, True, False]
+
+
+def test_a_main_cursor_that_wraps_in_time_is_not_restarted(monkeypatch):
+    rows = {f'old{i:03d}': {'committed_at': 1_000.0 + 10 * i, 'projection_state': 'pending'} for i in range(30)}
+    scan, clock = recent_scanner(monkeypatch, rows, striping='on', stripe=0)
+    for _ in range(200):
+        scan.next(20)
+        clock['now'] += 20.0
+    assert scan.stripe == 0
+
+
+def test_recent_discovery_setting_bounds(monkeypatch):
+    monkeypatch.delenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', raising=False)
+    assert batch_pipeline.projection_recent_discovery_seconds() == 120
+    for raw, want in (('0', 0), ('900', 900), ('99999', 3600), ('-1', 0), ('junk', 120)):
+        monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_RECENT_DISCOVERY_SECONDS', raw)
+        assert batch_pipeline.projection_recent_discovery_seconds() == want

@@ -33,9 +33,12 @@ enum FloatingBarPreferenceMutation: Equatable {
 
 extension FloatingControlBarWindow {
   var shouldOrderOutAfterConversationClose: Bool {
-    !FloatingControlBarManager.shared.isEnabled
-      && state.currentNotification == nil
-      && !state.showingAIConversation
+    FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+      isEnabled: FloatingControlBarManager.shared.isEnabled,
+      isSnoozed: FloatingControlBarManager.shared.isSnoozed,
+      hasCurrentNotification: state.currentNotification != nil,
+      showingAIConversation: state.showingAIConversation
+    )
   }
 
   /// Starts the token-fenced retraction after presentation eligibility has
@@ -155,19 +158,25 @@ extension FloatingControlBarManager {
     hasRevealedNotchThisSession = true
     window?.applySurfaceLevel()
     window?.normalizeForTemporaryShow()
-    window?.makeKeyAndOrderFront(nil)
+    let mayFocus = FloatingBarPresentationPolicy.shouldMakeKeyOnPresent(request: request)
+    if mayFocus {
+      window?.makeKeyAndOrderFront(nil)
+    } else {
+      window?.orderFrontRegardless()
+    }
     if shouldPlayNotchReveal {
       window?.playNotchRevealAnimation()
     }
     log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
-    // Auto-focus input if AI conversation is open.
-    if let window, window.state.showingAIConversation && !window.state.showingAIResponse {
+    // Only direct user requests may focus an open input or schedule a retry.
+    if mayFocus, let window, window.state.showingAIConversation && !window.state.showingAIResponse {
       if !window.focusInputField() {
         // SwiftUI may still be attaching the text view. Retry on its next
         // layout pass rather than relying on a fixed wall-clock delay.
         DispatchQueue.main.async { [weak window] in
-          window?.focusInputField()
+          guard let window, window.isKeyWindow else { return }
+          window.focusInputField()
         }
       }
     }

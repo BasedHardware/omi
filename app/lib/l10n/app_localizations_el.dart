@@ -15499,6 +15499,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Η κάρτα σας απορρίφθηκε';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ενημερώστε την κάρτα ή αποκτήστε ξανά το $plan με $price τον μήνα';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ενημερώστε την κάρτα για να αποκτήσετε ξανά το $plan';
   }
@@ -15523,4 +15528,31 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Μετάβαση σε μηνιαίο';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price τον μήνα';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Αντικαθιστά την απλήρωτη ετήσια χρέωση των $yearly. Ανανεώνεται κάθε μήνα. Ακύρωση οποιαδήποτε στιγμή.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Η πληρωμή απορρίφθηκε. Το πρόγραμμά σας δεν άλλαξε.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Η αλλαγή δεν είναι διαθέσιμη τώρα. Ενημερώστε την κάρτα σας.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Είστε πλέον σε μηνιαία χρέωση';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Πληρώθηκαν $price σήμερα. Ανανεώνεται κάθε μήνα.';
+  }
 }

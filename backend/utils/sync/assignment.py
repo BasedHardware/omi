@@ -268,6 +268,7 @@ def assign_in_transaction(
     incoming = deepcopy(incoming)
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    capture_clock_shift = float(incoming.pop('_sync_capture_clock_offset', 0.0) or 0.0)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
@@ -944,7 +945,12 @@ def assign_in_transaction(
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
         if processing_hold.enabled():
-            result[processing_hold.FIELD] = processing_hold.activity_patch(result, time.time())
+            result[processing_hold.FIELD] = processing_hold.activity_patch(
+                result,
+                time.time(),
+                clock_offset=capture_clock_shift,
+                owns_end=recorded_input_finish >= result['finished_at'],
+            )
         verdict, rule = fragment_rule(segments)
         curated = is_user_curated(result)
         result['sync_relevance'] = (

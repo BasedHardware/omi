@@ -273,6 +273,9 @@ def transcribe(
         try:
             file_id = resource_id(request('POST', '/files', files={'file': ('recovery.wav', audio, 'audio/wav')})['id'])
             body = transcription_body(file_id, language, diarize=diarize)
+            from utils.stt.allowance_watch import observe_request
+
+            observe_request('prerecorded', 'soniox', duration)
             created = request('POST', '/transcriptions', json=body)
             transcription_id = resource_id(created['id'])
             state = created
@@ -375,6 +378,10 @@ async def transcribe_async(
         )
         body = transcription_body(file_id, language)
         try:
+            from utils.stt.allowance_watch import observe_async
+            from utils.byok import get_byok_uid
+
+            await observe_async(get_byok_uid(), 'prerecorded', 'soniox', duration)
             state = await request('POST', '/transcriptions', json=body)
         except SonioxBatchError:
             # request() preserves paid uncertainty on 5xx; explicit 429 refusals

@@ -230,7 +230,9 @@ def test_pl086_refusal_backoff_survives_restart_and_completion_resets_it(h):
 
 
 @pytest.mark.parametrize('delay,expected', [(3600, 3600), (86400, 86400), (100000, 86400)])
-def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay, expected):
+@pytest.mark.parametrize('park', [False, True], ids=['rollback', 'parked'])
+def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay, expected, park, monkeypatch):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'on' if park else 'off')
     queue = Scheduler(h.store)
     work = item(h)
     assert queue.enqueue(work, T0)
@@ -249,4 +251,8 @@ def test_pl086_policy_wait_survives_restart_without_blocking_same_owner(h, delay
     restarted.recover(T0 + expected - 1)
     assert restarted.pull(T0 + expected - 1) == []
     restarted.recover(T0 + expected)
-    assert restarted.pull(T0 + expected)[0].item.segment_id == work.segment_id
+    if park:
+        assert restarted.pull(T0 + expected) == []
+        assert job(h)['state'] == 'allowance_held'
+    else:
+        assert restarted.pull(T0 + expected)[0].item.segment_id == work.segment_id

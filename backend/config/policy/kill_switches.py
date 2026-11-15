@@ -8,6 +8,9 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'BATCH_ALLOWANCE_PARK_ENABLED': True,
+    'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
+    'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED': False,
     'BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED': False,
     'CONVERSATION_TERMINAL_FAMILY_MODE': True,
@@ -19,6 +22,10 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED': True,
     'BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED': True,
     'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED': True,
+    'BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED': True,
+    'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED': True,
+    'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED': True,
+    'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED': True,
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
@@ -75,6 +82,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         return enabled
     value = env.get(name, str(KILL_SWITCHES[name])).strip().lower()
     if name in {
+        'BATCH_ALLOWANCE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED',
         'PROJECTION_DRAIN_CLAIM_AWARE',
@@ -85,7 +93,11 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         enabled = value != 'off'
         if value in {'false', '0', 'no'}:
             logger.warning("only 'off' disables %s; value '%s' keeps it ON", name, value)
-    elif name == 'CONVERSATION_TERMINAL_FAMILY_MODE':
+    elif name in {
+        'CONVERSATION_TERMINAL_FAMILY_MODE',
+        'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+        'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
+    }:
         enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
@@ -96,6 +108,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
+        'BATCH_ALLOWANCE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
         'BATCH_PIPELINE_PROJECTION_GHOST_SETTLE_ENABLED',

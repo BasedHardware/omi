@@ -15421,6 +15421,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atnaujinkite kortelę arba vėl naudokite $plan už $price per mėnesį';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
   }
@@ -15445,4 +15450,31 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pereiti prie mėnesinio';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per mėnesį';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Pakeičia neapmokėtą $yearly metinį mokestį. Atnaujinama kas mėnesį. Atšaukti galite bet kada.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Mokėjimas atmestas. Jūsų planas nepasikeitė.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Dabar mokate kas mėnesį';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šiandien sumokėta $price. Atnaujinama kas mėnesį.';
+  }
 }

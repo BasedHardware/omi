@@ -29,6 +29,28 @@ def _poll_skip_modes(client):
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        DriverEntry(
+            'database.batch_pipeline_delivered_share.delivered_share_page',
+            domains={'namespace': namespaces},
+            neutrals={
+                'now': (2000000000.0, 'fixed cohort clock; no shape change'),
+                'limit': (5000, 'bounded page size only'),
+            },
+        ),
+        DriverEntry(
+            'database.batch_pipeline_fresh_guard.fresh_committed_counts',
+            domains={'namespace': namespaces},
+            neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_coalescing.due',
+            domains={
+                'namespace': namespaces,
+                'producer_enabled': [False, True],
+                'after': [None, {'scan_at': 1.0, 'id': 'synthetic-cursor'}],
+            },
+            neutrals={'now': (3000000.0, 'immutable release/lease deadline operand only')},
+        ),
         CoveredByEntry(
             'database.record_custody_receipts.prune',
             covered_by=('database.record_custody_receipts.expired_page',),
@@ -79,6 +101,8 @@ def entries():
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (1024, 'in-memory candidate cap only'),
                 'max_scan': (10000, 'aggregate scan bound only'),
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
             },
@@ -89,6 +113,8 @@ def entries():
             patchers=(_repair_age_orders,),
             domains={
                 'urgent': [False, True],
+                'fresh': [False, True],
+                'newest': [False, True],
                 'after': [
                     None,
                     {
@@ -103,6 +129,8 @@ def entries():
                 ],
             },
             neutrals={
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
@@ -110,6 +138,7 @@ def entries():
                 'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
                 'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
+                'exclude': (frozenset(), 'in-memory deduplication only; no query shape change'),
             },
         ),
         DriverEntry(
@@ -462,12 +491,49 @@ def entries():
             body_digest='d9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
         ),
         DriverEntry(
+            'database.batch_pipeline_store.fresh_first_pending',
+            base={'owner_key': 'owner-hash'},
+            domains={'namespace': namespaces, 'ready': [False, True]},
+            neutrals={'transaction': (None, 'transaction binding only, no shape change')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending',
+            covered_by=('database.batch_pipeline_store.fresh_first_pending',),
+            reason='thin transactional adapter selects the ready equality without changing query ordering',
+            expect_observed=False,
+            body_digest='bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
+        ),
+        DriverEntry(
             'database.batch_pipeline_store.fresh_pending',
             trials=2,
             patchers=(_poll_skip_modes,),
             base={'owner_key': 'owner-hash'},
             domains={'namespace': namespaces},
             neutrals={'limit': (8, 'bounded page size')},
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.ready_owners',
+            domains={
+                'namespace': namespaces,
+                'after_owner_key': [None, 'synthetic-cursor'],
+                'ceiling_owner_key': [None, 'synthetic-ceiling'],
+                'descending': [False, True],
+            },
+            neutrals={'limit': (2, 'bounded owner count only')},
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.ready_owners',
+            covered_by=('database.batch_pipeline_store.ready_owners',),
+            reason='thin store adapter forwards the owner cursor unchanged',
+            expect_observed=False,
+            body_digest='b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
         ),
         CoveredByEntry(
             'database.batch_pipeline_store.FirestoreStore.held_merge_owners',
@@ -494,6 +560,7 @@ def entries():
                 'namespace': namespaces,
                 'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
+                'promote_recoveries': [False, True],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},
         ),

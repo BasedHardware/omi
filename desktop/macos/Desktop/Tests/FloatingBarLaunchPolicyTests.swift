@@ -258,6 +258,64 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       "an ordered-out panel does not need a visible-scale restore")
   }
 
+  func testOnlyExplicitUserPresentationMayAcquireKeyboardFocus() {
+    XCTAssertFalse(FloatingBarPresentationPolicy.shouldMakeKeyOnPresent(request: .background))
+    XCTAssertTrue(FloatingBarPresentationPolicy.shouldMakeKeyOnPresent(request: .explicitUserAction))
+  }
+
+  func testNotificationTemporaryShowArmsForSnoozedOrDisabledBarEvenWhenVisible() {
+    XCTAssertTrue(
+      FloatingBarDurableVisibilityPolicy.shouldArmTemporaryNotificationShow(
+        isWindowVisible: false,
+        isEnabled: true,
+        isSnoozed: false))
+    XCTAssertTrue(
+      FloatingBarDurableVisibilityPolicy.shouldArmTemporaryNotificationShow(
+        isWindowVisible: true,
+        isEnabled: false,
+        isSnoozed: false))
+    XCTAssertTrue(
+      FloatingBarDurableVisibilityPolicy.shouldArmTemporaryNotificationShow(
+        isWindowVisible: true,
+        isEnabled: true,
+        isSnoozed: true),
+      "a notification flushed while the bar is snoozed must still re-hide the bar after dismissal")
+    XCTAssertFalse(
+      FloatingBarDurableVisibilityPolicy.shouldArmTemporaryNotificationShow(
+        isWindowVisible: true,
+        isEnabled: true,
+        isSnoozed: false))
+  }
+
+  func testConversationCloseOrdersOutDisabledOrSnoozedBarWhenIdle() {
+    XCTAssertTrue(
+      FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+        isEnabled: false,
+        isSnoozed: false,
+        hasCurrentNotification: false,
+        showingAIConversation: false))
+    XCTAssertTrue(
+      FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+        isEnabled: true,
+        isSnoozed: true,
+        hasCurrentNotification: false,
+        showingAIConversation: false),
+      "closing a conversation while the bar is snoozed must re-hide the bar")
+    XCTAssertFalse(
+      FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+        isEnabled: true,
+        isSnoozed: true,
+        hasCurrentNotification: true,
+        showingAIConversation: false),
+      "a flushed notification owns the temporary surface until it dismisses")
+    XCTAssertFalse(
+      FloatingBarDurableVisibilityPolicy.shouldOrderOutAfterConversationClose(
+        isEnabled: true,
+        isSnoozed: false,
+        hasCurrentNotification: false,
+        showingAIConversation: false))
+  }
+
   func testDesktopHomeLaunchUsesNormalPolicyAndDoesNotCallDeferredRevealDirectly() throws {
     let source = try sourceFile("AccountCutover/DesktopHomeSignedInStartup.swift")
     let floatingBarLaunchSection = try extractSection(

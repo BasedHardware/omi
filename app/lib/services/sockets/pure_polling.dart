@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/pure_socket.dart';
@@ -43,6 +44,7 @@ class PurePollingSocket implements IPureSocket {
 
   final AudioPollingConfig config;
   final ISttProvider sttProvider;
+  final OnDeviceUsageTracker? onDeviceUsage;
 
   PurePollingStatus _status = PurePollingStatus.notConnected;
   PurePollingStatus get pollingStatus => _status;
@@ -87,7 +89,7 @@ class PurePollingSocket implements IPureSocket {
   bool get isBuffering => _bufferingSince != null;
   int get bufferedBytes => _totalBufferBytes;
 
-  PurePollingSocket({required this.config, required this.sttProvider});
+  PurePollingSocket({required this.config, required this.sttProvider, this.onDeviceUsage});
 
   @override
   Future<bool> connect() async {
@@ -192,7 +194,8 @@ class PurePollingSocket implements IPureSocket {
       // Providers own deadlines and resource cleanup. Timing out only this
       // Future would release the processing flag while recognition is still
       // running, allowing the next flush to submit the same audio again.
-      final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: _audioOffsetSeconds);
+      final audioStartSeconds = _audioOffsetSeconds;
+      final result = await sttProvider.transcribe(audioData, audioOffsetSeconds: audioStartSeconds);
       if (generation != _connectionGeneration) return;
       _bufferingSince = null;
       _consecutiveFailures = 0;
@@ -205,6 +208,8 @@ class PurePollingSocket implements IPureSocket {
             result.segments.where((s) => s.text.trim().isNotEmpty).map((s) => s.toTranscriptSegmentJson()).toList();
         if (segmentsJson.isNotEmpty) {
           onMessage(jsonEncode(segmentsJson));
+          final audioMs = (((result.audioEndSeconds ?? result.segments.last.end) - audioStartSeconds) * 1000).round();
+          onDeviceUsage?.record(audioMs: audioMs, segmentCount: segmentsJson.length);
         }
       }
     } catch (e, trace) {
@@ -267,6 +272,7 @@ class PurePollingSocket implements IPureSocket {
     if (_audioFrames.isNotEmpty && !_isProcessing) {
       await _flushBuffer();
     }
+    onDeviceUsage?.flush();
 
     _connectionGeneration++;
     _status = PurePollingStatus.disconnected;

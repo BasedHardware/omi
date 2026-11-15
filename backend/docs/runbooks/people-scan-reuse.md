@@ -69,6 +69,16 @@ writer and inventory suites passed 17 tests, and
 loopback emulator, including review apply/undo/redo, enrollment, evidence backfill,
 rollback and concurrent increments. The emulator was stopped after verification.
 
+## Yearly retention erasure audit 2026-11-15
+
+SCA-1808 adds `erase_assignment(uid, client)` at the end of
+`purge_user_subtree` for the existing top-level UID experiment row. The People
+subcollection wipe and final `generation_ref(user_ref).delete()` are unchanged;
+the added erase propagates failures for retry. No People writer or generation
+helper was added or removed. Re-pinned only this purge scope with Python 3.11
+after the strict generation/erasure tests and all 31 owned loopback emulator
+checks passed. The inventory check also passes; no production data was accessed.
+
 ## Measure before enabling
 
 `people_scan_dedupe` remains **0**. The closed-label counter

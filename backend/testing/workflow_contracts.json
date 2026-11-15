@@ -217,6 +217,21 @@
       ]
     },
     {
+      "id": "gpu_worker_deployment_gate",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_diarizer.yml"
+      ],
+      "tests": [
+        "tests/unit/test_record_seal_cluster_repair_deploy.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "the immutable Firestore control checkout and serving-index gate remain unconditional and source-bound",
+        "worker builds, digest promotion and every deployment writer follow the serving-index gate"
+      ]
+    },
+    {
       "id": "firestore_schema_readiness",
       "risk": "high",
       "sources": [
