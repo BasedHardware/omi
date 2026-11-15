@@ -42,19 +42,50 @@
       "description": "Cold compact Processing page resolves its source episode on demand and shows only its two pending recordings; two READY recordings remain finished on Home. Fictional fixture.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-reported-shape-before.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic reported shape through pre-one-row source: three duration singletons plus 13 completed members grouped as Transcribing. Fixture render, not owner phone capture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-reported-shape-after.png",
+      "platform": "mobile-ios",
+      "description": "Same synthetic shape on merged compact Home: Listening, one Transcribing row for three local pending recordings, ten READY rows and three omitted noise results.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-15T13:14:35Z",
-  "merged_origin_main": "33cf63956cd8a7cc86a9f7bbf99569d547e48e24",
+  "captured_at_utc": "2026-11-15T13:41:38Z",
+  "merged_origin_main": "6f2f97dc7e68fb1eb557ffff6f75ee8b24571ba0",
   "source_blobs": {
     "app/lib/backend/schema/episode.dart": "e032e0a34d5399481969e20d7c26fd419ab86a3f",
-    "app/lib/pages/conversations/conversations_page.dart": "3e0cf04569b35ba1abf35a1c6c8418bbfe1b436a",
+    "app/lib/pages/conversations/conversations_page.dart": "c2a867ea5444709819fa6e9cf89380d7a9474dda",
     "app/lib/pages/conversations/conversations_processing_rows.dart": "cf7356151e294b8510e3e0e4957cb457d4bde3d1",
-    "app/lib/pages/conversations/home_card_rows.dart": "8799d522d6a8d7908c353d922843e3354c06e666",
-    "app/lib/pages/conversations/home_rows.dart": "456c771178410ac44a2b3b15336dd33304fbd506",
-    "app/lib/pages/conversations/widgets/processing_conversation_row.dart": "bb529d30501f559275ab6d12680e421050bf90cc",
-    "app/lib/pages/episodes/episode_page.dart": "d9deee5751a419694d34de38a4a4fbf888dc3f5f"
+    "app/lib/pages/conversations/home_card_rows.dart": "cdc04d85d58e9ca2eef90b77da9b23f446fee679",
+    "app/lib/pages/conversations/home_rows.dart": "dd7a2c43638417c9367b52c188a23aec3a6f2ee9",
+    "app/lib/pages/conversations/widgets/processing_conversation_row.dart": "374cef984f9a7501a0f02de343599bc06ce1a4d3",
+    "app/lib/pages/episodes/episode_page.dart": "d9deee5751a419694d34de38a4a4fbf888dc3f5f",
+    "app/lib/utils/conversations/home_member_fallback.dart": "42c171bf940a03a9fd31d0704f78704e067f95ce",
+    "app/test/helpers/home_ready_members_fixture.dart": "21180761eedc298ccfcfc04d37498870ccf54bc3",
+    "app/test/widgets/home_row_contract_render_test.dart": "f84f50d3850be57f75d99c995bc677f642a7302f"
   },
   "native_entrypoint_blob": "fcc6954a8d3d71ac3f3b5a7eece7e8b9b52fc7cd",
-  "cold_compact_owner_lookup": true
+  "cold_compact_owner_lookup": true,
+  "baseline_ui_ref": "7b057be79d4a5384c7bc62271823a4a985df46b5",
+  "baseline_provenance": "data/run-2026-11-15-quality-12h/evidence/q12-ready-members/reported-shape-baseline.json in the workspace record",
+  "native_images": [
+    "001-mobile-ios-ready-before-compose.png",
+    "002-mobile-ios-own-recording-notes.png",
+    "003-mobile-ios-composed-replacement.png",
+    "004-mobile-ios-replacement-members.png",
+    "005-mobile-ios-pending-delete-scope.png",
+    "006-mobile-ios-cold-processing-members.png"
+  ],
+  "widget_fixture_images": [
+    "007-mobile-ios-reported-shape-before.png",
+    "008-mobile-ios-reported-shape-after.png"
+  ]
 }
