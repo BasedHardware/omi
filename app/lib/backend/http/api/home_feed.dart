@@ -1,3 +1,5 @@
+// Compact Home page and preparation transport with typed failure handling.
+// Card decoding stays separate from hydrated conversation and episode detail.
 import 'dart:convert';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/home_feed.dart';

@@ -16,6 +16,7 @@ Response shape:
     "id": "episode:example",
     "kind": "episode",
     "detail_id": "example",
+    "sort_at": "2026-11-15T00:00:00Z",
     "started_at": "2026-11-15T00:00:00Z",
     "finished_at": "2026-11-15T00:10:00Z",
     "title": "Example",
@@ -38,7 +39,7 @@ Response shape:
 }
 ```
 
-`kind` is `episode` or `conversation`; `id` includes that namespace and `detail_id` is the owning object's ID. Dates/revision/status are server-authored. Finished time and home_step may be null. Title/preview have bounded lengths. `generation` is an opaque equality token for authoritative loaded-window reconciliation; it is not ordered and does not invalidate otherwise well-scoped continuation cursors. A generation change clears unvalidated cached text and reconciles the loaded window. No transcripts, full notes, member list, audio or full conversation objects appear here. Current lock/privacy policy applies; locked rows expose only the existing allowed preview. Search/folder/date/star/discarded views retain their exact existing query semantics during the Home migration.
+`kind` is `episode` or `conversation`; `id` includes that namespace and `detail_id` is the owning object's ID. Dates/revision/status are server-authored. `sort_at` is a deterministic pagination key, using arrival only when recording evidence is absent. Nullable `started_at` remains unknown in that case; the client groups these cards under Unknown and does not display an invented time or duration. Finished time and home_step may be null. Title/preview have bounded lengths. `generation` is an opaque equality token for authoritative loaded-window reconciliation; it is not ordered and does not invalidate otherwise well-scoped continuation cursors. A generation change clears unvalidated cached text and reconciles the loaded window. No transcripts, full notes, member list, audio or full conversation objects appear here. Current lock/privacy policy applies; locked rows expose only the existing allowed preview. Search/folder/date/star/discarded views retain their exact existing query semantics during the Home migration.
 
 Before an account's source coverage is established, GET returns HTTP 409 with `detail: "home_feed_preparation_required"`. This explicit state is distinct from an outage, denied access or empty history. `POST /v1/home/feed/prepare` accepts no body and returns `{ready, processed, has_more}` after one bounded, resumable preparation chunk. The mobile client may drive bounded low-priority preparation while displaying its existing compatible history. It switches to the compact feed only after readiness. No GET schedules migration or generation, and no agent directly backfills production account data.
 

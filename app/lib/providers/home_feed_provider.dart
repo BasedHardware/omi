@@ -1,3 +1,5 @@
+// Bounded Home card paging, warming and legacy preparation coordination.
+// Account generations fence cached shells, mutations and late network responses.
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
@@ -193,7 +195,7 @@ class HomeFeedProvider extends ChangeNotifier {
           problem != null ||
           _items.length >= maxCards ||
           _bytes >= maxBytes ||
-          (_items.isNotEmpty && !_items.last.startedAt.isAfter(_now().subtract(const Duration(days: 7))))) {
+          (_items.isNotEmpty && !_items.last.sortAt.isAfter(_now().subtract(const Duration(days: 7))))) {
         return;
       }
       await loadMore();
@@ -217,28 +219,7 @@ class HomeFeedProvider extends ChangeNotifier {
       if (!_current(generation, uid)) return;
       initialized = true;
       if (result is ApiFailure<HomeFeedPage>) {
-        problem = result.problem;
-        // Only the absent-route response is a migration fallback, never transport/5xx/decode.
-        preparing = result.problem.statusCode == 409 && result.problem.detail == 'home_feed_preparation_required';
-        unsupported =
-            replace && _serverGeneration == null && (result.problem.kind == ApiProblemKind.notFound || preparing);
-        if (unsupported) {
-          recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
-        }
-        if (preparing) {
-          // Coverage can become dirty after a remote edit/delete. Existing text
-          // has no current authority, including cards outside this page.
-          _items = [for (final card in _items) card.withoutText()];
-          await _persist(generation, uid);
-          _schedulePreparation(generation, uid);
-          return;
-        }
-        final view = presentApiResult<List<HomeFeedCard>>(ApiFailure(result.problem),
-            previous: _items, isEmpty: (value) => value.isEmpty);
-        if (view.data == null) {
-          _items = const [];
-          await _persist(generation, uid);
-        }
+        await _handleFailure(result.problem, generation, uid, replace: replace);
         return;
       }
       final page = (result as ApiSuccess<HomeFeedPage>).data;
@@ -262,7 +243,7 @@ class HomeFeedProvider extends ChangeNotifier {
         if (_pendingDeletes.contains(card.detailId)) continue;
         merged[card.id] = card.kind == 'episode' && _pendingDeletes.isNotEmpty ? card.withoutText() : card;
       }
-      _items = merged.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+      _items = merged.values.toList()..sort((a, b) => b.sortAt.compareTo(a.sortAt));
       _bytes += page.items.fold<int>(0, (n, c) => n + c.title.length * 4 + c.preview.length * 4 + 256);
       if ((page.hasMore || page.truncated) && (page.nextCursor == null || page.nextCursor == requested)) {
         problem = const ApiProblem(ApiProblemKind.decode);
@@ -285,6 +266,30 @@ class HomeFeedProvider extends ChangeNotifier {
     _flight = flight;
     notifyListeners();
     return flight;
+  }
+
+  Future<void> _handleFailure(ApiProblem failure, int generation, String uid, {required bool replace}) async {
+    problem = failure;
+    preparing = failure.statusCode == 409 && failure.detail == 'home_feed_preparation_required';
+    // A serving rollback must restore compatibility even after cards were adopted.
+    // Dirty coverage after adoption keeps redacted geometry until reconciliation;
+    // the legacy provider may still hold text from before a remote deletion.
+    unsupported = failure.kind == ApiProblemKind.notFound || (replace && _serverGeneration == null && preparing);
+    if (unsupported) {
+      recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
+    }
+    if (preparing) {
+      _items = [for (final card in _items) card.withoutText()];
+      await _persist(generation, uid);
+      _schedulePreparation(generation, uid);
+      return;
+    }
+    final view =
+        presentApiResult<List<HomeFeedCard>>(ApiFailure(failure), previous: _items, isEmpty: (value) => value.isEmpty);
+    if (view.data == null) {
+      _items = const [];
+      await _persist(generation, uid);
+    }
   }
 
   /// Revalidate the entire loaded window after a known source mutation. Keeping redacted
@@ -311,13 +316,7 @@ class HomeFeedProvider extends ChangeNotifier {
         }
         if (!_current(generation, uid)) return;
         if (result is ApiFailure<HomeFeedPage>) {
-          problem = result.problem;
-          final view = presentApiResult<List<HomeFeedCard>>(ApiFailure(result.problem),
-              previous: _items, isEmpty: (value) => value.isEmpty);
-          if (view.data == null) {
-            _items = const [];
-            await _persist(generation, uid);
-          }
+          await _handleFailure(result.problem, generation, uid, replace: true);
           return;
         }
         final page = (result as ApiSuccess<HomeFeedPage>).data;
@@ -343,7 +342,7 @@ class HomeFeedProvider extends ChangeNotifier {
         cursor.add(page.nextCursor);
       }
       if (!_current(generation, uid)) return;
-      _items = collected.values.toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+      _items = collected.values.toList()..sort((a, b) => b.sortAt.compareTo(a.sortAt));
       _needsRefresh = false;
       _serverGeneration = acceptedGeneration;
       problem = null;

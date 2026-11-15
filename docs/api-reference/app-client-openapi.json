@@ -20452,6 +20452,11 @@
             "title": "Revision",
             "type": "string"
           },
+          "sort_at": {
+            "format": "date-time",
+            "title": "Sort At",
+            "type": "string"
+          },
           "sources": {
             "items": {
               "type": "string"
@@ -20466,9 +20471,16 @@
             "type": "boolean"
           },
           "started_at": {
-            "format": "date-time",
-            "title": "Started At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
           },
           "status": {
             "title": "Status",
@@ -20490,7 +20502,7 @@
           "id",
           "kind",
           "detail_id",
-          "started_at",
+          "sort_at",
           "status",
           "revision"
         ],

@@ -4,6 +4,7 @@
       "id": "episode:fixture",
       "kind": "episode",
       "detail_id": "fixture",
+      "sort_at": "2026-11-15T00:00:00Z",
       "started_at": "2026-11-15T00:00:00Z",
       "finished_at": null,
       "title": "Backend fixture",

@@ -3253,9 +3253,10 @@ export interface HomeFeedCard {
   member_count?: number;
   preview?: string;
   revision: string;
+  sort_at: string;
   sources?: Array<string>;
   starred?: boolean;
-  started_at: string;
+  started_at?: string | null;
   status: string;
   summary_available?: boolean;
   title?: string;

@@ -10,7 +10,8 @@ class HomeFeedCard(BaseModel):
     id: str
     kind: Literal['episode', 'conversation']
     detail_id: str
-    started_at: datetime
+    sort_at: datetime
+    started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     title: str = Field('', max_length=240)
     emoji: str = Field('', max_length=32)

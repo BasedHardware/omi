@@ -80,7 +80,9 @@ def reveal_display(uid: str, blob: Any) -> dict[str, Any] | None:
 
 def stamp(uid: str, row: Mapping[str, Any], kind: str) -> dict[str, Any]:
     """Only a full logical row can establish projection coverage."""
-    at = utc(row.get('recorded_start')) or utc(row.get('started_at')) or utc(row.get('created_at'))
+    recorded_at = utc(row.get('recorded_start')) or utc(row.get('started_at'))
+    # Arrival orders unknown-origin history without claiming a recording clock.
+    at = recorded_at or utc(row.get('created_at'))
     if at is None:
         return {}
     value = content(row, kind)
@@ -90,6 +92,7 @@ def stamp(uid: str, row: Mapping[str, Any], kind: str) -> dict[str, Any]:
         DISPLAY: seal_display(uid, value),
         VERSION: uuid4().hex,
         SORT: at,
+        'home_started_at': recorded_at,
         'home_projection_schema': SCHEMA,
         'home_has_tasks': (
             bool(structured.get('action_items'))

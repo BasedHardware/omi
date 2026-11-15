@@ -3,12 +3,14 @@ import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 
 /// A display projection, never a conversation detail or episode membership receipt.
+/// Omitted source content remains unknown until the existing detail API hydrates it.
 class HomeFeedCard {
   const HomeFeedCard(
       {required this.id,
       required this.kind,
       required this.detailId,
       required this.startedAt,
+      DateTime? sortAt,
       this.finishedAt,
       required this.title,
       required this.emoji,
@@ -21,9 +23,13 @@ class HomeFeedCard {
       required this.memberCount,
       required this.sources,
       required this.summaryAvailable,
-      required this.revision});
+      required this.revision})
+      : _sortAt = sortAt,
+        assert(sortAt != null || startedAt != null);
   final String id, kind, detailId, title, emoji, preview, status;
-  final DateTime startedAt;
+  final DateTime? startedAt;
+  final DateTime? _sortAt;
+  DateTime get sortAt => _sortAt ?? startedAt!;
   final DateTime? finishedAt;
   final String? homeStep;
   final bool starred, isLocked, hasTasks, summaryAvailable;
@@ -35,7 +41,8 @@ class HomeFeedCard {
     if (j['kind'] != 'episode' && j['kind'] != 'conversation') throw const FormatException('Invalid card kind');
     if (j['id'] is! String ||
         j['detail_id'] is! String ||
-        j['started_at'] is! String ||
+        j['sort_at'] is! String ||
+        (j['started_at'] != null && j['started_at'] is! String) ||
         j['title'] is! String ||
         j['preview'] is! String ||
         j['status'] is! String ||
@@ -48,7 +55,8 @@ class HomeFeedCard {
         id: j['id'],
         kind: j['kind'],
         detailId: j['detail_id'],
-        startedAt: DateTime.parse(j['started_at']),
+        sortAt: DateTime.parse(j['sort_at']),
+        startedAt: j['started_at'] == null ? null : DateTime.parse(j['started_at']),
         finishedAt: j['finished_at'] == null ? null : DateTime.parse(j['finished_at']),
         title: j['title'],
         emoji: j['emoji'] as String,
@@ -68,7 +76,8 @@ class HomeFeedCard {
         'id': id,
         'kind': kind,
         'detail_id': detailId,
-        'started_at': startedAt.toUtc().toIso8601String(),
+        'sort_at': sortAt.toUtc().toIso8601String(),
+        'started_at': startedAt?.toUtc().toIso8601String(),
         'finished_at': finishedAt?.toUtc().toIso8601String(),
         'title': title,
         'emoji': emoji,
@@ -89,6 +98,7 @@ class HomeFeedCard {
       kind: kind,
       detailId: detailId,
       startedAt: startedAt,
+      sortAt: sortAt,
       finishedAt: finishedAt,
       title: '',
       emoji: '',
@@ -105,7 +115,7 @@ class HomeFeedCard {
 
   ServerConversation displaySeed() => ServerConversation(
       id: kind == 'episode' ? id : detailId,
-      createdAt: startedAt,
+      createdAt: sortAt,
       startedAt: startedAt,
       finishedAt: finishedAt,
       structured: Structured(isLocked ? '' : title, '', emoji: emoji),
@@ -118,8 +128,8 @@ class HomeFeedCard {
   Episode episodeSeed() => Episode(
       id: detailId,
       live: false,
-      startedAt: startedAt,
-      lastActivityAt: finishedAt ?? startedAt,
+      startedAt: startedAt ?? sortAt,
+      lastActivityAt: finishedAt ?? startedAt ?? sortAt,
       title: isLocked ? '' : title,
       emoji: emoji);
 }

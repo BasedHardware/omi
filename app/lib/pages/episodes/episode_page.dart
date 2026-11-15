@@ -126,7 +126,9 @@ class EpisodePage extends StatelessWidget {
       Text(title, style: OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4)),
       const SizedBox(height: OmiSpacing.sm),
       Text(
-        '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
+        seedAwaiting
+            ? context.l10n.loading
+            : '${dates.weekdayDate(episode.startedAt)} · ${dates.timeRange(episode.startedAt, episode.lastActivityAt)} · ${OmiDuration.compact(duration, context.l10n)}',
         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
       ),
     ];

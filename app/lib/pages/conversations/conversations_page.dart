@@ -817,6 +817,7 @@ class _ConversationsPageState extends State<ConversationsPage>
           };
         }
         final cardById = <String, HomeFeedCard>{};
+        final unknownCardDay = DateTime(1);
         if (cardsOn) {
           conversationsByDate = {};
           final hidden = {...convoProvider.memoriesToDelete.keys, ...hiddenByLive};
@@ -825,7 +826,8 @@ class _ConversationsPageState extends State<ConversationsPage>
             if (card.kind == 'episode' && episodeLive && card.detailId == episodes?.live?.id) continue;
             final seed = card.displaySeed();
             cardById[seed.id] = card;
-            (conversationsByDate[localHomeDay(card.startedAt)] ??= []).add(seed);
+            (conversationsByDate[card.startedAt == null ? unknownCardDay : localHomeDay(card.startedAt!)] ??= [])
+                .add(seed);
           }
           convoProvider.setHomeCardSelectionSeeds([
             for (final card in feed.items)
@@ -1160,6 +1162,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                         return DateListItem(
                           key: ValueKey('date_${row.date.toIso8601String()}'),
                           date: row.date,
+                          label: cardsOn && row.date == unknownCardDay ? context.l10n.unknown : null,
                           isFirst: row.isFirst,
                         );
                       case _ConversationListRowKind.liveEpisode:

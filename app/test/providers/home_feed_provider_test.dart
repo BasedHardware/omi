@@ -78,6 +78,15 @@ void main() {
     expect(c.episodeSeed().conversationIds, isEmpty);
     expect(c.episodeSeed().members, isEmpty);
   });
+  test('unknown recording origin keeps pagination order without inventing detail timing', () {
+    final json = card(1).toJson()..['started_at'] = null;
+    final unknown = HomeFeedCard.fromJson(json);
+    expect(unknown.startedAt, isNull);
+    expect(unknown.sortAt, card(1).sortAt);
+    expect(unknown.displaySeed().startedAt, isNull);
+    expect(unknown.withoutText().toJson()['started_at'], isNull);
+    expect(unknown.toJson()['sort_at'], json['sort_at']);
+  });
   test('cache paints before remote; refresh discards old pages', () async {
     final remote = Completer<ApiResult<HomeFeedPage>>();
     final cache = MemoryCache()..value = [card(99, age: 30)];
@@ -165,6 +174,27 @@ void main() {
     expect(p.partial, true);
     p.dispose();
   });
+  for (final action in ['refresh', 'continuation', 'reconcile']) {
+    test('serving rollback restores compatibility after adoption during $action', () async {
+      var disabled = false;
+      final p = HomeFeedProvider(
+          owner: () => 'a',
+          cache: MemoryCache(),
+          now: () => DateTime.utc(2026, 11, 15),
+          fetch: ({cursor}) async => disabled
+              ? const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404))
+              : page([card(1, age: 8)], cursor: 'next', more: true));
+      await p.start();
+      expect(p.items, hasLength(1));
+      disabled = true;
+      if (action == 'refresh') await p.refresh();
+      if (action == 'continuation') await p.loadMore();
+      if (action == 'reconcile') await p.reconcileLoadedWindow();
+      expect(p.unsupported, true);
+      expect(p.items, isEmpty);
+      p.dispose();
+    });
+  }
   test('cache scoped per account and stale writer fenced', () async {
     final cache = HomeFeedCache();
     await cache.write('a', [card(1)], () => true);

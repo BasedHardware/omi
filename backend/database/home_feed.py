@@ -53,6 +53,7 @@ FEED_FIELDS = [
     'home_is_locked',
     'home_has_tasks',
     'home_finished_at',
+    'home_started_at',
 ]
 CONVERSATION_FIELDS = [
     'id',
@@ -570,7 +571,8 @@ def feed(
             'id': f'{kind}:{row["id"]}',
             'kind': kind,
             'detail_id': row['id'],
-            'started_at': row['home_sort_at'],
+            'sort_at': row['home_sort_at'],
+            'started_at': row.get('home_started_at'),
             'finished_at': row.get('home_finished_at'),
             'title': '' if locked else display.get('title', ''),
             'emoji': '' if locked else display.get('emoji', ''),

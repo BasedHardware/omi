@@ -567,11 +567,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Text(
-                OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                style: _metaStyle,
-                maxLines: 1,
-              ),
+              if (widget.homeCard == null || widget.homeCard!.startedAt != null)
+                Text(
+                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                  style: _metaStyle,
+                  maxLines: 1,
+                ),
               if (duration.isNotEmpty) Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
                 Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
@@ -648,7 +649,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        conversationRowTitle(context, widget.conversation),
+                        widget.homeCard != null &&
+                                widget.homeCard!.startedAt == null &&
+                                widget.conversation.structured.title.trim().isEmpty
+                            ? context.l10n.recording
+                            : conversationRowTitle(context, widget.conversation),
                         style: Theme.of(context).textTheme.titleMedium,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -729,6 +734,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
   String _getConversationDuration(BuildContext context) {
+    if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';
     int durationSeconds = widget.conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
     return OmiDuration.compact(durationSeconds, context.l10n);

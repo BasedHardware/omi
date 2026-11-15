@@ -182,6 +182,10 @@ def test_prepare_preserves_legacy_missing_started_at_and_late_import_order(store
     result = home_feed.feed('u', firestore_client=store)
     assert [item['detail_id'] for item in result['items']] == ['legacy', 'old']
     assert result['has_more'] is False
+    assert result['items'][0]['started_at'] is None
+    assert result['items'][0]['sort_at'] == AT
+    assert result['items'][1]['started_at'] == old['started_at']
+    assert 'recorded_start' not in store.docs['users/u/conversations/legacy']
 
 
 def test_projected_get_never_reads_members_transcripts_or_calls_generation(store, monkeypatch):
