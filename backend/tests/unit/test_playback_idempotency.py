@@ -576,7 +576,20 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['success', 'timeout', 'off', 'newer_marker', 'refused', 'saturated', 'error'])
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'success',
+        'timeout',
+        'off',
+        'newer_marker',
+        'refused',
+        'saturated',
+        'error',
+        'marker_retired_before_read',
+        'retire_error',
+    ],
+)
 async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, caplog, mode):
     import httpx
     import threading
@@ -598,8 +611,14 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     app.dependency_overrides[sync.auth.get_current_user_uid] = lambda: 'synthetic'
     row = {'audio_files': [], 'record_lane_owner': 'batch_live_v1', 'record_audio_closed': True}
     monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *a, **kw: dict(row))
-    monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: dict(row))
-    read = Mock(return_value='old')
+
+    def readback(*args, **kwargs):
+        if mode == 'marker_retired_before_read':
+            return {**row, 'audio_files': [dict(id='part', duration=1, chunk_timestamps=[100])]}
+        return dict(row)
+
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', readback)
+    read = Mock(return_value=None if mode == 'marker_retired_before_read' else 'old')
     monkeypatch.setattr(record_projection_rebuild, 'pending_version', read)
     release, finished = threading.Event(), threading.Event()
     marker = {'version': 'old'}
@@ -620,6 +639,9 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
 
     def retire(*args, observed_update_time):
         assert observed_update_time == 'old'
+        if mode == 'retire_error':
+            finished.set()
+            raise OSError('PRIVATE-SDK-DETAIL-CANARY')
         if marker.get('version') == observed_update_time:
             marker.clear()
         finished.set()
@@ -657,11 +679,18 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
             assert response.status_code == 200
             assert response.json()['audio_files'][0]['id'] == 'part'
             assert response.json()['audio_files'][0]['signed_url'] == 'signed'
-            assert marker == ({'version': 'new'} if mode == 'newer_marker' else {})
-            deletion.assert_called_once()
+            if mode == 'marker_retired_before_read':
+                deletion.assert_not_called()
+            else:
+                assert marker == (
+                    {'version': 'new'}
+                    if mode == 'newer_marker'
+                    else {'version': 'old'} if mode == 'retire_error' else {}
+                )
+                deletion.assert_called_once()
     finally:
         release.set()
-        if enabled and mode != 'saturated':
+        if enabled and mode not in {'saturated', 'marker_retired_before_read'}:
             assert await asyncio.to_thread(finished.wait, 5)
     assert read.call_count == int(enabled and mode != 'saturated')
-    assert discovery.call_count == int(enabled and mode != 'saturated')
+    assert discovery.call_count == int(enabled and mode not in {'saturated', 'marker_retired_before_read'})

@@ -14,11 +14,9 @@ def _refresh(uid: str, cid: str):
     from utils.batch_pipeline.record_projection_rebuild import rebuild
 
     version = debt.pending_version(uid, cid)
-    if version is None:
-        return None
     # Reuse cold repair's strict discovery, deletion/privacy transaction and CAS.
     # This is metadata only. Existing /urls demand handling builds real artifacts.
-    applied = rebuild(uid, cid)
+    applied = rebuild(uid, cid) if version is not None else None
     if applied is False:
         raise HTTPException(404, 'Conversation not found')
     row = conversations.get_conversation_raw_snapshot(
@@ -28,10 +26,23 @@ def _refresh(uid: str, cid: str):
         raise HTTPException(404, 'Conversation not found')
     if row.get('is_locked'):
         raise HTTPException(402, 'A paid plan is required to access this conversation.')
-    if not row.get('audio_files') and applied != 'no_objects':
+    # A background refresh may publish and retire debt after the route's first
+    # empty read. Always read back metadata, even if its marker is already gone.
+    if not row.get('audio_files') and version is not None and applied != 'no_objects':
         raise HTTPException(503, 'Playback metadata is not available yet')
     if applied is True:
-        debt.retire_observed(uid, cid, observed_update_time=version)
+        try:
+            debt.retire_observed(uid, cid, observed_update_time=version)
+        except Exception:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='sync',
+                from_mode='playback_metadata_debt',
+                to_mode='durable_repair',
+                reason='other',
+                outcome='degraded',
+            )
     # Incomplete or empty discovery retains debt. Newer marker versions always
     # survive the conditional delete; neither result has producer-token authority.
     return row
