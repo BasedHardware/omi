@@ -339,7 +339,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
         elif name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED':
-            assert flag['lifecycle'] == 'ops_kill'
+            assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
             assert 'read tolerance' in flag['notes']
