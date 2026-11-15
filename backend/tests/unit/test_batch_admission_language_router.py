@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from types import SimpleNamespace
+from time import time
 from unittest.mock import Mock
 
 import pytest
@@ -103,7 +104,7 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
         monkeypatch.setattr(intake, 'artifacts_for', staging)
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+            files=[UploadFile(filename=f'omi_{int(time()) - 10}.bin', file=BytesIO(b'\x00' * 10))],
             uid=UID,
             conversation_id=CID,
         )

@@ -4,7 +4,7 @@
 batch uploads beyond `SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS` (600 seconds
 by default) enter receipt recovery, including stamps only 601 seconds ahead.
 There is no 24-hour hole: clock error magnitude does not establish correctness.
-Within-tolerance skew, pre-2024 placement and deprecated V1 are unchanged.
+Unmarked within-tolerance skew, pre-2024 placement and deprecated V1 are unchanged.
 False/0/off/no restores typed HTTP 400 `invalid_capture_time` for new future
 admissions and the existing nonfuture estimated-upload behavior. The twelve dev/prod declarations are true, category `ops_kill`.
 No customer data migration or GPU image change is included.
@@ -20,7 +20,8 @@ It cannot merge with a real conversation or use its estimate for coverage.
 These marked estimates remain backfill, rather than taking fresh capacity.
 A marked future run needs the stable client-device header. An unmarked file
 needs no device/run identity: its owner and canonical single-file content HMAC
-identify it. Do not attach an unrelated explicit conversation target.
+identify it. Recovered/estimated uploads must not attach an explicit conversation
+target: the server refuses it instead of treating estimated time as binding proof.
 
 For unmarked files an immutable transaction freezes a separate offset under
 `users/{uid}/sync_assignment/capture-clock-<source-scope>`, making the full
@@ -69,7 +70,8 @@ Success uses the unchanged 202 schema: nonempty `job_id`, `status`,
 WAL uploaded, clears refusal markers and polls; authoritative completed status
 marks it synced and drains Pending. No success response is invented before
 durable custody/admission. Unsupported or unavailable processing keeps the
-phone copy on a non-success response. The server cannot retrieve a file an
+phone copy on a non-success response; estimated uploads return retryable 503
+instead of falling through to legacy processing without isolation. The server cannot retrieve a file an
 older app stopped retrying: the client must resend/requeue it. Manual Sync
 retries eligible rows now; otherwise the existing retry scheduler applies.
 

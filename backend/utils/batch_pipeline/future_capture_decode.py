@@ -1,4 +1,4 @@
-"""Strict future-only decoding; main's early-clock decoder remains untouched."""
+"""Isolated future/estimated-source decoding; main's early-clock decoder is unchanged."""
 
 import os
 from dataclasses import replace

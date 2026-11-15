@@ -945,14 +945,13 @@ async def sync_local_files_v2(
         future_capture = any(
             is_implausible_future_capture_time(get_timestamp_from_path(path), now=capture_received_at) for path in paths
         )
-        estimated_capture = (
-            future_capture_clamp_enabled()
-            and not isinstance(conversation_id, str)
-            and any(
-                capture_clock_run_from_path(path) and not is_early_capture_time(get_timestamp_from_path(path))
-                for path in paths
-            )
+        estimated_capture = future_capture_clamp_enabled() and any(
+            capture_clock_run_from_path(path) and not is_early_capture_time(get_timestamp_from_path(path))
+            for path in paths
         )
+        if estimated_capture and isinstance(conversation_id, str):
+            # An estimated wall clock cannot authorize a named temporal bind.
+            raise FutureCaptureRefused()
         capture_clock_policy = ESTIMATED_POLICY if estimated_capture else None
         if future_capture:
             future_paths = [
@@ -1155,6 +1154,18 @@ async def sync_local_files_v2(
             # A cohort/language/capacity decline retains the phone's files;
             # this policy can never fall through to a legacy reader.
             raise FutureCaptureRefused()
+
+        if estimated_capture:
+            # A repaired clock must retain its per-source isolation even when
+            # the batch cohort/language/capacity path declines this upload.
+            return JSONResponse(
+                status_code=503,
+                headers={'Retry-After': '30'},
+                content={
+                    'code': 'sync_batch_unavailable',
+                    'detail': 'Sync is temporarily unavailable; retain local audio',
+                },
+            )
 
         if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
             # A legacy job is created only on a young mode read: a request that read 'on'

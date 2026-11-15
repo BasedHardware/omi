@@ -211,3 +211,27 @@ def test_future_upload_cannot_fall_through_to_legacy(client, monkeypatch):
     )
     assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
     router.create_sync_job.assert_not_called()
+
+
+def test_requeued_estimate_cannot_fall_through_to_legacy(client, monkeypatch):
+    async def legacy(**kwargs):
+        return router.RecordUploadRoute.LEGACY
+
+    monkeypatch.setattr(router, 'registered_record_response', legacy)
+    stamp = int(router.time.time()) - 10
+    response = _post_sync(client, f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin')
+    assert response.status_code == 503 and response.json()['code'] == 'sync_batch_unavailable'
+    router.create_sync_job.assert_not_called()
+
+
+def test_requeued_estimate_refuses_explicit_conversation_binding(client):
+    stamp = int(router.time.time()) - 10
+    response = client.post(
+        '/v2/sync-local-files',
+        params={'conversation_id': 'neighbour'},
+        files=[
+            ('files', (f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin', b'\x00' * 32, 'application/octet-stream'))
+        ],
+    )
+    assert response.status_code == 400 and response.json()['code'] == 'invalid_capture_time'
+    router.create_sync_job.assert_not_called()
