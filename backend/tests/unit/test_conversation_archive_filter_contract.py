@@ -345,7 +345,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
     }
 
 
-def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
+def test_archive_filter_precedes_pagination_and_matches_count(conversations_db, monkeypatch):
     module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
@@ -390,6 +390,26 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         "offset",
         "stream",
     ]
+
+    # The actual slim query must keep the evidence needed by both old-client wires.
+    # Reuse this query fixture so the contract adds no heavy import/setup per test.
+    model = ModuleType('models.conversation')
+    model.Conversation = SimpleNamespace(model_fields={})
+    monkeypatch.setitem(sys.modules, 'models.conversation', model)
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    module.get_conversations_without_photos('user-1', list_fields_only=True)
+    assert {
+        'record_transcription_empty',
+        'record_projection_revision',
+        'home_transcription_pending_at',
+        'episode_transcription_pending_at',
+        'server_batch_audio_closed',
+        'server_batch_audio_start',
+        'server_batch_audio_end',
+        'record_audio_closed',
+        'record_upload_sessions',
+        'record_audio_partial',
+    } <= set(firestore.queries[-1].selected_fields)
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
