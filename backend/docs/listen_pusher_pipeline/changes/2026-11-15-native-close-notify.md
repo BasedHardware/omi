@@ -57,15 +57,26 @@ playback discovery in the drain. Socket cleanup may wait up to its existing tota
 three-second handoff budget after drain ownership is settled; the audio drain
 never awaits discovery. `drain_refresh` times actual background discovery.
 
-The authenticated audio URL reader distinguishes an empty batch projection with
-outstanding durable debt with the existing modelled field `poll_after_ms=5000`.
-The real FastAPI route/response-model test verifies this survives serialization.
-Current mobile and desktop decode this field but stop on an empty list; clients
-need a follow-up to poll an empty projection with this hint. No fake file/URL is
-emitted to work around their no-audio guard.
-Each empty batch URL poll adds one marker point read; no collection scan is added.
-An unavailable debt read also returns pending. Confirmed absent debt retains the
-existing empty-audio response. The reader never manufactures an audio URL.
+The authenticated audio URL reader repairs an empty batch projection with
+outstanding debt on demand. It reuses strict cold metadata discovery, owner
+privacy checks and projection CAS, then the existing `/urls` playback artifact
+lookup/enqueue path (DEC-BTR-004). Successful repair returns real `audio_files`
+on the first open. Only the observed marker version can be retired; newer debt
+survives. Incomplete/empty discovery retains debt.
+
+The request waits at most eight seconds on the existing two-thread metadata
+executor, with zero queued calls. A timed-out worker may finish later, bounded
+by those two slots. Saturation and unknown storage/database failures return503;
+privacy/deletion refusals return404. Only timeout returns the existing modelled
+`poll_after_ms=5000` with an empty list. Shipped mobile/desktop clients can still
+show no audio on that timeout, and a desktop which skips the request cannot use
+request-side repair. No fake file or URL is emitted.
+
+One pending-marker point read is followed, only when debt exists, by the existing
+strict rebuild's owner/discovery/privacy/CAS reads and a metadata readback; a
+successful closing repair adds one conditional delete. No background playback
+artifact is built merely because the recording seals. Switch-off adds none of
+this request IO and retains the old empty response.
 
 ## Intake wake, rollout and rollback
 
@@ -167,3 +178,26 @@ it never stops acknowledging marker versions after the first128 recordings.
 An evicted completed ACK is re-proven by a committed marker write, rather than
 returning a permanent failed-close result. All150 recorded marker versions are
 passed to background retirement in its focused regression.
+
+## Disconnect follow-up and fast retirement proof
+
+Disconnect finalization runs after the listen receiver/tick has drained. It
+must not start prepare there: inactive sessions use the existing flush and
+socket-end receipt/token drain. An active Cloud Tasks close whose prepare was
+sent but whose final watermark never arrived remains fenced even on clean EOF.
+EOF cannot prove that listen flushed every accepted byte. This is the lead's
+explicit no-custody-relaxation ruling; no teardown handshake is added.
+
+`event=record_close_uncommitted_disconnect records=N` logs one content-free
+aggregate per affected socket for release readback. Fresh repair still selects
+its `record_pending` job and requires producer/audio proof before clearing any
+fence. In the healthy path the susceptible window is one prepare round trip,
+up to the one-second relay tick and commit/custody handoff. Network failures,
+backpressure or lost ACKs can extend it: there is no time-based custody expiry.
+
+Fast CI now drives five real receipt/token/seal closes through production's
+retirement call site with a two-record wire bound; failure to retire blocks the
+third close. The150-close stress proof remains supplementary documentation.
+Every new closing upload batch invalidates completed metadata/debt ACK state;
+only pathless close scans deduplicate. A first refresh retiring its marker
+before a second upload cannot suppress the second batch's repair request.
