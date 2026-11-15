@@ -1659,12 +1659,17 @@ async def test_quiet_final_billing_window_releases_shadow_hold_without_usage_wri
 
 @pytest.mark.anyio
 @pytest.mark.parametrize('route', ['cloud_tasks', 'queued', 'blocked_byok'])
-async def test_durable_finalization_also_notifies_capture_close_without_pusher_finalizer(monkeypatch, route):
+@pytest.mark.parametrize('notify_failure', [False, True])
+async def test_durable_finalization_also_notifies_capture_close_without_pusher_finalizer(
+    monkeypatch, route, notify_failure
+):
+    fallback = MagicMock()
+    monkeypatch.setattr(conversation_module, 'record_fallback', fallback)
     host = SimpleNamespace(
         request=SimpleNamespace(uid='synthetic'),
         client_kind='omi',
         request_conversation_processing=AsyncMock(),
-        request_recording_close=AsyncMock(),
+        request_recording_close=AsyncMock(side_effect=OSError('private path') if notify_failure else None),
         persistence=SimpleNamespace(call=AsyncMock(return_value={'route': route})),
     )
     monkeypatch.setattr(conversation_module, 'get_byok_keys', lambda: None)
@@ -1673,3 +1678,6 @@ async def test_durable_finalization_also_notifies_capture_close_without_pusher_f
     assert await controller.schedule_finalization('conversation-1')
     host.request_recording_close.assert_awaited_once_with('conversation-1')
     host.request_conversation_processing.assert_not_awaited()
+    assert fallback.call_count == int(notify_failure)
+    if notify_failure:
+        assert fallback.call_args.kwargs['reason'] == 'unavailable'

@@ -117,7 +117,7 @@ def _refresh(uid: str, cid: str):
             from utils.observability.fallback import record_fallback
 
             record_fallback(
-                component='sync',
+                component='audio_merge',
                 from_mode='playback_metadata_debt',
                 to_mode='durable_repair',
                 reason='other',

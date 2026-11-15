@@ -350,6 +350,14 @@ class LiveConversationController:
                     await close_recording(conversation_id)
                 except Exception:
                     logger.warning('event=record_close_notify outcome=deferred')
+                    record_fallback(
+                        component='pusher',
+                        from_mode='record_close_v2',
+                        to_mode='deferred_record_close',
+                        reason='unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
         if route == 'pusher':
             if not self.host.request_conversation_processing:
                 return False
