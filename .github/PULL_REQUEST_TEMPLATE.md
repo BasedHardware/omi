@@ -16,6 +16,15 @@
      path counts as verification; compiling or lint passing does not.
      If something could not be verified, say so explicitly. -->
 
+## State this change writes
+
+<!-- List new/changed durable fields, queues, GCS prefixes and flags, or "none".
+     Update backend/deploy/state_readers.yaml; name EVERY reading deployment
+     (including independent GKE/GPU workers), the minimum commit/release each
+     needs, rollout order, and the kill-switch flag plus service that honors it.
+     Admission off does not stop readers draining already accepted work.
+     Verify: cd backend && pytest tests/unit/test_state_readers_registry.py -->
+
 ## Tests
 
 <!-- Bug fix: point to the regression test that would have caught the bug.
