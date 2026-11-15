@@ -1,0 +1,78 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/services/wals/upload_trace.dart';
+
+void main() {
+  late DateTime clock;
+  late UploadTrace trace;
+
+  DateTime at(int seconds) => DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true);
+
+  setUp(() {
+    clock = at(2000);
+    trace = UploadTrace(now: () => clock);
+  });
+
+  test('a first attempt with no gate reports none and one attempt', () {
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    expect(trace.take('/a.bin'), 'sealed=1990;first=2000;gate=none;attempts=1');
+    expect(trace.take('/a.bin'), isNull, reason: 'taken once');
+  });
+
+  test('a gate that closed after the seal is named; later attempts keep the first attempt time', () {
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    trace.take('/a.bin');
+    clock = at(2600);
+    trace.noteGate('rate_limited');
+    clock = at(4000);
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    expect(trace.take('/a.bin'), 'sealed=1990;first=2000;gate=rate_limited;attempts=2');
+  });
+
+  test('a gate from before the file was sealed did not hold it', () {
+    clock = at(1000);
+    trace.noteGate('background');
+    clock = at(2000);
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    expect(trace.take('/a.bin'), contains('gate=none'));
+  });
+
+  test('unknown labels are folded into other; a missing seal time sends nothing', () {
+    clock = at(2100);
+    trace.noteGate('something new');
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    expect(trace.take('/a.bin'), contains('gate=other'));
+    trace.prepare(firstFilePath: '/b.bin', oldestId: 'w2', sealedAtSeconds: 0);
+    expect(trace.take('/b.bin'), isNull);
+  });
+
+  test('an accepted upload starts a fresh count for that file', () {
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    trace.take('/a.bin');
+    trace.accepted('w1');
+    clock = at(3000);
+    trace.prepare(firstFilePath: '/a.bin', oldestId: 'w1', sealedAtSeconds: 1990);
+    expect(trace.take('/a.bin'), 'sealed=1990;first=3000;gate=none;attempts=1');
+  });
+
+  test('memory stays bounded', () {
+    for (var i = 0; i < 2000; i++) {
+      trace.prepare(firstFilePath: '/f$i.bin', oldestId: 'w$i', sealedAtSeconds: 1990);
+    }
+    expect(trace.take('/f0.bin'), isNull, reason: 'oldest parked headers were dropped');
+    expect(trace.take('/f1999.bin'), isNotNull);
+  });
+
+  test('every label the phone can send is one the server accepts', () {
+    expect(UploadTrace.gates, {
+      'none',
+      'rate_limited',
+      'auto_upload_off',
+      'background',
+      'retries_exhausted',
+      'in_flight',
+      'offline',
+      'server_hold',
+      'other',
+    });
+  });
+}

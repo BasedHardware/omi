@@ -166,6 +166,14 @@ def test_recap_dashboard_row_and_no_grid_overlap():
         for expr in _cloud_monitoring_exprs(panel['targets']):
             assert _referenced_log_metrics(expr) <= provisioned
     assert panels[0]['fieldConfig']['defaults']['custom']['stacking']['mode'] == 'none'
+    generation, reasons, delivery = _cloud_monitoring_exprs(panels[0]['targets'])
+    assert 'sum by (reason, error_type)' in reasons
+    assert 'reason="generation_error"' not in reasons, 'all reasons, including unlabelled legacy failures, must remain'
+    assert '"reason", "unspecified reason", "reason", "^$"' in reasons
+    assert '"error_type", "unlabelled error", "error_type", "^$"' in reasons
+    assert 'error_type!="DailySummaryDeliveryError"' in reasons
+    assert 'error_type="DailySummaryDeliveryError"' in delivery
+    assert 'delivery only' in delivery
     assert panels[-1]['targets'][0]['instant'] is True
     assert 'max' not in panels[-1]['fieldConfig']['defaults'], 'cohort age must not inherit a percent clamp'
     for panel in panels[2:]:

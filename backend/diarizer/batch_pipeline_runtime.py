@@ -26,6 +26,7 @@ from prometheus_client.registry import Collector
 from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
+from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
 from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
@@ -144,6 +145,8 @@ def health_server(
         registry.register(collector)
     if cap_dispatch_enabled() or offline_enforcement_enabled('batch'):
         registry.register(AUDIO_SECONDS)
+    for collector in ALLOWANCE_WATCH_COLLECTORS:  # batch_gpu observations live in the default registry
+        registry.register(collector)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)

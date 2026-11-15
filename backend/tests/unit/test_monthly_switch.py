@@ -13,6 +13,9 @@ os.environ.setdefault(
 )
 
 from models.users import PlanType  # noqa: E402
+
+# switch() imports this lazily; preload it before per-test call CPU accounting.
+import utils.billing_recovery as _billing_recovery  # noqa: E402,F401
 import utils.monthly_switch as ms  # noqa: E402
 
 NOW = 1_793_000_000
