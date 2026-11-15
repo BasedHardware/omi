@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  cloud_run_scope:
+    description: 'all or consumers; consumers excludes integration from every mutation and release expectation'
+    required: false
+    default: all
   integration_canary:
     description: 'Exact SCA-2283 ruled source only: preserve serving ops and stage integration 0/25/100 under caller lock'
     required: false
@@ -163,6 +167,18 @@ runs:
         SERVICE_IMAGES: ${{ inputs.service_images }}
       run: |
         set -euo pipefail
+        case "${{ inputs.cloud_run_scope }}" in
+          all) ;;
+          consumers)
+            [[ "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
+               "${{ inputs.runtime_env }}" == prod && "${{ inputs.deploy_targets }}" == cloud-run-only &&
+               "${{ inputs.deploy_gateway }}" == false && "${{ inputs.service }}" == backend &&
+               "${{ inputs.integration_canary }}" == false &&
+               "${{ inputs.project_id }}" == based-hardware && "${{ inputs.region }}" == us-central1 ]] || {
+              echo 'Invalid consumers-only boundary.' >&2; exit 1
+            } ;;
+          *) echo 'Invalid cloud_run_scope.' >&2; exit 1 ;;
+        esac
         if [[ "${{ inputs.integration_canary }}" != false ]]; then
           [[ "${{ inputs.integration_canary }}" == true &&
              "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
@@ -252,6 +268,16 @@ runs:
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
 
+    - name: Bind selected Cloud Run services
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "${{ inputs.cloud_run_scope }}" in
+          all) printf 'CLOUD_RUN_SCOPE_ARGS=\n' >> "$GITHUB_ENV" ;;
+          consumers) printf 'CLOUD_RUN_SCOPE_ARGS=--cloud-run-scope consumers\n' >> "$GITHUB_ENV" ;;
+          *) exit 1 ;;
+        esac
+
     - name: Validate GCP auth inputs
       shell: bash
       env:
@@ -328,6 +354,7 @@ runs:
         set -euo pipefail
         python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_service_images.py" \
           --service-images "$SERVICE_IMAGES" \
+          --cloud-run-scope "${{ inputs.cloud_run_scope }}" \
           --project "${{ inputs.project_id }}" \
           --short-sha "$SHORT_SHA" \
           --admitted-sha "${{ inputs.admitted_sha }}" \
@@ -339,6 +366,14 @@ runs:
     - name: Install Python deps for deploy scripts
       shell: bash
       run: python3 -m pip install -q pyyaml
+
+    - name: Capture omitted integration identity before mutations
+      id: omitted-integration
+      if: ${{ inputs.cloud_run_scope == 'consumers' }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_omitted_integration.py" capture \
+          --state "$RUNNER_TEMP/omitted-integration.json"
 
     - name: Preflight required deployment secrets before mutations
       id: preflight-required-secrets
@@ -773,7 +808,7 @@ runs:
         --migrate-legacy-public-binding backend
         --migrate-legacy-public-binding backend-sync
         --migrate-legacy-public-binding backend-sync-backfill
-        --migrate-legacy-public-binding backend-integration
+        ${{ inputs.cloud_run_scope == 'all' && '--migrate-legacy-public-binding backend-integration' || '' }}
 
     - name: Check development Cloud Run runtime bindings
       if: ${{ inputs.deploy_profile == 'auto-dev' }}
@@ -1067,7 +1102,7 @@ runs:
           --min-backoff=5s --max-backoff=300s
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
-      if: ${{ inputs.integration_canary != 'true' }}
+      if: ${{ inputs.cloud_run_scope == 'all' && inputs.integration_canary != 'true' }}
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -1103,6 +1138,7 @@ runs:
 
     - name: Capture ${{ inputs.service }}-integration revision
       id: capture-backend-integration-revision
+      if: ${{ inputs.cloud_run_scope == 'all' }}
       shell: bash
       run: |
         echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
@@ -1116,7 +1152,7 @@ runs:
         for service in backend-sync backend-sync-backfill backend-integration; do
           # The CAS candidate already retains the serving collector exactly;
           # reattaching it here would create a second integration revision.
-          if [[ "$service" == backend-integration && "${{ inputs.integration_canary }}" == true ]]; then continue; fi
+          if [[ "$service" == backend-integration && ("${{ inputs.integration_canary }}" == true || "${{ inputs.cloud_run_scope }}" == consumers) ]]; then continue; fi
           ingress=backend-1
           if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
           args=(
@@ -1144,7 +1180,7 @@ runs:
           --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
           --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
           --wait-revision-ready backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }} \
-          --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+          ${{ inputs.cloud_run_scope == 'all' && format('--wait-revision-ready backend-integration={0}', steps.capture-backend-integration-revision.outputs.revision) || '' }}
 
     - name: Capture exact no-traffic candidate URLs
       id: candidate-urls
@@ -1211,7 +1247,7 @@ runs:
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
           "${canary_args[@]}" \
-          --check-live-cloud-run
+          --check-live-cloud-run ${CLOUD_RUN_SCOPE_ARGS:-}
 
     - name: Report live Cloud Run env drift from manifest
       shell: bash
@@ -1222,6 +1258,7 @@ runs:
           --region ${{ inputs.region }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --rendered-state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          ${{ inputs.cloud_run_scope == 'consumers' && '--service backend --service backend-sync --service backend-sync-backfill' || '' }} \
           --summary-file "$GITHUB_STEP_SUMMARY"
 
     - name: Gate candidate revisions with the acceptance manifest
@@ -1279,7 +1316,7 @@ runs:
       id: verify-cloud-run-candidate
       shell: bash
       run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" ${CLOUD_RUN_SCOPE_ARGS:-} \
           --candidate \
           --cloud-run-only \
           --commit-sha "${{ inputs.admitted_sha }}" \
@@ -1381,7 +1418,7 @@ runs:
       if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
       shell: bash
       run: |
-        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" ${CLOUD_RUN_SCOPE_ARGS:-} \
           --candidate \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
@@ -1403,7 +1440,7 @@ runs:
           --service backend \
           --service backend-sync \
           --service backend-sync-backfill \
-          --service backend-integration \
+          ${{ inputs.cloud_run_scope == 'all' && '--service backend-integration' || '' }} \
           --output ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json' || 'artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json' }}
 
     - name: Verify validated revisions are still current
@@ -1412,7 +1449,16 @@ runs:
         test "$(gcloud run services describe backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
         test "$(gcloud run services describe backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
         test "$(gcloud run services describe backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.sync-backfill.outputs.revision }}"
-        test "$(gcloud run services describe backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+        if [[ "${{ inputs.cloud_run_scope }}" == all ]]; then
+          test "$(gcloud run services describe backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+        fi
+
+    - name: Verify omitted integration remains unchanged before promotion
+      if: ${{ inputs.cloud_run_scope == 'consumers' }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_omitted_integration.py" verify \
+          --state "$RUNNER_TEMP/omitted-integration.json"
 
     - name: Shift Cloud Run traffic to validated revisions
       id: shift-cloud-run-traffic
@@ -1425,7 +1471,7 @@ runs:
         if [[ "${{ inputs.integration_canary }}" == true ]]; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" promote \
             --state "$RUNNER_TEMP/integration-canary-private.json"
-        else
+        elif [[ "${{ inputs.cloud_run_scope }}" == all ]]; then
           gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
         fi
 
@@ -1437,7 +1483,7 @@ runs:
         if [[ "${{ inputs.deploy_profile }}" == "manual" && "${{ inputs.deploy_targets }}" == "cloud-run-only" ]]; then
           CLOUD_RUN_ONLY="--cloud-run-only"
         fi
-        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" ${CLOUD_RUN_SCOPE_ARGS:-} \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
           ${{ steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
@@ -1530,6 +1576,13 @@ runs:
           --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
         exit "$rollback_rc"
 
+    - name: Verify omitted integration remains unchanged after rollout or recovery
+      if: ${{ always() && inputs.cloud_run_scope == 'consumers' && steps.omitted-integration.outcome == 'success' }}
+      shell: bash
+      run: |
+        python3 "$DEPLOY_CONTROL_SCRIPTS/verify_omitted_integration.py" verify \
+          --state "$RUNNER_TEMP/omitted-integration.json"
+
     - name: Record ruled integration canary metadata receipt
       if: ${{ always() && inputs.integration_canary == 'true' }}
       shell: bash
@@ -1573,8 +1626,10 @@ runs:
             --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }}
             --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }}
             --expect-cloud-run-traffic backend-sync-backfill=${{ steps.sync-backfill.outputs.revision }}
-            --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
           )
+          if [[ "${{ inputs.cloud_run_scope }}" == all ]]; then
+            expected_traffic+=(--expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }})
+          fi
         fi
         report_args=(
           --env ${{ inputs.runtime_env }}
@@ -1584,8 +1639,10 @@ runs:
           --cloud-run-service backend
           --cloud-run-service backend-sync
           --cloud-run-service backend-sync-backfill
-          --cloud-run-service backend-integration
         )
+        if [[ "${{ inputs.cloud_run_scope }}" == all ]]; then
+          report_args+=(--cloud-run-service backend-integration)
+        fi
         if [[ "${{ inputs.deploy_profile }}" == "auto-dev" ]]; then
           python3 "$DEPLOY_CONTROL_SCRIPTS/deploy_status_report.py" \
             "${report_args[@]}" \

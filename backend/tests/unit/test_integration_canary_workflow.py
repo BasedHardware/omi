@@ -241,6 +241,7 @@ def step_script(name, values=None):
     script = [s['run'] for s in action['runs']['steps'] if s['name'] == name][-1]
     context = {
         'inputs.integration_canary': 'true',
+        'inputs.cloud_run_scope': 'all',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',

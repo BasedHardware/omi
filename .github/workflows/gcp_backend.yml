@@ -145,12 +145,15 @@ env:
 
 jobs:
   validate-production-boundary:
+    outputs:
+      cloud_run_scope: ${{ steps.boundary.outputs.cloud_run_scope }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only'
     runs-on: ubuntu-latest
     steps:
       - name: Reject unsupported production deployment boundary before side effects
+        id: boundary
         env:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
@@ -162,6 +165,26 @@ jobs:
           BREAK_GLASS_LOCK: ${{ github.event.inputs.break_glass_lock }}
         run: |
           set -euo pipefail
+          CLOUD_RUN_SCOPE="$(python3 - <<'PYTHON'
+          import os, re
+          tokens = [t for t in re.split(r'[\s,]+', os.environ.get('SERVICE_IMAGES', '').strip()) if t.startswith('scope=')]
+          if tokens not in ([], ['scope=consumers']):
+              raise SystemExit('Invalid or repeated service scope selector.')
+          print('consumers' if tokens else 'all')
+          PYTHON
+          )"
+          printf 'cloud_run_scope=%s\n' "$CLOUD_RUN_SCOPE" >> "$GITHUB_OUTPUT"
+          case "$CLOUD_RUN_SCOPE" in
+            ''|all) ;;
+            consumers)
+              [[ "$WORKFLOW_MODE" == deploy && "$DEPLOY_ENVIRONMENT" == prod &&
+                 "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
+                 "$BREAK_GLASS_LOCK" != true ]] || {
+                echo 'Consumers-only requires normally admitted production Cloud Run deploy.' >&2
+                exit 1
+              } ;;
+            *) echo 'Invalid cloud_run_scope.' >&2; exit 1 ;;
+          esac
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
                 "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
             [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
@@ -745,7 +768,7 @@ jobs:
         with:
           deploy_profile: manual
           # SCA-2283 captain ruling 01a1dca2: finite exact-source path only.
-          integration_canary: ${{ github.event.inputs.environment == 'prod' && needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4' && 'true' || 'false' }}
+          integration_canary: ${{ needs.validate-production-boundary.outputs.cloud_run_scope != 'consumers' && github.event.inputs.environment == 'prod' && needs.firestore_readiness.outputs.admitted_sha == '0714c5198be8f0183c8fd7dd3810d53c91af17a4' && 'true' || 'false' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.
@@ -753,6 +776,7 @@ jobs:
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
+          cloud_run_scope: ${{ needs.validate-production-boundary.outputs.cloud_run_scope || 'all' }}
           service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
           # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).

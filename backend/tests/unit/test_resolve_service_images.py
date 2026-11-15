@@ -167,7 +167,7 @@ def test_cli_writes_github_outputs(tmp_path, capsys):
     )
     assert code == 0
     assert f'backend=gcr.io/{PROJECT}/backend:aaaaaaa\n' in output.read_text()
-    assert 'none (every service ships its current image)' in capsys.readouterr().out
+    assert 'none (selected services ship the admitted fat image)' in capsys.readouterr().out
     assert (
         resolver.main(
             ['--service-images', 'nope', *['--project', PROJECT, '--short-sha', 'a' * 7]]

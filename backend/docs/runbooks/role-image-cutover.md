@@ -44,6 +44,40 @@ fat image, and records the per-service refs in its evidence.
 Rollback: redeploy with `service_images` blank (or omit the service). The fat
 image of the same SHA is still built and pushed by every deploy.
 
+### Production delivery consumers without integration
+
+`service_images` selects an image override, **not** a deployment service set.
+Omitted pairs resolve to the admitted fat image. To deploy only `backend`,
+`backend-sync` and `backend-sync-backfill`, use the existing protected
+`gcp_backend.yml` dispatch with `mode=deploy`, `environment=prod`,
+`deploy_targets=cloud-run-only` and the explicit `scope=consumers` token in `service_images` (alongside any
+consumer image pairs).
+The workflow input description retains its legacy image wording; omission alone
+does not select services. Use one normally admitted `release_sha`; optional consumer role digests must
+still prove that exact source and role. Eligibility, Firestore readiness,
+environment approval, workflow concurrency, native preflight, candidate and
+serving checks remain required. This option is unavailable to automatic/dev,
+build-only, gateway or integration-canary runs.
+
+The selection excludes integration from deployment, public-binding migration,
+collector attachment, traffic moves and the rollback snapshot. Its image
+override is rejected rather than silently ignored. Before any mutation, before
+promotion, and after success/failure/cancellation, a bounded metadata-only guard
+checks the omitted service's original UID, resource version, complete template,
+requested traffic and observed traffic fingerprint. It requires the retained
+`backend-integration-provfix-off1114` revision to serve 100%; a failed latest
+template does not justify changing the serving service. Only fingerprints and
+run identity are persisted, not configuration or secrets. Any read failure or
+drift refuses; the guard never repairs the excluded service.
+
+Candidate/serving receipts explicitly cover the three selected consumers;
+live env comparison follows that scope while static manifest/workflow checks
+remain complete. This is not an integration canary, a 100/20 composition, a
+new-pin integration admission, or an operator continuation for integration.
+Those require their separate reviewed controller extension. Release owns the
+consumer health windows and +20/+30 serving readbacks, then listen/pusher and
+integration-last sequencing. No deployment is authorized by this documentation.
+
 ## B3 cutover order (lead-owned deploys)
 
 Every step takes a digest that the **build-only** run of the same admitted

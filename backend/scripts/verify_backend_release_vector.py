@@ -66,6 +66,7 @@ def build_expectation(
     short_sha: str | None = None,
     expected_image: str | None = None,
     service_images: Mapping[str, str] | None = None,
+    cloud_run_scope: str = 'all',
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -79,6 +80,9 @@ def build_expectation(
     actually deployed; when omitted it falls back to the seven-character prefix
     for local/manual invocations.
     """
+    if cloud_run_scope not in {'all', 'consumers'}:
+        raise ValueError('invalid Cloud Run scope')
+    selected_services = CLOUD_RUN_SERVICES if cloud_run_scope == 'all' else CLOUD_RUN_SERVICES[:3]
     normalized_sha = commit_sha.strip().lower()
     if len(normalized_sha) < 7 or any(char not in '0123456789abcdef' for char in normalized_sha):
         raise ValueError('commit SHA must be a hexadecimal value with at least seven characters')
@@ -98,6 +102,8 @@ def build_expectation(
     if expected_image is not None and not expected_image.strip():
         raise ValueError('expected image must not be empty')
     service_images = dict(service_images or {})
+    if cloud_run_scope == 'consumers' and set(service_images) - set(selected_services):
+        raise ValueError('consumers vector includes an excluded service image')
     unknown = sorted(set(service_images) - {*CLOUD_RUN_SERVICES, LISTENER_SERVICE})
     if unknown:
         raise ValueError(f'service images name unknown services: {unknown}')
@@ -115,7 +121,7 @@ def build_expectation(
         image=(
             expected_image.strip() if expected_image is not None else f'gcr.io/{project}/backend:{resolved_short_sha}'
         ),
-        revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
+        revisions={service: f'{service}-{suffix}' for service in selected_services},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
         service_images=service_images,
@@ -139,7 +145,7 @@ def build_read_only_commands(
             f'--region={expectation.region}',
             '--format=json',
         ]
-        for service in CLOUD_RUN_SERVICES
+        for service in expectation.revisions
     }
     if include_revision_documents:
         commands.update(
@@ -154,7 +160,7 @@ def build_read_only_commands(
                     f'--region={expectation.region}',
                     '--format=json',
                 ]
-                for service in CLOUD_RUN_SERVICES
+                for service in expectation.revisions
             }
         )
     if include_listener:
@@ -498,7 +504,7 @@ def evidence(
     latest_ready_poll: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
-    for service in CLOUD_RUN_SERVICES:
+    for service in expectation.revisions:
         document = documents.get(f'cloud_run/{service}', {})
         status = _mapping(document.get('status'))
         template_spec = _mapping(_mapping(_mapping(document.get('spec')).get('template')).get('spec'))
@@ -675,8 +681,11 @@ def main() -> int:
         help='serving mode: seconds between latestReadyRevisionName convergence polls',
     )
     parser.add_argument('--evidence-path', type=Path)
+    parser.add_argument('--cloud-run-scope', choices=('all', 'consumers'), default='all')
     args = parser.parse_args()
     try:
+        if args.cloud_run_scope == 'consumers' and not args.cloud_run_only:
+            raise ValueError('consumers scope requires --cloud-run-only')
         if args.latest_ready_wait_seconds < 0:
             raise ValueError('latest-ready wait must not be negative')
         if args.latest_ready_poll_interval_seconds <= 0:
@@ -691,6 +700,7 @@ def main() -> int:
             environment=args.environment,
             expected_image=args.expected_image,
             service_images=dict(item.split('=', 1) for item in args.service_image),
+            cloud_run_scope=args.cloud_run_scope,
         )
         commands = build_read_only_commands(
             expectation,

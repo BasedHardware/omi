@@ -79,9 +79,23 @@ def resolve(
     base_service: str = "backend",
     registry: dict[str, Any] | None = None,
     inspect: Inspector = inspect_image_config,
+    cloud_run_scope: str = "all",
 ) -> dict[str, str]:
     registry = registry or json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
-    pairs = parse_pairs(raw)
+    tokens = [item for item in re.split(r"[\s,]+", raw.strip()) if item]
+    selectors = [item for item in tokens if item.startswith("scope=")]
+    if selectors not in ([], ["scope=consumers"]):
+        raise ServiceImageError("invalid or repeated service scope selector")
+    selected = "consumers" if selectors else "all"
+    if selected != cloud_run_scope:
+        raise ServiceImageError("service scope selector does not match admitted workflow scope")
+    pairs = parse_pairs(" ".join(item for item in tokens if not item.startswith("scope=")))
+    if cloud_run_scope not in {"all", "consumers"}:
+        raise ServiceImageError("invalid Cloud Run scope")
+    if cloud_run_scope == "consumers" and (
+        deploy_targets != "cloud-run-only" or deploy_gateway or set(pairs) - set(CLOUD_RUN_SERVICES[:3])
+    ):
+        raise ServiceImageError("consumers scope accepts only delivery consumer image overrides")
     if "backend-listen" in pairs and deploy_targets != "all":
         raise ServiceImageError("backend-listen deploys only with deploy_targets=all")
     if "llm-gateway" in pairs and not deploy_gateway:
@@ -103,6 +117,8 @@ def resolve(
     fat = f"gcr.io/{project}/{base_service}"
     outputs: dict[str, str] = {}
     for service in CLOUD_RUN_SERVICES:
+        if cloud_run_scope == "consumers" and service == "backend-integration":
+            continue
         outputs[service.replace("-", "_")] = pairs.get(service, f"{fat}:{short_sha}")
     listen = pairs.get("backend-listen")
     outputs["backend_listen"] = listen or f"{fat}:{short_sha}"
@@ -126,6 +142,7 @@ def resolve(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--service-images", default="")
+    parser.add_argument("--cloud-run-scope", choices=("all", "consumers"), default="all")
     parser.add_argument("--project", required=True)
     parser.add_argument("--short-sha", required=True)
     parser.add_argument("--admitted-sha", required=True)
@@ -143,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             deploy_targets=args.deploy_targets,
             deploy_gateway=args.deploy_gateway == "true",
             base_service=args.base_service,
+            cloud_run_scope=args.cloud_run_scope,
         )
     except ServiceImageError as error:
         print(f"ERROR: {error}", file=sys.stderr)
@@ -152,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
         with args.github_output.open("a", encoding="utf-8") as handle:
             handle.write(lines)
     print(lines, end="")
-    print(f"Role-image opt-in: {outputs['opted_in'] or 'none (every service ships its current image)'}")
+    print(f"Role-image opt-in: {outputs['opted_in'] or 'none (selected services ship the admitted fat image)'}")
     return 0
 
 

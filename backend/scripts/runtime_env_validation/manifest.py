@@ -670,7 +670,10 @@ def validate_runtime_env(
     strict_provisional: bool = False,
     integration_canary_state: Path | None = None,
     integration_canary_source: str | None = None,
+    cloud_run_scope: str = 'all',
 ) -> list[ValidationError]:
+    if cloud_run_scope not in {'all', 'consumers'} or (cloud_run_scope == 'consumers' and env != 'prod'):
+        return [ValidationError(env, 'invalid Cloud Run validation scope')]
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
     if integration_canary_state or integration_canary_source:
@@ -719,12 +722,18 @@ def validate_runtime_env(
         )
 
     cloud_run_state = None
+    live_config = env_config
+    if cloud_run_scope == 'consumers':
+        # All static/workflow contracts above remain full-manifest checks. Only
+        # the live comparison follows the explicit deployment mutation set.
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'].pop('backend-integration', None)
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:
-        cloud_run_state = _fetch_live_cloud_run_state(env_config)
+        cloud_run_state = _fetch_live_cloud_run_state(live_config)
 
     if cloud_run_state is not None:
-        errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
-        errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
+        errors.extend(_validate_cloud_run(live_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_sync_ledger_fence_mode(live_config, cloud_run_state))
     return errors

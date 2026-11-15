@@ -134,6 +134,7 @@ def main() -> int:
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument('--integration-canary-state', type=Path)
     parser.add_argument('--integration-canary-source')
+    parser.add_argument('--cloud-run-scope', choices=('all', 'consumers'), default='all')
     parser.add_argument(
         '--cloud-run-state',
         type=Path,
@@ -171,6 +172,7 @@ def main() -> int:
         strict_provisional=args.strict_provisional,
         integration_canary_state=args.integration_canary_state,
         integration_canary_source=args.integration_canary_source,
+        cloud_run_scope=args.cloud_run_scope,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)
