@@ -19,6 +19,7 @@ os.environ.setdefault('OPENAI_API_KEY', 'test-openai-key-not-real')
 
 from config import episodes as config
 from utils.episodes import composer, home_read, metrics, service
+from utils.sync import processing_hold
 
 UID = 'composer-uid'
 T0 = datetime(2026, 10, 30, 7, 56, tzinfo=timezone.utc)  # 14:56 in Asia/Bangkok
@@ -1790,6 +1791,59 @@ def test_receipt_promotes_real_deferred_wait_without_a_home_request(store, monke
     composer._deferred[UID, 'ep1'] = (0, c)
     composer._schedule_due()
     assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1', 'c2']
+
+
+@pytest.mark.parametrize('quiet_seconds', [120, 300, 600])
+@pytest.mark.parametrize('notes_finish_first', [False, True])
+def test_transcript_receipt_and_notes_hold_overlap_without_another_paid_compose(
+    store, monkeypatch, quiet_seconds, notes_finish_first
+):
+    _schedule_seam(store, monkeypatch)
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', str(quiet_seconds))
+    calls = []
+    c = _c(calls=calls)
+    member = store.rows['c2']
+    member.update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.schedule(UID, 'ep1', collaborators=c)
+    assert not calls and store.episode['compose_transcript_wait_until']
+
+    # Projection commits speech once, starting both independent quiet windows.
+    arrived = datetime.now(timezone.utc).timestamp()
+    member['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'Late launch details.'}]
+    member[processing_hold.FIELD] = processing_hold.activity_patch(member, arrived)
+    obligation = {'first_pending_at': arrived}
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds - 1) == (
+        'quiet_wait',
+        arrived + quiet_seconds,
+    )
+    composer.schedule_for_conversation(UID, 'c2', collaborators=c, row=member, transcript_updated=True)
+    assert store.episode['compose_transcript_wait_until'] is None
+    activity = store.episode['compose_activity_at']
+    pending = store.episode['compose_pending_since']
+    assert 0 < composer.settle_delay(store.episode) <= config.COMPOSER_SETTLE_SECONDS
+
+    def finish_compose():
+        # Deliver the existing timer after its quiet window; no Home read is required.
+        store.episode['compose_pending_since'] -= timedelta(minutes=11)
+        store.episode['compose_activity_at'] -= timedelta(minutes=11)
+        composer._deferred[UID, 'ep1'] = (0, c)
+        composer._schedule_due()
+        assert len(calls) == 1
+
+    if not notes_finish_first:
+        finish_compose()
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds) == ('ready', None)
+    member[processing_hold.FIELD] = processing_hold.completion_patch(member, processing_hold.content_snapshot(member))
+    member['structured']['overview'] = 'The member notes finished after their independent hold.'
+    composer.after_finalized(UID, 'c2', 'finalized', c, row=member)
+    if notes_finish_first:
+        # Completing notes cannot restart the episode quiet window at the notes completion time.
+        assert store.episode['compose_activity_at'] == activity
+        assert store.episode['compose_pending_since'] == pending
+        finish_compose()
+    composer.after_finalized(UID, 'c2', 'finalized', c, row=member)
+    assert len(calls) == 1 and not composer._deferred
+    assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds) == ('unchanged', None)
 
 
 def test_home_active_wait_eliminates_redundant_composer_reads(store, monkeypatch):

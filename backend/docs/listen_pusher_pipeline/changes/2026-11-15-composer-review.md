@@ -26,3 +26,23 @@ The repository rate cards do **not** provide per-operation embedding, Pinecone, 
 At 1 RU/query and regional Firestore list pricing the modeled retrieval increment is $5.2461/day ($0.0001943/compose), or $17.3961/day ($0.0006443/compose) including maximum composer context input, before extra summary output, SDK retries, control reads and any additional fixed infrastructure. At 10 RU/query those figures become $9.1341/day and $21.2841/day. These are scenario estimates, not a hard production spend cap. The context kill switch disables this retrieval increment; the detail switch independently controls longer output. A production acceptance pass must measure RU/query and compare the shared fallback rate, latency and vendor usage before treating this estimate as an actual cost change.
 
 The new People projection was audited as read-only: one owner-scoped batch of at most 20 transcript-bound IDs, selecting only name, relationship, description and dismissal state. It performs no People writes, learning projection, generation mutation or shared-cache change; its reviewed body is pinned in the People inventory and a test rejects write/transaction calls. The bounded active-goals builder also has a real Firestore query driver; its single-field predicate requires no additional index.
+
+## Integration with capture ledger and tunable notes hold
+
+Main `7f944b6d38059` includes the lifecycle ledger writers from #25304. Scaled
+conversation notes retain the existing lifecycle persistence owner:
+`persist_processed_conversation` calls `persist_processing_result_with_lifecycle`,
+which records `noted` and `done` in one fenced ledger write after the actual
+summary commit. Overview and section-only long notes both exercise this path.
+Episode composition writes the separate `episodes` collection; it is not a
+capture summary receipt and must not create a capture ledger row for an episode
+ID or claim that a member's individual notes have completed.
+
+A committed transcript receipt starts the episode's existing settle window
+immediately, independently of the member-notes quiet window. Both windows run
+from the same content arrival; the configurable notes hold does not defer the
+receipt or start a second episode window when member notes finish. Regression
+tests use 120, 300 and 600 second notes holds and both completion orders. They
+verify one paid episode call, no restarted episode deadline, and no paid replay
+when the member notes finish or their completion is retried. Deploy changes
+neither hold's default and schedules no notes regeneration.
