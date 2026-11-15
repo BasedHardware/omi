@@ -33,6 +33,9 @@ FIELD = 'capture_end'
 # The phone's VAD and the server's transcript place the last speech a few
 # seconds apart; the same bound separates a resumed recording from this end.
 TOLERANCE_SECONDS = 5.0
+# ``utils.sync.processing_hold.FIELD``; pinned by a test so this module stays import-light.
+HOLD_FIELD = 'sync_processing_hold'
+CLOCK_END_MATCH_SECONDS = 1.0
 MAX_CLOCK_SPAN_SECONDS = 7 * 86400
 CLIENT_END_TYPES = {'user_initiated': 'user_initiated', 'silence_backstop': 'silence_backstop', 'disconnect': 'unknown'}
 TRACE_GATES = frozenset(
@@ -115,9 +118,10 @@ def normalize(
 ) -> dict[str, Any]:
     """The stored marker, or ``ValueError`` for a marker no honest phone sends.
 
-    ``last_speech_at`` and ``end_decided_at`` stay on the device clock: recorded
-    time on the conversation is on that clock too, so the proof compares like
-    with like. ``last_speech_at`` is ``None`` when the phone detected no speech;
+    ``last_speech_at`` and ``end_decided_at`` stay on the device clock. Recorded
+    time on the conversation is on that clock too unless the upload was shifted
+    onto the server clock, and ``proof`` undoes that recorded shift, so the
+    comparison is always phone clock against phone clock. ``last_speech_at`` is ``None`` when the phone detected no speech;
     it is stored as ``None`` and such a marker can type the end but never prove
     it. ``end_at`` is the end instant mapped to server time through the
     send/receive offset, clamped so a fast phone clock cannot place the end in
@@ -170,6 +174,17 @@ def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
     finished = _seconds(row.get('finished_at'))
     if not finished or decided is None:
         return 'absent'
+    # The marker is on the phone clock. Uploaded audio from a phone running
+    # ahead is stored shifted onto the server clock, and the hold state keeps
+    # that shift beside the end it applies to. Undo it so both sides are on
+    # the phone clock; if the row's end has since moved for another reason the
+    # shift no longer describes it and nothing can be proven.
+    state = row.get(HOLD_FIELD) or {}
+    shift = _number(state.get('content_clock_offset')) if isinstance(state, Mapping) else None
+    if shift is not None:
+        if abs(finished - _seconds(state.get('content_clock_end'))) > CLOCK_END_MATCH_SECONDS:
+            return 'clock_unknown'
+        finished += shift
     if finished < speech - TOLERANCE_SECONDS:
         return 'content_behind'
     if finished > decided + TOLERANCE_SECONDS:

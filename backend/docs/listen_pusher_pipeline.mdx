@@ -9311,7 +9311,10 @@ At hold admission, a row that would otherwise wait and carries `external_data.re
 that one document. The wait is skipped, with outcome `end_proof`, only when all three hold: the marker has
 `pending_wals == 0`; `finished_at >= last_speech_at - 5 s` (assigned content reaches the phone's last
 speech); and `finished_at <= end_decided_at + 5 s` (nothing later, which would mean the recording resumed or
-the row holds another recording). Both comparisons are on the recorded device clock. Unchanged, immaterial
+the row holds another recording). Both comparisons are on the phone clock: an upload from a phone running
+ahead is stored shifted onto the server clock, the hold state keeps that shift beside the end it applies to
+(`content_clock_offset`, `content_clock_end`), and the proof adds it back before comparing. If the row's end
+has since moved for another reason the result is `clock_unknown` and the quiet rule applies. Unchanged, immaterial
 and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
 `omi_sync_capture_end_total{end_type,outcome}` counts markers and
 `omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,

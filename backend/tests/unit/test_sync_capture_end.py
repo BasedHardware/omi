@@ -65,6 +65,41 @@ def test_proof_needs_no_pending_files_content_through_last_speech_and_nothing_af
     assert capture_end.proof({}, stored) == 'absent'
 
 
+def _shifted(finished, *, shift=171.0, recorded_end=None):
+    """A row as the sync writer stores it for a phone running ``shift`` seconds ahead."""
+    state = {'content_clock_offset': shift, 'content_clock_end': finished if recorded_end is None else recorded_end}
+    return {'finished_at': finished, hold.FIELD: state}
+
+
+def test_a_phone_clock_171_seconds_ahead_still_proves_a_complete_recording():
+    # Phone times are 171 s ahead; the stored row end was shifted back by the same 171 s.
+    stored = marker(last_speech_at=1171.0, end_decided_at=1173.0, sent_at=1181.0)
+    assert capture_end.proof(_shifted(999.0), stored) == 'proven'
+    assert capture_end.proof(_shifted(1006.9), stored) == 'proven'
+    # Same skew, content still short of the last speech, or later than the declared end.
+    assert capture_end.proof(_shifted(990.0), stored) == 'content_behind'
+    assert capture_end.proof(_shifted(1100.0), stored) == 'resumed'
+    # Without the recorded shift the comparison is not reliable and the quiet wait stays.
+    assert capture_end.proof({'finished_at': 999.0}, stored) == 'content_behind'
+    # The row's end moved after the shift was recorded: the shift no longer describes it.
+    assert capture_end.proof(_shifted(999.0, recorded_end=950.0), stored) == 'clock_unknown'
+    assert capture_end.HOLD_FIELD == hold.FIELD
+
+
+def test_the_hold_keeps_the_shift_only_for_the_arrival_that_sets_the_row_end():
+    shifted = hold.activity_patch({'finished_at': 999.0}, 2000, clock_offset=171.0, owns_end=True)
+    assert (shifted[hold.CLOCK_OFFSET_FIELD], shifted[hold.CLOCK_END_FIELD]) == (171.0, 999.0)
+    row = {'finished_at': 999.0, hold.FIELD: shifted}
+    # An earlier file arriving late does not set the end and leaves the shift alone.
+    kept = hold.activity_patch(row, 2100, clock_offset=0.0, owns_end=False)
+    assert kept[hold.CLOCK_OFFSET_FIELD] == 171.0
+    # A later, unshifted arrival sets the end: the old shift no longer applies.
+    cleared = hold.activity_patch({**row, 'finished_at': 1500.0}, 2200, clock_offset=0.0, owns_end=True)
+    assert hold.CLOCK_OFFSET_FIELD not in cleared and hold.CLOCK_END_FIELD not in cleared
+    # A row that was never shifted carries neither field.
+    assert hold.CLOCK_OFFSET_FIELD not in hold.activity_patch({'finished_at': 999.0}, 2000, owns_end=True)
+
+
 def test_a_stop_with_no_detected_speech_is_stored_honestly_and_never_proves_the_end():
     stored = marker(last_speech_at=None)
     assert stored['last_speech_at'] is None and stored['end_type'] == 'user_initiated'
