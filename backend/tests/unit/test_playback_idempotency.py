@@ -588,6 +588,7 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
         'error',
         'marker_retired_before_read',
         'retire_error',
+        'no_objects',
     ],
 )
 async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, caplog, mode):
@@ -600,6 +601,7 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     from utils.executors import ExecutorSaturatedError
 
     app, sync = route_app
+    monkeypatch.setattr(playback_metadata, '_coordinator', playback_metadata.DemandCoordinator())
     enabled = mode != 'off'
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     for key in (
@@ -630,6 +632,9 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
         if mode == 'refused':
             finished.set()
             return False
+        if mode == 'no_objects':
+            finished.set()
+            return 'no_objects'
         if mode == 'error':
             finished.set()
             raise RuntimeError('PRIVATE-SDK-DETAIL-CANARY')
@@ -661,14 +666,17 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             response = await client.get('/v1/sync/audio/conversation/urls')
-        if mode in {'saturated', 'error'}:
-            assert response.status_code == 503 and marker
+            if mode == 'no_objects':
+                repeat = await client.get('/v1/sync/audio/conversation/urls')
+                assert repeat.status_code == 200 and repeat.json()['poll_after_ms'] == 5000
+        if mode == 'error':
+            assert response.status_code == 200 and response.json()['poll_after_ms'] == 5000 and marker
             assert 'PRIVATE-SDK-DETAIL-CANARY' not in response.text + caplog.text
             deletion.assert_not_called()
         elif mode == 'refused':
             assert response.status_code == 404 and marker
             deletion.assert_not_called()
-        elif mode in {'timeout', 'off'}:
+        elif mode in {'timeout', 'off', 'saturated', 'no_objects'}:
             assert response.status_code == 200
             assert response.json() == {
                 'audio_files': [],

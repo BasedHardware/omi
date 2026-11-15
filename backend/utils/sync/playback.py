@@ -424,14 +424,14 @@ def get_audio_signed_urls(
 
             try:
                 repaired = refresh_on_open(uid, conversation_id)
-            except TimeoutError:
+            except TimeoutError as pending:
                 from utils.observability.fallback import record_fallback
 
                 record_fallback(
-                    component='sync',
+                    component='audio_merge',
                     from_mode='playback_metadata',
                     to_mode='pending',
-                    reason='timeout',
+                    reason=getattr(pending, 'reason', 'timeout'),
                     outcome='degraded',
                 )
                 return {'audio_files': [], 'poll_after_ms': 5000}
