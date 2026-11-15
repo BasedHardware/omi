@@ -1339,7 +1339,7 @@ def test_v2_invalid_filename_returns_closed_code_with_legacy_string_detail(clien
 
 
 def test_v2_non400_http_failures_keep_original_status(client, monkeypatch):
-    def denied(*_args):
+    def denied(*_args, **_kwargs):
         raise HTTPException(status_code=403, detail='Synthetic denial')
 
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', denied)
@@ -1423,9 +1423,9 @@ def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monk
     staged = []
     real_retrieve = router._retrieve_file_paths_v2
 
-    def capture(files, uid, job_id):
+    def capture(files, uid, job_id, **kwargs):
         staged.extend(f.filename for f in files)
-        return real_retrieve(files, uid, job_id)
+        return real_retrieve(files, uid, job_id, **kwargs)
 
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', capture)
     before = _capture_time_counter('rejected_malformed')
