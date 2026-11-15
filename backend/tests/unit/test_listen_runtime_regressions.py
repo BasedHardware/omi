@@ -123,7 +123,7 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         server_batch_audio_end=101,
     )
     incoming, replies = asyncio.Queue(), asyncio.Queue()
-    close_controls, proven_pcm, finalizations = [], [], []
+    close_controls, proven_pcm, finalizations, prepare_replies = [], [], [], []
     read = pusher.read_pcm
 
     def readback(*args):
@@ -140,9 +140,11 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
             pass
 
         async def send_bytes(self, data):
-            if not answer_prepare and struct.unpack('<I', data[:4])[0] == 206:
+            if struct.unpack('<I', data[:4])[0] == 206 and json.loads(data[4:])['phase'] == 'prepare':
+                prepare_replies.append(json.loads(data[4:]))
+            if (not answer_prepare or prepared_before_disconnect) and struct.unpack('<I', data[:4])[0] == 206:
                 if json.loads(data[4:])['phase'] == 'prepare':
-                    return
+                    return  # Also model a prepare ACK lost just before disconnect.
             replies.put_nowait(data)
 
         async def receive_bytes(self):
@@ -215,8 +217,9 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
             # next relay tick commits; losing that socket must retain its fence.
             assert await runtime.conversations.schedule_finalization('conversation')
             async with asyncio.timeout(5):
-                while not session.pending_record_closes['conversation'].prepared:
+                while not prepare_replies:
                     await asyncio.sleep(0.001)
+                assert prepare_replies[-1]['status'] == 'prepared', prepare_replies
         session.audio_bytes_send(b'\x02\x00', 101)  # Accepted tail is still in listen at disconnect.
         receiver.cancel()  # Real supervisor drains the receive/tick tasks before teardown.
         await asyncio.gather(receiver, return_exceptions=True)

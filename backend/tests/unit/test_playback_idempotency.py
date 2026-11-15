@@ -628,7 +628,7 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     monkeypatch.setattr(playback_metadata, 'OPEN_TIMEOUT_SECONDS', 0.01 if mode == 'timeout' else 2)
     monkeypatch.setattr(sync.sync_playback, 'is_audio_merge_dispatch_enabled', lambda: True)
     monkeypatch.setattr(sync.sync_playback, 'get_playback_artifact_signed_url', lambda *a: 'signed')
-    monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: None)
+    monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: {'status': 'unavailable'})
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             response = await client.get('/v1/sync/audio/conversation/urls')
