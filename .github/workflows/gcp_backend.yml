@@ -149,6 +149,7 @@ jobs:
       integration_only: ${{ steps.boundary.outputs.integration_only }}
       integration_image: ${{ steps.boundary.outputs.integration_image }}
       post_wrap_guard: ${{ steps.boundary.outputs.post_wrap_guard }}
+      rollback_revision: ${{ steps.boundary.outputs.rollback_revision }}
     if: >-
       github.event.inputs.mode == 'deploy' ||
       github.event.inputs.mode == 'build-only'
@@ -170,8 +171,14 @@ jobs:
           INTEGRATION_ONLY=false
           INTEGRATION_IMAGE=''
           POST_WRAP_GUARD=internal
+          ROLLBACK_REVISION=backend-integration-provfix-off1114
           if [[ "$SERVICE_IMAGES" == integration-canary=* ]]; then
             INTEGRATION_IMAGE="${SERVICE_IMAGES#integration-canary=}"
+            if [[ "$INTEGRATION_IMAGE" == *,rollback_revision=* ]]; then
+              ROLLBACK_REVISION="${INTEGRATION_IMAGE##*,rollback_revision=}"
+              INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,rollback_revision=*}"
+            fi
+            [[ "$ROLLBACK_REVISION" =~ ^backend-integration-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ && ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
             if [[ "$INTEGRATION_IMAGE" == *,post_wrap_guard=* ]]; then
               POST_WRAP_GUARD="${INTEGRATION_IMAGE##*,post_wrap_guard=}"
               INTEGRATION_IMAGE="${INTEGRATION_IMAGE%,post_wrap_guard=*}"
@@ -186,7 +193,7 @@ jobs:
             }
             INTEGRATION_ONLY=true
           fi
-          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" >> "$GITHUB_OUTPUT"
+          printf 'integration_only=%s\nintegration_image=%s\npost_wrap_guard=%s\nrollback_revision=%s\n' "$INTEGRATION_ONLY" "$INTEGRATION_IMAGE" "$POST_WRAP_GUARD" "$ROLLBACK_REVISION" >> "$GITHUB_OUTPUT"
           if [[ "$DEPLOY_ENVIRONMENT" == prod && "$WORKFLOW_MODE" == deploy &&
                 "$RELEASE_SHA" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]]; then
             [[ "$DEPLOY_TARGETS" == cloud-run-only && "$SKIP_ELIGIBILITY" != true &&
@@ -774,6 +781,7 @@ jobs:
           integration_only: ${{ needs.validate-production-boundary.outputs.integration_only || 'false' }}
           integration_image: ${{ needs.validate-production-boundary.outputs.integration_image }}
           post_wrap_guard: ${{ needs.validate-production-boundary.outputs.post_wrap_guard || 'internal' }}
+          rollback_revision: ${{ needs.validate-production-boundary.outputs.rollback_revision || 'backend-integration-provfix-off1114' }}
           # 2026-10-24 costcut (live 22:45Z): prod backend-sync runs 6Gi; dev keeps 8Gi.
           backend_sync_memory: ${{ vars.BACKEND_SYNC_MEMORY || (github.event.inputs.environment == 'prod' && '6Gi' || '8Gi') }}
           # Read only for a development dispatch, so a production run never carries it.

@@ -6,6 +6,7 @@ import json
 import os
 import re
 import runpy
+import shlex
 import subprocess
 
 import pytest
@@ -390,6 +391,7 @@ def step_script(name, values=None):
         'inputs.integration_only': 'false',
         'inputs.integration_image': '',
         'inputs.post_wrap_guard': 'internal',
+        'inputs.rollback_revision': 'backend-integration-provfix-off1114',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',
@@ -405,7 +407,10 @@ def step_script(name, values=None):
         'steps.capture-backend-integration-revision.outputs.revision': 'integration-new',
     }
     context.update(values or {})
-    return re.sub(r'\$\{\{\s*(.*?)\s*\}\}', lambda match: context[match[1]], script)
+    rendered = re.sub(r'\$\{\{\s*(.*?)\s*\}\}', lambda match: context[match[1]], script)
+    if name == 'Validate deploy profile boundary':
+        rendered = 'ROLLBACK_REVISION=' + shlex.quote(context['inputs.rollback_revision']) + '\n' + rendered
+    return rendered
 
 
 @pytest.mark.parametrize(
@@ -769,3 +774,102 @@ def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(t
         assert receipt['external_handoff']['revision_uid'] == 'receiving-uid'
         assert receipt['external_handoff']['sweep_page_rows'] == 100
         assert receipt['phase'] == 'external_guard_pending'
+
+
+@pytest.mark.parametrize(
+    'predecessor',
+    [
+        'backend-integration-575e695-imgonly1',
+        '',
+        'latest',
+        'backend-sync-other',
+        'backend-integration-UPPER',
+        'backend-integration-' + 'x' * 50,
+    ],
+)
+def test_actual_workflow_binds_explicit_saved_predecessor_end_to_end(tmp_path, predecessor):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    script = re.sub(r'\$\{\{[^}]*\}\}', 'false', workflow['jobs']['validate-production-boundary']['steps'][0]['run'])
+    image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+    selection = f'integration-canary={image},post_wrap_guard=external,rollback_revision={predecessor}'
+    output = tmp_path / 'predecessor-output'
+    env = dict(
+        os.environ,
+        DEPLOY_ENVIRONMENT='prod',
+        DEPLOY_TARGETS='cloud-run-only',
+        WORKFLOW_MODE='deploy',
+        REQUESTED_BY='SCA-2283',
+        RELEASE_SHA='d' * 40,
+        SERVICE_IMAGES=selection,
+        SKIP_ELIGIBILITY='false',
+        BREAK_GLASS_LOCK='false',
+        GITHUB_OUTPUT=str(output),
+    )
+    result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+    valid = predecessor == 'backend-integration-575e695-imgonly1'
+    assert (result.returncode == 0) == valid
+    if valid:
+        assert f'rollback_revision={predecessor}' in output.read_text()
+        result = subprocess.run(
+            [
+                'bash',
+                '-c',
+                step_script(
+                    'Validate deploy profile boundary',
+                    {
+                        'inputs.integration_only': 'true',
+                        'inputs.integration_image': image,
+                        'inputs.admitted_sha': 'd' * 40,
+                        'inputs.post_wrap_guard': 'external',
+                        'inputs.rollback_revision': predecessor,
+                    },
+                ),
+            ],
+            env=dict(env, GITHUB_WORKSPACE=str(ROOT)),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        prepare = next(
+            step
+            for step in yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())['runs'][
+                'steps'
+            ]
+            if step.get('id') == 'integration-transport-prepare'
+        )
+        assert prepare['env']['ROLLBACK_REVISION'] == '${{ inputs.rollback_revision }}'
+        assert '--rollback-revision "$ROLLBACK_REVISION"' in prepare['run']
+        assert (
+            workflow['jobs']['validate-production-boundary']['outputs']['rollback_revision']
+            == '${{ steps.boundary.outputs.rollback_revision }}'
+        )
+
+
+def test_composite_rejects_predecessor_that_was_not_in_operator_selection():
+    image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+    result = subprocess.run(
+        [
+            'bash',
+            '-c',
+            step_script(
+                'Validate deploy profile boundary',
+                {
+                    'inputs.integration_only': 'true',
+                    'inputs.integration_image': image,
+                    'inputs.admitted_sha': 'd' * 40,
+                    'inputs.post_wrap_guard': 'external',
+                    'inputs.rollback_revision': 'backend-integration-575e695-imgonly1',
+                },
+            ),
+        ],
+        env=dict(
+            os.environ,
+            SERVICE_IMAGES=f'integration-canary={image},post_wrap_guard=external',
+            GITHUB_WORKSPACE=str(ROOT),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0

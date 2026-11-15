@@ -145,3 +145,32 @@ admission-to-commit, request/CPU or audio measurements are not substituted for
 delivery. The external evidence scope follows the explicit FreshGuard-only
 disposition above; default internal mode remains fail-closed.
 No live acceptance, saving, clean-hour start, or five-day outcome is claimed.
+
+
+### Bind the actual retained predecessor
+
+For integration-only restoration, append the exact saved named200/10 revision to
+this existing input, after the guard mode:
+
+```
+service_images=integration-canary=<immutable-backend-digest>,post_wrap_guard=external,rollback_revision=backend-integration-575e695-imgonly1
+```
+
+This is a source interface example, not a dispatch approval or a claim that this
+revision currently serves. Release must use its actual captain-admitted saved
+predecessor. The native boundary validates the named integration revision and
+passes it to `prepare --rollback-revision`. Prepare requires that exact revision
+to receive100% requested and observed traffic, be Ready in the same project and
+service, and retain the200/10 inverse. It never selects a latest revision or moves
+traffic to the historical provfix name to satisfy preparation.
+
+The private journal binds the name to the captured revision and original traffic.
+Candidate creation, stage/complete continuation, adapter preflight, traffic plans,
+retained-revision checks, rollback and sanitized external handoff all use that saved
+name. Continuations cannot replace it with a new CLI value. Existing same-run,
+source/control identity, CAS, readiness, uncertainty and inverse checks remain.
+Omitting the option retains the original provfix default for compatibility; it
+still refuses unless that exact revision serves. A custom predecessor is refused
+outside integration-only mode. No new public workflow input, job, runner, gate or
+credential is introduced. Publication and offline tests do not qualify live guard
+families or authorize100/20 activation; Release still owns admission and execution.

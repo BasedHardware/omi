@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  rollback_revision:
+    description: 'Exact retained integration predecessor; explicit integration-only binding must match the serving 200/10 revision'
+    required: false
+    default: 'backend-integration-provfix-off1114'
   post_wrap_guard:
     description: 'internal fails closed without a trusted adapter; explicit external delegates the post-wrap guard to Pipeline under SCA-2283 08:22 ruling'
     required: false
@@ -173,6 +177,7 @@ runs:
       shell: bash
       env:
         SERVICE_IMAGES: ${{ inputs.service_images }}
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
       run: |
         set -euo pipefail
         if [[ "${{ inputs.integration_canary }}" != false ]]; then
@@ -191,11 +196,16 @@ runs:
         [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.post_wrap_guard }}" == external ]] || exit 1
         [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.integration_only }}" == true ]] || exit 1
         if [[ "${{ inputs.integration_only }}" == true ]]; then
+          [[ "$ROLLBACK_REVISION" =~ ^backend-integration-[a-z0-9]([a-z0-9-]*[a-z0-9])?$ && ${#ROLLBACK_REVISION} -le 63 ]] || exit 1
+          BOUND_SERVICE_IMAGES="${SERVICE_IMAGES%,rollback_revision=$ROLLBACK_REVISION}"
+          [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 || "$BOUND_SERVICE_IMAGES" != "$SERVICE_IMAGES" ]] || exit 1
           [[ "${{ inputs.integration_canary }}" == true &&
              "${{ inputs.admitted_sha }}" =~ ^[0-9a-f]{40}$ &&
              "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
-             ("$SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
-              ("${{ inputs.post_wrap_guard }}" == internal && "$SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+             ("$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
+              ("${{ inputs.post_wrap_guard }}" == internal && "$BOUND_SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
+        else
+          [[ "$ROLLBACK_REVISION" == backend-integration-provfix-off1114 ]] || exit 1
         fi
         if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" && "${{ inputs.deploy_profile }}" != "manual" ]]; then
           echo "service_images (role-image opt-in) is accepted only on the manual profile" >&2
@@ -382,6 +392,7 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
           "${extension_args[@]}" \
           --post-wrap-guard "${{ inputs.post_wrap_guard }}" \
+          --rollback-revision "$ROLLBACK_REVISION" \
           --state "$RUNNER_TEMP/integration-canary-private.json" \
           --source "${{ inputs.admitted_sha }}" \
           --image "${{ inputs.integration_image || steps.service-images.outputs.backend_integration }}" \
@@ -408,6 +419,7 @@ runs:
             output.write('release_vector_args=' + shlex.join(pairs) + '\n')
         PYTHON
       env:
+        ROLLBACK_REVISION: ${{ inputs.rollback_revision }}
         EXISTING_VECTOR_ARGS: ${{ steps.service-images.outputs.release_vector_args }}
 
     - name: Preflight required deployment secrets before mutations

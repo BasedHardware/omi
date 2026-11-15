@@ -7,6 +7,7 @@ reads or snapshot inputs. Fake-clock sleeps execute the full foreground timeline
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 from urllib.parse import parse_qs, urlsplit
@@ -1359,3 +1360,164 @@ def test_journal_lock_and_symlink_are_rejected(tmp_path):
     path.symlink_to(real)
     with pytest.raises(OSError):
         c.Journal(path).read()
+
+
+ACTUAL_PREDECESSOR = 'backend-integration-575e695-imgonly1'
+
+
+def with_actual_predecessor(harness):
+    parts = extended(harness, reader=False)
+    controller, cloud, *_ = parts
+    old = cloud.revisions.pop(c.ROLLBACK)
+    cloud.revisions[ACTUAL_PREDECESSOR] = json.loads(json.dumps(old).replace(c.ROLLBACK, ACTUAL_PREDECESSOR))
+    cloud.services[c.SERVICE] = json.loads(
+        json.dumps(cloud.services[c.SERVICE]).replace(c.ROLLBACK, ACTUAL_PREDECESSOR)
+    )
+    return parts
+
+
+def prepare_actual(parts):
+    controller, _cloud, transport, _clock, _runtime, source = parts
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        post_wrap_guard='external',
+        rollback_revision=ACTUAL_PREDECESSOR,
+    )
+
+
+def test_actual_predecessor_binds_stage_continuation_handoff_and_saved_inverse(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    inverse = copy.deepcopy(cloud.revisions[ACTUAL_PREDECESSOR])
+    prepare_actual(parts)
+    assert controller.state['rollback'] == ACTUAL_PREDECESSOR
+    controller.candidate(runtime)
+    controller.stage()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {
+        ACTUAL_PREDECESSOR: 75,
+        controller.state['candidate']: 25,
+    }
+    controller.complete()
+    assert controller.state['external_handoff']['rollback_revision'] == ACTUAL_PREDECESSOR
+    controller.rollback()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {ACTUAL_PREDECESSOR: 100}
+    assert cloud.revisions[ACTUAL_PREDECESSOR] == inverse
+    assert all(c.ROLLBACK not in json.dumps(write['spec']['traffic']) for write in cloud.writes)
+
+
+@pytest.mark.parametrize('damage', ['name', 'not_ready', 'namespace', 'service', 'inverse', 'split', 'requested'])
+def test_actual_predecessor_prepare_refuses_wrong_or_unqualified_binding(harness, damage):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, _runtime, _source = parts
+    revision = cloud.revisions[ACTUAL_PREDECESSOR]
+    if damage == 'name':
+        cloud.services[c.SERVICE]['status']['traffic'][0]['revisionName'] = c.ROLLBACK
+    elif damage == 'not_ready':
+        revision['status']['conditions'][0]['status'] = 'False'
+    elif damage == 'namespace':
+        revision['metadata']['namespace'] = 'wrong-project'
+    elif damage == 'service':
+        revision['metadata']['labels']['serving.knative.dev/service'] = 'backend-sync'
+    elif damage == 'inverse':
+        env = c.app(revision['spec'])['env']
+        next(row for row in env if row['name'] == 'BATCH_PIPELINE_SERVING_TICK_SECONDS')['value'] = '20'
+    elif damage == 'split':
+        cloud.services[c.SERVICE]['status']['traffic'] = [
+            {'revisionName': ACTUAL_PREDECESSOR, 'percent': 75},
+            {'revisionName': c.ROLLBACK, 'percent': 25},
+        ]
+    else:
+        cloud.services[c.SERVICE]['spec']['traffic'][0]['revisionName'] = c.ROLLBACK
+    with pytest.raises(c.Refused):
+        prepare_actual(parts)
+    assert not cloud.writes and not controller.journal.path.exists()
+
+
+@pytest.mark.parametrize('damage', ['rollback', 'snapshot_name', 'snapshot_traffic'])
+def test_predecessor_continuation_rejects_journal_binding_tamper(harness, damage):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, *_ = parts
+    prepare_actual(parts)
+    state = controller.journal.read()
+    if damage == 'rollback':
+        state['rollback'] = c.ROLLBACK
+    elif damage == 'snapshot_name':
+        state['services'][c.SERVICE]['revision']['metadata']['name'] = c.ROLLBACK
+    else:
+        state['services'][c.SERVICE]['service']['status']['traffic'][0]['revisionName'] = c.ROLLBACK
+    controller.journal.save(state)
+    with pytest.raises(c.Refused, match='journal_rollback_binding'):
+        controller.load()
+    assert not cloud.writes
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        '',
+        'latest',
+        'backend-sync-other',
+        'backend-integration-x/other',
+        'backend-integration-UPPER',
+        'backend-integration-' + 'x' * 50,
+    ],
+)
+def test_predecessor_input_is_an_exact_integration_revision(harness, name):
+    parts = extended(harness, reader=False)
+    controller, cloud, transport, _clock, _runtime, source = parts
+    with pytest.raises(c.Refused, match='rollback_revision_invalid'):
+        controller.prepare(
+            source,
+            transport.image,
+            f'{c.SERVICE}-{source[:7]}-123-1',
+            integration_only=True,
+            post_wrap_guard='external',
+            rollback_revision=name,
+        )
+    assert not cloud.writes
+
+
+def test_internal_adapter_preflight_receives_the_same_saved_predecessor(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, transport, _clock, _runtime, source = parts
+    seen = []
+
+    class Reader:
+        def preflight(self, **binding):
+            seen.append(binding)
+
+    controller.discovery = Reader()
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        rollback_revision=ACTUAL_PREDECESSOR,
+    )
+    assert seen == [{'source': source, 'rollback': ACTUAL_PREDECESSOR}]
+    assert controller.state['rollback'] == ACTUAL_PREDECESSOR
+    assert not cloud.writes
+
+
+def test_legacy_profile_does_not_gain_an_unscoped_custom_predecessor(harness):
+    controller, cloud, transport, _clock, _runtime = harness
+    with pytest.raises(c.Refused, match='rollback_profile_binding'):
+        controller.prepare(
+            c.SOURCE, transport.image, f'{c.SERVICE}-{c.SOURCE[:7]}-123-1', rollback_revision=ACTUAL_PREDECESSOR
+        )
+    assert not cloud.writes
+
+
+def test_custom_predecessor_retained_revision_drift_refuses_before_stage(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    prepare_actual(parts)
+    controller.candidate(runtime)
+    cloud.revisions[ACTUAL_PREDECESSOR]['metadata']['resourceVersion'] = 'changed'
+    writes = len(cloud.writes)
+    with pytest.raises(c.Refused, match='rollback_revision_drift'):
+        controller.stage()
+    assert len(cloud.writes) == writes
