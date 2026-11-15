@@ -80,7 +80,7 @@ class Pool:
         self._closed = False
 
     @contextmanager
-    def connection(self, timeout: float = 30.0) -> Iterator[Any]:
+    def connection(self, timeout: float = 30.0, *, existing_only: bool = False) -> Iterator[Any]:
         if not self._slots.acquire(timeout=timeout):
             raise TimeoutError('job store pool exhausted')
         conn = None
@@ -88,6 +88,9 @@ class Pool:
             try:
                 conn = self._idle.get_nowait()
             except queue.Empty:
+                if existing_only:
+                    # Observers must not enter unbounded credential refresh/connection setup.
+                    raise TimeoutError('job store observation requires a warm connection')
                 conn = self._connect()
             yield conn
         except BaseException:
