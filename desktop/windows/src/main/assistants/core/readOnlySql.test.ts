@@ -214,7 +214,7 @@ describe('executeSql table allowlist', () => {
     const runQuery = vi.fn()
     for (const q of [
       'SELECT * FROM local_conversation',
-      'SELECT display_name FROM ai_user_profiles',
+      'SELECT content FROM memories',
       'SELECT * FROM local_kg_nodes'
     ]) {
       expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)
@@ -236,7 +236,7 @@ describe('executeSql table allowlist', () => {
       'SELECT * FROM rewind_frames, local_conversation', // implicit comma-join
       'SELECT * FROM "local_conversation"', // double-quoted identifier
       'SELECT * FROM [local_conversation]', // bracket-quoted identifier
-      'SELECT * FROM (SELECT * FROM ai_user_profiles)' // hidden inside a subquery
+      'SELECT * FROM (SELECT * FROM memories)' // hidden inside a subquery
     ]) {
       expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)
     }

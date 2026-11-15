@@ -1,209 +1,312 @@
-// Orchestrator-core tests for the AI User Profile generate flow. These exercise
-// service.ts's real orchestration logic through the injectable seams it wires to
-// (orchestrate.generateProfile) WITHOUT importing electron or better-sqlite3, so
-// they run hermetically under plain-node vitest. service.ts itself is a thin
-// wiring layer over this core (net.fetch + the db.ts writers).
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  AuthExpiredError,
-  HttpError,
-  SessionChangedError,
-  generateProfile,
-  type OrchestratorDeps,
-  type SourceFetchers
-} from './orchestrate'
-import type { ProfileSources } from './synthesis'
+// Contract for the AI-profile cloud reader (service.ts). The backend owns the
+// profile; this client must only GET it (cached for prompt consumers), POST
+// refresh, PATCH a user edit with source=user_edit, and DELETE — never generate
+// locally, never call /synthesize, never write a local history.
+//
+// Only electron's net.fetch is mocked; the real core/session (epoch, abort,
+// sign-out reset, uid decode) runs, so the account-isolation claims are pinned
+// against the real session module.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// A fetcher set that returns nothing anywhere (the "no data" case).
-function emptyFetchers(): SourceFetchers {
-  return {
-    memories: vi.fn(async () => []),
-    tasks: vi.fn(async () => []),
-    goals: vi.fn(async () => []),
-    conversations: vi.fn(async () => []),
-    messages: vi.fn(async () => [])
-  }
+const h = vi.hoisted(() => ({
+  netFetch: vi.fn<(url: string, init: RequestInit) => Promise<Response>>()
+}))
+
+vi.mock('electron', () => ({ net: { fetch: h.netFetch } }))
+
+const API = 'https://api.example'
+
+/** A JWT-shaped token whose payload carries `uid` (signature is never checked). */
+function jwt(uid: string): string {
+  const payload = Buffer.from(
+    JSON.stringify({ user_id: uid, exp: Math.floor(Date.now() / 1000) + 3600 })
+  ).toString('base64url')
+  return `h.${payload}.s`
 }
 
-function makeDeps(over: Partial<OrchestratorDeps> = {}): {
-  deps: OrchestratorDeps
-  synthesize: ReturnType<typeof vi.fn>
-  insertProfile: ReturnType<typeof vi.fn>
-  syncProfile: ReturnType<typeof vi.fn>
-} {
-  const synthesize = vi.fn(
-    async (_sources: ProfileSources, _past: string[]) => '- User is an engineer'
-  )
-  const insertProfile = vi.fn(() => 42)
-  const syncProfile = vi.fn(async () => undefined)
-  const deps: OrchestratorDeps = {
-    fetchers: emptyFetchers(),
-    synthesize,
-    listPastProfiles: vi.fn(() => []),
-    insertProfile,
-    syncProfile,
-    now: () => 1_700_000_000_000,
-    ...over
-  }
-  return { deps, synthesize, insertProfile, syncProfile }
+const session = (uid = 'user-a'): { apiBase: string; desktopApiBase: string; token: string } => ({
+  apiBase: API,
+  desktopApiBase: 'https://desktop.example',
+  token: jwt(uid)
+})
+
+const wire = (text: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+  profile_text: text,
+  generated_at: '2026-11-15T10:00:00Z',
+  data_sources_used: 12,
+  source: 'backend',
+  refreshed_at: '2026-11-15T10:00:00Z',
+  ...extra
+})
+
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
-// Let the fire-and-forget syncProfile().catch() microtasks settle.
-const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+type Service = typeof import('./service')
+type Session = typeof import('../core/session')
+
+// service.ts and core/session.ts hold module state, so each test gets fresh copies.
+async function fresh(): Promise<{ svc: Service; core: Session }> {
+  vi.resetModules()
+  const core = await import('../core/session')
+  const svc = await import('./service')
+  return { svc, core }
+}
+
+function calls(): { url: string; method: string; body: unknown; auth: string | null }[] {
+  return h.netFetch.mock.calls.map(([url, init]) => ({
+    url,
+    method: init.method ?? 'GET',
+    body: init.body ? JSON.parse(init.body as string) : undefined,
+    auth: new Headers(init.headers).get('Authorization')
+  }))
+}
+
+beforeEach(() => {
+  h.netFetch.mockReset()
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
+  vi.spyOn(console, 'log').mockImplementation(() => {})
+})
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('generateProfile (orchestrator core)', () => {
-  it('(a) throws "not enough data" and never calls the LLM when every source is empty', async () => {
-    const { deps, synthesize, insertProfile, syncProfile } = makeDeps()
-    await expect(generateProfile(deps)).rejects.toThrow(/not enough data/)
-    expect(synthesize).not.toHaveBeenCalled()
-    expect(insertProfile).not.toHaveBeenCalled()
-    expect(syncProfile).not.toHaveBeenCalled()
-  })
-
-  it('(b) still generates when one source fails but others return data (per-source failure does not abort)', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      // One source throws a transient (non-auth) error…
-      memories: vi.fn(async () => {
-        throw new HttpError(500)
-      }),
-      // …another returns real data.
-      tasks: vi.fn(async () => ['[todo] Ship the Windows profile feature'])
-    }
-    const { deps, synthesize, insertProfile } = makeDeps({ fetchers })
-
-    const record = await generateProfile(deps)
-
-    // Generation proceeded on the surviving source.
-    expect(synthesize).toHaveBeenCalledTimes(1)
-    expect(insertProfile).toHaveBeenCalledTimes(1)
-    expect(record.id).toBe(42)
-    // The failed source was named as a degraded (not silent) outcome.
-    expect(warn).toHaveBeenCalledWith(
-      '[fallback]',
-      expect.objectContaining({
-        component: 'backend_fetch',
-        outcome: 'degraded',
-        reason: 'source_fetch_failed',
-        source: 'memories',
-        error: 'HTTP 500'
-      })
-    )
-  })
-
-  it('(c) returns the inserted local row even when the backend sync fails (sync loss never loses the profile)', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      goals: vi.fn(async () => ['Ship 2 features per week (50% complete)'])
-    }
-    const syncProfile = vi.fn(async () => {
-      throw new HttpError(503)
+describe('parseProfile', () => {
+  it('maps the API shape, including the new source / refreshed_at fields', async () => {
+    const { svc } = await fresh()
+    expect(svc.parseProfile(wire('- Ada builds compilers', { source: 'user_edit' }))).toEqual({
+      profileText: '- Ada builds compilers',
+      generatedAt: Date.parse('2026-11-15T10:00:00Z'),
+      dataSourcesUsed: 12,
+      source: 'user_edit',
+      refreshedAt: Date.parse('2026-11-15T10:00:00Z')
     })
-    const { deps, insertProfile } = makeDeps({ fetchers, syncProfile })
+  })
 
-    const record = await generateProfile(deps)
+  it('treats null, a blank profile_text, and legacy rows without the new fields sanely', async () => {
+    const { svc } = await fresh()
+    expect(svc.parseProfile(null)).toBeNull()
+    expect(svc.parseProfile({ profile_text: '   ' })).toBeNull()
+    expect(svc.parseProfile({ profile_text: 'x', source: 'mystery' })).toEqual({
+      profileText: 'x',
+      generatedAt: null,
+      dataSourcesUsed: 0,
+      source: null,
+      refreshedAt: null
+    })
+  })
+})
 
-    // Local row was inserted and returned regardless of the sync outcome.
-    expect(insertProfile).toHaveBeenCalledTimes(1)
-    expect(record).toMatchObject({ id: 42, backendSynced: false })
-    expect(syncProfile).toHaveBeenCalledTimes(1)
+describe('codeForStatus', () => {
+  it('maps the refresh error statuses to distinct renderer codes', async () => {
+    const { svc } = await fresh()
+    expect(svc.codeForStatus(402)).toBe('usage_exhausted')
+    expect(svc.codeForStatus(409)).toBe('in_progress')
+    expect(svc.codeForStatus(422)).toBe('insufficient_data')
+    expect(svc.codeForStatus(502)).toBe('synthesis_failed')
+    expect(svc.codeForStatus(429)).toBe('rate_limited')
+    expect(svc.codeForStatus(403)).toBe('auth_expired')
+    expect(svc.codeForStatus(500)).toBe('unknown')
+  })
+})
 
+describe('reading the profile', () => {
+  it('without a session: no network, null text, not_signed_in', async () => {
+    const { svc } = await fresh()
+    expect(svc.getLatestProfileText()).toBeNull()
+    expect(await svc.loadProfile()).toEqual({ ok: false, code: 'not_signed_in' })
+    expect(h.netFetch).not.toHaveBeenCalled()
+  })
+
+  it('a session push warms the cache with one authed GET', async () => {
+    h.netFetch.mockResolvedValue(json(wire('- Ada builds compilers')))
+    const { svc } = await fresh()
+    const s = session()
+    svc.configureAiProfileSession(s)
     await flush()
-    // The sync failure surfaced as a degraded (not silent) outcome.
-    expect(warn).toHaveBeenCalledWith(
-      '[fallback]',
+
+    expect(calls()).toEqual([
+      {
+        url: `${API}/v1/users/ai-profile`,
+        method: 'GET',
+        body: undefined,
+        auth: `Bearer ${s.token}`
+      }
+    ])
+    expect(svc.getLatestProfileText()).toBe('- Ada builds compilers')
+    // Fresh cache: reading again costs nothing.
+    expect(h.netFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('GET null means no profile', async () => {
+    h.netFetch.mockResolvedValue(json(null))
+    const { svc } = await fresh()
+    svc.configureAiProfileSession(session())
+    expect(await svc.loadProfile()).toEqual({ ok: true, value: null })
+    expect(svc.getLatestProfileText()).toBeNull()
+  })
+
+  it('a stale cache answers immediately and refetches in the background', async () => {
+    h.netFetch.mockResolvedValueOnce(json(wire('old')))
+    const { svc } = await fresh()
+    svc.configureAiProfileSession(session())
+    await flush()
+
+    const realNow = Date.now()
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + svc.CACHE_TTL_MS + 1)
+    h.netFetch.mockResolvedValueOnce(json(wire('new')))
+    expect(svc.getLatestProfileText()).toBe('old')
+    await flush()
+    expect(h.netFetch).toHaveBeenCalledTimes(2)
+    expect(svc.getLatestProfileText()).toBe('new')
+  })
+
+  it('a failed read keeps serving the last fetched profile', async () => {
+    h.netFetch.mockResolvedValueOnce(json(wire('kept')))
+    const { svc } = await fresh()
+    svc.configureAiProfileSession(session())
+    await flush()
+
+    h.netFetch.mockResolvedValueOnce(json({ detail: 'boom' }, 503))
+    const r = await svc.loadProfile()
+    expect(r.ok && r.value?.profileText).toBe('kept')
+  })
+
+  it('concurrent reads share one request', async () => {
+    h.netFetch.mockResolvedValue(json(wire('x')))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    await Promise.all([svc.loadProfile(), svc.loadProfile(), svc.loadProfile()])
+    expect(h.netFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('account isolation', () => {
+  it('sign-out drops the cached profile', async () => {
+    h.netFetch.mockResolvedValue(json(wire('A secrets')))
+    const { svc } = await fresh()
+    svc.configureAiProfileSession(session('user-a'))
+    await flush()
+    expect(svc.getLatestProfileText()).toBe('A secrets')
+
+    svc.configureAiProfileSession(null)
+    expect(svc.getLatestProfileText()).toBeNull()
+  })
+
+  it("never serves user A's profile once user B's session is current", async () => {
+    h.netFetch.mockResolvedValueOnce(json(wire('A secrets')))
+    const { svc, core } = await fresh()
+    svc.configureAiProfileSession(session('user-a'))
+    await flush()
+
+    // A direct switch (e.g. a pulled session for another account) with no
+    // sign-out in between, and B's GET still pending.
+    h.netFetch.mockImplementationOnce(() => new Promise<Response>(() => {}))
+    core.setBackendSession(session('user-b'))
+    expect(svc.getLatestProfileText()).toBeNull()
+  })
+
+  it('drops a read that lands after the account changed', async () => {
+    let resolveA: (r: Response) => void = () => {}
+    h.netFetch.mockImplementationOnce(() => new Promise<Response>((r) => (resolveA = r)))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session('user-a'))
+    const pending = svc.loadProfile()
+    h.netFetch.mockImplementationOnce(() => new Promise<Response>(() => {}))
+    core.setBackendSession(session('user-b'))
+    resolveA(json(wire('A secrets')))
+    await pending
+    expect(svc.getLatestProfileText()).toBeNull()
+  })
+})
+
+describe('refresh', () => {
+  it('POSTs /refresh with no body and caches the result', async () => {
+    h.netFetch.mockResolvedValue(json(wire('- regenerated')))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    const r = await svc.refreshProfile()
+
+    expect(r.ok && r.value.profileText).toBe('- regenerated')
+    expect(calls()).toEqual([
       expect.objectContaining({
-        component: 'sync_dispatch',
-        outcome: 'degraded',
-        reason: 'backend_sync_failed',
-        op: 'generate'
+        url: `${API}/v1/users/ai-profile/refresh`,
+        method: 'POST',
+        body: undefined
       })
+    ])
+    expect(svc.getLatestProfileText()).toBe('- regenerated')
+  })
+
+  it.each([
+    [402, 'usage_exhausted'],
+    [409, 'in_progress'],
+    [422, 'insufficient_data'],
+    [502, 'synthesis_failed']
+  ] as const)('HTTP %i → %s', async (status, code) => {
+    h.netFetch.mockResolvedValue(json({ detail: 'x' }, status))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    expect(await svc.refreshProfile()).toEqual({ ok: false, code })
+  })
+
+  it('a double click joins the running refresh instead of drawing a 409', async () => {
+    h.netFetch.mockResolvedValue(json(wire('once')))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    await Promise.all([svc.refreshProfile(), svc.refreshProfile()])
+    expect(h.netFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('never calls the legacy /synthesize endpoint', async () => {
+    h.netFetch.mockResolvedValue(json(wire('x')))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    await svc.refreshProfile()
+    await svc.loadProfile()
+    expect(calls().some((c) => c.url.includes('synthesize'))).toBe(false)
+  })
+})
+
+describe('edit and delete', () => {
+  it('PATCHes the text with source=user_edit and caches the saved profile', async () => {
+    h.netFetch.mockResolvedValue(json(wire('edited', { source: 'user_edit' })))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    const r = await svc.editProfile('edited')
+
+    expect(r.ok && r.value.source).toBe('user_edit')
+    expect(calls()).toEqual([
+      expect.objectContaining({
+        url: `${API}/v1/users/ai-profile`,
+        method: 'PATCH',
+        body: { profile_text: 'edited', source: 'user_edit' }
+      })
+    ])
+    expect(svc.getLatestProfileText()).toBe('edited')
+  })
+
+  it('DELETE clears the cached profile', async () => {
+    h.netFetch.mockResolvedValueOnce(json(wire('to delete')))
+    const { svc } = await fresh()
+    svc.configureAiProfileSession(session())
+    await flush()
+
+    h.netFetch.mockResolvedValueOnce(new Response(null, { status: 204 }))
+    expect(await svc.deleteProfile()).toEqual({ ok: true, value: null })
+    expect(calls()[1]).toEqual(
+      expect.objectContaining({ url: `${API}/v1/users/ai-profile`, method: 'DELETE' })
     )
+    expect(svc.getLatestProfileText()).toBeNull()
   })
 
-  it('(m4) aborts with AuthExpiredError (not "not enough data") and never calls the LLM when a source session is expired', async () => {
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      // Data present elsewhere would otherwise generate — but auth expiry wins.
-      messages: vi.fn(async () => ['[human] hi']),
-      memories: vi.fn(async () => {
-        throw new AuthExpiredError()
-      })
-    }
-    const { deps, synthesize, insertProfile } = makeDeps({ fetchers })
-
-    await expect(generateProfile(deps)).rejects.toBeInstanceOf(AuthExpiredError)
-    await expect(generateProfile(deps)).rejects.toThrow(/auth expired/)
-    expect(synthesize).not.toHaveBeenCalled()
-    expect(insertProfile).not.toHaveBeenCalled()
-  })
-
-  // C1 (sign-out privacy). signOutUser() is wipe-then-signout, and a generation
-  // takes 10–90s. Without this guard an in-flight run completes AFTER the wipe
-  // and re-inserts the signed-out user's synthesized dossier into the DB that was
-  // just cleared to erase it (and PATCHes it to the backend with their token) —
-  // and if a second user has signed in by then, it lands in THEIR database.
-  it('(C1) discards the result — no insert, no sync — when the session changes mid-generation', async () => {
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      memories: vi.fn(async () => ['[work] engineer'])
-    }
-    // Session is live while the sources/LLM run, gone by the time we would write.
-    let stale = false
-    const synthesize = vi.fn(async (_sources: ProfileSources, _past: string[]) => {
-      stale = true // the user signs out during synthesis
-      return '- User is an engineer'
-    })
-    const { deps, insertProfile, syncProfile } = makeDeps({
-      fetchers,
-      synthesize,
-      isStale: () => stale
-    })
-
-    await expect(generateProfile(deps)).rejects.toBeInstanceOf(SessionChangedError)
-
-    // The whole point: nothing was written anywhere.
-    expect(insertProfile).not.toHaveBeenCalled()
-    expect(syncProfile).not.toHaveBeenCalled()
-  })
-
-  it('(C1) writes normally while the session is unchanged (guard does not misfire)', async () => {
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      memories: vi.fn(async () => ['[work] engineer'])
-    }
-    const { deps, insertProfile, syncProfile } = makeDeps({ fetchers, isStale: () => false })
-
-    const record = await generateProfile(deps)
-
-    expect(record.id).toBe(42)
-    expect(insertProfile).toHaveBeenCalledTimes(1)
-    expect(syncProfile).toHaveBeenCalledTimes(1)
-  })
-
-  it('hands the backend its sources plus past profiles oldest→newest', async () => {
-    const fetchers: SourceFetchers = {
-      ...emptyFetchers(),
-      memories: vi.fn(async () => ['[work] engineer'])
-    }
-    const synthesize = vi
-      .fn<(s: ProfileSources, past: string[]) => Promise<string>>()
-      .mockResolvedValue('- consolidated fact')
-    const listPastProfiles = vi.fn(() => ['- newest past', '- oldest past'])
-    const { deps } = makeDeps({ fetchers, synthesize, listPastProfiles })
-
-    const record = await generateProfile(deps)
-
-    expect(synthesize).toHaveBeenCalledTimes(1)
-    const [sources, past] = synthesize.mock.calls[0]
-    expect(sources.memories).toEqual(['[work] engineer'])
-    // The stored list is newest-first; the core reverses it for the backend's
-    // consolidation stage.
-    expect(past).toEqual(['- oldest past', '- newest past'])
-    expect(record.profileText).toBe('- consolidated fact')
+  it('a network failure is reported as network, not as a raw message', async () => {
+    h.netFetch.mockRejectedValue(new TypeError('fetch failed: secret body'))
+    const { svc, core } = await fresh()
+    core.setBackendSession(session())
+    expect(await svc.editProfile('x')).toEqual({ ok: false, code: 'network' })
   })
 })

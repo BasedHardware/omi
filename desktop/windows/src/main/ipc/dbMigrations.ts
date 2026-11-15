@@ -89,6 +89,20 @@ export const MIGRATIONS: Migration[] = [
       if (!hasFts) return
       d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
+  },
+  {
+    version: 3,
+    name: 'drop_ai_user_profiles',
+    up: (d) => {
+      // The backend owns the AI user profile (GET/PATCH/DELETE/refresh on
+      // /v1/users/ai-profile); the client no longer generates it or keeps a
+      // local history. The old table held only past client-generated texts —
+      // the current one already lives on the backend (it was PATCH-mirrored) —
+      // so drop it rather than leave user content orphaned on disk. IF EXISTS:
+      // installs that never created it (or a bare migration harness) skip.
+      d.exec('DROP INDEX IF EXISTS idx_ai_user_profiles_generated_at')
+      d.exec('DROP TABLE IF EXISTS ai_user_profiles')
+    }
   }
 ]
 

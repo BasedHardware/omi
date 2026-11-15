@@ -132,13 +132,7 @@ describe('USER_DATA_TABLES covers the whole schema (sign-out leak guard)', () =>
 
   it('finds the known core tables (extractor sanity — never passes vacuously)', () => {
     const tables = realSchemaTables()
-    for (const t of [
-      'local_conversation',
-      'ai_user_profiles',
-      'focus_sessions',
-      'action_items',
-      'staged_tasks'
-    ]) {
+    for (const t of ['local_conversation', 'focus_sessions', 'action_items', 'staged_tasks']) {
       expect(tables, `schema should contain ${t}`).toContain(t)
     }
   })

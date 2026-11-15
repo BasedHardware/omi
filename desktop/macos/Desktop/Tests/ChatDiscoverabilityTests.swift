@@ -407,7 +407,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
   func testTableAnnotationsIncludeAllExpectedTables() {
     let expected = [
       "screenshots", "action_items", "transcription_sessions", "transcription_segments",
-      "focus_sessions", "live_notes", "memories", "ai_user_profiles", "indexed_files",
+      "focus_sessions", "live_notes", "memories", "indexed_files",
       "goals", "staged_tasks", "observations", "task_chat_messages",
       "local_kg_nodes", "local_kg_edges",
     ]

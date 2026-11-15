@@ -1406,6 +1406,16 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def try_acquire_ai_profile_refresh_lock(uid: str, ttl: int = 60 * 60) -> bool:
+    """One backend AI-profile refresh per owner per ``ttl``; also throttles retries after a failure."""
+    result = r.set(f'users:{uid}:ai_profile_refresh_lock', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def release_ai_profile_refresh_lock(uid: str) -> None:
+    r.delete(f'users:{uid}:ai_profile_refresh_lock')
+
+
 def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:
     """At most one wear FCM per uid per UTC day. True iff this caller may send."""
     result = r.set(f'users:{uid}:daily_wear_lock:{date}', '1', ex=ttl, nx=True)

@@ -498,7 +498,6 @@ struct ChatPrompts {
     "live_notes": "AI-generated notes during recording",
     "memories":
       "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
-    "ai_user_profiles": "daily AI-generated user profile summaries",
     "indexed_files":
       "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
     "goals": "user goals with progress tracking",
@@ -696,11 +695,6 @@ struct ChatPrompts {
       "metadataJson": "Extra metadata JSON",
       "relevanceScore": "AI relevance score 0–100",
       "scoredAt": "When relevanceScore was computed",
-    ],
-    "ai_user_profiles": [
-      "profileText": "Full AI-generated profile summary text",
-      "dataSourcesUsed": "Bitmask of data sources used to generate the profile",
-      "generatedAt": "When this profile was generated",
     ],
     "indexed_files": [
       "path": "File path relative to home directory",

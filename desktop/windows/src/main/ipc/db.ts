@@ -115,8 +115,6 @@ import {
 } from './rewindSampleSql'
 import { SCREEN_SYNTH_FRAMES_SQL, type ScreenSynthFrameRow } from './screenSynthSql'
 import type {
-  AiUserProfileInput,
-  AiUserProfileRecord,
   FocusSessionInput,
   FocusSessionRecord,
   MemoryInput,
@@ -619,15 +617,8 @@ function get(): Database.Database {
   // sibling tracks never collide on a user_version bump. See shared/types.ts for
   // the record shapes and the readers/writers at the end of this file.
   db.exec(`
-    CREATE TABLE IF NOT EXISTS ai_user_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      profile_text TEXT NOT NULL,
-      data_sources_used TEXT,
-      generated_at INTEGER NOT NULL,
-      backend_synced INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
-
+    -- (ai_user_profiles is gone: the backend owns the AI user profile now, and
+    -- migration v3 in dbMigrations.ts drops the old local history table.)
     CREATE TABLE IF NOT EXISTS focus_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       screenshot_id TEXT,
@@ -1888,78 +1879,6 @@ export function recordVoiceTurnFailure(idempotencyKey: string, error: string): v
 }
 
 /* ---- Track 3 (proactive intelligence & memory) ---- */
-
-// --- AI User Profile history ---
-// Local history of the daily-synthesized AI User Profile. Backend is the source
-// of truth; these rows feed the stage-2 consolidation (reads up to 5 past ones).
-
-const AI_USER_PROFILE_COLUMNS =
-  'id, profile_text AS profileText, data_sources_used AS dataSourcesUsed, generated_at AS generatedAt, backend_synced AS backendSynced'
-
-type AiUserProfileRow = {
-  id: number
-  profileText: string
-  dataSourcesUsed: string | null
-  generatedAt: number
-  backendSynced: number
-}
-
-function mapAiUserProfile(row: AiUserProfileRow): AiUserProfileRecord {
-  return {
-    id: row.id,
-    profileText: row.profileText,
-    dataSourcesUsed: parseJsonArray(row.dataSourcesUsed) ?? [],
-    generatedAt: row.generatedAt,
-    backendSynced: row.backendSynced !== 0
-  }
-}
-
-export function insertAiUserProfile(rec: AiUserProfileInput): number {
-  const info = cachedStmt(
-    get(),
-    `INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced)
-       VALUES (?, ?, ?, ?)`
-  ).run(
-    rec.profileText,
-    rec.dataSourcesUsed && rec.dataSourcesUsed.length ? JSON.stringify(rec.dataSourcesUsed) : null,
-    rec.generatedAt,
-    rec.backendSynced ? 1 : 0
-  )
-  return info.lastInsertRowid as number
-}
-
-// Newest first, for the consolidation read (default 5).
-export function listAiUserProfiles(limit = 5): AiUserProfileRecord[] {
-  const rows = cachedStmt(
-    get(),
-    `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT ?`
-  ).all(limit) as AiUserProfileRow[]
-  return rows.map(mapAiUserProfile)
-}
-
-export function latestAiUserProfile(): AiUserProfileRecord | null {
-  const row = cachedStmt(
-    get(),
-    `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 1`
-  ).get() as AiUserProfileRow | undefined
-  return row ? mapAiUserProfile(row) : null
-}
-
-export function updateAiUserProfileText(id: number, text: string): void {
-  cachedStmt(get(), 'UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run(text, id)
-}
-
-export function markAiUserProfileSynced(id: number): void {
-  cachedStmt(get(), 'UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(id)
-}
-
-export function deleteAiUserProfile(id: number): void {
-  cachedStmt(get(), 'DELETE FROM ai_user_profiles WHERE id = ?').run(id)
-}
-
-export function deleteAllAiUserProfiles(): void {
-  cachedStmt(get(), 'DELETE FROM ai_user_profiles').run()
-}
 
 // --- Focus sessions ---
 // One row per Focus-assistant analysis. No backend focus API on Mac; sessions

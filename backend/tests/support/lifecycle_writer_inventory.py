@@ -3158,27 +3158,6 @@ FIELD_SITES = {
             "status; literal aliases=[('status', ('invalid_evidence',))]",
             ('key', 'kind', 'status'),
         ),
-        (
-            'run_session._state_pass',
-            'status',
-            "summary.get('status')",
-            (
-                'agree',
-                'arm',
-                'disagree',
-                'failure',
-                'judged',
-                'judged_harmful',
-                'profile_added',
-                'profile_rejected',
-                'profile_unsupported',
-                'rejected',
-                'rejected_top',
-                'status',
-                'unverified',
-                'would_serve',
-            ),
-        ),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
     ],
@@ -3237,25 +3216,6 @@ FIELD_SITES = {
             "'completed_duplicate'",
             ('processing_status', 'rationale', 'route', 'status', 'target_memory_id'),
         )
-    ],
-    'utils/dream_state_pass.py': [
-        (
-            '_run',
-            'status',
-            "'ready'",
-            ('profile_lines', 'profile_ops', 'render_chars', 'stale_refs', 'status', 'total_tokens'),
-        ),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'skipped_deadline'", ('status',)),
-        ('run', 'status', "'timeout'", ('status',)),
-        (
-            'run',
-            'status',
-            "{'written': 'complete', 'superseded': 'complete', 'expired': "
-            "'timeout'}.get(outcome, 'failed'); literal aliases=[('outcome', ('failed',))]",
-            ('status',),
-        ),
     ],
     'utils/dream_telemetry.py': [
         (
