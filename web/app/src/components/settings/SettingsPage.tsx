@@ -86,6 +86,8 @@ import {
   trackUpgradeSucceeded,
 } from '@/lib/analytics/subscriptionFunnel';
 import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
+import { CancelSubscriptionFlow } from './CancelSubscriptionFlow';
+import { useCancelFlowParityEnabled } from '@/lib/cancelFlowParity';
 import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
 // ============================================================================
@@ -868,6 +870,8 @@ export function UsageSectionContent({
   const [error, setError] = useState<string | null>(null);
   const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCancelFlow, setShowCancelFlow] = useState(false);
+  const cancelFlowParityEnabled = useCancelFlowParityEnabled();
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
   const [storefrontEnabled, setStorefrontEnabled] = useState(false);
@@ -1479,7 +1483,11 @@ export function UsageSectionContent({
 
                 {!isCancelingSubscription && (
                   <button
-                    onClick={() => setShowCancelConfirm(true)}
+                    onClick={() =>
+                      cancelFlowParityEnabled
+                        ? setShowCancelFlow(true)
+                        : setShowCancelConfirm(true)
+                    }
                     disabled={isLoading}
                     className="w-full py-2.5 text-sm text-red-400/70 transition-colors hover:text-red-400"
                   >
@@ -1561,7 +1569,7 @@ export function UsageSectionContent({
         </div>
       )}
 
-      {/* Cancel Subscription Confirmation Dialog */}
+      {/* Cancel Subscription Confirmation Dialog (fallback while the parity flag is off) */}
       <ConfirmDialog
         isOpen={showCancelConfirm}
         title="Cancel Subscription?"
@@ -1577,6 +1585,13 @@ export function UsageSectionContent({
         onCancel={() => setShowCancelConfirm(false)}
         isDestructive={true}
         isLoading={isCanceling}
+      />
+
+      <CancelSubscriptionFlow
+        open={showCancelFlow}
+        onOpenChange={setShowCancelFlow}
+        currentPeriodEnd={subscription?.current_period_end}
+        onSubscriptionUpdate={onSubscriptionUpdate}
       />
     </div>
   );

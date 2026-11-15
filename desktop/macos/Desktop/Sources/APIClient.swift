@@ -502,6 +502,7 @@ actor APIClient {
 
   func delete(
     _ endpoint: String,
+    body: Data? = nil,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
@@ -524,6 +525,10 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId
     )
+    if let body {
+      request.httpBody = body
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    }
     try validateExpectedOwner(effectiveAuthPolicy)
 
     try await performVoidRequest(request, authPolicy: effectiveAuthPolicy)

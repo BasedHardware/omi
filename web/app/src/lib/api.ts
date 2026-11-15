@@ -2081,20 +2081,71 @@ export async function upgradeSubscription(
 }
 
 /**
- * Cancel subscription
+ * Cancel subscription.
+ *
+ * The reason and optional details are the mobile cancel flow's payload; the
+ * backend already stores them (`CancelSubscriptionRequest`). Callers that pass
+ * no reason keep the historical body-less DELETE.
  */
-export async function cancelSubscription(): Promise<CancelSubscriptionResponse | null> {
+export async function cancelSubscription(
+  feedback: { reason?: string; reasonDetails?: string | null } = {},
+): Promise<CancelSubscriptionResponse | null> {
   try {
+    const hasFeedback = Boolean(feedback.reason);
     const response = await fetchWithAuth<CancelSubscriptionResponse>(
       '/v1/payments/subscription',
       {
         method: 'DELETE',
+        ...(hasFeedback
+          ? {
+              body: JSON.stringify({
+                reason: feedback.reason,
+                reason_details: feedback.reasonDetails || null,
+              }),
+            }
+          : {}),
       },
     );
     return response;
   } catch (error) {
     console.error('cancelSubscription error:', error);
+    throw error;
+  }
+}
+
+/** The cancel-flow stay offer (50% off the next 3 monthly invoices). */
+export interface RetentionOfferResponse {
+  eligible: boolean;
+  percent_off: number;
+  duration_months: number;
+  regular_amount?: number | null;
+  discounted_amount?: number | null;
+  currency?: string | null;
+}
+
+/**
+ * Read the stay offer shown on the last cancel step. An ineligible reader gets
+ * `eligible: false`; a failed read is treated as no offer so cancellation is
+ * never blocked by this call.
+ */
+export async function getRetentionOffer(): Promise<RetentionOfferResponse | null> {
+  try {
+    return await fetchWithAuth<RetentionOfferResponse>('/v1/payments/retention-offer');
+  } catch (error) {
+    console.error('getRetentionOffer error:', error);
     return null;
+  }
+}
+
+/** Apply the stay offer and keep the subscription renewing. */
+export async function acceptRetentionOffer(): Promise<RetentionOfferResponse | null> {
+  try {
+    return await fetchWithAuth<RetentionOfferResponse>('/v1/payments/retention-offer', {
+      method: 'POST',
+    });
+  } catch (error) {
+    console.error('acceptRetentionOffer error:', error);
+    throw error;
   }
 }
 

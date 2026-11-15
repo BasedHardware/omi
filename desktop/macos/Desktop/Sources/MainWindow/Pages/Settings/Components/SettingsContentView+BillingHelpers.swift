@@ -1233,6 +1233,50 @@ extension SettingsContentView {
     }
   }
 
+  /// Whether the plan-usage section offers the cancel entry (SCA-2171). Hidden
+  /// while the parity flag is off, so today's Manage-only path is unchanged;
+  /// Manage still opens the Stripe portal either way.
+  ///
+  /// A successful cancellation refresh sets `cancelAtPeriodEnd`, so this turns
+  /// false while the flow's done screen may still be on screen. The sheet is
+  /// therefore presented by `planUsageSection` — an ancestor that survives the
+  /// refresh — and never by this conditional row.
+  static func showsCancelEntry(
+    hasPaidSubscription: Bool,
+    cancelAtPeriodEnd: Bool,
+    flagEnabled: Bool
+  ) -> Bool {
+    hasPaidSubscription && !cancelAtPeriodEnd && flagEnabled
+  }
+
+  @ViewBuilder
+  var cancelSubscriptionEntry: some View {
+    if Self.showsCancelEntry(
+      hasPaidSubscription: hasPaidSubscription,
+      cancelAtPeriodEnd: userSubscription?.subscription.cancelAtPeriodEnd == true,
+      flagEnabled: CancelSubscriptionFlowSheet.isEnabled
+    ) {
+      settingsCard(settingId: "planusage.cancel") {
+        HStack(spacing: OmiSpacing.md) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Cancel Subscription")
+              .scaledFont(size: OmiType.body, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("We'll ask why before anything changes.")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Button("Cancel Subscription") {
+            showCancelSubscriptionFlow = true
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .accessibilityIdentifier("current-plan-cancel")
+        }
+      }
+    }
+  }
+
   func openCustomerPortal() {
     guard !isOpeningCustomerPortal else { return }
     isOpeningCustomerPortal = true
@@ -1391,4 +1435,28 @@ extension SettingsContentView {
     url.hasPrefix("http://127.0.0.1:") || url.hasPrefix("http://localhost:")
   }
 
+}
+
+extension View {
+  /// Presents the macOS cancel flow (SCA-2171) from a stable ancestor of the
+  /// plan cards rather than from the conditional cancel row.
+  ///
+  /// A successful cancellation refreshes the subscription, which sets
+  /// `cancelAtPeriodEnd` and removes the cancel row. A sheet attached to that
+  /// row is torn down with it, so the user never gets to read the done screen.
+  /// Attached here, the section owns the presentation and the sheet stays up
+  /// until the user explicitly dismisses it (Done, Keep, or the close button),
+  /// at which point the refreshed billing state is already in place.
+  func presentsCancelSubscriptionFlow(
+    isPresented: Binding<Bool>,
+    periodEnd: Int?,
+    onSubscriptionChanged: @escaping () -> Void
+  ) -> some View {
+    sheet(isPresented: isPresented) {
+      CancelSubscriptionFlowSheet(
+        periodEnd: periodEnd,
+        onClose: { isPresented.wrappedValue = false },
+        onSubscriptionChanged: onSubscriptionChanged)
+    }
+  }
 }

@@ -20,6 +20,8 @@ import type {
 } from '@/types/user';
 import { decodePlan, planDisplayName, planGrantsPaidCapability } from '@/types/user';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { CancelSubscriptionFlow } from './CancelSubscriptionFlow';
+import { useCancelFlowParityEnabled } from '@/lib/cancelFlowParity';
 import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import {
@@ -56,6 +58,8 @@ export function PlansSheet({
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showCancelFlow, setShowCancelFlow] = useState(false);
+  const cancelFlowParityEnabled = useCancelFlowParityEnabled();
   const [isCanceling, setIsCanceling] = useState(false);
   const [renewalConfirmation, setRenewalConfirmation] = useState<string | null>(null);
   const paywallWasOpen = useRef(false);
@@ -502,7 +506,11 @@ export function PlansSheet({
 
                             {!isCanceling_ && (
                               <button
-                                onClick={() => setShowCancelConfirm(true)}
+                                onClick={() =>
+                                  cancelFlowParityEnabled
+                                    ? setShowCancelFlow(true)
+                                    : setShowCancelConfirm(true)
+                                }
                                 disabled={isLoading}
                                 className="w-full py-2.5 text-sm text-error/70 transition-colors hover:text-error"
                               >
@@ -521,7 +529,7 @@ export function PlansSheet({
         </AnimatePresence>
       </Dialog.Root>
 
-      {/* Cancel Confirmation Dialog */}
+      {/* Cancel Confirmation Dialog (fallback while the parity flag is off) */}
       <ConfirmDialog
         open={showCancelConfirm}
         onOpenChange={setShowCancelConfirm}
@@ -538,6 +546,13 @@ export function PlansSheet({
         variant="danger"
         onConfirm={handleCancelSubscription}
         isLoading={isCanceling}
+      />
+
+      <CancelSubscriptionFlow
+        open={showCancelFlow}
+        onOpenChange={setShowCancelFlow}
+        currentPeriodEnd={subscription?.current_period_end}
+        onSubscriptionUpdate={onSubscriptionUpdate}
       />
     </>
   );

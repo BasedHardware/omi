@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/Services/SubscriptionEntitlementService.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/CancelSubscriptionFlowSheet.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+SubscriptionCancel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/SettingsViewModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/BillingWebFlow.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Storefront.swift
