@@ -65,7 +65,8 @@ def plan(source):
     return repair.plan_seals(store, ['pending'], object(), artifacts)
 
 
-def test_dry_run_no_writes_and_apply_only_patches_seal(source):
+def test_dry_run_no_writes_and_apply_only_patches_seal(source, monkeypatch):
+    monkeypatch.setattr(repair, 'time', SimpleNamespace(time=lambda: 1000))
     store, client, _ = source
     result = plan(source)
     report = repair.plan_summary(result)
@@ -77,7 +78,14 @@ def test_dry_run_no_writes_and_apply_only_patches_seal(source):
     assert client.rows[JOB_PATH]['state'] == 'record_pending'
     seal_tx = next(tx for tx in client.transactions if tx.updates)
     assert seal_tx.updates == [
-        (PATH, {'record_audio_closed': True, 'record_admitted_at': client.rows[PATH]['record_admitted_at']})
+        (
+            PATH,
+            {
+                'record_audio_closed': True,
+                'record_admitted_at': client.rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
+            },
+        )
     ]
     assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['stage'] == 'sealed'
     assert not any(value in json.dumps(report) for value in ('synthetic', 'pending', 'record_content_id'))

@@ -86,7 +86,7 @@ def test_default_and_malformed_mode_are_dark(monkeypatch):
 
 
 @pytest.mark.parametrize('mode', ['off', None])
-def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypatch, mode):
+def test_off_preserves_custody_payload_and_performs_no_renewal_io(monkeypatch, mode):
     monkeypatch.delenv('RECORD_TOKEN_LEASE_MODE', raising=False)
     if mode:
         monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', mode)
@@ -126,6 +126,7 @@ def test_off_is_bit_exact_old_write_payload_and_performs_no_renewal_io(monkeypat
     assert len(seal_updates) == 1
     assert seal_updates[0]['record_audio_closed'] is True
     assert isinstance(seal_updates[0]['record_admitted_at'], float)
+    assert isinstance(seal_updates[0]['record_sealed_at'], (int, float))
 
 
 @pytest.mark.parametrize('source', ['frames', 'custody_append'])

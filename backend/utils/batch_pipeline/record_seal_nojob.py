@@ -268,6 +268,7 @@ def apply_backfill(store, plan, approved_digest):
                 {
                     'record_upload_sessions': {},
                     'record_audio_closed': True,
+                    **({'record_sealed_at': time.time()} if not row.get('record_audio_closed') else {}),
                     **({'record_upload_failed': False} if row.get('record_upload_failed') else {}),
                 },
             )
