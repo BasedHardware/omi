@@ -33,7 +33,7 @@ def admission(client, anchors, monkeypatch):
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')
-    monkeypatch.setenv('BATCH_INTAKE_DECODE_FAILURE_MEMO_ENABLED', 'false')
+    monkeypatch.setenv('SYNC_RECORD_DECODE_FAILURE_MEMO', 'false')
     store = MemoryStore()
     store.namespace = 'batch_pipeline_dev'
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a: store)
@@ -186,8 +186,8 @@ def test_547_synthetic_refusals_replay_original_names_without_negative_cache(adm
         uploads.append(('files', (path.name, path.read_bytes(), 'application/octet-stream')))
     batches = [uploads[start : start + 16] for start in range(0, len(uploads), 16)]
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
-    for files in batches:
-        refused = client.post('/v2/sync-local-files', files=files)
+    for file in uploads:
+        refused = client.post('/v2/sync-local-files', files=[file])
         assert refused.status_code == 400 and refused.json()['code'] == 'invalid_capture_time', refused.text
     assert not store.rows and not anchors.rows
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
@@ -204,3 +204,19 @@ def test_547_synthetic_refusals_replay_original_names_without_negative_cache(adm
         assert response.status_code == 202 and response.json()['job_id'] == job_id
     assert len(staged) == 547
     assert {key: row for (table, key), row in store.rows.items() if table == 'jobs'} == jobs
+
+
+def test_requeued_estimate_with_run_token_meets_existing_upload_contract(admission, tmp_path, monkeypatch):
+    client, store, anchors, staged = admission
+    monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
+    stamp = int(router.time.time()) - 10
+    path = Path(pcm(tmp_path, stamp, 16000)).rename(tmp_path / f'audio_omi_pcm16_16000_clkerequeued_{stamp}.bin')
+    response = client.post(
+        '/v2/sync-local-files',
+        headers={'X-App-Platform': 'ios', 'X-Device-Id-Hash': 'abcd1234'},
+        files=[('files', (path.name, path.read_bytes(), 'application/octet-stream'))],
+    )
+    assert response.status_code == 202, response.text
+    result = response.json()
+    assert result['job_id'] and result['status'] == 'queued' and result['total_files'] == 1
+    assert result['total_segments'] == 1 and result['poll_after_ms'] > 0
