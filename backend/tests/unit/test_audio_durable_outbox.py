@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 from utils import pusher_audio_projection
+from utils import speaker_learning_jobs
 from utils.batch_pipeline import record_projection_rebuild as projection_rebuild
 import asyncio
 from concurrent.futures import Future
@@ -2599,8 +2600,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
     monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
     # An applied refresh schedules speaker follow-ups that build real datastore
     # clients; on CI their credential discovery outlasts this test's teardown wait.
-    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', MagicMock())
-    monkeypatch.setattr(pusher_audio_projection, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(speaker_learning_jobs, 'run_speaker_learning_jobs', AsyncMock())
     monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', MagicMock(return_value=False))
     controls = [
         struct.pack('<I', 104)
