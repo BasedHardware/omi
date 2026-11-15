@@ -380,6 +380,18 @@ environments:
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -1205,6 +1217,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1559,6 +1583,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1898,6 +1934,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -2198,6 +2246,18 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -2910,6 +2970,18 @@ environments:
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
             value: 'true'
             category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -3867,6 +3939,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4354,6 +4438,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4834,6 +4930,18 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5257,6 +5365,18 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:

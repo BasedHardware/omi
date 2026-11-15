@@ -135,6 +135,7 @@ def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monke
         if any(path == PATH and patch.get('record_audio_closed') for path, patch in tx.updates)
     )
     assert (job_path, {'available_at': 0, 'record_intake_retry_at': None}) in seal_tx.updates
+    assert any(path == PATH and isinstance(patch.get('record_sealed_at'), float) for path, patch in seal_tx.updates)
     later = records.transactions[records.transactions.index(seal_tx) + 1 :]
     assert all(path != job_path for tx in later for path, _ in tx.updates)
     if not ledger_fails:

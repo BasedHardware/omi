@@ -242,6 +242,12 @@ FIELD_SITES = {
             "'ready' if finished else 'persisted'",
             ('conversation_id', 'state'),
         ),
+        (
+            'ProjectionStore.mark_enrichment.commit',
+            'state',
+            "'ready' if finished else 'persisted'",
+            ('record_notes_deferred', 'state'),
+        ),
         ('ProjectionStore.ready.commit', 'state', "'ready'", ('state',)),
         (
             'ProjectionStore.settle_deleted_output.commit',

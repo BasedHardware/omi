@@ -664,7 +664,14 @@ def test_first_refusal_clock_is_stable_and_success_clears_atomically(records, mo
         for _, payload in transaction.updates
         if payload.get('record_audio_closed') is True
     ]
-    assert seal_updates == [{'record_audio_closed': True, 'record_seal_refused_at': None, 'record_admitted_at': 200}]
+    assert seal_updates == [
+        {
+            'record_audio_closed': True,
+            'record_seal_refused_at': None,
+            'record_admitted_at': 200,
+            'record_sealed_at': 200,
+        }
+    ]
 
 
 def test_refusal_stamp_kill_switch_preserves_old_no_write_contract(records, monkeypatch):

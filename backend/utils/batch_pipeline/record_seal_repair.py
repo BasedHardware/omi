@@ -359,6 +359,12 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             if admitted:
                 patch['record_admitted_at'] = time.time()
             sealed_observation.update(source_revision=pipeline_ledger.source_revision(snapshot), admitted=admitted)
+            if (
+                not row.get('record_audio_closed')
+                or row.get('record_upload_sessions')
+                or row.get('record_upload_failed')
+            ):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
             if row.get('record_upload_failed'):

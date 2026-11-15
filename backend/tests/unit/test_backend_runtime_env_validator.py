@@ -195,6 +195,10 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
+        {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
+        {"name": "RECORD_NOTES_EAGER_ENABLED", "value": "false"},
+        {"name": "RECORD_FOLLOWUP_WAKE_ENABLED", "value": "true"},
+        {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
@@ -3953,6 +3957,25 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
         target.write_text(target.read_text().replace('"action_items_page":100', '"dead_lever":100', 1))
     with pytest.raises(ValueError, match='unknown lever dead_lever'):
         read_lever_manifest.collect_sources(**kwargs)
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_post_seal_controls_are_rendered_on_every_cpu_reader(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='record_latency_renderer')
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    for host in hosts:
+        for key in flags:
+            value = 'false' if key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'} else 'true'
+            assert host['env'][key] == {'value': value, 'category': 'ops_kill'}
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': value}]
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
