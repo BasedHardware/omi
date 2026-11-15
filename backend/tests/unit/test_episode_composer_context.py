@@ -79,12 +79,13 @@ def test_relevance_and_visibility_filter_before_prompt_budget():
         {'content': 'Irrigation invalidated fact', 'invalid_at': 'yesterday'},
     ]
     block = context.relevant_memories([member()], memories)
-    assert 'rain sensor' in block and '[primary_user]' in block
+    assert 'rain sensor' in block and 'subject=primary_user' in block
     assert all(word not in block for word in ('violin', 'locked', 'rejected', 'invalidated'))
 
 
 @pytest.mark.parametrize('source', ['list', 'vector'])
-def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, source):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_loader_includes_all_owner_attributions_and_excludes_quality_or_paywall_rows(monkeypatch, source, legacy):
     from database import goals, users
     from models.memories import MemoryDB
     from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
@@ -107,7 +108,7 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         fact('eligible-self'),
         fact('eligible-legacy-self', ledger_schema_version=None, subject_attribution='user'),
     ]
-    denied = [
+    background = [
         MemoryDB.model_construct(id='legacy-unstamped', content='Garden irrigation unstamped'),
         MemoryDB.model_construct(
             id='legacy-interesting', content='Garden irrigation interesting', category='interesting'
@@ -122,9 +123,6 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         fact('inference', intent_backed=False),
         fact('unslotted', slot=None),
         fact('future-slot', slot='unreleased_slot'),
-        fact('locked', is_locked=True),
-        fact('rejected', user_review=False),
-        fact('invalidated', invalid_at=datetime.now(timezone.utc)),
         fact('legacy-third-party', ledger_schema_version=None, subject_scope='third_party'),
         fact('legacy-unknown', ledger_schema_version=None, subject_scope='unknown'),
         fact('legacy-attributed-third-party', ledger_schema_version=None, subject_attribution='third_party'),
@@ -135,7 +133,15 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         fact('legacy-null-attribution', ledger_schema_version=None, subject_attribution=None),
         fact('legacy-trigger', ledger_schema_version=None, kind='trigger'),
     ]
-    rows = allowed + denied
+    denied = [
+        fact('locked', is_locked=True),
+        fact('rejected', user_review=False),
+        fact('invalidated', invalid_at=datetime.now(timezone.utc)),
+        {'id': 'deleted', 'content': 'Garden irrigation deleted', 'deleted': True},
+    ]
+    background = [row for row in background if bool(row.ledger_schema_version) != legacy]
+    admitted = allowed + background
+    rows = admitted + denied
     monkeypatch.setattr(context, '_list_memories', lambda *_args: rows)
     if source == 'list':
         monkeypatch.setattr(context, '_search_memories', lambda *_args, **_kw: [])
@@ -158,12 +164,11 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         [member()], owner='Synthetic', tz=ZoneInfo('UTC'), language='English', context=background
     )
     prompt = messages[1][1]
-    assert all(row.id in prompt for row in allowed)
-    assert all(row.id not in prompt for row in denied)
-    assert '[unknown]' not in prompt and '[legacy_unspecified]' not in prompt
-    # Chat's legacy compatibility contract is intentionally unchanged tonight.
-    assert chat_memory.is_prompt_memory_eligible(denied[-1])
-    assert not context.composer_memory_eligible(denied[-1])
+    assert all(row.content in prompt for row in admitted)
+    assert all((row.get('id') if isinstance(row, dict) else row.id) not in prompt for row in denied)
+    assert 'subject=third_party' in prompt and 'attribution=unknown' in prompt
+    assert 'kind=document' in prompt and 'kind=trigger' in prompt
+    assert context.composer_memory_eligible(admitted[-1])
 
 
 def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
@@ -190,11 +195,11 @@ def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
 
 
 @pytest.mark.parametrize('missing', ['kind', 'subject_scope', 'subject_attribution'])
-def test_legacy_owner_fact_requires_all_explicit_attribution_stamps(missing):
+def test_legacy_background_does_not_require_attribution_stamps(missing):
     row = owner_fact('Garden irrigation is my project.')
     assert context.composer_memory_eligible(row)
     row.pop(missing)
-    assert not context.composer_memory_eligible(row)
+    assert context.composer_memory_eligible(row)
 
 
 def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(monkeypatch):

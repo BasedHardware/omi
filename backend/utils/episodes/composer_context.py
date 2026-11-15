@@ -1,6 +1,7 @@
 """Bounded owner background for episode notes; transcript remains the event authority.
 
-Uses authoritative hydration and stricter composer-only legacy eligibility.
+Owner ruling 2026-11-15: all account-owned memory attribution/categories are background.
+Uses shared chat quality/lock checks; never another account or deleted data.
 Retrieval failure or the one overall deadline omits all memories.
 """
 
@@ -20,7 +21,7 @@ from config.episodes import (
     COMPOSER_MEMORY_QUERY_TOKENS,
     COMPOSER_CONTEXT_MAX_READS,
 )
-from models.knowledge_ledger_policy import LEDGER_SCHEMA_VERSION, is_prompt_memory_eligible
+from models.knowledge_ledger_policy import is_prompt_memory_eligible, is_prompt_memory_visible
 from utils.episodes.composer_context_budget import bounded_gather
 
 logger = logging.getLogger(__name__)
@@ -106,35 +107,42 @@ def retrieval_query(members: Sequence[Mapping[str, Any]]) -> str:
 
 
 def _memory_data(memory: Any) -> Mapping[str, Any]:
-    # Defaults such as subject_attribution=unknown are not explicit legacy evidence.
+    # Preserve known attribution for rendering; missing values remain unknown.
     return memory if isinstance(memory, Mapping) else memory.model_dump(exclude_unset=True)
 
 
 def composer_memory_eligible(memory: Any) -> bool:
-    """Stricter than chat's legacy bridge; never widen the shared admission policy."""
+    """Owner ruling 2026-11-15: attribution is information, never an admission gate.
+
+    Reuse chat's quality/paywall predicate. Its separate canonical self-profile
+    slot predicate is inappropriate for attributed background about other people.
+    Account ownership and canonical suppression remain enforced by MemoryService.
+    """
     data = _memory_data(memory)
-    row = SimpleNamespace(
-        **{'is_locked': False, 'user_review': None, 'invalid_at': None, 'ledger_schema_version': None, **data}
+    row = SimpleNamespace(**{'is_locked': False, 'user_review': None, 'invalid_at': None, **data})
+    return bool(
+        is_prompt_memory_visible(row)
+        and not any(data.get(k) for k in ('deleted', 'is_deleted', 'deleted_at'))
+        and data.get('source_state') not in {'tombstoned', 'purged'}
+        and data.get('status') not in {'tombstoned', 'deleted', 'purged', 'superseded'}
     )
-    if not is_prompt_memory_eligible(row):
-        return False
-    # Legacy categories/manual creation do not prove who a fact is about.
-    # In particular, "interesting" extraction captures other people's wisdom.
-    # Require explicit fact + primary-owner scope + owner attribution stamps.
-    legacy = data.get('ledger_schema_version') != LEDGER_SCHEMA_VERSION
-    for field, safe in (
-        ('kind', {'fact'}),
-        ('subject_scope', {'primary_user'}),
-        ('subject_attribution', {'user'}),
-    ):
-        value = data.get(field)
-        if (legacy or field in data) and getattr(value, 'value', value) not in safe:
-            return False
-    return True
+
+
+def _memory_label(data: Mapping[str, Any]) -> str:
+    fields = [
+        ('category', 'category'),
+        ('kind', 'kind'),
+        ('subject_scope', 'subject'),
+        ('subject_attribution', 'attribution'),
+    ]
+    labels = [f'{label}={getattr(data.get(key), "value", data.get(key)) or "unknown"}' for key, label in fields]
+    date = data.get('created_at') or data.get('valid_at') or data.get('updated_at')
+    labels.append('date=' + (str(date)[:10] if date else 'unknown'))
+    return '; '.join(labels)
 
 
 def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[Any]) -> str:
-    """IDF overlap over <=1000 vetted candidates; retain at most 20 relevant facts."""
+    """IDF overlap over <=1000 account-owned candidates; at most 20 attributed background rows."""
     topics, entities, frequent = _episode_terms(members)
     query = topics | entities | frequent
     candidates = []
@@ -156,9 +164,7 @@ def relevant_memories(members: Sequence[Mapping[str, Any]], memories: Sequence[A
             for t in overlap
         ) / math.sqrt(max(1, len(terms)))
         if score > 0:
-            subject = data.get('subject_scope') or data.get('subject_attribution')
-            attribution = getattr(subject, 'value', subject) or 'legacy_unspecified'
-            ranked.append((-score, index, f'- [{attribution}] {bounded_text(content, 700)}'))
+            ranked.append((-score, index, f'- [{_memory_label(data)}] {bounded_text(content, 700)}'))
     body = '\n'.join(text for _, _, text in sorted(ranked)[:20])
     return bounded_text(body, COMPOSER_MEMORY_TOKENS)
 
