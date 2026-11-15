@@ -21,6 +21,7 @@ from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.stt import batch_language
 from utils.sync import legacy_dark, live_overlap
+from utils.sync.content_id import compute_sync_content_id
 from routers import sync as router
 
 FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
@@ -40,6 +41,7 @@ def admission(client, anchors, monkeypatch):
     monkeypatch.setattr(intake, 'admission_language_exclusion_enabled', lambda: False)
     monkeypatch.setattr(intake, 'language_guard_enabled', lambda: False)
     monkeypatch.setattr(intake, 'resolve_batch_policy', lambda *a: BatchUnitPolicy(batch_enabled=True))
+    monkeypatch.setattr(router, 'compute_sync_content_id', compute_sync_content_id)
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda *a: BatchUnitPolicy(batch_enabled=True))
     monkeypatch.setattr(legacy_dark, 'current_mode', lambda *a: legacy_dark.LegacySyncMode.ON)
     monkeypatch.setattr(
