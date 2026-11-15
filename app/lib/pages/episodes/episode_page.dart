@@ -46,7 +46,13 @@ class EpisodePage extends StatelessWidget {
     final history = context.read<ConversationProvider>();
     final episodes = context.read<EpisodeProvider?>();
     final cards = context.read<HomeFeedProvider?>()?.items ?? [];
-    final sourceSeeds = [episode, ...processingEpisodes, ...?episodes?.homeEpisodes];
+    final sourceSeeds = [
+      episode,
+      ...processingEpisodes,
+      ...?episodes?.homeEpisodes,
+      for (final id in initialIds)
+        if (episodes?.cachedEpisodeFor(id) case final source?) source,
+    ];
     final sources = [
       ...sourceSeeds,
       for (final source in sourceSeeds)
@@ -80,7 +86,8 @@ class EpisodePage extends StatelessWidget {
               m.isLocked ||
               m.homeStep == 'ready' ||
               m.homeStep == 'noise' ||
-              homeStepOf(m) == HomeStep.failed) ||
+              homeStepOf(m) == HomeStep.failed ||
+              (m.status == ConversationStatus.completed && homeStepOf(m) == null)) ||
           (card != null &&
               (card.homeStep == 'ready' || card.homeStep == 'noise' || card.homeStep == 'failed' || card.isLocked)))
         continue;
