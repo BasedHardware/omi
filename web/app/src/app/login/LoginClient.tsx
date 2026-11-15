@@ -193,13 +193,14 @@ export function LoginClient() {
     }
   }, [user, loading, router, isReferralFlow, finishReferral, afterLogin]);
 
+  // Navigation belongs to the auth-state effect above. Popup completion can
+  // precede React publishing the session; a redirect start is not a session.
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
     setError(null);
     clearRedirectSignInError();
     try {
       await signInWithGoogle();
-      if (!isReferralFlow) router.push(afterLogin);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Google'));
       console.error(err);
@@ -214,7 +215,6 @@ export function LoginClient() {
     clearRedirectSignInError();
     try {
       await signInWithApple();
-      if (!isReferralFlow) router.push(afterLogin);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Apple'));
       console.error(err);
