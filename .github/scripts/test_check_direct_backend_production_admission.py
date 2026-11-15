@@ -18,6 +18,20 @@ SPEC.loader.exec_module(CHECKER)
 
 
 class DirectBackendProductionAdmissionTests(unittest.TestCase):
+    def test_pinned_gke_selection_cannot_drop_its_admission_guards(self) -> None:
+        for relative in CHECKER.PINNED_GKE_WORKFLOWS:
+            for fragment in CHECKER.PINNED_GKE_FRAGMENTS:
+                with self.subTest(workflow=relative, fragment=fragment), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for fixture_relative in CHECKER.WORKFLOWS:
+                        target = root / fixture_relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / fixture_relative, target)
+                    target = root / relative
+                    text = target.read_text(encoding='utf-8')
+                    target.write_text(text.replace(fragment, ': # guard removed', 1), encoding='utf-8')
+                    self.assertTrue(CHECKER.validate(root))
+
     def test_inventory_is_admitted_and_uses_checked_out_source_identity(self) -> None:
         self.assertEqual(CHECKER.validate(ROOT), [])
 

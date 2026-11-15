@@ -13,6 +13,40 @@ hard-gates the final serving release vector. There is no release-record bucket,
 separate deployer identity, or backend beta ring. This does not change desktop
 Beta or Stable update-channel pointers.
 
+## Fixed merged source for standalone GKE pusher and listen
+
+The existing manual `gcp_backend_pusher.yml` and `gcp_backend_listen_helm.yml`
+workflows accept `branch=main` (the default) or `branch=<full lowercase merged
+commit SHA>` for production. The workflow starts from main, fetches fresh main,
+requires the requested object to be a commit on that ancestry, detaches at the
+exact selected source, then derives `CHECKED_OUT_SHA` and image identity from
+that tree. Mutable branch names and short SHAs are refused in production.
+Development retains its branch selection.
+
+Pusher still requires `service=pusher`, a successful automatic development
+qualification run and its exact `pusher_image_digest`. Both legacy pusher and
+backend-pusher role repositories retain their full Dockerfile/build-context and
+chart closure checks. That qualification is compared to the selected deployment
+source, so unrelated later main changes do not force a source repin. A difference
+in the selected tree still requires a new qualification; a missing or failed
+closure extractor refuses. Registry identity, promotion evidence, capacity and
+runtime readiness gates remain applicable.
+
+Listen fixed-source selection requires `mode=deploy` and an explicit `image_tag`
+resolving to that same selected commit. It retains `expected_sha` containment,
+registry existence and exact-source Firestore readiness checks, plus the existing
+chart/configuration, secret, rollout and exporter checks. A missing, mutable or
+mismatched image selector refuses before the image-resolution step's cloud read.
+The default main chart-only and rollback paths retain their existing behavior.
+
+These are normal chart deployment paths, not an image-only patch or a live-ops
+preservation mode. Review the selected source's chart/configuration changes and
+obtain scoped release approval. Invocation requires reviewed workflow controls
+on main, green required CI and normal admission, as well as the existing protected
+production environment and noncancelling shared `prod-train` lock. Selecting a
+merged pin grants no release go-ahead, proof waiver or permission to act on an
+active train. The SCA-2283 01:46Z image-only decision is a separate operator path.
+
 Use this runbook when a backend deploy may have produced stale runtime, partial traffic shifts, or GKE pods serving an old ReplicaSet. All commands below are read-only unless explicitly marked as a template for a future deploy workflow.
 ```
 
