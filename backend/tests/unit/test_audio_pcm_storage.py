@@ -112,11 +112,11 @@ def test_kill_switch_preserves_pcm_without_launching_encoder(monkeypatch, value)
 @pytest.mark.parametrize('failure', ['missing', 'timeout', 'corrupt'])
 def test_optional_encoder_failure_keeps_original_pcm_and_releases_capacity(monkeypatch, failure):
     def run(*args, **kwargs):
-        assert kwargs['timeout'] == 2
+        assert 0 < kwargs['timeout'] <= 2
         if failure == 'missing':
             raise FileNotFoundError('ffmpeg')
         if failure == 'timeout':
-            raise subprocess.TimeoutExpired('ffmpeg', 2)
+            raise subprocess.TimeoutExpired('ffmpeg', kwargs['timeout'])
         return SimpleNamespace(stdout=b'invalid')
 
     monkeypatch.setattr(subprocess, 'run', run)
@@ -131,6 +131,162 @@ def test_busy_encoder_keeps_pcm(monkeypatch):
     monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('encoder must not run'))
     pcm = bytes(64000)
     assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+
+
+def _decision_meter(monkeypatch):
+    seen = []
+
+    class _Child:
+        def __init__(self, label):
+            self.label = label
+
+        def inc(self, amount=1):
+            seen.append((self.label, amount))
+
+    monkeypatch.setattr(audio_pcm_storage, 'DECISIONS', SimpleNamespace(labels=lambda label: _Child(label)))
+    return seen
+
+
+def test_one_codec_child_per_process():
+    # One vCPU pods cannot hide two concurrent encoders; the second call must stay PCM as busy.
+    assert audio_pcm_storage._ENCODERS.acquire(blocking=False)
+    try:
+        assert not audio_pcm_storage._ENCODERS.acquire(blocking=False)
+    finally:
+        audio_pcm_storage._ENCODERS.release()
+
+
+def test_exhausted_total_budget_keeps_pcm_without_launching_encoder(monkeypatch):
+    seen = _decision_meter(monkeypatch)
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.0)
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **k: pytest.fail('encoder must not run'))
+    pcm = bytes(64000)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert ('deadline', 1) in seen
+
+
+def test_budget_limited_child_timeout_is_a_deadline_not_a_codec_error(monkeypatch):
+    seen = _decision_meter(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.2)
+
+    def run(*args, **kwargs):
+        # Deterministic: 0.2 s budget less the 0.08 s decode reserve.
+        assert kwargs['timeout'] == pytest.approx(0.12)
+        raise subprocess.TimeoutExpired('ffmpeg', kwargs['timeout'])
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    pcm = bytes(64000)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert ('deadline', 1) in seen
+
+
+def test_full_child_timeout_cap_still_labels_encoder_error(monkeypatch):
+    seen = _decision_meter(monkeypatch)
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 10.0)
+
+    def run(*args, **kwargs):
+        assert kwargs['timeout'] == audio_pcm_storage._TIMEOUT_SECONDS
+        raise subprocess.TimeoutExpired('ffmpeg', kwargs['timeout'])
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    pcm = bytes(64000)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert ('encoder_error', 1) in seen
+
+
+def test_decode_stage_uses_only_the_remaining_shared_budget(monkeypatch):
+    seen = _decision_meter(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.4)
+    monkeypatch.setattr(audio_pcm_storage, '_DECODE_RESERVE_SECONDS', 0.08)
+    pcm = bytes(64000)
+    encoded = b'x' * 1000
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append(kwargs['timeout'])
+        if len(calls) == 1:
+            clock[0] += 0.30  # encode consumed most of the shared budget
+            return SimpleNamespace(stdout=encoded)
+        return SimpleNamespace(stdout=pcm)
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (encoded, 'flac')
+    assert calls[0] == pytest.approx(0.32)
+    assert calls[1] == pytest.approx(0.10)
+    assert ('flac', 1) in seen
+
+
+def test_decode_without_remaining_budget_keeps_pcm(monkeypatch):
+    seen = _decision_meter(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.4)
+    monkeypatch.setattr(audio_pcm_storage, '_DECODE_RESERVE_SECONDS', 0.08)
+    pcm = bytes(64000)
+    encoded = b'x' * 1000
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append(kwargs['timeout'])
+        clock[0] += 0.40  # encode alone spent the whole budget
+        return SimpleNamespace(stdout=encoded)
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert len(calls) == 1
+    assert ('deadline', 1) in seen
+
+
+def _fallback_meter(monkeypatch):
+    seen = []
+    monkeypatch.setattr(audio_pcm_storage, 'record_fallback', lambda **kwargs: seen.append(kwargs))
+    return seen
+
+
+def test_deadline_records_one_shared_fallback_and_keeps_the_domain_counter(monkeypatch):
+    decisions = _decision_meter(monkeypatch)
+    fallbacks = _fallback_meter(monkeypatch)
+    clock = [100.0]
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 0.2)
+
+    def run(*args, **kwargs):
+        raise subprocess.TimeoutExpired('ffmpeg', kwargs['timeout'])
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    pcm = bytes(64000)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert fallbacks == [
+        {
+            'component': 'audio_custody',
+            'from_mode': 'flac',
+            'to_mode': 'pcm16',
+            'reason': 'timeout',
+            'outcome': 'degraded',
+        }
+    ]
+    assert ('deadline', 1) in decisions
+
+
+def test_verified_flac_and_disabled_switch_record_no_fallback(monkeypatch):
+    fallbacks = _fallback_meter(monkeypatch)
+    pcm = bytes(64000)
+    encoded = b'x' * 1000
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append(kwargs['input'])
+        return SimpleNamespace(stdout=encoded if kwargs['input'] == pcm else pcm)
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (encoded, 'flac')
+    monkeypatch.setenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'false')
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
+    assert fallbacks == []
 
 
 def test_real_subprocess_timeout_still_commits_original_custody(remote, monkeypatch):
