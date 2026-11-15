@@ -93,7 +93,7 @@ def test_terminal_empty_members_do_not_wait_and_late_speech_refreshes(store, clo
 @pytest.mark.parametrize(
     'overrides',
     [
-        {'summary_blocked_reason': None},
+        {'record_transcription_empty': None},
         {'summary_due_at': T0},
         {'summary_completed_at': T0},
         {'summary_output_present': True},

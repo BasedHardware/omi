@@ -99,7 +99,7 @@ def test_owner_shape_before_after_preserves_gate_and_full_action_ids(monkeypatch
         {'summary_due_at': T0},
         {'summary_completed_at': T0},
         {'summary_output_present': True},
-        {'summary_blocked_reason': None},
+        {'record_transcription_empty': None},
         {'status': 'processing'},
         {'structured': {'title': 'User title'}},
     ],
@@ -114,3 +114,18 @@ def test_noise_classification_and_curation_are_respected():
     assert home_step.project(row)['home_step'] == 'ready'
     assert home_step.project(row)['structured']['title'] == ''
     assert legacy_empty_wire.project(empty(), noise=False)['structured']['title'] == ''
+
+
+def test_stt_empty_receipt_needs_no_summary_failure_to_fix_both_wires():
+    row = empty(summary_blocked_reason=None)
+    assert home_step.project(row)['home_step'] == 'noise'
+    assert not old_awaiting(home_step.project(row))
+    episode = home_read.project_episode(UID, _episode(conversation_ids=['empty']), members={'empty': row})
+    assert episode['members'][0]['title'] == legacy_empty_wire.TERMINAL_TITLE
+
+
+def test_stt_only_noise_classification_rolls_back_with_wire_switch(monkeypatch):
+    row = empty(summary_blocked_reason=None)
+    monkeypatch.setenv('HOME_SETTLED_EMPTY_WIRE_ENABLED', 'false')
+    assert home_step.classify(row) == 'transcribing'
+    assert old_awaiting(home_step.project(row))

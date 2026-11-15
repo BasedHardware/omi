@@ -135,7 +135,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
         and not row.get('summary_completed_at')
         and not summary_owed(row)
     )
-    if is_completed_below_floor(row) or empty_output:
+    if is_completed_below_floor(row) or empty_output or legacy_empty_wire.terminal_noise(row):
         return NOISE
     if provisional:
         if summary_owed(row):

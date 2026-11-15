@@ -7,9 +7,8 @@ from config.episode_composition import anchored_wait_enabled, settled_terminal_e
 from config.episodes import episode_compose_transcript_wait_seconds
 from utils.episodes.policy import utc
 from utils.batch_pipeline.empty_transcription import terminal as stt_terminal_empty
-from utils.conversations.fragment_visibility import is_completed_below_floor
 from utils.conversations.home_titles import summary_owed
-from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
+from utils.conversations.summary_delivery import present
 
 
 def empty_terminal_result(row: Mapping[str, Any]) -> bool:
@@ -30,7 +29,6 @@ def empty_terminal_result(row: Mapping[str, Any]) -> bool:
         and not row.get('summary_output_present')
         and not row.get('summary_completed_at')
         and not summary_owed(row)
-        and (row.get('summary_blocked_reason') in EMPTY_BLOCKED_REASONS or is_completed_below_floor(row))
     )
 
 
