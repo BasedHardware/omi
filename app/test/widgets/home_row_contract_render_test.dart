@@ -178,6 +178,12 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
   await store.refresh();
   addTearDown(store.dispose);
   final boundary = GlobalKey();
+  final captureTheme = buildOmiTheme(brightness: Brightness.light);
+  // A native iOS snackbar resolves its unspecified family to SF Pro. The test
+  // engine otherwise falls back to Ahem for this standalone TextStyle.
+  final theme = captureTheme.copyWith(
+      snackBarTheme: captureTheme.snackBarTheme.copyWith(
+          contentTextStyle: captureTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display')));
   Widget screen = await buildTypedConversationScreen(
     conversations,
     pendingWork: store,
@@ -185,7 +191,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     feed: feed,
     captureProvider: capture,
     initializePreferences: false,
-    theme: buildOmiTheme(brightness: Brightness.light),
+    theme: theme,
   );
   if (withNavigation) {
     final apps = AppProvider();
