@@ -249,6 +249,10 @@ void main() {
   for (final compact in [false, true]) {
     testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      // Establish the fixture account before owner-fenced episode reads. A
+      // later mock-account reset must not invalidate the live snapshot mid-frame.
+      SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+      await SharedPreferencesUtil.init();
       final fixture = HomeSettledNoiseFixture(DateTime.now());
       final episodes = EpisodeProvider(
           fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
@@ -287,6 +291,7 @@ void main() {
       final boundary = await _pumpHome(tester, compact ? [] : fixture.members,
           episodeProvider: episodes, feed: compact ? feed : null, capture: capture, processing: fixture.localPending);
       expect(find.byType(LiveEpisodeRow), findsOneWidget);
+      expect(find.text('Listening now'), findsOneWidget);
       if (_baseline) {
         expect(find.byType(ProcessingConversationRow), findsNWidgets(4));
         expect(find.text('Transcribing… · 13 recordings'), findsOneWidget);
@@ -319,6 +324,7 @@ void main() {
               : compact
                   ? '008-mobile-ios-reported-shape-after'
                   : 'reported-shape-legacy-after');
+      expect(find.text('Listening now'), findsOneWidget, reason: 'capture keeps the real visible live row');
       await tester.pumpWidget(const SizedBox.shrink());
       episodes.invalidateHome();
     }, skip: _baseline && compact);
