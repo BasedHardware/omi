@@ -7008,6 +7008,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple से साइन इन विफल, कृपया पुनः प्रयास करें।';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple से साइन इन नहीं हो पाया। फिर से कोशिश करें या Google के साथ जारी रखें।';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override
