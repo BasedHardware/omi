@@ -5502,6 +5502,11 @@
               "required": "true",
               "type": "choice"
             },
+            "jobs": {
+              "description": "Optional space-separated declared job names; required to select planned jobs",
+              "required": "false",
+              "type": "string"
+            },
             "operation": {
               "default": "check",
               "description": "Prod is read-only; development can be reconciled",
