@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Aanmelden met Google mislukt, probeer het opnieuw.",
     "authenticationFailed": "Authenticatie mislukt. Probeer het opnieuw.",
     "authFailedToSignInWithApple": "Aanmelden met Apple mislukt, probeer het opnieuw.",
+    "authAppleSignInFailedUseGoogle": "Inloggen met Apple is niet gelukt. Probeer het opnieuw of ga verder met Google.",
     "authFailedToRetrieveToken": "Kon Firebase-token niet ophalen, probeer het opnieuw.",
     "authUnexpectedErrorFirebase": "Onverwachte fout bij aanmelden, Firebase-fout, probeer het opnieuw.",
     "authUnexpectedError": "Onverwachte fout bij aanmelden, probeer het opnieuw",

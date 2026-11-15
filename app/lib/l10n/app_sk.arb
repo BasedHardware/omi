@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Nepodarilo sa prihlásiť cez Google",
     "authenticationFailed": "Autentifikácia zlyhala",
     "authFailedToSignInWithApple": "Nepodarilo sa prihlásiť cez Apple",
+    "authAppleSignInFailedUseGoogle": "Prihlásenie cez Apple sa nepodarilo. Skúste to znova alebo pokračujte cez Google.",
     "authFailedToRetrieveToken": "Nepodarilo sa získať token",
     "authUnexpectedErrorFirebase": "Neočakávaná chyba Firebase",
     "authUnexpectedError": "Neočakávaná chyba",

@@ -160,6 +160,7 @@ def conversations_db():
     from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
     from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
+    from utils.home_feed import projection as home_feed_projection
 
     firestore = _Firestore([])
 
@@ -242,6 +243,7 @@ def conversations_db():
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
         "utils.conversations.transcribing_hold": transcribing_hold,

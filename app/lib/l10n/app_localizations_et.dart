@@ -7027,6 +7027,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple\'iga sisselogimine ebaõnnestus, palun proovige uuesti.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple\'iga sisselogimine ei õnnestunud. Proovi uuesti või jätka Google\'iga.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase tokeni hankimine ebaõnnestus, palun proovige uuesti.';
 
   @override

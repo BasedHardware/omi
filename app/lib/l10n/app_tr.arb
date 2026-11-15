@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google ile giriş yapılamadı, lütfen tekrar deneyin.",
     "authenticationFailed": "Kimlik doğrulama başarısız. Lütfen tekrar deneyin.",
     "authFailedToSignInWithApple": "Apple ile giriş yapılamadı, lütfen tekrar deneyin.",
+    "authAppleSignInFailedUseGoogle": "Apple ile giriş yapılamadı. Tekrar deneyin veya Google ile devam edin.",
     "authFailedToRetrieveToken": "Firebase jetonu alınamadı, lütfen tekrar deneyin.",
     "authUnexpectedErrorFirebase": "Giriş yaparken beklenmeyen hata, Firebase hatası, lütfen tekrar deneyin.",
     "authUnexpectedError": "Giriş yaparken beklenmeyen hata, lütfen tekrar deneyin",

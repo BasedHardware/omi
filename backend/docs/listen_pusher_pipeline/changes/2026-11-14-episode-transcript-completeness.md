@@ -3,7 +3,7 @@
 A retained visible member can be `completed` while its batch transcription is
 pending. The composer now waits when `home_transcription_pending_at` is set and
 there is no nonblank transcript. The deadline is that original stamp plus
-`EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS` (default 21600, bounded 0..86400).
+`EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS` (default 1200, bounded 0..86400).
 After expiry it composes available speech. Force/read requests do not bypass
 this gate. Hidden, deleted, discarded and duplicate members do not hold it.
 

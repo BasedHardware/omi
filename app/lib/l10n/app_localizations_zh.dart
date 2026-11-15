@@ -6921,6 +6921,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => '无法通过 Apple 登录。请重试，或使用 Google 继续。';
+
+  @override
   String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
 
   @override

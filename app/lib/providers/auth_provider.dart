@@ -21,6 +21,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -280,12 +281,17 @@ class AuthenticationProvider extends BaseProvider {
                 'Failed to sign in with Apple, please try again.',
           );
         }
-      } catch (e) {
-        Logger.debug('OAuth Apple sign in error: $e');
+      } catch (e, stackTrace) {
         PlatformManager.instance.analytics.signInFailed('apple', error: e);
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
-        );
+        if (isSignInCancellation(e)) {
+          Logger.debug('Apple sign in cancelled');
+        } else {
+          Logger.handle(e, stackTrace, message: 'Apple sign in failed');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authAppleSignInFailedUseGoogle ??
+                "Sign in with Apple didn't work. Try again or continue with Google.",
+          );
+        }
       }
       setLoadingState(false);
     }

@@ -20,7 +20,8 @@ episode read plus two member reads per promoted read recovery (in addition to
 Home's existing bounded member-metadata projection). It now adds zero composer
 reads per Home request during the wait, proved by counted fake database reads.
 The first wait still reads members and persists one deadline. No paid call is
-made while waiting; the six-hour compose wait does not change Home labels.
+made while waiting; the bounded compose wait (20 minutes by default) does not
+change Home labels.
 
 Below the scaled notes range, the entire one-shot request remains byte-for-byte
 identical with the notes detail switch on or off, including the variable packet.

@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "No s'ha pogut iniciar sessió amb Google, si us plau torneu-ho a provar.",
     "authenticationFailed": "L'autenticació ha fallat. Si us plau, torneu-ho a provar.",
     "authFailedToSignInWithApple": "No s'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.",
+    "authAppleSignInFailedUseGoogle": "No s'ha pogut iniciar la sessió amb Apple. Torna-ho a provar o continua amb Google.",
     "authFailedToRetrieveToken": "No s'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.",
     "authUnexpectedErrorFirebase": "Error inesperat en iniciar sessió, error de Firebase, si us plau torneu-ho a provar.",
     "authUnexpectedError": "Error inesperat en iniciar sessió, si us plau torneu-ho a provar",

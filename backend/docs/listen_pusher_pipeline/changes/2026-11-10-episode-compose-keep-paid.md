@@ -53,7 +53,8 @@ close/read/member_final/settle/repair.
 ## Verify after deploy (operator follow-up; no deploy in this change)
 
 Compare equal windows after the deployed revision is serving traffic, allowing
-one complete 25-minute settle interval before interpreting savings:
+one complete `COMPOSER_MAX_SETTLE_SECONDS` interval (currently five minutes)
+before interpreting savings:
 
 - `sum(increase(omi_episode_compose_calls_total[24h]))` by `trigger`: the
   `repair` share should be small and the `close`/`member_final` split should

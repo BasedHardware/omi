@@ -7083,6 +7083,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Anmeldung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Die Anmeldung mit Apple hat nicht geklappt. Versuche es erneut oder fahre mit Google fort.';
+
+  @override
   String get authFailedToRetrieveToken =>
       'Firebase-Token konnte nicht abgerufen werden, bitte versuchen Sie es erneut.';
 

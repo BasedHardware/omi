@@ -175,6 +175,66 @@ def test_android_missing_hide_is_repaired_while_code_is_not_on_production():
     assert (repairs, clears) == (1, 0)
 
 
+def test_android_first_sight_pending_production_code_creates_bounded_hide():
+    updated, repairs, clears = lifecycle.reconcile_android_config(
+        {},
+        production_codes=set(),
+        pending_versions_by_code={'412': '3.0.0'},
+        now=NOW,
+    )
+
+    assert updated['hidden_versions'] == ['3.0.0']
+    assert updated['review_submission_entries'] == [
+        {
+            'platform': 'android',
+            'version': '3.0.0',
+            'version_code': '412',
+            'submitted_at': NOW.isoformat().replace('+00:00', 'Z'),
+            'expires_at': (NOW + timedelta(days=14)).isoformat().replace('+00:00', 'Z'),
+            'state': 'active',
+            'owns_hidden_version': True,
+            'source': 'reconciliation',
+        }
+    ]
+    assert (repairs, clears) == (1, 0)
+
+
+def test_android_completed_old_build_does_not_clear_a_pending_replacement_hide():
+    config = {
+        'hidden_versions': ['3.0.0'],
+        'review_submission_entries': [active_entry('android', '3.0.0', code='412')],
+    }
+
+    updated, repairs, clears = lifecycle.reconcile_android_config(
+        config,
+        production_codes={'412'},
+        pending_versions_by_code={'413': '3.0.0'},
+        now=NOW,
+    )
+
+    assert updated['hidden_versions'] == ['3.0.0']
+    assert [(entry['version_code'], entry['state']) for entry in updated['review_submission_entries']] == [
+        ('413', 'active')
+    ]
+    assert (repairs, clears) == (1, 0)
+
+
+def test_android_first_sight_does_not_recreate_an_expired_tombstone():
+    tombstone = active_entry('android', '3.0.0', code='412')
+    tombstone['state'] = 'expired'
+    config = {'hidden_versions': [], 'review_submission_entries': [tombstone]}
+
+    updated, repairs, clears = lifecycle.reconcile_android_config(
+        config,
+        production_codes=set(),
+        pending_versions_by_code={'412': '3.0.0'},
+        now=NOW,
+    )
+
+    assert updated == config
+    assert (repairs, clears) == (0, 0)
+
+
 def test_submission_ttl_is_fourteen_days_and_existing_fields_survive():
     config = {
         'hidden_versions': ['legacy'],
@@ -216,6 +276,36 @@ def test_replayed_receipt_does_not_extend_an_active_submission_lease():
     row = updated["review_submission_entries"][0]
     assert row["expires_at"] == existing["expires_at"]
     assert row["owns_hidden_version"] is True
+
+
+def test_new_android_build_receipt_gets_a_full_lease():
+    existing = active_entry("android", "3.0.0", code="412", expiry=NOW + timedelta(minutes=1))
+    config = {"hidden_versions": ["3.0.0"], "review_submission_entries": [existing]}
+
+    updated = lifecycle.record_submission_config(
+        config, platform="android", version="3.0.0", version_code="413", now=NOW
+    )
+
+    assert len(updated["review_submission_entries"]) == 1
+    row = updated["review_submission_entries"][0]
+    assert row["version_code"] == "413"
+    assert row["submitted_at"] == NOW.isoformat().replace("+00:00", "Z")
+    assert row["expires_at"] == (NOW + timedelta(days=14)).isoformat().replace("+00:00", "Z")
+
+
+def test_fresh_receipt_replaces_a_past_deadline_with_a_full_lease():
+    existing = active_entry("android", "3.0.0", code="412", expiry=NOW - timedelta(seconds=1))
+    config = {"hidden_versions": ["3.0.0"], "review_submission_entries": [existing]}
+
+    updated = lifecycle.record_submission_config(
+        config, platform="android", version="3.0.0", version_code="412", now=NOW
+    )
+
+    row = updated["review_submission_entries"][0]
+    assert row["submitted_at"] == NOW.isoformat().replace("+00:00", "Z")
+    assert row["expires_at"] == (NOW + timedelta(days=14)).isoformat().replace("+00:00", "Z")
+    assert row["state"] == "active"
+    assert updated["hidden_versions"] == ["3.0.0"]
 
 
 def test_firestore_helpers_resolve_the_client_at_call_time(monkeypatch):
@@ -269,7 +359,7 @@ def test_store_api_failures_still_run_ttl_and_keep_unexpired_hides(monkeypatch):
     )
     monkeypatch.setattr(
         lifecycle,
-        '_play_production_codes',
+        '_play_production_state',
         lambda: (_ for _ in ()).throw(lifecycle.StoreCredentialsUnavailable('missing')),
     )
     sweep_counter = Mock()
@@ -346,7 +436,7 @@ def test_reconciliation_persists_dropped_tombstone_even_when_no_hide_was_cleared
 
     monkeypatch.setattr(lifecycle, "_update_config", update)
     monkeypatch.setattr(lifecycle, "_apple_versions", lambda: {"2.1.0": "READY_FOR_SALE"})
-    monkeypatch.setattr(lifecycle, "_play_production_codes", lambda: set())
+    monkeypatch.setattr(lifecycle, "_play_production_state", lambda: (set(), {}))
     monkeypatch.setattr(lifecycle, "OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL", Mock())
 
     summary = lifecycle.run_app_review_config_sweep(now=NOW)
@@ -371,7 +461,7 @@ def test_sweep_alerts_after_clearing_a_preexisting_build_qualified_ios_hide(
 
     monkeypatch.setattr(lifecycle, "_update_config", update)
     monkeypatch.setattr(lifecycle, "_apple_versions", lambda: {"2.1.0": "READY_FOR_SALE"})
-    monkeypatch.setattr(lifecycle, "_play_production_codes", lambda: set())
+    monkeypatch.setattr(lifecycle, "_play_production_state", lambda: (set(), {}))
     alerts = Mock()
     monkeypatch.setattr(lifecycle, "report_lifecycle_alert", alerts)
     monkeypatch.setattr(lifecycle, "OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL", Mock())
@@ -426,11 +516,12 @@ def test_play_reader_uses_only_production_track_and_deletes_temporary_edit(monke
                     'track': 'production',
                     'releases': [
                         {
+                            'name': '3.0.0 (gate 2026-11-12-1200)',
                             'status': 'inProgress',
                             'userFraction': 0.01,
                             'versionCodes': ['412'],
                         },
-                        {"status": "draft", "versionCodes": ["413"]},
+                        {"name": "3.0.1", "status": "draft", "versionCodes": ["413"]},
                         {'status': 'completed', 'versionCodes': ['411']},
                     ],
                 }
@@ -448,23 +539,39 @@ def test_play_reader_uses_only_production_track_and_deletes_temporary_edit(monke
     )
     monkeypatch.setattr(lifecycle, 'AuthorizedSession', lambda _credentials: session)
 
-    codes = lifecycle._play_production_codes()
+    codes, pending = lifecycle._play_production_state()
     assert codes == {'411'}
+    assert pending == {'412': '3.0.0', '413': '3.0.1'}
     for version, code in (("3.0.0", '412'), ("3.0.1", "413")):
         held_config = {
             "hidden_versions": [version],
             "review_submission_entries": [active_entry("android", version, code=code)],
         }
-        held_after_sweep, repairs, clears = lifecycle.reconcile_android_config(held_config, production_codes=codes)
+        held_after_sweep, repairs, clears = lifecycle.reconcile_android_config(
+            held_config,
+            production_codes=codes,
+            pending_versions_by_code={code: version},
+            now=NOW,
+        )
         assert held_after_sweep["hidden_versions"] == [version]
         assert (repairs, clears) == (0, 0)
+    completed_config = {
+        "hidden_versions": ["3.0.2"],
+        "review_submission_entries": [active_entry("android", "3.0.2", code="411")],
+    }
+    completed_after_sweep, repairs, clears = lifecycle.reconcile_android_config(
+        completed_config, production_codes=codes, pending_versions_by_code={}, now=NOW
+    )
+    assert completed_after_sweep["hidden_versions"] == []
+    assert completed_after_sweep["review_submission_entries"] == []
+    assert (repairs, clears) == (0, 1)
     assert len(session.calls) == 3
     assert '/tracks/production' in session.calls[1][1]
     assert '/tracks/internal' not in str(session.calls)
     assert session.calls[2][0] == 'delete'
 
 
-def test_play_edit_creation_retries_once_after_conflict(monkeypatch):
+def test_play_edit_creation_retries_conflicts_with_bounded_backoff(monkeypatch):
     class Response:
         def __init__(self, status, body):
             self.status_code = status
@@ -485,7 +592,7 @@ def test_play_edit_creation_retries_once_after_conflict(monkeypatch):
         def post(self, url, **_kwargs):
             self.posts += 1
             self.calls.append(("post", url))
-            return Response(409, {}) if self.posts == 1 else Response(200, {"id": "retry-edit"})
+            return Response(409, {}) if self.posts < 5 else Response(200, {"id": "retry-edit"})
 
         def get(self, url, **_kwargs):
             self.calls.append(("get", url))
@@ -502,10 +609,12 @@ def test_play_edit_creation_retries_once_after_conflict(monkeypatch):
         lambda *_a, **_k: object(),
     )
     monkeypatch.setattr(lifecycle, "AuthorizedSession", lambda _credentials: session)
-    monkeypatch.setattr(lifecycle.time, "sleep", lambda _seconds: None)
+    sleeps = []
+    monkeypatch.setattr(lifecycle.time, "sleep", sleeps.append)
 
-    assert lifecycle._play_production_codes() == {"412"}
-    assert session.posts == 2
+    assert lifecycle._play_production_state() == ({"412"}, {})
+    assert session.posts == 5
+    assert sleeps == [1, 2, 4, 8]
     assert session.calls[-1][0] == "delete"
 
 
@@ -582,11 +691,11 @@ def test_alert_rules_cover_lifecycle_events_and_dead_sweeper():
     page = rules['omi-app-review-config-alert']
     assert not page['isPaused']
     expression = page['data'][0]['model']['expr']
-    reason_matcher = (
-        'reason=~"credentials_unavailable|store_api_error|' 'submission_token_unavailable|submission_token_rejected"'
-    )
-    assert reason_matcher in expression
-    assert reason_matcher in page['annotations']['threshold']
+    expected_reasons = "credentials_unavailable|store_api_error|submission_token_unavailable|submission_token_rejected"
+    assert f'reason=~"{expected_reasons}"' in expression
+    assert f'reason=~"{expected_reasons}"' in page['annotations']['threshold']
+    assert "[3h])) >= bool 3" in expression
+    assert ">= 3" in page['annotations']['threshold']
     assert "reconciliation_repair" not in expression and "live_hide_cleared" not in expression
     deadman = rules['omi-app-review-config-sweep-silent']
     assert deadman['isPaused']
@@ -596,6 +705,8 @@ def test_alert_rules_cover_lifecycle_events_and_dead_sweeper():
 
 def test_submission_endpoint_rejects_missing_and_wrong_token(monkeypatch):
     monkeypatch.setattr(router, "load_submission_token", lambda: 'expected-token')
+    alerts = Mock()
+    monkeypatch.setattr(router, 'report_lifecycle_alert', alerts)
     monkeypatch.setattr(
         router,
         'submit_review_version',
@@ -607,6 +718,8 @@ def test_submission_endpoint_rejects_missing_and_wrong_token(monkeypatch):
         with pytest.raises(HTTPException) as error:
             asyncio.run(router.record_review_submission(body, token))
         assert error.value.status_code == 401
+    assert alerts.call_count == 3
+    assert all(call.args[1] == 'submission_token_rejected' for call in alerts.call_args_list)
 
 
 def test_submission_endpoint_fails_closed_when_credential_is_missing(monkeypatch):
