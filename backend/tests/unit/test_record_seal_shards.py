@@ -243,6 +243,32 @@ def test_process_deadline_counts_cold_start_and_reserves_cleanup(monkeypatch):
         process_deadline(100, 'unrecognized', now, 105)
 
 
+@pytest.mark.parametrize(
+    'hostname',
+    [
+        'record-seal-repair-29912640-0',
+        'record-seal-repair-29912640-2',
+        'record-seal-repair-29912640-4',
+        'record-seal-repair-29912640-abcde',
+        'record-seal-repair-29912640-2-abcde',
+    ],
+)
+def test_scheduled_deadline_accepts_literal_indexed_and_ordinary_hostnames(monkeypatch, hostname):
+    from scripts.record_seal_repair_job import process_deadline
+
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'synthetic')
+    now = 29912640 * 60 + 600
+    assert process_deadline(100, hostname, now, 105) == 1125
+
+
+def test_indexed_hostname_cannot_supply_a_future_scheduled_clock(monkeypatch):
+    from scripts.record_seal_repair_job import process_deadline
+
+    monkeypatch.setenv('KUBERNETES_SERVICE_HOST', 'synthetic')
+    with pytest.raises(ValueError, match='invalid scheduled repair clock'):
+        process_deadline(100, 'record-seal-repair-29912640-2', 29912640 * 60 - 61, 105)
+
+
 def test_projection_callback_is_inside_lease_and_not_run_for_duplicate(monkeypatch):
     from database import _client
     from utils.batch_pipeline import record_seal_sweeper, record_seal_run_lease

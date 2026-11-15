@@ -122,12 +122,13 @@ def partition_arguments(argv):
 def process_deadline(started, hostname, wall_now, monotonic_now):
     """Bound imports, cold scheduling/image pull, all phases and cleanup.
 
-    The standard CronJob name contains its scheduled Unix minute; pod names
-    append an optional Indexed index and Kubernetes random suffix. This clock
-    is earlier than Job creation, so it conservatively includes scale-up waits.
+    The standard Job name contains its scheduled Unix minute. Indexed pods use
+    the stable hostname <job>-<index>; ordinary pods use <job>-<random>. Also
+    accept an Indexed pod's metadata name, <job>-<index>-<random>. This clock is
+    earlier than Job creation, so it conservatively includes scale-up waits.
     """
     deadline = started + 1560  # At least 120s before the hard Job ceiling.
-    match = re.fullmatch(r'record-seal-repair-(\d{8,})-(?:\d+-)?[a-z0-9]{5}', hostname)
+    match = re.fullmatch(r'record-seal-repair-(\d{8,})-(?:\d+|(?:\d+-)?[a-z0-9]{5})', hostname)
     if match:
         scheduled = int(match.group(1)) * 60
         if scheduled > wall_now + 60:
