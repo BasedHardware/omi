@@ -124,7 +124,7 @@ def composer_memory_eligible(memory: Any) -> bool:
         ('subject_attribution', {'user', 'legacy_assumed'}),
     ):
         value = data.get(field)
-        if value is not None and getattr(value, 'value', value) not in safe:
+        if field in data and getattr(value, 'value', value) not in safe:
             return False
     return True
 

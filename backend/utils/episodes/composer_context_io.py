@@ -37,7 +37,8 @@ def people(uid: str, ids: list[str], budget: Any) -> list[dict]:
     if not ids:
         return []
     budget.check()
-    refs = [db.collection('users').document(uid).collection('people').document(pid) for pid in ids[:20]]
+    collection = db.collection('users').document(uid).collection('people')
+    refs = [collection.document(pid) for pid in ids[:20]]
     docs = list(
         db.get_all(
             refs,

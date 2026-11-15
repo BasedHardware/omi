@@ -116,3 +116,28 @@ def test_strict_context_read_budget_caps_stream_before_fetching():
     with pytest.raises(ListReadBudgetExhausted):
         budgeted_get_all(db, [object()], bounded)
     db.get_all.assert_not_called()
+
+
+def test_owner_people_projection_is_read_only_and_bounded(monkeypatch):
+    from database import _client
+    from utils.episodes import composer_context_io
+
+    client = Mock()
+    client.get_all.return_value = [SimpleNamespace(exists=True, to_dict=lambda: {'name': 'Synthetic person'})] * 20
+    monkeypatch.setattr(_client, 'db', client)
+    bounded = budget()
+    assert len(composer_context_io.people('synthetic-owner', [f'person-{n}' for n in range(40)], bounded)) == 20
+    client.collection.assert_called_once_with('users')
+    client.collection.return_value.document.assert_called_once_with('synthetic-owner')
+    client.collection.return_value.document.return_value.collection.assert_called_once_with('people')
+    args, kwargs = client.get_all.call_args
+    assert len(args[0]) == 20 and bounded.docs_scanned == 20
+    assert kwargs == {
+        'field_paths': ['name', 'relationship', 'description', 'is_dismissed'],
+        'timeout': 10,
+        'retry': None,
+    }
+    assert all(
+        call[0].split('.')[-1] not in {'set', 'update', 'create', 'delete', 'batch', 'transaction'}
+        for call in client.mock_calls
+    )

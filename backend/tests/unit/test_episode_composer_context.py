@@ -94,7 +94,9 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
 
     allowed = [
         fact('eligible-self'),
-        fact('eligible-legacy-unspecified', ledger_schema_version=None, kind=None, subject_scope=None),
+        MemoryDB.model_construct(
+            id='eligible-legacy-unspecified', content='Garden irrigation eligible-legacy-unspecified'
+        ),
         fact('eligible-legacy-self', ledger_schema_version=None, subject_attribution='user'),
     ]
     denied = [
@@ -115,6 +117,9 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
         fact('legacy-attributed-third-party', ledger_schema_version=None, subject_attribution='third_party'),
         fact('legacy-attributed-unknown', ledger_schema_version=None, subject_attribution='unknown'),
         fact('legacy-document', ledger_schema_version=None, kind='document'),
+        fact('legacy-null-kind', ledger_schema_version=None, kind=None),
+        fact('legacy-null-scope', ledger_schema_version=None, subject_scope=None),
+        fact('legacy-null-attribution', ledger_schema_version=None, subject_attribution=None),
         fact('legacy-trigger', ledger_schema_version=None, kind='trigger'),
     ]
     rows = allowed + denied
