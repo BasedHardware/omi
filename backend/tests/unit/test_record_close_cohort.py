@@ -94,7 +94,7 @@ async def test_both_account_cohorts_must_qualify_v3(inline_session, monkeypatch,
     acknowledgments = [frame for frame in peer.sent if struct.unpack('<I', frame[:4])[0] == 204]
     assert bool(acknowledgments) is expected
     if expected:
-        assert json.loads(acknowledgments[0][4:]) == {'type': 'record_close_ack', 'version': 3}
+        assert json.loads(acknowledgments[0][4:]) == {'type': 'record_close_ack', 'version': 3, 'abort_to_legacy': True}
     select(monkeypatch, listen_cohort)
     socket.incoming.extend([*acknowledgments, b''])
     socket.on_recv = lambda: active.update(active=len(socket.incoming) > 1)
@@ -102,6 +102,7 @@ async def test_both_account_cohorts_must_qualify_v3(inline_session, monkeypatch,
     session.pending_conversation_requests['unrelated'] = {'sent_at': 1000, 'retries': 0}
     await session.pusher_receive()
     assert session.record_close_supported is expected
+    assert session.record_close_abort_supported is expected
     assert not socket.closed_codes
 
 

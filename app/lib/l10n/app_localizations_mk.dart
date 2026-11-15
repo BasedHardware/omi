@@ -7064,6 +7064,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава со Apple, ве молиме обидете се повторно.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Најавувањето со Apple не успеа. Обидете се повторно или продолжете со Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преземање на firebase жетон, ве молиме обидете се повторно.';
 
   @override

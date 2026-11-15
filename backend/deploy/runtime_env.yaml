@@ -4143,6 +4143,12 @@ environments:
             EPISODE_COMPOSER_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS:
+              value: '1200'
+              category: config
+            FIRST_SUMMARY_DEADLINE_SECONDS:
+              value: '60'
+              category: config
             EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
               value: 'true'
               category: ops_kill

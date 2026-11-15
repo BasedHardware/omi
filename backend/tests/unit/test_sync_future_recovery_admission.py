@@ -15,7 +15,7 @@ from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_capture_time_skew import client, _default_skew
-from tests.unit.test_sync_receipt_clock_anchor import anchors
+from tests.unit.test_sync_receipt_clock_anchor import anchors, RECEIVED
 from utils.batch_pipeline import intake, projection
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -30,6 +30,14 @@ FUTURE = datetime(2038, 1, 19, tzinfo=timezone.utc).timestamp()
 
 @pytest.fixture
 def admission(client, anchors, monkeypatch):
+    import time as system_time
+    from utils.sync import lanes
+
+    # Pin the receive clock alongside the immutable anchor fixture: calendar
+    # dates here must never age into a different admission/retention population.
+    clock = SimpleNamespace(time=lambda: RECEIVED, monotonic=system_time.monotonic)
+    monkeypatch.setattr(router, 'time', clock)
+    monkeypatch.setattr(lanes, 'time', clock)
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_LANGUAGE_INHERITANCE_ENABLED', 'false')

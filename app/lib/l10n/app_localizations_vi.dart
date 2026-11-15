@@ -7039,6 +7039,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Không thể đăng nhập bằng Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Không thể đăng nhập bằng Apple. Hãy thử lại hoặc tiếp tục với Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Không thể lấy mã thông báo';
 
   @override

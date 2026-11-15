@@ -1225,16 +1225,21 @@ def _run(*, progress, shard, shards, deadline=None):
         # never past a deferred row. Initial checkpoint survives interruption;
         # end-of-pass wrap revisits even the oldest chronic/interrupted row.
         budget = SweepBudget(30)
-        with silent_dependencies(), budget.interrupt_io():
-            if last_attempted:
-                frontier.write(last_attempted, budget)
-            if last_job_attempted and jobs_frontier is not None:
-                jobs_frontier.write(last_job_attempted, budget)
-            if last_urgent_attempted and urgent_frontier is not None:
-                urgent_frontier.write(last_urgent_attempted, budget)
+        try:
+            with silent_dependencies(), budget.interrupt_io():
+                if last_attempted:
+                    frontier.write(last_attempted, budget)
+                if last_job_attempted and jobs_frontier is not None:
+                    jobs_frontier.write(last_job_attempted, budget)
+                if last_urgent_attempted and urgent_frontier is not None:
+                    urgent_frontier.write(last_urgent_attempted, budget)
+        except BudgetExhausted:
+            report['cursor_checkpoint_outcome'] = 'budget_exhausted'
+            report['work_incomplete'] = True
+            progress({'event': 'record_seal_repair_checkpoint', 'outcome': 'budget_exhausted'})
     return {
         'event': 'record_seal_repair',
-        'outcome': 'ok',
+        'outcome': 'budget_exhausted' if report.get('cursor_checkpoint_outcome') == 'budget_exhausted' else 'ok',
         'mode': mode,
         'discovery_saturated': saturated,
         'shard': shard,

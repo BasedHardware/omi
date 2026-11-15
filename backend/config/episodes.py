@@ -216,9 +216,9 @@ def episode_compose_transcript_ready_enabled() -> bool:
 def episode_compose_transcript_wait_seconds() -> float:
     """A fixed deadline from the member's pending stamp; reads never renew it."""
     try:
-        return max(0.0, min(float(os.getenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '21600')), 86400.0))
+        return max(0.0, min(float(os.getenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')), 86400.0))
     except ValueError:
-        return 21600.0
+        return 1200.0
 
 
 def episode_compose_settle_enabled() -> bool:
@@ -454,8 +454,12 @@ COMPOSER_LOOKUP_SCHEDULES_PER_WINDOW = 4
 COMPOSER_MAX_PAID_TURNS = 2  # initial + optional repair; L9 extends this bound
 COMPOSER_CALL_BUDGET_SECONDS = COMPOSER_TIMEOUT_SECONDS * 2 + 30
 COMPOSER_LEASE_SECONDS = COMPOSER_MAX_PAID_TURNS * COMPOSER_CALL_BUDGET_SECONDS + 60
-COMPOSER_SETTLE_SECONDS = 10 * 60
-COMPOSER_MAX_SETTLE_SECONDS = 25 * 60
+# Quiet time after the last evidence change before a background compose, and the cap since the
+# first pending change. A closed episode already waits for every member's transcript before it
+# may compose, so the quiet window only coalesces late note refreshes. At ten minutes it was the
+# largest single wait between a recording ending and its row on Home (median 599 s, 2026-11-15).
+COMPOSER_SETTLE_SECONDS = 2 * 60
+COMPOSER_MAX_SETTLE_SECONDS = 5 * 60
 # After a failed paid attempt the read-side net backs off 10, 20, 40 min, then stops until
 # the evidence changes (a member finalize still composes).
 COMPOSER_RETRY_MINUTES = 10

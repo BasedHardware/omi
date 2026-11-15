@@ -11,11 +11,14 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -95,6 +98,62 @@ const _twoSourceGroup = CaptureGroup(
 );
 
 final conversationsScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'conversations-buffered-home',
+    title: 'A week of compact Home cards',
+    page: _page,
+    state: 'Two compact pages with 24 synthetic cards across eight days; no source history or detail preloaded',
+    run: (a) async {
+      final now = DateTime(2026, 11, 15, 17);
+      var requests = 0;
+      final feed = HomeFeedProvider(
+        now: () => now,
+        fetch: ({cursor}) async {
+          requests++;
+          final offset = cursor == null ? 0 : 12;
+          return ApiSuccess(HomeFeedPage(
+            generation: 'synthetic-week',
+            nextCursor: offset == 0 ? 'second-page' : null,
+            hasMore: offset == 0,
+            truncated: false,
+            items: [
+              for (var i = offset; i < offset + 12; i++)
+                HomeFeedCard(
+                  id: 'conversation:week-$i',
+                  kind: 'conversation',
+                  detailId: 'week-$i',
+                  startedAt: now.subtract(Duration(days: i ~/ 3, hours: i % 3)),
+                  finishedAt: now.subtract(Duration(days: i ~/ 3, hours: i % 3)).add(const Duration(minutes: 20)),
+                  title: ['Design catch-up with Alex', 'Planning the next launch', 'A walk with Sam'][i % 3],
+                  emoji: '📝',
+                  preview: 'A short saved preview. Full notes and transcript load when opened.',
+                  status: 'completed',
+                  starred: false,
+                  isLocked: false,
+                  hasTasks: false,
+                  memberCount: 1,
+                  sources: const ['omi'],
+                  summaryAvailable: true,
+                  revision: 'synthetic-$i',
+                ),
+            ],
+          ));
+        },
+      );
+      addTearDown(feed.dispose);
+      await feed.start();
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: [
+        ..._listProviders([]),
+        ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
+      ]);
+      expect(feed.items, hasLength(24));
+      expect(requests, 2);
+      expect(find.text('Design catch-up with Alex'), findsWidgets);
+      await a.shot('Home renders compact cards with previews; a week is already buffered', step: 'top');
+      await a.scrollSeries('Scroll through the buffered week without another network request');
+      expect(requests, 2);
+    },
+  ),
   AuditScenario(
     id: 'conversations-locked-preview',
     title: 'Saved conversations waiting on their allowance',
