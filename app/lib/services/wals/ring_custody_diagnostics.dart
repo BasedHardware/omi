@@ -1,3 +1,5 @@
+// Bounded content-free ring observations for the existing diagnostics export.
+// This recorder never grants custody, changes clocks, or retains audio bodies.
 import 'dart:collection';
 
 import 'device_capture_clock.dart';

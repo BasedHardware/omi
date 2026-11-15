@@ -1,3 +1,5 @@
+// Assemble read-only device and recording-store evidence for support export.
+// Never reconnect, sync time, repair indexes, or mutate recording custody here.
 import 'dart:typed_data';
 
 import 'package:disk_space_2/disk_space_2.dart';
