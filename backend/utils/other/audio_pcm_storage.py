@@ -144,12 +144,18 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                     ).stdout
                 except subprocess.TimeoutExpired:
                     # A child killed by our own budget is a deadline, not a codec fault.
+                    encode_elapsed = time.monotonic() - encode_started
                     encode_outcome = 'timeout'
                     result = 'deadline' if encode_timeout < _TIMEOUT_SECONDS else 'encoder_error'
                 except (OSError, subprocess.SubprocessError):
+                    encode_elapsed = time.monotonic() - encode_started
                     encode_outcome = 'error'
                     result = 'encoder_error'
-                samples.append(('encode', time.monotonic() - encode_started, encode_outcome, encode_timeout))
+                else:
+                    # Stop the stage clock as the child returns: nothing after this
+                    # point belongs to the child's stage.
+                    encode_elapsed = time.monotonic() - encode_started
+                samples.append(('encode', encode_elapsed, encode_outcome, encode_timeout))
             if encoded is not None:
                 result = 'not_smaller'
                 if encoded and len(encoded) * 100 <= len(pcm) * 95:
@@ -169,17 +175,22 @@ def compact_pcm(pcm: bytes, sample_rate: int, channels: int) -> tuple[bytes, str
                                 timeout=decode_timeout,
                             ).stdout
                         except subprocess.TimeoutExpired:
+                            decode_elapsed = time.monotonic() - decode_started
                             decode_outcome = 'timeout'
                             result = 'deadline' if decode_timeout < _TIMEOUT_SECONDS else 'encoder_error'
                         except (OSError, subprocess.SubprocessError):
+                            decode_elapsed = time.monotonic() - decode_started
                             decode_outcome = 'error'
                             result = 'encoder_error'
                         else:
+                            # Stop the stage clock as the child returns, before the byte
+                            # comparison and saved-byte accounting that follow it.
+                            decode_elapsed = time.monotonic() - decode_started
                             result = 'mismatch'
                             if decoded == pcm:
                                 payload, codec, result = encoded, 'flac', 'flac'
                                 SAVED_BYTES.inc(len(pcm) - len(encoded))
-                        samples.append(('decode', time.monotonic() - decode_started, decode_outcome, decode_timeout))
+                        samples.append(('decode', decode_elapsed, decode_outcome, decode_timeout))
         finally:
             _ENCODERS.release()
     # Flushed only after the codec slot is released, so the observations stay out

@@ -129,14 +129,16 @@ eight pre-created children (`stage_seconds` 2x3,
 96; the owner's ceiling of 96 series per pod covers both. Children are
 pre-created and never observed at
 zero, so `increase()` can see a first burst without a fabricated sample. The
-cost is one clock read and one local tuple append per child that runs, plus the
-flush after the slot is released; disabled, ineligible and busy calls allocate
-nothing and observe nothing. No per-request, content, size or account label is
-attached.
+cost is two timestamp reads per invoked child -- stage start, and stage end
+taken as the child returns or raises, before any byte comparison or saved-byte
+accounting -- plus one local sample append, plus the flush after the slot is
+released; disabled, ineligible and busy calls allocate nothing and observe
+nothing. No per-request, content, size or account label is attached.
 
-Read them with the same pinned endpoints, window and selector as the guard,
-replacing `JOB` with the one surface job (`prod-omi-pusher` for the pusher's
-`pusher-metrics` target) and keeping `namespace="prod-omi-backend"`:
+Read them with the same pinned endpoints, window and selector as the guard. The
+per-surface scrape job labels are `pusher-metrics` for the pusher surface and
+`backend-listen-metrics` for listen; keep `namespace="prod-omi-backend"` and
+replace `JOB` below with exactly one of those, never a fleet-wide sum:
 
 ```promql
 histogram_quantile(0.5, sum by (le) (rate(omi_audio_pcm_storage_stage_seconds_bucket{namespace="prod-omi-backend",job="JOB",stage="encode"}[5m])))

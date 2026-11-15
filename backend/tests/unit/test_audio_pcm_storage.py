@@ -583,3 +583,42 @@ def test_non_admitted_path_leaves_the_live_stage_counters_untouched(monkeypatch)
     before = _live_stage_children()
     assert audio_pcm_storage.compact_pcm(bytes(64000), 16000, 1) == (bytes(64000), 'pcm16')
     assert _live_stage_children() == before
+
+
+class _SlowComparison(bytes):
+    """Byte comparison that costs injected clock time, standing in for real work."""
+
+    def __eq__(self, other):
+        _SlowComparison.clock[0] += 0.30
+        return bytes.__eq__(self, other)
+
+
+def test_decode_stage_clock_stops_before_the_byte_comparison_and_saving(monkeypatch):
+    # The decode stage times the child, not the verification that follows it. A
+    # meta-clock that advances during comparison and saved-byte accounting would
+    # inflate the sample if the end timestamp were taken after either of them.
+    seen = _stage_meter(monkeypatch)
+    clock = _codec_clock(monkeypatch)
+    pcm, encoded = bytes(64000), b'x' * 1000
+    saved = []
+    _SlowComparison.clock = clock
+
+    def run(*args, **kwargs):
+        if kwargs['input'] == pcm:
+            clock[0] += 0.10
+            return SimpleNamespace(stdout=encoded)
+        clock[0] += 0.05
+        return SimpleNamespace(stdout=_SlowComparison(pcm))
+
+    def metered_saved(amount):
+        clock[0] += 0.20  # accounting work after the child returned
+        saved.append(amount)
+
+    monkeypatch.setattr(subprocess, 'run', run)
+    monkeypatch.setattr(audio_pcm_storage, 'SAVED_BYTES', SimpleNamespace(inc=metered_saved))
+    assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (encoded, 'flac')
+    assert seen == [
+        ('stage', 'encode', 'success', pytest.approx(0.10)),
+        ('stage', 'decode', 'success', pytest.approx(0.05)),
+    ]
+    assert saved == [len(pcm) - len(encoded)]
