@@ -12,6 +12,7 @@ import pytest
 import urllib3
 from pinecone import Pinecone
 
+from config import summary_context
 from database import vector_db
 from database.pinecone_partition_index import OwnerIndex
 from utils import generated_compute
@@ -130,3 +131,22 @@ def test_owner_search_admission_uses_context_deadline_not_retry_window(monkeypat
     assert policy.call('search', lambda: [], budget=budget, single_attempt=True) == []
     now[0] += 2
     assert policy.call('search', lambda: [], budget=budget, single_attempt=True) == []
+
+
+class _SealedError(Exception):
+    """A provider exception type that rejects attribute writes."""
+
+    def __setattr__(self, name, value):
+        if name.startswith('__'):
+            return super().__setattr__(name, value)
+        raise AttributeError(name)
+
+
+def test_stage_marking_never_replaces_an_exception_that_rejects_attributes():
+    original = _SealedError('provider failure')
+    with pytest.raises(_SealedError) as caught:
+        with summary_context.context_stage('vector'):
+            raise original
+    assert caught.value is original
+    # Unmarked failures still report their class, with the default stage.
+    assert summary_context.failure_details(original) == ('hydrate', '_SealedError')

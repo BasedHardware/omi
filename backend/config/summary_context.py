@@ -9,8 +9,13 @@ STAGES = frozenset({'budget', 'embedding', 'vector', 'hydrate'})
 def mark_failure(error: Exception, stage: str) -> None:
     if stage not in STAGES:
         raise ValueError('unknown summary context stage')
-    if not getattr(error, '_summary_context_stage', None):
-        setattr(error, '_summary_context_stage', stage)
+    try:
+        if not getattr(error, '_summary_context_stage', None):
+            setattr(error, '_summary_context_stage', stage)
+    except (AttributeError, TypeError):
+        # Telemetry is best-effort: an exception that rejects attributes keeps
+        # propagating unchanged and is reported without a stage.
+        pass
 
 
 @contextmanager
