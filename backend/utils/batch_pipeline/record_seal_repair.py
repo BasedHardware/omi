@@ -1,7 +1,6 @@
 """Exact-job record seal repair. Plans stay private; public reports are aggregates."""
 
 from collections import Counter
-import time
 from datetime import datetime
 import hashlib
 import json
