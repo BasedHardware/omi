@@ -68,6 +68,9 @@ def _router():
 
 
 async def _upload(module, BytesIO, *, conversation_id=None):
+    # This suite tests routing counters, not wall-clock lookback admission. Keep
+    # the route's receive clock aligned with its fixed synthetic file timestamp.
+    module.time = SimpleNamespace(time=lambda: 1792152000.0, monotonic=module.time.monotonic)
     return await module.sync_local_files_v2(
         files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
         uid=UID,
