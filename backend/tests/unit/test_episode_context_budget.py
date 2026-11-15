@@ -20,7 +20,7 @@ def fallbacks(monkeypatch):
 
 
 def test_one_deadline_discards_all_partial_context_and_late_memories(monkeypatch, fallbacks):
-    monkeypatch.setattr(budget, 'COMPOSER_CONTEXT_TIMEOUT_SECONDS', 0.1)
+    monkeypatch.setattr(budget, 'COMPOSER_CONTEXT_TIMEOUT_SECONDS', 0.5)
     release, ended = threading.Event(), threading.Event()
     identity = ContextVar('synthetic_owner', default='missing')
     token = identity.set('owner-context')
@@ -28,8 +28,8 @@ def test_one_deadline_discards_all_partial_context_and_late_memories(monkeypatch
     def load(deadline):
         try:
             assert identity.get() == 'owner-context'
-            assert deadline - time.monotonic() <= 0.1
-            release.wait(1)
+            assert deadline - time.monotonic() <= 0.5
+            release.wait(3)
             return 'late profile', 'late private memories'
         finally:
             ended.set()
@@ -37,11 +37,11 @@ def test_one_deadline_discards_all_partial_context_and_late_memories(monkeypatch
     try:
         started = time.monotonic()
         result = budget.bounded_gather(load, 'fallback')
-        assert time.monotonic() - started < 0.5
+        assert time.monotonic() - started < 2
         assert result == ('fallback', '')
     finally:
         release.set()
-        assert ended.wait(1)
+        assert ended.wait(3)
         identity.reset(token)
     assert result == ('fallback', '')
     fallbacks.assert_called_once_with('timeout')

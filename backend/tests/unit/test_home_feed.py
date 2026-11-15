@@ -2,11 +2,13 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+import json
 
 import pytest
 
 from database import home_feed
 from utils.home_feed.projection import stamp, reveal_display
+from utils.encryption import encrypt
 
 AT = datetime(2026, 11, 15, tzinfo=timezone.utc)
 
@@ -214,6 +216,57 @@ def test_legacy_episode_redacts_locked_member_and_suppresses_only_when_group_vis
     assert result['items'][0]['is_locked'] is True
     unadmitted = home_feed.feed('u', episodes_admitted=False, firestore_client=store)
     assert unadmitted['items'][0]['kind'] == 'conversation'
+
+
+@pytest.mark.parametrize('unsafe', [None, 'deleted', 'locked', 'edited', 'newer', 'membership', 'invalid_ciphertext'])
+def test_legacy_composed_display_requires_unchanged_visible_members(store, monkeypatch, unsafe):
+    # Migration's metadata-only writes change Firestore update_time; retain the
+    # original source revision across bounded chunks to validate legacy content.
+    monkeypatch.setattr(home_feed, 'MEMBERS_PER_PREPARE', 1)
+    ids = ['a', 'b']
+    for cid in ids:
+        store.put(f'users/u/conversations/{cid}', conversation(f'Member {cid}', episode_id='e'))
+        store.put(f'users/u/episode_links/{cid}', {'episode_id': 'e'})
+    episode = {
+        'started_at': AT,
+        'status': 'closed',
+        'conversation_ids': ids,
+        'composed_member_ids': ids,
+        'composed_membership': ids,
+        'composed_at': AT + timedelta(seconds=1),
+        'content': encrypt(json.dumps({'title': 'Saved episode title', 'lede': 'Saved episode preview'}), 'u'),
+    }
+    member = store.docs['users/u/conversations/b']
+    if unsafe == 'deleted':
+        member['deleted'] = True
+    elif unsafe == 'locked':
+        member['is_locked'] = True
+    elif unsafe == 'edited':
+        member['home_source_version'] = 'changed-after-compose'
+    elif unsafe == 'newer':
+        store.versions['users/u/conversations/b'] = AT + timedelta(seconds=2)
+    elif unsafe == 'membership':
+        episode['composed_member_ids'] = ['a']
+    elif unsafe == 'invalid_ciphertext':
+        episode['content'] = 'invalid-ciphertext'
+    store.put('users/u/episodes/e', episode)
+    drain(store)
+    store.reads.clear()
+    card = home_feed.feed('u', firestore_client=store)['items'][0]
+    if unsafe is None:
+        assert (card['title'], card['preview']) == ('Saved episode title', 'Saved episode preview')
+    else:
+        assert 'Saved episode' not in card['title'] + card['preview']
+    assert not any('content' in (fields or []) for _, fields in store.reads)
+    if unsafe is None:
+        # A later member edit must revoke the newly established legacy proof.
+        member = store.docs['users/u/conversations/b']
+        member['home_source_version'] = 'later-edit'
+        store.docs['users/u/episode_links/b']['home_dirty'] = True
+        store.docs['users/u/episode_links/home_feed_control']['ready'] = False
+        drain(store)
+        card = home_feed.feed('u', firestore_client=store)['items'][0]
+        assert 'Saved episode' not in card['title'] + card['preview']
 
 
 def test_dirty_deleted_member_cannot_leak_old_episode_text(store):

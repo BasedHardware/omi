@@ -26,7 +26,7 @@ from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevanc
 from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS
 from database.home_feed_writer import CONTROL, SCHEMA
 from database.home_feed_queries import EPISODES, CONVERSATIONS, STANDALONE
-from utils.encryption import ENCRYPTION_SECRET
+from utils.encryption import ENCRYPTION_SECRET, decrypt
 from utils.home_feed.projection import stamp, reveal_display, content, seal_display, utc
 from utils.home_feed.paging import decode_cursor, encode_cursor, merge_page
 from utils.conversations import home_step
@@ -91,6 +91,7 @@ CONVERSATION_FIELDS = [
     'home_source_version',
     'home_prepared',
     'home_prepared_source_version',
+    'home_legacy_source_updated_at',
     'home_compat_owner',
     'sync_bridge_pending',
     'folder_user_set',
@@ -116,6 +117,11 @@ EPISODE_FIELDS = [
     'duplicate_conversation_ids',
     'recorded_merged_into',
     'emoji',
+    'content',
+    'composed_at',
+    'composed_member_ids',
+    'composed_membership',
+    'summary_needs_regeneration',
     'home_content_member_versions',
     'home_member_prepare_cursor',
     'home_display',
@@ -177,6 +183,26 @@ def _revision(snapshot):
     return value.isoformat() if isinstance(value, datetime) else None
 
 
+def _member_home_version(row):
+    if row.get('home_source_version'):
+        return row['home_source_version']
+    original = utc(row.get('home_legacy_source_updated_at')) or utc(row.get('_home_snapshot_updated_at'))
+    return f'legacy:{original.isoformat()}' if original else None
+
+
+def _legacy_episode_display(uid, row):
+    """Decode saved legacy display only during explicit, member-validated preparation."""
+    try:
+        saved = json.loads(decrypt(row.get('content'), uid))
+    except (ValueError, TypeError, AttributeError):
+        return None
+    return (
+        content({**row, 'title': saved.get('title'), 'lede': saved.get('lede')}, 'episode')
+        if isinstance(saved, dict)
+        else None
+    )
+
+
 def _conversation_projection(uid, row):
     result = stamp(uid, row, 'conversation')
     if not result:
@@ -198,6 +224,10 @@ def _conversation_projection(uid, row):
             None if row.get('status') == 'in_progress' else utc(row.get('recorded_end')) or utc(row.get('finished_at'))
         ),
     )
+    if not row.get('home_source_version'):
+        result['home_legacy_source_updated_at'] = utc(row.get('home_legacy_source_updated_at')) or utc(
+            row.get('_home_snapshot_updated_at')
+        )
     if row.get('home_content_invalidated'):
         result['home_display'] = seal_display(
             uid, {'schema': SCHEMA, 'title': '', 'emoji': '', 'preview': '', 'summary_available': False}
@@ -321,6 +351,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 source = get(user.collection('conversations').document(cid), CONVERSATION_FIELDS, 'source_read')
                 if source.exists:
                     row: dict[str, Any] = dict(source.to_dict() or {}, id=cid, _home_force_prepare=True)
+                    row['_home_snapshot_updated_at'] = getattr(source, 'update_time', None)
                     row['created_at'] = utc(row.get('created_at')) or getattr(source, 'create_time', None)
                     rows[cid] = row
                 if raw.get('episode_id'):
@@ -329,6 +360,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 receipt_updates[cid] = False
             elif kind == 'conversations':
                 row = dict(raw, id=doc.id)
+                row['_home_snapshot_updated_at'] = getattr(doc, 'update_time', None)
                 row['created_at'] = utc(row.get('created_at')) or getattr(doc, 'create_time', None)
                 rows[doc.id] = row
             else:
@@ -389,6 +421,11 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     'sources': [],
                     'display': None,
                     'certified': True,
+                    'legacy_valid': bool(utc(row.get('composed_at')))
+                    and set(row.get('composed_member_ids') or []) == set(ids)
+                    and (row.get('composed_membership') is None or set(row['composed_membership']) == set(ids))
+                    and not row.get('summary_needs_regeneration'),
+                    'member_versions': {},
                 }
             if (
                 eid not in invalidated_episodes
@@ -408,6 +445,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 counts['members'] += 1
                 raw = dict(member.to_dict() or {}, id=cid) if member.exists else {}
                 if member.exists:
+                    raw['_home_snapshot_updated_at'] = getattr(member, 'update_time', None)
                     raw['created_at'] = utc(raw.get('created_at')) or getattr(member, 'create_time', None)
                     if tombstoned:
                         raw['_home_deleted'] = True
@@ -435,11 +473,24 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                         staged['certified']
                         and belongs
                         and bool(proof.get(cid))
-                        and proof.get(cid) == raw.get('home_source_version')
+                        and proof.get(cid) == _member_home_version(raw)
                         and not tombstoned
                     )
+                    original = utc(raw.get('home_legacy_source_updated_at')) or utc(raw['_home_snapshot_updated_at'])
+                    composed = utc(row.get('composed_at'))
+                    staged['legacy_valid'] = (
+                        staged.get('legacy_valid', False)
+                        and visible
+                        and not raw.get('home_source_version')
+                        and not raw.get('home_content_invalidated')
+                        and original is not None
+                        and composed is not None
+                        and original <= composed
+                    )
+                    staged.setdefault('member_versions', {})[cid] = _member_home_version(raw)
                 else:
                     staged['certified'] = False
+                    staged['legacy_valid'] = False
                 staged['offset'] += 1
             complete = staged['offset'] == len(ids)
             projection: dict[str, Any] = {'home_prepare_state': staged, 'home_needs_prepare': not complete}
@@ -453,6 +504,9 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 }
                 if staged['certified'] and not staged['locked']:
                     compact = reveal_display(uid, row.get('home_display')) or compact
+                elif staged.get('legacy_valid') and not staged['locked']:
+                    compact = _legacy_episode_display(uid, row) or compact
+                    projection['home_content_member_versions'] = staged['member_versions']
                 if staged['locked']:
                     compact = {'schema': SCHEMA, 'title': '', 'emoji': '', 'preview': '', 'summary_available': False}
                 projection.update(stamp(uid, row, 'episode'))
