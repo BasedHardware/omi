@@ -14,6 +14,8 @@ from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_
 from config import record_seal_repair as repair_config
 
 from database._client import run_transactional
+from database.record_audio import observe_record_sealed
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
@@ -323,13 +325,16 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
         observation = {}
+        sealed_observation = {}
 
         @firestore.transactional
         def commit(tx):
             observation.clear()  # Only the final transaction attempt may emit.
+            sealed_observation.clear()
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
-            row = ref.get(transaction=tx).to_dict() or {}
+            snapshot = ref.get(transaction=tx)
+            row = snapshot.to_dict() or {}
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = seal_refusal(
@@ -347,6 +352,10 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
             )
             patch: dict[str, Any] = {'record_audio_closed': True}
+            admitted = row.get('record_admitted_at') is None
+            if admitted:
+                patch['record_admitted_at'] = time.time()
+            sealed_observation.update(source_revision=pipeline_ledger.source_revision(snapshot), admitted=admitted)
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
             if row.get('record_upload_failed'):
@@ -373,6 +382,8 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         try:
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
+            if result in {'sealed', 'upload_failed_cleared'}:
+                observe_record_sealed(store.client, uid, cid, ref, **sealed_observation)
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

@@ -75,7 +75,11 @@ def test_dry_run_no_writes_and_apply_only_patches_seal(source):
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['content'] == 'untouched'
     assert client.rows[JOB_PATH]['state'] == 'record_pending'
-    assert client.transactions[-1].updates == [(PATH, {'record_audio_closed': True})]
+    seal_tx = next(tx for tx in client.transactions if tx.updates)
+    assert seal_tx.updates == [
+        (PATH, {'record_audio_closed': True, 'record_admitted_at': client.rows[PATH]['record_admitted_at']})
+    ]
+    assert client.rows[('users', 'synthetic', 'pipeline_ledger', 'record')]['stage'] == 'sealed'
     assert not any(value in json.dumps(report) for value in ('synthetic', 'pending', 'record_content_id'))
 
 
@@ -533,3 +537,18 @@ def test_fresh_wake_never_runs_when_seal_privacy_recheck_refuses(source, monkeyp
     assert repair.apply_seals(store, approval, approval['plan_sha256']) == {'privacy_refused': 1}
     assert not client.rows[PATH].get('record_audio_closed')
     assert client.rows[JOB_PATH]['available_at'] == 10900
+
+
+def test_repair_admission_is_once_and_ledger_failure_is_fail_open(source, monkeypatch):
+    store, client, _ = source
+    admissions = Mock()
+    monkeypatch.setattr(repair.pipeline_ledger, 'observe_admission', admissions)
+    monkeypatch.setattr(repair.pipeline_ledger, 'advance', Mock(side_effect=RuntimeError('ledger unavailable')))
+    result = plan(source)
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
+    assert client.rows[PATH]['record_audio_closed']
+    assert client.rows[PATH]['record_admitted_at'] is not None
+    client.rows[PATH]['record_audio_closed'] = False
+    result = plan(source)
+    assert repair.apply_seals(store, result, result['plan_sha256']) == {'sealed': 1}
+    assert admissions.call_count == 1
