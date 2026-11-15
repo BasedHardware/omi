@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 import pytest_asyncio
@@ -21,6 +21,10 @@ import pytest_asyncio
 from config.batch_pipeline import projection_drain_claim_aware_enabled, projection_prefetch_depth
 from config.policy.kill_switches import KILL_SWITCHES
 from database import conversations as conversations_db
+from database.batch_pipeline_intake import admit
+from dataclasses import replace
+from datetime import datetime, timezone
+from tests.unit.test_batch_pipeline_scheduler import item
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
@@ -599,6 +603,38 @@ def test_drain_step_holds_the_owner_claim_and_skips_only_the_pre_checks(claims):
     assert log.prechecks == 0
     # One claim for the whole step, not one per row.
     assert claims.entered == [owner_key(BURST)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('case', ['recent', 'old', 'multipart', 'partial', 'upload', 'off', 'wake_error'])
+async def test_recent_single_record_followup_wakes_at_persist_without_discovery(monkeypatch, case):
+    monkeypatch.setenv('RECORD_FOLLOWUP_WAKE_ENABLED', 'false' if case == 'off' else 'true')
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 2 if case == 'multipart' else 1)
+    for sid in ids:
+        log.jobs[sid].update(
+            fresh_capture=True,
+            record_finished_at=1000 - (1801 if case == 'old' else 700),
+            projection_binding={'native_record': case != 'upload', 'partial_record': case == 'partial'},
+        )
+    projector = projector_for(log)
+    projector.clock = lambda: 1000
+    projector.start_followups = AsyncMock()
+    if case == 'wake_error':
+        projector.start_followups.side_effect = RuntimeError('synthetic wake failure')
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        assert log.persist_order == ids
+        if case in {'recent', 'wake_error'}:
+            projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+        else:
+            projector.start_followups.assert_not_awaited()
+        # Queued wakes need no duplicate hint; rollback retains the old hints.
+        # The result receipt remains durable in either case.
+        assert projector.chain_followups == ([] if case == 'recent' else ids)
+    finally:
+        drains.close()
 
 
 def test_drain_off_walk_keeps_every_pre_check(monkeypatch):
@@ -1896,3 +1932,43 @@ async def test_live_target_defer_refusal_preserves_active_rerequest(monkeypatch,
     # re-request alone produced the second turn.
     assert not list(projector.drain_requests)
     drains.close()
+
+
+@pytest.mark.asyncio
+async def test_real_intake_with_fresh_merge_off_still_wakes_recent_record_followup(monkeypatch):
+    monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    monkeypatch.delenv('RECORD_NOTES_EAGER_ENABLED', raising=False)
+    monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', BURST)
+    monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
+    now = 100_000.0
+    log = ResultLog()
+    ids = chain(log, BURST, 'record', 1)
+    sid = ids[0]
+    binding = replace(log.bindings[sid], record_origin=True, native_record=True, target_conversation_id='capture')
+    intake = MemoryStore()
+    intake.rows['conversations', f'{BURST}/capture'] = {
+        'status': 'completed',
+        'record_audio_closed': True,
+        'record_lane_owner': 'batch_sync_v1',
+        'record_upload_revision': 1,
+        'finished_at': datetime.fromtimestamp(now - 900, timezone.utc),
+    }
+    work = replace(item(sid, owner=BURST, capture=now - 2000, duration=60), privacy_generation=0)
+    admit(intake, [work], binding, now, namespace='test')
+    admitted = intake.rows['jobs', sid]
+    assert admitted['fresh_capture'] is False
+    assert 'record_notes_after_complete' not in admitted
+    log.jobs[sid].update(admitted)
+    log.bindings[sid] = binding
+    projector = projector_for(log)
+    # Keep the existing hermetic persist seam; urgency reads the real admitted job.
+    projector.assign_record_silence = lambda work, binding, session, **_: session.persist_empty()
+    projector.clock = lambda: now
+    projector.start_followups = AsyncMock()
+    drains = projection_drain.OwnerDrains(projector)
+    try:
+        await drains.run(BURST)
+        projector.start_followups.assert_awaited_once_with(tuple(ids), discover=False)
+    finally:
+        drains.close()

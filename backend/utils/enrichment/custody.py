@@ -5,6 +5,8 @@ import uuid
 
 from google.cloud import firestore
 
+from config.record_latency import record_notes_eager_enabled
+from database.record_notes_hold import merge_producers
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, BatchPrivacyReason, assert_batch_write_allowed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS
 
@@ -114,6 +116,11 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
             summary_repair=False,
             summary_expected_revision=None,
         )
+        if record_notes_eager_enabled() and donor.get('record_notes_producers'):
+            pending['record_notes_producers'] = merge_producers(
+                None if previous.get('dormant') else previous.get('record_notes_producers'),
+                donor['record_notes_producers'],
+            )
         if donor.get('sync_hold'):
             pending['sync_hold'] = True
             if donor.get('sync_hold_requested') or not donor.get('merge_hold'):

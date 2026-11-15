@@ -16,6 +16,10 @@ overlay:
   gke:
     backend-listen:
       env:
+        RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -361,6 +365,10 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -442,6 +450,10 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -536,6 +548,10 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -608,6 +624,10 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
