@@ -30,6 +30,21 @@ SignInFailureDetailProvider? signInFailureDetailProvider(String provider) {
   };
 }
 
+/// `Sign In Failed` with its closed class, then `Sign In Failure Detail` with the
+/// provider's own code whenever an error object exists. Unknown providers emit nothing.
+List<RegisteredEvent> signInFailureEvents(String provider, {Object? error, bool cancelled = false}) {
+  final failed = signInFailedProvider(provider);
+  final detail = signInFailureDetailProvider(provider);
+  if (failed == null || detail == null) return const [];
+  return [
+    SignInFailed(
+      provider: failed,
+      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
+    ),
+    if (error != null) SignInFailureDetail(provider: detail, errorCode: classifySignInFailureCode(error)),
+  ];
+}
+
 /// Apple returned a credential without an identity token.
 class AppleIdentityTokenMissing implements Exception {
   const AppleIdentityTokenMissing();
