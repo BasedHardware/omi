@@ -3,11 +3,13 @@
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+import time
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
 from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
 from config.record_seal_rules import token_lease_mode
+from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
 from database import batch_pipeline_coalescing_completion as coalescing_completion
@@ -184,6 +186,26 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if created and binding.native_record:
+                # Admission commits after staging. Reuse the pending-job and
+                # conversation snapshots already read in this transaction.
+                job['record_intake_claimed_at'] = pending.get('record_intake_claimed_at')
+                job['record_sealed_at'] = row.get('record_sealed_at')
+                job['record_ready_at'] = time.time()
+                finished = row.get('finished_at')
+                if isinstance(finished, datetime):
+                    finished = finished.timestamp()
+                if recent_record_end(finished, now):
+                    job['record_finished_at'] = finished
+                    # All siblings retain this dispatch owner even if the
+                    # recording ages out or the urgency switch changes later.
+                    if not binding.partial_record and record_notes_eager_enabled():
+                        job['record_notes_after_complete'] = True
+                    if record_fresh_merge_enabled():
+                        # Seal/staging latency must not demote a new recording
+                        # behind this owner's unresolved historical captures.
+                        # All siblings use the recording end, not unit ends.
+                        job['fresh_capture'] = True
             if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
                 job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
             if partial_metadata.get('release'):
