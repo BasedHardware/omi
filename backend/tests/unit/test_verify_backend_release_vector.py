@@ -51,6 +51,32 @@ def _expectation() -> verifier.DeploymentExpectation:
     )
 
 
+def test_integration_only_vector_has_no_omitted_consumer_or_gke_reads():
+    kwargs = dict(
+        commit_sha='d' * 40,
+        deploy_run_id='123',
+        deploy_run_attempt='1',
+        project='based-hardware',
+        region='us-central1',
+        environment='prod',
+        integration_only=True,
+        expected_image='gcr.io/based-hardware/backend@sha256:' + 'a' * 64,
+    )
+    expectation = verifier.build_expectation(**kwargs)
+    assert set(expectation.revisions) == {'backend-integration'}
+    commands = verifier.build_read_only_commands(expectation, include_listener=False, include_revision_documents=True)
+    assert set(commands) == {'cloud_run/backend-integration', 'cloud_run_revision/backend-integration'}
+    verifier.assert_commands_are_read_only(commands)
+    for changes in (
+        {'environment': 'dev'},
+        {'project': 'elsewhere'},
+        {'commit_sha': 'abcdef1'},
+        {'service_images': {'backend-sync': 'x@sha256:' + 'a' * 64}},
+    ):
+        with pytest.raises(ValueError, match='integration-only'):
+            verifier.build_expectation(**{**kwargs, **changes})
+
+
 def _cloud_run_document(*, revision: str, image: str, environment: str = 'dev') -> dict:
     return {
         'spec': {

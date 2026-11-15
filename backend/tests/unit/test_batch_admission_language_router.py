@@ -1,6 +1,5 @@
 """The router must exclude unsafe new uploads before reserving batch ownership."""
 
-import time
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -103,10 +102,8 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         monkeypatch.setattr(intake, 'batch_artifact_authorize', authorize)
         staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
         monkeypatch.setattr(intake, 'artifacts_for', staging)
-        # Keep age admission valid so this test reaches language admission.
-        capture_at = int(time.time()) - 60
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename=f'omi_{capture_at}.bin', file=BytesIO(b'\x00' * 10))],
+            files=[UploadFile(filename=f'omi_{int(module.time.time())}.bin', file=BytesIO(b'\x00' * 10))],
             uid=UID,
             conversation_id=CID,
         )

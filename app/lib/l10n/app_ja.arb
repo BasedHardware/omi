@@ -2240,6 +2240,7 @@
     "authFailedToSignInWithGoogle": "Googleでのサインインに失敗しました。もう一度お試しください。",
     "authenticationFailed": "認証に失敗しました。もう一度お試しください。",
     "authFailedToSignInWithApple": "Appleでのサインインに失敗しました。もう一度お試しください。",
+    "authAppleSignInFailedUseGoogle": "Appleでサインインできませんでした。もう一度お試しいただくか、Googleで続行してください。",
     "authFailedToRetrieveToken": "Firebaseトークンの取得に失敗しました。もう一度お試しください。",
     "authUnexpectedErrorFirebase": "サインイン中に予期しないエラーが発生しました。Firebaseエラー、もう一度お試しください。",
     "authUnexpectedError": "サインイン中に予期しないエラーが発生しました。もう一度お試しください",

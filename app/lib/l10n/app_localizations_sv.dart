@@ -7033,6 +7033,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Det gick inte att logga in med Apple. Försök igen eller fortsätt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
 
   @override

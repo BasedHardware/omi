@@ -432,7 +432,9 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     composite = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
     steps = composite['runs']['steps']
     lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
-    assert 'if' not in lane
+    # Integration-only restoration cannot mutate the consumer lane. Normal
+    # successful deploys still reconcile it in their existing dispatch mode.
+    assert lane['if'] == "${{ inputs.integration_only != 'true' && (success()) }}"
     mode = lane['with']['mode']
     assert "deploy_profile == 'auto-dev'" in mode
     assert "deploy_targets == 'all'" in mode
@@ -529,7 +531,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     by_name = {step.get('name'): step for step in steps}
 
     public_probe = by_name['Gate backend candidate on known audio']
-    assert public_probe['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert public_probe['if'] == (
+        "${{ inputs.integration_only != 'true' && "
+        "(inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}"
+    )
 
     serving_smoke = by_name['Smoke promoted production serving API']
     assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
@@ -558,7 +563,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     )
 
     development_smoke = by_name['Smoke What Matters Now datastore query']
-    assert development_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'development' }}"
+    assert development_smoke['if'] == (
+        "${{ inputs.integration_only != 'true' && "
+        "(inputs.deploy_profile == 'manual' && inputs.environment == 'development') }}"
+    )
     assert development_smoke.get('id') == 'smoke-what-matters-now-datastore-query'
     assert steps.index(by_name['Verify serving backend release vector']) < steps.index(development_smoke)
     assert steps.index(development_smoke) < steps.index(
