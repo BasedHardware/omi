@@ -1749,6 +1749,33 @@ def test_home_wait_reads_do_not_requeue_until_deadline_or_new_receipt(store, mon
     assert composer.needs_compose(store.episode)
 
 
+@pytest.mark.parametrize('change', ['discarded', 'deleted', 'membership_removed'])
+def test_home_removal_of_waiting_member_composes_remaining_speech_promptly(store, monkeypatch, change):
+    calls = []
+    c = _c(calls=calls)
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    assert not calls and not composer.needs_compose(store.episode)
+    if change == 'membership_removed':
+        store.episode['conversation_ids'].remove('c2')
+    else:
+        store.rows['c2'][change] = True
+    _schedule_seam(store, monkeypatch)
+    schedule = composer.schedule
+    monkeypatch.setattr(composer, 'schedule', lambda uid, eid, **kw: schedule(uid, eid, collaborators=c, **kw))
+    wires = [{'id': 'ep1', 'members': [{'id': 'c1'}]}]
+    assert home_read.schedule_missed_composes(UID, [store.episode], wires) == 1
+    assert len(calls) == 1 and store.episode['composed_member_ids'] == ['c1']
+    assert store.episode['compose_transcript_wait_until'] is None
+
+
+def test_regeneration_request_bypasses_active_wait_suppression(store):
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    store.episode['summary_needs_regeneration'] = True
+    assert composer.needs_compose(store.episode)
+
+
 def test_transcript_receipt_rearms_active_wait(store, monkeypatch):
     store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'

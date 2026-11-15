@@ -1140,7 +1140,9 @@ def _compose(
         if waiting_until:
             now = datetime.now(timezone.utc)
             due = min(waiting_until)
-            if _utc(episode.get('compose_transcript_wait_until')) != due:
+            if _utc(episode.get('compose_transcript_wait_until')) != due or episode.get(
+                'compose_pending_membership'
+            ) != sorted(_retained_ids(episode)):
                 written = _write(
                     uid,
                     episode_id,
@@ -1149,6 +1151,7 @@ def _compose(
                         'compose_pending_since': episode.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
                         'compose_transcript_wait_started_at': wait_observed_at,
+                        'compose_pending_membership': sorted(_retained_ids(episode)),
                     },
                     expected_member_revisions=member_revisions,
                 )
@@ -1550,6 +1553,14 @@ def needs_compose(
     wait_until = _utc(episode.get('compose_transcript_wait_until'))
     wait_started = _utc(episode.get('compose_transcript_wait_started_at'))
     if episode_compose_transcript_wait_enabled() and wait_until and wait_until > datetime.now(timezone.utc):
+        retained = sorted(_retained_ids(episode))
+        waiting_members = episode.get('compose_pending_membership')
+        if (
+            episode.get('summary_needs_regeneration')
+            or (waiting_members is not None and sorted(waiting_members) != retained)
+            or (visible_member_ids is not None and sorted(visible_member_ids) != retained)
+        ):
+            return True  # A removed blocker must reach _members again without a transcript receipt.
         # Home already read the bounded member metadata. A newer transcript receipt
         # can wake this wait, including an episode that has never been composed.
         return bool(
