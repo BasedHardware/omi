@@ -35,6 +35,12 @@ ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
+    # Episode context, completeness and notes run on both cohosts. Missing bindings refuse the roll.
+    "EPISODE_COMPOSER_CONTEXT_ENABLED",
+    "EPISODE_COMPOSER_DETAIL_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED",
+    "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED",
     "MEMORY_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
     "CLIENT_SUMMARIES_AT_CAP_ENABLED",
@@ -108,6 +114,10 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Only main.py admits native record units; pusher never assigns GPU queue priority.
         'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -138,6 +148,14 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BATCH_PIPELINE_RECOVERY_MODE',
         'BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST',
         'BUCKET_BATCH_PIPELINE',
+    }
+)
+_RECORD_LATENCY_LISTEN_ONLY = frozenset(
+    {
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
     }
 )
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
@@ -590,6 +608,10 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 f"[{env}] envFrom ConfigMap set differs: pusher={sorted(pusher_from)} "
                 f"listen={sorted(listen_from)} — co-hosts must share the same bulk source"
             )
+
+        for flag in sorted(_RECORD_LATENCY_LISTEN_ONLY):
+            if flag not in listen_env:
+                errors.append(f"[{env}] record latency flag {flag} missing on backend-listen")
 
         publisher = "FSR_QUEUE_AGE_PUBLISHER"
         pusher_publisher = pusher_env.get(publisher)

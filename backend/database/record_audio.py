@@ -61,7 +61,9 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # missing tail. Repair refreshes the separate partial barrier.
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch: dict[str, bool | None | float] = {'record_audio_closed': True}
+            patch: dict[str, bool | float | None] = {'record_audio_closed': True}
+            if not row.get('record_audio_closed'):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
             # Admission is a durable per-capture fact, not a per-seal event. A

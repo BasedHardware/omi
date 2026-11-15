@@ -128,11 +128,15 @@ def test_log_metric_source_scopes_and_real_turn_extraction():
         'resource.labels.project_id="based-hardware"',
         'resource.labels.service_name="backend-sync"',
         'httpRequest.status=503',
-        'httpRequest.responseSize=266',
         'httpRequest.requestMethod="POST"',
         'run.googleapis.com%2Frequests',
     ):
         assert token in upload
+    # A responseSize byte class rotted: the record-wait body moved from 266 to
+    # 271 bytes and the alert read zero while 80% of the service answered 503.
+    # The request log is not sampled, so route plus status is the whole predicate.
+    assert 'responseSize' not in upload
+    assert metrics['omi_pipeline_upload_admission_503']['description'].find('266 B no longer occurs') > 0
     route = re.search(r'httpRequest.requestUrl=~"([^"]+)"', upload).group(1)
     for path in ('/v2/sync-local-files', '/v2/sync-local-files/', '/v2/sync-local-files?device=x'):
         assert re.search(route, 'https://example.test' + path)
