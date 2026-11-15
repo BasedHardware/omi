@@ -7,11 +7,16 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/transcription_allowance.dart';
+import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
+import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
 const _default = CustomSttConfig.defaultConfig;
+
+const atCapSnapshot =
+    TranscriptionAllowanceSnapshot(mode: 'on_device', reason: 'plan_allowance_exhausted', remainingSeconds: 0);
 
 const _custom = CustomSttConfig(
   provider: SttProvider.deepgramLive,
@@ -79,15 +84,10 @@ void main() {
     });
 
     for (final case_ in [
-      ('no-subscription / cache-miss', null, 'allowance_unavailable'),
-      (
-        'basic under cap still on_device from S16 inactive/exhausted shapes',
-        _allowance('on_device', reason: 'subscription_inactive'),
-        'subscription_inactive'
-      ),
+      ('inactive subscription', _allowance('on_device', reason: 'subscription_inactive'), 'subscription_inactive'),
       ('basic over cap', _allowance('on_device', reason: 'plan_allowance_exhausted'), 'plan_allowance_exhausted'),
     ]) {
-      test('iOS ready + ${case_.$1} ⇒ on-device, managed unreachable', () {
+      test('ready + ${case_.$1} ⇒ on-device, managed unreachable', () {
         final decision = _resolve(allowance: case_.$2, readiness: FreemiumReadiness.ready);
         expect(decision.path, SttResolvedPath.onDevice);
         expect(decision.opensManagedOmiSocket, isFalse);
@@ -96,14 +96,40 @@ void main() {
         expect(decision.reason, case_.$3);
       });
 
-      test('Android not ready + ${case_.$1} ⇒ blocked, managed unreachable', () {
+      test('not ready + ${case_.$1} ⇒ today\'s Omi socket, never blocked', () {
         final decision = _resolve(allowance: case_.$2, readiness: FreemiumReadiness.requiresSetup);
-        expect(decision.path, SttResolvedPath.blocked);
-        expect(decision.opensManagedOmiSocket, isFalse);
-        expect(decision.blockSocket, isTrue);
-        expect(decision.reason, 'on_device_not_ready');
+        expect(decision.path, SttResolvedPath.managed);
+        expect(decision.blockSocket, isFalse);
+        expect(decision.allowanceOnDevice, isFalse);
+        expect(decision.reason, SttModeResolver.reasonNotReady);
       });
     }
+
+    test('no snapshot yet ⇒ today\'s Omi socket (paid users never land on-device at cold start)', () {
+      final decision = _resolve(allowance: null);
+      expect(decision.path, SttResolvedPath.managed);
+      expect(decision.reason, SttModeResolver.reasonAllowanceUnknown);
+    });
+
+    for (final reason in ['allowance_unavailable', 'usage_invalid']) {
+      test('transient on_device reason $reason ⇒ Omi socket, not on-device', () {
+        final decision = _resolve(allowance: _allowance('on_device', reason: reason));
+        expect(decision.path, SttResolvedPath.managed);
+        expect(decision.reason, reason);
+      });
+    }
+
+    test('on-device config unavailable ⇒ Omi socket', () {
+      final decision = SttModeResolver(onDeviceConfigBuilder: () => null).resolve(
+        flagEnabled: true,
+        persistedCustomStt: _default,
+        allowance: _allowance('on_device', reason: 'plan_allowance_exhausted'),
+        readiness: FreemiumReadiness.ready,
+        codec: BleAudioCodec.opus,
+      );
+      expect(decision.path, SttResolvedPath.managed);
+      expect(decision.reason, SttModeResolver.reasonConfigUnavailable);
+    });
 
     test('plus / managed stays on the Omi socket', () {
       final decision = _resolve(allowance: _allowance('managed', reason: 'plan_within_allowance'));
@@ -128,20 +154,118 @@ void main() {
       expect(decision.opensManagedOmiSocket, isFalse);
     });
 
-    test('unsupported codec + on_device blocks instead of Omi fallback', () {
+    test('unsupported codec + on_device keeps today\'s Omi socket', () {
       final decision = _resolve(
         allowance: _allowance('on_device', reason: 'plan_allowance_exhausted'),
         codec: BleAudioCodec.aac,
       );
-      expect(decision.path, SttResolvedPath.blocked);
-      expect(decision.reason, 'unsupported_codec_on_device');
-      expect(decision.opensManagedOmiSocket, isFalse);
+      expect(decision.path, SttResolvedPath.managed);
+      expect(decision.reason, SttModeResolver.reasonUnsupportedCodec);
     });
 
     test('unknown allowance mode fails closed', () {
       final decision = _resolve(allowance: _allowance('surprise', reason: 'future'));
       expect(decision.opensManagedOmiSocket, isFalse);
       expect(decision.path, SttResolvedPath.onDevice);
+    });
+  });
+
+  group('decide(): default-on flag, kill switch, model preparation', () {
+    SttModeResolver resolver({
+      bool flag = true,
+      bool killed = false,
+      TranscriptionAllowanceSnapshot? allowance,
+      FreemiumReadiness readiness = FreemiumReadiness.ready,
+      List<String>? prepared,
+    }) {
+      return SttModeResolver(
+        flagReader: () => flag,
+        killSwitchReader: () async => killed,
+        allowanceReader: () => allowance,
+        readinessReader: ({String? language}) async => readiness,
+        onDeviceConfigBuilder: _onDevice,
+        prepareOnDevice: ({String? language}) => prepared?.add('prepare'),
+      );
+    }
+
+    final atCap = _allowance('on_device', reason: 'plan_allowance_exhausted');
+
+    test('the local flag defaults on', () {
+      expect(FreeTierOnDeviceSttFlag.isEnabled(environment: const {}), isTrue);
+    });
+
+    test('prefs false still forces the local flag off', () {
+      expect(FreeTierOnDeviceSttFlag.isEnabled(environment: const {}, prefsOverride: false), isFalse);
+    });
+
+    test('at cap and ready ⇒ on-device', () async {
+      final decision = await resolver(allowance: atCap).decide(persistedCustomStt: _default, codec: BleAudioCodec.opus);
+      expect(decision.path, SttResolvedPath.onDevice);
+    });
+
+    test('kill switch on ⇒ today\'s managed path', () async {
+      final decision = await resolver(allowance: atCap, killed: true)
+          .decide(persistedCustomStt: _default, codec: BleAudioCodec.opus);
+      expect(decision.path, SttResolvedPath.managed);
+      expect(decision.reason, 'flag_off');
+    });
+
+    test('kill switch read failing keeps the feature on', () async {
+      expect(await FreeTierOnDeviceSttFlag.killed(readFlag: (_) async => throw StateError('offline')), isFalse);
+    });
+
+    test('at cap and not ready ⇒ managed and the model is prepared', () async {
+      final prepared = <String>[];
+      final decision = await resolver(allowance: atCap, readiness: FreemiumReadiness.requiresSetup, prepared: prepared)
+          .decide(persistedCustomStt: _default, codec: BleAudioCodec.opus);
+      expect(decision.path, SttResolvedPath.managed);
+      expect(prepared, ['prepare']);
+    });
+
+    test('within allowance never prepares from the socket path', () async {
+      final prepared = <String>[];
+      await resolver(allowance: _allowance('managed', reason: 'plan_within_allowance'), prepared: prepared)
+          .decide(persistedCustomStt: _default, codec: BleAudioCodec.opus);
+      expect(prepared, isEmpty);
+    });
+
+    test('explicit custom STT ignores the kill switch read and stays honored', () async {
+      var reads = 0;
+      final r = SttModeResolver(
+        flagReader: () => true,
+        killSwitchReader: () async {
+          reads++;
+          return false;
+        },
+        allowanceReader: () => atCap,
+        readinessReader: ({String? language}) async => FreemiumReadiness.ready,
+        onDeviceConfigBuilder: _onDevice,
+        prepareOnDevice: ({String? language}) {},
+      );
+      final decision = await r.decide(persistedCustomStt: _custom, codec: BleAudioCodec.opus);
+      expect(decision.path, SttResolvedPath.honorCustom);
+      expect(reads, 0);
+    });
+  });
+
+  group('OnDeviceSttPreparer.shouldPrepareFor', () {
+    test('prepares at the cap and in the last two hours, not before', () {
+      expect(OnDeviceSttPreparer.shouldPrepareFor(atCapSnapshot), isTrue);
+      expect(
+          OnDeviceSttPreparer.shouldPrepareFor(const TranscriptionAllowanceSnapshot(
+              mode: 'managed', reason: 'plan_within_allowance', remainingSeconds: 3600)),
+          isTrue);
+      expect(
+          OnDeviceSttPreparer.shouldPrepareFor(const TranscriptionAllowanceSnapshot(
+              mode: 'managed', reason: 'plan_within_allowance', remainingSeconds: 9000)),
+          isFalse);
+      expect(
+          OnDeviceSttPreparer.shouldPrepareFor(
+              const TranscriptionAllowanceSnapshot(mode: 'managed', reason: 'plan_unlimited')),
+          isFalse);
+      expect(OnDeviceSttPreparer.shouldPrepareFor(null), isFalse);
+      expect(OnDeviceSttPreparer.shouldPrepareFor(const TranscriptionAllowanceSnapshot(mode: 'blocked', reason: 'x')),
+          isFalse);
     });
   });
 

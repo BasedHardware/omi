@@ -355,6 +355,10 @@ class CaptureController extends ChangeNotifier
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
   LocalSttFailure? _localSetupFailure;
+
+  /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
+  bool _transcribingOnPhoneAtCap = false;
+  bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -1835,6 +1839,7 @@ class CaptureController extends ChangeNotifier
 
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2543,6 +2548,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
