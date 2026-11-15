@@ -66,7 +66,7 @@ def apply(transaction: Any, writes: list) -> None:
 
 def preserve_registered_audio(conversation: Mapping[str, Any]) -> bool:
     """The episode cleanup repair never authorizes deleting a registered recording."""
-    return empty_member_cleanup_enabled() and bool(
+    return bool(
         conversation.get('audio_files')
         or conversation.get('server_batch_audio_received') is True
         or conversation.get('server_batch_audio_start') is not None

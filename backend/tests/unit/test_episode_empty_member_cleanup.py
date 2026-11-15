@@ -18,6 +18,7 @@ SESSION = (*ROOT, 'recording_sessions', 'session')
 
 @pytest.fixture
 def db(monkeypatch):
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', 'true')
     now = datetime(2026, 11, 15, 12, tzinfo=timezone.utc)
     store = StrictFirestore(
         {
@@ -118,3 +119,23 @@ def test_stale_conversation_owner_and_current_link_are_both_detached(db):
     assert delete(db)
     assert 'empty' not in db.rows[EPISODE]['conversation_ids']
     assert 'empty' not in db.rows[second]['conversation_ids']
+
+
+def test_cleanup_defaults_off_and_only_true_opts_in(monkeypatch):
+    from config.episode_composition import empty_member_cleanup_enabled
+
+    monkeypatch.delenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', raising=False)
+    assert not empty_member_cleanup_enabled()
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', 'invalid')
+    assert not empty_member_cleanup_enabled()
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', 'true')
+    assert empty_member_cleanup_enabled()
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_registered_audio_protection_is_independent_of_detach_switch(db, monkeypatch, enabled):
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', enabled)
+    db.rows[CONV]['server_batch_audio_start'] = 123
+    before = deepcopy(db.rows)
+    assert not delete(db)
+    assert db.rows == before

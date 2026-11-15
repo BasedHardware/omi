@@ -1,6 +1,6 @@
-"""Default-on bug repairs to closed episode composition; read at each call boundary."""
+"""Episode wait repairs and opt-in transactional cleanup; read at each call boundary."""
 
-from config.refactor_modes import default_on
+from config.refactor_modes import default_off, default_on
 
 EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED_ENV = 'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED'
 EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED_ENV = 'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED'
@@ -17,7 +17,7 @@ def anchored_wait_enabled() -> bool:
 
 
 def empty_member_cleanup_enabled() -> bool:
-    return default_on(EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED_ENV)
+    return default_off(EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED_ENV)
 
 
 def legacy_empty_wire_enabled() -> bool:

@@ -177,7 +177,7 @@ def test_absent_ids_do_not_reopen_visible_membership_wait_forever(store, clock, 
     assert visible == ['c1', 'c2']
     assert not composer.needs_compose(store.episode, visible_member_ids=visible)
     monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', 'false')
-    assert composer.needs_compose(store.episode, visible_member_ids=visible)
+    assert not composer.needs_compose(store.episode, visible_member_ids=visible)
     monkeypatch.delenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED')
     clock.current += timedelta(seconds=1201)
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
@@ -242,7 +242,7 @@ def test_detached_absent_id_reconciles_membership_without_rebuy(store, clock, mo
     assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2'])
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
     assert len(calls) == 1
-    assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2']) is (not enabled)
+    assert not composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2'])
 
 
 @pytest.mark.parametrize(

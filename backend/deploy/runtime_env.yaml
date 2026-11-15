@@ -404,7 +404,7 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
@@ -638,7 +638,7 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
@@ -1311,7 +1311,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -1712,7 +1712,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -2098,7 +2098,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -2447,7 +2447,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -3218,7 +3218,7 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
@@ -3548,7 +3548,7 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
@@ -4249,7 +4249,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -4783,7 +4783,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -5310,7 +5310,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
@@ -5782,7 +5782,7 @@ environments:
               value: 'true'
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
