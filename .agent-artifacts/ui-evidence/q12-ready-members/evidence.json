@@ -58,14 +58,14 @@
       "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-15T14:30:32Z",
-  "merged_origin_main": "55b9c76b1116d66034d0e59ff57fd31f63a51c9d",
+  "captured_at_utc": "2026-11-15T15:09:16Z",
+  "merged_origin_main": "160911e2aa8b3a0cdee13d00e540bb38fe7597e8",
   "source_blobs": {
     "app/lib/backend/schema/episode.dart": "e032e0a34d5399481969e20d7c26fd419ab86a3f",
     "app/lib/pages/conversations/conversations_page.dart": "c2a867ea5444709819fa6e9cf89380d7a9474dda",
     "app/lib/pages/conversations/conversations_processing_rows.dart": "cf7356151e294b8510e3e0e4957cb457d4bde3d1",
-    "app/lib/pages/conversations/home_card_rows.dart": "cdc04d85d58e9ca2eef90b77da9b23f446fee679",
-    "app/lib/pages/conversations/home_rows.dart": "dd7a2c43638417c9367b52c188a23aec3a6f2ee9",
+    "app/lib/pages/conversations/home_card_rows.dart": "09818947d4b673db5ab8eb2c138f9a4e627e650e",
+    "app/lib/pages/conversations/home_rows.dart": "4be585b513fbbfb055ec87a1d3fe034ebeec175a",
     "app/lib/pages/conversations/widgets/processing_conversation_row.dart": "374cef984f9a7501a0f02de343599bc06ce1a4d3",
     "app/lib/pages/episodes/episode_page.dart": "d9deee5751a419694d34de38a4a4fbf888dc3f5f",
     "app/lib/utils/conversations/home_member_fallback.dart": "42c171bf940a03a9fd31d0704f78704e067f95ce",
@@ -91,5 +91,5 @@
     "007-mobile-ios-reported-shape-before.png",
     "008-mobile-ios-reported-shape-after.png"
   ],
-  "render_source_head": "71ebd2b6143a5ee0ed7b441a0abde92e205b8c3c"
+  "render_source_head": "3ac0b73baef0c11b92c73fc93acde1d24223442e"
 }
