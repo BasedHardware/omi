@@ -328,3 +328,30 @@ def test_old_readers_require_reader_first_roll_and_existing_row_partition_fences
     assert not old_overlap.compatible_capture(first, second)
     assert not old_overlap.compatible_capture(first, ordinary)
     assert not old_overlap.compatible_capture(ordinary, first)
+
+
+def test_existing_gpu_scheduler_filters_unknown_work_fields_but_retains_full_job_trust(monkeypatch):
+    old_contract = main_module('backend/utils/batch_pipeline/contracts.py', monkeypatch)
+    old_scheduler = main_module('backend/utils/batch_pipeline/scheduler.py', monkeypatch)
+    old_scheduler.WorkItem = old_contract.WorkItem
+    store = MemoryStore()
+    queue = old_scheduler.Scheduler(store)
+    work = contracts.WorkItem(
+        'future',
+        'synthetic',
+        NOW,
+        'gs://synthetic/audio',
+        1,
+        contracts.Priority.DEEP,
+        conversation_id='receipt-one',
+        capture_time_trust='untrusted',
+    )
+    assert queue.enqueue(work, 0)
+    [lease] = queue.pull(1)
+    assert not hasattr(lease.item, 'capture_time_trust')  # Existing compute does not need the marker.
+    assert queue.complete(old_contract.WorkResult('future', 'gs://synthetic/result'), lease.token, 2)
+    row = store.rows['jobs', 'future']
+    assert row['capture_time_trust'] == 'untrusted' and row['conversation_id'] == 'receipt-one'
+    # The upgraded CPU reader reconstructs full admission provenance after compute.
+    recovered = contracts.WorkItem(**{key: row[key] for key in contracts.WorkItem.__dataclass_fields__ if key in row})
+    assert recovered.capture_time_trust == 'untrusted'
