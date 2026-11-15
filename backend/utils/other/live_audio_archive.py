@@ -249,7 +249,9 @@ class LiveAudioArchive:
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
-        raw, metadata = await run_blocking(storage_executor, pack.encoded, preserve_pcm=self.durable)
+        raw, metadata = await run_blocking(
+            storage_executor, pack.encoded, preserve_pcm=self.durable, compact_custody_pcm=self.durable
+        )
         if (
             self.durable
             and framed_pack(request.uid)

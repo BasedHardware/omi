@@ -227,7 +227,12 @@ def test_explain_missing_row_is_404(monkeypatch):
 def test_route_policy_manifest_declares_both_routes():
     import yaml
 
-    manifest = yaml.safe_load((BACKEND / 'route_policy_manifest.yaml').read_text(encoding='utf-8'))
+    # The manifest is ~160 KB; the C loader keeps this contract well inside the
+    # per-test CPU guard without changing what is parsed.
+    manifest = yaml.load(
+        (BACKEND / 'route_policy_manifest.yaml').read_text(encoding='utf-8'),
+        Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader),
+    )
     paths = {route['path'] for route in manifest['routes']}
     assert '/v2/pipeline-ledger/census' in paths
     assert '/v2/pipeline-ledger/explain/{conversation_id}' in paths

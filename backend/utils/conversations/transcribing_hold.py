@@ -1,18 +1,25 @@
 """Bounded, presentation-only wait for a completed server-batch capture's transcript.
 
-The completion CAS stamps the deadline once. Readers never renew it and never
-write a lifecycle status. Shared database hydration must remain authoritative
-for replace_record and finalization replay; apply project only at API exits.
+The completion CAS stamps the server wait once. Readers bound that wait without
+using capture age, renewing it, or writing a lifecycle status. Shared database
+hydration must remain authoritative for replace_record and finalization replay;
+apply project only at API exits.
 """
 
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from config.episodes import home_transcription_presentation_gate_enabled
+from config.episodes import (
+    home_transcription_deadline_seconds,
+    home_transcription_max_age_seconds,
+    home_transcription_presentation_gate_enabled,
+    home_transcription_queue_hold_enabled,
+)
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
 
 READ_FIELDS = (
+    'created_at',
     'home_transcription_pending_at',
     'home_transcription_deadline_at',
     'record_lane_owner',
@@ -54,10 +61,51 @@ def applies(row: Mapping[str, Any], *, stored: bool = False) -> bool:
     )
 
 
-def deadline(row: Mapping[str, Any]) -> datetime:
-    """The stamped deadline of a row ``applies`` accepted, as an aware datetime."""
-    value = row['home_transcription_deadline_at']
+def _utc(value: datetime | str) -> datetime:
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value.replace('Z', '+00:00'))
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def wait_started_at(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime | None:
+    """Server wait start, including old rows that retained only its deadline.
+
+    Capture end can predate offline upload by days. Creation is only a fallback
+    when neither pending stamp exists; updated_at and read time never renew it.
+    """
+    for key in (f'{prefix}_pending_at', f'{prefix}_deadline_at', 'created_at'):
+        value = row.get(key)
+        if not isinstance(value, (datetime, str)):
+            continue
+        try:
+            anchor = _utc(value)
+        except ValueError:
+            continue
+        return (
+            anchor - timedelta(seconds=home_transcription_deadline_seconds())
+            if key.endswith('_deadline_at')
+            else anchor
+        )
+    return None
+
+
+def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime:
+    """Read-time bound heals old stamps without a write, renewal, or job lookup."""
+    if not home_transcription_queue_hold_enabled():
+        return _utc(row[f'{prefix}_deadline_at'])
+    anchor = wait_started_at(row, prefix=prefix)
+    if anchor is None:
+        raise ValueError('transcription wait has no server timestamp')
+    return anchor + timedelta(seconds=home_transcription_max_age_seconds())
+
+
+def failed(row: Mapping[str, Any]) -> bool:
+    """Explicit row failure receipts win over the queue wait, irrespective of age."""
+    return bool(
+        getattr(row.get('status'), 'value', row.get('status')) == 'failed'
+        or row.get('record_upload_failed')
+        or row.get('finalization_status') == 'dead_letter'
+    )
 
 
 def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
@@ -67,11 +115,12 @@ def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, An
     deadline_at = deadline(row)
     title, status = transcription_presentation(
         deadline_at,
-        failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
+        failed=failed(row),
         now=now,
     )
     return {
         **row,
         'status': 'completed' if status == 'failed' else status,
         'structured': {**(row.get('structured') or {}), 'title': title},
+        **({'summary_retryable': False} if home_transcription_queue_hold_enabled() and not failed(row) else {}),
     }

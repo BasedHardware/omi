@@ -18,6 +18,7 @@ from config.merge_before_processing import enabled as merge_before_processing_en
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
+MIN_QUIET_SECONDS = 120
 MAX_HOLD_SECONDS = 3600
 MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
@@ -50,6 +51,22 @@ def record(outcome: str) -> None:
 
 def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def quiet_seconds() -> int:
+    """Arrival-quiet window before full processing, read per call.
+
+    Clients that send no end-of-recording proof wait this long after the last
+    content arrival. ``SYNC_PROCESSING_QUIET_SECONDS`` tunes it without a
+    release; a missing or malformed value keeps the 600 s default, and the
+    value is clamped to [120, 600] so a typo can neither remove the debounce
+    nor lengthen the wait.
+    """
+    try:
+        value = int(os.getenv('SYNC_PROCESSING_QUIET_SECONDS', str(QUIET_SECONDS)))
+    except (TypeError, ValueError):
+        return QUIET_SECONDS
+    return max(MIN_QUIET_SECONDS, min(QUIET_SECONDS, value))
 
 
 def enabled_for(row: Mapping[str, Any]) -> bool:
@@ -121,14 +138,15 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     first = timestamp(state.get('pending_since')) or float(obligation['first_pending_at'])
     last = max(timestamp(state.get('last_content_at')), timestamp((row.get('smart_merge') or {}).get('last_merged_at')))
     last = last or first
-    due = min(last + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+    quiet = quiet_seconds()
+    due = min(last + quiet, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
-    gap = timestamp(row.get('finished_at')) + QUIET_SECONDS
+    gap = timestamp(row.get('finished_at')) + quiet
     if now < first + MAX_HOLD_SECONDS:
         if now < due:
             return 'quiet_wait', due
         if watermark is not None and timestamp(watermark) < gap:
-            return 'watermark_wait', min(now + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+            return 'watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS)
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)

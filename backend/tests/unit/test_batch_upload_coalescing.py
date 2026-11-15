@@ -1,9 +1,12 @@
 """Custody state machine with original receipts; synthetic accounts/audio only."""
 
+import asyncio
 from copy import deepcopy
 from dataclasses import asdict
 import json
 import struct
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -11,6 +14,9 @@ from config import batch_pipeline_coalescing as config
 from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_staging import reap_one
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
+
+# Load the supervisor once during collection, outside per-test call CPU accounting.
+from utils.batch_pipeline import serving, upload_coalescing
 from utils.batch_pipeline.upload_coalescing import _pack, _unpack, member_status, queued
 
 
@@ -24,12 +30,6 @@ def store():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pump', ['true', 'false'])
 async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump):
-    import asyncio
-    from unittest.mock import AsyncMock, Mock
-    from types import SimpleNamespace
-
-    from utils.batch_pipeline import serving, upload_coalescing
-
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', pump)
     monkeypatch.setenv('BATCH_PIPELINE_SERVING_ENABLED', 'true')
