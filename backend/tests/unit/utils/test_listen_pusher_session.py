@@ -1786,6 +1786,7 @@ async def test_close_only_prepares_then_flushes_tail_and_retains_until_ack(monke
     assert frame_json(ws.sent[-1])['phase'] == 'prepare'
     close = session.pending_record_closes['conv-1']
     close.prepared = True
+    session.deps.get_current_conversation_id = lambda: None
     assert not await session.request_recording_close('conv-1')
     assert [frame_type(f) for f in ws.sent] == [104, 103, 101, 104]
     assert frame_json(ws.sent[-1])['phase'] == 'commit'
@@ -1805,6 +1806,7 @@ async def test_close_only_keeps_control_pending_when_tail_send_fails():
     session.audio_bytes_send(b'abcd', received_at=100.0, conversation_id='conv-1')
     assert not await session.request_recording_close('conv-1')
     session.pending_record_closes['conv-1'].prepared = True
+    session.deps.get_current_conversation_id = lambda: None
     assert not await session.request_recording_close('conv-1')
     assert 'conv-1' in session.pending_record_closes
     assert all(frame_type(f) != 104 or frame_json(f)['phase'] == 'prepare' for f in ws.sent)

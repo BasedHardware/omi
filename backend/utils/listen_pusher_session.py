@@ -474,7 +474,14 @@ class ListenPusherSession:
                 close.socket, close.prepared, close.base, close.sent = socket, False, 0, 0
             phase = 'prepare'
             if close.prepared:
+                if self.deps.get_current_conversation_id() == conversation_id:
+                    # Lifecycle finalization precedes successor persistence. The
+                    # receiver still owns this binding until that await finishes;
+                    # keep accepting its tail and retain the prepared fence.
+                    return False
                 await self._audio_bytes_flush(lock_held=True)
+                if self.deps.get_current_conversation_id() == conversation_id:
+                    return False
                 if any(
                     (run.conversation_id or self.deps.get_current_conversation_id()) == conversation_id
                     for run in self.audio_runs

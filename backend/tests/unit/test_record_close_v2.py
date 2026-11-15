@@ -5,6 +5,9 @@ import json
 import struct
 import threading
 import time
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from routers.listen.receiver import ListenReceiver
 
 import pytest
 from fastapi.websockets import WebSocketDisconnect
@@ -129,8 +132,77 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
             if session.pending_record_closes['conversation'].prepared:
                 break
             await asyncio.sleep(0.001)
+        assert session.pending_record_closes['conversation'].prepared
+        expected_pcm = b'\x01\x00' * 2 + b'\x02\x00' * 2
         if rollover:
-            binding['cid'] = 'next'
+            # Finalization has prepared X, but successor persistence has not
+            # switched the live binding. Exercise the actual receiver's generic
+            # exception boundary, rather than calling audio_bytes_send alone.
+            frames, accepted = asyncio.Queue(), asyncio.Event()
+            state = SimpleNamespace(
+                active=True,
+                close_code=1001,
+                current_conversation_id='conversation',
+                last_audio_received_time=None,
+                last_activity_time=None,
+                first_audio_byte_timestamp=None,
+                last_usage_record_timestamp=None,
+                audio_ring_buffer=None,
+            )
+            count = 0
+
+            def accept_frame(*args, **kwargs):
+                nonlocal count
+                session.audio_bytes_send(*args, **kwargs)
+                count += 1
+                if count == 2:
+                    accepted.set()
+
+            host = SimpleNamespace(
+                state=state,
+                request=SimpleNamespace(
+                    websocket=SimpleNamespace(receive=frames.get),
+                    uid='owner',
+                    codec='pcm16',
+                    sample_rate=16000,
+                ),
+                limits=SimpleNamespace(ws_receive_timeout=5),
+                is_multi_channel=False,
+                use_custom_stt=True,
+                frame_size=320,
+                audio_bytes_send=accept_frame,
+                transcripts=SimpleNamespace(enqueue=lambda _: None),
+                start_live_transcription=lambda: None,
+            )
+            live_receiver = ListenReceiver(host, [], {})
+            live_receiver.raw_archive = SimpleNamespace(append=AsyncMock(), close=AsyncMock())
+            receiving = asyncio.create_task(live_receiver.receive_data())
+            successor_persisted = asyncio.Event()
+
+            async def create_successor():
+                await successor_persisted.wait()  # Inject persistence latency.
+                binding['cid'] = state.current_conversation_id = 'next'
+
+            successor = asyncio.create_task(create_successor())
+            try:
+                for _ in range(3):  # Several relay ticks during slow successor creation.
+                    await session.request_recording_close('conversation')
+                    assert not session.pending_record_closes['conversation'].frozen
+                for sample in (4, 5):
+                    frames.put_nowait({'bytes': bytes((sample, 0)) * 2})
+                await asyncio.wait_for(accepted.wait(), 5)
+                assert state.active and state.close_code == 1001 and not receiving.done()
+                assert not sealed.is_set() and client.rows[path]['record_upload_sessions']
+                successor_persisted.set()
+                await successor
+            finally:
+                successor_persisted.set()
+                await successor
+                frames.put_nowait({'type': 'websocket.disconnect', 'code': 1000})
+                await asyncio.wait_for(receiving, 5)
+            assert count == 2 and state.close_code == 1000
+            expected_pcm += b'\x04\x00' * 2 + b'\x05\x00' * 2
+        binding['cid'] = 'next' if rollover else None
         await session.request_recording_close('conversation')
         await asyncio.wait_for(read_entered.wait(), 5)
         assert not sealed.is_set()
@@ -140,7 +212,7 @@ async def test_yielding_close_cannot_overtake_accepted_tail_or_wake_intake(
             session.audio_bytes_send(b'\x03\x00', 102, conversation_id='conversation')
         release_read.set()
         await asyncio.wait_for(sealed.wait(), 5)
-        assert b''.join(payloads) == b'\x01\x00' * 2 + b'\x02\x00' * 2
+        assert b''.join(payloads) == expected_pcm
         assert client.rows[path]['record_audio_closed']
         assert client.rows[job]['available_at'] == 0
         # The same socket must remain usable for audio between conversations.
@@ -241,6 +313,7 @@ async def test_capacity_lost_ack_and_reconnect_retain_exact_close_until_acceptan
     assert not close.prepared and 'conv-1' in session.pending_record_closes
     await session.request_recording_close('conv-1')
     await deliver(ws, 'prepare', 'prepared')
+    session.deps.get_current_conversation_id = lambda: 'next'
     await session.request_recording_close('conv-1')
     assert close.frozen and 'conv-1' in session.pending_record_closes
     await session.request_recording_close('conv-1')  # Lost ACK: idempotent retransmit.
@@ -276,6 +349,7 @@ async def test_yielding_final_commit_refuses_new_input_before_acceptance():
     session.record_close_supported = True
     await session.request_recording_close('conv-1')
     session.pending_record_closes['conv-1'].prepared = True
+    session.deps.get_current_conversation_id = lambda: 'next'
     sending = asyncio.create_task(session.request_recording_close('conv-1'))
     try:
         await asyncio.wait_for(entered.wait(), 5)
@@ -399,6 +473,7 @@ async def _sequential_closes(inline_session, monkeypatch, *, total, limit):
             # Real accepted PCM, receipt readback and producer proof for every close.
             session.audio_bytes_send(b'\x01\x00', 100 + i)
             await session.request_recording_close(cid)
+            binding['cid'] = None  # Successor/detach before the final close boundary.
             async with asyncio.timeout(10):
                 while not session.record_close_supported:
                     await asyncio.sleep(0.001)
