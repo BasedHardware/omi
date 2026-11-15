@@ -30,6 +30,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
 from utils.sync import processing_hold, bridge_pending, bridge
+from database import capture_end as capture_end_db
 from utils.enrichment.smart_refresh import settle_survivor
 from utils.conversations.smart_merge_policy import refresh_owed
 from utils.enrichment.admission import ConversationAbsorbed
@@ -117,7 +118,12 @@ def enrich_conversation(uid: str, conversation_id: str, language: str, *, user_s
         # Rollback bypasses admission, but still settles stored hold metadata
         # after success so lazy effects do not remain fenced indefinitely.
         outcome, due = (
-            processing_hold.admission(conversation_data, context, now=time.time())
+            processing_hold.admission(
+                conversation_data,
+                context,
+                now=time.time(),
+                end_proven=lambda: capture_end_db.proven(uid, conversation_data),
+            )
             if processing_hold.enabled_for(context)
             else ('ready', None)
         )
