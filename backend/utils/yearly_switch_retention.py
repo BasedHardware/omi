@@ -29,6 +29,16 @@ def erase_assignment(uid: str, client) -> None:
     client.collection('experiments').document(EXPERIMENT_ID).collection('assignments').document(uid).delete()
 
 
+def assignment_exists(uid: str, client=None) -> bool:
+    """Read the existing roster before billing or eligibility work on repeat visits."""
+    if client is None:
+        from database._client import get_firestore_client
+
+        client = get_firestore_client()
+    snapshot = client.collection('experiments').document(EXPERIMENT_ID).collection('assignments').document(uid).get()
+    return bool(snapshot.exists)
+
+
 def admit(uid: str, placement: str, *, count_captures, blocked, client=None, now=None) -> bool:
     if placement not in {'cancel', 'engaged'} or not enabled() or blocked():
         return False

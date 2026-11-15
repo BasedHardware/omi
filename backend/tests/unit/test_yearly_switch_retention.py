@@ -137,6 +137,16 @@ def retention_http(monkeypatch):
     monkeypatch.setattr(routes.users_db, 'get_user_deletion_wipe_status', lambda _: None)
     monkeypatch.setattr(routes.users_db, 'get_user_subscription', lambda _: Mock(stripe_subscription_id='synthetic'))
     monkeypatch.setattr(
+        retention,
+        'assignment_exists',
+        lambda uid: db.collection('experiments')
+        .document(retention.EXPERIMENT_ID)
+        .collection('assignments')
+        .document(uid)
+        .get()
+        .exists,
+    )
+    monkeypatch.setattr(
         routes.yearly_switch, 'get_offer', lambda _: YearlySwitch(True, 'eligible', yearly_amount=26991)
     )
     count = Mock(return_value=8)
@@ -145,11 +155,11 @@ def retention_http(monkeypatch):
     app.include_router(routes.router)
     app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: uid_for('treatment')
     with TestClient(app) as http:
-        yield http, db, count
+        yield http, db, count, routes
 
 
 def test_http_admission_and_config_execute_real_routes_with_local_fixtures(retention_http):
-    http, db, count = retention_http
+    http, db, count, _routes = retention_http
     assert http.get('/v1/payments/yearly-switch-retention').json()['eligible'] is True
     assert not db.docs  # Config reads never consume an opportunity.
     assert http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()['eligible'] is True
@@ -157,3 +167,76 @@ def test_http_admission_and_config_execute_real_routes_with_local_fixtures(reten
     assert http.post('/v1/payments/yearly-switch-retention?placement=cancel').json()['eligible'] is False
     assert http.post('/v1/payments/yearly-switch-retention?placement=other').status_code == 422
     assert count.call_args.kwargs['statuses'] == ['completed']
+
+
+@pytest.mark.parametrize('arm', ['treatment', 'control'])
+def test_repeat_home_presentation_skips_billing_and_capture_reads(retention_http, monkeypatch, arm):
+    http, db, count, routes = retention_http
+    uid = uid_for(arm)
+    http.app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: uid
+
+    first = http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()
+    assert first['eligible'] is (arm == 'treatment')
+    assert len(db.docs) == 1
+
+    count.reset_mock()
+    subscription_read = Mock(side_effect=AssertionError('existing enrollment must short-circuit billing reads'))
+    stripe_read = Mock(side_effect=AssertionError('existing enrollment must short-circuit billing reads'))
+    monkeypatch.setattr(routes.users_db, 'get_user_subscription', subscription_read)
+    monkeypatch.setattr(routes.yearly_switch, 'get_offer', stripe_read)
+
+    second = http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()
+    assert second['eligible'] is False
+    subscription_read.assert_not_called()
+    stripe_read.assert_not_called()
+    count.assert_not_called()
+    assert len(db.docs) == 1
+
+
+def test_not_yet_engaged_home_presentation_skips_billing_lookup(retention_http, monkeypatch):
+    http, db, count, routes = retention_http
+    count.return_value = 7
+    stripe_read = Mock(side_effect=AssertionError('engagement gate must precede billing reads'))
+    monkeypatch.setattr(
+        routes.users_db,
+        'get_user_subscription',
+        Mock(
+            return_value=Mock(
+                stripe_subscription_id='synthetic',
+                current_price_id='configured-monthly',
+                status='active',
+                cancel_at_period_end=False,
+            )
+        ),
+    )
+    monkeypatch.setattr(routes.yearly_switch, 'supports_monthly_switch_price', lambda _: True)
+    monkeypatch.setattr(routes.yearly_switch, 'get_offer', stripe_read)
+
+    result = http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()
+    assert result['eligible'] is False and result['reason'] == 'not_engaged'
+    stripe_read.assert_not_called()
+    assert count.call_count == 1
+    assert db.docs == {}
+
+
+def test_billing_ineligible_home_presentation_skips_engagement_read(retention_http, monkeypatch):
+    http, db, count, routes = retention_http
+    subscription_read = Mock(
+        return_value=Mock(
+            stripe_subscription_id='synthetic',
+            current_price_id='configured-non-monthly',
+            status='active',
+            cancel_at_period_end=False,
+        )
+    )
+    stripe_read = Mock(return_value=routes.yearly_switch.YearlySwitch(False, 'not_monthly'))
+    monkeypatch.setattr(routes.users_db, 'get_user_subscription', subscription_read)
+    monkeypatch.setattr(routes.yearly_switch, 'supports_monthly_switch_price', lambda _: False)
+    monkeypatch.setattr(routes.yearly_switch, 'get_offer', stripe_read)
+
+    result = http.post('/v1/payments/yearly-switch-retention?placement=engaged').json()
+    assert result['eligible'] is False and result['reason'] == 'not_monthly'
+    subscription_read.assert_called_once_with(uid_for('treatment'))
+    stripe_read.assert_called_once_with('synthetic')
+    count.assert_not_called()
+    assert db.docs == {}
