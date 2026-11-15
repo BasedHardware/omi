@@ -1205,6 +1205,15 @@ async def sync_local_files_v2(
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
                         {
+                            'retained_capture_offsets_by_name': {
+                                os.path.basename(path): offset for path, offset in retained_capture_offsets.items()
+                            }
+                        }
+                        if capture_clock_policy is not None
+                        else {}
+                    ),
+                    **(
+                        {
                             'capture_received_at': (
                                 capture_received_at
                                 if future_capture or estimated_capture or retained_capture

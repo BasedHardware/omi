@@ -14,8 +14,25 @@ from utils.sync.files import get_timestamp_from_path
 from utils.sync.receipt_clock import receipt_clock_offsets, require_future_upload, retained_source_offsets
 
 
-def decode_future_units(paths, *, uid, device_id, received_at, max_seconds=3600, coverage_context=None):
-    retained = retained_source_offsets(paths, uid=uid, device_id=device_id, received_at=received_at)
+def decode_future_units(
+    paths,
+    *,
+    uid,
+    device_id,
+    received_at,
+    max_seconds=3600,
+    coverage_context=None,
+    retained_offsets_by_name=None,
+):
+    retained = (
+        {
+            path: retained_offsets_by_name[os.path.basename(path)]
+            for path in paths
+            if os.path.basename(path) in retained_offsets_by_name
+        }
+        if retained_offsets_by_name is not None
+        else retained_source_offsets(paths, uid=uid, device_id=device_id, received_at=received_at)
+    )
     future = [
         p
         for p in paths

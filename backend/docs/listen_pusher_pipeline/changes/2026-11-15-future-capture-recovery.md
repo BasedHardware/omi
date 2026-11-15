@@ -33,6 +33,17 @@ in a new directory or bundle retains that source's date and conversation ID.
 The existing canonical file identity is reused; original basename/timestamp,
 bytes, content IDs, source-frame offsets and custody proofs are unchanged.
 
+Before admission, the router checks retained owner/source anchors in one
+Firestore `get_all` batch, bounded to the existing 20-file upload limit. The
+result is reused by the decoder, so the request does not repeat that lookup.
+An over-limit lookup fails closed. A miss writes no anchor. A retained recovery
+still validates account age and reads its immutable anchor transactionally,
+without writing it. A new future source does the existing Auth account-age
+read and one transaction read plus conditional anchor write per new scope.
+An unanchored nonfuture estimate pays only the bounded lookup; it does not do
+the Auth read, transaction read or write. The production recovery signal is
+`OMI_SYNC_LANE_ADMISSIONS_TOTAL{reason="retained_capture_recovery"}`.
+
 For marked future files `future_device_offset_v1` retains the revision-3
 owner/device/run transaction: `offset = max(decoded raw end) - first receipt`.
 All members subtract that immutable offset, preserving relative source order
@@ -45,9 +56,11 @@ starts. Failed account/anchor reads or transactions return 503 with
 ## Fences and response
 
 The dedicated decoder validates strict future frame counts/full decoded durations
-before yielding units. It never coalesces independent files. Normal marked estimates use the existing
-strict decoder per original source, without a new receipt offset or Auth/anchor
-read, and inherit the same identity/trust fences. Each source has
+before yielding units. It never coalesces independent files. Normal marked
+estimates use the existing strict decoder per original source. They may have
+the bounded read-only retained-anchor lookup above, but without a hit they do
+not do the Auth read, transaction read or future offset write, and inherit the
+same identity/trust fences. Each source has
 a content-derived `receipt-<HMAC>` source identity. Each admitted PCM unit/VAD part
 has a stable distinct `receipt-part-<UUID>` row identity from its source, unit start
 and VAD part index, independent of bundle IDs and provider word-edge jitter, so disconnected speech cannot overwrite another part.

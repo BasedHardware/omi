@@ -442,7 +442,12 @@ def start_response(status: dict) -> JSONResponse:
 
 def upload_decoder(uid, device_id, context):
     if (context or {}).get('capture_clock_policy') in {FUTURE_CLOCK_POLICY, ESTIMATED_POLICY}:
-        return partial(decode_future_units, uid=uid, device_id=device_id)
+        return partial(
+            decode_future_units,
+            uid=uid,
+            device_id=device_id,
+            retained_offsets_by_name=(context or {}).get('retained_capture_offsets_by_name'),
+        )
     return decode_units
 
 

@@ -132,6 +132,10 @@ def retained_source_offsets(
         else:
             source_id = compute_sync_content_id(uid, [path])
             scopes[path] = hashlib.sha256(f'file:{source_id}'.encode()).hexdigest()
+    from utils.sync.input_limits import MAX_BACKFILL_FILES
+
+    if len(set(scopes.values())) > MAX_BACKFILL_FILES:
+        raise FutureCaptureRetry()
     try:
         offsets = retained_offsets(uid, list(scopes.values()))
         return {path: offsets[scope] for path, scope in scopes.items() if scope in offsets}

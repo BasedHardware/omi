@@ -139,7 +139,12 @@ async def restore_upload(
             ceiling,
             uid,
             context,
-            decoder=partial(decode_future_units, uid=uid, device_id=binding.client_device_id),
+            decoder=partial(
+                decode_future_units,
+                uid=uid,
+                device_id=binding.client_device_id,
+                retained_offsets_by_name=context.get('retained_capture_offsets_by_name'),
+            ),
         )
     else:
         iterator = decode_units(paths, max_seconds=ceiling)
