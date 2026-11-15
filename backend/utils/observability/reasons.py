@@ -76,6 +76,7 @@ class ReasonFamily(StrEnum):
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
@@ -103,6 +104,22 @@ class PusherPcmErrorReason(StrEnum):
     ACQUIRE = 'acquire'
     RELEASE = 'release'
     LATE_STORAGE = 'late_storage'
+
+
+class AppReviewConfigReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CREDENTIALS_UNAVAILABLE = 'credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
+    RECONCILIATION_REPAIR = 'reconciliation_repair'
+    LIVE_HIDE_CLEARED = 'live_hide_cleared'
+    SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+
+
+class AppReviewConfigOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    PARTIAL = 'partial'
+    ERROR = 'error'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -815,6 +832,8 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+    STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
 
 
 class NotesAgentForceReason(StrEnum):
