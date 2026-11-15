@@ -1,78 +1,167 @@
-"""Repair-only rollout preserves effective policy and cannot target GPU resources."""
+"""Private CAS packet, exact inverse, server-delta verification and strict inputs."""
 
 from copy import deepcopy
+import json
 from pathlib import Path
 import runpy
+import stat
 
 import pytest
+import yaml
 
 from tests.unit.test_record_seal_cluster_repair_deploy import documents
 
-PATCH = runpy.run_path(
+TOOL = runpy.run_path(
     str(Path(__file__).resolve().parents[2] / 'deploy/record-seal-repair/render_stock_drain_patch.py')
-)['repair_patch']
+)
+PATCH = TOOL['repair_patch']
 
 
-def live_cron():
+def live_cron(fresh=True):
     live = deepcopy(documents('--set', 'recordSealRepair.shards=1')[('CronJob', 'record-seal-repair')])
-    live['metadata'].update(namespace='prod-omi-backend', resourceVersion='123')
-    env = live['spec']['jobTemplate']['spec']['template']['spec']['containers'][0]['env']
-    next(e for e in env if e['name'] == 'RECORD_SEAL_REPAIR_SERVER_FLAGS')['value'] = 'private-effective-policy'
-    next(e for e in env if e['name'] == 'RECORD_SEAL_REPAIR_FRESH_ENABLED')['value'] = 'false'
-    env.append({'name': 'OPERATOR_PRIVATE_GATE', 'valueFrom': {'secretKeyRef': {'name': 'private', 'key': 'gate'}}})
+    live['metadata'].update(namespace='prod-omi-backend', resourceVersion='123', uid='synthetic-cron')
+    live['spec']['schedule'] = '*/5 * * * *'
+    job = live['spec']['jobTemplate']['spec']
+    for key in ('completionMode', 'completions', 'parallelism'):
+        job.pop(key, None)
+    pod = job['template']['spec']
+    c = pod['containers'][0]
+    pod['affinity'] = TOOL['node_affinity']('batch-pipeline-pool')
+    pod['tolerations'] = [
+        {'effect': 'NoSchedule', 'key': 'omi.ai/batch-pipeline', 'operator': 'Equal', 'value': 'true'},
+        {'effect': 'NoSchedule', 'key': 'nvidia.com/gpu', 'operator': 'Equal', 'value': 'present'},
+    ]
+    c['resources']['requests']['cpu'] = '4'
+    next(e for e in c['env'] if e['name'] == 'RECORD_SEAL_REPAIR_SERVER_FLAGS')['value'] = 'private-effective-policy'
+    if not fresh:
+        c['env'] = [e for e in c['env'] if e['name'] != TOOL['FRESH']]
+    c['env'].append(
+        {'name': 'OPERATOR_PRIVATE_GATE', 'valueFrom': {'secretKeyRef': {'name': 'private', 'key': 'gate'}}}
+    )
     return live
 
 
-@pytest.mark.parametrize('shards', [1, 5])
-def test_target_only_patch_preserves_every_gate_policy_and_other_pod_field(shards):
-    live = live_cron()
-    rendered = documents(
-        '--set', f'recordSealRepair.shards={shards}', '--set-string', 'recordSealRepair.imageDigest=sha256:' + 'b' * 64
-    )
-    original = deepcopy(live)
-    patch = PATCH(live, list(rendered.values()))
-    assert live == original
-    assert [op['path'] for op in patch] == ['/metadata/resourceVersion', '/spec/schedule', '/spec/jobTemplate']
-    assert patch[0]['op'] == 'test' and patch[0]['value'] == '123'
-    job = patch[-1]['value']['spec']
-    assert job['completions'] == job['parallelism'] == shards
-    pod = job['template']['spec']
-    before = original['spec']['jobTemplate']['spec']['template']['spec']
-    for key in ('serviceAccountName', 'securityContext', 'restartPolicy'):
-        assert pod[key] == before[key]
-    assert pod['containers'][0]['env'] == before['containers'][0]['env']
-    assert pod['containers'][0]['image'].endswith('b' * 64)
-    assert 'tolerations' not in pod
+def rendered():
+    return list(documents('--set-string', 'recordSealRepair.imageDigest=sha256:' + 'b' * 64).values())
 
 
-@pytest.mark.parametrize('change', ['name', 'namespace', 'kind', 'version'])
+def image(live):
+    return live['spec']['jobTemplate']['spec']['template']['spec']['containers'][0]['image']
+
+
+def apply(doc, patch):
+    doc = deepcopy(doc)
+    for op in patch:
+        keys = op['path'].lstrip('/').split('/')
+        parent = doc
+        for key in keys[:-1]:
+            parent = parent[key]
+        if op['op'] == 'test':
+            assert parent[keys[-1]] == op['value']
+        else:
+            parent[keys[-1]] = deepcopy(op['value'])
+    return doc
+
+
+@pytest.mark.parametrize('fresh', [False, True])
+def test_target_packet_preserves_policy_and_exact_inverse_restores_entire_footprint(fresh):
+    before = live_cron(fresh)
+    patch, receipt, inverse = TOOL['prepare'](before, rendered(), image(before))
+    after = apply(before, patch)
+    TOOL['check'](after, receipt, 'after')
+    before_c = TOOL['target'](before)[2]
+    after_c = TOOL['target'](after)[2]
+    assert after_c['env'] == before_c['env'] + ([] if fresh else [{'name': TOOL['FRESH'], 'value': 'true'}])
+    assert receipt['beforeSpecSha256'] != receipt['afterSpecSha256']
+    assert inverse[1]['value'] == '__FRESH_READBACK_RESOURCE_VERSION_REQUIRED__'
+    after['metadata']['resourceVersion'] = '124'
+    rollback = TOOL['rollback'](after, receipt)
+    restored = apply(after, rollback)
+    assert restored['spec'] == before['spec']  # Includes old image, placement, mode, cadence, tolerations.
+    TOOL['check'](restored, receipt, 'before')
+    assert rollback[1]['value'] == '124'
+
+
+@pytest.mark.parametrize('change', ['name', 'namespace', 'kind', 'version', 'uid'])
 def test_bad_live_target_is_refused(change):
     live = live_cron()
     if change == 'kind':
         live['kind'] = 'Deployment'
-    elif change == 'version':
-        live['metadata'].pop('resourceVersion')
+    elif change in ('version', 'uid'):
+        live['metadata'].pop('resourceVersion' if change == 'version' else 'uid')
     else:
         live['metadata'][change] = 'different'
     with pytest.raises(ValueError):
-        PATCH(live, list(documents().values()))
+        PATCH(live, rendered(), expected_image=image(live))
 
 
-def test_cli_tightens_output_permissions_and_prints_no_private_policy(tmp_path, monkeypatch, capsys):
-    import json
-    import stat
+@pytest.mark.parametrize('phase', ['dry-run', 'readback', 'rollback'])
+def test_any_unapproved_server_spec_change_blocks_forward_and_inverse(phase):
+    before = live_cron()
+    patch, receipt, _ = TOOL['prepare'](before, rendered(), image(before))
+    after = apply(before, patch)
+    after['spec']['suspend'] = not after['spec'].get('suspend', False)
+    with pytest.raises(ValueError):
+        if phase == 'rollback':
+            TOOL['rollback'](after, receipt)
+        else:
+            TOOL['check'](after, receipt, 'after')
+
+
+def test_inverse_refuses_replaced_object_and_changed_receipt():
+    before = live_cron()
+    patch, receipt, _ = TOOL['prepare'](before, rendered(), image(before))
+    after = apply(before, patch)
+    after['metadata']['uid'] = 'replacement'
+    with pytest.raises(ValueError):
+        TOOL['rollback'](after, receipt)
+    after['metadata']['uid'] = before['metadata']['uid']
+    receipt['beforeSpec']['schedule'] = 'unexpected'
+    with pytest.raises(ValueError):
+        TOOL['rollback'](after, receipt)
+
+
+def test_cli_private_packet_before_apply_and_verified_rollback(tmp_path, monkeypatch, capsys):
     import sys
-    import yaml
 
-    live, rendered, output = tmp_path / 'live.json', tmp_path / 'rendered.yaml', tmp_path / 'patch.json'
-    live.write_text(json.dumps(live_cron()))
-    rendered.write_text(yaml.safe_dump_all(list(documents().values())))
-    output.write_text('old')
-    output.chmod(0o644)
+    before = live_cron()
+    live, manifest = tmp_path / 'live.json', tmp_path / 'rendered.yaml'
+    live.write_text(json.dumps(before))
+    manifest.write_text(yaml.safe_dump_all(rendered()))
+    args = [
+        'packet',
+        'prepare',
+        '--live-json',
+        str(live),
+        '--rendered-yaml',
+        str(manifest),
+        '--expected-image',
+        image(before),
+        '--out',
+        str(tmp_path),
+    ]
+    monkeypatch.setattr(sys, 'argv', args)
+    TOOL['main']()
+    for name in ('receipt.json', 'forward.json', 'rollback.template.json'):
+        assert stat.S_IMODE((tmp_path / name).stat().st_mode) == 0o600
+    patch = json.loads((tmp_path / 'forward.json').read_text())
+    after = apply(before, patch)
+    after['metadata']['resourceVersion'] = '124'
+    live.write_text(json.dumps(after))
     monkeypatch.setattr(
-        sys, 'argv', ['render', '--live-json', str(live), '--rendered-yaml', str(rendered), '--output', str(output)]
+        sys,
+        'argv',
+        [
+            'packet',
+            'rollback',
+            '--receipt',
+            str(tmp_path / 'receipt.json'),
+            '--object',
+            str(live),
+            '--output',
+            str(tmp_path / 'rollback.json'),
+        ],
     )
-    PATCH.__globals__['main']()
-    assert stat.S_IMODE(output.stat().st_mode) == 0o600
-    assert json.loads(output.read_text())[0]['op'] == 'test'
+    TOOL['main']()
+    assert apply(after, json.loads((tmp_path / 'rollback.json').read_text()))['spec'] == before['spec']
     assert capsys.readouterr().out == ''
