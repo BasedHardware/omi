@@ -471,12 +471,12 @@ def entries():
             covered_by=('database.batch_pipeline_store.ready_pending',),
             reason='thin adapter for the existing ready-head shape; only the bounded page cap differs',
             expect_observed=False,
-            body_digest='26f763a5f32011d8c0b83f01b1fa5fe3556397a1a6a85378296ac794f0a84714',
+            body_digest='48c1a206ba4e768ab07b48cd7c79df4e759cbe32c576c5723abba4d9b874d18a',
         ),
         DriverEntry(
             'database.batch_pipeline_store.ready_pending',
             base={'owner_key': 'owner-hash'},
-            domains={'namespace': namespaces},
+            domains={'namespace': namespaces, 'after': [None, (0.0, 'synthetic-cursor')]},
             neutrals={'limit': (160, 'bounded exceptional sibling-group page only')},
         ),
         CoveredByEntry(

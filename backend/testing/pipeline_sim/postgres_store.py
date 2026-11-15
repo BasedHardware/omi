@@ -173,8 +173,8 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
-    def ready_pending(self, owner_key: str, limit: int) -> list[dict]:
-        return self.pg.ready_pending(owner_key, limit)
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        return self.pg.ready_pending(owner_key, limit, after=after)
 
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False

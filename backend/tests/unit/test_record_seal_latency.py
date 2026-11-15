@@ -307,3 +307,38 @@ def test_recovering_record_sibling_does_not_block_an_independent_record(monkeypa
     merged = OrderedMerge(store).commit_next('owner', NOW)
     assert merged and merged['segment_id'] == 'y'
     assert store.rows['jobs', 'x2']['state'] == 'result_ready'
+
+
+@pytest.mark.parametrize('over_depth', [False, True])
+def test_sibling_probe_advances_full_held_pages_across_merge_instances(monkeypatch, over_depth):
+    from dataclasses import asdict
+    from utils.batch_pipeline.scheduler import owner_key
+
+    monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')
+    store = MemoryStore()
+    queue = Scheduler(store)
+    binding = ProjectionBinding('owner', 'x', 'x-content', ('x1', 'x2'), native_record=True)
+    for i, sid in enumerate(('x1', 'x2', *(f'old-{j:03d}' for j in range(180)), 'y')):
+        queue.enqueue(item(sid, owner='owner', capture=NOW - 500 + i), NOW)
+        job = store.rows['jobs', sid]
+        job.update(
+            fresh_capture=sid == 'y',
+            state='result_ready',
+            ready_at=NOW - 600,
+            result=WorkResult(sid, 'gs://synthetic/result').to_dict(),
+        )
+        if sid.startswith('old-'):
+            job['stt_route'] = {'stt_route': 'provider'}
+    for sid in ('x1', 'x2'):
+        store.rows['jobs', sid]['projection_binding'] = asdict(binding)
+    store.rows['jobs', 'x1'].update(state='quarantined', merge_pending=False, recovery_state='running')
+    if over_depth:
+        store.rows['owners', owner_key('owner')]['log_sequence'] = 16
+    merge = OrderedMerge(store, catch_up_depth=16)
+    assert merge.commit_next('owner', NOW) is None
+    assert store.rows['owners', owner_key('owner')]['record_sibling_cursor']
+    merged = OrderedMerge(store, catch_up_depth=16).commit_next('owner', NOW)
+    assert merged and merged['segment_id'] == 'y'
+    assert 'record_sibling_cursor' not in store.rows['owners', owner_key('owner')]
+    assert store.rows['jobs', 'x2']['state'] == 'result_ready'

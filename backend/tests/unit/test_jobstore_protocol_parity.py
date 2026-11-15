@@ -100,4 +100,4 @@ def test_pg_sim_forwards_the_independent_record_ready_page():
     store.pg = Mock()
     store.pg.ready_pending.return_value = [{'segment_id': 'independent'}]
     assert store.ready_pending('synthetic-owner', 160) == [{'segment_id': 'independent'}]
-    store.pg.ready_pending.assert_called_once_with('synthetic-owner', 160)
+    store.pg.ready_pending.assert_called_once_with('synthetic-owner', 160, after=None)

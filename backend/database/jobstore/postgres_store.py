@@ -380,12 +380,14 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
-    def ready_pending(self, owner_key: str, limit: int) -> list[dict]:
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        cursor = 'AND (capture_at, key COLLATE "C") > (%s, %s) ' if after is not None else ''
+        params = (self.namespace, owner_key, *after) if after is not None else (self.namespace, owner_key)
         with self._read_conn() as conn:
             rows = conn.execute(
                 "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
-                "AND state = 'result_ready' ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
-                (self.namespace, owner_key, max(1, min(limit, 160))),
+                f"AND state = 'result_ready' {cursor}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 160))),
             ).fetchall()
         return [row[0] for row in rows]
 

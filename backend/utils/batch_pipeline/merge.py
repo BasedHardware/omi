@@ -416,7 +416,12 @@ class OrderedMerge:
             if not candidate or candidate['state'] != 'result_ready':
                 return None
             if _record_sibling_pending(tx, candidate):
-                blocked.update(head_state='record_sibling', sibling=True)
+                blocked.update(
+                    head_state='record_sibling',
+                    sibling=True,
+                    segment_id=candidate['segment_id'],
+                    cursor=owner.get('record_sibling_cursor'),
+                )
                 return None
             if not fresh_first and _backlog_held(candidate):
                 # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.
@@ -480,6 +485,7 @@ class OrderedMerge:
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
+            owner.pop('record_sibling_cursor', None)
             owner.update(
                 watermark=watermark if late else position,
                 log_tail=job['segment_id'],
@@ -553,12 +559,45 @@ class OrderedMerge:
             try:
                 if sibling_probe:
                     # Existing ready-head query/index, widened only for a blocked group.
-                    pending = self.store.ready_pending(key, FRESH_PROBE_ROWS + 128)
-                    pending = self.store.run(
-                        lambda tx: [
-                            row for row in pending if not _record_sibling_pending(tx, row) and not _backlog_held(row)
-                        ]
+                    cursor = strict_blocked.get('cursor') or {}
+                    after = (
+                        (cursor['capture_at'], cursor['segment_id'])
+                        if (cursor.get('head') == strict_blocked['segment_id'])
+                        else None
                     )
+                    page = self.store.ready_pending(key, FRESH_PROBE_ROWS + 128, after=after)
+
+                    def independent(tx):
+                        over_depth = bool(depth and _awaiting_projection(tx, tx.get('owners', key)) >= depth)
+                        return [
+                            row
+                            for row in page
+                            if not _record_sibling_pending(tx, row)
+                            and not _backlog_held(row)
+                            and (row.get('fresh_capture') is True or not over_depth)
+                        ]
+
+                    pending = self.store.run(independent)
+                    pending.sort(
+                        key=lambda row: (row.get('fresh_capture') is not True, row['capture_at'], row['segment_id'])
+                    )
+                    if not pending:
+                        # Persist progress only for a full blocked page. The hint
+                        # never authorizes a commit and clears on commit or exhaustion.
+                        def remember(tx):
+                            tx.check_privacy(owner_id)
+                            current = tx.get('owners', key)
+                            if len(page) >= FRESH_PROBE_ROWS + 128:
+                                current['record_sibling_cursor'] = {
+                                    'head': strict_blocked['segment_id'],
+                                    'capture_at': page[-1]['capture_at'],
+                                    'segment_id': page[-1]['segment_id'],
+                                }
+                            else:
+                                current.pop('record_sibling_cursor', None)
+                            tx.put('owners', key, current)
+
+                        self.store.run(remember)
                 else:
                     pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
             except FailedPrecondition:

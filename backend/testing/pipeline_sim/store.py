@@ -502,7 +502,7 @@ class SimStore:
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
 
-    def ready_pending(self, owner_key: str, limit: int) -> list[dict]:
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
         rows = [
             row
             for (table, _), row in self.rows.items()
@@ -510,6 +510,7 @@ class SimStore:
             and row.get('owner_key') == owner_key
             and row.get('merge_pending')
             and row.get('state') == 'result_ready'
+            and (after is None or (row['capture_at'], row['segment_id']) > tuple(after))
         ]
         return deepcopy(sorted(rows, key=lambda row: (row['capture_at'], row['segment_id']))[: max(1, min(limit, 160))])
 
