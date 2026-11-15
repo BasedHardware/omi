@@ -391,6 +391,62 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('a processing aggregate retains every owner and recording after one episode finishes', (tester) async {
+    final source = _fictional();
+    final first = Episode(
+      id: 'first',
+      live: false,
+      startedAt: _at,
+      lastActivityAt: _at,
+      title: 'First episode',
+      members: [source.members.first],
+      conversationIds: [source.members.first.id],
+    );
+    final second = Episode(
+      id: 'second',
+      live: false,
+      startedAt: _at,
+      lastActivityAt: _at,
+      title: 'Second episode',
+      members: [source.members.last],
+      conversationIds: [source.members.last.id],
+    );
+    final aggregate = Episode(
+      id: '',
+      live: false,
+      startedAt: _at,
+      lastActivityAt: _at,
+      members: source.members,
+      conversationIds: source.conversationIds,
+    );
+    await _pump(tester, aggregate, Brightness.light, home: EpisodePage(episode: aggregate, processingAggregate: true));
+    final provider = Provider.of<EpisodeProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
+    provider.debugSetHomeEpisodes([
+      Episode(
+          id: first.id,
+          live: false,
+          startedAt: _at,
+          lastActivityAt: _at,
+          title: first.title,
+          lede: 'Finished first episode fixture',
+          members: first.members,
+          conversationIds: first.conversationIds),
+      second,
+    ]);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('processing_episode_first')), findsOneWidget);
+    expect(find.byKey(const ValueKey('processing_episode_second')), findsOneWidget);
+    for (final member in source.members) {
+      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
+    }
+    // Opening either source uses its real identity; the aggregate never adopts the first source.
+    await tester.tap(find.byKey(const ValueKey('processing_episode_second')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Second episode'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('a section opens its moment in the transcript', (tester) async {
     OmiColors.active = OmiColors.forBrightness(Brightness.light);
     final opened = <String>[];

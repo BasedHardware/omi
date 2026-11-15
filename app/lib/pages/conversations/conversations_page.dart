@@ -783,6 +783,7 @@ class _ConversationsPageState extends State<ConversationsPage>
             groupAwaitingTranscript: true,
             now: clock.now(),
             processingTodayOnly: _pendingWork.homeProcessingToday,
+            singleProcessingRow: _pendingWork.homeProcessingToday,
             activityOnlyFailures: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
@@ -829,17 +830,25 @@ class _ConversationsPageState extends State<ConversationsPage>
           ..sort((a, b) => b.compareTo(a));
         // Episodes beta, default view: background conversations live in the day's recap, not on Home.
         final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
-        final builtRows = _buildConversationListRows(
-          dates: mergedDates,
-          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
-          recordingsByDate: recordingsByDate,
-          heldByDate: heldByDate,
-        );
+        final builtRows = _processingFirst(
+            _buildConversationListRows(
+              dates: mergedDates,
+              conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
+              recordingsByDate: recordingsByDate,
+              heldByDate: heldByDate,
+            ),
+            projectedProcessingIds,
+            enabled: _pendingWork.homeProcessingToday);
         final localToday = localHomeDay(clock.now());
         final withLive =
             episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
         // Only the default view: a search or folder shows what it matched.
-        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
+        // Default Home already projected every local entry together with server
+        // rows. A second insertion can resurrect stale ready/noise entries and
+        // bypass the one-row fold. Filtered views and rollback keep their adapter.
+        final conversationRows = showRecordings &&
+                !convoProvider.isSelectionModeActive &&
+                !(defaultHome && _pendingWork.homeProcessingToday)
             ? _withProcessingRows(
                 withLive,
                 [
@@ -1067,6 +1076,7 @@ class _ConversationsPageState extends State<ConversationsPage>
                             key: ValueKey('processing_${row.conversation!.id}'),
                             conversation: row.conversation!,
                             episode: projectedRow?.episode,
+                            processingEpisodes: projectedRow?.processingEpisodes ?? const [],
                             step: projectedRow?.step ?? HomeStep.writingNotes,
                             count: projectedRow?.count ?? 1,
                           );

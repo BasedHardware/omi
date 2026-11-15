@@ -24,8 +24,15 @@ import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 /// (Summary and Transcript tabs, then a page of sections). Its summary/tasks/moments are the live
 /// page's own content blocks; its members use the existing conversation detail and hydration path.
 class EpisodePage extends StatelessWidget {
-  const EpisodePage({super.key, required this.episode});
+  const EpisodePage({
+    super.key,
+    required this.episode,
+    this.processingAggregate = false,
+    this.processingEpisodes = const [],
+  });
   final Episode episode;
+  final bool processingAggregate;
+  final List<Episode> processingEpisodes;
 
   Future<void> _delete(BuildContext context) async {
     final history = context.read<ConversationProvider>();
@@ -85,15 +92,43 @@ class EpisodePage extends StatelessWidget {
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
     final opened = this.episode;
-    final episode = episodes?.openedEpisode(opened.id) ??
-        episodes?.homeEpisodes
-            .where(
-              (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id,
-            )
-            .firstOrNull ??
-        opened;
-    final known = {for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c};
-    final members = [for (final member in episode.members) known[member.id] ?? member]
+    final episode = processingAggregate
+        ? opened
+        : episodes?.openedEpisode(opened.id) ??
+            episodes?.homeEpisodes
+                .where(
+                  (e) => opened.id.isEmpty ? e.conversationIds.any(opened.conversationIds.contains) : e.id == opened.id,
+                )
+                .firstOrNull ??
+            opened;
+    // A processing aggregate is a collection of owners, never the first matching
+    // owner. Keep every recording and provide a link to each real episode's notes.
+    final owners = {
+      for (final source in processingEpisodes) source.id: source,
+      if (processingAggregate)
+        for (final source in episodes?.homeEpisodes ?? const <Episode>[])
+          if (source.id.isNotEmpty && !source.live && source.conversationIds.any(opened.conversationIds.contains))
+            source.id: source,
+    };
+    final sources = [
+      for (final source in owners.values)
+        episodes?.openedEpisode(source.id) ??
+            episodes?.homeEpisodes.where((e) => e.id == source.id).firstOrNull ??
+            source,
+    ];
+    final known = {
+      for (final source in sources)
+        for (final c in source.members) c.id: c,
+      for (final c in history?.processingConversations ?? const <ServerConversation>[]) c.id: c,
+      for (final c in history?.conversations ?? const <ServerConversation>[]) c.id: c,
+    };
+    final retained = {
+      for (final member in episode.members) member.id: member,
+      if (processingAggregate)
+        for (final source in sources)
+          for (final member in source.members) member.id: member,
+    };
+    final members = [for (final member in retained.values) known[member.id] ?? member]
         .where(
           (m) =>
               !m.discarded &&
@@ -124,6 +159,26 @@ class EpisodePage extends StatelessWidget {
       ),
     ];
     final memberRows = <Widget>[
+      for (final source in sources)
+        if (source.conversationIds.any(memberIds.contains))
+          ConversationListItem(
+            key: ValueKey('processing_episode_${source.id}'),
+            conversation: ServerConversation(
+              id: 'episode:${source.id}',
+              createdAt: source.startedAt,
+              startedAt: source.startedAt,
+              finishedAt: source.lastActivityAt,
+              structured: Structured(
+                  source.title.trim().isEmpty ? context.l10n.wrappedProcessingDefault : source.title, '',
+                  emoji: source.emoji),
+            ),
+            date: source.startedAt,
+            conversationIdx: -1,
+            homeEpisode: source,
+            hasLinkedTasks: false,
+            allowSelection: false,
+            embedded: true,
+          ),
       for (final member in members)
         Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),

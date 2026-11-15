@@ -16,6 +16,7 @@ void main() {
           enabled: episodes.isNotEmpty,
           groupAwaitingTranscript: true,
           processingTodayOnly: todayOnly,
+          singleProcessingRow: todayOnly,
           activityOnlyFailures: todayOnly,
           now: midnight);
 

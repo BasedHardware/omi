@@ -18,6 +18,7 @@ class ProcessingConversationRow extends StatelessWidget {
     super.key,
     required this.conversation,
     this.episode,
+    this.processingEpisodes = const [],
     this.step = HomeStep.writingNotes,
     this.count = 1,
   });
@@ -26,6 +27,7 @@ class ProcessingConversationRow extends StatelessWidget {
 
   /// The episode this row stands for; a lone conversation has none yet.
   final Episode? episode;
+  final List<Episode> processingEpisodes;
 
   /// The current processing step shown in the subtitle.
   final HomeStep step;
@@ -39,6 +41,8 @@ class ProcessingConversationRow extends StatelessWidget {
     routeToPage(
       context,
       EpisodePage(
+        processingAggregate: episode?.id.isEmpty == true,
+        processingEpisodes: processingEpisodes,
         episode: episode ??
             Episode(
               id: '',

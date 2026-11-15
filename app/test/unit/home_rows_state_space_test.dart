@@ -172,7 +172,9 @@ List<String> _violations(_Scenario s, List<ServerConversation> members, Episode 
     if (rows[i].isProcessing && rows[i + 1].isProcessing && rows[i].day == rows[i + 1].day) {
       out.add('adjacent-processing-rows-not-folded');
     }
-    if (rows[i].startedAt.isBefore(rows[i + 1].startedAt)) out.add('rows-out-of-order');
+    if (!rows[i].isProcessing && rows[i].startedAt.isBefore(rows[i + 1].startedAt)) {
+      out.add('finished-rows-out-of-order');
+    }
   }
   for (var i = 0; i < members.length; i++) {
     final state = s.states[i];

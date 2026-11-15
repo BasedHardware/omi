@@ -235,6 +235,7 @@ class Episode {
                 (s) => s.name == m.status,
                 orElse: () => ConversationStatus.completed,
               ),
+              homeStep: m.homeStep,
             ),
         ],
         bullets: e.bullets ?? const [],

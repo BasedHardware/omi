@@ -22,11 +22,13 @@ import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../helpers/home_fixture_env.dart';
+import '../helpers/home_one_processing_fixture.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 
@@ -211,6 +213,53 @@ void main() {
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
 
+  for (final withPending in [false, true]) {
+    testWidgets('stale ready and noise processing entries never bypass the fold, pending=$withPending', (tester) async {
+      final now = DateTime.now();
+      final ready = _conv('ready-stale', now, title: 'Finished fixture', homeStep: 'ready');
+      final noise = _conv('noise-stale', now, homeStep: 'noise');
+      final pending = _conv('pending', now, homeStep: 'transcribing');
+      await _pumpHome(tester, [ready, noise, if (withPending) pending],
+          processing: [ready, noise, if (withPending) pending]);
+      expect(find.byKey(_processingKey), withPending ? findsOneWidget : findsNothing);
+      expect(find.text('Finished fixture'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  for (final withLive in [false, true]) {
+    for (final serverOnly in [false, true]) {
+      testWidgets('five pending episode groups have one row with live=$withLive serverOnly=$serverOnly',
+          (tester) async {
+        final fixture = HomeOneProcessingFixture(DateTime.now(), serverOnly: serverOnly);
+        final episodes = EpisodeProvider(
+          fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: withLive ? fixture.live : null)),
+          fetchPage: (from, to, {cursor}) async =>
+              ApiSuccess(EpisodePageRead(enabled: true, episodes: fixture.episodes)),
+        );
+        await episodes.refreshLive();
+        episodes.debugSetHomeEpisodes(fixture.episodes);
+        final capture = withLive ? _LiveCapture() : null;
+        if (capture != null) addTearDown(capture.dispose);
+        final boundary = await _pumpHome(tester, [if (!serverOnly) ...fixture.pending, fixture.finished],
+            episodeProvider: episodes, capture: capture, processing: serverOnly ? [] : fixture.pending);
+        expect(find.byKey(_processingKey), findsOneWidget);
+        expect(find.text('Transcribing… · 27 recordings'), findsOneWidget);
+        final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+        expect(row.episode!.members.map((m) => m.id).toSet(), fixture.pending.map((m) => m.id).toSet());
+        expect(row.processingEpisodes.map((e) => e.id).toSet(), fixture.episodes.map((e) => e.id).toSet());
+        expect(_top(tester, find.byKey(_processingKey)) < _top(tester, find.text('Finished episode fixture')), isTrue);
+        if (withLive) {
+          expect(_top(tester, find.byType(LiveEpisodeRow)) < _top(tester, find.byKey(_processingKey)), isTrue);
+        }
+        await _capture(tester, boundary, withLive ? 'one-row-with-live' : 'one-row-without-live');
+        await tester.pumpWidget(const SizedBox.shrink());
+        episodes.invalidateHome();
+      });
+    }
+  }
+
   testWidgets('live episode owns its three closed processing recordings', (tester) async {
     final now = DateTime.now();
     final start = now.subtract(const Duration(minutes: 24));
@@ -387,7 +436,7 @@ void main() {
     await _capture(tester, boundary, '004-noise-hidden');
   });
 
-  testWidgets('005-finished-breaks-run', (tester) async {
+  testWidgets('005-finished-keeps-one-processing-row', (tester) async {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     DateTime at(int h, int m) => DateTime(today.year, today.month, today.day, h, m);
@@ -400,19 +449,18 @@ void main() {
     ];
     final boundary = await _pumpHome(tester, items);
 
-    expect(find.byKey(_processingKey), findsNWidgets(2));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Middle finished review'), findsOneWidget);
-    expect(find.text(_processing), findsNWidgets(2));
+    expect(find.text(_processing), findsOneWidget);
     expect(find.textContaining(_transcribing), findsNWidgets(0));
-    // Newest run first, the finished row between them, the earliest run last.
+    // All pending recordings share the first row; finished work keeps its own row.
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));
     final middle = _top(tester, find.text('Middle finished review'));
-    final early = _top(tester, runs.at(1));
-    expect(late < middle && middle < early, isTrue, reason: 'the finished row must split the two runs');
+    expect(late < middle, isTrue, reason: 'processing stays above the finished row');
     _expectAbsent(['Okay.', 'Recording · 3:00 PM']);
 
-    await _capture(tester, boundary, '005-finished-breaks-run');
+    await _capture(tester, boundary, '005-finished-keeps-one-row');
   });
 
   testWidgets('006-locked-row', (tester) async {
@@ -432,13 +480,12 @@ void main() {
     ];
     final boundary = await _pumpHome(tester, items);
 
-    expect(find.byKey(_processingKey), findsNWidgets(2));
+    expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Locked recording'), findsOneWidget);
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));
     final locked = _top(tester, find.text('Locked recording'));
-    final early = _top(tester, runs.at(1));
-    expect(late < locked && locked < early, isTrue, reason: 'the locked row keeps its own place between runs');
+    expect(late < locked, isTrue, reason: 'processing stays above the locked row');
     _expectAbsent(['Mm-hmm.']);
 
     await _capture(tester, boundary, '006-locked-row');
