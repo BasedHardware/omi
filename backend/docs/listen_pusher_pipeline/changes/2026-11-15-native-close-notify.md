@@ -72,9 +72,11 @@ privacy/deletion refusals return404. Only timeout returns the existing modelled
 show no audio on that timeout, and a desktop which skips the request cannot use
 request-side repair. No fake file or URL is emitted.
 
-One pending-marker point read is followed, only when debt exists, by the existing
-strict rebuild's owner/discovery/privacy/CAS reads and a metadata readback; a
-successful closing repair adds one conditional delete. No background playback
+Each empty open adds one pending-marker point read and one fresh metadata
+readback, even if a background refresh just retired the marker. Existing debt
+also invokes the strict rebuild's owner/discovery/privacy/CAS reads; a successful
+closing repair adds one conditional delete. A failed optional delete keeps debt
+and does not prevent serving the proven metadata. No background playback
 artifact is built merely because the recording seals. Switch-off adds none of
 this request IO and retains the old empty response.
 
@@ -126,11 +128,12 @@ not production storage latency or five-minute Home delivery.
 Per recording with B uploaded drain batches and P empty playback polls: B owner
 point reads and B marker writes (one of each per uploaded drain batch), one job
 read and at most one intake wake write per eligible seal transaction attempt, P
-marker point reads, and at most one conditional debt delete per successful closing
+marker point reads (plus P fresh metadata readbacks and any demand-rebuild
+reads), and at most one conditional debt delete per successful closing
 refresh. Existing custody/storage/privacy work is additional and unchanged.
 At sustained10000 recordings/hour (240000/day), ten eligible seal attempts alone
 plan for2400000 job reads/day, exceeding the earlier1M declaration. The combined
-added read envelope is240000 * (B + 10 + P)/day; retries or repeated successful
+added read envelope is240000 * (B + 10 + 2P + R)/day, with R the additional strict demand-rebuild reads per recording; retries or repeated successful
 close refreshes require separate accounting and this is no runtime cap.
 Normal one-attempt, B=1, P=0 is480000 reads/day, not a measured production saving.
 
