@@ -39,6 +39,9 @@ captures and partial pages share this intake function. This writes the existing
 priority field before enqueue; it needs the Cloud Run/listen release, not a GPU
 worker image roll. The existing scheduler checks FRESH before RECENT/DEEP,
 including for the same owner. Already admitted units are not reclassified.
+The stored `fresh_capture` merge cohort and its independent supervision/count
+timer from #25292 retain their capture-age semantics. The ordering test also
+checks that bulk admission does not label old captures fresh in that cohort.
 `RECORD_INTAKE_AGE_PRIORITY_ENABLED=false` restores old classification for new
 admissions; keep it on while bulk drain runs. It is bound on all five main.py
 hosts in dev/prod overlays, the generated runtime manifest, listen charts,
@@ -74,6 +77,21 @@ and margin. This is a sizing upper estimate at the stated stock/rate, not a
 hard billing cap or measured production read cost; remeasure terminal child
 probe totals and retry rates after deployment. Normal traffic/admission reads,
 GCS/network, CPU nodes and vendor spend are separate.
+
+Main #25304 adds a separate, fail-open post-seal ledger transaction on
+`database.record_audio.seal_record_audio`: three fenced document reads and at
+most one ledger write per first admission. At 10k first admissions/h, allow
+another 30k reads/h and 10k writes/h: nominal read sizing becomes about
+0.99M/h ($0.51/h), still within the 4M/h planning envelope. Canonical repair
+itself writes one conversation and, when claim-safe, one intake wake: 10–20k
+document writes/h; including the ledger allowance gives 20–30k writes/h.
+The supplied $0.51/million price is for reads only; ledger write charges are
+additional and not priced here. The repair's existing direct
+`apply_seals` transaction does not invoke that new pusher ledger writer, so its
+ledger admission coverage remains a separate integration gap, not an asserted
+effect or a dependency of this drain. Privacy/source deletion fences on the
+new ledger writer are unchanged. Ledger retries are included only as a sizing
+allowance; production billing is not verified.
 
 At 00:39Z the fleet completed about 588 audio-hours/hour. At the supplied ~20%
 utilization, linear extrapolation is ~2940 audioh/h total, ~2350 spare, unverified.

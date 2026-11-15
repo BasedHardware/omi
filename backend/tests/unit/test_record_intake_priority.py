@@ -110,6 +110,10 @@ def test_new_recording_pulls_ahead_of_bulk_repair_even_for_the_same_owner(monkey
     )
     assert queue.pull(NOW, 1)[0].item.segment_id == 'just-ended'
     assert store.rows['jobs', 'old-0']['priority'] == int(Priority.RECENT)
+    # The independent merge/guard cohort keeps its existing capture-age
+    # semantics; changing scheduling class must not relabel old results fresh.
+    assert store.rows['jobs', 'old-0']['fresh_capture'] is False
+    assert store.rows['jobs', 'just-ended']['fresh_capture'] is True
 
 
 def test_classification_never_promotes_already_lower_priority(monkeypatch):
