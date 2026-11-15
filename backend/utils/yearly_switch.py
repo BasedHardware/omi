@@ -89,6 +89,11 @@ def _monthly_target(price_id: Optional[str]) -> Optional[tuple[str, str]]:
     return None
 
 
+def supports_monthly_switch_price(price_id: Optional[str]) -> bool:
+    """Whether a stored price id is a configured monthly price for this offer."""
+    return _monthly_target(price_id) is not None
+
+
 def _target(sub: Any) -> tuple[str, str]:
     """(plan_id, yearly price id) of a subscription that passed refusal()."""
     price = _get(_get(_get(sub, 'items'), 'data')[0], 'price')

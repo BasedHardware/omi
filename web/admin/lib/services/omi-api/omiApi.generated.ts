@@ -10876,6 +10876,24 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/payments/yearly-switch-retention": {
+    get: {
+      operationId: "retention_status_v1_payments_yearly_switch_retention_get";
+      responses: {
+        "200": YearlySwitchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "admit_retention_v1_payments_yearly_switch_retention_post";
+      responses: {
+        "200": YearlySwitchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/paypal/payment-details": {
     get: {
       operationId: "get_paypal_payment_details_endpoint_v1_paypal_payment_details_get";
@@ -19485,6 +19503,47 @@ export async function get_yearly_switch_endpoint_v1_payments_yearly_switch_get(q
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function retention_status_v1_payments_yearly_switch_retention_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<YearlySwitchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/yearly-switch-retention`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function admit_retention_v1_payments_yearly_switch_retention_post(query: { placement: "cancel" | "engaged" }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<YearlySwitchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/yearly-switch-retention`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_paypal_payment_details_endpoint_v1_paypal_payment_details_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<PayPalPaymentDetailsResponse | null> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/paypal/payment-details`;
@@ -24105,4 +24164,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 550 client methods generated.
+// Total: 552 client methods generated.

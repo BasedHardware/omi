@@ -222,6 +222,9 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionPaymentIssueMonthlyTapped | Subscription Payment Issue Monthly Tapped | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueMonthlySwitched | Subscription Payment Issue Monthly Switched | none | active | subscription-payment-recovery |
 | subscriptionPaymentIssueMonthlyFailed | Subscription Payment Issue Monthly Failed | reason | active | subscription-payment-recovery |
+| retentionOfferShown | Retention Offer Shown | reason, percent_off | active | yearly-switch-retention |
+| retentionOfferAccepted | Retention Offer Accepted | reason, percent_off | active | yearly-switch-retention |
+| yearlyRetentionObservation | Yearly Retention Observation | placement, action, variant, experiment_version | active | yearly-switch-retention |
 
 ## App Review Opportunity decisions
 

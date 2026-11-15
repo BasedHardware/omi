@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "002-mobile-ios-cancel-control.png",
+      "platform": "mobile-ios",
+      "description": "Current cancellation control/no yearly offer; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-cancel-after.png",
+      "platform": "mobile-ios",
+      "description": "Production cancellation, too_expensive treatment; yearly before discount; Cancel pinned; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-engaged-before.png",
+      "platform": "mobile-ios",
+      "description": "Minimal Home host before/flag-off: no new placement; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-engaged-after.png",
+      "platform": "mobile-ios",
+      "description": "Production engaged placement in minimal Home host, not full Home shell; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-price-preview.png",
+      "platform": "mobile-ios",
+      "description": "Production existing yearly preview, exact synthetic charge and annual total; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-payment-declined.png",
+      "platform": "mobile-ios",
+      "description": "Production switch decline, monthly retained; dismiss sheet to Cancel subscription; synthetic widget raster, not a device screenshot",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-head-preview-normal.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic isolated yearly-switch preview; normal text; original PR head; not a device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-head-preview-large.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic isolated yearly-switch preview; 150% text; original PR head; not a device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-merged-preview-normal.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic isolated yearly-switch preview; normal text; local merged candidate; not a device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-merged-preview-large.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic isolated yearly-switch preview; 150% text; local merged candidate; not a device capture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

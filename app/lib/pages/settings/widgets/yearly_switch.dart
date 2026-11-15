@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/payment.dart' as payment_api;
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api/yearly_switch_retention.dart' as retention_api;
 import 'package:omi/backend/schema/gen/payments_wire.g.dart' as wire;
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -20,7 +22,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// Offered in Plans & Billing. The confirm sheet shows Stripe's preview: what is charged today, the
 /// plan and the renewal date.
 
-enum YearlySwitchSurface { plans }
+enum YearlySwitchSurface { plans, cancel, engaged }
 
 typedef YearlySwitchLoader = Future<wire.GeneratedYearlySwitchResponse?> Function({bool preview});
 
@@ -65,15 +67,41 @@ String? yearlySwitchCandidate(UsageProvider? provider) {
 /// [minor] units of [currency], exact and unambiguous like every purchase surface ("US$89.97").
 String yearlySwitchMoney(int minor, String? currency) => formatBillingPrice(minor, currency ?? 'usd');
 
-void _emitShown(YearlySwitchSurface surface) => const TypedEvents()
-    .emit(SubscriptionYearlySwitchShown(surface: SubscriptionYearlySwitchShownSurface.values.byName(surface.name)));
+/// Separate event vocabulary preserves released plans/home event shapes.
+void observeYearlyRetention(YearlySwitchSurface surface, YearlyRetentionObservationAction action) {
+  const TypedEvents().emit(YearlyRetentionObservation(
+    placement: YearlyRetentionObservationPlacement.values.byName(surface.name),
+    action: action,
+    variant: YearlyRetentionObservationVariant.treatment,
+    experimentVersion: 1,
+  ));
+}
 
-void _emitOpened(YearlySwitchSurface surface) => const TypedEvents()
-    .emit(SubscriptionYearlySwitchOpened(surface: SubscriptionYearlySwitchOpenedSurface.values.byName(surface.name)));
+void _emitShown(YearlySwitchSurface surface) {
+  if (surface != YearlySwitchSurface.plans) {
+    observeYearlyRetention(surface, YearlyRetentionObservationAction.shown);
+  } else {
+    const TypedEvents().emit(const SubscriptionYearlySwitchShown(surface: SubscriptionYearlySwitchShownSurface.plans));
+  }
+}
 
-void _emitFailed(YearlySwitchSurface surface, SubscriptionYearlySwitchFailedReason reason) =>
-    const TypedEvents().emit(SubscriptionYearlySwitchFailed(
-        surface: SubscriptionYearlySwitchFailedSurface.values.byName(surface.name), reason: reason));
+void _emitOpened(YearlySwitchSurface surface) {
+  if (surface != YearlySwitchSurface.plans) {
+    observeYearlyRetention(surface, YearlyRetentionObservationAction.opened);
+  } else {
+    const TypedEvents()
+        .emit(const SubscriptionYearlySwitchOpened(surface: SubscriptionYearlySwitchOpenedSurface.plans));
+  }
+}
+
+void _emitFailed(YearlySwitchSurface surface, SubscriptionYearlySwitchFailedReason reason) {
+  if (surface != YearlySwitchSurface.plans) {
+    observeYearlyRetention(surface, YearlyRetentionObservationAction.failed);
+  } else {
+    const TypedEvents()
+        .emit(SubscriptionYearlySwitchFailed(surface: SubscriptionYearlySwitchFailedSurface.plans, reason: reason));
+  }
+}
 
 /// Opens the confirm sheet; resolves true once the reader is on yearly.
 Future<bool> showYearlySwitchSheet(
@@ -81,13 +109,15 @@ Future<bool> showYearlySwitchSheet(
   required YearlySwitchSurface surface,
   YearlySwitchLoader? load,
   YearlySwitchApplier? apply,
+  Future<bool> Function()? readEnabled,
 }) async {
   _emitOpened(surface);
   var switched = false;
   await showOmiSheet<void>(
     context: context,
     title: context.l10n.yearlySwitchTitle,
-    builder: (_) => YearlySwitchSheet(surface: surface, load: load, apply: apply, onSwitched: () => switched = true),
+    builder: (_) => YearlySwitchSheet(
+        surface: surface, load: load, apply: apply, readEnabled: readEnabled, onSwitched: () => switched = true),
   );
   return switched;
 }
@@ -96,12 +126,13 @@ Future<bool> showYearlySwitchSheet(
 /// previewed amount only, so the charge is the one on screen. A declined card changes nothing: the
 /// reader stays on monthly. After any failure the next tap re-previews before it charges.
 class YearlySwitchSheet extends StatefulWidget {
-  const YearlySwitchSheet({super.key, required this.surface, this.load, this.apply, this.onSwitched});
+  const YearlySwitchSheet({super.key, required this.surface, this.load, this.apply, this.onSwitched, this.readEnabled});
 
   final YearlySwitchSurface surface;
   final YearlySwitchLoader? load;
   final YearlySwitchApplier? apply;
   final VoidCallback? onSwitched;
+  final Future<bool> Function()? readEnabled;
 
   @override
   State<YearlySwitchSheet> createState() => _YearlySwitchSheetState();
@@ -123,7 +154,29 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
     _load();
   }
 
+  Future<bool> _enabled() async {
+    if (widget.surface == YearlySwitchSurface.plans) return true;
+    try {
+      if (widget.readEnabled != null) return await widget.readEnabled!().timeout(const Duration(seconds: 3));
+      final status = await retention_api.yearlyRetentionStatus().timeout(const Duration(seconds: 3));
+      return status is ApiSuccess<bool> && status.data;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _load() async {
+    if (!await _enabled()) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _unavailable = true;
+          _offer = null;
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -150,9 +203,26 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
   Future<void> _switch() async {
     var offer = _offer;
     if (offer == null || _switching) return;
+    // Latch before the asynchronous flag read so a double tap cannot charge twice.
+    setState(() => _switching = true);
+    if (!await _enabled()) {
+      if (mounted) {
+        setState(() {
+          _switching = false;
+          _unavailable = true;
+          _offer = null;
+        });
+      }
+      return;
+    }
+    if (!mounted) return;
     HapticFeedback.mediumImpact();
-    const TypedEvents().emit(SubscriptionYearlySwitchConfirmed(
-        surface: SubscriptionYearlySwitchConfirmedSurface.values.byName(widget.surface.name)));
+    if (widget.surface == YearlySwitchSurface.plans) {
+      const TypedEvents()
+          .emit(const SubscriptionYearlySwitchConfirmed(surface: SubscriptionYearlySwitchConfirmedSurface.plans));
+    } else {
+      observeYearlyRetention(widget.surface, YearlyRetentionObservationAction.confirmed);
+    }
     setState(() {
       _switching = true;
       _error = null;
@@ -209,8 +279,12 @@ class _YearlySwitchSheetState extends State<YearlySwitchSheet> {
     }
     final l10n = context.l10n;
     if (outcome == _Outcome.switched) {
-      const TypedEvents().emit(SubscriptionYearlySwitchSucceeded(
-          surface: SubscriptionYearlySwitchSucceededSurface.values.byName(widget.surface.name)));
+      if (widget.surface == YearlySwitchSurface.plans) {
+        const TypedEvents()
+            .emit(const SubscriptionYearlySwitchSucceeded(surface: SubscriptionYearlySwitchSucceededSurface.plans));
+      } else {
+        observeYearlyRetention(widget.surface, YearlyRetentionObservationAction.succeeded);
+      }
       widget.onSwitched?.call();
       final usage = context.read<UsageProvider?>();
       if (usage != null) {

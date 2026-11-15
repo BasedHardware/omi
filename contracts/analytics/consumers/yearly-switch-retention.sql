@@ -1,0 +1,1 @@
+SELECT event, count(*) FROM events WHERE app_namespace = :app_namespace AND build_number = :build_number AND event IN ('Retention Offer Shown', 'Retention Offer Accepted', 'Yearly Retention Observation') GROUP BY event;
