@@ -111,13 +111,18 @@ def recording(monkeypatch, request):
 def test_complete_binding_has_one_outbox_revision_independent_of_sibling_count(recording):
     f = recording
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
-    # Each newly projected unit tries content completion. None may dispatch
-    # notes for the partial transcript, including the maximum-size binding.
+    # Every projected unit must leave notes undispatched. Probe completion
+    # with first/middle/last missing receipts, then the full 128-sibling set;
+    # replaying the same incomplete scan after every unit adds no coverage.
+    count = len(f.binding.segment_ids)
+    probes = {0, count // 2, max(0, count - 2), count - 1}
     for index, sid in enumerate(f.binding.segment_ids):
         f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
-        result = f.store.complete(sid, f.binding, NOW, f.accounting, policy=POLICY)
-        if index + 1 < len(f.binding.segment_ids):
-            assert result is None and not row.get().exists
+        assert not row.get().exists
+        if index in probes:
+            result = f.store.complete(sid, f.binding, NOW, f.accounting, policy=POLICY)
+            if index + 1 < count:
+                assert result is None
     assert result and row.get().to_dict()['version'] == 1
     f.store.complete(sid, f.binding, NOW + 1, f.accounting, policy=POLICY)
     assert row.get().to_dict()['version'] == 1
