@@ -322,6 +322,9 @@ def test_terminal_wire_state_reclaims_slots_and_preserves_recent_idempotence():
     assert state.blocks('c-0', True)  # Evicted history must acquire/prove a new close.
 
 
+# A full day on one live relay: keep the fast lane's state-machine proof above,
+# and run this real receipt/token/seal stress proof in the explicit slow suite.
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(inline_session, monkeypatch):
     client, path, _, _ = inline_session

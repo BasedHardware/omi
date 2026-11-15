@@ -1019,6 +1019,9 @@ def _legacy_chunk(remote, start, pcm, name=None, *, is_batch=True):
     blob.upload_from_string(pcm, if_generation_match=0)
 
 
+# Sixty real immutable packs plus full-minute readback is a stress proof; the
+# surrounding small-pack tests keep the same custody boundaries in fast CI.
+@pytest.mark.slow
 def test_sixty_custody_packs_and_projected_minute_publish_one_audio_file(remote):
     pcm = b'\x01\x00' * 16000
     for sequence in range(60):
