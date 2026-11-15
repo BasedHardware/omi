@@ -6,6 +6,7 @@ fast-unit duration allowlist next to test_sync_cloud_tasks.py.
 
 import json
 import sys
+import time
 
 import pytest
 
@@ -36,7 +37,9 @@ def _restore(saved):
 async def _upload(module, BytesIO):
     from starlette.datastructures import UploadFile
 
-    upload = UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))
+    # Exercise legacy routing with recoverable audio regardless of the calendar.
+    capture_at = int(time.time()) - 60
+    upload = UploadFile(filename=f'omi_{capture_at}.bin', file=BytesIO(b'\x00' * 10))
     return await module.sync_local_files_v2(files=[upload], uid='test-uid')
 
 
