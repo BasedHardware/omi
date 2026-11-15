@@ -106,7 +106,9 @@ def _assert_deletion_teardown_skipped_owner_writes(runtime):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('answer_prepare,prepared_before_disconnect', [(True, False), (False, False), (True, True)])
+@pytest.mark.parametrize(
+    'answer_prepare,prepared_before_disconnect', [(True, False), (False, False), (True, True), (False, True)]
+)
 async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_prepare(
     inline_session, monkeypatch, caplog, answer_prepare, prepared_before_disconnect
 ):
@@ -142,7 +144,7 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         async def send_bytes(self, data):
             if struct.unpack('<I', data[:4])[0] == 206 and json.loads(data[4:])['phase'] == 'prepare':
                 prepare_replies.append(json.loads(data[4:]))
-            if (not answer_prepare or prepared_before_disconnect) and struct.unpack('<I', data[:4])[0] == 206:
+            if not answer_prepare and struct.unpack('<I', data[:4])[0] == 206:
                 if json.loads(data[4:])['phase'] == 'prepare':
                     return  # Also model a prepare ACK lost just before disconnect.
             replies.put_nowait(data)
@@ -203,7 +205,7 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
     await session.connect()
     # A long-lived session reads the capability while an earlier finalization
     # is pending; an entirely idle receiver deliberately does not poll recv().
-    session.pending_conversation_requests['earlier-finalization'] = {}
+    session.pending_conversation_requests['earlier-finalization'] = {'sent_at': session.deps.now(), 'retries': 0}
     receiver = asyncio.create_task(session.pusher_receive())
     try:
         async with asyncio.timeout(5):
@@ -220,7 +222,11 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
                 while not prepare_replies:
                     await asyncio.sleep(0.001)
                 assert prepare_replies[-1]['status'] == 'prepared', prepare_replies
+                if answer_prepare:
+                    while not session.pending_record_closes['conversation'].prepared:
+                        await asyncio.sleep(0.001)
         session.audio_bytes_send(b'\x02\x00', 101)  # Accepted tail is still in listen at disconnect.
+        assert not receiver.done()
         receiver.cancel()  # Real supervisor drains the receive/tick tasks before teardown.
         await asyncio.gather(receiver, return_exceptions=True)
         await asyncio.wait_for(runtime._teardown_components(), 5)
