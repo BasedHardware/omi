@@ -17,8 +17,11 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 DIGEST_RE = re.compile(r"^sha256:[a-f0-9]{64}$")
 SHA_RE = re.compile(r"^[a-f0-9]{40}$")
@@ -50,6 +53,41 @@ CONTRACT_FILES = (
 )
 
 
+# backend/scripts is deliberately conservative: deployment tools call shared
+# helpers and subprocesses. A partial import scan would miss those dependencies.
+# Runtime env is compared semantically through the shared Pusher projection.
+CONTROL_PATHS = (
+    "backend/scripts",
+    "backend/config/memory_rollout.py",
+    # Pure policy modules imported by the deployment validators/renderers.
+    "backend/config/prerecorded_stt.py",
+    "backend/config/stt_provider_policy.py",
+    "backend/config/live_stt_gpu_fleet.py",
+    "backend/config/plan_catalog_generated.py",
+    "backend/config/refactor_switches.py",
+    "backend/utils/pusher_storage_budget.py",
+    "backend/utils/metrics.py",
+    "backend/charts/pusher",
+    "backend/charts/monitoring/alerts",
+    "backend/charts/monitoring/live-alert-gate.json",
+    "backend/charts/monitoring/mute-timings.json",
+    "backend/charts/backend-listen/dev_omi_backend_listen_values.yaml",
+    "backend/charts/backend-listen/prod_omi_backend_listen_values.yaml",
+    "backend/charts/monitoring/kube-prometheus-stack/dev_omi_monitoring_values.yaml",
+    "backend/charts/monitoring/dashboards/gke/pusher.json",
+    "config/diarization-cohort-stages.json",
+    "backend/testing/release_fixtures",
+    ".github/scripts/verify_backend_release_admission.py",
+    ".github/workflows/gcp_backend_pusher.yml",
+    ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+    ".github/workflows/release-eligibility.yml",
+    ".github/actions/release-eligibility",
+    ".github/actions/firestore-readiness",
+    ".github/actions/deployment-summary",
+    ".github/actions/deployment-notifier",
+)
+
+
 class EvidenceError(ValueError):
     """The selected development run cannot prove a safe promotion."""
 
@@ -75,8 +113,6 @@ def pusher_runtime_env_projection(manifest_path: Path = RUNTIME_ENV_MANIFEST) ->
     That is the Pusher service block plus the shared backend ConfigMap, which
     the prod job writes before Helm and the Pusher pod envFroms wholesale.
     """
-
-    import yaml  # Lazy: the workflow installs PyYAML before it runs this verifier.
 
     loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
     manifest = yaml.load(manifest_path.read_text(encoding="utf-8"), Loader=loader)  # noqa: S506 - safe loader
@@ -227,6 +263,7 @@ def _validate_canary(
     qualification_deployment_receipt_sha256: Any,
     expected_canary_workflow_id: int,
     expected_canary_run_id: int,
+    expected_canary_workflow_sha: str,
 ) -> list[str]:
     errors: list[str] = []
     if not isinstance(canary, dict):
@@ -379,8 +416,14 @@ def _validate_canary(
         errors.append("production canary receipt run is not active or successfully completed")
     if canary_run.get("status") == "completed" and canary_run.get("conclusion") != "success":
         errors.append("production canary receipt run did not complete successfully")
-    if canary_run.get("head_sha") != source_sha:
-        errors.append("production canary receipt run source does not match the checked-out production source")
+    workflow_sha = expected_canary_workflow_sha or source_sha
+    if not isinstance(workflow_sha, str) or not SHA_RE.fullmatch(workflow_sha) or workflow_sha == "0" * 40:
+        errors.append("expected canary workflow source must be a full nonzero lowercase SHA")
+    if canary_run.get("head_sha") != workflow_sha:
+        if expected_canary_workflow_sha:
+            errors.append("production canary run does not match the trusted workflow source")
+        else:
+            errors.append("production canary receipt run source does not match the checked-out production source")
     return errors
 
 
@@ -520,6 +563,8 @@ def validate(
     expected_canary_workflow_id: int,
     expected_canary_run_id: int,
     expected_canary_source_sha: str = "",
+    expected_canary_workflow_sha: str = "",
+    expected_qualification_source_sha: str = "",
     canary_deployment_receipt: dict[str, Any] | None = None,
     canary_semantic_evidence: dict[str, Any] | None = None,
     final_deployment_receipt: dict[str, Any] | None = None,
@@ -581,6 +626,11 @@ def validate(
     source_sha = evidence.get("source_sha")
     if not isinstance(source_sha, str) or not SHA_RE.fullmatch(source_sha):
         errors.append("qualification evidence must contain a full lowercase source SHA")
+    if expected_qualification_source_sha:
+        if not SHA_RE.fullmatch(expected_qualification_source_sha) or expected_qualification_source_sha == "0" * 40:
+            errors.append("explicit qualification source must be a full nonzero lowercase SHA")
+        if source_sha != expected_qualification_source_sha:
+            errors.append("explicit release source does not match the development qualification source")
     if run.get("id") != expected_run_id:
         errors.append("selected workflow API result does not match the requested run id")
     if run.get("workflow_id") != expected_workflow_id:
@@ -694,6 +744,7 @@ def validate(
                 qualification_deployment_receipt_sha256=receipt_sha256,
                 expected_canary_workflow_id=expected_canary_workflow_id,
                 expected_canary_run_id=expected_canary_run_id,
+                expected_canary_workflow_sha=expected_canary_workflow_sha,
             )
         )
     if require_final:
@@ -726,7 +777,72 @@ def validate(
     return errors
 
 
+class SourceAdmissionError(ValueError):
+    """Source cannot run under the selected deployment controls."""
+
+
+def _git(repository: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", "-C", str(repository), *arguments], capture_output=True, text=True, check=False)
+
+
+def _runtime_policy(repository: Path, sha: str) -> dict:
+    manifest = _git(repository, "show", f"{sha}:backend/deploy/runtime_env.yaml")
+    if manifest.returncode:
+        raise SourceAdmissionError("could not read the Pusher runtime policy at the selected commit")
+    with tempfile.TemporaryDirectory(prefix="pusher-runtime-policy-") as directory:
+        path = Path(directory) / "runtime_env.yaml"
+        path.write_text(manifest.stdout, encoding="utf-8")
+        try:
+            return pusher_runtime_env_projection(path)
+        except (ValueError, TypeError, KeyError, AttributeError, yaml.YAMLError) as exc:
+            raise SourceAdmissionError("could not validate the Pusher runtime policy") from exc
+
+
+def admit_source(repository: Path, *, release_sha: str, workflow_sha: str) -> str:
+    """Return the runtime SHA; blank preserves the immutable main dispatch source."""
+    source_sha = release_sha or workflow_sha
+    for label, sha in (("workflow", workflow_sha), ("release", source_sha)):
+        if not SHA_RE.fullmatch(sha) or sha == "0" * 40:
+            raise SourceAdmissionError(f"{label} SHA must be a full nonzero lowercase commit SHA")
+        if _git(repository, "cat-file", "-t", sha).stdout.strip() != "commit":
+            raise SourceAdmissionError(f"{label} SHA is not a known commit")
+    head = _git(repository, "rev-parse", "HEAD")
+    if head.returncode or head.stdout.strip() != workflow_sha:
+        raise SourceAdmissionError("source admission must run from the immutable workflow-control checkout")
+    for older, newer in ((workflow_sha, "origin/main"), (source_sha, workflow_sha)):
+        if _git(repository, "merge-base", "--is-ancestor", older, newer).returncode:
+            raise SourceAdmissionError("release and workflow source must be merged ancestors of fresh origin/main")
+    for older, newer in ((source_sha, workflow_sha), (workflow_sha, "origin/main")):
+        compared = _git(repository, "diff", "--quiet", older, newer, "--", *CONTROL_PATHS)
+        if compared.returncode:
+            raise SourceAdmissionError(
+                "Pusher deployment controls changed or could not be compared; select a fresh source and qualification"
+            )
+    main_sha = _git(repository, "rev-parse", "origin/main").stdout.strip()
+    policies = {sha: _runtime_policy(repository, sha) for sha in {source_sha, workflow_sha, main_sha}}
+    if policies[source_sha] != policies[workflow_sha] or policies[workflow_sha] != policies[main_sha]:
+        raise SourceAdmissionError("Pusher runtime policy changed; select a fresh source and qualification")
+    return source_sha
+
+
+def _admit_source_main(arguments: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repository", type=Path, default=Path("."))
+    parser.add_argument("--release-sha", default="")
+    parser.add_argument("--workflow-sha", required=True)
+    args = parser.parse_args(arguments)
+    try:
+        source_sha = admit_source(args.repository, release_sha=args.release_sha, workflow_sha=args.workflow_sha)
+    except (OSError, SourceAdmissionError) as exc:
+        print(f"Pusher source admission failed: {exc}", file=sys.stderr)
+        return 1
+    print(source_sha)
+    return 0
+
+
 def main() -> int:
+    if sys.argv[1:2] == ["--admit-source"]:
+        return _admit_source_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--deployment-receipt", type=Path, required=True)
@@ -749,6 +865,10 @@ def main() -> int:
     parser.add_argument("--expected-canary-workflow-id", type=int, default=0)
     parser.add_argument("--expected-canary-run-id", type=int, default=0)
     parser.add_argument("--expected-canary-source-sha", default="")
+    parser.add_argument(
+        "--expected-canary-workflow-sha", default="", help="trusted dispatch GITHUB_SHA, not runtime source"
+    )
+    parser.add_argument("--expected-qualification-source-sha", default="")
     args = parser.parse_args()
 
     try:
@@ -765,6 +885,8 @@ def main() -> int:
             expected_canary_workflow_id=args.expected_canary_workflow_id,
             expected_canary_run_id=args.expected_canary_run_id,
             expected_canary_source_sha=args.expected_canary_source_sha,
+            expected_canary_workflow_sha=args.expected_canary_workflow_sha,
+            expected_qualification_source_sha=args.expected_qualification_source_sha,
             canary_deployment_receipt=(
                 load_json(args.canary_deployment_receipt) if args.canary_deployment_receipt else None
             ),

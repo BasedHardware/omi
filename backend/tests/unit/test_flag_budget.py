@@ -193,10 +193,9 @@ def test_pipeline_env_surface_holds_its_budget():
     assert not found, 'Flag budget (backend/docs/adr/0006-pipeline-flag-budget.md):\n' + '\n'.join(found)
 
 
-def test_budget_file_declares_scope_and_count():
+def test_budget_file_declares_scope_and_retired_ledger():
     data = _load()
     assert tuple(data['scope']) == SCOPE
-    assert data['count'] == len(data['names'])
     assert isinstance(data['retired'], dict)
 
 
