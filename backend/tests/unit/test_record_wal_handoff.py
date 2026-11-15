@@ -132,6 +132,15 @@ def world(monkeypatch, tmp_path):
         )
 
     def rows(table):
+        entries = {path[-1]: row for path, row in client.rows.items() if path[0] == f'{NS}_intakes'}
+        if table == 'wal_handoffs':
+            return {key: row for key, row in entries.items() if row.get('kind') == database.BUNDLE_KIND}
+        file_rows = {key: row for key, row in entries.items() if row.get('kind') == database.FILE_KIND}
+        if table == 'wal_files':
+            return file_rows
+        if table in {'wal_obligations', 'wal_outbox'}:
+            field = 'obligation' if table == 'wal_obligations' else 'outbox'
+            return {key: row[field] for key, row in file_rows.items()}
         return {path[-1]: row for path, row in client.rows.items() if path[0] == f'{NS}_{table}'}
 
     return SimpleNamespace(client=client, store=store, bucket=bucket, paths=paths, upload=upload, rows=rows)
@@ -152,7 +161,11 @@ async def test_all_files_accepted_before_decode_and_completed_native_job_never_c
     assert len(world.bucket.rows) == len(world.rows('wal_files')) == len(world.rows('wal_obligations')) == 2
     assert len(world.rows('wal_outbox')) == 2
     assert world.client.rows[ROW_PATH]['record_upload_revision'] == 8
-    assert all('expires_at' not in row for table in database.TABLES for row in world.rows(table).values())
+    assert all(
+        'expires_at' not in row
+        for table in ('wal_handoffs', 'wal_files', 'wal_obligations', 'wal_outbox')
+        for row in world.rows(table).values()
+    )
     assert all(path.exists() for path in world.paths)
     assert all(row['state'] == 'pending' for row in world.rows('wal_obligations').values())
     # Exact create-only originals, no paid job, queue or provider reservation.

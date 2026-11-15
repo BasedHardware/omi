@@ -7,14 +7,18 @@ PCM cannot generally compare byte-for-byte, and phone WALs can include frames
 never sent live. This phase keeps every submitted original durable and leaves
 its processing obligation pending; it does not plan gaps or dispatch paid STT.
 
+Bundle receipts and stable per-file receipt rows use the existing stage-qualified
+intake collection, with explicit kinds. Each file row carries its pending
+obligation and outbox wake atomically; `wal_pending_since` provides indexed
+discovery. Ordinary job dispatch never consumes them.
+
 One default-on admission switch, `RECORD_WAL_HANDOFF_ENABLED`, rolls back to
 strict refusal for new bundles. Accepted receipts and their polling handles
 survive rollback. Do not deploy a reader-incapable artifact while obligations
 remain. Original objects use the existing private archive bucket's encryption,
 create-only and tombstone discipline, plus generation/size/checksum/plaintext
 verification. Account/protection erasure sweeps orphan originals; conversation
-erasure discovers the dedicated prefix in each relevant bucket and all four
-new metadata tables. These objects are excluded from the live inventory and
+erasure discovers the dedicated prefix in each relevant bucket and the new bundle/file rows in the existing intake collection. These objects are excluded from the live inventory and
 routine batch artifact cleanup.
 
 Before serving promotion, the release owner must validate private-bucket

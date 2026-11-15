@@ -26,7 +26,7 @@ def world(monkeypatch):
     assert project.startswith('demo-'), 'emulator proofs require a demo project'
     client = firestore.Client(project=project, credentials=AnonymousCredentials())
     uid, cid = 'synthetic-wal-' + uuid4().hex, 'record'
-    namespace = 'batch_pipeline_test_' + uuid4().hex[:12]
+    namespace = 'batch_pipeline_dev'
     user = client.collection('users').document(uid)
     conversation = user.collection('conversations').document(cid)
     user.set({'private_cloud_sync_enabled': True})
@@ -78,9 +78,8 @@ def world(monkeypatch):
 
     monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *_: 0)
     yield client, namespace, uid, cid, conversation, files, begin, originals
-    for table in handoff.TABLES:
-        for doc in client.collection(f'{namespace}_{table}').stream():
-            doc.reference.delete()
+    for doc in handoff.intake_collection(client, namespace).stream():
+        doc.reference.delete()
     client.recursive_delete(user)
     # The disposable emulator owns this authority marker; production's write
     # fence correctly forbids deleting privacy generations.
@@ -105,7 +104,9 @@ def test_committed_reply_loss_replays_one_revision_and_one_outbox(world, monkeyp
     accepted = handoff.commit(client, namespace, fence, originals(fence))
     assert accepted['state'] == 'accepted' and lost
     assert conversation.get().to_dict()['record_upload_revision'] == 8
-    assert len(list(client.collection(f'{namespace}_wal_outbox').stream())) == 2
+    assert (
+        len([row for row in handoff.intake_collection(client, namespace).stream() if row.to_dict().get('outbox')]) == 2
+    )
     count, oldest = handoff.pending_sample(client, namespace)
     assert count == 2 and oldest == accepted['accepted_at']
     # Restarted reader/producer with phone offline: no local bytes or old process state.
@@ -127,7 +128,7 @@ def test_interrupted_object_only_attempt_is_superseded_without_acceptance(world)
     assert restarted['fence_token'] != interrupted['fence_token']
     with pytest.raises(handoff.HandoffConflict):
         handoff.commit(client, namespace, interrupted, originals(interrupted))
-    assert not list(client.collection(f'{namespace}_wal_obligations').stream())
+    assert not any(row.to_dict().get('obligation') for row in handoff.intake_collection(client, namespace).stream())
     handoff.commit(client, namespace, restarted, originals(restarted))
     assert conversation.get().to_dict()['record_upload_revision'] == 8
 
@@ -140,8 +141,9 @@ def test_concurrent_rebundles_commit_one_per_file_obligation(world):
         results = [future.result(timeout=30) for future in futures]
     assert all(row['state'] == 'accepted' for row in results)
     assert conversation.get().to_dict()['record_upload_revision'] == 9
-    for table in ('wal_files', 'wal_obligations', 'wal_outbox'):
-        assert len(list(client.collection(f'{namespace}_{table}').stream())) == 2
+    rows = [row.to_dict() for row in handoff.intake_collection(client, namespace).stream()]
+    assert len([row for row in rows if row.get('kind') == handoff.FILE_KIND]) == 2
+    assert len([row for row in rows if row.get('obligation') and row.get('outbox')]) == 2
 
 
 def test_privacy_generation_change_cannot_commit_and_erasure_finds_all_receipts(world):
@@ -151,7 +153,7 @@ def test_privacy_generation_change_cannot_commit_and_erasure_finds_all_receipts(
     privacy.set({'generation': 1, 'blocked': False, 'purging': False})
     with pytest.raises(BatchPrivacyBlocked):
         handoff.commit(client, namespace, fence, originals(fence))
-    assert not list(client.collection(f'{namespace}_wal_outbox').stream())
+    assert not any(row.to_dict().get('outbox') for row in handoff.intake_collection(client, namespace).stream())
     # A separate valid bundle proves deletion discovers every new table and URI.
     privacy.set({'generation': 0, 'blocked': False, 'purging': False})
     accepted = handoff.commit(client, namespace, fence, originals(fence))
@@ -165,6 +167,5 @@ def test_privacy_generation_change_cannot_commit_and_erasure_finds_all_receipts(
         delete_uri=lambda owner, uri: deleted.append((owner, uri)),
     )
     assert len(deleted) == 2 and all(owner == uid for owner, _ in deleted)
-    for table in handoff.TABLES:
-        assert not list(client.collection(f'{namespace}_{table}').stream())
+    assert not list(handoff.intake_collection(client, namespace).stream())
     assert handoff.read_status(client, namespace, uid, accepted['job_id']) is None

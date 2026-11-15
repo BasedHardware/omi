@@ -52,10 +52,6 @@ DEPENDENT_TABLES = (
     'coalesce_groups',
     'coalesce_sources',
     'coalesce_heads',
-    'wal_handoffs',
-    'wal_files',
-    'wal_obligations',
-    'wal_outbox',
 )
 # A unit stops starting rows at either bound; each row is a few bounded RPCs.
 UNIT_MAX_ROWS = 10

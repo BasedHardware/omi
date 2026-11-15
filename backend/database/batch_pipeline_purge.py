@@ -221,10 +221,6 @@ def purge_batch_owner(
             'coalesce_sources',
             'coalesce_heads',
             'allowance_holds',
-            'wal_handoffs',
-            'wal_files',
-            'wal_obligations',
-            'wal_outbox',
         ):
             after = None
             while True:

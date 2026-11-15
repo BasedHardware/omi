@@ -103,7 +103,7 @@ async def handoff(*, store, uid, cid, paths, source, device):
     # Even rollback must discover accepted receipts. Identity is server-derived
     # from every basename and original byte, never a caller-supplied content id.
     files = await run_blocking(sync_executor, inspect_files, paths)
-    job_id = receipts.bundle_id(uid, cid, files)
+    job_id = await run_blocking(sync_executor, receipts.bundle_id, uid, cid, files)
     old = await run_blocking(db_executor, receipts.read_status, store.client, store.namespace, uid, job_id)
     if old is not None:
         metrics.answers.labels('replayed').inc()
@@ -115,7 +115,7 @@ async def handoff(*, store, uid, cid, paths, source, device):
     )
     if fence['state'] == 'accepted':
         metrics.answers.labels('replayed').inc()
-        return receipts.status(fence)
+        return await run_blocking(db_executor, receipts.status, fence)
     by_name = {Path(path).name: path for path in paths}
     stored = []
     try:
@@ -142,4 +142,4 @@ async def handoff(*, store, uid, cid, paths, source, device):
             await run_blocking(storage_executor, delete_record_wal_original, uid, receipt)
         raise
     metrics.answers.labels('accepted').inc()
-    return receipts.status(accepted)
+    return await run_blocking(db_executor, receipts.status, accepted)

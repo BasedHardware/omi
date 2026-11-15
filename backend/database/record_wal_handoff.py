@@ -18,7 +18,8 @@ from database.firestore_read_origin import read_origin
 SCHEMA = 'record_wal_handoff_v1'
 VERSION = 1
 JOB_PREFIX = 'bp_wh_'
-TABLES = ('wal_handoffs', 'wal_files', 'wal_obligations', 'wal_outbox')
+BUNDLE_KIND = 'record_wal_bundle'
+FILE_KIND = 'record_wal_file'
 PENDING_REASON = 'source_alignment_pending'
 FENCE_SECONDS = 600
 
@@ -35,8 +36,23 @@ def bundle_id(uid, cid, files):
     return JOB_PREFIX + identity([SCHEMA, uid, cid, files])
 
 
-def _ref(client, namespace, table, key):
-    return client.collection(f'{namespace}_{table}').document(key)
+def intake_collection(client, namespace):
+    # Reuse existing stage-qualified admission receipt collections. Metadata
+    # rows have explicit kinds; only WAL files own wal_pending_since discovery.
+    # No new work-state collection or independent scheduler is introduced.
+    if namespace == 'batch_pipeline_prod':
+        return client.collection('batch_pipeline_prod_intakes')
+    if namespace == 'batch_pipeline_dev':
+        return client.collection('batch_pipeline_dev_intakes')
+    raise ValueError('stage-qualified intake namespace required')
+
+
+def _ref(client, namespace, key):
+    return intake_collection(client, namespace).document(key)
+
+
+def _file_ref(client, namespace, file_id):
+    return _ref(client, namespace, 'wal_file_' + file_id)
 
 
 def _authority(client, tx, uid, cid, source, device, expected_generation=None):
@@ -70,7 +86,7 @@ def has_receipts(uid, cid, *, firestore_client=None):
 def begin(client, namespace, uid, cid, files, source, device):
     """A scoped fence independent of RECORD_TOKEN_LEASE_MODE (including off)."""
     job_id = bundle_id(uid, cid, files)
-    ref = _ref(client, namespace, 'wal_handoffs', job_id)
+    ref = _ref(client, namespace, job_id)
     token = uuid4().hex
 
     @firestore.transactional
@@ -86,12 +102,13 @@ def begin(client, namespace, uid, cid, files, source, device):
         file_rows = []
         for entry in files:
             file_id = identity([SCHEMA, uid, cid, generation, entry])
-            prior = _ref(client, namespace, 'wal_files', file_id).get(transaction=tx).to_dict() or {}
+            prior = _file_ref(client, namespace, file_id).get(transaction=tx).to_dict() or {}
             file_rows.append({'file_id': file_id, **entry, 'receipt': prior.get('receipt')})
         fence = {
             'schema': SCHEMA,
             'version': VERSION,
             'job_id': job_id,
+            'kind': BUNDLE_KIND,
             'owner_id': uid,
             'owner_key': privacy_owner_key(uid),
             'conversation_id': cid,
@@ -115,7 +132,7 @@ def begin(client, namespace, uid, cid, files, source, device):
 def commit(client, namespace, fence, receipts):
     """CAS owner/privacy/fence; commit every original, work, wake and revision."""
     uid, cid, job_id = fence['owner_id'], fence['conversation_id'], fence['job_id']
-    ref = _ref(client, namespace, 'wal_handoffs', job_id)
+    ref = _ref(client, namespace, job_id)
 
     @firestore.transactional
     def finish(tx):
@@ -143,7 +160,7 @@ def commit(client, namespace, fence, receipts):
                 or not receipt.get('stored_size')
             ):
                 raise HandoffConflict('unverified original file')
-            file_ref = _ref(client, namespace, 'wal_files', entry['file_id'])
+            file_ref = _file_ref(client, namespace, entry['file_id'])
             prior = file_ref.get(transaction=tx).to_dict() or {}
             if prior and prior.get('receipt') != receipt:
                 raise HandoffConflict('immutable file receipt conflict')
@@ -163,7 +180,6 @@ def commit(client, namespace, fence, receipts):
             if prior:
                 continue  # A rebundled file keeps its one obligation and wake.
             file_id = entry['file_id']
-            tx.set(file_ref, {**common, 'file_id': file_id, 'receipt': receipt, 'uri': receipt['uri']})
             work = {
                 **common,
                 'file_id': file_id,
@@ -173,8 +189,19 @@ def commit(client, namespace, fence, receipts):
                 'pending_since': now,
                 'upload_revision': revision,
             }
-            tx.set(_ref(client, namespace, 'wal_obligations', file_id), work)
-            tx.set(_ref(client, namespace, 'wal_outbox', file_id), work)
+            tx.set(
+                file_ref,
+                {
+                    **common,
+                    'kind': FILE_KIND,
+                    'file_id': file_id,
+                    'receipt': receipt,
+                    'uri': receipt['uri'],
+                    'obligation': work,
+                    'outbox': work,
+                    'wal_pending_since': now,
+                },
+            )
         accepted = {
             **fence,
             'state': 'accepted',
@@ -206,7 +233,7 @@ def check_fence(client, namespace, fence):
         )
         if protection != fence['data_protection_level']:
             raise BatchPrivacyBlocked('data_protection_changed')
-        current = _ref(client, namespace, 'wal_handoffs', fence['job_id']).get(transaction=tx).to_dict() or {}
+        current = _ref(client, namespace, fence['job_id']).get(transaction=tx).to_dict() or {}
         if current.get('fence_token') != fence['fence_token'] or current.get('fence_until', 0) < time.time():
             raise HandoffConflict('exact request fence lost')
 
@@ -233,7 +260,7 @@ def status(receipt):
 def read_status(client, namespace, uid, job_id):
     @firestore.transactional
     def read(tx):
-        receipt = _ref(client, namespace, 'wal_handoffs', job_id).get(transaction=tx).to_dict() or {}
+        receipt = _ref(client, namespace, job_id).get(transaction=tx).to_dict() or {}
         if receipt.get('owner_id') != uid or receipt.get('state') != 'accepted':
             return None
         if receipt.get('schema') != SCHEMA or receipt.get('version') != VERSION:
@@ -253,8 +280,8 @@ def read_status(client, namespace, uid, job_id):
 @read_origin('job:record_wal_handoff:pending_sample')
 def pending_sample(client, namespace):
     """Indexed work discovery, independent of phones, producer switch and TTL."""
-    query = client.collection(f'{namespace}_wal_obligations')
+    query = intake_collection(client, namespace)
     # Single-field indexes only. pending_since exists exactly while unsettled.
-    oldest = list(query.order_by('pending_since').limit(1).stream(timeout=10, retry=None))
-    count = query.where('pending_since', '>=', 0).limit(10001).count().get(timeout=10, retry=None)[0][0].value
-    return int(count), (oldest[0].to_dict()['pending_since'] if oldest else None)
+    oldest = list(query.order_by('wal_pending_since').limit(1).stream(timeout=10, retry=None))
+    count = query.where('wal_pending_since', '>=', 0).limit(10001).count().get(timeout=10, retry=None)[0][0].value
+    return int(count), (oldest[0].to_dict()['wal_pending_since'] if oldest else None)
