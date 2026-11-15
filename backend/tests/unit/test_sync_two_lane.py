@@ -433,8 +433,11 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     steps = composite['runs']['steps']
     lane = next(step for step in steps if step.get('name') == 'Provision sync-backfill lane')
     # Integration-only restoration cannot mutate the consumer lane. Normal
-    # successful deploys still reconcile it in their existing dispatch mode.
-    assert lane['if'] == "${{ inputs.integration_only != 'true' && (success()) }}"
+    # all-service successful deploys still reconcile it in their existing dispatch mode;
+    # a selected service never reconfigures the shared queue.
+    assert (
+        lane['if'] == "${{ inputs.cloud_run_service == 'all' && (inputs.integration_only != 'true' && (success())) }}"
+    )
     mode = lane['with']['mode']
     assert "deploy_profile == 'auto-dev'" in mode
     assert "deploy_targets == 'all'" in mode
@@ -537,7 +540,10 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
     )
 
     serving_smoke = by_name['Smoke promoted production serving API']
-    assert serving_smoke['if'] == "${{ inputs.deploy_profile == 'manual' && inputs.environment == 'prod' }}"
+    assert serving_smoke['if'] == (
+        "${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && "
+        "(inputs.deploy_profile == 'manual' && inputs.environment == 'prod') }}"
+    )
     assert 'https://api.omi.me/v2/desktop/beta/candidates/reserve' in serving_smoke['run']
     assert '--candidate-api-url https://api.omi.me' in serving_smoke['run']
     assert 'firebase-production-serving-token' in serving_smoke['run']

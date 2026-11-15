@@ -266,7 +266,7 @@ jobs:
           CLOUD_RUN_SERVICE: ${{ github.event.inputs.cloud_run_service || 'all' }}
           REQUESTED_BY: ${{ github.event.inputs.requested_by }}
         run: |
-          [[ "$CLOUD_RUN_SERVICE" == all ]] || exit 1
+          [[ "${CLOUD_RUN_SERVICE:-all}" == all ]] || { echo "::error::repair does not accept a service selector" >&2; exit 1; }
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
