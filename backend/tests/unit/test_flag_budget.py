@@ -314,6 +314,14 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
+        elif name in {
+            'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
+            'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+            'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+            'HOME_SETTLED_EMPTY_WIRE_ENABLED',
+        }:
+            assert entry['owner'] == flag['owner'] == 'quality-lead'
+            assert entry['review_by'] == '2026-12-15'
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
             assert entry['review_by'] == '2026-12-14'
