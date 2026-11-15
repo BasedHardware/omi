@@ -34,6 +34,13 @@ def client(handler):
     return lambda **kwargs: httpx.Client(transport=httpx.MockTransport(handler), **kwargs)
 
 
+@pytest.fixture(autouse=True)
+def empty_deferred_cleanup():
+    module._DEFERRED_CLEANUP.clear()
+    yield
+    module._DEFERRED_CLEANUP.clear()
+
+
 @pytest.fixture
 def key(monkeypatch):
     monkeypatch.setenv('SONIOX_API_KEY', 'synthetic-only-key')
@@ -253,3 +260,27 @@ def test_prerecorded_failover_stops_at_first_rate_limit(key, stage):
         )
     assert raised.value.kind == 'rate_limited'
     assert calls.count(stage) == 1
+
+
+def test_refused_transcription_delete_is_retried_by_the_next_call(key, caplog):
+    calls, refuse = [], [True]
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.method == 'DELETE':
+            if request.url.path.startswith('/v1/transcriptions/') and refuse[0]:
+                return httpx.Response(429)
+            return httpx.Response(204)
+        if request.url.path == '/v1/files':
+            return httpx.Response(201, json={'id': FILE})
+        if request.method == 'POST':
+            return httpx.Response(201, json={'id': TRANSCRIPTION, 'status': 'completed'})
+        return httpx.Response(200, json=TRANSCRIPT)
+
+    module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
+    assert list(module._DEFERRED_CLEANUP) == [f'/transcriptions/{TRANSCRIPTION}']
+    assert 'outcome=failed http_status=429' in caplog.text
+    refuse[0], calls[:] = False, []
+    module.transcribe(b'synthetic', 5, client_factory=client(handler), sleep=lambda _: None)
+    assert calls.count(('DELETE', f'/v1/transcriptions/{TRANSCRIPTION}')) == 2
+    assert not module._DEFERRED_CLEANUP
