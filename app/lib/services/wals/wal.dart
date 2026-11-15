@@ -44,6 +44,7 @@ const secondsPerFlashPage = 1.4;
 /// - [uploadRejected] — an upload request was refused (HTTP 400/413, or a
 ///                  historical 403). Retained without user attention; automatic
 ///                  uploads retry daily for seven days, then count as reported.
+///                  Invalid capture clocks continue weekly until accepted.
 enum WalStatus {
   inProgress,
   miss,
@@ -193,7 +194,28 @@ const int walMaxRefusalRetriesPerDrain = 25;
 /// the backend's fresh-lane cutoff, `SYNC_FRESH_MAX_AGE_SECONDS`).
 const int liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
-bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds;
+/// Build/patch rollback for clock-priority scheduling; never changes stored time.
+const walClockPriorityOff = bool.fromEnvironment('OMI_WAL_CLOCK_PRIORITY_OFF');
+
+/// Roll back indefinite clock-refusal probes to the ordinary seven-day policy.
+const invalidCaptureTimeRecoveryOff = bool.fromEnvironment('OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF');
+
+enum WalCaptureTimeClass { live, historical, unknown }
+
+WalCaptureTimeClass walCaptureTimeClass(Wal wal, int nowSeconds) {
+  if (!walClockPriorityOff &&
+      (wal.timerStart <= 0 ||
+          wal.timerStart > nowSeconds ||
+          (wal.status == WalStatus.uploadRejected &&
+              wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime))) {
+    return WalCaptureTimeClass.unknown;
+  }
+  return nowSeconds - wal.timerStart <= liveCaptureMaxAgeSeconds
+      ? WalCaptureTimeClass.live
+      : WalCaptureTimeClass.historical;
+}
+
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.live;
 
 class WalStats {
   final int totalFiles;
@@ -722,15 +744,33 @@ class Wal {
     _changed();
   }
 
-  /// Daily recovery is independent of the transient network retry budget.
-  /// Old indexes get a new seven-day window on their first recovery pass.
-  /// Refusals fixed by the bytes themselves (size, part count) never succeed on a resend.
-  bool refusalRetryDue(int nowSeconds) =>
-      status == WalStatus.uploadRejected &&
-      uploadRejectionReason != WalUploadRejection.tooLarge &&
-      uploadRejectionReason != WalUploadRejection.tooManyParts &&
-      (uploadRejectedAt == 0 || nowSeconds < uploadRejectedAt + 7 * 86400) &&
-      (uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + 86400);
+  /// Shared clock-class turn budget, checkpointed on waiting unknown-clock
+  /// rows before valid uploads so process restarts cannot erase their turn.
+  int _clockRecoveryValidBatches;
+  int get clockRecoveryValidBatches => _clockRecoveryValidBatches;
+  set clockRecoveryValidBatches(int value) {
+    if (_clockRecoveryValidBatches == value) return;
+    _clockRecoveryValidBatches = value;
+    _changed();
+  }
+
+  /// Recovery is independent of the transient network retry budget. Capture
+  /// clocks can become admissible in a later server rollout: retry daily for
+  /// the first week, then weekly indefinitely, without changing either clock.
+  /// Other refusals keep the seven-day window; byte-determined refusals never resend.
+  bool refusalRetryDue(int nowSeconds) {
+    if (status != WalStatus.uploadRejected ||
+        uploadRejectionReason == WalUploadRejection.tooLarge ||
+        uploadRejectionReason == WalUploadRejection.tooManyParts) {
+      return false;
+    }
+    final pastFirstWeek = uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
+    final recoverClock =
+        !invalidCaptureTimeRecoveryOff && uploadRejectionReason == WalUploadRejection.invalidCaptureTime;
+    if (pastFirstWeek && !recoverClock) return false;
+    final intervalSeconds = pastFirstWeek ? 7 * 86400 : 86400;
+    return uploadRefusalLastAttemptAt == 0 || nowSeconds >= uploadRefusalLastAttemptAt + intervalSeconds;
+  }
 
   bool refusalReported(int nowSeconds) =>
       status == WalStatus.uploadRejected && uploadRejectedAt > 0 && nowSeconds >= uploadRejectedAt + 7 * 86400;
@@ -873,6 +913,7 @@ class Wal {
     int uploadRejectionStatusCode = 400,
     int uploadRejectedAt = 0,
     int uploadRefusalLastAttemptAt = 0,
+    int clockRecoveryValidBatches = 0,
   })  : _timerStart = timerStart,
         _codec = codec,
         _seconds = seconds,
@@ -918,6 +959,7 @@ class Wal {
         _uploadRejectionStatusCode = uploadRejectionStatusCode,
         _uploadRejectedAt = uploadRejectedAt,
         _uploadRefusalLastAttemptAt = uploadRefusalLastAttemptAt,
+        _clockRecoveryValidBatches = clockRecoveryValidBatches,
         data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -977,6 +1019,7 @@ class Wal {
       uploadRejectionStatusCode: json['upload_rejection_status_code'] ?? 400,
       uploadRejectedAt: json['upload_rejected_at'] ?? 0,
       uploadRefusalLastAttemptAt: json['upload_refusal_last_attempt_at'] ?? 0,
+      clockRecoveryValidBatches: json['clock_recovery_valid_batches'] ?? 0,
     )
       ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
       ..repairLegacyImportedCustody();
@@ -1030,6 +1073,7 @@ class Wal {
       'upload_rejection_status_code': uploadRejectionStatusCode,
       'upload_rejected_at': uploadRejectedAt,
       'upload_refusal_last_attempt_at': uploadRefusalLastAttemptAt,
+      if (clockRecoveryValidBatches > 0) 'clock_recovery_valid_batches': clockRecoveryValidBatches,
     };
   }
 
@@ -1090,6 +1134,7 @@ class Wal {
     h = _mixFingerprint(h, uploadRejectionStatusCode);
     h = _mixFingerprint(h, uploadRejectedAt);
     h = _mixFingerprint(h, uploadRefusalLastAttemptAt);
+    h = _mixFingerprint(h, clockRecoveryValidBatches);
     return h;
   }
 
