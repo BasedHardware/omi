@@ -82,22 +82,14 @@ recordSealRepair:
     # Also preserve the collected final-pass policy inputs and cohort allowlists.
 ```
 
-This is a shape example, not current production flags. Never commit or print
-cohort allowlists. At each ramp rung, lead refreshes the map with the same
-already-deployed chart/image and retained release values:
-
-```sh
-# Render the CronJob only, then use the target-only CAS patch procedure in:
-# backend/docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md
-# Never apply or upgrade the full worker chart for a repair-only change.
-```
-
-Render before apply and require that only `CronJob/record-seal-repair` changes.
-The offline chart regression compares 0% and 100% maps and proves identical
-worker Deployments, sweeper and RBAC. No rollout/restart is needed per rung.
-Existing repair Jobs retain their startup map for at most 1680 seconds; new Jobs
-use the refreshed map. Lead should settle/stop the old repair Job before the
-next rung if that overlap is unacceptable.
+This is a shape example, not current production flags. The stock-drain packet
+procedure in backend/docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md
+**preserves the live environment and does not refresh RECORD_SEAL_REPAIR_SERVER_FLAGS**.
+It deliberately ignores a newly rendered policy map. Do not use it for ramp or
+final-pass policy refreshes. A separate target-only, UID/resourceVersion-guarded
+policy-map refresh procedure is future work and is not part of this change.
+Existing Jobs retain their startup map for up to1680s; new stock-drain Jobs use
+the same preserved map. No full worker-chart apply or GPU rollout is permitted.
 
 When live `_ramp` values override revision env defaults, use those effective
 percentages in the repair map. Copying only revision env fallbacks is stale.
