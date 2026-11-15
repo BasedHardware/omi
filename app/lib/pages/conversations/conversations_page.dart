@@ -825,7 +825,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           for (final card in feed.items) {
             if (card.kind == 'conversation' &&
                 (convoProvider.memoriesToDelete.containsKey(card.detailId) ||
-                    (hidden.contains(card.detailId) && card.homeStep != 'ready'))) continue;
+                    (hidden.contains(card.detailId) && card.homeStep != 'ready'))) {
+              continue;
+            }
             if (card.kind == 'episode' && episodeLive && card.detailId == episodes?.live?.id) continue;
             final seed = card.displaySeed();
             cardById[seed.id] = card;
