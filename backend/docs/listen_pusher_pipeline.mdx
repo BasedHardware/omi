@@ -3276,6 +3276,19 @@ wait. Recording detail with `X-Omi-Recording-Detail: 1` queues its durable enric
 a 4,200-second per-recording escalation lease (maximum hold plus one quiet window);
 expired intent restores the wait. Empty-transcript process entry bypasses this notes
 gate, and scheduling deferrals propagate through donor completion unchanged.
+`HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED` defaults on for non-batch pendant members. A durable
+retry settles an idle owner through Home's activity-fenced idle-close transaction,
+including when the member is not last. Otherwise, at 180 seconds since its
+finalization job was created, its own notes may proceed while the owner stays
+live. One extra automatic paid attempt is admitted per finalization/content
+revision; retries cannot consume it twice. A failed or interrupted attempt
+recovers through ordinary closed-owner processing or explicit user reprocessing.
+Set this switch off on every finalization host to restore the original gate;
+existing permit metadata is then inert. There is no startup scan or historical
+recomposition. This is an eligibility bound checked on worker delivery, not a
+new deadline scheduler; the ordinary reconciliation interval still applies.
+The 1,800-second occasion grouping window and the composer's live refusal stay
+unchanged, so this does not promise notes within five minutes of last speech.
 Optional dependency failures preserve
 the detail read and fail eager for processing. Explicit Process Now carries
 `backlog_choice` intent. The [runbook](runbooks/home-processing-ownership.md)
@@ -6770,6 +6783,15 @@ semantics. Deprecated V1 keeps the pre-existing zero future tolerance — any
 future stamp stays the legacy 400 — because its inline pipeline runs at
 capture-time offset 0; V2 owns skew admission.
 
+Sync accepts the released `_<timestamp>_u<ASCII decimal digits>.bin` collision
+suffix with `SYNC_COLLISION_SUFFIX_ENABLED` on by default. Only the numeric
+timestamp is parsed; raw filenames, bytes, signed claims, storage objects and
+content identities remain unchanged, so same-time siblings stay distinct.
+Clock-run markers and decoded `.wav` names retain this suffix. Set the switch
+to `false`, `0`, `off` or `no` to refuse new collision uploads; internal reads
+and decoded WAVs still drain already admitted work. The existing early-clock,
+future-skew and custody policies apply unchanged.
+
 V2 admits pre-2024 reset-clock filenames when `SYNC_EARLY_CAPTURE_CLAMP_ENABLED`
 is unset or not `false` (default on). Such uploads retain untrusted backfill
 pacing, without treating the invalid year as a lookback age. Valid historical
@@ -9927,3 +9949,15 @@ instrumentation never invents their first lease timestamp.
 The Home histogram admits only recordings ended within 30 minutes and notes
 written at or after that end. Old Home history, untrusted/future end clocks and
 prior in-recording notes do not contaminate the post-seal latency cohort.
+
+### Staged source-frame close protocol
+
+`PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` remains default off. The experimental wire
+now requires `record_close_protocol=3` and an exact version-3 capability; v2
+peers keep the existing closure path. With both sides opted in, a source-frame
+reservation pins archive and relay ownership and commit joins the retired
+binding's original archive before its ordered audio watermark. Successor
+creation is not a close prerequisite. Each attempt has a five-second bound and
+the pending handshake a thirty-second deadline; expiry preserves custody fences.
+Prepared EOF/deadline recovery still blocks default-on admission. See the
+[Q12-S boundary note](./listen_pusher_pipeline/changes/2026-11-15-q12-s-source-close-boundary.md).

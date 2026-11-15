@@ -464,9 +464,9 @@ class ProjectionFollowups:
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
-        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt['state'] in {'ready', 'quarantined'}:
             return
+        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 
