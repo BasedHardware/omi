@@ -216,7 +216,17 @@ speech and reports an end on an explicit stop (`user_initiated`), a lost or remo
 when the server-provided silence timer runs out (`silence_backstop`). `CaptureEndReporter` posts it to
 `/v2/sync-capture-end` and again when the recording's last sealed file is accepted, so the final copy says no
 file is pending. The reporter is an observer: audio up to the end that is still being written or published counts as
-pending (`MobileBatchBuffer.unregisteredStarts`), so it waits for the capture lifecycle and never drives it.
+pending (`MobileBatchBuffer.pendingJournalCount`), so it waits for the capture lifecycle and never drives it.
+This observer reads retained journals from disk, including failed append/seal/publish operations and prior
+processes. Losing a writer or replaying a journal cannot erase pending evidence. A retained journal stops
+counting only when the ledger reports server acceptance for that file and the current byte length matches
+the accepted length; an accepted prefix cannot hide later appends. Unreadable metadata over-counts; an
+unreadable directory omits the marker. The index separately counts every unproven row, including transport-only
+`synced` copies and terminal refusals. Counts may overlap while registering/replaying; only delay is allowed.
+An observation is bound to its account and WAL generation before queuing and rechecked after disk reads:
+logout cannot turn an emptied active index into an old recording's zero. This adds no startup index save.
+A process-wide append revision also invalidates an observation if capture writes during its asynchronous
+disk read; the end stays queued for a later accepted-file wake. Retained torn originals remain pending.
 The marker is latency information only. It never seals, uploads, deletes or releases a WAL,
 and no custody rule above reads it: a marker that is lost, refused or switched off (PostHog
 `upload_end_marker_off`) leaves the server's ordinary wait in place. It is held in memory, so an app killed

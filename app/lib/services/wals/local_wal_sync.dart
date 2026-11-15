@@ -163,12 +163,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   int pendingWalsForRecording(String recordingSessionId, {DateTime? through}) => _wals
       .where((wal) =>
           wal.recordingSessionId == recordingSessionId &&
-          (wal.status == WalStatus.inProgress ||
-              wal.status == WalStatus.miss ||
-              wal.status == WalStatus.uploadRejected) &&
+          !captureEndAccepted(wal) &&
           (through == null ||
+              wal.timerStart <= 0 ||
               wal.timerStart <= through.millisecondsSinceEpoch ~/ 1000 ||
-              walCaptureTimeClass(wal, _now().millisecondsSinceEpoch ~/ 1000) == WalCaptureTimeClass.unknown))
+              wal.timerStart > _now().millisecondsSinceEpoch ~/ 1000 ||
+              wal.uploadRejectionReason == WalUploadRejection.invalidCaptureTime))
       .length;
 
   int _framesPerSecond = 100;

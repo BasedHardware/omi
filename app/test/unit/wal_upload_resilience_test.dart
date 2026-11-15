@@ -11,11 +11,13 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import '../support/faulting_wal_writer.dart';
 
 /// Covers WAL upload failure scenarios that cause recordings to become stuck.
 ///
@@ -179,12 +181,81 @@ void main() {
       row(now - 180, WalStatus.inProgress),
       row(now - 60, WalStatus.miss), // Trusted trailing silence after the end.
       row(2145916800, WalStatus.uploaded),
-      row(2145916800, WalStatus.synced),
+      row(2145916800, WalStatus.synced)..syncedAt = now,
+      row(now - 180, WalStatus.synced), // Transport only: no server proof.
+      row(now - 180, WalStatus.corrupted),
+      row(now - 180, WalStatus.outsideRecoveryWindow),
       row(2145916800, WalStatus.miss)..recordingSessionId = 'other',
     ];
-    expect(sync.pendingWalsForRecording('ended', through: end), 5);
-    expect(sync.pendingWalsForRecording('ended'), 6);
+    expect(sync.pendingWalsForRecording('ended', through: end), 8);
+    expect(sync.pendingWalsForRecording('ended'), 9);
   });
+
+  for (final operation in ['flush', 'close']) {
+    test('failed $operation seal stays pending from disk through cancel and replay until real upload acceptance',
+        () async {
+      SharedPreferencesUtil().uid = 'owner';
+      late FaultingWalWriter writer;
+      final producer = MobileBatchBuffer(
+        directory: tempDir,
+        publish: (_) async => fail('a failed seal must not publish'),
+        openWriter: (file) => writer = FaultingWalWriter(file),
+      );
+      await producer.initialize();
+      final now = DateTime.now();
+      expect(
+          producer.append([9], uid: 'owner', codec: BleAudioCodec.opus, now: now, recordingSessionId: 'sealed'), true);
+      if (operation == 'flush') {
+        writer.failFlush = true;
+      } else {
+        writer.failClose = true;
+      }
+      producer.seal();
+      expect(producer.failed, isTrue);
+      expect(producer.hasFrames, isFalse, reason: 'the failed writer has left the in-memory set');
+      // Recreate the observer as on restart: it has never held this WAL in memory.
+      final observer = MobileBatchBuffer(directory: tempDir, publish: (_) async {});
+      final sent = <int>[];
+      Future<int> pending() async =>
+          await observer.pendingJournalCount('sealed',
+              through: now, acceptedFileBytes: sync.captureEndAcceptedFileBytes('sealed')) +
+          sync.pendingWalsForRecording('sealed', through: now);
+      final reporter = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add(pendingWals);
+          return true;
+        },
+        pendingWals: (_) => pending(),
+        disabled: () async => false,
+      );
+      await reporter.report(CaptureEndSignal(
+          recordingSessionId: 'sealed', type: CaptureEndType.userInitiated, lastSpeechAt: now, decidedAt: now));
+      expect(sent, [1], reason: 'the durable journal survives a failed seal and a fresh observer');
+      final recovered = await MobileBatchBuffer.recover(tempDir, []);
+      expect(recovered, hasLength(1));
+      await sync.addExternalWal(recovered.single, admittedGeneration: sync.sessionGeneration);
+      expect(await pending(), greaterThan(0), reason: 'journal replay/index admission is not server acceptance');
+      final blocked = Completer<void>();
+      final queued = sync.testQueueWalIo(blocked.future);
+      final cancelled = sync.syncAll();
+      sync.cancelSync();
+      blocked.complete();
+      await queued;
+      await cancelled;
+      await reporter.uploadAccepted('sealed');
+      expect(uploadAttempts, isEmpty);
+      expect(sent, [1], reason: 'cancellation cannot discharge pending evidence');
+      uploadResponse = (_) async => UploadFilesResult.queued('accepted-seal');
+      sync.onRecordingUploadAccepted = (session) => unawaited(reporter.uploadAccepted(session));
+      await sync.syncAll();
+      await reporter.uploadAccepted('sealed');
+      expect(sent, [1, 0]);
+      expect(await pending(), 0);
+      expect(tempDir.listSync().whereType<File>().where((file) => file.path.endsWith('.batch-journal')), hasLength(1),
+          reason: 'observing acceptance does not delete or rewrite recovery evidence');
+      expect(await File('${tempDir.path}/${recovered.single.filePath}').readAsBytes(), [1, 0, 0, 0, 9]);
+    });
+  }
 
   test('end reporter reaches zero only after both clock classes in the same session are accepted', () async {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

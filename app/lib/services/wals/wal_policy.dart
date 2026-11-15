@@ -1,5 +1,21 @@
 part of 'local_wal_sync.dart';
 
+/// Only server acceptance can discharge the end marker's pending evidence.
+/// A transport-only synced copy (syncedAt == 0) is still unproven.
+bool captureEndAccepted(Wal wal) =>
+    wal.status == WalStatus.uploaded || (wal.status == WalStatus.synced && wal.syncedAt > 0);
+
+extension CaptureEndAcceptance on LocalWalSyncImpl {
+  Map<String, int> captureEndAcceptedFileBytes(String recordingSessionId) => {
+        for (final wal in _wals)
+          if (wal.recordingSessionId == recordingSessionId &&
+              captureEndAccepted(wal) &&
+              wal.filePath != null &&
+              wal.storageTotalBytes > 0)
+            wal.filePath!.split('/').last: wal.storageTotalBytes,
+      };
+}
+
 /// Error string the backend's stale guard sets when a job sits queued past
 /// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
 /// #7469 — if this string changes, update here and keep the structural check
