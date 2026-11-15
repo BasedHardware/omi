@@ -9652,8 +9652,8 @@ watcher, strict matched-load acceptance, ramp and drain sequence.
 
 `EPISODE_COMPOSE_SETTLE_ENABLED` defaults on (unset or blank). `off` restores
 full-fingerprint triggering and immediate retries. When enabled, background
-composes wait for 10 quiet minutes, with a 25-minute cap from the first pending
-arrival. Foreground read-side schedules and forced composes bypass this window.
+composes wait for `COMPOSER_SETTLE_SECONDS` (two quiet minutes), with a
+`COMPOSER_MAX_SETTLE_SECONDS` cap (five minutes) from the first pending arrival. Foreground read-side schedules and forced composes bypass this window.
 Only changed retained membership, speech text or resolved person names trigger a
 paid recompose; discard, visible notes drift and explicit regeneration remain
 repair triggers. Summaries and speaker labels remain prompt inputs, and the full
