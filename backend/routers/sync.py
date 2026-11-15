@@ -36,7 +36,7 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
-from database.sync_recovery_source import recovery_source_conversation
+from utils.sync.recovery_source import recovery_source_conversation
 from utils.sync.deleted_conversation import deleted_conversation_result, is_conversation_deleted
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.account_deletion_marker import account_deletion_blocks_user_work

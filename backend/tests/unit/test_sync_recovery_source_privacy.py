@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from database import _client
-from database.sync_recovery_source import recovery_source_conversation
+from utils.sync.recovery_source import recovery_source_conversation
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from tests.unit.test_batch_pipeline_scheduler import MemoryTransaction
 from utils.sync.content_id import compute_sync_content_id

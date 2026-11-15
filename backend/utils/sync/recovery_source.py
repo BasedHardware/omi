@@ -4,9 +4,6 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database import _client
-from database.batch_pipeline_privacy import assert_batch_write_allowed
-
 
 def recovery_source_conversation(uid: str, conversation_id: str | None) -> str | None:
     """Return only a live same-account source, preserving all existing privacy denials."""
@@ -17,6 +14,9 @@ def recovery_source_conversation(uid: str, conversation_id: str | None) -> str |
         or len(conversation_id) > 128
     ):
         return None
+    from database import _client
+    from database.batch_pipeline_privacy import assert_batch_write_allowed
+
     client = _client.get_firestore_client()
 
     @firestore.transactional
