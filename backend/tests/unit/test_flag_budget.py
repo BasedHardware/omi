@@ -322,6 +322,12 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
+        elif name == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED':
+            assert flag['lifecycle'] == 'rollout'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Default off')
+            assert flag['review_by'] == '2026-11-16'
+            assert flag['ramp']['cohorts'][-1] == 'fleet after independent custody review'
         else:
             assert flag['lifecycle'] == 'ops_kill'
             assert flag['fail'] == 'open'
