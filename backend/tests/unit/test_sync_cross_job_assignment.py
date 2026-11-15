@@ -15,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.stt import allowance_session  # noqa: F401 - retain scopes across legacy package stubs
 from utils.sync.assignment import assign_in_transaction, needs_fragment_review
 from utils.sync.absorption_metrics import record_assignment_metrics
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
@@ -382,8 +381,6 @@ def independent_job_pipeline():
     )
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     fakes['utils.conversations.lifecycle'] = lifecycle
-    for leaf in ('database.capture_end', 'database.summary_processing', 'database.auth'):
-        fakes[leaf] = AutoMockModule(leaf)
     bridge = AutoMockModule('utils.sync.bridge')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes['utils.sync.bridge'] = bridge
