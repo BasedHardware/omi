@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, Mock, call, patch
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -20,6 +21,39 @@ sys.modules[_SPEC.name] = promote
 _SPEC.loader.exec_module(promote)
 BUILD_ID = "00000000-0000-4000-8000-000000000001"
 BUILD_TAG = "v1.2.3+456-android-cm"
+
+
+def _fake_play_sdk_modules():
+    class Credentials:
+        @staticmethod
+        def from_service_account_info(_info):
+            raise AssertionError("test must replace credential construction")
+
+    service_account = ModuleType("google.oauth2.service_account")
+    service_account.Credentials = Credentials
+    oauth2 = ModuleType("google.oauth2")
+    oauth2.__path__ = []
+    oauth2.service_account = service_account
+    google = ModuleType("google")
+    google.__path__ = []
+    google.oauth2 = oauth2
+
+    discovery = ModuleType("googleapiclient.discovery")
+    discovery.build = None
+    googleapiclient = ModuleType("googleapiclient")
+    googleapiclient.__path__ = []
+    googleapiclient.discovery = discovery
+    return (
+        {
+            "google": google,
+            "google.oauth2": oauth2,
+            "google.oauth2.service_account": service_account,
+            "googleapiclient": googleapiclient,
+            "googleapiclient.discovery": discovery,
+        },
+        Credentials,
+        discovery,
+    )
 
 
 class InputTests(unittest.TestCase):
@@ -36,32 +70,37 @@ class InputTests(unittest.TestCase):
         execute = client.edits.return_value.insert.return_value.execute
         execute.side_effect = [Conflict(), Conflict(), Conflict(), Conflict(), {"id": "retry-edit"}]
         sleeps = []
+        sdk_modules, credentials, discovery = _fake_play_sdk_modules()
+        original_sdk_modules = {name: sys.modules.get(name) for name in sdk_modules}
         with (
+            patch.dict(sys.modules, sdk_modules),
             patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
-            patch(
-                "google.oauth2.service_account.Credentials.from_service_account_info",
-                return_value=object(),
-            ),
-            patch("googleapiclient.discovery.build", return_value=client),
+            patch.object(
+                credentials, "from_service_account_info", return_value=object()
+            ) as from_service_account_info,
+            patch.object(discovery, "build", return_value=client),
             patch.object(promote.time, "sleep", sleeps.append),
         ):
             self.assertEqual(promote.play_edit(), (client, "retry-edit"))
+        from_service_account_info.assert_called_once_with(
+            {}, scopes=["https://www.googleapis.com/auth/androidpublisher"]
+        )
         self.assertEqual(execute.call_count, 5)
         self.assertEqual(sleeps, [1, 2, 4, 8])
 
         execute.reset_mock()
         execute.side_effect = [Conflict()] * promote.PLAY_EDIT_CREATE_ATTEMPTS
         with (
+            patch.dict(sys.modules, sdk_modules),
             patch.dict(promote.os.environ, {"GCLOUD_SERVICE_ACCOUNT_CREDENTIALS": "{}"}),
-            patch(
-                "google.oauth2.service_account.Credentials.from_service_account_info",
-                return_value=object(),
-            ),
-            patch("googleapiclient.discovery.build", return_value=client),
+            patch.object(credentials, "from_service_account_info", return_value=object()),
+            patch.object(discovery, "build", return_value=client),
             patch.object(promote.time, "sleep"),
         ):
             with self.assertRaisesRegex(promote.PromotionError, "Google Play edit creation failed"):
                 promote.play_edit()
+        for name, original_module in original_sdk_modules.items():
+            self.assertIs(sys.modules.get(name), original_module)
 
     def test_android_build_tag_must_bind_to_the_promoted_version(self):
         self.assertEqual(promote.require_build_tag(BUILD_TAG, "1.2.3"), BUILD_TAG)
