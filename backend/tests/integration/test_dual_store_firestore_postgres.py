@@ -232,6 +232,28 @@ def test_a_copy_that_still_holds_a_reservations_segment_is_a_mismatch(dual):
     assert compare_serving_query(store.primary, shadow, 'get', 'gpus', 'g', transaction=True, budget_s=5) == 'mismatch'
 
 
+def test_an_intake_whose_lineage_the_mirror_omits_is_a_serving_mismatch(dual):
+    """repair_lineage stays Firestore-only; the omission is an activation gate, not parity."""
+    from database.jobstore.serving_parity import compare_serving_query
+
+    store, shadow, pool = dual
+    client = store.primary.client
+    client.collection(f'{store.namespace}_intakes').document('i').set({'owner_key': 'owner', 'segment_ids': ['a']})
+    store.refresh([('intakes', 'i')])
+    assert store.drain(30)
+    assert compare_serving_query(store.primary, shadow, 'get', 'intakes', 'i', transaction=True, budget_s=5) == 'match'
+    client.collection(f'{store.namespace}_intakes').document('i').set(
+        {'owner_key': 'owner', 'segment_ids': ['a'], 'repair_lineage': {'capture': 'synthetic'}}
+    )
+    store.refresh([('intakes', 'i')])
+    assert store.drain(30)
+    with pool.connection() as conn:
+        assert 'repair_lineage' not in shadow.read_doc(conn, 'intakes', 'i')
+    assert (
+        compare_serving_query(store.primary, shadow, 'get', 'intakes', 'i', transaction=True, budget_s=5) == 'mismatch'
+    )
+
+
 def test_complete_census_includes_claims_and_holds_without_claiming_on_pg(dual, monkeypatch):
     from database.jobstore.backfill import backfill
     from database.jobstore.dual_store import MIRRORED_TABLES

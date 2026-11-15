@@ -147,11 +147,14 @@ def compare_serving_query(
         def read(store):
             value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
             if query == 'get' and store is primary and isinstance(value, dict):
-                # The copy never holds a table's Firestore-only fields. Strip them from the primary side only,
-                # as dual_store.compare does: a copy that still holds one must read as a mismatch.
-                from database.jobstore.dual_store import mirrored
+                # Only the table's own exception (a GPU reservation's segment id) is taken off, and only from
+                # the primary side: a copy that still holds it must read as a mismatch. The fields the mirror
+                # omits for every table (repair_lineage) stay in: that omission is a serving mismatch and an
+                # activation gate, not something this checker may normalize away.
+                from database.jobstore.dual_store import UNMIRRORED_TABLE_FIELDS
 
-                value = mirrored(value, args[0] if args else kwargs.get('table'))
+                dropped = UNMIRRORED_TABLE_FIELDS.get(args[0] if args else kwargs.get('table') or '', frozenset())
+                value = {name: field for name, field in value.items() if name not in dropped}
             return codec.canonical(value)
 
         deadline = time.monotonic() + budget_s
