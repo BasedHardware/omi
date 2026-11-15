@@ -684,6 +684,14 @@ queries have no ratio; stale counts/ratios expire at 120 s. The default-on
 gauges when off. Reader inventory and rollout proof requirements are recorded in
 `docs/listen_pusher_pipeline/changes/2026-11-13-fresh-delivery-guard.md`.
 
+The guard has an independent 20s supervised timer using the **same maintenance
+lease**, with bounded count RPCs on the DB executor so a slow general pass cannot
+delay its refresh. Opportunistic maintenance calls share the guard's 60s cadence
+and overlap lock. `omi_batch_pipeline_fresh_guard_sample_timestamp_seconds`
+exports the query window anchor only with valid counts; compare that exact
+inclusive window using `scripts/fresh_guard_cohort.py` (stored `fresh_capture`,
+never `fresh_first` or capture age). Scrapes still perform no IO.
+
 The projection acknowledge also stamps `jobs.delivered_at` and
 `jobs.delivered_in_target` in the transaction that sets
 `projection_state=completed`. The only semantic reader is the delivered-share

@@ -7,6 +7,7 @@ deletions waited up to 40 minutes behind them.
 
 from __future__ import annotations
 
+import copy
 import os
 import subprocess
 from pathlib import Path
@@ -19,16 +20,22 @@ from scripts import runtime_env_durable_dispatch_contracts as contracts
 ROOT = Path(__file__).resolve().parents[3]
 STEP = 'Configure production conversation-erasure Cloud Tasks queue'
 
+# The deploy documents are large (runtime_env.yaml is ~280 KB) and the pure-Python
+# loader costs ~0.3 s per parse, which put two tests in this file at the CI CPU
+# guard's 1.00 s ceiling. Parse each document once per process with the C loader
+# (already used elsewhere in this suite) and hand out copies to tests that mutate.
+_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+_DOCUMENTS: dict[str, object] = {}
 
-def _read_yaml(path):
-    # Same safe YAML semantics with the C parser used by the other manifest
-    # contracts; retain a fresh tree for mutation tests instead of caching it.
-    return yaml.load(path.read_text(), Loader=yaml.CSafeLoader)
+
+def _document(relative_path: str):
+    if relative_path not in _DOCUMENTS:
+        _DOCUMENTS[relative_path] = yaml.load((ROOT / relative_path).read_text(), Loader=_LOADER)
+    return _DOCUMENTS[relative_path]
 
 
 def _steps():
-    action = _read_yaml(ROOT / '.github/actions/deploy-backend-stack/action.yml')
-    return action['runs']['steps']
+    return _document('.github/actions/deploy-backend-stack/action.yml')['runs']['steps']
 
 
 def test_queue_is_provisioned_on_every_prod_deploy_before_traffic_moves():
@@ -91,7 +98,7 @@ fi
 
 
 def test_every_prod_dispatcher_names_the_queue_and_wipes_keep_theirs():
-    manifest = _read_yaml(ROOT / 'backend/deploy/runtime_env.yaml')
+    manifest = _document('backend/deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     hosts = {'gke/backend-listen': prod['gke']['backend-listen']['env']}
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
@@ -100,17 +107,17 @@ def test_every_prod_dispatcher_names_the_queue_and_wipes_keep_theirs():
         assert env['CONVERSATION_ERASURE_TASKS_QUEUE']['value'] == 'conversation-erasure', scope
         assert env['ACCOUNT_DELETION_TASKS_QUEUE']['value'] == 'account-deletion', scope
 
-    chart = _read_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
+    chart = _document('backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     chart_env = {entry['name']: entry.get('value') for entry in chart['env']}
     assert chart_env['CONVERSATION_ERASURE_TASKS_QUEUE'] == 'conversation-erasure'
 
-    staging = _read_yaml(ROOT / 'backend/deploy/runtime_env/staging.overlay.yaml')
+    staging = _document('backend/deploy/runtime_env/staging.overlay.yaml')
     assert staging['cloud_run']['queue_map']['conversation-erasure'] == 'staging-conversation-erasure'
     assert '"staging-conversation-erasure|' in (ROOT / 'backend/deploy/staging/create_queues.sh').read_text()
 
 
 def test_prod_contract_rejects_erasure_units_on_the_wipe_queue():
-    prod = _read_yaml(ROOT / 'backend/deploy/runtime_env.yaml')['environments']['prod']
+    prod = copy.deepcopy(_document('backend/deploy/runtime_env.yaml')['environments']['prod'])
     assert contracts.validate_account_deletion_dispatch_contract('prod', prod) == []
 
     entry = prod['cloud_run']['services']['backend-sync']['env']['CONVERSATION_ERASURE_TASKS_QUEUE']
