@@ -89,8 +89,9 @@ class EpisodePage extends StatelessWidget {
               homeStepOf(m) == HomeStep.failed ||
               (m.status == ConversationStatus.completed && homeStepOf(m) == null)) ||
           (card != null &&
-              (card.homeStep == 'ready' || card.homeStep == 'noise' || card.homeStep == 'failed' || card.isLocked)))
+              (card.homeStep == 'ready' || card.homeStep == 'noise' || card.homeStep == 'failed' || card.isLocked))) {
         continue;
+      }
       final latest = versions.lastOrNull;
       if (latest == null) continue;
       final member = card?.homeStep == null ? latest : latest.withHomeStep(card!.homeStep!);
