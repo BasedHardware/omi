@@ -1,9 +1,10 @@
 """Composer search stays canonical, budgeted, and separate from chat defaults."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, create_autospec
 
 import pytest
+from google.cloud.firestore_v1 import Client, CollectionReference, DocumentReference
 
 from database import vector_db
 from utils.memory import canonical_memory_adapter as canonical
@@ -19,8 +20,10 @@ def budget(documents=160):
 def test_composer_vector_only_does_not_query_history_or_typesense(monkeypatch):
     repo = MemoryService(db_client=Mock())
     bounded = budget()
-    repo._canonical.search = Mock(return_value=[])
-    repo.history.search = Mock(side_effect=AssertionError('redundant historical vector query'))
+    repo._canonical.search = create_autospec(repo._canonical.search, return_value=[], spec_set=True)
+    repo.history.search = create_autospec(
+        repo.history.search, side_effect=AssertionError('redundant historical vector query'), spec_set=True
+    )
     assert repo.search('synthetic', 'garden', vector_only=True, budget=bounded) == []
     assert repo._canonical.search.call_args.kwargs['vector_only'] is True
     assert repo._canonical.search.call_args.kwargs['budget'] is bounded
@@ -29,7 +32,9 @@ def test_composer_vector_only_does_not_query_history_or_typesense(monkeypatch):
     from utils.memory import atom_keyword_index as keyword
 
     monkeypatch.setattr(keyword, 'keyword_search_memory_ids', Mock(side_effect=AssertionError('Typesense')))
-    query = Mock(return_value=SimpleNamespace(hits=[]))
+    query = create_autospec(
+        vector_db.query_memory_vector_candidates, return_value=SimpleNamespace(hits=[]), spec_set=True
+    )
     assert (
         canonical.search_canonical_memories(
             'synthetic', 'garden', db_client=Mock(), vector_query=query, vector_only=True, budget=bounded
@@ -52,25 +57,48 @@ def test_chat_search_does_not_gain_composer_options(monkeypatch):
 
 
 def test_expired_embedding_cannot_start_a_vector_query(monkeypatch):
+    from utils.llm.clients import _OpenAIEmbeddingsProxy
+
     clock = [100.0]
     monkeypatch.setattr(vector_db, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(vector_db, 'index', object())
     provider = Mock(side_effect=AssertionError('no vector query after deadline'))
     monkeypatch.setattr(vector_db, 'owner_index', provider)
 
-    def embed(_query, **kwargs):
-        assert kwargs == {'timeout': 8}
+    def embed(_query):
         clock[0] += 9
         return [0.1]
 
-    monkeypatch.setattr(vector_db, 'embeddings', SimpleNamespace(embed_query=embed))
+    embeddings = create_autospec(_OpenAIEmbeddingsProxy, instance=True, spec_set=True)
+    embeddings.embed_query.side_effect = embed
+    monkeypatch.setattr(vector_db, 'embeddings', embeddings)
     with pytest.raises(TimeoutError):
         vector_db.query_memory_vector_candidates('synthetic', 'garden', timeout_seconds=8)
     provider.assert_not_called()
+    embeddings.embed_query.assert_called_once_with('garden')
+
+
+def test_budgeted_retrieval_matches_real_embedding_and_owner_index_signatures(monkeypatch):
+    from utils.llm.clients import _OpenAIEmbeddingsProxy
+    from database.pinecone_partition_index import OwnerIndex
+
+    embeddings = create_autospec(_OpenAIEmbeddingsProxy, instance=True, spec_set=True)
+    embeddings.embed_query.return_value = [0.1]
+    owner = create_autospec(OwnerIndex, instance=True, spec_set=True)
+    owner.query.return_value = {'matches': []}
+    monkeypatch.setattr(vector_db, 'index', object())
+    monkeypatch.setattr(vector_db, 'embeddings', embeddings)
+    monkeypatch.setattr(
+        vector_db, 'owner_index', create_autospec(vector_db.owner_index, return_value=owner, spec_set=True)
+    )
+    assert vector_db.query_memory_vector_candidates('synthetic', 'garden', timeout_seconds=8).hits == []
+    embeddings.embed_query.assert_called_once_with('garden')
+    assert owner.query.call_count == 1
+    assert 0 < owner.query.call_args.kwargs['_request_timeout'] <= 8
 
 
 def test_hydration_rejects_over_budget_batch_before_reading():
-    db = Mock()
+    db = create_autospec(Client, instance=True, spec_set=True)
     with pytest.raises(ListReadBudgetExhausted):
         fetch_authoritative_product_memory_items_by_ids('synthetic', ['one', 'two'], db_client=db, budget=budget(1))
     db.get_all.assert_not_called()
@@ -78,7 +106,7 @@ def test_hydration_rejects_over_budget_batch_before_reading():
 
 def test_hydration_uses_remaining_deadline_and_charges_documents():
     bounded = budget(1)
-    db = Mock()
+    db = create_autospec(Client, instance=True, spec_set=True)
     db.get_all.return_value = [SimpleNamespace(id='one', exists=False)]
     assert fetch_authoritative_product_memory_items_by_ids('synthetic', ['one'], db_client=db, budget=bounded) == []
     assert db.get_all.call_args.kwargs['timeout'] == 10
@@ -122,7 +150,13 @@ def test_owner_people_projection_is_read_only_and_bounded(monkeypatch):
     from database import _client
     from utils.episodes import composer_context_io
 
-    client = Mock()
+    client = create_autospec(Client, instance=True, spec_set=True)
+    users = create_autospec(CollectionReference, instance=True, spec_set=True)
+    owner = create_autospec(DocumentReference, instance=True, spec_set=True)
+    people = create_autospec(CollectionReference, instance=True, spec_set=True)
+    client.collection.return_value = users
+    users.document.return_value = owner
+    owner.collection.return_value = people
     client.get_all.return_value = [SimpleNamespace(exists=True, to_dict=lambda: {'name': 'Synthetic person'})] * 20
     monkeypatch.setattr(_client, 'db', client)
     bounded = budget()
@@ -141,3 +175,18 @@ def test_owner_people_projection_is_read_only_and_bounded(monkeypatch):
         call[0].split('.')[-1] not in {'set', 'update', 'create', 'delete', 'batch', 'transaction'}
         for call in client.mock_calls
     )
+
+
+def test_profile_projection_matches_real_document_client_signature(monkeypatch):
+    from database import _client
+    from utils.episodes import composer_context_io
+
+    client = create_autospec(Client, instance=True, spec_set=True)
+    users = create_autospec(CollectionReference, instance=True, spec_set=True)
+    owner = create_autospec(DocumentReference, instance=True, spec_set=True)
+    client.collection.return_value = users
+    users.document.return_value = owner
+    owner.get.return_value = SimpleNamespace(to_dict=lambda: {'ai_user_profile': {'profile_text': 'Gardener.'}})
+    monkeypatch.setattr(_client, 'db', client)
+    assert composer_context_io.profile('synthetic', budget()) == {'profile_text': 'Gardener.'}
+    owner.get.assert_called_once_with(field_paths=['ai_user_profile'], timeout=10, retry=None)

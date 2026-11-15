@@ -790,7 +790,9 @@ def query_memory_vector_candidates(
     deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
     if timeout_seconds is not None and timeout_seconds <= 0:
         raise TimeoutError('memory query deadline')
-    vector = embeddings.embed_query(query, **({'timeout': timeout_seconds} if timeout_seconds is not None else {}))
+    # The production embedding proxy accepts text only. The caller deadline
+    # bounds waiting; recheck it below before issuing any vector RPC.
+    vector = embeddings.embed_query(query)
     query_options = {}
     if deadline is not None:
         remaining = deadline - time.monotonic()
