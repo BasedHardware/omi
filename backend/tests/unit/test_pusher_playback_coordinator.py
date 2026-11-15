@@ -139,3 +139,17 @@ async def test_only_successful_closing_refresh_retires_acknowledged_debt(monkeyp
         assert fallback.call_args.kwargs['outcome'] == 'degraded'
     else:
         fallback.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_optional_worker_reports_durable_repair_handoff(monkeypatch):
+    monkeypatch.setattr(module, '_owner', None)
+    monkeypatch.setattr(module, 'run_blocking', AsyncMock(side_effect=asyncio.CancelledError()))
+    fallback = MagicMock()
+    monkeypatch.setattr(module, 'record_fallback', fallback)
+    owner = module.coordinator()
+    assert owner.submit('u', 'c', [], True, None)
+    await asyncio.gather(*list(owner.tasks), return_exceptions=True)
+    assert not owner.active
+    assert fallback.call_args.kwargs['reason'] == 'cancelled'
+    assert fallback.call_args.kwargs['outcome'] == 'degraded'
