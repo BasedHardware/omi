@@ -505,15 +505,11 @@ def discover_jobs(
             if age_order
             else {'path': doc.reference.path, 'finished_at': horizon}
         )
-        valid_ids = (
-            isinstance(uid, str)
-            and bool(uid)
-            and '/' not in uid
-            and isinstance(cid, str)
-            and bool(cid)
-            and '/' not in cid
-        )
-        if not valid_ids or doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
+        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
+            malformed = True
+        else:
+            malformed = doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id')
+        if malformed:
             # Invalid identities cannot supply a user path or proof authority.
             # Their metadata-only refusal still has exactly one owner, including
             # the legacy single-shard path (which previously skipped silently).
