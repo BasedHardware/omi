@@ -108,7 +108,7 @@ void main() {
       expect(row.step, HomeStep.transcribing);
       expect(row.episode!.members.map((m) => m.id), unorderedEquals(['new', 'old', 'local']));
       expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
-      expect(find.byType(ConversationListItem), findsOneWidget);
+      expect(find.text('Finished notes'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }

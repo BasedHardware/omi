@@ -399,21 +399,26 @@ List<HomeRow> foldProcessingRuns(List<HomeRow> rows,
   if (!singleProcessingRow) return _foldContiguousProcessingRuns(rows, processingTitle: processingTitle);
   final folded = <HomeRow>[];
   final byDay = <DateTime, List<HomeRow>>{};
+  HomeStep? processingStep(HomeRow row) {
+    final replaced = row.episode?.composed == true && !row.isProcessing && !row.isTemporaryMember;
+    return replaced
+        ? null
+        : row.step ??
+            (row.isProcessing ? homeStepOf(row.conversation) ?? HomeStep.transcribing : homeStepOf(row.conversation));
+  }
+
   for (final row in rows) {
-    (byDay[row.isProcessing && processingDay != null ? localHomeDay(processingDay) : row.day] ??= []).add(row);
+    final step = processingStep(row);
+    final day =
+        processingDay != null && step != null && step != HomeStep.failed ? localHomeDay(processingDay) : row.day;
+    (byDay[day] ??= []).add(row);
   }
   final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
   for (final day in days) {
     final run = <HomeRow>[];
     final finished = <HomeRow>[];
     for (final row in byDay[day]!) {
-      // A composed owner is the finished replacement even when its sole retained
-      // member still carries an older pending list projection.
-      final replaced = row.episode?.composed == true && !row.isProcessing && !row.isTemporaryMember;
-      final step = replaced
-          ? null
-          : row.step ??
-              (row.isProcessing ? homeStepOf(row.conversation) ?? HomeStep.transcribing : homeStepOf(row.conversation));
+      final step = processingStep(row);
       if (step == null || step == HomeStep.failed) {
         finished.add(row);
       } else {
