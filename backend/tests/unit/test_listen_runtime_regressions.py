@@ -106,9 +106,9 @@ def _assert_deletion_teardown_skipped_owner_writes(runtime):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('answer_prepare', [True, False])
+@pytest.mark.parametrize('answer_prepare,prepared_before_disconnect', [(True, False), (False, False), (True, True)])
 async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_prepare(
-    inline_session, monkeypatch, answer_prepare
+    inline_session, monkeypatch, caplog, answer_prepare, prepared_before_disconnect
 ):
     """Real teardown/controller, relay parser, receipts and seal; no repair runner."""
     client, path, _, _ = inline_session
@@ -210,14 +210,27 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         session.pending_conversation_requests.clear()
         session.audio_bytes_send(b'\x01\x00', 100)
         await session._audio_bytes_flush()
+        if prepared_before_disconnect:
+            # Cloud Tasks finalization on a live stream can prepare before the
+            # next relay tick commits; losing that socket must retain its fence.
+            assert await runtime.conversations.schedule_finalization('conversation')
+            async with asyncio.timeout(5):
+                while not session.pending_record_closes['conversation'].prepared:
+                    await asyncio.sleep(0.001)
         session.audio_bytes_send(b'\x02\x00', 101)  # Accepted tail is still in listen at disconnect.
         receiver.cancel()  # Real supervisor drains the receive/tick tasks before teardown.
         await asyncio.gather(receiver, return_exceptions=True)
         await asyncio.wait_for(runtime._teardown_components(), 5)
         await asyncio.wait_for(handler, 5)
-        assert finalizations == ['conversation']
-        assert not close_controls and not session.pending_record_closes
-        assert row['record_audio_closed'] and row['record_upload_sessions'] == {}
+        assert finalizations == ['conversation'] * (2 if prepared_before_disconnect else 1)
+        if prepared_before_disconnect:
+            assert [control['phase'] for control in close_controls] == ['prepare']
+            assert row['record_upload_sessions'] and not row['record_audio_closed']
+            assert 'event=record_close_uncommitted_disconnect records=1' in caplog.text
+            _assert_prepared_disconnect_selected_by_repair(row)
+        else:
+            assert not close_controls and not session.pending_record_closes
+            assert row['record_audio_closed'] and row['record_upload_sessions'] == {}
         assert b''.join(proven_pcm) == b'\x01\x00\x02\x00'
         assert not session.audio_runs and not session.audio_total_size
     finally:
@@ -226,6 +239,29 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         if not handler.done():
             incoming.put_nowait(None)
         await asyncio.wait_for(handler, 5)
+
+
+def _assert_prepared_disconnect_selected_by_repair(row):
+    from config.record_audio import record_identity
+    from utils.batch_pipeline import record_seal_cluster_repair as repair
+    from utils.batch_pipeline.record_seal_budget import SweepBudget
+    from tests.unit.test_record_seal_cluster_repair import OrderedJobsClient
+    import time
+
+    content, segment = record_identity('owner', 'conversation')
+    job = dict(
+        state='record_pending',
+        owner_id='owner',
+        conversation_id='conversation',
+        record_content_id=content,
+        enqueued_at=time.time() - 120,
+    )
+    document = SimpleNamespace(
+        id=segment, reference=SimpleNamespace(path=f'batch_pipeline_prod_jobs/{segment}'), to_dict=lambda: job
+    )
+    selected, _, _ = repair.discover_jobs(OrderedJobsClient([document]), budget=SweepBudget(10), fresh=True)
+    assert [path for path, _ in selected] == ['users/owner/conversations/conversation']
+    assert repair.pending_blocker(row) == 'producer_pending_tokens'
 
 
 @pytest.mark.anyio

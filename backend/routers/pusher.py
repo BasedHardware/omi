@@ -1619,7 +1619,10 @@ async def _run_websocket_util_trigger(
                         record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
-            for cid in close_protocol.requests.keys() - close_protocol.committed:
+            uncommitted_closes = close_protocol.requests.keys() - close_protocol.committed
+            if uncommitted_closes:
+                logger.warning('event=record_close_uncommitted_disconnect records=%d', len(uncommitted_closes))
+            for cid in uncommitted_closes:
                 record_barrier.hold_recording(cid)
                 record_close_requests.discard(cid)
             if (
