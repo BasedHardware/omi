@@ -41,6 +41,7 @@ from config.episodes import (
 )
 from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
+from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
@@ -81,6 +82,8 @@ def classify(row: Mapping[str, Any]) -> str | None:
     """
     if not home_step_projection_enabled():
         return None
+    if empty_capture.applies(row):
+        return NOISE
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
     title = str(structured.get('title') or '').strip()
@@ -172,4 +175,4 @@ def project(row: dict[str, Any]) -> dict[str, Any]:
     if step == READY:
         home_latency.observe(row)
     wire = row if step is None else {**row, 'home_step': step}
-    return legacy_empty_wire.project(wire, noise=step == NOISE)
+    return legacy_empty_wire.project(empty_capture.project(wire), noise=step == NOISE)
