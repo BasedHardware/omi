@@ -29,8 +29,8 @@ def entries():
                 'ids': ['person-1'],
                 'people_rows': [],
                 'prior_rows': [{'conversation_id': 'prior'}],
-                'member_ids': ['current'],
             },
+            domains={'member_ids': [[], ['current'], [f'member-{i}' for i in range(65)]]},
             neutrals={'budget': budget()},
         ),
         CoveredByEntry(
