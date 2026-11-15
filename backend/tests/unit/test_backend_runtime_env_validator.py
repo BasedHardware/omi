@@ -695,6 +695,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
                 'HOSTED_LID_API_URL',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
@@ -4017,3 +4019,17 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
         del missing['cloud_run']['services'][host]['env']['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED']
         with pytest.raises(AssertionError):
             _assert_record_close_listener_bindings(missing)
+
+
+@pytest.mark.parametrize('key', ['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'])
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
+    validator = load_validator()
+    payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+    payload = payload.replace(json.dumps({'name': key, 'value': 'true'}) + ',', '')
+    path = tmp_path / 'missing-close-switch.json'
+    path.write_text(payload)
+    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=path)
+    assert {(error.scope, error.message) for error in errors} == {
+        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
+        *(('cloud_run/' + name, 'missing env ' + key) for name in ('backend', 'backend-sync', 'backend-integration')),
+    }
