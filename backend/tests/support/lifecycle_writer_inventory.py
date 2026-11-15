@@ -1,6 +1,16 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Census response metadata only; no lifecycle document writes.
+    'utils/sync/batch_census.py': [
+        (
+            'snapshot',
+            'status',
+            "OUTCOME_DISABLED; literal aliases=[('OUTCOME_DISABLED', ('disabled',))]",
+            ('failed', 'status', 'stocks', 'units'),
+        ),
+        ('snapshot', 'status', 'outcome', ('failed', 'status', 'stocks', 'units')),
+    ],
     'database/batch_pipeline_allowance_hold.py': [
         (
             'park',
@@ -2006,13 +2016,13 @@ FIELD_SITES = {
             'mark_record_upload_failed.commit',
             'record_audio_closed',
             'False',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         (
             'mark_record_upload_failed.commit',
             'record_upload_failed',
             'True',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),

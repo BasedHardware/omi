@@ -155,6 +155,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
+    'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
     'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
@@ -4186,6 +4188,43 @@ _add(
                 'dev:dream-agent',
             ]
         },
+    )
+)
+
+
+# W3 stuck-state census (SCA-2119): the exporter samples every registered stock.
+# Every entry is a domain member, so one driver iteration per stock proves its
+# count and oldest-age query shape is served by the generated manifest.
+from config.batch_census import ENTRIES as _CENSUS_ENTRIES
+
+_add(
+    DriverEntry(
+        'database.batch_census_export.sample_entry',
+        domains={'entry': list(_CENSUS_ENTRIES)},
+        neutrals={
+            'now': (1_700_000_000.0, 'sample moment; resolves relative age cutoffs only'),
+            'timeout': (60.0, 'per-RPC budget; does not change the query shape'),
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._scope',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Collection scope builder consumed by the registered exporter driver; the recorded shape '
+        'is attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._filtered',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Filter builder consumed by the registered exporter driver; the recorded shape is '
+        'attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
     )
 )
 
