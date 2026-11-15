@@ -143,3 +143,55 @@ Limitless's app-side ACK ordering (ACK only after fsync). No live packet format 
   non-live records. A missing mark means retain and re-download. Do not assume a fixed mark cadence.
 - **Uptime-flagged timestamps:** bit 31 (`0x80000000`) of a record timestamp means the low 31 bits are
   seconds since boot (RTC unset), not epoch UTC. The app reads such records as "no usable time".
+
+## 6. Behaviour within v1 after the 3.0.24 field report (2026-11-15)
+
+Nothing here changes the wire format or a capability bit. It records how both sides now behave inside
+the v1 contract, and why. The report: one pendant on 3.0.24 drained its battery about 2.5 times faster
+than on 3.0.21, and its ring backlog never cleared.
+
+**Firmware.**
+
+- **A status poll never writes the card.** The storage worker refreshes the status characteristic
+  four times a second while a phone is connected. That refresh used the same call as INFO, which
+  commits the buffered batch first. With live persistence on there is always a buffered batch, so the
+  pendant rewrote a whole 16 KiB batch plus a metadata sector about four times a second for the whole
+  connection. The poll now reports the same position from RAM (`sd_ring_peek_info`). `CMD_RING_INFO`
+  and the start of a READ still commit first, so what they report is readable.
+- **Timed flush depends on who else holds the audio.** A partly filled batch that contains a record
+  the phone was not sent (offline, unsubscribed, failed send) is written within one second of that
+  record arriving, as before. A batch whose records were all sent live may wait up to four seconds for
+  more audio; at speech rate it fills and is written once in that time. Either edge of the BLE link
+  flushes at once, because "sent" is not "received" on a link that is dropping.
+- **Mark cadence** follows commits, so marks now arrive about every four seconds of speech, as section
+  3 always said, rather than several times a second. The app must not assume a cadence (section 5).
+- **The storage worker sleeps** until a command, a stop or a live mark wakes it. It used to poll every
+  millisecond while connected.
+
+**App.**
+
+- **Bounded reads.** With `CAP_APP_ACK_RECLAIM` and `CAP_RING_ID`, a sync pass reads the ring in
+  ranges of `ringReadWindowRecords` using the 13-byte READ, stores each range, sends
+  `CMD_RING_ADVANCE_ID` past it, and only then requests the next. A pass covers what was unread when
+  it began and does not chase records written during it. A dropped link costs at most the range in
+  flight. Firmware without those capabilities keeps the single read to the write head.
+- **A lost ADVANCE ack is settled by INFO.** The pendant commits an advance before acknowledging it.
+  If no ack arrives the app asks for INFO and treats the advance as done when `read_seq` has reached
+  it, instead of failing the pass and downloading the range again.
+- **Proofs are dropped when the pendant releases them.** An acked advance moves the app's record of
+  the pendant's read pointer and discards the ring and live ranges below it. A small in-memory list of
+  just-released live ranges remains, so a read already in flight can still drop those records. Each
+  proof check reads the WAL index once, not once per referenced file.
+- **The live tail is not a backlog.** With live persistence the ring always holds audio the phone
+  has received live and not yet released. Marks are suppressed until the read pointer reaches the
+  live run and stop when an unsent record joins the ring (section 5), so marks that keep reaching
+  `write_seq` mean nothing unsent is waiting. A range is proven between two marks, though, so nothing
+  below the first mark of a connection can be proven live. The app therefore reads the ring only up
+  to that first mark and leaves everything after it to the live proof; once `read_seq` has passed the
+  first mark and marks reach the write head, it does not start a ring read at all. When marks stop
+  while `write_seq` keeps growing past two batches, it reads to the write head as before.
+
+**Still true, and still costly.** After an offline backlog the pendant suppresses marks until the
+backlog is read and advanced, so audio streamed live during that catch-up has no mark and is read from
+the ring as well. At about 68 records per second read against 8 written, that adds roughly one eighth
+to the backlog. Relaxing mark suppression would remove it and is a contract change, not made here.

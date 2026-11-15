@@ -202,32 +202,58 @@ class RingCustodyCheckpoint {
 
 typedef CustodyWalValidator = Future<bool> Function(CustodyWalRef ref);
 
-Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
+/// Builds a validator bound to one read of the WAL index.
+///
+/// Proofs are checked in bursts: every ring chunk, every live mark, every
+/// reconnect. Reloading the index for each reference made one check cost
+/// (references x index size), which stalled ring sync on phones holding
+/// thousands of recordings.
+typedef CustodyWalValidatorSnapshot = Future<CustodyWalValidator> Function();
+
+Future<CustodyWalValidator> walFileManagerCustodySnapshot() async {
+  Map<String, Wal>? byName;
   try {
     final wals = await WalFileManager.loadWals();
-    Wal? indexed;
+    final index = <String, Wal>{};
     for (final wal in wals) {
       final name =
           (wal.filePath != null && wal.filePath!.isNotEmpty) ? wal.filePath!.split('/').last : wal.getFileName();
-      if (name == ref.fileName) {
-        indexed = wal;
-        break;
-      }
+      // The first entry for a name wins, as when the index was scanned in order.
+      index.putIfAbsent(name, () => wal);
     }
-    if (indexed == null) return false;
-    if (indexed.totalFrames != ref.frames) return false;
-    if (ref.liveRingId != null && indexed.liveRingId != ref.liveRingId) return false;
-    if (ref.liveOrdinalStart != null && indexed.liveOrdinalStart != ref.liveOrdinalStart) return false;
-    if (ref.liveOrdinalEnd != null && indexed.liveOrdinalEnd != ref.liveOrdinalEnd) return false;
-    final path = await Wal.getFilePath(ref.fileName);
-    if (path == null) return false;
-    final file = File(path);
-    if (!file.existsSync()) return false;
-    return (await file.length()) == ref.bytes;
+    byName = index;
   } catch (e) {
-    Logger.debug('PendantRingCustody: WAL validation failed for ${ref.fileName}: $e');
-    return false;
+    Logger.debug('PendantRingCustody: WAL index unavailable for validation: $e');
   }
+  final index = byName;
+  return (CustodyWalRef ref) async {
+    try {
+      final indexed = index?[ref.fileName];
+      if (indexed == null) return false;
+      if (indexed.totalFrames != ref.frames) return false;
+      if (ref.liveRingId != null && indexed.liveRingId != ref.liveRingId) return false;
+      if (ref.liveOrdinalStart != null && indexed.liveOrdinalStart != ref.liveOrdinalStart) return false;
+      if (ref.liveOrdinalEnd != null && indexed.liveOrdinalEnd != ref.liveOrdinalEnd) return false;
+      final path = await Wal.getFilePath(ref.fileName);
+      if (path == null) return false;
+      final file = File(path);
+      if (!file.existsSync()) return false;
+      return (await file.length()) == ref.bytes;
+    } catch (e) {
+      Logger.debug('PendantRingCustody: WAL validation failed for ${ref.fileName}: $e');
+      return false;
+    }
+  };
+}
+
+Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async => (await walFileManagerCustodySnapshot())(ref);
+
+/// Reuses proof checks across the records of one bounded ring read, so a run of
+/// records inside one live range costs one check rather than one per record.
+/// Scope it to a single read window: it is how long a result may be trusted.
+class CustodyProofMemo {
+  CustodyWalValidator? _validate;
+  final Map<LiveRangeProof, bool> _ranges = Map.identity();
 }
 
 class LivePacketOrdinals {
@@ -291,7 +317,18 @@ class _DeviceCustody {
 
   final List<({int ringSeq, int liveIndex, int ordinalBoundary})> marks = [];
 
+  /// Ring sequence of the first live mark accepted on this connection. A range
+  /// is proven between two marks, so nothing below the first one can be proven
+  /// live; a ring read has to cover it.
+  int? liveAnchorSeq;
+
   final List<({int start, int end, CustodyWalRef wal})> durableLiveChunks = [];
+
+  /// Live ranges the pendant has already released, newest last. A ring read
+  /// that was in flight when they were released still delivers those records;
+  /// this lets it drop them rather than store a second copy. In memory only.
+  final List<LiveRangeProof> releasedLiveRanges = [];
+  static const int maxReleasedLiveRanges = 64;
 
   bool evidenceBroken = false;
 
@@ -319,13 +356,19 @@ typedef LiveFrameObservation = int?;
 class PendantRingCustody {
   final Map<String, _DeviceCustody> _devices = {};
   final PendantCustodyStore _store;
-  final CustodyWalValidator _walValidator;
+  final CustodyWalValidatorSnapshot _validatorSnapshot;
 
   Future<void> _saveQueue = Future.value();
 
-  PendantRingCustody({PendantCustodyStore? store, CustodyWalValidator? walValidator})
-      : _store = store ?? PendantCustodyStore(),
-        _walValidator = walValidator ?? walFileManagerCustodyValidator;
+  /// [walValidator] checks one reference at a time (tests, custom stores).
+  /// The default reads the WAL index once per [_validatorSnapshot] call.
+  PendantRingCustody({
+    PendantCustodyStore? store,
+    CustodyWalValidator? walValidator,
+    CustodyWalValidatorSnapshot? walValidatorSnapshot,
+  })  : _store = store ?? PendantCustodyStore(),
+        _validatorSnapshot =
+            walValidatorSnapshot ?? (walValidator != null ? (() async => walValidator) : walFileManagerCustodySnapshot);
 
   static final PendantRingCustody shared = PendantRingCustody();
 
@@ -355,7 +398,9 @@ class PendantRingCustody {
     if (existing != null && existing.epoch == epoch && identical(existing.sessionToken, token)) {
       state = existing;
       state.marks.clear();
+      state.liveAnchorSeq = null;
       state.durableLiveChunks.clear();
+      state.releasedLiveRanges.clear();
       state.evidenceBroken = false;
       state.ordinals = LivePacketOrdinals();
     } else {
@@ -367,6 +412,7 @@ class PendantRingCustody {
     state.connected = true;
     state.advanceCallback = onAdvanceReady ?? replayAdvance;
     state.marks.clear();
+    state.liveAnchorSeq = null;
     state.durableLiveChunks.clear();
     state.evidenceBroken = false;
     state.incarnationInvalid = false;
@@ -407,6 +453,7 @@ class PendantRingCustody {
       if (!_isSession(state, deviceId, epoch, token)) return;
       if (status == RingProtocol.ackOk) {
         state.checkpoint.lastAdvancedSeq = frontier;
+        _noteDeviceReadFloor(state, frontier);
         await _persist(state.checkpoint);
       } else if (status == RingProtocol.ackRingIdMismatch) {
         noteMismatch(deviceId, epoch);
@@ -473,6 +520,7 @@ class PendantRingCustody {
       state.evidenceBroken = true;
       return;
     }
+    state.liveAnchorSeq ??= mark.ringSeq;
     state.marks.add((ringSeq: mark.ringSeq, liveIndex: mark.liveIndex, ordinalBoundary: boundary));
 
     _foldProvenRanges(state);
@@ -544,29 +592,59 @@ class PendantRingCustody {
     await _persist(state.checkpoint);
   }
 
-  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq) async {
+  /// Whether the phone already holds ring record [seq] durably, so a ring read
+  /// may drop it instead of storing a second copy.
+  ///
+  /// [memo] lets one bounded read reuse the check for records in the same range.
+  Future<bool> isDurableLiveRecord(String deviceId, int? ringId, int seq, {CustodyProofMemo? memo}) async {
     if (ringId == null) return false;
     final state = _devices[deviceId];
     final token = state?.sessionToken;
     final cp = state?.checkpoint;
     if (cp == null || cp.ringId != ringId) return false;
-    final ranges = List.of(cp.liveRanges);
-    for (final r in ranges) {
+    LiveRangeProof? range;
+    for (final r in cp.liveRanges) {
       if (seq >= r.startSeq && seq < r.endSeq) {
-        for (final w in r.wals) {
-          if (!await _walValidator(w)) return false;
-        }
-        final s = _devices[deviceId];
-        if (s == null ||
-            !identical(s.checkpoint, cp) ||
-            !identical(s.sessionToken, token) ||
-            s.checkpoint.ringId != ringId) {
-          return false;
-        }
-        return true;
+        range = r;
+        break;
       }
     }
-    return false;
+    if (range == null) {
+      for (final r in state!.releasedLiveRanges) {
+        if (seq >= r.startSeq && seq < r.endSeq) {
+          range = r;
+          break;
+        }
+      }
+    }
+    if (range == null) return false;
+
+    final remembered = memo?._ranges[range];
+    final bool valid;
+    if (remembered != null) {
+      valid = remembered;
+    } else {
+      final validate = memo?._validate ?? await _validatorSnapshot();
+      memo?._validate = validate;
+      var allValid = true;
+      for (final w in range.wals) {
+        if (!await validate(w)) {
+          allValid = false;
+          break;
+        }
+      }
+      valid = allValid;
+      memo?._ranges[range] = valid;
+    }
+    if (!valid) return false;
+    final s = _devices[deviceId];
+    if (s == null ||
+        !identical(s.checkpoint, cp) ||
+        !identical(s.sessionToken, token) ||
+        s.checkpoint.ringId != ringId) {
+      return false;
+    }
+    return true;
   }
 
   int? advanceTarget(String deviceId, int epoch) {
@@ -595,8 +673,11 @@ class PendantRingCustody {
     for (final r in state.checkpoint.liveRanges) {
       if (r.endSeq > from && r.startSeq < target) refs.addAll(r.wals);
     }
+    final validate = refs.isEmpty ? null : await _validatorSnapshot();
+    final checked = Set<CustodyWalRef>.identity();
     for (final w in refs) {
-      final ok = await _walValidator(w);
+      if (!checked.add(w)) continue;
+      final ok = await validate!(w);
       final s = _state(deviceId, epoch);
       if (s == null || !identical(s.sessionToken, token) || s.checkpoint.ringId != cpRingId) return null;
       if (!ok) {
@@ -639,7 +720,26 @@ class PendantRingCustody {
     if (state == null) return;
     if (seq > state.checkpoint.lastAdvancedSeq) state.checkpoint.lastAdvancedSeq = seq;
     if (markSeq != null) state.checkpoint.lastAdvancedMarkSeq = markSeq;
+    _noteDeviceReadFloor(state, seq);
     await _persist(state.checkpoint);
+  }
+
+  /// The pendant acknowledged an advance to [seq], so its read pointer is at
+  /// least there and the proofs for everything below are spent. Dropping them
+  /// here keeps each later check proportional to what is still unreleased;
+  /// they used to pile up until the next INFO and every check walked them all.
+  void _noteDeviceReadFloor(_DeviceCustody state, int seq) {
+    final cp = state.checkpoint;
+    if (seq > cp.reportedReadSeq) cp.reportedReadSeq = seq;
+    if (seq > cp.durableSeq) cp.durableSeq = seq;
+    final released = cp.liveRanges.where((r) => r.endSeq <= cp.reportedReadSeq).toList();
+    if (released.isNotEmpty) {
+      cp.liveRanges.removeWhere((r) => r.endSeq <= cp.reportedReadSeq);
+      state.releasedLiveRanges.addAll(released);
+      final excess = state.releasedLiveRanges.length - _DeviceCustody.maxReleasedLiveRanges;
+      if (excess > 0) state.releasedLiveRanges.removeRange(0, excess);
+    }
+    cp.ringRanges.removeWhere((r) => r.endSeq <= cp.reportedReadSeq);
   }
 
   bool hasConnection(String deviceId, int epoch) => _state(deviceId, epoch)?.connected ?? false;
@@ -662,6 +762,46 @@ class PendantRingCustody {
     return observeLiveFrame(deviceId, epoch, packetCounter, fragmentIndex);
   }
 
+  /// Ring records the pendant may write between two live marks without that
+  /// meaning the live run was broken: two SD batches of 36 records.
+  static const int liveTailSlackRecords = 72;
+
+  _DeviceCustody? _liveProving(String deviceId, int epoch) {
+    final state = _state(deviceId, epoch);
+    if (state == null || !state.liveEnabled || state.evidenceBroken || state.incarnationInvalid) return null;
+    if (state.marks.isEmpty || state.liveAnchorSeq == null) return null;
+    return state;
+  }
+
+  /// The ring sequence from which this connection's live marks can prove
+  /// records, or null when it has no marks it can trust.
+  ///
+  /// With live persist on, the ring always holds audio the phone has received
+  /// live and not yet released. From this sequence on, the live proof releases
+  /// it as the phone stores it, and a ring read would only fetch a second copy.
+  /// Below it nothing can be proven live (a range needs a mark on each side),
+  /// so that stretch is what a ring read is for.
+  int? liveProofStartSeq(String deviceId, int epoch) => _liveProving(deviceId, epoch)?.liveAnchorSeq;
+
+  /// Whether live marks have kept up with the ring as far as [writeSeq].
+  ///
+  /// The pendant stops emitting marks as soon as a record the phone was not
+  /// sent joins the ring, so marks at the write head mean nothing unsent is
+  /// waiting; when they stop while the ring keeps growing, something is.
+  bool liveMarksReach(String deviceId, int epoch, int writeSeq) {
+    final state = _liveProving(deviceId, epoch);
+    return state != null && writeSeq - state.marks.last.ringSeq <= liveTailSlackRecords;
+  }
+
+  /// Whether everything still unread on the ring is audio this connection's
+  /// live proof will release, so there is nothing a ring read should fetch.
+  bool liveRunCoversUnread(String deviceId, int epoch, RingInfo info) {
+    final state = _liveProving(deviceId, epoch);
+    if (state == null) return false;
+    if (info.ringId == null || info.ringId != state.checkpoint.ringId) return false;
+    return info.readSeq >= state.liveAnchorSeq! && liveMarksReach(deviceId, epoch, info.writeSeq);
+  }
+
   int? durableFrontierFor(String deviceId, int epoch) {
     final state = _state(deviceId, epoch);
     return state?.durableFrontier;
@@ -674,7 +814,9 @@ class PendantRingCustody {
     state.evidenceBroken = true;
     state.incarnationInvalid = true;
     state.durableLiveChunks.clear();
+    state.releasedLiveRanges.clear();
     state.marks.clear();
+    state.liveAnchorSeq = null;
     final cp = state.checkpoint;
     cp.liveRanges.clear();
     cp.ringRanges.clear();
@@ -697,7 +839,9 @@ class PendantRingCustody {
     if (info.ringId != null && info.ringId != cp.ringId) {
       state.checkpoint = RingCustodyCheckpoint(deviceId: deviceId, ringId: info.ringId);
       state.marks.clear();
+      state.liveAnchorSeq = null;
       state.durableLiveChunks.clear();
+      state.releasedLiveRanges.clear();
       state.evidenceBroken = false;
       state.incarnationInvalid = false;
       state.ordinals = LivePacketOrdinals();
@@ -728,7 +872,8 @@ class PendantRingCustody {
           state.evidenceBroken = true;
           break;
         }
-        final already = state.checkpoint.liveRanges.any((r) => r.startSeq == prev.ringSeq && r.endSeq == cur.ringSeq);
+        final already = cur.ringSeq <= state.checkpoint.reportedReadSeq ||
+            state.checkpoint.liveRanges.any((r) => r.startSeq == prev.ringSeq && r.endSeq == cur.ringSeq);
         if (already) {
           lastFolded = i - 1;
           continue;
@@ -823,9 +968,15 @@ class PendantRingCustody {
     }
     if (cp.durableSeq > provable) cp.durableSeq = provable;
     if (cp.lastAdvancedSeq > provable) cp.lastAdvancedSeq = provable;
+    if (cp.liveRanges.isEmpty && cp.ringRanges.isEmpty) return true;
+    final validate = await _validatorSnapshot();
+    // One recording backs many consecutive ranges; check each file once.
+    final checked = <String>{};
     for (final r in [...cp.liveRanges, ...cp.ringRanges]) {
       for (final w in (r is LiveRangeProof ? r.wals : (r as RingRangeProof).wals)) {
-        if (!await _walValidator(w)) return false;
+        final key = '${w.fileName}|${w.bytes}|${w.frames}|${w.liveRingId}|${w.liveOrdinalStart}|${w.liveOrdinalEnd}';
+        if (!checked.add(key)) continue;
+        if (!await validate(w)) return false;
       }
     }
     return true;
