@@ -277,3 +277,33 @@ def test_image_only_process_without_fresh_merge_env_is_inert(monkeypatch, proces
     monkeypatch.setenv('K_SERVICE', process)
     monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
     assert record_latency.record_fresh_merge_enabled() is False
+
+
+@pytest.mark.parametrize('fresh_merge', [False, True])
+@pytest.mark.parametrize('fresh_class', [False, True])
+def test_recovering_record_sibling_does_not_block_an_independent_record(monkeypatch, fresh_merge, fresh_class):
+    from dataclasses import asdict
+
+    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', str(fresh_merge).lower())
+    store = MemoryStore()
+    queue = Scheduler(store)
+    binding = ProjectionBinding('owner', 'x', 'x-content', ('x1', 'x2'), native_record=True)
+    for i, sid in enumerate(('x1', 'x2', 'y')):
+        queue.enqueue(item(sid, owner='owner', capture=NOW - 100 + i), NOW)
+        store.rows['jobs', sid].update(fresh_capture=fresh_class)
+    for sid in ('x1', 'x2'):
+        store.rows['jobs', sid]['projection_binding'] = asdict(binding)
+    store.rows['jobs', 'x1'].update(
+        state='quarantined',
+        merge_pending=False,
+        recovery_state='running',
+    )
+    for sid in ('x2', 'y'):
+        store.rows['jobs', sid].update(
+            state='result_ready',
+            ready_at=NOW - 600,
+            result=WorkResult(sid, 'gs://synthetic/result').to_dict(),
+        )
+    merged = OrderedMerge(store).commit_next('owner', NOW)
+    assert merged and merged['segment_id'] == 'y'
+    assert store.rows['jobs', 'x2']['state'] == 'result_ready'

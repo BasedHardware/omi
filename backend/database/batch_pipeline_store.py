@@ -86,6 +86,7 @@ class Store(Protocol):
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool: ...
     def longest_ready_pending(self, owner_key: str) -> dict | None: ...
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
+    def ready_pending(self, owner_key: str, limit: int) -> list[dict]: ...
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]: ...
@@ -460,6 +461,9 @@ class FirestoreStore:
         # A hint read outside any transaction; the fresh-first transaction re-verifies it.
         return fresh_pending(self.client, self.namespace, owner_key, limit)
 
+    def ready_pending(self, owner_key: str, limit: int) -> list[dict]:
+        return ready_pending(self.client, self.namespace, owner_key, limit)
+
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]:
@@ -615,6 +619,23 @@ def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transact
         .stream(transaction=transaction)
     )
     return docs[0].to_dict() if docs else None
+
+
+def ready_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
+    """Bounded existing ready-head query, only for a sibling-blocked recording group."""
+    return [
+        doc.to_dict()
+        for doc in (
+            client.collection(f'{namespace}_jobs')
+            .where('owner_key', '==', owner_key)
+            .where('merge_pending', '==', True)
+            .where('state', '==', 'result_ready')
+            .order_by('capture_at')
+            .order_by('segment_id')
+            .limit(max(1, min(limit, 160)))
+            .stream()
+        )
+    ]
 
 
 def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict | None:

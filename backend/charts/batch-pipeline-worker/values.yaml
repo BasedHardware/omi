@@ -60,10 +60,6 @@ borrowedNodePools:
   priority: -1
 worker:
   # Post-seal rollback controls, shared with the CPU serving hosts.
-  RECORD_FRESH_MERGE_ENABLED: false
-  RECORD_NOTES_EAGER_ENABLED: true
-  RECORD_FOLLOWUP_WAKE_ENABLED: true
-  RECORD_SEAL_WAKE_PRESERVED_ENABLED: true
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.

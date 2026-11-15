@@ -150,10 +150,10 @@ otherwise its existing lease can become a certified retry only when both
 
 `RECORD_FRESH_MERGE_ENABLED=false` is explicit in dev/prod runtime overlays
 for Cloud Run backend, backend-integration, backend-sync, backend-sync-backfill,
-and GKE backend-listen, and in worker defaults plus both stage values files.
+and GKE backend-listen. The dedicated GPU entrypoint does not import these four controls, so its unused chart bindings are removed.
 The code default is off, including when GKE image-only rolls leave the variable absent. This is staged enablement: the GPU worker image
 will not roll tonight, so no newly broadened fresh class may reach its old
-merge writer. The union flag inventory is 290 declarations with the seeded
+merge writer. The union flag inventory is 291 declarations with the seeded
 budget unchanged at 161 and four separately owned helper-backed exceptions;
 no budget increase or combined rollback control is needed.
 
@@ -202,7 +202,7 @@ merge writer remains; chart rendering here is not that runtime proof.
 
 Only after that readback, flip `RECORD_FRESH_MERGE_ENABLED` to `'true'` in
 both runtime overlays (all five CPU hosts per stage), both backend-listen env
-lists, and `worker.RECORD_FRESH_MERGE_ENABLED: true` in the worker defaults and
+lists. The GPU runtime has no admission switch; its guard-qualified image is still required before CPU stamping can be enabled.
 both stage values files. Regenerate `runtime_env.yaml`, deploy the admitted
 CPU/worker configuration, and read back the actual revision/pod env values.
 Rollback is the same values to false; already stamped jobs retain their class,
@@ -243,3 +243,35 @@ Cloud Run continues to receive the rendered false binding.
 Cross-service deploy readers use the recognized `default_on` helper name
 for cuts 1–3. This preserves runtime defaults and lets the deploy contract
 verify the actual reader on every bound host; no known-gap exception is used.
+
+## Reviewed delivery fences (2026-11-15)
+
+Native completion-owned notes persist their source capture and admitted upload
+revision on the existing outbox row. At delivery, after privacy admission and
+before leasing or any paid callback, the source must still be sealed, have no
+upload sessions, and match the projected revision. Reopening and resealing
+without projecting the new revision cannot buy notes. The existing task/outbox
+re-arm uses its existing 120-second cadence, bounded at the obligation's
+first_pending_at + MAX_HOLD_SECONDS (3600). If custody never clears, the outbox
+parks dormant and the lifecycle ledger records failed:timeout in its independent
+fenced transaction; a new real projection can reopen the obligation. This adds
+one source document read per source capture per due delivery (at most 30
+scheduled checks per hour-long first-summary episode, excluding transport
+retries), plus the normal ledger write on timeout. No additional poller exists.
+Main's older settle callback also lacks a producer-barrier delivery check; this
+change closes that pre-existing gap for the new completion-owned obligations.
+
+A dormant receipt's retired hold cannot supply a None settle deadline. Active
+canonical holds move refresh wakes to their absolute deadline and carry sync
+or merge hold provenance into the consumer, so an arrival after completion
+can defer again before paid work without restarting quiet.
+
+The sibling guard remains active with fresh stamping off, protecting already
+admitted classes. It reuses the existing partial-projection terminal-held
+classification; recoverable siblings still wait, but a bounded ready-head
+probe lets independent recordings pass their group. The probe uses the
+existing ready-head index, at most 160 result rows plus predecessor reads per
+blocked-group attempt, and runs only on that exceptional path. No healthy-path
+query or recurrent polling is added. At $0.51/million reads, 30 producer checks
+cost $0.0000153 per source/output; the blocked-group probe's actual count
+depends on the returned page and predecessor set.

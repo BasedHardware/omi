@@ -1,0 +1,147 @@
+"""Delivery must not buy notes while a recording's new upload is unresolved."""
+
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
+
+from database import pipeline_ledger, record_audio
+from database.outbox_firestore import FirestoreEnrichmentOutbox
+from tests.unit.test_record_complete_notes import recording, NOW, POLICY
+from utils.conversations import demand_processing
+from utils.enrichment import age_gate, consumer
+from utils.sync import processing_hold, reprocess
+from utils.workers.consumer import run_push
+
+
+@pytest.fixture
+def delivery(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
+    monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
+    monkeypatch.setattr(age_gate, 'park_if_expired', lambda *a, **k: False)
+    monkeypatch.setattr(demand_processing, 'admit', lambda *a, **k: True)
+    adapter = FirestoreEnrichmentOutbox(f.client, privacy_blocked=lambda *_: False, create_wake=Mock())
+    key = reprocess.key(f.binding.owner_id, 'capture')
+    ref = f.client.collection(reprocess.COLLECTION).document(key)
+
+    def mutate(row_id, operation):
+        tx = f.client.transaction()
+        row_ref = f.client.collection(reprocess.COLLECTION).document(row_id)
+        old = row_ref.get(transaction=tx).to_dict()
+        new, result = operation(old)
+        if new != old:
+            if new is None:
+                tx.delete(row_ref)
+            else:
+                tx.set(row_ref, new)
+        return result
+
+    monkeypatch.setattr(adapter, '_mutate', mutate)
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert ref.get().to_dict()['record_notes_producers'] == {'capture': 1}
+    clock = [NOW + 120]
+    monkeypatch.setattr(consumer.time, 'time', lambda: clock[0])
+    paid = Mock(return_value=SimpleNamespace(structured={'overview': 'Complete synthetic transcript'}))
+    worker = consumer.EnrichmentConsumer(adapter, process=paid)
+
+    def deliver(at):
+        clock[0] = at
+        token = ref.get().to_dict()['task_token']
+        return run_push(worker, adapter, key, token, now=at)
+
+    return SimpleNamespace(**locals())
+
+
+def reopen(d):
+    assert record_audio.set_record_upload_pending(
+        d.f.binding.owner_id, 'capture', 'late-producer', True, firestore_client=d.f.client
+    )
+    assert d.f.conversation.get().to_dict()['record_upload_revision'] == 2
+
+
+def test_reopened_record_defers_until_new_revision_projects_then_runs_once(delivery):
+    d = delivery
+    reopen(d)
+    assert d.deliver(NOW + 120).outcome == 'deferred'
+    assert d.ref.get().to_dict()['due_at'] == NOW + 240
+    d.paid.assert_not_called()
+    # A seal alone is insufficient: revision 2 audio has not projected yet.
+    d.f.client.rows[d.f.conversation.path].update(record_upload_sessions={}, record_audio_closed=True)
+    assert d.deliver(NOW + 240).outcome == 'deferred'
+    d.paid.assert_not_called()
+    # The new projection coalesces the same durable obligation, attesting revision 2.
+    d.adapter.enqueue(
+        d.key,
+        d.f.binding.owner_id,
+        {
+            'conversation_id': 'capture',
+            'language': 'en',
+            'record_notes_producer': {'conversation_id': 'capture', 'revision': 2},
+        },
+        NOW + 360,
+        now=NOW + 250,
+        coalesce='min',
+        snapshot_summary=True,
+    )
+    assert d.deliver(NOW + 360).outcome == 'done'
+    d.paid.assert_called_once()
+    assert d.ref.get().to_dict()['dormant']
+    assert d.deliver(NOW + 361).outcome == 'stale'
+    d.paid.assert_called_once()
+
+
+def test_never_cleared_producer_is_parked_at_existing_hold_cap_and_ledger_records_timeout(delivery):
+    d = delivery
+    reopen(d)
+    assert d.deliver(NOW + 120).outcome == 'deferred'
+    maximum = NOW + processing_hold.MAX_HOLD_SECONDS
+    assert d.deliver(maximum - 1).outcome == 'deferred'
+    assert d.ref.get().to_dict()['due_at'] == maximum
+    assert d.deliver(maximum).outcome == 'stale'
+    saved = d.ref.get().to_dict()
+    assert saved['dormant'] and saved['due_at'] is None
+    assert saved['record_notes_producer_timeout_at'] == maximum
+    ledger = pipeline_ledger.ledger_ref(d.f.client, d.f.binding.owner_id, 'capture').get().to_dict()
+    assert ledger['stage'] == 'failed:timeout' and ledger['terminal_reason'] == 'failed:timeout'
+    d.paid.assert_not_called()
+    assert d.deliver(maximum + 120).outcome == 'stale'
+
+
+def test_clear_barrier_does_not_add_a_delay_or_buy_duplicate_notes(delivery):
+    d = delivery
+    assert d.deliver(NOW + 120).outcome == 'done'
+    assert d.deliver(NOW + 121).outcome == 'stale'
+    d.paid.assert_called_once()
+
+
+def test_refresh_carries_hold_provenance_and_rechecks_later_canonical_quiet_deadline(delivery, monkeypatch):
+    from utils.enrichment import callback
+
+    d = delivery
+    d.f.client.rows[d.ref.path]['summary_seen'] = True
+    d.adapter.enqueue(
+        d.key,
+        d.f.binding.owner_id,
+        {'conversation_id': 'capture', 'language': 'en', 'record_notes_processing_hold': {'merge_first': False}},
+        NOW + 650,
+        now=NOW + 50,
+        coalesce='max',
+        processing_hold_deadline=True,
+    )
+    # Another arrival after completion extends the canonical clock beyond the saved wake.
+    canonical = d.f.conversation.get().to_dict()
+    canonical['sync_processing_hold'] = {
+        'held': True,
+        'pending_since': NOW,
+        'last_content_at': NOW + 100,
+    }
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '600')
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a, **k: canonical)
+    paid = Mock()
+    monkeypatch.setattr(callback, 'process_conversation', paid)
+    d.worker._process = callback.enrich_conversation
+    result = d.deliver(NOW + 650)
+    assert result.outcome == 'deferred'
+    assert d.ref.get().to_dict()['due_at'] == NOW + 700
+    paid.assert_not_called()

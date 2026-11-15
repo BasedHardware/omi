@@ -432,6 +432,7 @@ def test_post_seal_kill_switches_have_readers_on_every_bound_host(results: Resul
                 continue
             assert deployment.entrypoint is not None, (model.env, deployment.id, key)
             readers = results.baseline.readers.by_entrypoint[deployment.entrypoint]
+            assert key in readers, (model.env, deployment.id, key)
             assert 'backend/config/record_latency.py' in readers[key].modules, (model.env, deployment.id, key)
 
 

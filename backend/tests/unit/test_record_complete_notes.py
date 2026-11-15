@@ -398,3 +398,83 @@ def test_hold_scheduling_does_not_inspect_encrypted_projection_content(recording
     assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
     row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
     assert row.get().to_dict()['due_at'] == NOW
+
+
+@pytest.mark.parametrize('hold', ['sync_hold', 'merge_hold'])
+def test_dormant_summary_receipt_does_not_preserve_retired_hold_deadline(recording, hold):
+    f = recording
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    row.create(
+        {
+            'dormant': True,
+            'summary_seen': True,
+            'due_at': None,
+            'version': 1,
+            'first_pending_at': NOW - 1000,
+            hold: True,
+        }
+    )
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    saved = row.get().to_dict()
+    assert not saved.get('dormant') and saved['due_at'] == NOW + 600
+    assert saved['record_notes_producers'] == {'capture': 1}
+
+
+def test_held_refresh_completion_moves_an_earlier_fallback_to_canonical_deadline(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '600')
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    f.client.rows[row.path].update(summary_seen=True, due_at=NOW + 600, sync_hold=False)
+    f.client.rows[f.conversation.path]['sync_processing_hold'] = {
+        'held': True,
+        'pending_since': NOW,
+        'last_content_at': NOW + 50,
+    }
+    f.store.mark_enrichment('last', f.binding, NOW + 50, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW + 50, f.accounting, policy=POLICY)
+    assert row.get().to_dict()['due_at'] == NOW + 650
+    assert row.get().to_dict()['sync_hold'] is True
+
+
+@pytest.mark.parametrize('recording', [3], indirect=True)
+@pytest.mark.parametrize('recovery', ['failed_held', 'disabled'])
+def test_terminal_record_unit_allows_suffix_to_merge_and_complete_partial(recording, recovery):
+    from database.batch_pipeline_projection import held_without_recovery
+    from tests.unit.test_batch_pipeline_scheduler import MemoryStore
+    from utils.batch_pipeline.scheduler import Scheduler
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.contracts import WorkResult
+
+    f = recording
+    memory = MemoryStore()
+    queue = Scheduler(memory)
+    for i, sid in enumerate(f.binding.segment_ids):
+        work = WorkItem(sid, f.binding.owner_id, NOW - 100 + i, 'gs://synthetic/audio', 4, Priority.FRESH)
+        queue.enqueue(work, NOW)
+        memory.rows['jobs', sid].update(
+            projection_binding=asdict(f.binding),
+            fresh_capture=True,
+            state='result_ready',
+            result=WorkResult(sid, 'gs://synthetic/result').to_dict(),
+            ready_at=NOW,
+        )
+    terminal = {
+        'state': 'quarantined',
+        'merge_pending': False,
+        'result': None,
+        'recovery_state': 'failed_held' if recovery == 'failed_held' else 'held',
+        'policy_parts': {'recovery': {'recovery_enabled': False}},
+    }
+    assert held_without_recovery(terminal)
+    memory.rows['jobs', 'first'].update(terminal)
+    f.client.rows[f.store.ref('jobs', 'first').path].update(terminal)
+    del f.client.rows[f.store.ref('results', 'first').path]
+    merge = OrderedMerge(memory)
+    for sid in f.binding.segment_ids[1:]:
+        assert merge.commit_next(f.binding.owner_id, NOW)['segment_id'] == sid
+        f.client.rows[f.store.ref('jobs', sid).path]['state'] = 'committed'
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    result, _ = f.store.complete_partial(f.binding, NOW, f.accounting)
+    assert result['outcome'] == 'partial' and result['held_segments'] == 1
+    assert result['total_segments'] == 3

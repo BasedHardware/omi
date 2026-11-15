@@ -29,7 +29,6 @@ tolerations:
     effect: NoSchedule
 worker:
   # Staged OFF until every merge writer runs the sibling guard.
-  RECORD_FRESH_MERGE_ENABLED: false
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   servingMetricsMinRefreshSeconds: 30

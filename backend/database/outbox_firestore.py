@@ -189,6 +189,7 @@ class FirestoreEnrichmentOutbox:
         new_dispatch: Callable[[], dict[str, str] | None] | None = None,
         snapshot_summary: bool = False,
         eager_if_unheld: bool = False,
+        processing_hold_deadline: bool = False,
         pending_writes: list | None = None,
     ) -> EnqueueResult:
         """``new_dispatch`` (Firestore enrichment only) supplies a new row's queue binding, e.g. backfill."""
@@ -204,8 +205,14 @@ class FirestoreEnrichmentOutbox:
         def update(old):
             # Reuse the outbox CAS read: an earlier producer's processing hold
             # cannot be shortened by a complete recording's eager wake.
-            held = eager_if_unheld and old and (old.get('sync_hold') or old.get('merge_hold'))
-            return outbox.mark_update(
+            held = (
+                eager_if_unheld and old and not old.get('dormant') and (old.get('sync_hold') or old.get('merge_hold'))
+            )
+            hold_coalesce = coalesce
+            if processing_hold_deadline and old and not old.get('dormant'):
+                # A canonical absolute deadline may move either earlier or later.
+                hold_coalesce = 'max' if (old.get('due_at') or 0) < available_at else 'min'
+            new, (reported, coalesced) = outbox.mark_update(
                 owner_id,
                 conversation_id,
                 language,
@@ -214,7 +221,7 @@ class FirestoreEnrichmentOutbox:
                 # Keep the producer's absolute hold deadline; reasserting its
                 # hold flags below would restart the tunable quiet window.
                 settle_at=old['due_at'] if held else available_at,
-                coalesce='max' if held else coalesce,
+                coalesce='max' if held else hold_coalesce,
                 effects_only=effects_only,
                 batch=tx is not None,
                 policy_id=policy_id,
@@ -222,6 +229,24 @@ class FirestoreEnrichmentOutbox:
                 snapshot_summary=snapshot_summary,
                 stamps=stamps,
             )(old)
+            producer = payload.get('record_notes_producer')
+            if producer:
+                # Sidecar metadata stays on the durable row, outside the <=4 KiB claim payload.
+                producers = {} if old and old.get('dormant') else dict(new.get('record_notes_producers') or {})
+                capture_id, revision = producer['conversation_id'], producer.get('revision')
+                prior = producers.get(capture_id)
+                producers[capture_id] = (
+                    max(prior, revision)
+                    if prior is not None and revision is not None
+                    else (prior if revision is None else revision)
+                )
+                new['record_notes_producers'] = producers
+            provenance = payload.get('record_notes_processing_hold')
+            if isinstance(provenance, dict):
+                # Carry provenance without treating a notes wake as new content.
+                new['sync_hold'] = True
+                new['merge_hold' if provenance.get('merge_first') else 'sync_hold_requested'] = True
+            return new, ({**new, '_wake': reported.get('_wake', False)}, coalesced)
 
         if tx is None:
             row, coalesced = self._mutate(dedupe_key, update)
@@ -285,8 +310,12 @@ class FirestoreEnrichmentOutbox:
         owner = uuid.uuid4().hex
         cache: dict[str, Any] = {}
         stamps: list[tuple[str, str]] = []
+        expired_sources = []
+        claim_owner = []
 
         def claim(old):
+            expired_sources.clear()
+            claim_owner.clear()
             stamps.clear()
             if old is None or old.get('dormant') or old.get('task_token') != wake_token:
                 return old, (Outcome.STALE, None)
@@ -299,6 +328,33 @@ class FirestoreEnrichmentOutbox:
             if row['due_at'] > now and (not outbox.effects_may_run_early(row) or not enabled(row['uid'])):
                 row.update(task_token=uuid.uuid4().hex, task_due_at=row['due_at'])
                 return row, (Outcome.DEFERRED, row)
+            if row.get('record_notes_producers'):
+                from database import record_notes_hold
+
+                blocked = record_notes_hold.inspect(self._client(), row['uid'], row['record_notes_producers'])
+                if blocked:
+                    deadline = record_notes_hold.deadline(row)
+                    if now >= deadline:
+                        expired_sources.extend(blocked)
+                        claim_owner.append(row['uid'])
+                        row.update(
+                            dormant=True,
+                            due_at=None,
+                            lease_until=0,
+                            owner=None,
+                            record_notes_producer_timeout_at=now,
+                            record_notes_producers={},
+                        )
+                        return row, (Outcome.STALE, None)
+                    due = min(now + record_notes_hold.RETRY_SECONDS, deadline)
+                    row.update(
+                        due_at=due,
+                        task_due_at=due,
+                        task_token=uuid.uuid4().hex,
+                        deferred_reason='record_producer_pending',
+                        wake_check_after=due,
+                    )
+                    return row, (Outcome.DEFERRED, row)
             row.update(
                 lease_until=now + lease_seconds, owner=owner, claim_attempts=int(row.get('claim_attempts') or 0) + 1
             )
@@ -306,6 +362,10 @@ class FirestoreEnrichmentOutbox:
 
         outcome, row = self._mutate(row_id, claim)
         outbox.record_summary_stamps(stamps)
+        if expired_sources:
+            from database import record_notes_hold
+
+            record_notes_hold.record_timeout(self._client(), claim_owner[0], expired_sources, now=now)
         if row is None:
             assert outcome is not None
             return outcome
@@ -376,6 +436,7 @@ class FirestoreEnrichmentOutbox:
                         dispatch=None,
                         summary_repair=False,
                         summary_expected_revision=None,
+                        record_notes_producers={},
                     )
                     settled.pop('summary_seen_by', None)
                     settled.pop(SUPERSEDE_STREAK_FIELD, None)  # a dormant receipt ends the episode

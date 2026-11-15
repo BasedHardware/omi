@@ -14,6 +14,7 @@ from google.cloud import firestore
 
 from config.batch_pipeline import projection_followup_page_enabled, projection_source_deleted_enabled
 from config.record_latency import recent_native_record_notes, record_notes_eager_enabled
+from utils.batch_pipeline.held_terminal import OPERATOR_INTENTS, held_without_recovery
 from config.record_audio import require_record_audio_barrier
 from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_delivered_share import delivery_stamp
@@ -419,7 +420,14 @@ class ProjectionStore:
                     result = outbox.enqueue(
                         reprocess.key(binding.owner_id, output_id),
                         binding.owner_id,
-                        {'conversation_id': output_id, 'language': language},
+                        {
+                            'conversation_id': output_id,
+                            'language': language,
+                            'record_notes_producer': {
+                                'conversation_id': binding.target_conversation_id or canonical,
+                                'revision': session.job.get('record_input_upload_revision'),
+                            },
+                        },
                         now + min(settle_seconds(), MAX_HOLD_SECONDS),
                         tx=_ClientTransaction(self.client, transaction),
                         now=now,
@@ -873,13 +881,26 @@ class ProjectionStore:
                     wake = outbox.enqueue(
                         reprocess.key(binding.owner_id, canonical),
                         binding.owner_id,
-                        {'conversation_id': canonical, 'language': binding.language or row.get('language') or 'en'},
+                        {
+                            'conversation_id': canonical,
+                            'language': binding.language or row.get('language') or 'en',
+                            'record_notes_producer': {
+                                'conversation_id': binding.target_conversation_id or canonical,
+                                'revision': session.job.get('record_input_upload_revision'),
+                            },
+                            'record_notes_processing_hold': (
+                                {'merge_first': bool(hold.get('merge_first'))}
+                                if hold_owns_delay and processing_hold.enabled_for(row)
+                                else None
+                            ),
+                        },
                         due_at,
                         tx=_ClientTransaction(self.client, transaction),
                         now=now,
                         coalesce='min' if eager or hold_owns_delay else 'max',
                         snapshot_summary=True,
                         eager_if_unheld=eager,
+                        processing_hold_deadline=hold_owns_delay,
                         pending_writes=notes_writes,
                     )
                     if wake.wake_token:
@@ -1169,39 +1190,6 @@ def extend_chain(steps, times, seconds: float, now: float) -> tuple[list[float],
     if seconds > steps[-1]:
         return [*steps, seconds], [*times, now]
     return list(steps), list(times)
-
-
-# A reviewed operator intent that is not settled can still change its unit.
-OPERATOR_INTENTS = ('speech_redrive', 'terminal_disposition', 'silence_disposition')
-
-
-def held_without_recovery(job: dict) -> bool:
-    """A quarantined unit that nothing automatic will change.
-
-    Its recovery settled without words or hit the hard independent duration
-    limit before spending (``failed_held``), or its
-    recorded recovery policy is off and no paid call was ever authorized. Either
-    way its encrypted audio stays server-side for a reviewed operator redrive.
-    """
-    from config.policy import RecoveryPolicy
-
-    retained_dead = job.get('state') == 'dead' and job.get('dead_letter_reason') in {'held_expired', 'input_expiring'}
-    if (job.get('state') != 'quarantined' and not retained_dead) or job.get('result'):
-        return False
-    if any(
-        isinstance(job.get(key), dict) and job[key].get('state') not in {'completed', 'failed_held'}
-        for key in OPERATOR_INTENTS
-    ):
-        return False
-    if retained_dead or job.get('recovery_state') == 'failed_held':
-        return True
-    raw = (job.get('policy_parts') or {}).get('recovery')
-    return (
-        job.get('recovery_state') == 'held'
-        and not job.get('recovery')
-        and isinstance(raw, dict)
-        and not RecoveryPolicy.from_dict(raw).recovery_enabled
-    )
 
 
 def assignment_held_without_recovery(job: dict, entry: dict) -> bool:

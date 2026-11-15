@@ -1502,6 +1502,9 @@ def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment,
             continue  # Repair/sweeper children do not execute these paths.
         containers = deployment['spec']['template']['spec']['containers']
         env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
+        if chart == 'batch-pipeline-worker':
+            assert set(flags).isdisjoint(env)  # Dedicated GPU runtime has no admission/projection readers.
+            continue
         for key in flags:
             expected = (
                 'false' if mode == 'disabled' or (mode == 'staged' and key == 'RECORD_FRESH_MERGE_ENABLED') else 'true'
