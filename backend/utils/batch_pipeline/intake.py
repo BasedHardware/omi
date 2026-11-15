@@ -437,163 +437,25 @@ def upload_capture_trust(context):
     return 'untrusted' if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY else None
 
 
-def upload_languages(user, target, admission_language, sampled):
-    """Preserve declared-language selection without expanding the intake flow graph."""
-    language = normalized_stt_language(target.get('language') or user.get('language'))
-    # Switch-off retains legacy sync's input; new custody inherits known
-    # context. Previous batch receipts above always keep their original lane.
-    prefs = user.get('transcription_preferences') or {}
-    input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
-    inherit = language_inheritance_enabled()
-    inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
-    if inherited:
-        language = inherited
-        if language_class(inherited) == 'supported':
-            # Bound supported context outranks a later user single-mode
-            # preference, including in the legacy eligibility guard.
-            input_language = inherited
-    elif inherit:
-        # Unknown declarations are classification inputs, not capability
-        # proof, even if single-language mode was selected.
-        language = input_language = 'multi'
-    if admission_language is not None:
-        language = input_language = admission_language
-    if sampled:
-        # The user's declared language is not capability proof without single-language mode.
-        inherited = None
-        language = input_language = 'multi'
-    return language, input_language, inherited
-
-
-async def completed_upload_response(store, previous, uid, content_id, public_job_id, conversation_id, paths, lane):
-    """Keep the existing completed-content receipt behavior outside the intake flow graph."""
-    if previous.get('status') == 'completed':
-        try:
-            cached = await run_blocking(
-                db_executor,
-                cache_completed,
-                store,
-                uid,
-                content_id,
-                public_job_id,
-                {
-                    'owner_key': owner_key(uid),
-                    'conversation_id': conversation_id,
-                    'total_files': len(paths),
-                    'lane': lane,
-                },
-                time.time(),
-            )
-        except BatchPrivacyBlocked as error:
-            # cache_completed checks privacy only after proving a valid
-            # completed receipt. The user deleted its conversation: answer
-            # the synchronous all-success shape (no IDs, no intake write) so
-            # the phone ACKs instead of looping on a 409.
-            if not is_conversation_deleted(error):
-                raise
-            # Re-prove in one transaction that every denial is a deletion;
-            # any other denial raises here and keeps the 409.
-            total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
-            if total is None:
-                raise error
-            logger.info('event=batch_intake outcome=conversation_deleted_terminal')
-            return JSONResponse(status_code=200, content=deleted_conversation_result(total))
-        if cached:
-            status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
-            if status:
-                return start_response(status)
-    return None
-
-
-async def stage_upload_units(
-    iterator,
-    unit_item,
-    store,
-    input_language,
-    uid,
-    target,
-    user,
-    evidence,
-    sampled,
-    *,
-    artifacts,
-    provider,
-    upload_context,
-    set_phase,
-):
-    """Preserve unit language, provenance and staging in a bounded flow graph."""
-    items = []
-    from utils.stt.batch_language import resolve_language
-    from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
-
-    # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
-    # speech must be Parakeet-safe vendor audio LID, and every further 30 s of it a Parakeet
-    # language to the self gate, so no admitted unit meets the worker's language barrier or
-    # sends later speech in another language to Parakeet. Strict-silent units keep today's own
-    # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
-    # no unit inherits another's language.
-    queue, decisions = [], {}
-    if sampled:
-
-        sample = await _sample_language_units(
-            iterator, unit_item, store, input_language, uid, target, user, evidence, set_phase
-        )
-        if sample is None:
-            return None
-        queue, decisions = sample
-    # A missing-input repair replays these exact decisions; it never probes again.
-    repair_languages: dict[str, dict] = {}
-    set_phase('decode')
-    while unit := (
-        queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
-    ):
-        if len(items) >= 128:
-            raise ValueError('capture bundle exceeds bounded conversation-unit limit')
-        item = unit_item(unit, len(items))
-        if len(items) in decisions:
-            # This unit was classified above under fresh authority (silent units on their own audio).
-            language_decision = decisions[len(items)]
-        else:
-            set_phase('language_probe')
-            probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
-            # Every self/vendor classification gets fresh dispatch authority on CPU.
-            language_decision = await run_blocking(
-                sync_executor,
-                resolve_language,
-                input_language,
-                unit.wav,
-                surface='batch',
-                cohort_key=uid,
-                before_probe=probe_guard,
-                before_self_probe=probe_guard,
-            )
-            # Refusal preserves the caller's source; never acknowledge or admit it.
-            probe_guard.raise_if_denied()
-        frozen_language = (
-            language_decision.language
-            if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-            else 'und' if language_guard_enabled() else input_language
-        )
-        repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
-        set_phase('freeze_audio')
-        frozen = await run_blocking(
-            sync_executor,
-            with_context,
-            unit.wav,
-            {
-                **upload_context,
-                'segment_id': item.segment_id,
-                'capture_at': item.capture_at,
-                'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
-                **proof,
-            },
-        )
-        set_phase('stage_audio')
-        uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
-        # Provider units are funded by the provider stage, not GPU compute admission.
-        items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
-        set_phase('decode')
-    return items, repair_languages
+def upload_error_response(error, phase, started):
+    if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
+        return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
+    # A transaction may have committed even when its reply was lost. Keep
+    # the staging outbox for reconciliation; never release/re-route content.
+    logger.error(
+        'event=batch_intake outcome=retry exception_type=%s phase=%s elapsed_ms=%d',
+        type(error).__name__,
+        phase,
+        round((time.monotonic() - started) * 1000),
+    )
+    return JSONResponse(
+        status_code=503,
+        headers={'Retry-After': '30'},
+        content={
+            'code': 'sync_batch_unavailable',
+            'detail': 'Sync is temporarily unavailable; retain local audio',
+        },
+    )
 
 
 async def accept_upload(
@@ -663,11 +525,41 @@ async def accept_upload(
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(previous['job_id'])
-        cached_response = await completed_upload_response(
-            store, previous, uid, content_id, public_job_id, conversation_id, paths, lane
-        )
-        if cached_response is not None:
-            return cached_response
+        if previous.get('status') == 'completed':
+            try:
+                cached = await run_blocking(
+                    db_executor,
+                    cache_completed,
+                    store,
+                    uid,
+                    content_id,
+                    public_job_id,
+                    {
+                        'owner_key': owner_key(uid),
+                        'conversation_id': conversation_id,
+                        'total_files': len(paths),
+                        'lane': lane,
+                    },
+                    time.time(),
+                )
+            except BatchPrivacyBlocked as error:
+                # cache_completed checks privacy only after proving a valid
+                # completed receipt. The user deleted its conversation: answer
+                # the synchronous all-success shape (no IDs, no intake write) so
+                # the phone ACKs instead of looping on a 409.
+                if not is_conversation_deleted(error):
+                    raise
+                # Re-prove in one transaction that every denial is a deletion;
+                # any other denial raises here and keeps the 409.
+                total = await run_blocking(db_executor, store.run, lambda tx: _only_deleted_total(tx, uid, content_id))
+                if total is None:
+                    raise error
+                logger.info('event=batch_intake outcome=conversation_deleted_terminal')
+                return JSONResponse(status_code=200, content=deleted_conversation_result(total))
+            if cached:
+                status = await run_blocking(db_executor, durable_status, store, uid, public_job_id)
+                if status:
+                    return start_response(status)
         phase = 'ownership_fence'
         mode = await run_blocking(db_executor, legacy_dark.current_mode, uid)
         adopt = None
@@ -800,7 +692,29 @@ async def accept_upload(
                     total_files=len(paths),
                     lane=lane,
                 )
-        language, input_language, inherited = upload_languages(user, target, admission_language, sampled)
+        language = normalized_stt_language(target.get('language') or user.get('language'))
+        # Switch-off retains legacy sync's input; new custody inherits known
+        # context. Previous batch receipts above always keep their original lane.
+        prefs = user.get('transcription_preferences') or {}
+        input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+        inherit = language_inheritance_enabled()
+        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
+        if inherited:
+            language = inherited
+            if language_class(inherited) == 'supported':
+                # Bound supported context outranks a later user single-mode
+                # preference, including in the legacy eligibility guard.
+                input_language = inherited
+        elif inherit:
+            # Unknown declarations are classification inputs, not capability
+            # proof, even if single-language mode was selected.
+            language = input_language = 'multi'
+        if admission_language is not None:
+            language = input_language = admission_language
+        if sampled:
+            # The user's declared language is not capability proof without single-language mode.
+            inherited = None
+            language = input_language = 'multi'
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.
@@ -939,6 +853,7 @@ async def accept_upload(
                 decoder=upload_decoder(uid, client_device_id, intake_context),
             )
         )
+        items = []
 
         def unit_item(unit, index):
             return replace(
@@ -958,38 +873,88 @@ async def accept_upload(
                 capture_time_trust=upload_capture_trust(intake_context),
             )
 
-        def set_decode_phase(value):
-            nonlocal phase
-            phase = value
+        from utils.stt.batch_language import resolve_language
+        from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
 
-        staged = await stage_upload_units(
-            iterator,
-            unit_item,
-            store,
-            input_language,
-            uid,
-            target,
-            user,
-            evidence,
-            sampled,
-            artifacts=artifacts,
-            provider=provider,
-            upload_context={
-                **(intake_context or {}),
-                'owner_id': uid,
-                'job_id': public_job_id,
-                'content_id': content_id,
-                'source': source,
-                'should_lock': should_lock,
-                'client_device_id': client_device_id,
-                'client_platform': client_platform,
-                'conversation_id': conversation_id,
-            },
-            set_phase=set_decode_phase,
-        )
-        if staged is None:
-            return None
-        items, repair_languages = staged
+        # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
+        # speech must be Parakeet-safe vendor audio LID, and every further 30 s of it a Parakeet
+        # language to the self gate, so no admitted unit meets the worker's language barrier or
+        # sends later speech in another language to Parakeet. Strict-silent units keep today's own
+        # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
+        # no unit inherits another's language.
+        queue, decisions = [], {}
+        if sampled:
+
+            def set_sample_phase(value):
+                nonlocal phase
+                phase = value
+
+            sample = await _sample_language_units(
+                iterator, unit_item, store, input_language, uid, target, user, evidence, set_sample_phase
+            )
+            if sample is None:
+                return None
+            queue, decisions = sample
+        # A missing-input repair replays these exact decisions; it never probes again.
+        repair_languages: dict[str, dict] = {}
+        phase = 'decode'
+        while unit := (
+            queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
+        ):
+            if len(items) >= 128:
+                raise ValueError('capture bundle exceeds bounded conversation-unit limit')
+            item = unit_item(unit, len(items))
+            if len(items) in decisions:
+                # This unit was classified above under fresh authority (silent units on their own audio).
+                language_decision = decisions[len(items)]
+            else:
+                phase = 'language_probe'
+                probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+                # Every self/vendor classification gets fresh dispatch authority on CPU.
+                language_decision = await run_blocking(
+                    sync_executor,
+                    resolve_language,
+                    input_language,
+                    unit.wav,
+                    surface='batch',
+                    cohort_key=uid,
+                    before_probe=probe_guard,
+                    before_self_probe=probe_guard,
+                )
+                # Refusal preserves the caller's source; never acknowledge or admit it.
+                probe_guard.raise_if_denied()
+            frozen_language = (
+                language_decision.language
+                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+                else 'und' if language_guard_enabled() else input_language
+            )
+            repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
+            phase = 'freeze_audio'
+            frozen = await run_blocking(
+                sync_executor,
+                with_context,
+                unit.wav,
+                {
+                    **(intake_context or {}),
+                    'owner_id': uid,
+                    'job_id': public_job_id,
+                    'content_id': content_id,
+                    'segment_id': item.segment_id,
+                    'capture_at': item.capture_at,
+                    'source': source,
+                    'should_lock': should_lock,
+                    'client_device_id': client_device_id,
+                    'client_platform': client_platform,
+                    'conversation_id': conversation_id,
+                    'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
+                    **proof,
+                },
+            )
+            phase = 'stage_audio'
+            uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
+            # Provider units are funded by the provider stage, not GPU compute admission.
+            items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+            phase = 'decode'
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(
@@ -1064,27 +1029,10 @@ async def accept_upload(
             status = await run_blocking(db_executor, durable_status, store, uid, outcome['job_id'])
             return start_response(status) if status else sync_content_in_progress_response(outcome['job_id'])
         return sync_content_in_progress_response(outcome.get('job_id'))
-    except (FutureCaptureRefused, FutureCaptureRetry) as error:
-        return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     except Exception as error:
-        # A transaction may have committed even when its reply was lost. Keep
-        # the staging outbox for reconciliation; never release/re-route content.
-        logger.error(
-            'event=batch_intake outcome=retry exception_type=%s phase=%s elapsed_ms=%d',
-            type(error).__name__,
-            phase,
-            round((time.monotonic() - started) * 1000),
-        )
-        return JSONResponse(
-            status_code=503,
-            headers={'Retry-After': '30'},
-            content={
-                'code': 'sync_batch_unavailable',
-                'detail': 'Sync is temporarily unavailable; retain local audio',
-            },
-        )
+        return upload_error_response(error, phase, started)
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
