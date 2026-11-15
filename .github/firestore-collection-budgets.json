@@ -192,6 +192,10 @@
   ],
   "exempt": [
     {
+      "collection": "record_seal_repair_backlog_cursor_v1",
+      "reason": "Document ID in the existing batch_pipeline_prod_maintenance collection, not a new collection. The computed-name scanner over-approximates .collection(collection_name) sites. Shards append count/index to encrypted document frontiers; no account state or plaintext identifiers are stored. One point read per lane per run and checkpoint writes per attempted metadata page."
+    },
+    {
       "collection": "agent_vm_reconciler_leases",
       "reason": "Retired Cloud Agent VM reconciler lease state. PR #11795 removed the reconciler that wrote and polled it, so no runtime path schedules, claims, retries or reads it; the only remaining reference is the one-shot operator sweep backend/scripts/sweep_agent_vm_firestore.py, which deletes the collection and then reports matched=0 on every later run. It has no recurring read volume to budget. Remove this exemption together with the collection."
     }

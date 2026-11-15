@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,6 +24,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.runtime_env_canary_ops import compose  # noqa: E402
 from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
@@ -665,9 +668,24 @@ def validate_runtime_env(
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
+    integration_canary_state: Path | None = None,
+    integration_canary_source: str | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
+    if integration_canary_state or integration_canary_source:
+        if env != 'prod' or not (integration_canary_state and integration_canary_source):
+            return [ValidationError(env, 'integration canary requires bound prod source/state')]
+        try:
+            env_config = compose(
+                env_config, json.loads(integration_canary_state.read_text()), integration_canary_source
+            )
+            # Workflow reconstruction must validate the same effective manifest
+            # as the rendered candidate, including serving-ops composition.
+            manifest = deepcopy(manifest)
+            manifest['environments'][env] = env_config
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'integration canary ops evidence invalid')]
     errors = _validate_manifest_shape(env_config, env)
     errors.extend(_validate_directory_routing_bindings(env, env_config))
     errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
@@ -696,6 +714,7 @@ def validate_runtime_env(
                 manifest_path=manifest_path,
                 manifest=manifest,
                 workflow_root=workflow_root,
+                integration_canary_source=integration_canary_source,
             )
         )
 

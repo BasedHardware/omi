@@ -49,6 +49,14 @@ async function buildAssets(): Promise<void> {
   await mkdir('.moonshine/public', { recursive: true });
   await cp('public', '.moonshine/public', { recursive: true, force: true });
 
+  const proxyBuild = await Bun.build({
+    entrypoints: ['./scripts/firebase-auth-proxy.ts'],
+    outdir: '.moonshine',
+    target: 'bun',
+  });
+  if (!proxyBuild.success)
+    throw new AggregateError(proxyBuild.logs, 'Auth proxy build failed');
+
   const publicEnvironment = buildPublicEnvironment(process.env);
   const clientPath = '.moonshine/public/client.js';
   const client = await Bun.file(clientPath).text();
@@ -68,6 +76,7 @@ async function buildAssets(): Promise<void> {
 import { reactRenderer, registerRouteModules } from '@tschk/moonshine-react';
 import { createBunServer } from '@tschk/moonshine-deploy-bun';
 import { resolve } from 'node:path';
+import { createFirebaseAuthProxy } from './firebase-auth-proxy.js';
 import manifest from './manifest.json' with { type: 'json' };
 import { modules } from './dist/server.js';
 
@@ -275,11 +284,16 @@ const handler = createRequestHandler({
   renderer,
   staticDir: import.meta.dir + '/public',
 });
+const firebaseAuthProxy = createFirebaseAuthProxy(${JSON.stringify(
+    publicEnvironment.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  )});
 // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
 const fetch = async (request) => {
   // Arm before the handler awaits. The SSE branch below only runs after a
   // response exists, which is too late for a proxy still waiting on the API.
   server.timeout(request, ${BUN_REQUEST_TIMEOUT_SECONDS});
+  const authResponse = await firebaseAuthProxy(request);
+  if (authResponse) return authResponse;
   const response = await handler(request);
   // Streamed chat replies can pause for 25s during a tool call, longer than Bun's 10s idle default.
   if (response.headers.get('content-type')?.includes('text/event-stream')) {

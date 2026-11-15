@@ -61,7 +61,9 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             # missing tail. Repair refreshes the separate partial barrier.
             return None
         if not row.get('record_audio_closed') or row.get('record_seal_refused_at') is not None:
-            patch: dict[str, bool | None | float] = {'record_audio_closed': True}
+            patch: dict[str, bool | float | None] = {'record_audio_closed': True}
+            if not row.get('record_audio_closed'):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_seal_refused_at') is not None:
                 patch['record_seal_refused_at'] = None
             # Admission is a durable per-capture fact, not a per-seal event. A
@@ -77,20 +79,9 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
     # The ledger is written after the real seal commits, in its own CAS
     # transaction. A ledger failure can never fail the seal. Admission is
     # counted once per capture, not once per partial-seal repair.
-    if admitted:
-        pipeline_ledger.observe_admission()
     revision = max(1, source_revision)
     if result is None and admitted:
-        pipeline_ledger.advance(
-            uid,
-            conversation_id,
-            pipeline_ledger.SEALED,
-            revision=revision,
-            reopen=True,
-            source_ref=ref,
-            owner_ref=owner_ref,
-            firestore_client=client,
-        )
+        observe_record_sealed(client, uid, conversation_id, ref, source_revision=revision, admitted=True)
     elif result == 'upload_failed':
         # A deleted capture gets no ledger row: erasure must not be followed by
         # a new durable record. The firing clock is the observed failure, never
@@ -109,6 +100,33 @@ def seal_record_audio(uid: str, conversation_id: str, *, firestore_client=None) 
             firestore_client=client,
         )
     return result
+
+
+def observe_record_sealed(client, uid, conversation_id, ref, *, source_revision, admitted, refresh_revision=False):
+    """Shared fail-open, deletion-fenced observation after a real seal commits."""
+    try:
+        if admitted:
+            pipeline_ledger.observe_admission()
+        if refresh_revision:
+            committed = ref.get(timeout=3, retry=None)
+            if not (committed.to_dict() or {}).get('record_audio_closed'):
+                return
+            source_revision = pipeline_ledger.source_revision(committed)
+        pipeline_ledger.advance(
+            uid,
+            conversation_id,
+            pipeline_ledger.SEALED,
+            revision=max(1, source_revision),
+            reopen=True,
+            source_ref=ref,
+            owner_ref=client.collection('users').document(uid),
+            firestore_client=client,
+            **({'preserve_same_stage_clock': True} if not admitted else {}),
+        )
+    except Exception as error:
+        # Observability never changes a committed seal's outcome.
+        pipeline_ledger.observe_seal_failure(error)
+        return False
 
 
 def set_record_upload_pending(

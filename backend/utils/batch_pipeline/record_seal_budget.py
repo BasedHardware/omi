@@ -34,9 +34,18 @@ class SweepBudget:
             raise BudgetExhausted()
 
         previous = signal.signal(signal.SIGALRM, expired)
-        signal.setitimer(signal.ITIMER_REAL, max(0.001, self.deadline - self.clock()))
+        previous_timer = signal.getitimer(signal.ITIMER_REAL)
+        entered = self.clock()
+        remaining = max(0.001, self.deadline - entered)
+        if previous_timer[0] > 0:
+            remaining = min(remaining, previous_timer[0])
+        signal.setitimer(signal.ITIMER_REAL, remaining)
         try:
             yield
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous)
+            if previous_timer[0] > 0:
+                signal.setitimer(
+                    signal.ITIMER_REAL, max(0.001, previous_timer[0] - (self.clock() - entered)), previous_timer[1]
+                )

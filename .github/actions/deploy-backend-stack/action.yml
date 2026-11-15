@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  integration_canary:
+    description: 'Exact SCA-2283 ruled source only: preserve serving ops and stage integration 0/25/100 under caller lock'
+    required: false
+    default: 'false'
   record_token_lease_mode:
     description: 'Caller-supplied record token lease mode'
     required: false
@@ -159,6 +163,17 @@ runs:
         SERVICE_IMAGES: ${{ inputs.service_images }}
       run: |
         set -euo pipefail
+        if [[ "${{ inputs.integration_canary }}" != false ]]; then
+          [[ "${{ inputs.integration_canary }}" == true &&
+             "${{ inputs.deploy_profile }}" == manual && "${{ inputs.environment }}" == prod &&
+             "${{ inputs.runtime_env }}" == prod && "${{ inputs.deploy_targets }}" == cloud-run-only &&
+             "${{ inputs.deploy_gateway }}" == false && "${{ inputs.service }}" == backend &&
+             "${{ inputs.project_id }}" == based-hardware && "${{ inputs.region }}" == us-central1 &&
+             "${{ inputs.admitted_sha }}" == 0714c5198be8f0183c8fd7dd3810d53c91af17a4 ]] || {
+            echo 'Invalid ruled integration canary boundary.' >&2
+            exit 1
+          }
+        fi
         if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" && "${{ inputs.deploy_profile }}" != "manual" ]]; then
           echo "service_images (role-image opt-in) is accepted only on the manual profile" >&2
           exit 1
@@ -663,6 +678,42 @@ runs:
           exit 1
         fi
 
+    - name: Capture ruled integration canary baseline and serving ops
+      id: integration-canary-prepare
+      if: ${{ inputs.integration_canary == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        umask 077
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
+          --state "$RUNNER_TEMP/integration-canary-private.json" \
+          --source "${{ inputs.admitted_sha }}" \
+          --image "${{ steps.service-images.outputs.backend_integration }}" \
+          --candidate "backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" \
+          --project "${{ inputs.project_id }}" --region "${{ inputs.region }}"
+        # Only the authenticated immutable image identity leaves the private
+        # journal. Never upload or print its serving config/secret references.
+        python3 - <<'PYTHON'
+        import json, os, re, shlex
+        from pathlib import Path
+        state = json.loads((Path(os.environ['RUNNER_TEMP']) / 'integration-canary-private.json').read_text())
+        image = state['image']
+        if not re.fullmatch(r'gcr\.io/based-hardware/[a-z0-9_.-]+@sha256:[0-9a-f]{64}', image):
+            raise ValueError('canary digest identity missing')
+        args = shlex.split(os.environ['EXISTING_VECTOR_ARGS'])
+        pairs = []
+        for offset in range(0, len(args), 2):
+            if args[offset] != '--service-image' or offset + 1 >= len(args):
+                raise ValueError('invalid release vector arguments')
+            if not args[offset + 1].startswith('backend-integration='):
+                pairs.extend(args[offset:offset + 2])
+        pairs.extend(['--service-image', 'backend-integration=' + image])
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('release_vector_args=' + shlex.join(pairs) + '\n')
+        PYTHON
+      env:
+        EXISTING_VECTOR_ARGS: ${{ steps.service-images.outputs.release_vector_args }}
+
     - name: Render backend runtime env
       id: runtime-env
       shell: bash
@@ -683,9 +734,15 @@ runs:
         SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
         SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/render_backend_runtime_env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
+          "${canary_args[@]}" \
           --state-output "$RUNNER_TEMP/backend-runtime-env-state.json" >> "$GITHUB_OUTPUT"
 
     - name: Validate backend runtime env before deploy
@@ -693,11 +750,17 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${canary_args[@]}" \
           --cloud-run-state "$RUNNER_TEMP/backend-runtime-env-state.json"
 
     - name: Migrate legacy public Cloud Run bindings
@@ -1004,6 +1067,7 @@ runs:
           --min-backoff=5s --max-backoff=300s
 
     - name: Deploy ${{ inputs.service }}-integration to Cloud Run
+      if: ${{ inputs.integration_canary != 'true' }}
       id: deploy-backend-integration
       uses: google-github-actions/deploy-cloudrun@v3
       with:
@@ -1028,6 +1092,15 @@ runs:
         env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
+    - name: Create ruled integration candidate by CAS from serving configuration
+      if: ${{ inputs.integration_canary == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" candidate \
+          --state "$RUNNER_TEMP/integration-canary-private.json" \
+          --runtime-state "$RUNNER_TEMP/backend-runtime-env-state.json"
+
     - name: Capture ${{ inputs.service }}-integration revision
       id: capture-backend-integration-revision
       shell: bash
@@ -1041,6 +1114,9 @@ runs:
       run: |
         set -euo pipefail
         for service in backend-sync backend-sync-backfill backend-integration; do
+          # The CAS candidate already retains the serving collector exactly;
+          # reattaching it here would create a second integration revision.
+          if [[ "$service" == backend-integration && "${{ inputs.integration_canary }}" == true ]]; then continue; fi
           ingress=backend-1
           if [[ "$service" == backend-integration ]]; then ingress=backend-integration; fi
           args=(
@@ -1124,11 +1200,17 @@ runs:
       env:
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
+        canary_args=()
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
+                       --integration-canary-source "${{ inputs.admitted_sha }}")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
+          "${canary_args[@]}" \
           --check-live-cloud-run
 
     - name: Report live Cloud Run env drift from manifest
@@ -1202,7 +1284,7 @@ runs:
           --cloud-run-only \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1303,7 +1385,7 @@ runs:
           --candidate \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1336,10 +1418,16 @@ runs:
       id: shift-cloud-run-traffic
       shell: bash
       run: |
+        set -euo pipefail
         gcloud run services update-traffic backend --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
         gcloud run services update-traffic backend-sync --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
         gcloud run services update-traffic backend-sync-backfill --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.sync-backfill.outputs.revision }}=100 --quiet
-        gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" promote \
+            --state "$RUNNER_TEMP/integration-canary-private.json"
+        else
+          gcloud run services update-traffic backend-integration --project=${{ inputs.project_id }} --region=${{ inputs.region }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+        fi
 
     - name: Verify serving backend release vector
       id: verify-serving-release-vector
@@ -1352,7 +1440,7 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-          ${{ steps.service-images.outputs.release_vector_args }} \
+          ${{ steps.integration-canary-prepare.outputs.release_vector_args || steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1419,14 +1507,53 @@ runs:
         ${{ inputs.deploy_profile == 'manual' && (failure() || cancelled()) &&
         steps.cloud-run-traffic-snapshot.outcome == 'success' &&
         (steps.shift-cloud-run-traffic.outcome == 'failure' ||
+        steps.shift-cloud-run-traffic.outcome == 'cancelled' ||
         steps.verify-serving-release-vector.outcome == 'failure' ||
+        steps.verify-serving-release-vector.outcome == 'cancelled' ||
         steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
-        steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
+        steps.smoke-promoted-production-serving-api.outcome == 'cancelled' ||
+        steps.smoke-what-matters-now-datastore-query.outcome == 'failure' ||
+        steps.smoke-what-matters-now-datastore-query.outcome == 'cancelled') }}
       shell: bash
       run: |
+        set -euo pipefail
+        canary_args=()
+        rollback_rc=0
+        if [[ "${{ inputs.integration_canary }}" == true ]]; then
+          python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" rollback \
+            --state "$RUNNER_TEMP/integration-canary-private.json" || rollback_rc=$?
+          canary_args=(--exclude-service backend-integration)
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/cloud_run_traffic_snapshot.py" restore \
           --snapshot artifacts/backend-cloud-run-pre-promotion-traffic-snapshot.json \
-          --evidence-path artifacts/backend-cloud-run-traffic-restore.json
+          "${canary_args[@]}" \
+          --evidence-path artifacts/backend-cloud-run-traffic-restore.json || rollback_rc=$?
+        exit "$rollback_rc"
+
+    - name: Record ruled integration canary metadata receipt
+      if: ${{ always() && inputs.integration_canary == 'true' }}
+      shell: bash
+      run: |
+        python3 - <<'PYTHON'
+        import json, os
+        from pathlib import Path
+        source = Path(os.environ['RUNNER_TEMP']) / 'integration-canary-private.json'
+        if source.exists():
+            state = json.loads(source.read_text())
+            receipt = {key: state.get(key) for key in
+                       ('source', 'image', 'candidate', 'candidate_uid', 'rollback', 'run_id', 'run_attempt',
+                        'phase', 'prepared_at', 'moved_at', 'baseline_hash', 'metrics_read_at')}
+            receipt['moves'] = [{key: row.get(key) for key in ('percent', 'verified_at')}
+                                for row in state.get('moves', [])]
+            receipt['health'] = {key: state.get('health', {}).get(key)
+                                 for key in ('state', 'error_share', 'error_threshold')}
+            receipt['baseline'] = {key: state.get('baseline', {}).get(key)
+                                   for key in ('end', 'read_at', 'share', 'cpu_p95')}
+            receipt['intent'] = {key: (state.get('intent') or {}).get(key) for key in ('kind', 'status', 'at')}
+            target = Path('artifacts/integration-canary-receipt.json')
+            target.parent.mkdir(exist_ok=True)
+            target.write_text(json.dumps(receipt, sort_keys=True, allow_nan=False) + '\n')
+        PYTHON
 
     - name: Cloud Run deploy status report
       if: always()
@@ -1496,6 +1623,7 @@ runs:
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-candidate-acceptance.json' || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-candidate-status.json' || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && 'artifacts/dev-backend-cloud-run-traffic-restore.json' || 'artifacts/backend-cloud-run-traffic-restore.json' }}
+          artifacts/integration-canary-receipt.json
         if-no-files-found: warn
 
     - name: Show Output

@@ -212,6 +212,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
     'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
+    'database.batch_pipeline_store.FirestoreStore.ready_pending': '48c1a206ba4e768ab07b48cd7c79df4e759cbe32c576c5723abba4d9b874d18a',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
@@ -258,7 +259,7 @@ BODY_DIGEST = {
     # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
-    'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
+    'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -1981,6 +1982,18 @@ _add(
 )
 _add(DriverEntry('database.goals.get_goal_history', base={'uid': UID, 'goal_id': 'goal-1'}, neutrals={'days': _DAYS}))
 _add(DriverEntry('database.goals.get_user_goal', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'utils.episodes.composer_context_io.goals',
+        base={'uid': UID},
+        neutrals={
+            'budget': (
+                ListReadBudget(deadline_monotonic=8.0, max_documents=160, clock=lambda: 0.0, strict_documents=True),
+                'composer context deadline/read allowance; caps RPC/window, not the active-goal filter',
+            ),
+        },
+    )
+)
 _add(
     DriverEntry(
         'database.goals.get_user_goals',

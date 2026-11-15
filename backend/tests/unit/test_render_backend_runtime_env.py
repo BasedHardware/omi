@@ -1449,6 +1449,129 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_episode_switches_render_on_every_composition_host(environment):
+    keys = (
+        'EPISODE_COMPOSER_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_DETAIL_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
+    )
+    config = _MANIFEST['environments'][environment]
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        env = config['cloud_run']['services'][name]['env']
+        for key in keys:
+            assert env[key] == {'value': 'true', 'category': 'ops_kill'}
+            assert _MODULE['_render_env_entries']({key: env[key]}) == [{'name': key, 'value': 'true'}]
+            # An operator override must survive the renderer rather than fall back to code defaults.
+            assert _MODULE['_render_env_entries']({key: {'value': 'false', 'category': 'ops_kill'}}) == [
+                {'name': key, 'value': 'false'}
+            ]
+    for chart in ('backend-listen', 'pusher'):
+        for key in keys:
+            assert config['gke'][chart]['env'][key] == {'value': 'true', 'category': 'ops_kill'}
+        chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+        values = chart_dir / f'{environment}_omi_{chart.replace("-", "_")}_values.yaml'
+        result = subprocess.run(
+            [
+                'helm',
+                'template',
+                f'{environment}-{chart}',
+                str(chart_dir),
+                '-f',
+                str(values),
+                '--set-string',
+                'image.digest=sha256:' + 'a' * 64,
+                '--set',
+                'image.tag=',
+                '--set',
+                'image.pullPolicy=IfNotPresent',
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment')
+        entries = [
+            entry
+            for container in deployment['spec']['template']['spec']['containers']
+            for entry in container.get('env', [])
+            if entry['name'] in keys
+        ]
+        assert sorted(entries, key=lambda entry: entry['name']) == [
+            {'name': key, 'value': 'true'} for key in sorted(keys)
+        ]
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize('chart', ['backend-listen', 'batch-pipeline-worker'])
+@pytest.mark.parametrize('mode', ['staged', 'disabled', 'qualified'])
+def test_post_seal_switches_reach_rendered_pods_and_can_be_disabled(environment, chart, mode, tmp_path):
+    chart_dir = _SCRIPT.parents[1] / 'charts' / chart
+    stem = 'batch-pipeline-worker' if chart == 'batch-pipeline-worker' else 'backend_listen'
+    values = chart_dir / f'{environment}_omi_{stem}_values.yaml'
+    flags = [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ]
+    command = [
+        'helm',
+        'template',
+        f'{environment}-{chart}',
+        str(chart_dir),
+        '-f',
+        str(values),
+        '--set-string',
+        'image.digest=sha256:' + 'a' * 64,
+        '--set',
+        'image.tag=',
+        '--set',
+        'image.pullPolicy=IfNotPresent',
+    ]
+    if chart == 'batch-pipeline-worker':
+        command += ['--set', 'enabled=true']
+        command += ['--namespace', f'{environment}-omi-backend']
+        if mode != 'staged':
+            for key in flags:
+                command += ['--set', f'worker.{key}={str(mode == "qualified").lower()}']
+    elif mode != 'staged':
+        source = yaml.safe_load(values.read_text())
+        for entry in source['env']:
+            if entry['name'] in flags:
+                entry['value'] = str(mode == 'qualified').lower()
+        override = tmp_path / 'disabled.yaml'
+        override.write_text(yaml.safe_dump({'env': source['env']}))
+        command += ['-f', str(override)]
+    result = subprocess.run(command, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    deployments = [doc for doc in yaml.safe_load_all(result.stdout) if doc and doc['kind'] == 'Deployment']
+    assert deployments
+    for deployment in deployments:
+        if (
+            chart == 'batch-pipeline-worker'
+            and deployment['spec']['template']['metadata']['labels'].get('app.kubernetes.io/name')
+            != 'batch-pipeline-worker'
+        ):
+            continue  # Repair/sweeper children do not execute these paths.
+        containers = deployment['spec']['template']['spec']['containers']
+        env = {e['name']: e.get('value') for c in containers for e in c.get('env', [])}
+        if chart == 'batch-pipeline-worker':
+            assert set(flags) & env.keys() == {'RECORD_FRESH_MERGE_ENABLED'}
+            assert env['RECORD_FRESH_MERGE_ENABLED'] == ('true' if mode == 'qualified' else 'false')
+            continue
+        for key in flags:
+            expected = (
+                'false'
+                if mode == 'disabled'
+                or (mode == 'staged' and key in {'RECORD_FRESH_MERGE_ENABLED', 'RECORD_NOTES_EAGER_ENABLED'})
+                else 'true'
+            )
+            assert env[key] == expected
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
 @pytest.mark.parametrize('chart', ['pusher', 'backend-listen'])
 def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
     chart_dir = _SCRIPT.parents[1] / 'charts' / chart
@@ -1483,6 +1606,7 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
         expected['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] = 'true'
     else:
         expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
+        expected['RECORD_INTAKE_AGE_PRIORITY_ENABLED'] = 'true'
         expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
     contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
     for key, value in expected.items():
