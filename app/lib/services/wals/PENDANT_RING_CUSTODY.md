@@ -194,3 +194,40 @@ previous download-proof, decoder, ownership and timeout behavior. It does not
 control the independent batch-proof switch. No v1 wire command or capability is
 added. Historical phone files without exact ring mapping cannot be retrofitted
 from timestamps, sample similarity or live ordinals alone.
+
+
+### Receipt validation after R16 review
+
+Every replayable audio reference now names its original non-legacy account,
+physical pendant, ring incarnation, exact coordinates, byte length, frame count
+and SHA-256 of the immutable fsynced file. The SHA-256 is the same file-byte
+identity used by the upload capture manifest, not a second content scheme; WALs
+had no previously persisted per-file digest to reuse. Digest and coordinates are
+committed in the same WAL index transaction before a receipt can authorize
+ADVANCE. Ordinary live, batch and downloaded WALs all use this contract.
+Ownerless, legacy unscoped, hashless and corrupted index rows retain the pendant
+copy. Existing files/indexes are never upgraded to authority by measuring them
+at restore. Batch replay verifies the journal's fsynced prefix digest before
+recovering its original ordinals, then commits the recovered full file digest.
+
+An all-zero packed record has no samples but is still a ring record. A range
+containing only empty records writes a canonical `.ring-empty` file naming the
+owner/device/ring/exclusive sequence interval, fsyncs it, then persists a zero-
+frame, zero-duration WAL index entry and digest. It is marked synced only to
+exclude control metadata from audio upload; no server/audio acknowledgement is
+asserted. Mixed chunks include their empty records in the same exact indexed
+sequence interval as their audio. Empty reference lists never prove a range.
+Missing marker/index, wrong account or a changed marker retains the records.
+
+A separate 45-second persistence-progress watchdog stops BLE admission on a
+stalled queue/fsync/index even after DONE. DATA does not renew it or the ordinary
+coordinator; completed indexed chunks renew coordinator progress. Uncancellable
+OS writes retain exclusive device ownership until settled. They cannot be made
+proof or bypassed by a new reader merely because their watchdog expired.
+
+The compile-time OFF switches remain; the validation hardening and rejection of
+empty/unscoped/corrupted authority remain fail-closed in either build. The current
+remote flags API serves an unbounded last-known-good server snapshot and supplies
+no freshness grant, so it cannot implement absent/stale/unreadable => OFF by a
+config key alone. A bounded server freshness contract is required before using it
+for data release; see the Q12-AA R16 handoff. No remote configuration was changed.

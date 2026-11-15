@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:crypto/crypto.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,7 +52,7 @@ void main() {
     return result;
   }
 
-  Future<(Wal, CustodyWalRef)> audio(String name) async {
+  Future<(Wal, CustodyWalRef)> audio(String name, {int start = 100, int end = 120}) async {
     final file = File('${directory.path}/$name');
     await file.writeAsBytes([1, 17], flush: true);
     final wal = Wal(
@@ -62,14 +63,32 @@ void main() {
         filePath: name,
         storage: WalStorage.disk,
         status: WalStatus.miss,
-        ownerUid: 'owner');
-    return (wal, CustodyWalRef(fileName: name, bytes: 2, frames: 1, ownerUid: 'owner'));
+        ownerUid: 'owner',
+        device: 'device',
+        downloadRingId: 7,
+        downloadSeqStart: start,
+        downloadSeqEnd: end,
+        downloadFileBytes: 2,
+        fileSha256: sha256.convert([1, 17]).toString());
+    return (
+      wal,
+      CustodyWalRef(
+          fileName: name,
+          bytes: 2,
+          frames: 1,
+          ownerUid: 'owner',
+          downloadDeviceId: 'device',
+          downloadRingId: 7,
+          downloadSeqStart: start,
+          downloadSeqEnd: end,
+          fileSha256: sha256.convert([1, 17]).toString())
+    );
   }
 
   test('synthetic slow ACK, fast buffered burst, disconnect and restart replay exact indexed prefix', () async {
-    final first = await audio('slow.bin');
-    final burst = await audio('burst.bin');
-    await WalFileManager.saveWals([first.$1, burst.$1]);
+    final first = await audio('slow.bin', end: 110);
+    final burst = await audio('burst.bin', start: 110, end: 150);
+    await WalFileManager.saveWals([first.$1]);
     final old = manager();
     await old.beginConnection('device', 1, v1Info(readSeq: 100, writeSeq: 200));
     await old.recordDurableRingRange('device', 1, 7, 100, 110, [first.$2]);
@@ -77,6 +96,7 @@ void main() {
     await old.markAdvanced('device', 1, 110);
 
     old.endConnection('device', 1);
+    await WalFileManager.saveWals([first.$1, burst.$1]);
     // Disk/index completion belongs to the original READ, after live teardown.
     await old.recordDurableRingRange('device', 1, 7, 110, 150, [burst.$2]);
     await old.flush();
@@ -107,7 +127,7 @@ void main() {
   }, skip: !ringDrainRecoveryEnabled);
 
   test('missing older ref preserves newer proof but never bridges the missing prefix', () async {
-    final valid = await audio('newer.bin');
+    final valid = await audio('newer.bin', start: 110, end: 150);
     await WalFileManager.saveWals([valid.$1]);
     final old = manager();
     await old.recordDurableRingRange(
@@ -116,7 +136,7 @@ void main() {
     final next = manager();
     await next.beginConnection('device', 2, v1Info(readSeq: 100, writeSeq: 200));
     expect(await next.validatedAdvanceTarget('device', 2, 7), isNull);
-    final gap = await audio('gap.bin');
+    final gap = await audio('gap.bin', end: 110);
     await WalFileManager.saveWals([valid.$1, gap.$1]);
     await next.recordDurableRingRange('device', 2, 7, 100, 110, [gap.$2]);
     expect(await next.validatedAdvanceTarget('device', 2, 7), 150);
@@ -231,7 +251,7 @@ void main() {
       ..downloadSeqEnd = 120
       ..downloadFileBytes = 2;
     await WalFileManager.saveWals([file.$1]);
-    const ref = CustodyWalRef(
+    final ref = CustodyWalRef(
         fileName: 'coordinates.bin',
         bytes: 2,
         frames: 1,
@@ -239,7 +259,8 @@ void main() {
         downloadRingId: 7,
         downloadSeqStart: 100,
         downloadSeqEnd: 120,
-        downloadDeviceId: 'device');
+        downloadDeviceId: 'device',
+        fileSha256: sha256.convert([1, 17]).toString());
     expect(await walFileManagerCustodyValidator(ref), isTrue);
     final c = manager();
     await c.recordDurableRingRange('device', 1, 7, 100, 140, [ref]);

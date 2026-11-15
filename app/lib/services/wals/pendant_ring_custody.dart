@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -27,6 +28,7 @@ class CustodyWalRef {
   final String? batchLiveSession;
   final String? liveDeviceId;
   final String? ownerUid;
+  final String? fileSha256;
   final int? downloadRingId;
   final int? downloadSeqStart;
   final int? downloadSeqEnd;
@@ -42,6 +44,7 @@ class CustodyWalRef {
     this.batchLiveSession,
     this.liveDeviceId,
     this.ownerUid,
+    this.fileSha256,
     this.downloadRingId,
     this.downloadSeqStart,
     this.downloadSeqEnd,
@@ -58,6 +61,7 @@ class CustodyWalRef {
         if (batchLiveSession != null) 'batch_session': batchLiveSession,
         if (liveDeviceId != null) 'live_device': liveDeviceId,
         if (ownerUid != null) 'owner': ownerUid,
+        if (fileSha256 != null) 'sha256': fileSha256,
         if (downloadRingId != null) 'download_ring': downloadRingId,
         if (downloadSeqStart != null) 'download_start': downloadSeqStart,
         if (downloadSeqEnd != null) 'download_end': downloadSeqEnd,
@@ -86,6 +90,7 @@ class CustodyWalRef {
       batchLiveSession: json['batch_session'] as String?,
       liveDeviceId: json['live_device'] as String?,
       ownerUid: json['owner'] as String?,
+      fileSha256: json['sha256'] as String?,
       downloadRingId: asInt(json['download_ring']),
       downloadSeqStart: asInt(json['download_start']),
       downloadSeqEnd: asInt(json['download_end']),
@@ -322,7 +327,30 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
 
 Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
   try {
-    if (indexed == null) return false;
+    if (indexed == null || indexed.status == WalStatus.corrupted) return false;
+    if (ref.ownerUid == null ||
+        ref.ownerUid!.isEmpty ||
+        ref.ownerUid == 'legacy' ||
+        indexed.ownerUid != ref.ownerUid ||
+        SharedPreferencesUtil().uid != ref.ownerUid) {
+      return false;
+    }
+    if (ref.fileSha256 == null ||
+        !RegExp(r'^[a-f0-9]{64}$').hasMatch(ref.fileSha256!) ||
+        indexed.fileSha256 != ref.fileSha256) {
+      return false;
+    }
+    if (ref.downloadRingId == null && ref.liveRingId == null) return false;
+    if (ref.liveRingId != null &&
+        (ref.liveDeviceId == null ||
+            ref.liveDeviceId!.isEmpty ||
+            indexed.liveDeviceId != ref.liveDeviceId ||
+            (ref.batchLiveSession == null && indexed.device != ref.liveDeviceId) ||
+            ref.liveOrdinalStart == null ||
+            ref.liveOrdinalEnd == null ||
+            ref.liveOrdinalEnd! <= ref.liveOrdinalStart!)) {
+      return false;
+    }
     if (indexed.storage != WalStorage.disk || indexed.totalFrames != ref.frames) return false;
     if (ref.ownerUid != null && (indexed.ownerUid != ref.ownerUid || SharedPreferencesUtil().uid != ref.ownerUid)) {
       return false;
@@ -331,6 +359,8 @@ Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
         (!ringDrainRecoveryEnabled ||
             ref.ownerUid == null ||
             ref.ownerUid!.isEmpty ||
+            ref.downloadDeviceId == null ||
+            ref.downloadDeviceId!.isEmpty ||
             ref.downloadSeqStart == null ||
             ref.downloadSeqEnd == null ||
             ref.downloadSeqEnd! <= ref.downloadSeqStart! ||
@@ -359,7 +389,23 @@ Future<bool> _validateIndexedWal(CustodyWalRef ref, Wal? indexed) async {
     final file = File(path);
     if (!file.existsSync()) return false;
     final matches = (await file.length()) == ref.bytes;
-    return matches && (ref.ownerUid == null || SharedPreferencesUtil().uid == ref.ownerUid);
+    if (!matches || (await sha256.bind(file.openRead()).first).toString() != ref.fileSha256) return false;
+    // Zero-frame proof is an explicit durable index row + canonical marker,
+    // never the vacuous truth of an empty list of audio WALs.
+    if (ref.frames == 0) {
+      if (ref.downloadRingId == null || !ref.fileName.endsWith('.ring-empty')) return false;
+      final marker = jsonDecode(await file.readAsString());
+      if (marker is! Map ||
+          marker['kind'] != 'empty_ring_records_v1' ||
+          marker['device'] != ref.downloadDeviceId ||
+          marker['ring'] != ref.downloadRingId ||
+          marker['start'] != ref.downloadSeqStart ||
+          marker['end'] != ref.downloadSeqEnd ||
+          marker['owner'] != ref.ownerUid) {
+        return false;
+      }
+    }
+    return SharedPreferencesUtil().uid == ref.ownerUid;
   } catch (e) {
     Logger.debug('PendantRingCustody: WAL validation failed for ${ref.fileName}: $e');
     return false;
@@ -721,7 +767,7 @@ class PendantRingCustody {
     int endSeq,
     List<CustodyWalRef> wals,
   ) async {
-    if (endSeq <= startSeq || ringId == 0) return;
+    if (endSeq <= startSeq || ringId == 0 || wals.isEmpty) return;
     final proof = RingRangeProof(startSeq: startSeq, endSeq: endSeq, wals: List.of(wals));
     if (!_downloadRangeMatches(proof, deviceId, ringId)) return;
     if (ringDrainRecoveryEnabled) {
@@ -741,14 +787,25 @@ class PendantRingCustody {
     await _persist(state.checkpoint);
   }
 
-  bool _downloadRangeMatches(RingRangeProof range, String deviceId, int ringId) => range.wals.every((ref) =>
-      ref.downloadRingId == null ||
-      (ref.downloadRingId == ringId &&
-          ref.downloadDeviceId == deviceId &&
-          ref.downloadSeqStart != null &&
-          ref.downloadSeqEnd != null &&
-          ref.downloadSeqStart! <= range.startSeq &&
-          ref.downloadSeqEnd! >= range.endSeq));
+  bool _referenceScopeMatches(CustodyWalRef ref, String device, int? ring) {
+    if (ref.liveRingId != null) {
+      return ref.liveRingId == ring &&
+          (ref.liveDeviceId == device || (_walValidator != walFileManagerCustodyValidator && ref.liveDeviceId == null));
+    }
+    if (ref.downloadRingId != null) return ref.downloadRingId == ring && ref.downloadDeviceId == device;
+    return _walValidator != walFileManagerCustodyValidator;
+  }
+
+  bool _downloadRangeMatches(RingRangeProof range, String deviceId, int ringId) =>
+      range.wals.isNotEmpty &&
+      range.wals.every((ref) =>
+          (ref.downloadRingId == null && _walValidator != walFileManagerCustodyValidator) ||
+          (ref.downloadRingId == ringId &&
+              ref.downloadDeviceId == deviceId &&
+              ref.downloadSeqStart != null &&
+              ref.downloadSeqEnd != null &&
+              ref.downloadSeqStart! <= range.startSeq &&
+              ref.downloadSeqEnd! >= range.endSeq));
 
   /// Re-read the durable receipt journal even on an existing BLE epoch. An old
   /// read may have finished its disk transaction after that epoch was replaced.
@@ -787,6 +844,7 @@ class PendantRingCustody {
             bytes: wal.downloadFileBytes!,
             frames: wal.totalFrames,
             ownerUid: wal.ownerUid,
+            fileSha256: wal.fileSha256,
             downloadRingId: ringId,
             downloadSeqStart: start,
             downloadSeqEnd: end,
@@ -815,9 +873,9 @@ class PendantRingCustody {
     if (cp == null || cp.ringId != ringId) return false;
     final ranges = List.of(cp.liveRanges);
     for (final r in ranges) {
-      if (seq >= r.startSeq && seq < r.endSeq) {
+      if (seq >= r.startSeq && seq < r.endSeq && r.wals.isNotEmpty) {
         for (final w in r.wals) {
-          if (!await _walValidator(w)) return false;
+          if (!_referenceScopeMatches(w, deviceId, ringId) || !await _walValidator(w)) return false;
         }
         final s = _devices[deviceId];
         if (s == null ||
@@ -847,7 +905,7 @@ class PendantRingCustody {
     final result = <(int, int)>[];
     final validate = await _validationSnapshot();
     for (final range in candidates) {
-      var valid = true;
+      var valid = range.$3.isNotEmpty && range.$3.every((r) => _referenceScopeMatches(r, deviceId, ringId));
       for (final ref in range.$3) {
         if (!await validate(ref)) {
           valid = false;
@@ -879,7 +937,9 @@ class PendantRingCustody {
     for (final range in state.checkpoint.ringRanges) {
       if (range.endSeq <= state.checkpoint.reportedReadSeq || range.startSeq >= target) continue;
       for (final ref in range.wals) {
-        if (ref.ownerUid != null && SharedPreferencesUtil().uid != ref.ownerUid) return false;
+        if (ref.ownerUid != null && SharedPreferencesUtil().uid != ref.ownerUid) {
+          return false;
+        }
       }
     }
     for (final range in state.checkpoint.liveRanges) {
@@ -907,6 +967,11 @@ class PendantRingCustody {
     var target = advanceTarget(deviceId, epoch);
     if (target == null) return null;
     final from = state.checkpoint.reportedReadSeq;
+    if (state.checkpoint.ringRanges.any((r) => r.wals.isEmpty) ||
+        state.checkpoint.liveRanges.any((r) => r.wals.isEmpty)) {
+      await _validateCheckpoint(state.checkpoint);
+      return null;
+    }
     final refs = <CustodyWalRef>[];
     for (final r in state.checkpoint.ringRanges) {
       if (r.endSeq > from && r.startSeq < target) refs.addAll(r.wals);
@@ -916,7 +981,7 @@ class PendantRingCustody {
     }
     final validate = await _validationSnapshot();
     for (final w in refs) {
-      final ok = await validate(w);
+      final ok = _referenceScopeMatches(w, deviceId, ringId) && await validate(w);
       final s = _state(deviceId, epoch);
       if (s == null || !identical(s.sessionToken, token) || s.checkpoint.ringId != cpRingId) return null;
       if (!ok) {
@@ -1068,7 +1133,8 @@ class PendantRingCustody {
         liveOrdinalEnd: end,
         batchLiveSession: wal.batchLiveSession,
         liveDeviceId: wal.liveDeviceId,
-        ownerUid: wal.ownerUid);
+        ownerUid: wal.ownerUid,
+        fileSha256: wal.fileSha256);
     if (!await _walValidator(ref) || !_isSession(s, device, epoch, token)) return;
     if (!identical(s.checkpoint, checkpoint) ||
         checkpoint.ringId != wal.liveRingId ||
@@ -1269,6 +1335,9 @@ class PendantRingCustody {
 
   Future<bool> _validateCheckpoint(RingCustodyCheckpoint cp) async {
     final validate = await _validationSnapshot();
+    cp.liveRanges.removeWhere((r) => r.wals.any((ref) => !_referenceScopeMatches(ref, cp.deviceId, cp.ringId)));
+    cp.ringRanges.removeWhere((r) => r.wals.isEmpty);
+    cp.liveRanges.removeWhere((r) => r.wals.isEmpty);
     if (ringDrainRecoveryEnabled) {
       // A deleted/foreign/unindexed WAL invalidates its own range, not every
       // unrelated downloaded range. Never carry durableSeq across that hole.

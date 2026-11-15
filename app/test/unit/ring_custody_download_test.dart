@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -220,6 +222,8 @@ void main() {
   final custodies = <PendantRingCustody>[];
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({'uid': 'owner'});
+    await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('ring_custody_dl_test_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
@@ -244,7 +248,8 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal) {
+  RingStorageSyncImpl syncWith(_FakeLocalSync local, _FakeRingDevice card, Wal wal,
+      {Timer Function(Duration, void Function())? timer}) {
     final custody = PendantRingCustody(
       walValidator: (ref) async {
         final path = await Wal.getFilePath(ref.fileName);
@@ -254,7 +259,7 @@ void main() {
       },
     );
     custodies.add(custody);
-    final sync = RingStorageSyncImpl(_Listener())
+    final sync = RingStorageSyncImpl(_Listener(), transferTimer: timer)
       ..testConnection = card
       ..testCustody = custody
       ..testWals = [wal];
@@ -507,6 +512,64 @@ void main() {
     expect(ready(), isTrue, reason: 'synthetic pendant did not reach the expected boundary');
   }
 
+  test('R16 DONE behind stalled index hits persistence deadline and keeps owner until settle', () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 66, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync()..indexGate = Completer<void>();
+    final wal = ringWal(records: 61);
+    void Function()? deadline;
+    final sync = syncWith(local, card, wal, timer: (duration, callback) {
+      if (duration == const Duration(seconds: 45)) deadline = callback;
+      return Timer(duration, callback);
+    });
+    final pending = sync.syncWal(wal: wal);
+    final checked = expectLater(pending, throwsException);
+    await card.readReady;
+    card.emit(_readBegin(5, 61));
+    for (var i = 0; i < 60; i++) {
+      card.emit(_record(frameSizes: List.filled(100, 1)));
+    }
+    await until(() => local.indexAttempts == 1);
+    card.emit(_done(0, 65));
+    await Future<void>.delayed(Duration.zero);
+    expect(deadline, isNotNull);
+    deadline!();
+    await until(() => card.stopCalls > 0);
+    expect(card.advances, isEmpty, reason: 'a pending index is never proof');
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(card.reads, [5]);
+    local.indexGate!.complete();
+    await checked;
+    expect(sync.isSyncing, isFalse);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('R16 empty records wait for a durable indexed marker before ADVANCE', () async {
+    final card =
+        _FakeRingDevice(ringInfo: _info(caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync()..indexGate = Completer<void>();
+    final wal = ringWal();
+    final sync = syncWith(local, card, wal);
+    final pending = sync.syncWal(wal: wal);
+    await card.readReady;
+    card.emit(_readBegin(5, 1));
+    card.emit(_record(frameSizes: []));
+    card.emit(_done(0, 6));
+    await until(() => local.indexAttempts == 1);
+    expect(card.advances, isEmpty);
+    final markerFiles = tempDir.listSync().whereType<File>().where((f) => f.path.endsWith('.ring-empty'));
+    expect(markerFiles, hasLength(1));
+    local.indexGate!.complete();
+    await pending;
+    expect(local.added.single.totalFrames, 0);
+    expect(local.added.single.status, WalStatus.synced);
+    expect(local.added.single.fileSha256, hasLength(64));
+    expect(card.advances.single.seq, 6);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
   test('cancel during index save stops read, settles exact tail, and ACKs before releasing ownership', () async {
     final card = _FakeRingDevice(
         ringInfo: _info(writeSeq: 66, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
@@ -595,6 +658,52 @@ void main() {
     expect(local.added, hasLength(1));
     expect(local.added.single.totalFrames, 1, reason: 'already indexed [6,8) is not written again');
     expect(card.advances.last.seq, 8);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
+  test('R16 a same-length replacement after READ admission is written again rather than skipped', () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 7, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync();
+    final wal = ringWal(records: 2);
+    final sync = syncWith(local, card, wal);
+    final custody = PendantRingCustody(
+        store: PendantCustodyStore(directoryProvider: () async => Directory('${tempDir.path}/real_custody')));
+    custodies.add(custody);
+    sync.testCustody = custody;
+    final file = File('${tempDir.path}/island.bin');
+    await file.writeAsBytes([1, 17], flush: true);
+    final indexed = Wal(
+        codec: BleAudioCodec.opus,
+        timerStart: 1000,
+        seconds: 1,
+        totalFrames: 1,
+        filePath: 'island.bin',
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        ownerUid: 'owner',
+        device: 'devkit-1',
+        downloadRingId: 42,
+        downloadSeqStart: 6,
+        downloadSeqEnd: 7,
+        downloadFileBytes: 2,
+        fileSha256: sha256.convert([1, 17]).toString());
+    await WalFileManager.init();
+    await WalFileManager.saveWals([indexed]);
+    final pending = sync.syncWal(wal: wal);
+    // Fake index writer below does not update the real index, so no final ACK.
+    final checked = expectLater(pending, throwsException);
+    await card.readReady;
+    await file.writeAsBytes([1, 18], flush: true);
+    card.emit(_readBegin(5, 2));
+    card.emit(_record());
+    card.emit(_record());
+    card.emit(_done(0, 7));
+    await checked;
+    expect(local.added.single.totalFrames, 2,
+        reason: 'hash revalidation discarded stale duplicate-suppression authority');
+    expect(card.advances, isEmpty);
     await card.controller.close();
     await sync.stop();
   }, skip: !ringDrainRecoveryEnabled);

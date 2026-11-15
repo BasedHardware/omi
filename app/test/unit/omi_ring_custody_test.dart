@@ -348,9 +348,10 @@ void main() {
   test('INFO observed on the wire registers the ring incarnation with the custody manager', () async {
     const ringId = 0x1122334455667788;
     final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
-    OmiDeviceConnection(_device('3.0.21'), t);
+    final conn = OmiDeviceConnection(_device('3.0.21'), t);
     t.emit(DeviceTransportState.connected);
     await _settle();
+    await conn.ringCustodyReady;
 
     expect(PendantRingCustody.shared.currentRingId('omi-1'), ringId);
   });

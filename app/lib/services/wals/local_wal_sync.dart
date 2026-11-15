@@ -14,6 +14,9 @@ import 'package:omi/services/wals/watch_live_coverage.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:uuid/uuid.dart';
+import 'package:crypto/crypto.dart';
 import 'dart:math';
 import 'wal_index_inventory.dart';
 import 'package:omi/utils/wal_index_worker.dart';
@@ -1142,6 +1145,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         _consumeAdmission(data.length);
+        if (wal.liveRingId != null) {
+          wal.fileSha256 = sha256.convert(data).toString();
+          wal.liveDeviceId = wal.device;
+        }
         wal.filePath = fileName;
         wal.storage = WalStorage.disk;
         if (wal.liveRingId != null && wal.liveOrdinalStart != null) {
@@ -1226,6 +1233,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         liveRingId: ringId,
         liveOrdinalStart: start,
         liveOrdinalEnd: end,
+        ownerUid: wal.ownerUid,
+        liveDeviceId: deviceId,
+        fileSha256: wal.fileSha256,
       ),
     );
     DebugLogManager.logEvent('pendant_custody', {

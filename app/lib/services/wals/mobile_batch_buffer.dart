@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -219,10 +220,13 @@ class MobileBatchBuffer {
     // Serial async metadata I/O avoids blocking the UI isolate and precedes
     // seal publication in the same queue. An interrupted snapshot keeps the
     // previous conservative prefix; it never supplies reclaim authority.
-    final snapshot = jsonEncode(_wal!.toJson());
+    final snapshot = _wal!.toJson();
+    final audio = File('${directory.path}/${_wal!.filePath}');
+    final prefixBytes = _wal!.storageTotalBytes;
     _pending = _pending.then((_) async {
       final tmp = File('${journal.path}.tmp');
-      await tmp.writeAsString(snapshot, flush: true);
+      snapshot['file_sha256'] = (await sha256.bind(audio.openRead(0, prefixBytes)).first).toString();
+      await tmp.writeAsString(jsonEncode(snapshot), flush: true);
       await tmp.rename(journal.path);
     }).catchError((Object _) {
       failed = true;
@@ -250,6 +254,7 @@ class MobileBatchBuffer {
     _wal = null;
     _journal = null;
     _pending = _pending.then((_) async {
+      wal.fileSha256 = (await sha256.bind(File('${directory.path}/${wal.filePath}').openRead()).first).toString();
       await publish(wal);
       // publish persists the shared WAL index before removing the journal.
       if (await journal.exists()) await journal.delete();
@@ -321,6 +326,9 @@ class MobileBatchBuffer {
         // A snapshot can prove only its original complete prefix. Additional
         // on-disk frames are recovered but never given inferred ordinals.
         if (!batchRingProofEnabled ||
+            wal.fileSha256 == null ||
+            claimedBytes > bytes.length ||
+            sha256.convert(bytes.sublist(0, claimedBytes)).toString() != wal.fileSha256 ||
             wal.batchLiveSession == null ||
             wal.liveOrdinalStart == null ||
             wal.liveOrdinalEnd == null ||
@@ -342,6 +350,7 @@ class MobileBatchBuffer {
         } finally {
           await durable.close();
         }
+        wal.fileSha256 = sha256.convert(bytes.sublist(0, offset)).toString();
         wal.recoveredBatchJournal = true;
         wal.totalFrames = frames;
         wal.seconds = (frames / wal.codec.getFramesPerSecond()).ceil();

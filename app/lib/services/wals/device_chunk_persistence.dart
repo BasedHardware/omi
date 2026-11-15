@@ -6,6 +6,58 @@ part of 'local_wal_sync.dart';
 /// New default collision names keep the capture timestamp as the last token,
 /// which is the server's filename wire contract. Existing files are untouched.
 extension DeviceChunkPersistence on LocalWalSync {
+  Future<Wal> persistEmptyRingRecords(
+      {required Wal source,
+      required int ringId,
+      required int start,
+      required int end,
+      required int admittedGeneration}) async {
+    if (end <= start) throw StateError('empty marker interval');
+    final owner = SharedPreferencesUtil().uid;
+    if (owner.isEmpty || sessionGeneration != admittedGeneration) {
+      throw StateError('empty marker has no current owner');
+    }
+    final data = utf8.encode(jsonEncode({
+      'kind': 'empty_ring_records_v1',
+      'device': source.device,
+      'ring': ringId,
+      'start': start,
+      'end': end,
+      'owner': owner
+    }));
+    if (!await ensureStorageAdmission(bytes: data.length, admittedGeneration: admittedGeneration)) {
+      throw StateError('empty marker storage refused');
+    }
+    final dir = await getApplicationDocumentsDirectory();
+    final name = 'custody_empty_${const Uuid().v4()}.ring-empty';
+    try {
+      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
+      final marker = Wal(
+          codec: source.codec,
+          timerStart: source.timerStart,
+          seconds: 0,
+          totalFrames: 0,
+          filePath: name,
+          storage: WalStorage.disk,
+          status: WalStatus.synced,
+          ownerUid: owner,
+          device: source.device,
+          downloadRingId: ringId,
+          downloadSeqStart: start,
+          downloadSeqEnd: end,
+          downloadFileBytes: data.length,
+          fileSha256: sha256.convert(data).toString());
+      await addExternalWal(marker, admittedGeneration: admittedGeneration);
+      if (!await hasDurableWal(marker, admittedGeneration: admittedGeneration)) {
+        throw StateError('empty marker index not durable');
+      }
+      return marker;
+    } catch (_) {
+      releaseStorageAdmission(data.length);
+      rethrow;
+    }
+  }
+
   Future<Wal> persistDeviceChunk({
     required Wal source,
     required List<List<int>> frames,
@@ -69,6 +121,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadSeqStart: downloadSeqStart,
           downloadSeqEnd: downloadSeqEnd,
           downloadFileBytes: downloadRingId != null ? data.length : null,
+          fileSha256: downloadRingId != null ? sha256.convert(data).toString() : null,
           clockRun: clockRun);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {

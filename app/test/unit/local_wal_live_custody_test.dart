@@ -66,7 +66,7 @@ void main() {
   final custodies = <PendantRingCustody>[];
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'uid': 'owner'});
     await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('live_custody_');
     custodyDir = await Directory.systemTemp.createTemp('live_custody_cp_');
