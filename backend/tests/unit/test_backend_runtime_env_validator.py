@@ -4011,7 +4011,7 @@ def _assert_record_close_listener_bindings(config):
     hosts.extend(config['cloud_run']['services'].values())
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
-        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'ops_kill'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
         assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
