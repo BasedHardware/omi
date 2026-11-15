@@ -382,6 +382,7 @@ def independent_job_pipeline():
     )
     lifecycle = AutoMockModule('utils.conversations.lifecycle')
     fakes['utils.conversations.lifecycle'] = lifecycle
+    fakes['database.capture_end'] = AutoMockModule('database.capture_end')
     bridge = AutoMockModule('utils.sync.bridge')
     bridge.finish_sync_bridges = lambda uid, cid: cid
     fakes['utils.sync.bridge'] = bridge
