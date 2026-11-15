@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -260,18 +261,21 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  /// Asks Apple (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestAppleCredential() {
+    if (PlatformService.isMobile && !Env.useWebAuth && !Platform.isAndroid) {
+      return AuthService.instance.signInWithAppleMobile();
+    }
+    return AuthService.instance.authenticateWithProvider('apple');
+  }
+
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('apple');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
-          credential = await AuthService.instance.signInWithAppleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('apple');
-        }
+        final credential = await requestAppleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
