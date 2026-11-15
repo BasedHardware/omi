@@ -1821,11 +1821,11 @@ async def test_close_capability_ack_drains_pending_notification_only_for_support
         struct.pack('<I', PUSHER_RECORD_CLOSE_ACK_OPCODE)
         + json.dumps({'type': 'record_close_ack', 'version': version}).encode()
     )
-    ws = FakePusherWebSocket(incoming=[ack])
+    ws = FakePusherWebSocket(incoming=[ack, b''])
     session = make_session(ws=ws, active_ref=active)
     await session.connect()
     assert not await session.request_recording_close('conv-1')
-    ws.on_recv = lambda: active.update(active=False)
+    ws.on_recv = lambda: active.update(active=len(ws.incoming) > 1)
     await session.pusher_receive()
     assert session.record_close_supported is (type(version) is int and version == 2)
     assert any(frame_type(f) == 104 for f in ws.sent) is session.record_close_supported

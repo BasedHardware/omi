@@ -235,6 +235,7 @@ async def test_capacity_lost_ack_and_reconnect_retain_exact_close_until_acceptan
         socket.incoming.append(result_frame('conv-1', ticket, phase, status, watermark))
         socket.on_recv = lambda: active.update(active=False)
         await session.pusher_receive()
+        active['active'] = True  # The fixture stopped the pump, not the live session.
 
     await deliver(ws, 'prepare', 'capacity')
     assert not close.prepared and 'conv-1' in session.pending_record_closes
@@ -327,6 +328,18 @@ def test_terminal_wire_state_reclaims_slots_and_preserves_recent_idempotence():
 @pytest.mark.slow
 @pytest.mark.asyncio
 async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(inline_session, monkeypatch):
+    await _sequential_closes(inline_session, monkeypatch, total=150, limit=100)
+
+
+@pytest.mark.asyncio
+async def test_production_retirement_survives_more_closes_than_wire_capacity(inline_session, monkeypatch):
+    from utils import pusher_record_close
+
+    monkeypatch.setattr(pusher_record_close, 'MAX_CLOSES', 2)
+    await _sequential_closes(inline_session, monkeypatch, total=5, limit=2)
+
+
+async def _sequential_closes(inline_session, monkeypatch, *, total, limit):
     client, path, _, _ = inline_session
     incoming, replies = asyncio.Queue(), asyncio.Queue()
     active = {'active': True}
@@ -369,7 +382,7 @@ async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(i
     session = make_session(
         ws=Relay(),
         active_ref=active,
-        config_overrides={'uid': 'owner', 'sample_rate': 16000, 'max_pending_requests': 100},
+        config_overrides={'uid': 'owner', 'sample_rate': 16000, 'max_pending_requests': limit},
         deps_overrides={'get_current_conversation_id': lambda: binding['cid']},
     )
     handler = asyncio.create_task(
@@ -378,7 +391,7 @@ async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(i
     await session.connect()
     receiver = asyncio.create_task(session.pusher_receive())
     try:
-        for i in range(150):
+        for i in range(total):
             cid = f'close-{i}'
             row_path = (*path[:-1], cid)
             client.rows[row_path] = {'record_lane_owner': 'batch_live_v1', 'status': 'completed'}
@@ -395,7 +408,7 @@ async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(i
                     await session.request_recording_close(cid)
                     await asyncio.sleep(0.001)
             assert not session.pending_record_closes
-            assert len(session.record_close_boundaries) <= 100
+            assert len(session.record_close_boundaries) <= limit
             assert len(states[0].requests) <= 1 and len(states[0].received) <= 1
             assert len(states[0].completed) <= 128 and len(states[0].committed) <= 129
         with pytest.raises(AudioBackpressure):
@@ -424,6 +437,7 @@ async def test_unsupported_close_is_terminal_until_reconnect(monkeypatch, frozen
     ws.incoming.append(result_frame('conv-1', close.request_id, 'commit' if frozen else 'prepare', 'unsupported'))
     ws.on_recv = lambda: active.update(active=False)
     await session.pusher_receive()
+    active['active'] = True
     assert not session.pending_record_closes
     assert not session.record_close_supported
     before = len(ws.sent)
@@ -452,6 +466,7 @@ async def test_evicted_lost_ack_reprepares_fresh_baseline_without_unfreezing():
     ws.incoming.append(result_frame('conv-1', close.request_id, 'commit', 'unknown'))
     ws.on_recv = lambda: active.update(active=False)
     await session.pusher_receive()
+    active['active'] = True
     assert close.frozen and not close.prepared
     await session.request_recording_close('conv-1')
     assert close.frozen and close.base == 0 and close.sent == 0
