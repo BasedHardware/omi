@@ -281,8 +281,9 @@ overlay:
           category: rollout
     pusher:
       env:
-        # SCA-2304: approved codec rollback; custody and existing readers stay enabled.
-        AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED: {value: "false", category: ops_kill}
+        # SCA-2304: pusher activation at 2026-11-15 14:23:17Z, generation 3309.
+        # Rollback inverse: set this binding and the prod chart to "false", then regenerate.
+        AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED: {value: "true", category: ops_kill}
         # SCA-2185: preserve this host's observed production bindings.
         NOTES_SHORT_CLIP_FLOOR: {value: "true", category: rollout}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).

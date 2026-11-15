@@ -115,9 +115,10 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
-  # Captain 2026-11-15 02:55Z: keep codec off pending SCA-2304 requalification.
+  # Release 2026-11-15 14:23:17Z, SCA-2304: generation 3309 enabled pusher only.
+  # Rollback inverse: set this binding and the prod runtime overlay to "false".
   - name: AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED
-    value: "false"
+    value: "true"
   # SCA-2185: preserve observed production overrides; rollback changes these pins.
   - name: NOTES_SHORT_CLIP_FLOOR
     value: "true"

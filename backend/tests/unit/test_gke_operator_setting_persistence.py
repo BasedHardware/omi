@@ -14,7 +14,7 @@ PINS = {
         'NOTES_SHORT_CLIP_FLOOR': 'true',
     },
     'pusher': {
-        'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED': 'false',
+        'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED': 'true',
         'NOTES_SHORT_CLIP_FLOOR': 'true',
     },
 }

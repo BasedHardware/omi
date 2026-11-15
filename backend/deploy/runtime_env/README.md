@@ -218,8 +218,15 @@ They remain absent from source; the registry and graduation tests continue to
 reject their reintroduction. The rollout owner must dispose of those stale
 production entries before claiming literal environment agreement.
 
-The captain's 2026-11-15 02:55Z contingency additionally pins prod pusher
-`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=false` after two codec-latency breaches.
-Listen retains its accepted default-on behavior. Keep pusher off until the
-custody owner requalifies the codec under SCA-2304; this disables optional
-compression only, preserving PCM custody and existing FLAC readers.
+Release's 2026-11-15 14:23:17Z pusher-only activation under SCA-2304 supersedes
+the captain's 02:55Z compression-off contingency. Prod pusher explicitly pins
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true`, matching runtime generation 3309
+on source `afa75349` / image digest prefix `055d316`. All other settings and
+listen's default-on behavior are preserved. Ready enabled serving and the full
+canary remain pending; this config audit records the activation without granting
+acceptance or deployment permission.
+
+Rollback inverse: set only this pusher binding to `false` in both the production
+chart and runtime overlay, then regenerate `runtime_env.yaml` and the flag catalog.
+This disables optional compression while preserving PCM custody and existing
+FLAC readers. Release owns any guard rollback and its matching disposition here.

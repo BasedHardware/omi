@@ -3107,7 +3107,7 @@ environments:
             category: ops_kill
             value: '100'
           AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED:
-            value: 'false'
+            value: 'true'
             category: ops_kill
           NOTES_SHORT_CLIP_FLOOR: {value: 'true', category: rollout}
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
