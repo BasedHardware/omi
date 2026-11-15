@@ -148,3 +148,22 @@ def test_repair_boundary_compares_stored_capture_instead_of_raw_filename(anchors
     [unit] = units(tmp_path / 'source', [FUTURE], run=None)
     job = {'capture_at': unit.stored_capture_at, 'duration_seconds': unit.duration_seconds}
     assert artifact_reupload._original_unit([job], 0, unit) is job
+
+
+def test_retained_provenance_batchget_does_not_pass_an_inactive_sdk_transaction(monkeypatch):
+    from unittest.mock import MagicMock
+    from google.cloud.firestore_v1 import _helpers
+    from database import sync_capture_clock
+
+    client = MagicMock()
+    client.transaction.return_value = SimpleNamespace(in_progress=False)
+
+    def batchget(refs, *, transaction=None):
+        # Exercise the SDK's real local request guard without credentials/RPCs.
+        assert _helpers.get_transaction_id(transaction) is None
+        return []
+
+    client.get_all.side_effect = batchget
+    monkeypatch.setattr(sync_capture_clock, 'get_firestore_client', lambda: client)
+    assert sync_capture_clock.retained_offsets('synthetic', ['scope']) == {}
+    client.transaction.assert_not_called()

@@ -60,7 +60,7 @@ def retained_offsets(uid: str, scopes: list[str]) -> dict[str, float]:
     refs = [collection.document(f'capture-clock-{scope}') for scope in set(scopes)]
     offsets = {}
     # One bounded BatchGet for the upload, including missing-document snapshots.
-    for snapshot in client.get_all(refs, transaction=client.transaction()):
+    for snapshot in client.get_all(refs):
         row = snapshot.to_dict()
         if row is None:
             continue
