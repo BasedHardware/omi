@@ -2597,6 +2597,11 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
     if close_path == 'staged_v2':
         monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
     monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
+    # An applied refresh schedules speaker follow-ups that build real datastore
+    # clients; on CI their credential discovery outlasts this test's teardown wait.
+    monkeypatch.setattr(pusher, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(pusher_audio_projection, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', MagicMock(return_value=False))
     controls = [
         struct.pack('<I', 104)
         + json.dumps(
