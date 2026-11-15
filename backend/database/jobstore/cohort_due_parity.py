@@ -12,7 +12,7 @@ import time
 
 from database import rpc_deadline
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled
-from database.jobstore import codec
+import database.jobstore.codec as codec
 from database.jobstore.cohort import project_document
 from database.jobstore.dual_store import mirrored, read_current, shadow_writes_enabled
 from utils.staging_fence import jobstore_mirror_factory_admits
