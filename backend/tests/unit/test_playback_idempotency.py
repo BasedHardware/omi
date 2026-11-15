@@ -576,12 +576,17 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('enabled', [False, True])
-async def test_empty_projection_pending_hint_survives_real_http_response(monkeypatch, route_app, enabled):
+@pytest.mark.parametrize('mode', ['success', 'timeout', 'off', 'newer_marker', 'refused'])
+async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, mode):
     import httpx
+    import threading
+    import asyncio
     from database import record_projection_rebuild
+    from utils.batch_pipeline import record_projection_rebuild as repair
+    from utils.sync import playback_metadata
 
     app, sync = route_app
+    enabled = mode != 'off'
     monkeypatch.setenv('OMI_ENV_STAGE', 'offline')
     for key in (
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
@@ -590,19 +595,63 @@ async def test_empty_projection_pending_hint_survives_real_http_response(monkeyp
     ):
         monkeypatch.setenv(key, 'true' if enabled else 'false')
     app.dependency_overrides[sync.auth.get_current_user_uid] = lambda: 'synthetic'
-    monkeypatch.setattr(
-        sync.conversations_db,
-        'get_conversation',
-        lambda *args, **kwargs: {'audio_files': [], 'record_lane_owner': 'batch_live_v1'},
-    )
-    read = Mock(return_value=True)
-    monkeypatch.setattr(record_projection_rebuild, 'pending', read)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
-        response = await client.get('/v1/sync/audio/conversation/urls')
-    assert response.status_code == 200
-    assert response.json() == {
-        'audio_files': [],
-        'conversation_audio': None,
-        'poll_after_ms': 5000 if enabled else None,
-    }
+    row = {'audio_files': [], 'record_lane_owner': 'batch_live_v1', 'record_audio_closed': True}
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation', lambda *a, **kw: dict(row))
+    monkeypatch.setattr(sync.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: dict(row))
+    read = Mock(return_value='old')
+    monkeypatch.setattr(record_projection_rebuild, 'pending_version', read)
+    release, finished = threading.Event(), threading.Event()
+    marker = {'version': 'old'}
+
+    def rebuild(*args):
+        if mode == 'timeout':
+            assert release.wait(5)
+        if mode == 'refused':
+            finished.set()
+            return False
+        row['audio_files'] = [dict(id='part', duration=1, chunk_timestamps=[100])]
+        if mode == 'newer_marker':
+            marker['version'] = 'new'
+        return True
+
+    def retire(*args, observed_update_time):
+        assert observed_update_time == 'old'
+        if marker.get('version') == observed_update_time:
+            marker.clear()
+        finished.set()
+        return not marker
+
+    discovery = Mock(side_effect=rebuild)
+    deletion = Mock(side_effect=retire)
+    monkeypatch.setattr(repair, 'rebuild', discovery)
+    monkeypatch.setattr(record_projection_rebuild, 'retire_observed', deletion)
+    monkeypatch.setattr(playback_metadata, 'OPEN_TIMEOUT_SECONDS', 0.01 if mode == 'timeout' else 2)
+    monkeypatch.setattr(sync.sync_playback, 'is_audio_merge_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(sync.sync_playback, 'get_playback_artifact_signed_url', lambda *a: 'signed')
+    monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: None)
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            response = await client.get('/v1/sync/audio/conversation/urls')
+        if mode == 'refused':
+            assert response.status_code == 404 and marker
+            deletion.assert_not_called()
+        elif mode in {'timeout', 'off'}:
+            assert response.status_code == 200
+            assert response.json() == {
+                'audio_files': [],
+                'conversation_audio': None,
+                'poll_after_ms': 5000 if enabled else None,
+            }
+            deletion.assert_not_called()
+        else:
+            assert response.status_code == 200
+            assert response.json()['audio_files'][0]['id'] == 'part'
+            assert response.json()['audio_files'][0]['signed_url'] == 'signed'
+            assert marker == ({'version': 'new'} if mode == 'newer_marker' else {})
+            deletion.assert_called_once()
+    finally:
+        release.set()
+        if enabled:
+            assert await asyncio.to_thread(finished.wait, 5)
     assert read.call_count == int(enabled)
+    assert discovery.call_count == int(enabled)

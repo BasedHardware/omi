@@ -419,24 +419,27 @@ def get_audio_signed_urls(
             and conversation
             and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
         ):
-            from database import record_projection_rebuild
+            from concurrent.futures import TimeoutError
+            from utils.sync.playback_metadata import refresh_on_open
 
             try:
-                pending = record_projection_rebuild.pending(uid, conversation_id)
-            except Exception:
+                repaired = refresh_on_open(uid, conversation_id)
+            except TimeoutError:
                 from utils.observability.fallback import record_fallback
 
                 record_fallback(
                     component='sync',
                     from_mode='playback_metadata',
                     to_mode='pending',
-                    reason='other',
+                    reason='timeout',
                     outcome='degraded',
                 )
-                pending = True  # Unknown repair state cannot assert that no audio exists.
-            if pending:
                 return {'audio_files': [], 'poll_after_ms': 5000}
-        return {"audio_files": []}
+            if repaired is not None:
+                conversation = {**conversation, **repaired}
+                audio_files = repaired.get('audio_files') or []
+        if not audio_files:
+            return {"audio_files": []}
 
     if is_audio_merge_dispatch_enabled():
         return _get_audio_urls_via_artifacts(uid, conversation_id, audio_files, conversation)

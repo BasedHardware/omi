@@ -36,6 +36,15 @@ def pending(uid, cid, *, firestore_client=None):
     return client.collection(COLLECTION).document(marker_id(uid, cid)).get(field_paths=['kind']).exists
 
 
+def pending_version(uid, cid, *, firestore_client=None):
+    """One bounded point read for demand repair and version-conditional retirement."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = (
+        client.collection(COLLECTION).document(marker_id(uid, cid)).get(field_paths=['kind'], timeout=1, retry=None)
+    )
+    return snapshot.update_time if snapshot.exists else None
+
+
 def mark_many(uid, conversation_ids, *, firestore_client=None):
     """One bounded cleanup RPC, rather than one timeout per socket obligation."""
     owners = set(conversation_ids)

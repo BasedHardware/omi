@@ -51,9 +51,14 @@ class FakeRequest:
 
 @pytest.mark.parametrize('pending', [False, True])
 def test_empty_batch_audio_distinguishes_durable_metadata_debt(monkeypatch, pending):
-    from database import record_projection_rebuild
+    from utils.sync import playback_metadata
 
-    monkeypatch.setattr(record_projection_rebuild, 'pending', lambda *args: pending)
+    def repair(*args):
+        if pending:
+            raise TimeoutError
+        return None
+
+    monkeypatch.setattr(playback_metadata, 'refresh_on_open', repair)
     result = playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'})
     assert result == ({'audio_files': [], 'poll_after_ms': 5000} if pending else {'audio_files': []})
 
@@ -374,6 +379,7 @@ def test_build_playback_artifact_encodes_mp3(monkeypatch):
 
 def test_all_close_switches_off_preserves_empty_playback_without_new_io(monkeypatch):
     from database import record_projection_rebuild
+    from utils.sync import playback_metadata
 
     for key in (
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
@@ -385,6 +391,7 @@ def test_all_close_switches_off_preserves_empty_playback_without_new_io(monkeypa
     write = MagicMock(side_effect=AssertionError('rollback must not write metadata debt'))
     monkeypatch.setattr(record_projection_rebuild, 'pending', read)
     monkeypatch.setattr(record_projection_rebuild, 'mark_many', write)
+    monkeypatch.setattr(playback_metadata, 'refresh_on_open', read)
     assert playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'}) == {
         'audio_files': []
     }
