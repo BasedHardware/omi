@@ -321,7 +321,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             'HOME_SETTLED_EMPTY_WIRE_ENABLED',
         }:
             assert entry['owner'] == flag['owner'] == 'quality-lead'
-            assert entry['review_by'] == '2026-12-15'
+            assert entry['review_by'] == (
+                '2026-11-17' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
+            )
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
             assert entry['review_by'] == '2026-12-14'
@@ -336,6 +338,12 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
+        elif name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED':
+            assert flag['lifecycle'] == 'ops_kill'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Default off')
+            assert 'read tolerance' in flag['notes']
+            assert '48 hours' in flag['notes']
         elif name.startswith('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'):
             default = (
                 'Default 100'
