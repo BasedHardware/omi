@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -377,6 +380,8 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -468,6 +473,9 @@ environments:
             category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
+            category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
             category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
@@ -591,6 +599,8 @@ environments:
             category: ops_kill
             value: '0'
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -969,6 +979,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1250,6 +1263,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1361,6 +1376,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -1634,6 +1652,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1744,6 +1764,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -2003,6 +2026,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2117,6 +2142,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -2335,6 +2363,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2721,6 +2751,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3077,6 +3110,8 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3277,6 +3312,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3399,6 +3437,8 @@ environments:
             category: ops_kill
             value: '100'
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3799,6 +3839,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4080,6 +4123,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4324,6 +4369,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -4597,6 +4645,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4848,6 +4898,9 @@ environments:
           env:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
+              category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
               category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
@@ -5107,6 +5160,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5345,6 +5400,9 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5562,6 +5620,8 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
