@@ -201,7 +201,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED", "value": "true"},
-        {"name": "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED", "value": "true"},
+        {"name": "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED", "value": "false"},
         {"name": "HOME_SETTLED_EMPTY_WIRE_ENABLED", "value": "true"},
         {"name": "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
