@@ -280,7 +280,10 @@ def main():
                     report['projection_prepass_budget_exhausted'] = int(
                         projection_report.get('outcome') == 'budget_exhausted'
                     )
-                run_summary(report, shard=shard, shards=shards, phase=phase)
+                if sys.argv[1:] == ['--row']:
+                    emit(report)
+                else:
+                    run_summary(report, shard=shard, shards=shards, phase=phase)
                 return 0
 
             except BaseException as error:

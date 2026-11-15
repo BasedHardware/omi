@@ -253,3 +253,16 @@ def test_outcome_is_served_by_repair_registry_with_only_bounded_labels(cron):
         (Path(__file__).resolve().parents[2] / 'charts/monitoring/metric-inventory.prod.json').read_text()
     )
     assert 'omi_record_seal_repair_run_outcomes_total' in inventory['declared_metrics']
+
+
+@pytest.mark.parametrize('exception,exit_code', [(BudgetExhausted(), 0), (RuntimeError(), 1)])
+def test_row_child_escape_does_not_count_a_coordinator_run(cron, monkeypatch, exception, exit_code):
+    import io
+    from utils.observability import firestore_probe_export as export
+
+    monkeypatch.setattr(sys, 'argv', ['record_seal_repair_job.py', '--row'])
+    monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer=io.BytesIO(b'{}')))
+    monkeypatch.setattr(cluster, 'row_main', Mock(side_effect=exception))
+    assert job.main() == exit_code
+    assert not any(row.get('repair_run_summary') for row in cron)
+    assert not [s for f in export.REPAIR_RUN_OUTCOMES.collect() for s in f.samples]
