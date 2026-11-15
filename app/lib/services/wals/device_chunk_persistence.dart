@@ -3,6 +3,8 @@ part of 'local_wal_sync.dart';
 /// All device drains use this transaction: admission, identical length-prefixed
 /// bytes, flushed file, indexed WAL, then proof of durability before device ACK.
 /// Naming callbacks preserve the producer's existing collision sequence.
+/// New default collision names keep the capture timestamp as the last token,
+/// which is the server's filename wire contract. Existing files are untouched.
 extension DeviceChunkPersistence on LocalWalSync {
   Future<Wal> persistDeviceChunk({
     required Wal source,
@@ -35,8 +37,14 @@ extension DeviceChunkPersistence on LocalWalSync {
         final dot = name.lastIndexOf('.');
         final stem = dot > 0 ? name.substring(0, dot) : name;
         final ext = dot > 0 ? name.substring(dot) : '';
+        final timestampSeparator = stem.lastIndexOf('_');
+        final prefix = stem.substring(0, timestampSeparator);
+        final timestamp = stem.substring(timestampSeparator + 1);
         do {
-          name = '${stem}_u${nextCollisionSequence()}$ext';
+          final nonce = nextCollisionSequence();
+          name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
+              ? '${stem}_u$nonce$ext'
+              : '${prefix}_u${nonce}_$timestamp$ext';
         } while (await File('${dir.path}/$name').exists());
       }
       await File('${dir.path}/$name').writeAsBytes(data, flush: true);
