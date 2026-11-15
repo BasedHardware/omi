@@ -82,3 +82,13 @@ reads/day: discovery, transactional fence and optional shadow refresh, with one
 retry. These are planning bounds, not a measured fleet, population, spend or
 runtime cap. The operator must remeasure/rebudget before exceeding the envelope
 or repeating passes/retries beyond it. Normal serving never invokes stamping.
+
+## Store protocol parity
+
+Postgres and simulation adapters implement the same independent clock/cursor
+interface and read their own native versioned control marker. Firestore marker
+completion does not qualify a Postgres primary or authorize native clock
+activation; its existing owner retains native population/index/authority gates.
+No native Postgres backfill or activation is added here. Serving-parity marker
+observations use the existing bounded connection without a serving transaction
+or row lock. These adapter obligations do not add a gate to the Firestore rollout.
