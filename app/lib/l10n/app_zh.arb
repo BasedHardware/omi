@@ -2218,6 +2218,7 @@
     "authFailedToSignInWithGoogle": "使用Google登录失败，请重试。",
     "authenticationFailed": "身份验证失败。请重试。",
     "authFailedToSignInWithApple": "使用Apple登录失败，请重试。",
+    "authAppleSignInFailedUseGoogle": "无法通过 Apple 登录。请重试，或使用 Google 继续。",
     "authFailedToRetrieveToken": "获取Firebase令牌失败，请重试。",
     "authUnexpectedErrorFirebase": "登录时发生意外错误，Firebase错误，请重试。",
     "authUnexpectedError": "登录时发生意外错误，请重试",

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google'iga sisselogimine ebaõnnestus, palun proovige uuesti.",
     "authenticationFailed": "Autentimine ebaõnnestus. Palun proovige uuesti.",
     "authFailedToSignInWithApple": "Apple'iga sisselogimine ebaõnnestus, palun proovige uuesti.",
+    "authAppleSignInFailedUseGoogle": "Apple'iga sisselogimine ei õnnestunud. Proovi uuesti või jätka Google'iga.",
     "authFailedToRetrieveToken": "Firebase tokeni hankimine ebaõnnestus, palun proovige uuesti.",
     "authUnexpectedErrorFirebase": "Ootamatu viga sisselogimisel, Firebase viga, palun proovige uuesti.",
     "authUnexpectedError": "Ootamatu viga sisselogimisel, palun proovige uuesti",

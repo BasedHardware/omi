@@ -16,6 +16,7 @@ from utils.batch_pipeline.projection import publish_client_completion
 from tests.integration.test_batch_pipeline_projection_firestore import superseded_anchor
 from unittest.mock import Mock
 from database.batch_pipeline_projection_finish_backfill import backfill_ref, BACKFILL_VERSION
+from database.batch_pipeline_store import projection_page
 from utils.batch_pipeline.serving import Serving
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
@@ -292,6 +293,14 @@ async def test_excluded_async_finish_rows_still_schedule_and_complete(lane, monk
     lane.projector.persist(sid)
     row = lane.projector.store.ref('results', sid).get().to_dict()
     assert row['projection_finish_due_at'] == -1.0
+    # The independently stamped follow-up query must still discover async rows
+    # excluded from finish discovery, on the real loopback Firestore engine.
+    assert row['projection_followup_due_at'] == lane.clock()
+    assert sid not in projection_page(lane.client, lane.store.namespace, due_before=lane.clock(), exclude_async=True)[0]
+    assert (
+        sid
+        in projection_page(lane.client, lane.store.namespace, followup_due_before=lane.clock(), exclude_async=True)[0]
+    )
     backfill_ref(lane.client, lane.store.namespace).set({'version': BACKFILL_VERSION, 'complete': True})
     read = lane.projector.store.read
     lane.projector.store.read = Mock(wraps=read)

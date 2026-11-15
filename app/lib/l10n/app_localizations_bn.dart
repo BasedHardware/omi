@@ -7039,6 +7039,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple দিয়ে সাইন ইন করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple দিয়ে সাইন ইন হয়নি। আবার চেষ্টা করুন অথবা Google দিয়ে চালিয়ে যান।';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase টোকেন পুনরুদ্ধার করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
 
   @override

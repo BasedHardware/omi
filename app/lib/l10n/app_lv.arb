@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Neizdevās pierakstīties ar Google, lūdzu, mēģiniet vēlreiz.",
     "authenticationFailed": "Autentifikācija neizdevās. Lūdzu, mēģiniet vēlreiz.",
     "authFailedToSignInWithApple": "Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.",
+    "authAppleSignInFailedUseGoogle": "Pierakstīšanās ar Apple neizdevās. Mēģiniet vēlreiz vai turpiniet ar Google.",
     "authFailedToRetrieveToken": "Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedErrorFirebase": "Neparedzēta kļūda pierakstīšanās laikā, Firebase kļūda, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedError": "Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz",

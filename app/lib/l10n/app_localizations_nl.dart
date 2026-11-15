@@ -7046,6 +7046,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Aanmelden met Apple mislukt, probeer het opnieuw.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Inloggen met Apple is niet gelukt. Probeer het opnieuw of ga verder met Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kon Firebase-token niet ophalen, probeer het opnieuw.';
 
   @override

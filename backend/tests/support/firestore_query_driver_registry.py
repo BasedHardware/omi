@@ -48,6 +48,7 @@ from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRI
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
+from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
@@ -197,7 +198,7 @@ BODY_DIGEST = {
     'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '00d9834b2575536d3f8ee2d3017529dddeb3770d7d63e72c5f731e9a272c28aa',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -261,6 +262,9 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
+    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
+    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
+    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -3578,6 +3582,7 @@ for entry in (
     *allowance_hold_entries(),
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
+    *home_feed_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
@@ -4341,6 +4346,19 @@ for _key, _reason in (
     (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
+    ),
+    (
+        'database.jobstore.reconcile._primary_keys',
+        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
+        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
+        'No filters or composite index; built-in document-id ordering only.',
+    ),
+    (
+        'database.jobstore.reconcile.process_page',
+        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
+        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
+        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
+        'tests/unit/test_jobstore_reconcile.py.',
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))

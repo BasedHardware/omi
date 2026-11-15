@@ -4,6 +4,7 @@ from collections.abc import Callable
 from contextlib import nullcontext
 
 from database.action_item_fence import fenced_action_item_commit
+from database.home_feed_writer import suppress_during_account_erasure
 import logging
 from typing import Any
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @invalidate_around_write
+@suppress_during_account_erasure
 def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> dict:
     # Top-level batch stores are outside users/{uid}; fence and purge them
     # before deleting the last references needed for retryable object erasure.

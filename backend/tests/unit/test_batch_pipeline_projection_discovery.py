@@ -1,6 +1,7 @@
 """Discovery hints advance independently; they never authorize projection."""
 
 from unittest.mock import Mock
+import math
 
 import pytest
 
@@ -10,6 +11,35 @@ from config.policy import kill_switch
 from database.batch_pipeline_store import projection_page
 from tests.unit.test_batch_pipeline_followup_desync import ResultQuery
 from utils.batch_pipeline import projection_discovery
+
+
+def test_clock_modes_reset_cursor_and_infinite_finish_seed_is_finite(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED', 'true')
+    monkeypatch.setattr(projection_discovery, 'projection_discovery_stripe', lambda: 2048)
+    monkeypatch.setattr(projection_discovery.time, 'time', lambda: 100.0)
+    store = Mock()
+    store.projection_page.side_effect = [
+        (['head'], (10.0, 1.0, 'head')),
+        (['finish'], (55.0, 2.0, 'finish')),
+        (['head'], (20.0, 1.0, 'head')),
+        (['followup'], (160.0, 2.0, 'followup')),
+        (['head'], (10.0, 1.0, 'head')),
+        (['finish'], None),
+    ]
+    scan = ProjectionDiscovery(store, states=('persisted', 'ready'))
+    assert scan.next(1, due_before=float('inf'), exclude_async=True) == ['finish']
+    assert scan.next(1, followup_due_before=300.0) == ['followup']
+    assert scan.next(1, due_before=float('inf'), exclude_async=True) == ['finish']
+    calls = [c.kwargs for c in store.projection_page.call_args_list]
+    assert [calls[i]['after'] for i in (0, 2, 4)] == [None, None, None]
+    assert calls[1]['after'] == calls[5]['after'] == (55.0,)
+    assert math.isfinite(calls[1]['after'][0])
+    assert calls[3]['after'] == (160.0,)
+    assert calls[1]['exclude_async'] is True
+    assert 'exclude_async' not in calls[3] and calls[3]['followup_due_before'] == 300.0
+    with pytest.raises(ValueError, match='cannot be combined'):
+        scan.next(due_before=100.0, followup_due_before=100.0)
 
 
 def test_default_on_independent_scans_wrap_and_kill_switch_restores_first_page(monkeypatch):

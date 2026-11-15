@@ -23,6 +23,7 @@ from database.batch_pipeline_projection_finish import (
     projection_finish_state_fields,
 )
 from database.batch_pipeline_store import projection_page
+from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_sweep_owner_chain import Recording
@@ -48,6 +49,15 @@ SWITCHES = (
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED',
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED',
 )
+
+
+@pytest.mark.parametrize('state', ['persisted', 'ready'])
+def test_async_state_move_stamps_independent_followup_clock(state):
+    assert projection_finish_state_fields(state, 123.0, async_projection=True) == {
+        PROJECTION_FINISH_DUE_FIELD: -1.0,
+        PROJECTION_FINISH_STEP_FIELD: 0,
+        FOLLOWUP_DUE: 123.0,
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -155,10 +165,12 @@ def test_a_state_change_clears_both_fields_in_the_same_write(monkeypatch, enable
     assert projection_finish_state_fields('ready', 5.0) == {
         PROJECTION_FINISH_DUE_FIELD: 5.0,
         PROJECTION_FINISH_STEP_FIELD: 0,
+        FOLLOWUP_DUE: 5.0,
     }
     assert projection_finish_state_fields('completed', 5.0) == {
         PROJECTION_FINISH_DUE_FIELD: firestore.DELETE_FIELD,
         PROJECTION_FINISH_STEP_FIELD: firestore.DELETE_FIELD,
+        FOLLOWUP_DUE: firestore.DELETE_FIELD,
     }
     assert store.hold_for_quarantine('good', binding, 100)
     assert client.rows[row]['projection_state'] == 'ready'
@@ -433,6 +445,7 @@ def test_flag_off_writer_fields_remain_discoverable_on_listen_host(monkeypatch):
         assert projection_finish_entry_fields(state, 123.0) == {
             PROJECTION_FINISH_DUE_FIELD: 123.0,
             PROJECTION_FINISH_STEP_FIELD: 0,
+            FOLLOWUP_DUE: 123.0,
         }
         assert projection_finish_state_fields(state, 123.0) == projection_finish_entry_fields(state, 123.0)
 

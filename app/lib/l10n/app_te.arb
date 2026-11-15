@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.",
     "authFailedToRetrieveToken": "firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"

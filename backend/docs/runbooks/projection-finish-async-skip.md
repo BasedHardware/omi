@@ -30,9 +30,16 @@ Each finish sweep also probes persisted/ready receipts with a clock at or below
 finish page. Sync-only rows cannot wake extra follow-up discovery. Positive-clock
 async rows from older writers remain on the ordinary finish page; seeing one
 keeps the drain scheduled and transactionally classifies it. No extra fallback
-page or per-job scan runs for synchronous-only work. The follow-up drain keeps
-its existing unfiltered discovery, claims, privacy fences, readiness, retries
-and completion transactions.
+page or per-job scan runs for synchronous-only work. Follow-up discovery is
+independent of the finish clock. Main's separately admitted follow-up-clock
+rollout stamps `projection_followup_due_at` alongside the negative finish hint
+and can use that independent clock after its own writer/backfill marker is
+complete. Until then it keeps unfiltered discovery. Neither query mode filters
+negative finish hints from follow-up work. Finish and follow-up clocks cannot
+share a cursor; switching modes resets it. Under the infinite finish ceiling,
+stripe seeds remain finite by clamping their seed horizon to wall time.
+Claims, privacy fences, readiness, retries and completion transactions retain
+their contracts; this composition does not authorize follow-up-clock rollout.
 
 `BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED` defaults on. Set it to `false` to
 remove the lower bound and restore the former finish discovery, preserving the

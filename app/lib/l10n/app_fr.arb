@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Échec de la connexion avec Google, veuillez réessayer.",
     "authenticationFailed": "Échec de l'authentification. Veuillez réessayer.",
     "authFailedToSignInWithApple": "Échec de la connexion avec Apple, veuillez réessayer.",
+    "authAppleSignInFailedUseGoogle": "La connexion avec Apple n'a pas fonctionné. Réessayez ou continuez avec Google.",
     "authFailedToRetrieveToken": "Échec de la récupération du jeton Firebase, veuillez réessayer.",
     "authUnexpectedErrorFirebase": "Erreur inattendue lors de la connexion, erreur Firebase, veuillez réessayer.",
     "authUnexpectedError": "Erreur inattendue lors de la connexion, veuillez réessayer",

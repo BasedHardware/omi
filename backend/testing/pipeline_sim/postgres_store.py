@@ -107,6 +107,9 @@ class PgSimStore(SimStore):
     def projection_finish_backfill_complete(self) -> bool:
         return self.pg.projection_finish_backfill_complete()
 
+    def projection_followup_backfill_complete(self) -> bool:
+        return self.pg.projection_followup_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
@@ -192,9 +195,15 @@ class PgSimStore(SimStore):
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
         exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         return self.pg.projection_page(
-            limit, after=after, states=states, due_before=due_before, exclude_async=exclude_async
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
         )
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:

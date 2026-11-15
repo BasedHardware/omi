@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "فشل تسجيل الدخول باستخدام Google، يرجى المحاولة مرة أخرى.",
     "authenticationFailed": "فشلت المصادقة. يرجى المحاولة مرة أخرى.",
     "authFailedToSignInWithApple": "فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.",
+    "authAppleSignInFailedUseGoogle": "لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.",
     "authFailedToRetrieveToken": "فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedErrorFirebase": "خطأ غير متوقع أثناء تسجيل الدخول، خطأ في Firebase، يرجى المحاولة مرة أخرى.",
     "authUnexpectedError": "خطأ غير متوقع أثناء تسجيل الدخول، يرجى المحاولة مرة أخرى",

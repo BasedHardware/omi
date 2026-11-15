@@ -314,7 +314,8 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
             await asyncio.sleep(0)
         assert len(finish._abandon_record_drains) == cap
         assert len(owners) == cap + 1  # Retained owner plus four abandon owners.
-        assert sum('outcome=abandon_overflow' in r.message for r in caplog.records) == count - cap - 1
+        assert sum('outcome=abandon_queued' in r.message for r in caplog.records) == count - cap - 1
+        assert len(finish._abandon_queue) == count - cap - 1
         assert all(tracker.pending for tracker in trackers)
         sessions = records.rows[PATH]['record_upload_sessions']
         assert len(sessions) == count and all('abandoned_at' not in value for value in sessions.values())
@@ -328,11 +329,13 @@ async def test_shared_storage_settles_before_four_coordinators_attest(records, m
         release.set()
         await asyncio.wait_for(asyncio.gather(tasks[0], *owners), 5)
         await asyncio.wait_for(asyncio.gather(*(tracker.wait() for tracker in trackers)), 5)
-        await asyncio.sleep(0)
+        async with asyncio.timeout(5):
+            while finish._abandon_by_worker:
+                await asyncio.sleep(0)
         assert not finish._abandon_record_drains
         sessions = records.rows[PATH]['record_upload_sessions']
-        assert sum('abandoned_at' in value for value in sessions.values()) == cap
-        assert all('abandoned_at' not in sessions[b.upload_sessions['record']] for b in barriers_[cap + 1 :])
+        assert sum('abandoned_at' in value for value in sessions.values()) == count - 1
+        assert not finish._abandon_queue
         extra = asyncio.create_task(asyncio.Event().wait())
         tasks.append(extra)
         assert finish.abandon_evicted_record_drain(extra, barriers_[-1], executors.ExecutorFutureTracker())
