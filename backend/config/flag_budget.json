@@ -813,6 +813,21 @@
       "owner": "uicleanup / omi-lifecycle",
       "review_by": "2026-12-06"
     },
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": {
+      "owner": "quality-12h/Q12-A",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": {
+      "owner": "quality-12h/Q12-A",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "PUSHER_RECORD_SEAL_WAKE_ENABLED": {
+      "owner": "quality-12h/Q12-A",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "RECORD_FOLLOWUP_WAKE_ENABLED": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-14",
