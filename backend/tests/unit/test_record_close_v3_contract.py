@@ -141,7 +141,10 @@ async def test_switch_off_ignores_previously_retired_boundaries(monkeypatch):
     with session.audio_frame('conv-1') as frame:
         assert frame is None
         session.audio_bytes_send(b'\x01\x00', 100)
-    assert session.audio_runs[-1].conversation_id == 'conv-1'
+    assert session.audio_runs[-1].conversation_id is None  # Main resolves implicit binding at flush.
+    await session.connect()
+    await session._audio_bytes_flush()
+    assert session.pusher_ws.sent[0] == struct.pack('<I', 103) + b'conv-1'
     assert not await session.request_recording_close('conv-1')
 
 

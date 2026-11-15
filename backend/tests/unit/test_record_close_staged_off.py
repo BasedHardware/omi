@@ -158,3 +158,30 @@ async def test_absent_notify_uses_existing_listener_and_pusher_close_paths(legac
     assert client.rows[harness.job_path]['available_at'] == 0
     pusher.PusherCloseState.assert_not_called()
     listen_pusher_session.PendingClose.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_absent_notify_keeps_implicit_binding_lazy_until_flush(monkeypatch):
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    binding = {'cid': 'X'}
+    read_binding = Mock(side_effect=lambda: binding['cid'])
+    socket = FakePusherWebSocket()
+    session = make_session(
+        ws=socket,
+        config_overrides={'sample_rate': 16000},
+        deps_overrides={'get_current_conversation_id': read_binding},
+    )
+    await session.connect()
+    read_binding.reset_mock()
+    pcm = b'\x01\x00\x02\x00'
+    session.audio_bytes_send(pcm, 100)
+    read_binding.assert_not_called()
+    assert session.audio_runs[0].conversation_id is None
+    binding['cid'] = 'Y'
+    await session._audio_bytes_flush()
+    read_binding.assert_called_once_with()
+    assert socket.sent == [
+        struct.pack('<I', 103) + b'Y',
+        struct.pack('<Id', 101, 100 - len(pcm) / 32000) + pcm,
+    ]
+    await session.close()

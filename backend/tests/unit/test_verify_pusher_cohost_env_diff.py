@@ -234,6 +234,26 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
     assert any(f"[{env}] required identical flag LLM_GATEWAY_ACCOUNTING_ENABLED disagrees" in error for error in errors)
 
 
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'key',
+    [
+        'EPISODE_COMPOSER_CONTEXT_ENABLED',
+        'EPISODE_COMPOSER_DETAIL_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',
+        'EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED',
+        'CONVERSATION_NOTES_SCALED_DETAIL_ENABLED',
+    ],
+)
+def test_episode_switch_missing_on_either_cohost_refuses_roll(gate, chart_fixture, env, key):
+    values = chart_fixture / f'backend/charts/pusher/{env}_omi_pusher_values.yaml'
+    replace_once(values, f'  - name: {key}\n    value: "true"\n', '')
+    assert any(
+        f'required identical flag {key} is missing on pusher' in error
+        for error in gate.validate_preflight(chart_fixture)
+    )
+
+
 def test_stale_listen_only_allowlist_entry_fails(gate: SimpleNamespace, chart_fixture: Path) -> None:
     values = chart_fixture / "backend/charts/pusher/prod_omi_pusher_values.yaml"
     replace_once(

@@ -380,6 +380,21 @@ environments:
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
             category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
           RECORD_FRESH_MERGE_ENABLED:
             value: 'false'
             category: ops_kill
@@ -577,6 +592,21 @@ environments:
             value: 'true'
             category: ops_kill
           PUSHER_RECORD_SEAL_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -1217,6 +1247,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -1583,6 +1628,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -1934,6 +1994,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -2246,6 +2321,21 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
@@ -2984,6 +3074,21 @@ environments:
           RECORD_SEAL_WAKE_PRESERVED_ENABLED:
             value: 'true'
             category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
@@ -3277,6 +3382,21 @@ environments:
             value: 'true'
             category: ops_kill
           PUSHER_RECORD_SEAL_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
             value: 'true'
             category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -3939,6 +4059,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4438,6 +4573,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4930,6 +5080,21 @@ environments:
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5365,6 +5530,21 @@ environments:
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
             RECORD_FRESH_MERGE_ENABLED:

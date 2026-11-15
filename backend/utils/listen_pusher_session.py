@@ -419,13 +419,15 @@ class ListenPusherSession:
         """
         chunk = audio_bytes
         chunk_start_wall = start_wall
-        current_conversation = self.deps.get_current_conversation_id()
-        bound_conversation = conversation_id if binding_pinned else conversation_id or current_conversation
-        if (
-            close_notify_enabled()
-            and self.pending_record_closes is not None
-            and self.record_close_boundaries is not None
-        ):
+        # Notify off preserves main's implicit binding resolution at flush.
+        notify = close_notify_enabled()
+        current_conversation = self.deps.get_current_conversation_id() if notify else None
+        bound_conversation = (
+            conversation_id
+            if binding_pinned
+            else (conversation_id or current_conversation) if notify else conversation_id
+        )
+        if notify and self.pending_record_closes is not None and self.record_close_boundaries is not None:
             if (
                 self.record_close_supported
                 and bound_conversation
