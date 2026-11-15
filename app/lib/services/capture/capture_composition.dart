@@ -275,7 +275,9 @@ Future<void> _installMobileStandardBatch(CaptureProvider provider) async {
       pendingWals: (signal) async {
         if (phone is! LocalWalSyncImpl) throw StateError('Capture-end WAL inventory unavailable');
         final unregistered = await lane.buffer.pendingJournalCount(signal.recordingSessionId,
-            through: signal.decidedAt, acceptedFileBytes: phone.captureEndAcceptedFileBytes(signal.recordingSessionId));
+            ownerUid: SharedPreferencesUtil().uid,
+            through: signal.decidedAt,
+            acceptedFileBytes: phone.captureEndAcceptedFileBytes(signal.recordingSessionId));
         final registered = phone.pendingWalsForRecording(signal.recordingSessionId, through: signal.decidedAt);
         return unregistered + registered;
       },

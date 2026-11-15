@@ -296,6 +296,12 @@ void main() {
     await failing.pending;
     expect(failing.failed, isTrue);
     expect(await failing.pendingJournalCount('rec'), 1, reason: 'its audio is in the journal, not the file index');
+    expect(await failing.pendingJournalCount('rec', ownerUid: uid), 1);
+    expect(await failing.pendingJournalCount('rec', ownerUid: 'next-account'), 0,
+        reason: 'another account can never upload this journal, so it must not hold that account\'s recording open');
+    await File('${directory.path}/unknown.batch-journal').writeAsString('{');
+    expect(await failing.pendingJournalCount('rec', ownerUid: 'next-account'), 1,
+        reason: 'a journal with unreadable ownership still counts for every account');
   });
 
   test('unknown-clock audio stays in the end watermark before and during a failed index publication', () async {

@@ -47,8 +47,11 @@ class MobileBatchBuffer {
   /// never discard evidence because an in-memory writer/list lost its WAL.
   /// Unreadable metadata counts conservatively; a directory error propagates
   /// so the reporter omits the marker instead of asserting zero. No writes.
+  /// With [ownerUid], a journal that names another account is not this
+  /// account's pending audio: it can never be uploaded from here, so counting
+  /// it would hold the recording open forever after an account switch.
   Future<int> pendingJournalCount(String recordingSessionId,
-      {DateTime? through, DateTime? now, Map<String, int> acceptedFileBytes = const {}}) async {
+      {String? ownerUid, DateTime? through, DateTime? now, Map<String, int> acceptedFileBytes = const {}}) async {
     var count = 0;
     final throughSeconds = through?.millisecondsSinceEpoch;
     final nowSeconds = (now ?? DateTime.now()).millisecondsSinceEpoch ~/ 1000;
@@ -80,6 +83,7 @@ class MobileBatchBuffer {
           continue;
         }
         if (metadata['recording_session_id'] != recordingSessionId) continue;
+        if (ownerUid != null && ownerUid.isNotEmpty && metadata['owner_uid'] != ownerUid) continue;
         final start = metadata['timer_start'] as int;
         if (throughSeconds == null || start <= 0 || start <= throughSeconds ~/ 1000 || start > nowSeconds) count++;
       } on FileSystemException {
