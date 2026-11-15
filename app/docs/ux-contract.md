@@ -171,7 +171,8 @@ One policy, and never neither:
 | progress | `OmiFeedback.progress(context, msg)` | until replaced (≤ 1 min) | ongoing work, replaced by its result |
 
 - Neutral surface with a small coloured status icon; never a red or green slab (white on red fails
-  contrast). Floating, above Home's chat bar. A pushed page with a pinned bottom action (conversation
+  contrast). Floating, above the root screen's bottom controls (Home's chat bar, the sign-in buttons;
+  `OmiFeedback.claimBottomClearance`). A pushed page with a pinned bottom action (conversation
   detail's Ask Omi bar) wraps its body in `OmiFeedbackClearance(bottom:)` so toasts float above it.
 - Code without a `BuildContext` uses `AppSnackbar` (same toasts on the global navigator).
 - An informational toast has no "OK" action.
