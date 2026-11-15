@@ -87,9 +87,9 @@ cohort allowlists. At each ramp rung, lead refreshes the map with the same
 already-deployed chart/image and retained release values:
 
 ```sh
-helm upgrade prod-omi-batch-pipeline-worker backend/charts/batch-pipeline-worker \
-  --namespace prod-omi-backend --reuse-values \
-  --values /private/repair-flags.yaml --wait --timeout 15m
+# Render the CronJob only, then use the target-only CAS patch procedure in:
+# backend/docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md
+# Never apply or upgrade the full worker chart for a repair-only change.
 ```
 
 Render before apply and require that only `CronJob/record-seal-repair` changes.
@@ -211,3 +211,9 @@ is not served on Cloud Run; the `omi_.*` GMP keep list also covers the metric
 name. Set `recordSealRepair.jobsDiscovery=off` to pass `RECORD_SEAL_REPAIR_JOBS=off`
 to the CronJob and restore the prior discovery and partial-retry behavior. Existing
 custody owners stay unchanged.
+
+
+The November 15 stock drain adds independent hash partitions, continuous fresh
+priority and newest-first refills. Production placement/resources, the separate
+repair image pin, read/capacity estimates and exact target-only patch/rollback
+commands are in [the stock-drain change note](../../docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md).

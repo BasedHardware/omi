@@ -357,15 +357,17 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             if (
                 plan.get('wake_admission')
                 and repair_config.fresh_enabled()
-                and isinstance(enqueued, (int, float))  # a bool reads as age ~now, outside the window
+                and isinstance(enqueued, (int, float))
+                and not isinstance(enqueued, bool)
                 and math.isfinite(enqueued)
-                and 0 <= time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS
+                and 0 <= time.time() - enqueued
                 and intake_wake_allowed(current_job, time.time())
             ):
-                # The seal and wake commit together. Zero sorts ahead of the
-                # barrier-refusal backlog and cancels its 15-minute retry delay.
+                # The seal and claim-safe wake commit together. Fresh wakes
+                # sort before bulk stock; both cancel a certified retry delay.
                 # Admission still runs its full privacy/custody/artifact checks.
-                tx.update(job_ref, {'available_at': 0, 'record_intake_retry_at': None})
+                wake = 0 if time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS else 1
+                tx.update(job_ref, {'available_at': wake, 'record_intake_retry_at': None})
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
