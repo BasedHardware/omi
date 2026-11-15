@@ -194,10 +194,16 @@ class PgSimStore(SimStore):
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
         followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         return self.pg.projection_page(
-            limit, after=after, states=states, due_before=due_before, followup_due_before=followup_due_before
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
         )
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:

@@ -41,6 +41,11 @@ def clock_run_from_path(path: str) -> Optional[str]:
     """The estimated-clock run named in a sync upload or VAD segment filename."""
     if not clock_run_partition_enabled():
         return None
+    return capture_clock_run_from_path(path)
+
+
+def capture_clock_run_from_path(path: str) -> Optional[str]:
+    """Immutable run identity for admitted clock anchors, independent of flags."""
     match = _TOKEN.search(os.path.basename(path))
     return match.group(1) if match else None
 

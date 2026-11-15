@@ -21,20 +21,25 @@ from database.batch_pipeline_projection_followup_clock import state_fields as fo
 
 PROJECTION_FINISH_DUE_FIELD = 'projection_finish_due_at'
 PROJECTION_FINISH_STEP_FIELD = 'projection_finish_backoff_step'
+# Below every real due clock. Legacy queries still see it on rollback.
+PROJECTION_FINISH_ASYNC_CLOCK = -1.0
 # The page that this clock bounds. Assignment keeps its own pending-only page.
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
 
-def projection_finish_state_fields(state: str | None, now: float) -> dict:
+def projection_finish_state_fields(state: str | None, now: float, *, async_projection: bool = False) -> dict:
     """Patch fields for a state move: due now in a finish state, retired otherwise.
 
-    Both finish and independent follow-up discovery clocks are stamped here,
-    so every existing receipt/state writer participates in both rollouts.
-    A row that enters a finish state must carry a clock at once: the filtered
-    page cannot see a row without one, so deferring that write would strand it.
+    Both clocks are stamped on state moves. Async policy retains its negative
+    finish hint while independent follow-up discovery uses its own due clock.
+    Callers without a pinned async policy remain due for classification.
     """
     if state in PROJECTION_FINISH_STATES:
-        return {PROJECTION_FINISH_DUE_FIELD: now, PROJECTION_FINISH_STEP_FIELD: 0, **followup_state_fields(state, now)}
+        return {
+            PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK if async_projection else now,
+            PROJECTION_FINISH_STEP_FIELD: 0,
+            **followup_state_fields(state, now),
+        }
     return {
         PROJECTION_FINISH_DUE_FIELD: firestore.DELETE_FIELD,
         PROJECTION_FINISH_STEP_FIELD: firestore.DELETE_FIELD,

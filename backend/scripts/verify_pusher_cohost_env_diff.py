@@ -165,6 +165,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
             # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription
@@ -270,6 +271,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "prod": frozenset(
         {
             # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
             # The unlimited_v2 backfill/import day cap is enforced by listen
             # admission and the Cloud Run sync/batch hosts through the shared
             # funded allowance; pusher never admits managed transcription

@@ -629,6 +629,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Server-computed recording and episode metadata, not display projections.
         'recorded_start',
         'recorded_end',
+        # Server-authored receipt-clock provenance, not client display projection.
+        'capture_time_trust',
         # Source-clock timezone metadata, not client-authored display text.
         'capture_timezone',
         'arrival_at',

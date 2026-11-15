@@ -1,6 +1,7 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
 from dataclasses import replace
+from functools import partial
 import hashlib
 import io
 import logging
@@ -40,6 +41,13 @@ from database.sync_ledger import (
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
+from utils.batch_pipeline.future_capture_decode import decode_future_units
+from utils.sync.receipt_clock import (
+    POLICY as FUTURE_CLOCK_POLICY,
+    ESTIMATED_POLICY,
+    FutureCaptureRefused,
+    FutureCaptureRetry,
+)
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
@@ -247,7 +255,12 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
-        sources = {job.get('conversation_id') for job in jobs if job.get('conversation_id')}
+        sources = {
+            value
+            for job in jobs
+            for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+            if value
+        }
         result_ids = ledger.get('result') or {}
         sources.update(result_ids.get('new_memories') or [])
         sources.update(result_ids.get('updated_memories') or [])
@@ -427,15 +440,29 @@ def start_response(status: dict) -> JSONResponse:
     )
 
 
+def upload_decoder(uid, device_id, context):
+    if (context or {}).get('capture_clock_policy') in {FUTURE_CLOCK_POLICY, ESTIMATED_POLICY}:
+        return partial(
+            decode_future_units,
+            uid=uid,
+            device_id=device_id,
+            retained_offsets_by_name=(context or {}).get('retained_capture_offsets_by_name'),
+        )
+    return decode_units
+
+
+def upload_capture_trust(context):
+    return (
+        'untrusted' if (context or {}).get('capture_clock_policy') in {FUTURE_CLOCK_POLICY, ESTIMATED_POLICY} else None
+    )
+
+
 def _sync_unavailable_response() -> JSONResponse:
     """Today's single retryable intake answer; every failure path returns exactly this."""
     return JSONResponse(
         status_code=503,
         headers={'Retry-After': '30'},
-        content={
-            'code': 'sync_batch_unavailable',
-            'detail': 'Sync is temporarily unavailable; retain local audio',
-        },
+        content={'code': 'sync_batch_unavailable', 'detail': 'Sync is temporarily unavailable; retain local audio'},
     )
 
 
@@ -597,6 +624,7 @@ async def accept_upload(
             requires_compute_admission=True,
             conversation_id=conversation_id,
             privacy_generation=_coalescing_generation(_coalescing_group),
+            capture_source_conversation_id=(intake_context or {}).get('capture_source_conversation_id'),
         )
         phase = 'authorization'
         snapshots = {}
@@ -857,7 +885,7 @@ async def accept_upload(
                 max_unit_seconds,
                 uid,
                 {**(intake_context or {}), 'client_device_id': client_device_id},
-                decoder=decode_units,
+                decoder=upload_decoder(uid, client_device_id, intake_context),
             )
         )
         items = []
@@ -872,11 +900,13 @@ async def accept_upload(
                 duration_seconds=unit.duration_seconds,
                 unit_kind='conversation' if conversation_id else 'capture_span',
                 conversation_id=conversation_id
+                or getattr(unit, 'recovery_id', None)
                 or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
                 privacy_generation=context.generation,
                 # The built-in decoder times WAL PCM from sync filenames.
                 # Alternate adapters (for example held WAV) have no such proof.
                 timing_store='sync' if decode is None else None,
+                capture_time_trust='untrusted' if getattr(unit, 'recovery_id', None) else None,
             )
 
         from utils.stt.batch_language import resolve_language
@@ -1038,6 +1068,8 @@ async def accept_upload(
     except BatchPrivacyBlocked:
         return privacy_blocked_response()
     except Exception as error:
+        if isinstance(error, (FutureCaptureRefused, FutureCaptureRetry)):
+            return JSONResponse(status_code=error.status_code, headers=error.headers, content=error.detail)
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
         deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
@@ -1137,6 +1169,8 @@ async def _coalescing_try_offer(
     arguments: dict,
     evidence: IntakeRouteEvidence | None,
 ) -> JSONResponse | None:
+    if upload_capture_trust(arguments.get('intake_context')) == 'untrusted':
+        return None  # Do not pack independent unknown-date sources together.
     if not _coalescing_eligible(*eligibility):
         return None
     from utils.batch_pipeline.upload_coalescing import offer

@@ -7,7 +7,7 @@ Everything else takes existing per-upload admission. No encoded audio is
 concatenated: the sealed raw files use the existing canonical decoder.
 """
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 import base64
 import hashlib
 import json
@@ -199,7 +199,7 @@ async def offer(store, artifacts, seed, *, arguments, context, language, policy,
         'privacy_generation': context.generation,
         'content_id': arguments['content_id'],
         'job_id': 'bp_' + arguments['job_id'],
-        'item': asdict(replace(item, audio_uri=uri)),
+        'item': replace(item, audio_uri=uri).to_dict(include_nulls=True),
         'uri': uri,
         'bytes': size,
         'files': len(arguments['paths']),

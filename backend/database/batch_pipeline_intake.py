@@ -69,6 +69,9 @@ def admit(
             from database.batch_pipeline_coalescing import guard
 
             guard(tx, coalescing_group, now)
+        sources = {getattr(item, 'capture_source_conversation_id', None) for item in items} - {None}
+        if sources:
+            tx.check_privacy(binding.owner_id, sources, binding.privacy_generation)
         row = {}
         partial_parent = (intake or {}).get('record_partial_parent')
         if binding.record_origin:
