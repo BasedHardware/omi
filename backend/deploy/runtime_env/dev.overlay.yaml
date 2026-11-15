@@ -25,6 +25,7 @@ overlay:
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
         RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
         HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
@@ -379,6 +380,7 @@ overlay:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
@@ -464,6 +466,7 @@ overlay:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
@@ -562,6 +565,7 @@ overlay:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
@@ -638,6 +642,7 @@ overlay:
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,

@@ -33,6 +33,7 @@ from config.refactor_modes import pipeline_ledger_enabled
 from database._client import get_firestore_client, run_transactional
 from database.account_deletion_marker import ACCOUNT_DELETION_COLLECTION
 from database.account_deletion_policy import account_deletion_marker_blocks_access
+from utils.observability.fallback import record_fallback
 from utils.observability.reasons import (
     PipelineLedgerFailureReason,
     PipelineLedgerOutcome,
@@ -338,6 +339,25 @@ def observe_admission() -> None:
         pass
 
 
+def observe_seal_failure(error: BaseException) -> None:
+    """A post-commit observation failed; the authoritative seal stays successful."""
+    _observe_write('error')
+    _observe_failure(error)
+    record_fallback(
+        component='firestore_read',
+        from_mode='record_seal_ledger',
+        to_mode='sealed_without_ledger',
+        # Classified by class name so this module keeps no google.api_core import:
+        # it is loaded under minimal SDK stubs by read-path contract tests.
+        reason=(
+            'timeout'
+            if isinstance(error, TimeoutError) or type(error).__name__ == 'DeadlineExceeded'
+            else 'unavailable' if type(error).__name__ == 'ServiceUnavailable' else 'other'
+        ),
+        outcome='degraded',
+    )
+
+
 def ledger_ref(client: Any, uid: str, capture_id: str) -> Any:
     return client.collection('users').document(uid).collection(COLLECTION).document(capture_id)
 
@@ -361,6 +381,7 @@ def _commit(
     source_ref: Any = None,
     owner_ref: Any = None,
     then: tuple[str, ...] = (),
+    preserve_same_stage_clock: bool = False,
     **kwargs: Any,
 ) -> str:
     hops: list[dict[str, Any]] = []
@@ -386,6 +407,10 @@ def _commit(
                 return 'deleted'
         snapshot = ref.get(transaction=transaction)
         current = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        if preserve_same_stage_clock and current and current.get('stage') == stage:
+            # An already-admitted re-seal must not postpone its original stuck
+            # deadline. Check inside the ledger CAS, after deletion fences.
+            return 'duplicate'
         first = plan_advance(current, stage, **kwargs)
         if first.doc is None and (not then or first.outcome not in {'duplicate', 'stale'}):
             return first.outcome
@@ -474,7 +499,15 @@ def record_summary(
     )
 
 
-def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = None, **fields: Any) -> bool:
+def advance(
+    uid: str,
+    capture_id: str,
+    stage: str,
+    *,
+    firestore_client: Any = None,
+    preserve_same_stage_clock: bool = False,
+    **fields: Any,
+) -> bool:
     """Best-effort ledger write in its own CAS transaction.
 
     ``fields`` are the :func:`plan_advance` keyword arguments (``now``,
@@ -502,6 +535,7 @@ def advance(uid: str, capture_id: str, stage: str, *, firestore_client: Any = No
             source_ref=source_ref,
             owner_ref=owner_ref,
             then=then,
+            preserve_same_stage_clock=preserve_same_stage_clock,
             **fields,
         )
         _observe_write('ok' if outcome == 'written' else outcome)

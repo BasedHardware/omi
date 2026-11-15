@@ -117,8 +117,8 @@ export interface SeriesPayload {
   gaps: Record<string, string>;
   /** Headline only: oldest leg's data-through day across all series. */
   status?: { through: string | null; text: string } | null;
-  /** When the oldest value in this body turns 24h old; the stats proxy never
-   * serves the body as last-good past it. */
+  /** Earliest expiry of a served value (24h for history, 3h for the meter);
+   * the stats proxy never serves the body as last-good past it. */
   staleUntil: string | null;
 }
 
@@ -268,6 +268,11 @@ export interface Legs {
 type LegName = Exclude<keyof Legs, "live" | "meter">;
 /** The meter headline is shown only while its newest hourly row is this fresh. */
 export const METER_FRESH_MS = 3 * 3_600_000;
+
+function freshMeterExpiry(meter: MeterTile | null | undefined, now: Date) {
+  const expiry = meter ? Date.parse(meter.asOf) + METER_FRESH_MS : NaN;
+  return Number.isFinite(expiry) && now.getTime() < expiry ? expiry : null;
+}
 
 const LEGS_FOR: Record<SeriesName, LegName[]> = {
   // The headline's Cost / user is the health series' cost-per-user point, so it
@@ -1148,9 +1153,7 @@ export function healthFrames(
   // headline falls back to the metered live day when there is one, else the
   // latest settled day. The visible source label names the mode and date.
   const meter = legs.meter ?? null;
-  const meterAgeMs = meter ? now.getTime() - Date.parse(meter.asOf) : null;
-  const meterFresh =
-    meter != null && meterAgeMs != null && meterAgeMs < METER_FRESH_MS;
+  const meterFresh = freshMeterExpiry(meter, now) != null;
   const meterStatus = meterFresh
     ? `Headline: margin meter hour ${meter!.asOf
         .slice(0, 16)
@@ -2185,6 +2188,10 @@ export async function seriesPayload(
       sources.meter ? sources.meter() : Promise.resolve(null),
       COLD_STORE_WAIT
     ).catch(() => null);
+    // The proxy must expire a meter headline at the same instant as the
+    // renderer, even when its historical legs remain usable for 24 hours.
+    const meterExpiry = freshMeterExpiry(legs.meter, now);
+    if (meterExpiry != null) staleUntil = Math.min(staleUntil, meterExpiry);
   }
   const frames = assembleSeries(name, legs, wall, now);
   let status: SeriesPayload["status"] = null;

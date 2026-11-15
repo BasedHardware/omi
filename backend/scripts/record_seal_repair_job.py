@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Counts-only entrypoint for the isolated repair CronJob and its row children."""
 
+import time
+
+PROCESS_STARTED = time.monotonic()
+
+import socket
 import json
 import traceback
 import re
@@ -102,6 +107,38 @@ def failure(event, error):
     return payload
 
 
+def partition_arguments(argv):
+    """Cron arguments only; no serving runtime env or policy flag is introduced."""
+    if not argv:
+        return 0, 1
+    if len(argv) != 4 or argv[0] != '--shards' or argv[2] != '--shard-index-file':
+        raise ValueError('invalid arguments')
+    count = int(argv[1])
+    index = int(Path(argv[3]).read_text().strip())
+    repair.validate_partition(index, count)
+    return index, count
+
+
+def process_deadline(started, hostname, wall_now, monotonic_now):
+    """Bound imports, cold scheduling/image pull, all phases and cleanup.
+
+    The standard Job name contains its scheduled Unix minute. Indexed pods use
+    the stable hostname <job>-<index>; ordinary pods use <job>-<random>. Also
+    accept an Indexed pod's metadata name, <job>-<index>-<random>. This clock is
+    earlier than Job creation, so it conservatively includes scale-up waits.
+    """
+    deadline = started + 1560  # At least 120s before the hard Job ceiling.
+    match = re.fullmatch(r'record-seal-repair-(\d{8,})-(?:\d+|(?:\d+-)?[a-z0-9]{5})', hostname)
+    if match:
+        scheduled = int(match.group(1)) * 60
+        if scheduled > wall_now + 60:
+            raise ValueError('invalid scheduled repair clock')
+        deadline = min(deadline, monotonic_now + scheduled + 1680 - 60 - wall_now)
+    elif os.environ.get('KUBERNETES_SERVICE_HOST'):
+        raise ValueError('unrecognized scheduled repair identity')
+    return deadline
+
+
 def main():
     def terminate(*_):
         # Unwind the coordinator's finally block and reap all children.
@@ -116,7 +153,7 @@ def main():
         with terminal_probe_totals(
             'record-seal-repair', fd=os.environ.get(CHILD_FD_ENV), log_empty=False
         ), repair.silent_dependencies(), (
-            repair_probe_server() if not sys.argv[1:] and repair.config.enabled() else nullcontext()
+            repair_probe_server() if sys.argv[1:] != ['--row'] and repair.config.enabled() else nullcontext()
         ):
             try:
                 if sys.argv[1:] == ['--row']:
@@ -127,18 +164,36 @@ def main():
                         output.flush()
 
                     checkpoint(repair.row_main(payload, progress=checkpoint))
-                elif not sys.argv[1:]:
-                    try:
-                        from utils import record_projection_rebuild
-
-                        report = record_projection_rebuild.run_job()
-                        if report['outcome'] != 'disabled':
-                            emit(report)
-                    except Exception as error:
-                        emit(failure('record_projection_rebuild', error))
-                    emit(repair.run(progress=emit))
                 else:
-                    raise ValueError('invalid arguments')
+                    shard, shards = partition_arguments(sys.argv[1:])
+                    deadline = process_deadline(PROCESS_STARTED, socket.gethostname(), time.time(), time.monotonic())
+
+                    def projection():
+                        try:
+                            from utils import record_projection_rebuild
+                            from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+                            remaining = deadline - time.monotonic() - 30
+                            if shard == 0 and remaining > 0:
+                                with SweepBudget(min(60, remaining)).interrupt_io():
+                                    report = record_projection_rebuild.run_job()
+                                if report['outcome'] != 'disabled':
+                                    emit(report)
+                        except Exception as error:
+                            emit(failure('record_projection_rebuild', error))
+
+                    from utils.batch_pipeline.record_seal_budget import SweepBudget
+
+                    with SweepBudget(max(0, deadline - time.monotonic())).interrupt_io():
+                        emit(
+                            repair.run(
+                                progress=emit,
+                                deadline=deadline,
+                                before=projection,
+                                **({'shard': shard, 'shards': shards} if shards > 1 else {}),
+                            )
+                        )
+
             except BaseException as error:
                 emit(failure('record_seal_repair', error))
                 return 1

@@ -1736,6 +1736,119 @@ describe("the snapshot is shared and never served cold as settled", () => {
 });
 
 describe("variable margin frames (David 2026-10-23)", () => {
+  it("bounds proxy caching to the last millisecond of meter freshness", async () => {
+    const s = sources();
+    const expiry = now.getTime() + 1;
+    s.meter = vi.fn(async () => ({
+      asOf: new Date(expiry - 3 * 3_600_000).toISOString(),
+      variableMarginPct: 41.26,
+      basisVersion: null,
+    }));
+    const fresh = await seriesPayload("health", Promise.resolve(null), now, s);
+    expect(fresh.frames.variableMargin.at(-1)?.marginPct).toBe(41.3);
+    expect(Date.parse(fresh.staleUntil!)).toBe(expiry);
+
+    const expired = await seriesPayload(
+      "health",
+      Promise.resolve(null),
+      new Date(expiry),
+      s
+    );
+    // Current main retains the settled fallback after the meter expires.
+    expect(expired.frames.variableMargin.at(-1)?.live).toBe(0);
+    expect(expired.frames.variableMargin.at(-1)?.marginPct).not.toBe(41.3);
+    expect(String(expired.frames.variableMarginStatus[0].text)).toContain(
+      "Margin meter stale since"
+    );
+    expect(Date.parse(expired.staleUntil!)).toBeGreaterThan(expiry);
+  });
+
+  it("keeps a history bound earlier than meter expiry", async () => {
+    const s = sources();
+    s.meter = vi.fn(async () => ({
+      asOf: now.toISOString(),
+      variableMarginPct: 41.26,
+      basisVersion: null,
+    }));
+    const wall = await computeWall(s, now);
+    const earlier = now.getTime() + 500;
+    const kept = {
+      ...wall,
+      metrics: wall.metrics.map((m, i) => ({
+        ...m,
+        value: i === 0 ? 1 : null,
+        retainedSince: new Date(earlier - 24 * 3_600_000).toISOString(),
+      })),
+    };
+    const served = await seriesPayload("health", Promise.resolve(kept), now, s);
+    expect(served.frames.variableMargin.at(-1)?.marginPct).toBe(41.3);
+    expect(Date.parse(served.staleUntil!)).toBe(earlier);
+  });
+
+  it.each(["empty", "rejected"])(
+    "emits a standalone meter headline on cold %s billing history",
+    async (history) => {
+      const s = sources();
+      s.billing = vi.fn(async () => {
+        if (history === "rejected") throw new Error("billing unavailable");
+        return { ...(await billing()), daily: [] };
+      });
+      const asOf = new Date(now.getTime() - 3_600_000).toISOString();
+      s.meter = vi.fn(async () => ({
+        asOf,
+        variableMarginPct: 41.26,
+        basisVersion: null,
+      }));
+      const served = await seriesPayload(
+        "health",
+        Promise.resolve(null),
+        now,
+        s
+      );
+      expect(served.frames.variableMargin).toEqual([
+        {
+          date: asOf,
+          marginPct: 41.3,
+          live: 1,
+          costPerMonth: null,
+          mrr: null,
+          goalCost: null,
+        },
+      ]);
+      expect(Date.parse(served.staleUntil!)).toBe(
+        Date.parse(asOf) + 3 * 3_600_000
+      );
+      expect(s.meter).toHaveBeenCalledTimes(1);
+      expect(served.frames.cost).toEqual([]);
+      if (history === "rejected") expect(served.gaps.billing).toBeTruthy();
+    }
+  );
+
+  it.each(["expired", "missing", "rejected"])(
+    "does not fabricate a standalone headline with %s meter input",
+    async (input) => {
+      const s = sources();
+      s.billing = vi.fn(async () => ({ ...(await billing()), daily: [] }));
+      s.meter = vi.fn(async () => {
+        if (input === "rejected") throw new Error("meter unavailable");
+        return input === "missing"
+          ? null
+          : {
+              asOf: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+              variableMarginPct: 41.26,
+              basisVersion: null,
+            };
+      });
+      const served = await seriesPayload(
+        "health",
+        Promise.resolve(null),
+        now,
+        s
+      );
+      expect(served.frames.variableMargin).toEqual([]);
+    }
+  );
+
   it("trails the settled 7-day run rate against that day's book, disclosed", async () => {
     const s = sources();
     const f = await all(null, s);

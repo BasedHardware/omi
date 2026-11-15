@@ -397,6 +397,9 @@ environments:
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
             value: '86400'
             category: config
@@ -1226,6 +1229,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1582,6 +1588,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -1923,6 +1932,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -2225,6 +2237,9 @@ environments:
               value: 'true'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
@@ -2940,6 +2955,9 @@ environments:
             value: 'true'
             category: ops_kill
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
@@ -3904,6 +3922,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4397,6 +4418,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -4882,6 +4906,9 @@ environments:
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
               value: '86400'
               category: config
@@ -5311,6 +5338,9 @@ environments:
               value: 'true'
               category: ops_kill
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
