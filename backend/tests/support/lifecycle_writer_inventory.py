@@ -1,6 +1,15 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'utils/batch_pipeline/empty_transcription.py': [
+        (
+            'stamp',
+            'record_transcription_empty',
+            "{'version': 1, 'projection_revision': result['record_projection_revision'], 'pending_generation': "
+            "generation, 'spans': merged}",
+            ('record_transcription_empty',),
+        )
+    ],
     # Home visibility defaults and response metadata only; no lifecycle writes.
     'database/home_feed.py': [
         ('_visible', 'status', "'completed'", ('status',)),

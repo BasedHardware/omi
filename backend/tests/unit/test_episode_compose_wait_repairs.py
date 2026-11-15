@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from tests.unit.test_episode_composer import T0, UID, _c, _row, store  # noqa: F401
+from utils.batch_pipeline import empty_transcription
 from utils.episodes import composer, compose_wait
 
 
@@ -30,6 +31,21 @@ def terminal(store, cid='empty'):
         record_projection_revision=1,
         home_transcription_pending_at=T0 + timedelta(hours=4),
     )
+    row.update(
+        server_batch_audio_closed=True,
+        server_batch_audio_start=row['started_at'].timestamp(),
+        server_batch_audio_end=row['finished_at'].timestamp(),
+    )
+    empty_transcription.stamp(
+        {},
+        row,
+        {
+            'start': row['started_at'].timestamp(),
+            'end': row['finished_at'].timestamp(),
+            'terminal_empty_outcome': 'silence',
+        },
+    )
+    row[empty_transcription.FIELD]['pending_generation'] = empty_transcription.pending_generation(row)
     store.rows[cid] = row
     if cid not in store.episode['conversation_ids']:
         store.episode['conversation_ids'].append(cid)
@@ -228,3 +244,72 @@ def test_detached_absent_id_reconciles_membership_without_rebuy(store, clock, mo
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
     assert len(calls) == 1
     assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2']) is (not enabled)
+
+
+@pytest.mark.parametrize(
+    'extra',
+    [
+        {},
+        {'server_batch_audio_received': True, 'server_batch_audio_closed': True},
+        {'record_projection_revision': 1},
+        {'summary_blocked_reason': 'content_below_floor'},
+    ],
+)
+def test_summary_exhaustion_with_pending_stt_keeps_waiting(store, clock, extra):
+    row = terminal(store)
+    row.pop('record_transcription_empty', None)
+    row.update(extra)
+    assert not compose_wait.empty_terminal_result(row)
+    assert composer._transcript_wait_until(row) == clock.current + timedelta(seconds=1200)
+    calls = []
+    if row.get('summary_blocked_reason') != 'content_below_floor':
+        assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+        assert not calls
+
+
+def test_pending_stt_cap_expiry_then_late_transcript_buys_exactly_one_recompose(store, clock):
+    row = terminal(store)
+    row.pop('record_transcription_empty', None)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert not calls
+    clock.current += timedelta(seconds=1200)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 1
+    row['transcript_segments'] = [{'text': 'Speech after the legitimate cap', 'start': 0, 'end': 10}]
+    row['episode_transcript_updated_at'] = clock.current
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 2
+
+
+def test_old_writer_stale_map_cannot_shorten_a_new_blocker_generation(store, clock):
+    row = store.rows['c1']
+    row.update(transcript_segments=[], home_transcription_pending_at=clock.current)
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    first = clock.current
+    clock.current += timedelta(seconds=1100)
+    row['home_transcription_pending_at'] = clock.current
+    # Old image preserves the unknown map but stamps its new-generation legacy fields.
+    store.episode.update(
+        compose_transcript_wait_started_at=clock.current,
+        compose_transcript_wait_until=clock.current + timedelta(seconds=1200),
+    )
+    clock.current = first + timedelta(seconds=1201)
+    assert composer.needs_compose(store.episode)  # stale map can cause a harmless early wake
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert not calls
+    assert store.episode['compose_transcript_wait_until'] == first + timedelta(seconds=2300)
+    assert not composer.needs_compose(store.episode)
+    clock.current = first + timedelta(seconds=2300)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 1
+
+
+def test_committed_stt_empty_needs_no_summary_exhaustion_verdict(store, clock):
+    row = terminal(store)
+    row.pop('summary_blocked_reason')
+    assert composer._transcript_wait_until(row) is None
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'

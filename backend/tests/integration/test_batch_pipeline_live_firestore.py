@@ -11,6 +11,7 @@ import fakeredis
 from database import batch_pipeline_projection_claim as projection_claims
 from tests.integration.test_batch_pipeline_projection_firestore import lane, active_rows, frozen_manifest
 from utils.batch_pipeline.live import register_recording, record_identity
+from utils.batch_pipeline import empty_transcription
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.projection import build_incoming
 from utils.sync.assignment_errors import SyncAssignmentConflict
@@ -334,6 +335,7 @@ def test_true_vad_silence_replaces_unprotected_provisional_speech(lane, monkeypa
     row = active_rows(lane)[0]
     assert result['updated_memories'] == ['live-record']
     assert row['record_projection_revision'] == 1 and not row['transcript_segments']
+    assert empty_transcription.terminal(row)
 
 
 def test_native_record_preserves_real_correction_translation_and_manual_receipt(lane):

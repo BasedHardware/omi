@@ -862,7 +862,11 @@ class Projector:
             'data_protection_level': binding.data_protection_level,
             '_batch_require_live_target': True,
             '_batch_redrive_target': bool(session.entry.get('projection_redriven_at')),
-            '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
+            '_batch_replace_live': {
+                'start': item.capture_at,
+                'end': item.capture_at + item.duration_seconds,
+                'terminal_empty_outcome': session.entry['result']['outcome'],
+            },
         }
         try:
             conversations_db.assign_sync_conversation(

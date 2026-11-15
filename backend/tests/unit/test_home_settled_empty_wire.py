@@ -7,6 +7,7 @@ import pytest
 
 from tests.unit.test_episode_composer import T0, UID, _episode, _row
 from utils.conversations import home_step, legacy_empty_wire
+from utils.batch_pipeline import empty_transcription
 from utils.episodes import home_read
 
 
@@ -19,6 +20,21 @@ def empty(**overrides):
         notes_written_at=T0,
         episode_id='ep1',
     )
+    row.update(
+        server_batch_audio_closed=True,
+        server_batch_audio_start=row['started_at'].timestamp(),
+        server_batch_audio_end=row['finished_at'].timestamp(),
+    )
+    empty_transcription.stamp(
+        {},
+        row,
+        {
+            'start': row['started_at'].timestamp(),
+            'end': row['finished_at'].timestamp(),
+            'terminal_empty_outcome': 'silence',
+        },
+    )
+    row[empty_transcription.FIELD]['pending_generation'] = empty_transcription.pending_generation(row)
     row.update(overrides)
     return row
 

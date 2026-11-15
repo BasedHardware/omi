@@ -6,6 +6,7 @@ from typing import Any, Mapping
 from config.episode_composition import anchored_wait_enabled, settled_terminal_enabled
 from config.episodes import episode_compose_transcript_wait_seconds
 from utils.episodes.policy import utc
+from utils.batch_pipeline.empty_transcription import terminal as stt_terminal_empty
 from utils.conversations.fragment_visibility import is_completed_below_floor
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
@@ -14,12 +15,17 @@ from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 def empty_terminal_result(row: Mapping[str, Any]) -> bool:
     """The Home noise contract, independent of presentation feature switches.
 
-    Emptiness alone never qualifies. A durable exhausted-output/below-floor
-    decision must exist, and renewed summary debt or a recovered receipt wins.
+    Summary exhaustion/below-floor decisions alone never settle transcription.
+    A validated STT-empty receipt must cover the closed audio and current wait
+    generation; renewed summary debt or a recovered summary receipt wins.
     Late speech is evaluated by the normal evidence/fingerprint path.
     """
     return bool(
         row.get('status') == 'completed'
+        and stt_terminal_empty(row)
+        and not any(
+            str(s.get('text') or '').strip() for s in row.get('transcript_segments') or [] if isinstance(s, Mapping)
+        )
         and not present(row.get('structured') or {})
         and not row.get('summary_output_present')
         and not row.get('summary_completed_at')
@@ -29,7 +35,7 @@ def empty_terminal_result(row: Mapping[str, Any]) -> bool:
 
 
 def settled_terminal(row: Mapping[str, Any]) -> bool:
-    return settled_terminal_enabled() and empty_terminal_result(row)
+    return bool(settled_terminal_enabled() and row.get('status') == 'completed' and stt_terminal_empty(row))
 
 
 OBSERVATIONS = 'compose_transcript_wait_observations'
