@@ -99,7 +99,8 @@ capture. Tests prove registration succeeds at both 0% and 100%; however its
 immutable job policy records different `batch_percent`, `retire_percent`,
 `live_stt_retired` and `policy_id`. During the minutes between a rung and the
 refresh (or while the previous Job finishes), repaired registrations can freeze
-the earlier values. The refresh prevents extending that drift to new Jobs; it
+the earlier values. Until the separate policy-refresh procedure exists and is executed, that drift
+extends to new stock-drain Jobs too. A policy refresh would prevent it; it
 does not rewrite already-created policies. Final-pass inputs must also match
 the serving role. Existing pending jobs retain their original admission policy.
 
