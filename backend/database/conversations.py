@@ -76,6 +76,7 @@ from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from database import transcript_pointer
+from utils.home_feed.projection import stamp as stamp_home_display
 from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
@@ -371,6 +372,10 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    # Partial writes cannot certify an entire legacy row. Explicit prepare
+    # reconciles them; full creates/processing results get compact content now.
+    if isinstance(data.get('structured'), dict) and ('started_at' in data or 'recorded_start' in data):
+        data.update(stamp_home_display(uid, data, 'conversation'))
     stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
@@ -4109,6 +4114,23 @@ def update_conversation_segments(
         from utils.conversations.recorded_time import write_span
 
         update_payload.update(write_span({**current, **update_payload}, arrival_at=datetime.now(timezone.utc)))
+        # A proven additive live append cannot revoke old display text. Keep
+        # these frequent writes off the explicit Home preparation path; edits,
+        # removals, re-attribution and moved origins retain the normal fence.
+        prior_by_id = {s.get('id'): s for s in persisted} if live_segments is not None else {}
+        after_by_id = {s.get('id'): s for s in accepted}
+        speech_fields = ('text', 'person_id', 'person_name', 'is_user', 'speaker')
+        if (
+            live_segments is not None
+            and current.get('status') == 'in_progress'
+            and (not started_at or started_at == current.get('started_at'))
+            and update_payload.get('recorded_start', current.get('recorded_start')) == current.get('recorded_start')
+            and all(
+                sid in after_by_id and all(before.get(k) == after_by_id[sid].get(k) for k in speech_fields)
+                for sid, before in prior_by_id.items()
+            )
+        ):
+            update_payload['home_append_only'] = True
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,

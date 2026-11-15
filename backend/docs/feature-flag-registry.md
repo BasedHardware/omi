@@ -528,6 +528,7 @@ and an explicit empty literal renders as `''`.
 | `FSR_MAINTENANCE_COORDINATION_ENABLED` | Default on in prod independently of read-lever rollback; explicit false restores per-replica maintenance | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | merge-desk |
 | `HOME_EMPTY_OUTPUT_NOISE` | Default on; terminal empty-output summaries classify as Home noise regardless of title provenance when there is no overview or section body | backend | env | open | — | — | — | — | keep | keep | — | refactor-lead |
+| `HOME_FEED_ENABLED` | Default on; serve compact Home cards and explicit bounded preparation. Off returns404 and clients retain existing Home. Write coverage stays active for safe re-enable. | backend, mobile | env | open | — | — | — | — | keep | keep | — | mobile-home-card-feed |
 | `HOME_HIDE_BELOW_FLOOR_ROWS` | Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `HOME_HIDE_EPISODE_MEMBERS` | Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement | backend | env | open | — | — | — | — | keep | keep | — | auditfix |
 | `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` | Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording | backend | env | open | — | — | — | — | keep | keep | — | home-overlap |
@@ -1263,6 +1264,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
 - `HOME_EMPTY_OUTPUT_NOISE` — Default on; terminal empty-output summaries classify as Home noise regardless of title provenance when there is no overview or section body (fail: open)
+- `HOME_FEED_ENABLED` — Default on; serve compact Home cards and explicit bounded preparation. Off returns404 and clients retain existing Home. Write coverage stays active for safe re-enable. (fail: open)
 - `HOME_HIDE_BELOW_FLOOR_ROWS` — Default on; Home permanently omits settled uncurated below-floor rows and holds provisional minimum-title rows across lanes for up to two hours (fail: open)
 - `HOME_HIDE_EPISODE_MEMBERS` — Default on; omit completed Home members only when this client acknowledges their exact extant episode replacement (fail: open)
 - `HOME_LIVE_MEMBER_NOTES_DEFERRED_ENABLED` — Default on; defer automatic notes for still-live episode members; recording detail alone escalates one recording (fail: open)

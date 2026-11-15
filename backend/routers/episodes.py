@@ -29,8 +29,11 @@ from models.recording_speakers import (
 from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.home_feed import home_feed_enabled
 from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
+from database import home_feed as compact_home
+from models.home_feed import HomeFeedResponse, HomeFeedPreparationResponse
 from models.episode import (
     EpisodeListResponse,
     Episode,
@@ -190,3 +193,40 @@ def assign_episode_speaker(
         raise HTTPException(status_code=404, detail='Episode not found')
     anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
     return edit(uid, anchor, body, background_tasks, episode_id=episode_id)
+
+
+@router.get('/v1/home/feed', response_model=HomeFeedResponse, tags=['home'])
+def get_home_feed(
+    limit: int = Query(50, ge=1, le=100),
+    cursor: Optional[str] = Query(None, max_length=4096),
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.feed(uid, limit=limit, cursor=cursor, episodes_admitted=_admitted(uid, channel))
+    except compact_home.AccountUnavailable as error:
+        compact_home.FEED_OUTCOME.labels(outcome='denied').inc()
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationRequired as error:
+        compact_home.FEED_OUTCOME.labels(outcome='preparation_required').inc()
+        raise HTTPException(status_code=409, detail='home_feed_preparation_required') from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail='Invalid Home feed cursor') from error
+
+
+@router.post('/v1/home/feed/prepare', response_model=HomeFeedPreparationResponse, tags=['home'])
+def prepare_home_feed(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'home:prepare')),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.prepare(uid)
+    except compact_home.AccountUnavailable as error:
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationTooLarge as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except compact_home.PreparationRequired as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error

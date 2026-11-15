@@ -24,10 +24,16 @@ import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 /// (Summary and Transcript tabs, then a page of sections). Its summary/tasks/moments are the live
 /// page's own content blocks; its members use the existing conversation detail and hydration path.
 class EpisodePage extends StatelessWidget {
-  const EpisodePage({super.key, required this.episode});
+  const EpisodePage({super.key, required this.episode, this.displaySeedOnly = false});
+  final bool displaySeedOnly;
   final Episode episode;
 
   Future<void> _delete(BuildContext context) async {
+    final authoritative = displaySeedOnly ? context.read<EpisodeProvider?>()?.openedEpisode(episode.id) : episode;
+    if (authoritative == null) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
     final history = context.read<ConversationProvider>();
     final l10n = context.l10n;
     if (!context.read<ConnectivityProvider>().isConnected) {
@@ -39,9 +45,9 @@ class EpisodePage extends StatelessWidget {
       return;
     }
     // conversationIds includes discarded members; the visible list intentionally does not.
-    final known = {for (final c in episode.members) c.id: c, for (final c in history.conversations) c.id: c};
+    final known = {for (final c in authoritative.members) c.id: c, for (final c in history.conversations) c.id: c};
     final targets = [
-      for (final id in episode.conversationIds.toSet())
+      for (final id in authoritative.conversationIds.toSet())
         if (!history.memoriesToDelete.containsKey(id))
           known[id] ??
               ServerConversation(id: id, createdAt: episode.startedAt, discarded: true, structured: Structured('', '')),
@@ -85,6 +91,7 @@ class EpisodePage extends StatelessWidget {
     // The page outlives the row that opened it: the finished notes land here, too.
     // A row with no episode yet opens a stand-in with no id; its recording finds the real one.
     final opened = this.episode;
+    final seedAwaiting = displaySeedOnly && episodes?.openedEpisode(opened.id) == null;
     final episode = episodes?.openedEpisode(opened.id) ??
         episodes?.homeEpisodes
             .where(
@@ -166,47 +173,61 @@ class EpisodePage extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           Positioned.fill(
-            child: processing
-                ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
-                : ListView(
-                    padding: const EdgeInsets.all(OmiSpacing.md),
-                    children: [
-                      ...heading,
-                      const SizedBox(height: OmiSpacing.lg),
-                      if (composed) ...[
-                        // A composed episode reads like a conversation's summary: a lede, then a section per moment.
-                        if (episode.lede.trim().isNotEmpty)
-                          Text(
-                            episode.lede,
-                            key: const Key('episode_lede'),
-                            style: OmiType.callout.copyWith(height: 1.45),
-                          ),
-                        EpisodeSections(
-                          moments: moments,
-                          onOpenMoment: (moment) => _openMoment(context, moment, members),
-                        ),
-                        if (episode.followUps.isNotEmpty) ...[
-                          EpisodeSectionTitle(context.l10n.episodeFollowUps),
-                          EpisodeBullets(episode.followUps),
+            child: seedAwaiting
+                ? ListView(padding: const EdgeInsets.all(OmiSpacing.md), children: [
+                    ...heading,
+                    if (episodes?.openProblem(opened.id) != null)
+                      OmiErrorState(
+                          message: context.l10n.somethingWentWrong,
+                          onRetry: () async {
+                            await episodes?.openEpisode(opened.id);
+                          })
+                    else
+                      const OmiLoadingState(),
+                  ])
+                : processing
+                    ? _ProcessingBody(heading: heading, items: items, memberRows: memberRows)
+                    : ListView(
+                        padding: const EdgeInsets.all(OmiSpacing.md),
+                        children: [
+                          ...heading,
+                          const SizedBox(height: OmiSpacing.lg),
+                          if (composed) ...[
+                            // A composed episode reads like a conversation's summary: a lede, then a section per moment.
+                            if (episode.lede.trim().isNotEmpty)
+                              Text(
+                                episode.lede,
+                                key: const Key('episode_lede'),
+                                style: OmiType.callout.copyWith(height: 1.45),
+                              ),
+                            EpisodeSections(
+                              moments: moments,
+                              onOpenMoment: (moment) => _openMoment(context, moment, members),
+                            ),
+                            if (episode.followUps.isNotEmpty) ...[
+                              EpisodeSectionTitle(context.l10n.episodeFollowUps),
+                              EpisodeBullets(episode.followUps),
+                            ],
+                          ] else
+                            EpisodeBullets(episode.bullets),
+                          if (items.isNotEmpty) ...[
+                            EpisodeSectionTitle(context.l10n.tasks, count: items.length),
+                            EpisodeContentCard(
+                              children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
+                            ),
+                          ],
+                          if (!composed && moments.isNotEmpty) ...[
+                            EpisodeSectionTitle(context.l10n.episodeMoments),
+                            EpisodeContentCard(
+                              children: [
+                                for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)
+                              ],
+                            ),
+                          ],
+                          EpisodeSectionTitle(context.l10n.conversations),
+                          ...memberRows,
                         ],
-                      ] else
-                        EpisodeBullets(episode.bullets),
-                      if (items.isNotEmpty) ...[
-                        EpisodeSectionTitle(context.l10n.tasks, count: items.length),
-                        EpisodeContentCard(
-                          children: [for (final item in items) EpisodeItemRow(item: item, now: DateTime.now())],
-                        ),
-                      ],
-                      if (!composed && moments.isNotEmpty) ...[
-                        EpisodeSectionTitle(context.l10n.episodeMoments),
-                        EpisodeContentCard(
-                          children: [for (final moment in moments) EpisodeMomentRow(moment: moment, current: false)],
-                        ),
-                      ],
-                      EpisodeSectionTitle(context.l10n.conversations),
-                      ...memberRows,
-                    ],
-                  ),
+                      ),
           ),
           // A late episode composes on this open; the server starts it on the read below.
           _OpenCompose(key: ValueKey('open-${episode.id}'), episode: episode),
