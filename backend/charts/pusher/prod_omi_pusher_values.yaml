@@ -116,7 +116,7 @@ runtimeConfigMapName: prod-omi-backend-config
 
 env:
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
-    value: "true"
+    value: "false"
   - name: PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED
     value: "true"
   - name: PUSHER_RECORD_SEAL_WAKE_ENABLED

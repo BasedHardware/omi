@@ -105,7 +105,9 @@ and use slow closure until a capable pusher returns. A prepared, uncommitted
 producer remains fenced for full-proof repair, rather than being cleared on loss
 of the protocol connection.
 
-All switches default on and have explicit dev/prod runtime and chart bindings:
+Close-notify is staged OFF by default, with explicit false dev/prod runtime and chart bindings on all six hosts. Playback fast path and seal wake remain default on. The staged protocol is not approved for use: receiver frames need one shared archive/pusher binding plus an in-flight barrier, and rollover deferral needs a bounded proof-repair handoff. A paused archive-append interleaving test and independent custody review are required before opt-in. Disabled listeners allocate no close inventory and make no notification callback; disabled pushers allocate no wire state.
+
+The switches have explicit dev/prod runtime and chart bindings:
 `PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` and `PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED`
 on pusher, backend-listen, every Cloud Run backend service
 (dev/prod); the cohost gate requires identical GKE literals. The native
@@ -119,9 +121,7 @@ clear foreign producers or bypass privacy to restore speed.
 
 Healthy scheduling is one prepare round trip, <=1s relay tick and <=1s pusher
 tick, plus mandatory custody/readback/upload, acknowledged debt and seal/wake
-transactions. Close bypasses the60s audio-batch timer. Approximately60s end to
-seal remains a post-deploy target; hermetic interleaving tests prove ordering,
-not production storage latency or five-minute Home delivery.
+transactions. Close bypasses the60s audio-batch timer. This scheduling describes the staged protocol only. With notify OFF there is no end-to-seal bound: Cloud Tasks completion still waits for a legacy request, header rollover or socket end. Existing eligible closes check every 1s and defer optional playback discovery; mandatory custody and durable debt still gate completion. The latency share due to absent close notification versus playback discovery is unmeasured. Hermetic tests do not establish production latency or five-minute Home delivery.
 
 ## Incremental cost envelope
 

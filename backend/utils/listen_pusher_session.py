@@ -219,8 +219,8 @@ class ListenPusherSession:
         self.audio_timeline_suspended = False
         self.record_close_supported = False
         self.record_close_unsupported_socket: object = None
-        self.pending_record_closes: dict[str, PendingClose] = {}
-        self.record_close_boundaries: OrderedDict[str, bool] = OrderedDict()
+        self.pending_record_closes: dict[str, PendingClose] | None = {} if close_notify_enabled() else None
+        self.record_close_boundaries: OrderedDict[str, bool] | None = OrderedDict() if close_notify_enabled() else None
 
     @property
     def uid(self):
@@ -403,20 +403,25 @@ class ListenPusherSession:
         current_conversation = self.deps.get_current_conversation_id()
         bound_conversation = conversation_id or current_conversation
         if (
-            self.record_close_supported
-            and bound_conversation
-            and bound_conversation != current_conversation
-            and bound_conversation not in self.pending_record_closes
+            close_notify_enabled()
+            and self.pending_record_closes is not None
+            and self.record_close_boundaries is not None
         ):
-            # Terminal history is bounded. An old explicit offer cannot reopen a
-            # forgotten boundary: reject before acceptance; accepted/replay runs
-            # already carry their owner and bypass this entry point.
-            raise AudioBackpressure('listen_record_closed', chunk)
-        closing = self.pending_record_closes.get(bound_conversation) if bound_conversation else None
-        if bound_conversation in self.record_close_boundaries or closing is not None and closing.frozen:
-            # This call has not accepted/buffered the input. The caller retains
-            # custody, including its existing archive/WAL path, under backpressure.
-            raise AudioBackpressure('listen_record_closed', chunk)
+            if (
+                self.record_close_supported
+                and bound_conversation
+                and bound_conversation != current_conversation
+                and bound_conversation not in self.pending_record_closes
+            ):
+                # Terminal history is bounded. An old explicit offer cannot reopen a
+                # forgotten boundary: reject before acceptance; accepted/replay runs
+                # already carry their owner and bypass this entry point.
+                raise AudioBackpressure('listen_record_closed', chunk)
+            closing = self.pending_record_closes.get(bound_conversation) if bound_conversation else None
+            if bound_conversation in self.record_close_boundaries or closing is not None and closing.frozen:
+                # This call has not accepted/buffered the input. The caller retains
+                # custody, including its existing archive/WAL path, under backpressure.
+                raise AudioBackpressure('listen_record_closed', chunk)
         if (
             audio_outbox_enabled()
             and self.audio_total_size + self.audio_inflight_size + len(chunk) > self.config.max_audio_buffer_size
@@ -438,6 +443,7 @@ class ListenPusherSession:
         self.audio_buffer_last_received = received_at
 
     def _remember_record_boundary(self, cid: str, *, accepted: bool) -> None:
+        assert self.record_close_boundaries is not None
         self.record_close_boundaries[cid] = accepted
         self.record_close_boundaries.move_to_end(cid)
         while len(self.record_close_boundaries) > self.config.max_pending_requests:
@@ -449,7 +455,12 @@ class ListenPusherSession:
             # Teardown has drained the receiver/tick. A new prepare cannot be
             # completed there; leave the unprepared owner to socket-end drainage.
             return False
-        if not close_notify_enabled() or not audio_outbox_enabled():
+        if (
+            not close_notify_enabled()
+            or not audio_outbox_enabled()
+            or self.pending_record_closes is None
+            or self.record_close_boundaries is None
+        ):
             return False
         if self.pusher_ws is not None and self.pusher_ws is self.record_close_unsupported_socket:
             return False  # Negative capability is terminal until a new connection.
@@ -688,7 +699,11 @@ class ListenPusherSession:
                                 run.failed_socket = pusher_ws
                         raise
                     sent_envelopes += 1
-                    close = self.pending_record_closes.get(conversation) if conversation else None
+                    close = (
+                        self.pending_record_closes.get(conversation)
+                        if conversation and self.pending_record_closes is not None
+                        else None
+                    )
                     if close is not None and close.socket is pusher_ws:
                         close.sent += len(envelope.data)
                 if current_conversation_id and current_conversation_id != self.last_synced_conversation_id:
@@ -738,7 +753,7 @@ class ListenPusherSession:
             await self.deps.sleep(1)
             if self.audio_total_size > 0:
                 await self._audio_bytes_flush()
-            if self.record_close_supported:
+            if self.record_close_supported and self.pending_record_closes is not None:
                 for cid in list(self.pending_record_closes):
                     await self.request_recording_close(cid)
 
@@ -780,11 +795,11 @@ class ListenPusherSession:
                         and type(ack.get('version')) is int
                         and ack['version'] == RECORD_CLOSE_VERSION
                     )
-                    if self.record_close_supported:
+                    if self.record_close_supported and self.pending_record_closes is not None:
                         for cid in list(self.pending_record_closes):
                             await self.request_recording_close(cid)
                 elif header_type == RESULT_OPCODE:
-                    if self.pusher_ws is not sock:
+                    if not close_notify_enabled() or self.pending_record_closes is None or self.pusher_ws is not sock:
                         continue
                     ack = json.loads(msg[4:].decode('utf-8'))
                     if (

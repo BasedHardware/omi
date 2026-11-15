@@ -516,10 +516,12 @@ async def _run_websocket_util_trigger(
             logger.error(f'Failed to send audio timeline ack: {e} {uid}')
             return
 
-    close_protocol = PusherCloseState(
-        record_close_protocol == RECORD_CLOSE_VERSION and close_notify_enabled() and audio_outbox_enabled()
+    close_protocol = (
+        PusherCloseState(True)
+        if close_notify_enabled() and record_close_protocol == RECORD_CLOSE_VERSION and audio_outbox_enabled()
+        else None
     )
-    if close_protocol.negotiated:
+    if close_protocol is not None:
         await websocket.send_bytes(record_close_ack_frame())
 
     # Defense-in-depth: during drain the LB should already have removed us from
@@ -801,7 +803,7 @@ async def _run_websocket_util_trigger(
             for conv_id in list(record_close_requests):
                 if conv_id == exclude:
                     continue  # The just-dequeued reference is not buffered yet.
-                if close_protocol.blocks(conv_id, websocket_active):
+                if close_protocol is not None and close_protocol.blocks(conv_id, websocket_active):
                     continue  # A transport send/rollover is not a committed close boundary.
                 if websocket_active and any(window.conversation_id == conv_id for window in refused_windows):
                     continue  # Uncommitted PCM is still owned by this socket.
@@ -932,7 +934,8 @@ async def _run_websocket_util_trigger(
     def retire_record_close(conv_id: str) -> None:
         record_close_requests.discard(conv_id)
         record_barrier.retire_close(conv_id)
-        close_protocol.retire(conv_id)
+        if close_protocol is not None:
+            close_protocol.retire(conv_id)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -1619,7 +1622,9 @@ async def _run_websocket_util_trigger(
                         record_barrier.hold_recording(current_conversation_id)
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
-            uncommitted_closes = close_protocol.requests.keys() - close_protocol.committed
+            uncommitted_closes = (
+                close_protocol.requests.keys() - close_protocol.committed if close_protocol is not None else set()
+            )
             if uncommitted_closes:
                 logger.warning('event=record_close_uncommitted_disconnect records=%d', len(uncommitted_closes))
                 record_fallback(
@@ -1636,7 +1641,7 @@ async def _run_websocket_util_trigger(
             if (
                 tail_committed
                 and current_conversation_id in record_close_requests
-                and (not close_protocol.negotiated or current_conversation_id in close_protocol.committed)
+                and (close_protocol is None or current_conversation_id in close_protocol.committed)
                 and current_conversation_id not in record_barrier.failed_recordings
                 and not record_barrier.record_upload_failed
                 and os.getenv('RECORD_BARRIER_INLINE_FINISH', 'true').strip().lower() != 'false'
@@ -1772,7 +1777,7 @@ async def _run_websocket_util_trigger(
                         ):
                             raise ValueError('invalid close-v2 control')
                         status, base = 'unsupported', 0
-                        if close_protocol.negotiated and close_notify_enabled() and private_cloud_sync_enabled:
+                        if close_protocol is not None and close_notify_enabled() and private_cloud_sync_enabled:
                             if phase == 'prepare':
                                 status, base = close_protocol.prepare(
                                     conversation_id, request_id, record_close_requests
@@ -1830,7 +1835,8 @@ async def _run_websocket_util_trigger(
                 # Parse: header(4) | timestamp(8 bytes double) | audio_data
                 buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                 audio_data = data[12:]
-                close_protocol.audio(current_conversation_id, len(audio_data))
+                if close_protocol is not None:
+                    close_protocol.audio(current_conversation_id, len(audio_data))
                 run_gap_before = False
 
                 if audio_timeline_v2:

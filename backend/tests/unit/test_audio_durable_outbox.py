@@ -2536,6 +2536,7 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
 @pytest.mark.asyncio
 @pytest.mark.parametrize('fast', ['true', 'false'])
 async def test_close_defers_only_optional_discovery_after_verified_upload(inline_session, monkeypatch, fast):
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
     client, path, barrier, projected = inline_session
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', fast)
     order = []
@@ -2565,7 +2566,10 @@ async def test_close_defers_only_optional_discovery_after_verified_upload(inline
 
 
 @pytest.mark.asyncio
-async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(inline_session, monkeypatch):
+@pytest.mark.parametrize('close_path', ['staged_v2', 'finalization', 'rollover'])
+async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
+    inline_session, monkeypatch, close_path
+):
     client, path, barrier, projected = inline_session
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
@@ -2589,6 +2593,10 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         return result
 
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    if close_path == 'staged_v2':
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
     controls = [
         struct.pack('<I', 104)
         + json.dumps(
@@ -2596,6 +2604,11 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         ).encode()
         for phase in ('prepare', 'commit')
     ]
+
+    if close_path == 'finalization':
+        controls = [struct.pack('<I', 104) + json.dumps({'conversation_id': 'conversation'}).encode()]
+    elif close_path == 'rollover':
+        controls = [struct.pack('<I', 103) + b'successor']
 
     class OpenStream(Socket):
         async def receive_bytes(self):

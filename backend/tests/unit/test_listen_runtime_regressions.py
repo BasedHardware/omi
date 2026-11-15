@@ -113,6 +113,7 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
     inline_session, monkeypatch, caplog, answer_prepare, prepared_before_disconnect
 ):
     """Real teardown/controller, relay parser, receipts and seal; no repair runner."""
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
     client, path, _, _ = inline_session
     row = client.rows[path]
     row.update(
@@ -1663,6 +1664,7 @@ async def test_quiet_final_billing_window_releases_shadow_hold_without_usage_wri
 async def test_durable_finalization_also_notifies_capture_close_without_pusher_finalizer(
     monkeypatch, route, notify_failure
 ):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
     fallback = MagicMock()
     monkeypatch.setattr(conversation_module, 'record_fallback', fallback)
     host = SimpleNamespace(

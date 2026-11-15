@@ -45,7 +45,7 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
-        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
@@ -280,7 +280,7 @@ overlay:
           category: rollout
     pusher:
       env:
-        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
@@ -562,7 +562,7 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
-          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -934,7 +934,7 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
-          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -1343,7 +1343,7 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
-          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
@@ -1701,7 +1701,7 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
-          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}

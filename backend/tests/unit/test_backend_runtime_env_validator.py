@@ -4011,7 +4011,7 @@ def _assert_record_close_listener_bindings(config):
     hosts.extend(config['cloud_run']['services'].values())
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
-        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == expected
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'ops_kill'}
         assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
@@ -4032,7 +4032,8 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
 def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
     validator = load_validator()
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
-    payload = payload.replace(json.dumps({'name': key, 'value': 'true'}) + ',', '')
+    value = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
+    payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'
     path.write_text(payload)
     errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=path)

@@ -9,6 +9,11 @@ from tests.unit.test_record_audio_seal import records, PATH, env
 from database.record_audio import seal_record_audio
 
 
+@pytest.fixture(autouse=True)
+def notify_off_independent_wake(monkeypatch):
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+
+
 @pytest.mark.parametrize('clock', ['due', 'retry', 'claim', 'stale_marker', 'unknown'])
 def test_native_seal_preserves_claim_and_only_wakes_known_retry(records, clock):
     now = time.time()

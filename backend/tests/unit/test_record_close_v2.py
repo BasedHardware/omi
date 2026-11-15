@@ -23,6 +23,12 @@ from utils.pusher_record_close import PusherCloseState, PendingClose
 from utils.pusher_record_close import result_frame
 
 
+@pytest.fixture(autouse=True)
+def staged_protocol_opt_in(monkeypatch):
+    # Experimental handshake proofs opt in explicitly; shipping defaults are off.
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('rollover', [False, True])
 @pytest.mark.parametrize('explicit_binding', [False, True])

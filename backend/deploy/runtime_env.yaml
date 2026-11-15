@@ -377,7 +377,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -563,7 +563,7 @@ environments:
             category: ops_kill
             value: '0'
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -1206,7 +1206,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -1562,7 +1562,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -1903,7 +1903,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -2207,7 +2207,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -2921,7 +2921,7 @@ environments:
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -3215,7 +3215,7 @@ environments:
             category: ops_kill
             value: '100'
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-            value: 'true'
+            value: 'false'
             category: ops_kill
           PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
             value: 'true'
@@ -3880,7 +3880,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -4369,7 +4369,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -4851,7 +4851,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'
@@ -5278,7 +5278,7 @@ environments:
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
             PUSHER_RECORD_CLOSE_NOTIFY_ENABLED:
-              value: 'true'
+              value: 'false'
               category: ops_kill
             PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
               value: 'true'

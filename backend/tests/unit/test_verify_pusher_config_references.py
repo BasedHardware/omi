@@ -201,7 +201,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED": "true",
         "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
         "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
-        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": "true",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": "false",
         "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": "true",
         "PUSHER_RECORD_SEAL_WAKE_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
