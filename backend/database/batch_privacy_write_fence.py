@@ -26,6 +26,7 @@ from google.cloud.firestore_v1.types import (
     WriteResult,
 )
 from google.rpc import status_pb2
+from database.home_feed_writer import augment_home_writes, affects_home, bulk_erasure_scope
 from database.batch_privacy_attempt import CONVERSATION_AUTHORITY_FIELDS, TOKEN_FIELD, SCHEMA_FIELD, TOKEN_SCHEMA
 
 # Protobuf builds this class dynamically; the installed module has no typed declaration.
@@ -135,10 +136,13 @@ def token_write(path: str) -> Write:
 def augment_commit(request: Any) -> tuple[Any, int]:
     writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
     count = len(writes)
+    home_writes = augment_home_writes(writes)
     tokens = authority_tokens(writes)
-    if not tokens:
+    if not tokens and len(home_writes) == count:
         return request, count
     prepared = CommitRequest(request)
+    del prepared.writes[:]
+    prepared.writes.extend(home_writes)
     # Appending after source writes also handles authority field updates.
     # Authority deletion is rejected above; account-subtree erasure retains it.
     # The final token is unique after source wipe/recreation;
@@ -199,7 +203,7 @@ def _bulk_parts(request, kwargs):
     # BatchWrite is non-atomic and forbids duplicate documents. Relevant writes
     # become independent atomic Commits, each containing its own fence. Unrelated
     # writes retain BatchWrite, its labels and its per-write status semantics.
-    indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write])]
+    indices = [i for i, write in enumerate(prepared.writes) if authority_tokens([write]) or affects_home(write)]
     return supplied, prepared, indices
 
 
@@ -284,6 +288,7 @@ def _wrap_bulk(original: Any) -> Any:
 
         wrapped = sync_wrapped
 
+    wrapped = bulk_erasure_scope(wrapped)
     setattr(wrapped, '_omi_batch_privacy_fence', True)
     return wrapped
 

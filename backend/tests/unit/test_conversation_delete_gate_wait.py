@@ -849,6 +849,7 @@ class _Request:
     [
         (lambda *a: 'purged', 200, 'done'),
         (lambda *a: 'held', 200, 'done'),
+        (lambda *a: 'busy', 200, 'done'),  # lost the gate to a same-account peer: redriven, not retried
         (MagicMock(side_effect=RuntimeError('firestore down')), 500, 'retry'),
     ],
 )
@@ -857,6 +858,22 @@ def test_task_handler_maps_run_outcomes_to_queue_retry(monkeypatch, effect, stat
     response = asyncio.run(users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 1}), 0))
     assert response.status_code == status
     assert body_status.encode() in response.body
+
+
+def test_task_handler_logs_why_a_run_failed(monkeypatch, caplog):
+    """Every 500 carries its reason: the obligation kind, generation, error type and sanitized message."""
+    secret = 'tok_9f8e7d6c5b4a3f2e1d0c'
+    error = legal_holds.DestructiveOperationInProgress(f'another destructive operation owns the account gate {secret}')
+    monkeypatch.setattr(purge_jobs, 'run_job', MagicMock(side_effect=error))
+    with caplog.at_level('WARNING', logger='routers.users'):
+        response = asyncio.run(
+            users_router.run_conversation_batch_purge(_Request({'job_id': 'j1', 'generation': 4}), 2)
+        )
+    assert response.status_code == 500
+    line = next(record.getMessage() for record in caplog.records if 'attempt 3 failed' in record.getMessage())
+    assert 'kind=batch_purge job=j1 generation=4' in line
+    assert 'DestructiveOperationInProgress: another destructive operation owns the account gate' in line
+    assert secret not in line
 
 
 def test_task_handler_runs_on_its_own_pool_not_the_account_wipe_pool(monkeypatch):

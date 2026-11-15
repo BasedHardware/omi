@@ -485,13 +485,25 @@ def run_job(
         except PurgeCheckpointed:
             finish('checkpointed')
             return 'checkpointed'
+        except Exception as error:
+            # Units acquire before erasing, so a unit that lost its gate wait erased nothing; progress is saved.
+            if _lost_gate_to_peer(error, uid):
+                logger.info('conversation batch purge waiting for the account gate job=%s', job)
+                finish('busy')
+                return 'busy'
+            _finish_failed(finish)
+            raise
         except BaseException:
-            try:
-                finish('failed')
-            except Exception:
-                pass  # The lease expires; the original failure is what the queue must see.
+            _finish_failed(finish)
             raise
         return 'purged' if finish('completed') else 'superseded'
+
+
+def _finish_failed(finish: Callable[[str], bool]) -> None:
+    try:
+        finish('failed')
+    except Exception:
+        pass  # The lease expires; the original failure is what the queue must see.
 
 
 def _lost_gate_to_peer(error: BaseException, uid: str) -> bool:

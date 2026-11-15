@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Gagal masuk dengan Google. Silakan coba lagi.",
     "authenticationFailed": "Autentikasi gagal. Silakan coba lagi.",
     "authFailedToSignInWithApple": "Gagal masuk dengan Apple. Silakan coba lagi.",
+    "authAppleSignInFailedUseGoogle": "Masuk dengan Apple tidak berhasil. Coba lagi atau lanjutkan dengan Google.",
     "authFailedToRetrieveToken": "Gagal mengambil token. Silakan coba lagi.",
     "authUnexpectedErrorFirebase": "Terjadi kesalahan tak terduga saat masuk dengan Firebase. Silakan coba lagi.",
     "authUnexpectedError": "Terjadi kesalahan tak terduga saat masuk. Silakan coba lagi.",
@@ -4143,6 +4144,7 @@
     "paywallTrialBilledYearly": "Ditagih tahunan",
     "paywallTrialSaveAmount": "Hemat {amount}",
     "paywallTrialCta": "Mulai dengan {price}",
+    "paywallTrialCodeHint": "Punya kode Omi Pro? Masukkan di layar berikutnya.",
     "paywallTrialCancelNote": "Batalkan kapan saja. Tanpa biaya, tanpa penalti.",
     "paywallMonthlyFallbackTitle": "Belum siap untuk setahun penuh?",
     "paywallMonthlyFallbackTrialBody": "Mulai dengan paket bulanan saja. Gratis {days} hari yang sama, lalu {price} per bulan. Batalkan kapan saja.",
@@ -4688,5 +4690,6 @@
     "monthlySwitchDeclined": "Pembayaran ditolak. Paket Anda tidak berubah.",
     "monthlySwitchUnavailable": "Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.",
     "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
-    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan."
+    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan.",
+    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi."
 }

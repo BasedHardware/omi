@@ -376,6 +376,15 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         textAlign: TextAlign.center,
                         style: _Paper.label(size: 13, color: _Paper.success, weight: FontWeight.w600),
                       ),
+                      const SizedBox(height: 4),
+                      // Shopify buyers with an included year land here, not on the plans sheet with
+                      // its code field; their code goes in Stripe Checkout's promotion code box.
+                      Text(
+                        l10n.paywallTrialCodeHint,
+                        key: const Key('trial_paywall_code_hint'),
+                        textAlign: TextAlign.center,
+                        style: _Paper.label(size: 13, color: _Paper.textSecondary),
+                      ),
                     ],
                   ),
                 ),

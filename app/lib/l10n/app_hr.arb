@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava putem Applea nije uspjela. Pokušajte ponovno ili nastavite s Googleom.",
     "authFailedToRetrieveToken": "Dohvaćanje firebase tokena nije uspjelo, molim vas pokušajte ponovno.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "Naplaćuje se godišnje",
     "paywallTrialSaveAmount": "Uštedite {amount}",
     "paywallTrialCta": "Započnite za {price}",
+    "paywallTrialCodeHint": "Imate Omi Pro kod? Unesite ga na sljedećem zaslonu.",
     "paywallTrialCancelNote": "Otkažite bilo kada. Bez naknada, bez kazni.",
     "paywallMonthlyFallbackTitle": "Još niste spremni za cijelu godinu?",
     "paywallMonthlyFallbackTrialBody": "Počnite s mjesečnim planom. Istih {days} dana besplatno, zatim {price} mjesečno. Otkažite bilo kada.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "Plaćanje je odbijeno. Vaš plan nije promijenjen.",
     "monthlySwitchUnavailable": "Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.",
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
-    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno."
+    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
+    "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno."
 }

@@ -7027,6 +7027,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple\'iga sisselogimine ebaõnnestus, palun proovige uuesti.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple\'iga sisselogimine ei õnnestunud. Proovi uuesti või jätka Google\'iga.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase tokeni hankimine ebaõnnestus, palun proovige uuesti.';
 
   @override
@@ -13396,6 +13400,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Kas sul on Omi Pro kood? Sisesta see järgmisel ekraanil.';
+
+  @override
   String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
 
   @override
@@ -15446,4 +15453,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Täna makstud $price. Uueneb igakuiselt.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
 }

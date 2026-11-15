@@ -6994,6 +6994,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get authFailedToSignInWithApple => 'ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google';
+
+  @override
   String get authFailedToRetrieveToken => 'ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง';
 
   @override
@@ -13335,6 +13339,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'มีโค้ด Omi Pro ไหม ใส่โค้ดได้ในหน้าจอถัดไป';
+
+  @override
   String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override
@@ -15379,4 +15386,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'ชำระ $price แล้ววันนี้ ต่ออายุทุกเดือน';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
 }

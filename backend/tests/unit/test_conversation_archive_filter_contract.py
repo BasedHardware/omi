@@ -160,6 +160,7 @@ def conversations_db():
     from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
     from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
+    from utils.home_feed import projection as home_feed_projection
 
     firestore = _Firestore([])
 
@@ -242,6 +243,7 @@ def conversations_db():
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
         "utils.conversations.transcribing_hold": transcribing_hold,
@@ -343,7 +345,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
     }
 
 
-def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
+def test_archive_filter_precedes_pagination_and_matches_count(conversations_db, monkeypatch):
     module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
@@ -388,6 +390,26 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         "offset",
         "stream",
     ]
+
+    # The actual slim query must keep the evidence needed by both old-client wires.
+    # Reuse this query fixture so the contract adds no heavy import/setup per test.
+    model = ModuleType('models.conversation')
+    model.Conversation = SimpleNamespace(model_fields={})
+    monkeypatch.setitem(sys.modules, 'models.conversation', model)
+    monkeypatch.setenv('OMI_INDEXED_LIST_READS_ENABLED', 'true')
+    module.get_conversations_without_photos('user-1', list_fields_only=True)
+    assert {
+        'record_transcription_empty',
+        'record_projection_revision',
+        'home_transcription_pending_at',
+        'episode_transcription_pending_at',
+        'server_batch_audio_closed',
+        'server_batch_audio_start',
+        'server_batch_audio_end',
+        'record_audio_closed',
+        'record_upload_sessions',
+        'record_audio_partial',
+    } <= set(firestore.queries[-1].selected_fields)
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
@@ -472,6 +494,15 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
                 'record_projection_revision',
                 'record_upload_failed',
                 'finalization_status',
+                'record_admitted_at',
+                'home_transcription_queue_observed_at',
+                'has_content',
+                'episode_transcription_pending_at',
+                'episode_transcription_deadline_at',
+                'sync_content_revision',
+                'is_locked',
+                'server_batch_audio_received',
+                'server_batch_audio_closed',
             ]
         )
     assert ("select", tuple(dict.fromkeys(expected_fields))) in firestore.queries[0].events

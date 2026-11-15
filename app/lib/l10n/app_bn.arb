@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple দিয়ে সাইন ইন হয়নি। আবার চেষ্টা করুন অথবা Google দিয়ে চালিয়ে যান।",
     "authFailedToRetrieveToken": "Firebase টোকেন পুনরুদ্ধার করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "বার্ষিক বিল করা হয়",
     "paywallTrialSaveAmount": "{amount} সাশ্রয় করুন",
     "paywallTrialCta": "{price} দিয়ে শুরু করুন",
+    "paywallTrialCodeHint": "Omi Pro কোড আছে? পরের স্ক্রিনে সেটি দিন।",
     "paywallTrialCancelNote": "যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।",
     "paywallMonthlyFallbackTitle": "এক বছরের জন্য এখনও প্রস্তুত নন?",
     "paywallMonthlyFallbackTrialBody": "এর বদলে মাসিক দিয়ে শুরু করুন। একই {days} দিন বিনামূল্যে, তারপর মাসে {price}। যেকোনো সময় বাতিল করুন।",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "পেমেন্ট প্রত্যাখ্যাত হয়েছে। আপনার প্ল্যান বদলায়নি।",
     "monthlySwitchUnavailable": "এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।",
     "monthlySwitchDoneTitle": "আপনি এখন মাসিক প্ল্যানে",
-    "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।"
+    "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।",
+    "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।"
 }

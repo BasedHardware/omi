@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google'iga sisselogimine ebaõnnestus, palun proovige uuesti.",
     "authenticationFailed": "Autentimine ebaõnnestus. Palun proovige uuesti.",
     "authFailedToSignInWithApple": "Apple'iga sisselogimine ebaõnnestus, palun proovige uuesti.",
+    "authAppleSignInFailedUseGoogle": "Apple'iga sisselogimine ei õnnestunud. Proovi uuesti või jätka Google'iga.",
     "authFailedToRetrieveToken": "Firebase tokeni hankimine ebaõnnestus, palun proovige uuesti.",
     "authUnexpectedErrorFirebase": "Ootamatu viga sisselogimisel, Firebase viga, palun proovige uuesti.",
     "authUnexpectedError": "Ootamatu viga sisselogimisel, palun proovige uuesti",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Arveldatakse iga-aastaselt",
     "paywallTrialSaveAmount": "Säästa {amount}",
     "paywallTrialCta": "Alusta hinnaga {price}",
+    "paywallTrialCodeHint": "Kas sul on Omi Pro kood? Sisesta see järgmisel ekraanil.",
     "paywallTrialCancelNote": "Tühista igal ajal. Ei mingeid tasusid ega trahve.",
     "paywallMonthlyFallbackTitle": "Pole veel terveks aastaks valmis?",
     "paywallMonthlyFallbackTrialBody": "Alusta hoopis kuupaketiga. Samad {days} päeva tasuta, seejärel {price} kuus. Tühista igal ajal.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Makse lükati tagasi. Sinu pakett ei muutunud.",
     "monthlySwitchUnavailable": "Üleminek pole praegu saadaval. Uuenda selle asemel kaarti.",
     "monthlySwitchDoneTitle": "Maksad nüüd igakuiselt",
-    "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt."
+    "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt.",
+    "processingDeleteScopeChanged": "Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti."
 }

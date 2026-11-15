@@ -1,7 +1,7 @@
 """Bounded, presentation-only wait for a completed server-batch capture's transcript.
 
-The completion CAS stamps the server wait once. Readers bound that wait without
-using capture age, renewing it, or writing a lifecycle status. Shared database
+The completion CAS stamps the server wait once. The first seal admission may
+advance its presentation anchor once; readers never renew it or write status. Shared database
 hydration must remain authoritative for replace_record and finalization replay;
 apply project only at API exits.
 """
@@ -9,6 +9,7 @@ apply project only at API exits.
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from typing import Any
+import math
 
 from config.episodes import (
     home_transcription_deadline_seconds,
@@ -17,6 +18,8 @@ from config.episodes import (
     home_transcription_queue_hold_enabled,
 )
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
+from config.transcription_pending import pending_retry_enabled, seal_wait_enabled
+from utils.conversations import empty_capture
 
 READ_FIELDS = (
     'created_at',
@@ -28,6 +31,15 @@ READ_FIELDS = (
     'record_upload_failed',
     'finalization_status',
     'user_title',
+    'record_admitted_at',
+    'home_transcription_queue_observed_at',
+    'has_content',
+    'episode_transcription_pending_at',
+    'episode_transcription_deadline_at',
+    'sync_content_revision',
+    'is_locked',
+    'server_batch_audio_received',
+    'server_batch_audio_closed',
 )
 
 
@@ -53,7 +65,12 @@ def applies(row: Mapping[str, Any], *, stored: bool = False) -> bool:
         home_transcription_presentation_gate_enabled()
         and getattr(row.get('status'), 'value', row.get('status')) == 'completed'
         and row.get('record_lane_owner') in BATCH_RECORD_OWNERS
-        and isinstance(row.get('home_transcription_deadline_at'), datetime)
+        and (
+            isinstance(row.get('home_transcription_deadline_at'), datetime)
+            or seal_wait_enabled()
+            and home_transcription_queue_hold_enabled()
+            and isinstance(row.get('episode_transcription_deadline_at'), datetime)
+        )
         and not row.get('record_projection_revision')
         and not has_transcript
         and not str(row.get('user_title') or '').strip()
@@ -91,11 +108,35 @@ def wait_started_at(row: Mapping[str, Any], *, prefix: str = 'home_transcription
 
 def deadline(row: Mapping[str, Any], *, prefix: str = 'home_transcription') -> datetime:
     """Read-time bound heals old stamps without a write, renewal, or job lookup."""
+    if (
+        prefix == 'home_transcription'
+        and not row.get('home_transcription_pending_at')
+        and not row.get('home_transcription_deadline_at')
+        and seal_wait_enabled()
+        and isinstance(row.get('episode_transcription_deadline_at'), datetime)
+    ):
+        prefix = 'episode_transcription'
     if not home_transcription_queue_hold_enabled():
         return _utc(row[f'{prefix}_deadline_at'])
     anchor = wait_started_at(row, prefix=prefix)
     if anchor is None:
         raise ValueError('transcription wait has no server timestamp')
+    # Both native seal and full-proof repair CAS this first-admission clock only
+    # when absent. Reconnects, retries, requeues and repeated reads cannot move
+    # it. Do not use record_sealed_at: that clock changes on every reseal.
+    if seal_wait_enabled():
+        for key in ('record_admitted_at', 'home_transcription_queue_observed_at'):
+            admitted = row.get(key)
+            if (
+                isinstance(admitted, (int, float))
+                and not isinstance(admitted, bool)
+                and math.isfinite(admitted)
+                and admitted > 0
+            ):
+                try:
+                    anchor = max(anchor, datetime.fromtimestamp(admitted, timezone.utc))
+                except (OverflowError, OSError, ValueError):
+                    pass
     return anchor + timedelta(seconds=home_transcription_max_age_seconds())
 
 
@@ -110,6 +151,9 @@ def failed(row: Mapping[str, Any]) -> bool:
 
 def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any]:
     """Return a wire copy; expired/error captures stay visible as completed rows."""
+    empty = empty_capture.project(row, now=now)
+    if empty is not row:
+        return empty
     if not applies(row):
         return row
     deadline_at = deadline(row)
@@ -123,4 +167,51 @@ def project(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, An
         'status': 'completed' if status == 'failed' else status,
         'structured': {**(row.get('structured') or {}), 'title': title},
         **({'summary_retryable': False} if home_transcription_queue_hold_enabled() and not failed(row) else {}),
+    }
+
+
+def retry_pending(row: Mapping[str, Any]) -> bool:
+    """Stored capture evidence, independent of titles and display switches.
+
+    A title (including a user title) is not transcript evidence. In particular,
+    Couldn't transcribe is synthesized on reads, never required in storage.
+    This handler receives the hydrated full row, not a slim list projection.
+    """
+    return bool(
+        pending_retry_enabled()
+        and row.get('record_lane_owner') in BATCH_RECORD_OWNERS
+        and row.get('status') in {'completed', 'in_progress', 'processing', 'failed'}
+        and any(
+            isinstance(row.get(key), datetime)
+            for key in ('home_transcription_deadline_at', 'episode_transcription_deadline_at')
+        )
+        and not row.get('record_projection_revision')
+        and not row.get('transcript_segments')
+    )
+
+
+def retry_wire(row: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any] | None:
+    """No model or job mutation. None asks the API to return a clear non-200.
+
+    There is no owner-click priority promotion in this pipeline. Do not turn
+    old audio into fresh audio or overwrite a worker's claim/backoff. A recent
+    first seal is enough to return the released client's processing contract.
+    """
+    empty = empty_capture.project(row, now=now)
+    if empty is not row:
+        return empty
+    prefix = (
+        'home_transcription'
+        if isinstance(row.get('home_transcription_deadline_at'), datetime)
+        else 'episode_transcription'
+    )
+    title, status = transcription_presentation(deadline(row, prefix=prefix), failed=failed(row), now=now)
+    if status == 'failed' or row.get('discarded'):
+        return None
+    return {
+        **row,
+        'status': 'processing',
+        'home_step': 'transcribing',
+        'summary_retryable': False,
+        'structured': {**(row.get('structured') or {}), 'title': row.get('user_title') or title},
     }

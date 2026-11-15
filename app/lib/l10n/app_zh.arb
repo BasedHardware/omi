@@ -2218,6 +2218,7 @@
     "authFailedToSignInWithGoogle": "使用Google登录失败，请重试。",
     "authenticationFailed": "身份验证失败。请重试。",
     "authFailedToSignInWithApple": "使用Apple登录失败，请重试。",
+    "authAppleSignInFailedUseGoogle": "无法通过 Apple 登录。请重试，或使用 Google 继续。",
     "authFailedToRetrieveToken": "获取Firebase令牌失败，请重试。",
     "authUnexpectedErrorFirebase": "登录时发生意外错误，Firebase错误，请重试。",
     "authUnexpectedError": "登录时发生意外错误，请重试",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "按年计费",
     "paywallTrialSaveAmount": "节省 {amount}",
     "paywallTrialCta": "以 {price} 开始",
+    "paywallTrialCodeHint": "有 Omi Pro 兑换码？请在下一个页面输入。",
     "paywallTrialCancelNote": "随时取消。无费用，无罚款。",
     "paywallMonthlyFallbackTitle": "还没准备好订一整年？",
     "paywallMonthlyFallbackTrialBody": "不如先从月付开始。同样免费{days}天，之后每月{price}。随时取消。",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "付款被拒。你的计划没有变化。",
     "monthlySwitchUnavailable": "目前无法切换。请改为更新银行卡。",
     "monthlySwitchDoneTitle": "已改为按月付费",
-    "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。"
+    "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。",
+    "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。"
 }

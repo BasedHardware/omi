@@ -11,6 +11,8 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/storage_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
@@ -249,8 +251,8 @@ void main() {
       );
 
   StorageSyncImpl storageSyncWith(_FakeLocalSync local, _FakeStorageDevice card, Wal wal,
-      {Timer Function(Duration, void Function())? transferTimer}) {
-    final sync = StorageSyncImpl(_Listener(), transferTimer: transferTimer)
+      {Timer Function(Duration, void Function())? transferTimer, DateTime Function()? clock}) {
+    final sync = StorageSyncImpl(_Listener(), transferTimer: transferTimer, clock: clock)
       ..testDevice = BtDevice(id: 'devkit-1', name: 'Omi DevKit', type: DeviceType.omi, rssi: -40)
       ..testConnection = card
       ..testWals = [wal];
@@ -316,6 +318,79 @@ void main() {
       await sync.stop();
     });
   }
+
+  final clockNow = DateTime.utc(2026, 11, 15, 11);
+  final phoneSeconds = clockNow.millisecondsSinceEpoch ~/ 1000;
+  for (final raw in [1704067200, phoneSeconds + 86400, phoneSeconds + 86401, 1967677260, 0x7fffffff, 0, -1]) {
+    test('LittleFS clock $raw preserves file index and waits for durable bytes before DELETE', () async {
+      final card = _FakeStorageDevice(script: [
+        _dataPacket([40]),
+        [100]
+      ]);
+      final local = _FakeLocalSync();
+      final wal = storageWal(timerStart: raw);
+      final sync = storageSyncWith(local, card, wal, clock: () => clockNow);
+      addTearDown(sync.stop);
+      addTearDown(card.controller.close);
+      await sync.syncWal(wal: wal);
+      final persisted = local.added.single;
+      final timed = useDeviceCaptureTime(raw, phoneSeconds);
+      expect(persisted.timerStart, timed ? raw : phoneSeconds);
+      expect(persisted.clockRun, timed ? isNull : isNotNull);
+      expect(wal.timerStart, raw);
+      expect(card.writes, [
+        [1, 0x11, 0]
+      ]);
+      expect(card.deletes, [1]);
+      expect(local.events.single, startsWith('addExternalWal:'));
+    });
+  }
+
+  test('an estimated chunk collision keeps its run adjacent to the timestamp', () async {
+    final local = _FakeLocalSync();
+    final source = storageWal();
+    var nonce = 0;
+    final one = await local.persistDeviceChunk(
+        source: source,
+        frames: [
+          [1, 2]
+        ],
+        timerStart: phoneSeconds,
+        admittedGeneration: 1,
+        nextCollisionSequence: () => nonce++,
+        clockRun: 'run12');
+    final two = await local.persistDeviceChunk(
+        source: source,
+        frames: [
+          [3, 4]
+        ],
+        timerStart: phoneSeconds,
+        admittedGeneration: 1,
+        nextCollisionSequence: () => nonce++,
+        clockRun: 'run12');
+    expect(two.filePath, isNot(one.filePath));
+    expect(two.filePath,
+        endsWith(deviceCaptureClockRepairOff ? '_clkerun12_u0_$phoneSeconds.bin' : '_u0_clkerun12_$phoneSeconds.bin'));
+    expect(await File((await Wal.getFilePath(one.filePath))!).readAsBytes(), [2, 0, 0, 0, 1, 2]);
+    expect(await File((await Wal.getFilePath(two.filePath))!).readAsBytes(), [2, 0, 0, 0, 3, 4]);
+  });
+
+  test('LittleFS never invents a date from an implausible phone clock', () async {
+    if (deviceCaptureClockRepairOff) return;
+    final card = _FakeStorageDevice(script: [
+      _dataPacket([40]),
+      [100]
+    ]);
+    final local = _FakeLocalSync();
+    final wal = storageWal(timerStart: 0);
+    final sync = storageSyncWith(local, card, wal, clock: () => DateTime.utc(1970));
+    addTearDown(sync.stop);
+    addTearDown(card.controller.close);
+    await expectLater(sync.syncWal(wal: wal), throwsStateError);
+    expect(local.added, isEmpty);
+    expect(card.deletes, isEmpty);
+    expect(wal.status, WalStatus.miss);
+  });
 
   test('StorageSync: first real DATA delayed 20 seconds after ACK completes successfully', () async {
     final card = _SubscribedStorageDevice(script: [
@@ -732,8 +807,57 @@ void main() {
     await syncs.storage.stop();
   });
 
+  for (final raw in [1704067200, phoneSeconds + 86400, phoneSeconds + 86401, 1967677260, 0x7fffffff, 0, -1]) {
+    test('Limitless clock $raw guards final batch filename and retains page ACK coordinates', () async {
+      final card = _FakeLimitless(pages: [
+        {
+          'opus_frames': [
+            [1, 2, 3]
+          ],
+          'timestamp_ms': raw * 1000,
+          'max_index': 0
+        },
+        {
+          'opus_frames': [
+            [4, 5]
+          ],
+          'timestamp_ms': raw * 1000,
+          'max_index': 1
+        },
+      ]);
+      final local = _FakeLocalSync();
+      final wal = Wal(
+          timerStart: raw,
+          codec: BleAudioCodec.opus,
+          seconds: 2,
+          status: WalStatus.miss,
+          storage: WalStorage.flashPage,
+          device: 'limitless-1',
+          fileNum: 0,
+          storageOffset: 0,
+          storageTotalBytes: 1);
+      final sync = FlashPageWalSyncImpl(_Listener(), clock: () => clockNow)
+        ..testDevice = BtDevice(id: 'limitless-1', name: 'Limitless', type: DeviceType.limitless, rssi: -40)
+        ..testConnection = card
+        ..testWals = [wal];
+      sync.setLocalSync(local);
+      addTearDown(sync.stop);
+      await sync.syncWal(wal: wal);
+      final persisted = local.added.single;
+      final legacyFallback = deviceCaptureClockRepairOff && raw <= 0;
+      final timed = legacyFallback || useDeviceCaptureTime(raw, phoneSeconds);
+      final expected = legacyFallback ? phoneSeconds : (timed ? raw : phoneSeconds - 1);
+      expect(persisted.timerStart, expected);
+      expect(persisted.clockRun, timed ? isNull : isNotNull);
+      expect(persisted.filePath, endsWith('_${expected * 1000}.bin'));
+      if (!timed) expect(persisted.filePath, contains('_clke${persisted.clockRun}_'));
+      expect(card.acks.last, 1);
+      expect(wal.timerStart, raw);
+    });
+  }
+
   test('Limitless: a session gap ACKs only the saved batch max, never the pending page', () async {
-    const ts1 = 1700000000000;
+    const ts1 = 1794740000000;
     const ts2 = ts1 + 200000; // >120s gap
     final card = _FakeLimitless(
       pages: [

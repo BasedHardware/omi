@@ -50,6 +50,7 @@ def _filename(seconds_from_now: float) -> str:
 def _default_skew(monkeypatch):
     monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
 
 
 # --- shared window ---
@@ -187,6 +188,10 @@ def client(monkeypatch, tmp_path):
 
     monkeypatch.setattr(router, 'resolve_batch_policy', lambda _: BatchUnitPolicy())
     monkeypatch.setattr(router, 'compute_sync_content_id', lambda *_a: 'content-1')
+    # This ordinary-route fixture has no retained source metadata service.
+    # Recovery admission overrides this with the real owner/content lookup.
+    monkeypatch.setattr(router, 'retained_source_offsets', lambda *a, **k: {})
+    monkeypatch.setattr(router, 'recovery_source_conversation', lambda *a, **k: None)
     monkeypatch.setattr(router, 'create_sync_job', Mock())
     monkeypatch.setattr(router, 'claim_sync_content', lambda *_a: {'outcome': 'held', 'result': {}})
     monkeypatch.setattr(router, 'mark_job_completed', Mock())
@@ -1335,7 +1340,7 @@ def test_v2_invalid_filename_returns_closed_code_with_legacy_string_detail(clien
 
 
 def test_v2_non400_http_failures_keep_original_status(client, monkeypatch):
-    def denied(*_args):
+    def denied(*_args, **_kwargs):
         raise HTTPException(status_code=403, detail='Synthetic denial')
 
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', denied)
@@ -1419,9 +1424,9 @@ def test_v2_route_admits_collision_suffixed_upload_with_sound_clock(client, monk
     staged = []
     real_retrieve = router._retrieve_file_paths_v2
 
-    def capture(files, uid, job_id):
+    def capture(files, uid, job_id, **kwargs):
         staged.extend(f.filename for f in files)
-        return real_retrieve(files, uid, job_id)
+        return real_retrieve(files, uid, job_id, **kwargs)
 
     monkeypatch.setattr(router, '_retrieve_file_paths_v2', capture)
     before = _capture_time_counter('rejected_malformed')

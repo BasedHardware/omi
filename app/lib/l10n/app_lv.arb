@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Neizdevās pierakstīties ar Google, lūdzu, mēģiniet vēlreiz.",
     "authenticationFailed": "Autentifikācija neizdevās. Lūdzu, mēģiniet vēlreiz.",
     "authFailedToSignInWithApple": "Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.",
+    "authAppleSignInFailedUseGoogle": "Pierakstīšanās ar Apple neizdevās. Mēģiniet vēlreiz vai turpiniet ar Google.",
     "authFailedToRetrieveToken": "Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedErrorFirebase": "Neparedzēta kļūda pierakstīšanās laikā, Firebase kļūda, lūdzu, mēģiniet vēlreiz.",
     "authUnexpectedError": "Neparedzēta kļūda pierakstīšanās laikā, lūdzu, mēģiniet vēlreiz",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Rēķins katru gadu",
     "paywallTrialSaveAmount": "Ietaupiet {amount}",
     "paywallTrialCta": "Sākt par {price}",
+    "paywallTrialCodeHint": "Vai jums ir Omi Pro kods? Ievadiet to nākamajā ekrānā.",
     "paywallTrialCancelNote": "Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.",
     "paywallMonthlyFallbackTitle": "Vesels gads pagaidām par daudz?",
     "paywallMonthlyFallbackTrialBody": "Sāciet ar mēneša plānu. Tās pašas {days} dienas bez maksas, pēc tam {price} mēnesī. Atceliet jebkurā brīdī.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Maksājums noraidīts. Jūsu plāns nav mainīts.",
     "monthlySwitchUnavailable": "Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.",
     "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
-    "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi."
+    "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi.",
+    "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz."
 }

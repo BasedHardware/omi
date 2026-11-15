@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Не атрымалася ўвайсці праз Apple. Паспрабуйце яшчэ раз або працягніце з Google.",
     "authFailedToRetrieveToken": "Не вдалося атрымаць токен firebase, спрабуйце яшчэ раз.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "Аплата штогод",
     "paywallTrialSaveAmount": "Эканомія {amount}",
     "paywallTrialCta": "Пачаць за {price}",
+    "paywallTrialCodeHint": "Ёсць код Omi Pro? Увядзіце яго на наступным экране.",
     "paywallTrialCancelNote": "Адмяніць у любы час. Без камісій і штрафаў.",
     "paywallMonthlyFallbackTitle": "Пакуль не гатовыя на год?",
     "paywallMonthlyFallbackTrialBody": "Пачніце з месячнага плана. Тыя ж {days} дзён бясплатна, потым {price} у месяц. Адмяніць можна ў любы момант.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "Аплата адхілена. Ваш план не змяніўся.",
     "monthlySwitchUnavailable": "Пераход зараз недаступны. Замест гэтага абнавіце картку.",
     "monthlySwitchDoneTitle": "Цяпер у вас штомесячная аплата",
-    "monthlySwitchDoneBody": "Сёння аплачана {price}. Падаўжаецца штомесяц."
+    "monthlySwitchDoneBody": "Сёння аплачана {price}. Падаўжаецца штомесяц.",
+    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў."
 }

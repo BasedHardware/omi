@@ -31,6 +31,8 @@ CONTROL_CHECKOUT = (
 )
 GATEWAY_WORKFLOW = Path(".github/workflows/gcp_llm_gateway.yml")
 LISTEN_WORKFLOW = Path(".github/workflows/gcp_backend_listen_helm.yml")
+LISTEN_EVIDENCE_CHECKOUT = "ref: ${{ inputs.mode == 'evidence' && inputs.expected_sha || (github.event.inputs.environment == 'prod' && 'main' || github.event.inputs.branch) }}"
+LISTEN_EVIDENCE_CONTROL = CONTROL_CHECKOUT.replace('.github/firestore-workflow', '.github/listen-evidence-control')
 LISTEN_EXPORTER_CHECKOUT = "ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}"
 GATEWAY_RELEASE_SHA_INPUT = (
     "      release_sha:\n"
@@ -134,7 +136,8 @@ def validate(root: Path) -> list[str]:
     for relative in WORKFLOWS:
         path = root / relative
         text = path.read_text(encoding="utf-8") if path.exists() else ""
-        if (PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else CHECKOUT) not in text:
+        expected_checkout = PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else LISTEN_EVIDENCE_CHECKOUT if relative == LISTEN_WORKFLOW else CHECKOUT
+        if expected_checkout not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
             errors.append(f"{relative} must prove production source is on fresh origin/main")
@@ -145,6 +148,12 @@ def validate(root: Path) -> list[str]:
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
         source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        if relative == LISTEN_WORKFLOW:
+            # A separate immutable control checkout is not an application source.
+            # Recognize only the exact path/ref/nonpersistent-credentials contract.
+            source_checkouts -= text.count(LISTEN_EVIDENCE_CONTROL)
+            if text.count(LISTEN_EVIDENCE_CONTROL) != 1:
+                errors.append(f"{relative} evidence controls must use immutable workflow source in their isolated path")
         expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
         if source_checkouts != expected_checkouts:
             errors.append(f"{relative} must not check out a second source after production admission")

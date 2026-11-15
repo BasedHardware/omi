@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Најавувањето со Apple не успеа. Обидете се повторно или продолжете со Google.",
     "authFailedToRetrieveToken": "Неуспешно преземање на firebase жетон, ве молиме обидете се повторно.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "Се наплаќа годишно",
     "paywallTrialSaveAmount": "Заштедете {amount}",
     "paywallTrialCta": "Започнете за {price}",
+    "paywallTrialCodeHint": "Имате код за Omi Pro? Внесете го на следниот екран.",
     "paywallTrialCancelNote": "Откажете во секое време. Без надоместоци, без казни.",
     "paywallMonthlyFallbackTitle": "Сè уште не сте подготвени за цела година?",
     "paywallMonthlyFallbackTrialBody": "Почнете со месечен план. Истите {days} дена бесплатно, потоа {price} месечно. Откажете кога сакате.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "Плаќањето е одбиено. Вашиот план не е променет.",
     "monthlySwitchUnavailable": "Префрлањето моментално не е достапно. Наместо тоа, ажурирајте ја картичката.",
     "monthlySwitchDoneTitle": "Сега плаќате месечно",
-    "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно."
+    "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно.",
+    "processingDeleteScopeChanged": "Списокот за обработка се промени. Прегледајте го и обидете се повторно."
 }
