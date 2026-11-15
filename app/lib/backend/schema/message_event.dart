@@ -64,6 +64,10 @@ class MessageServiceStatusEvent extends MessageEvent {
   /// [mobileStandardBatch]; absent on old servers means today's live transcript.
   final bool localPreview;
 
+  /// Seconds without speech after which this phone may declare a silence end
+  /// of the recording. Absent means: send no silence end.
+  final int? endSilenceSeconds;
+
   MessageServiceStatusEvent({
     required this.status,
     this.statusText,
@@ -73,6 +77,7 @@ class MessageServiceStatusEvent extends MessageEvent {
     this.reason,
     this.mobileStandardBatch = false,
     this.localPreview = false,
+    this.endSilenceSeconds,
   }) : super(eventType: 'service_status');
 
   factory MessageServiceStatusEvent.fromJson(Map<String, dynamic> json) {
@@ -85,6 +90,7 @@ class MessageServiceStatusEvent extends MessageEvent {
       reason: json['reason'] as String?,
       mobileStandardBatch: json['mobile_standard_batch'] == true,
       localPreview: json['mobile_standard_batch'] == true && json['local_preview'] == true,
+      endSilenceSeconds: json['end_silence_seconds'] is int ? json['end_silence_seconds'] as int : null,
     );
   }
 }

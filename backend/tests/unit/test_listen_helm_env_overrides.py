@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / ".github" / "scripts" / "listen_helm_env_overrides.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "gcp_backend_listen_helm.yml"
 PROD_VALUES = ROOT / "backend" / "charts" / "backend-listen" / "prod_omi_backend_listen_values.yaml"
+_WORKFLOW_STEPS: list[dict] | None = None
 
 
 def load_helper():
@@ -512,8 +513,16 @@ def test_cli_redact_release_values_reads_stdin():
 
 
 def _workflow_steps() -> list[dict]:
-    document = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    return document["jobs"]["helm-upgrade"]["steps"]
+    # The workflow is ~40 KB and ``_step`` is called several times per test; parse it
+    # once per process with the C loader instead of re-tokenizing it in Python.
+    global _WORKFLOW_STEPS
+    if _WORKFLOW_STEPS is None:
+        document = yaml.load(
+            WORKFLOW.read_text(encoding="utf-8"),
+            Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader),
+        )
+        _WORKFLOW_STEPS = document["jobs"]["helm-upgrade"]["steps"]
+    return _WORKFLOW_STEPS
 
 
 def _step(name: str) -> dict:

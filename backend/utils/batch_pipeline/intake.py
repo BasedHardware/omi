@@ -437,6 +437,36 @@ def upload_capture_trust(context):
     return 'untrusted' if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY else None
 
 
+def upload_unit_item(
+    unit,
+    index,
+    *,
+    seed,
+    content_id,
+    conversation_id,
+    uid,
+    source,
+    client_device_id,
+    should_lock,
+    privacy_generation,
+    timing_store,
+    capture_time_trust,
+):
+    return replace(
+        seed,
+        segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
+        capture_at=unit.stored_capture_at if getattr(unit, 'stored_capture_at', None) is not None else unit.capture_at,
+        duration_seconds=unit.duration_seconds,
+        unit_kind='conversation' if conversation_id else 'capture_span',
+        conversation_id=conversation_id or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
+        privacy_generation=privacy_generation,
+        # The built-in decoder times WAL PCM from sync filenames.
+        # Alternate adapters (for example held WAV) have no such proof.
+        timing_store=timing_store,
+        capture_time_trust=capture_time_trust,
+    )
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -834,23 +864,19 @@ async def accept_upload(
         )
         items = []
 
-        def unit_item(unit, index):
-            return replace(
-                seed,
-                segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
-                capture_at=(
-                    unit.stored_capture_at if getattr(unit, 'stored_capture_at', None) is not None else unit.capture_at
-                ),
-                duration_seconds=unit.duration_seconds,
-                unit_kind='conversation' if conversation_id else 'capture_span',
-                conversation_id=conversation_id
-                or chunk_identity(uid, source, client_device_id, should_lock, unit.capture_at),
-                privacy_generation=context.generation,
-                # The built-in decoder times WAL PCM from sync filenames.
-                # Alternate adapters (for example held WAV) have no such proof.
-                timing_store='sync' if decode is None else None,
-                capture_time_trust=upload_capture_trust(intake_context),
-            )
+        unit_item = partial(
+            upload_unit_item,
+            seed=seed,
+            content_id=content_id,
+            conversation_id=conversation_id,
+            uid=uid,
+            source=source,
+            client_device_id=client_device_id,
+            should_lock=should_lock,
+            privacy_generation=context.generation,
+            timing_store='sync' if decode is None else None,
+            capture_time_trust=upload_capture_trust(intake_context),
+        )
 
         from utils.stt.batch_language import resolve_language
         from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
