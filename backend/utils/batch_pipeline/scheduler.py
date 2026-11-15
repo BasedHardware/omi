@@ -7,7 +7,7 @@ import logging
 import random
 from threading import Lock
 import uuid
-from time import monotonic
+from time import monotonic, time as wall_time
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -637,6 +637,12 @@ class Scheduler:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
                 token = uuid.uuid4().hex
+                if (
+                    (job.get('projection_binding') or {}).get('native_record')
+                    and job['attempt'] == 0
+                    and not job.get('admission_refusals')
+                ):
+                    job.setdefault('record_first_leased_at', wall_time())
                 job.update(
                     state='leased',
                     token=token,

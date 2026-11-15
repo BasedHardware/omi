@@ -43,10 +43,8 @@ def purge_owner(namespace: str, uid: str) -> int:
     """A5, at the end of a batch purge: erase ``uid``'s Postgres copy to match the purged primary.
 
     Unlike ``mirror_refresh`` this RAISES: privacy erasure must not be best effort, and the purge that
-    calls it is bounded and retried. Outside shadow mode it is one ``os`` lookup and returns 0.
+    calls it is bounded and retried. Retained copies remain reachable with shadow mode and admission disabled.
     """
-    if not _shadow_mode():
-        return 0
     import database.jobstore.dual_store as dual_store
 
     return dual_store.purge_owner(namespace, uid)
@@ -64,7 +62,10 @@ def shadow_parity_collectors() -> tuple:
     try:
         import database.jobstore.dual_store as dual_store
 
+        from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
+
         return (
+            SERVING_PARITY_TOTAL,
             dual_store.SHADOW_PARITY_TOTAL,
             dual_store.SHADOW_CONVERGENCE_TOTAL,
             dual_store.SHADOW_CONVERGENCE_SECONDS,

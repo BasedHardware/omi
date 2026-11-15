@@ -14,6 +14,8 @@ from config.record_seal_rules import overlap_trim_enabled, upload_failed_repair_
 from config import record_seal_repair as repair_config
 
 from database._client import run_transactional
+from database.record_audio import observe_record_sealed
+from database import pipeline_ledger
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.batch_pipeline.live import retained_record_units
@@ -25,6 +27,9 @@ from config import record_seal_rules as lease
 from utils.batch_pipeline.record_seal_reasons import proof_reason, proof_diagnostics, tail_gap_bucket, TailGapRefusal
 from utils.other.storage import list_audio_chunks
 from utils.batch_pipeline import record_seal_profile
+from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
+
+LEDGER_OBSERVATION_SECONDS = 3
 
 ROW_FIELDS = (
     'record_lane_owner',
@@ -302,7 +307,7 @@ def plan_seals(
     return {**plan, 'plan_sha256': plan_digest(plan)}
 
 
-def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None):
+def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outcomes=None, observation_counts=None):
     body = {key: value for key, value in plan.items() if key != 'plan_sha256'}
     if approved_digest != plan['plan_sha256'] or plan_digest(body) != approved_digest:
         raise ValueError('fresh dry-run plan approval required')
@@ -323,13 +328,16 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
         job_ref = store.client.collection(f'{store.namespace}_jobs').document(entry['job_id'])
 
         observation = {}
+        sealed_observation = {}
 
         @firestore.transactional
         def commit(tx):
             observation.clear()  # Only the final transaction attempt may emit.
+            sealed_observation.clear()
             check_budget()
             current_job = job_ref.get(transaction=tx).to_dict() or {}
-            row = ref.get(transaction=tx).to_dict() or {}
+            snapshot = ref.get(transaction=tx)
+            row = snapshot.to_dict() or {}
             if _job_state(current_job) != job or seal_row_state(row) != entry['row']:
                 return 'state_changed'
             refusal = seal_refusal(
@@ -347,6 +355,16 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
                 store.client, tx, uid, conversation_ids=(cid,), expected_generation=job['privacy_generation']
             )
             patch: dict[str, Any] = {'record_audio_closed': True}
+            admitted = row.get('record_admitted_at') is None
+            if admitted:
+                patch['record_admitted_at'] = time.time()
+            sealed_observation.update(source_revision=pipeline_ledger.source_revision(snapshot), admitted=admitted)
+            if (
+                not row.get('record_audio_closed')
+                or row.get('record_upload_sessions')
+                or row.get('record_upload_failed')
+            ):
+                patch['record_sealed_at'] = time.time()
             if row.get('record_upload_sessions'):
                 patch['record_upload_sessions'] = {}  # Only the exact proven-dead map.
             if row.get('record_upload_failed'):
@@ -357,20 +375,40 @@ def apply_seals(store, plan, approved_digest, *, check_budget=lambda: None, outc
             if (
                 plan.get('wake_admission')
                 and repair_config.fresh_enabled()
-                and isinstance(enqueued, (int, float))  # a bool reads as age ~now, outside the window
+                and isinstance(enqueued, (int, float))
+                and not isinstance(enqueued, bool)
                 and math.isfinite(enqueued)
-                and 0 <= time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS
+                and 0 <= time.time() - enqueued
                 and intake_wake_allowed(current_job, time.time())
             ):
-                # The seal and wake commit together. Zero sorts ahead of the
-                # barrier-refusal backlog and cancels its 15-minute retry delay.
+                # The seal and claim-safe wake commit together. Fresh wakes
+                # sort before bulk stock; both cancel a certified retry delay.
                 # Admission still runs its full privacy/custody/artifact checks.
-                tx.update(job_ref, {'available_at': 0, 'record_intake_retry_at': None})
+                wake = 0 if time.time() - enqueued <= repair_config.FRESH_WINDOW_SECONDS else 1
+                tx.update(job_ref, {'available_at': wake, 'record_intake_retry_at': None})
             return 'upload_failed_cleared' if row.get('record_upload_failed') else 'sealed'
 
         try:
             result = run_transactional(store.client, commit, transient=True)
             outcomes[result] += 1
+            if result in {'sealed', 'upload_failed_cleared'}:
+                try:
+                    # The real seal has committed. Optional ledger IO must not
+                    # occupy a row slot for its entire audio-proof budget.
+                    with SweepBudget(LEDGER_OBSERVATION_SECONDS).interrupt_io():
+                        observed = observe_record_sealed(
+                            store.client, uid, cid, ref, refresh_revision=True, **sealed_observation
+                        )
+                    if observed is False and observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
+                except (Exception, BudgetExhausted) as error:
+                    # Catch cancellation only after the seal transaction. It is
+                    # a ledger miss, never a failed seal or permission bypass.
+                    pipeline_ledger.observe_seal_failure(
+                        TimeoutError() if isinstance(error, BudgetExhausted) else error
+                    )
+                    if observation_counts is not None:
+                        observation_counts['ledger_misses'] = observation_counts.get('ledger_misses', 0) + 1
             if (
                 result in {'sealed', 'upload_failed_cleared'}
                 and lease.token_lease_serving(uid)

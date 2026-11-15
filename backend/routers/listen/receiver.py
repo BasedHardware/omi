@@ -69,6 +69,7 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
+from utils.sync.capture_end import silence_seconds as capture_end_silence_seconds
 from models.message_event import (
     PhotoDescribedEvent,
     PhotoProcessingEvent,
@@ -2459,6 +2460,7 @@ class ListenReceiver(ReplayFilterMixin):
                         status='mobile_batch_admission',
                         mobile_standard_batch=self.host.mobile_standard_batch,
                         local_preview=True if getattr(self.host, 'local_preview_batch', False) else None,
+                        end_silence_seconds=capture_end_silence_seconds(),
                     )
                 )
             if not self.host.state.realtime_demand.observe(payload):

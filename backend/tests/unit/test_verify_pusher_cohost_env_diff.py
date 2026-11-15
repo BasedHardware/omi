@@ -65,6 +65,27 @@ def test_preflight_passes_on_good_fixture(gate: SimpleNamespace, chart_fixture: 
     assert gate.validate_preflight(chart_fixture) == []
 
 
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+@pytest.mark.parametrize(
+    'key',
+    [
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ],
+)
+def test_record_latency_binding_cannot_disappear(gate, chart_fixture, environment, key):
+    values = chart_fixture / f'backend/charts/backend-listen/{environment}_omi_backend_listen_values.yaml'
+    source = values.read_text()
+    source, count = re.subn(r'  - name: ' + key + r'\n    value: [^\n]+\n', '', source)
+    assert count == 1
+    values.write_text(source)
+    assert f'[{environment}] record latency flag {key} missing on backend-listen' in gate.validate_preflight(
+        chart_fixture
+    )
+
+
 @pytest.mark.parametrize("env", ("dev", "prod"))
 def test_shared_chat_frontend_auth_is_listen_only(gate: SimpleNamespace, env: str) -> None:
     allowed = gate.LISTEN_ONLY_ALLOWED[env]
