@@ -222,6 +222,7 @@ def test_budget_terminal_phase_is_counted_once_and_matches_summary(cron, monkeyp
     [
         ({'cursor_checkpoint_outcome': 'budget_exhausted', 'work_incomplete': True}, 'checkpoint'),
         ({'dispositions': {'sealed': 1, 'budget_exhausted': 2}}, 'rows'),
+        ({'dispositions': {'sealed': 1, 'deferred': 2}}, 'rows'),
         ({'outcome': 'overlap_refused'}, 'setup'),
     ],
 )
