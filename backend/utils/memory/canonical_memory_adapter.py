@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Collection, Dict, Iterator, List, Optional, Sequence, Tuple, TypedDict, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -1020,6 +1020,10 @@ def read_canonical_scan_page(
     return slots, exhausted
 
 
+class _VectorBudgetOptions(TypedDict, total=False):
+    timeout_seconds: float
+
+
 def search_canonical_memories(
     uid: str,
     query: str,
@@ -1096,7 +1100,7 @@ def search_canonical_memories(
         vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
-    vector_options = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
+    vector_options: _VectorBudgetOptions = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
     if ledger_kinds is None:
         vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit, **vector_options)
     else:
