@@ -24,7 +24,6 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 295,
   "names": {
     "BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS": {"owner": "Goal: Pipeline / SCA-1960", "review_by": "2026-11-28"},
     "RECORD_FRESH_MERGE_ENABLED": {"owner": "q12-post-seal", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
