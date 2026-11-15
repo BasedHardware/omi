@@ -180,11 +180,11 @@ def test_547_synthetic_refusals_replay_original_names_without_negative_cache(adm
         stamp = [1956528000, 2114380800, 2147472000][index % 3] + index
         path = Path(pcm(tmp_path, stamp, 160))
         uploads.append(('files', (path.name, path.read_bytes(), 'application/octet-stream')))
-    batches = [uploads[start : start + 32] for start in range(0, len(uploads), 32)]
+    batches = [uploads[start : start + 16] for start in range(0, len(uploads), 16)]
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
     for files in batches:
         refused = client.post('/v2/sync-local-files', files=files)
-        assert refused.status_code == 400 and refused.json()['code'] == 'invalid_capture_time'
+        assert refused.status_code == 400 and refused.json()['code'] == 'invalid_capture_time', refused.text
     assert not store.rows and not anchors.rows
     monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     receipts = []
