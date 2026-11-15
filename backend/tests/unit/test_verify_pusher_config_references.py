@@ -30,6 +30,13 @@ def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
     return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
+@pytest.fixture(scope="module")
+def runtime_environments() -> dict:
+    # Both environment assertions inspect the same immutable deployment snapshot.
+    # Parse it once during setup instead of in each policy call's CPU budget.
+    return yaml.safe_load((SCRIPT.parents[2] / 'backend/deploy/runtime_env.yaml').read_text())['environments']
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -209,6 +216,8 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "HOME_TRANSCRIPTION_MAX_AGE_SECONDS": "86400",
         "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED": "true",
         "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": "false",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT": "100",
+        "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S": "",
         "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": "true",
         "PUSHER_RECORD_SEAL_WAKE_ENABLED": "true",
         "HOME_PROCESSING_MAX_AGE_SECONDS": "21600",
@@ -548,9 +557,9 @@ def test_post_seal_controls_are_listen_only_rendered_bindings(environment, prefl
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment, runtime_environments):
     root = SCRIPT.parents[2]
-    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments'][environment]
+    manifest = runtime_environments[environment]
     classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
     key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
     assert key in classification

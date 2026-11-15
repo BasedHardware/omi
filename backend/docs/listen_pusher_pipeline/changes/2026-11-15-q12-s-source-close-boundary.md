@@ -31,28 +31,46 @@ keeps the retired ingress boundary and producer custody fences. No new pusher
 drain slot is retained. Existing seal-only retries remain limited to six
 producer-pending refusals.
 
-## Blocker and rollout
+## Account cohort and settled EOF recovery
 
-A prepared EOF, source failure or expired handshake is not a completed-tail proof.
-The producer token can remain on a live healthy pusher after its listen owner has
-gone, while fresh repair refuses that producer. Releasing it merely because a
-clock elapsed could seal before a retained source tail arrives. A durable source
-custody/recovery handoff, or an equally complete ordered proof, is required before
-this can be default on. Process restart and old-container behavior have not been
-accepted by this change's hermetic tests.
+The opt-in boolean also requires account selection through the existing
+`serving_for` parser. Its conventional `_SERVE_UID_SHA256S` (empty) and
+`_SERVE_PERCENT` (100 when the boolean is enabled) companions are independently checked by listen and
+pusher. Only two selected peers negotiate v3. An absent/false boolean ignores
+cohort markers, and an explicitly unselected owner gets the original bytes and no close
+inventories. All reader hosts have explicit bindings; no account digest is
+checked into deployment sources.
 
-The registry owns the review date, expander and cohort plan. The first real-account
-cohort is the consenting owner on a dedicated route after synthetic restart and
-deadline proofs. The quality lead expands only after independent custody review,
-zero owner/byte mismatch, zero new1011 or stranded live tokens, clean producer
-pending/admission counts, and the target close/Home latency window. Until those
-conditions pass, keep the flag false everywhere and report the ramp blocked.
+Prepared-only actual EOF now reuses the capped abandonment metadata lane after
+the receive task ends, other socket submitters stop, and its record worker and
+shielded executor futures settle. Only prepared recording tokens minted by that
+socket are attested; reconnect and unrelated tokens remain unchanged. The new
+coordinator has a thirty-second deadline. Overflow, incomplete settlement or
+cancellation leave the producer fenced, without adding retained drain slots.
+Abandonment proves stoppage only; repair still requires retained-tail proof and
+privacy/revision checks before releasing a token or sealing.
 
-Release staged code to pusher before backend-listen; Cloud Run uses the existing
-completion row observed by listen and needs no new close transport. Never enable
-v2 to bridge an image roll. A v3 listener with a v2/disabled pusher gets no matching
-capability; a legacy/v2 listener on the v3 pusher gets no v3 capability. One-sided
-switch states send no qualified close. Staged code can be rolled in either order
-while disabled. Rollback is `PUSHER_RECORD_CLOSE_NOTIFY_ENABLED=false` on both
-Deployments, preserving playback fast path, native seal wake and the bounded
-producer-pending retries.
+A live handshake expiry never abandons its producer. A verified latency caveat
+remains: a prepared, uncommitted socket can carry that fence through a later
+header rollover, while OFF can seal at that rollover. Default stays OFF pending
+delta review and an owner-first account cohort; no universal one-minute bound
+is claimed. Missing retained tails, timeout and coordinator overflow remain
+fail-closed and may require existing process-death repair.
+
+The quality lead executes the registry ramp by setting the boolean true,
+percentage zero, and the same placeholder-resolved owner digest on both GKE
+Deployments, pusher first then backend-listen. Clean owner and percentage-cohort
+windows must show zero owner/byte mismatch, new1011 or stranded settled producer
+tokens, no pending/admission growth, and the seal/Home targets. The review and
+expansion decision is due 2026-11-16. Rollback sets the boolean false on both;
+all cohort markers become inert. Cloud Run finalization reaches listen through
+its existing five-second durable completion poll, so no new transport or
+Cloud Run enablement is needed. Old/v2 peers and one-sided configurations use
+the legacy path. Actual process kills, old images and account acceptance still
+need release validation.
+
+The owner authorized a fleet-on rollout through the lead. An absent percentage
+therefore preserves the existing true-switch fleet path at 100 percent; the
+new checked-in percentage binding is also 100. An absent/false boolean remains
+inert. To narrow an enabled fleet to the owner, explicitly set percentage zero
+and the owner digest on both peers; no route change is required.

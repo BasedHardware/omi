@@ -2638,6 +2638,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
     monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
     if close_path == 'staged_v3':
         monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
     # An applied refresh schedules speaker follow-ups that build real datastore
     # clients; on CI their credential discovery outlasts this test's teardown wait.
