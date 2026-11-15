@@ -206,6 +206,7 @@ def test_runtime_composition_uses_plain_reads_and_keeps_the_seal_transaction(sou
                 'record_audio_closed': True,
                 'record_upload_sessions': {},
                 'record_admitted_at': source[1].rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
             },
         )
     ]

@@ -339,6 +339,7 @@ async def test_fresh_repair_rollback_restores_unstamped_retry_rows(monkeypatch, 
         'owner_id': 'synthetic',
         'state': 'record_pending',
         'available_at': 1060,
+        'record_intake_claimed_at': 1000,
     }
 
 
