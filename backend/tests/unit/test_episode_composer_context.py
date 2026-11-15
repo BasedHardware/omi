@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 
 import tiktoken
 import pytest
+from unittest.mock import create_autospec
 
 from config import episodes as config
 from utils.llms import memory as chat_memory
@@ -42,6 +43,16 @@ def tokens(text):
     return len(tiktoken.get_encoding('o200k_base').encode(text, disallowed_special=()))
 
 
+def owner_fact(content, **fields):
+    return {
+        'content': content,
+        'kind': 'fact',
+        'subject_scope': 'primary_user',
+        'subject_attribution': 'user',
+        **fields,
+    }
+
+
 def test_selector_reuses_chat_policy_without_importing_runtime_clients():
     assert context.is_prompt_memory_eligible is chat_memory.is_prompt_memory_eligible
     result = subprocess.run(
@@ -61,14 +72,14 @@ def test_selector_reuses_chat_policy_without_importing_runtime_clients():
 
 def test_relevance_and_visibility_filter_before_prompt_budget():
     memories = [
-        {'content': 'My garden irrigation uses a rain sensor.', 'subject_attribution': 'user'},
+        owner_fact('My garden irrigation uses a rain sensor.'),
         {'content': 'I am learning violin.'},
         {'content': 'Irrigation locked fact', 'is_locked': True},
         {'content': 'Irrigation rejected fact', 'user_review': False},
         {'content': 'Irrigation invalidated fact', 'invalid_at': 'yesterday'},
     ]
     block = context.relevant_memories([member()], memories)
-    assert 'rain sensor' in block and '[user]' in block
+    assert 'rain sensor' in block and '[primary_user]' in block
     assert all(word not in block for word in ('violin', 'locked', 'rejected', 'invalidated'))
 
 
@@ -94,12 +105,14 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
 
     allowed = [
         fact('eligible-self'),
-        MemoryDB.model_construct(
-            id='eligible-legacy-unspecified', content='Garden irrigation eligible-legacy-unspecified'
-        ),
         fact('eligible-legacy-self', ledger_schema_version=None, subject_attribution='user'),
     ]
     denied = [
+        MemoryDB.model_construct(id='legacy-unstamped', content='Garden irrigation unstamped'),
+        MemoryDB.model_construct(
+            id='legacy-interesting', content='Garden irrigation interesting', category='interesting'
+        ),
+        MemoryDB.model_construct(id='legacy-manual', content='Garden irrigation manual', manually_added=True),
         fact('third-party', subject_scope='third_party'),
         fact('unknown-person', subject_scope='unknown'),
         fact('canonical-attributed-third-party', subject_attribution='third_party'),
@@ -135,7 +148,9 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
             # Recheck even when an adapter incorrectly returns unsafe hits.
             return [SimpleNamespace(memory=row) for row in rows]
 
-        monkeypatch.setattr(MemoryService, 'search', search)
+        monkeypatch.setattr(
+            MemoryService, 'search', create_autospec(MemoryService.search, side_effect=search, spec_set=True)
+        )
     monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_args, **_kw: [])
     background = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
@@ -145,7 +160,7 @@ def test_loader_layers_strict_legacy_privacy_over_chat_policy(monkeypatch, sourc
     prompt = messages[1][1]
     assert all(row.id in prompt for row in allowed)
     assert all(row.id not in prompt for row in denied)
-    assert '[unknown]' not in prompt and '[legacy_unspecified]' in prompt
+    assert '[unknown]' not in prompt and '[legacy_unspecified]' not in prompt
     # Chat's legacy compatibility contract is intentionally unchanged tonight.
     assert chat_memory.is_prompt_memory_eligible(denied[-1])
     assert not context.composer_memory_eligible(denied[-1])
@@ -165,13 +180,21 @@ def test_query_and_ranking_prefer_people_projects_over_passing_mentions():
     block = context.relevant_memories(
         [row],
         [
-            {'content': 'I enjoy playing violin.'},
-            {'content': 'Priya is my colleague on Atlas.'},
-            {'content': 'Atlas is my current release project.'},
+            owner_fact('I enjoy playing violin.'),
+            owner_fact('Priya is my colleague on Atlas.'),
+            owner_fact('Atlas is my current release project.'),
         ],
     )
     assert 'Priya is my colleague' in block and 'current release project' in block
     assert 'violin' not in block
+
+
+@pytest.mark.parametrize('missing', ['kind', 'subject_scope', 'subject_attribution'])
+def test_legacy_owner_fact_requires_all_explicit_attribution_stamps(missing):
+    row = owner_fact('Garden irrigation is my project.')
+    assert context.composer_memory_eligible(row)
+    row.pop(missing)
+    assert not context.composer_memory_eligible(row)
 
 
 def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(monkeypatch):
@@ -185,11 +208,13 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
         seen.append((uid, query, kwargs))
         # Even a buggy adapter returning an unvetted row must not leak it.
         return [
-            SimpleNamespace(memory={'content': 'Irrigation rain sensor.'}),
+            SimpleNamespace(memory=owner_fact('Irrigation rain sensor.')),
             SimpleNamespace(memory={'content': 'Irrigation locked content.', 'is_locked': True}),
         ]
 
-    monkeypatch.setattr(MemoryService, 'search', search)
+    monkeypatch.setattr(
+        MemoryService, 'search', create_autospec(MemoryService.search, side_effect=search, spec_set=True)
+    )
     monkeypatch.setattr(chat_memory, 'get_prompt_data', lambda _uid: (_ for _ in ()).throw(AssertionError('fallback')))
     monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
@@ -228,7 +253,7 @@ def test_search_outage_omits_memories_without_list_fallback(monkeypatch):
 
 
 def test_background_is_token_bounded_for_multilingual_long_facts():
-    memories = [{'content': 'irrigation ' + '园艺浇水计划。' * 2000} for _ in range(50)]
+    memories = [owner_fact('irrigation ' + '园艺浇水计划。' * 2000) for _ in range(50)]
     assert 0 < tokens(context.relevant_memories([member()], memories)) <= config.COMPOSER_MEMORY_TOKENS
     owner = context.owner_block(
         owner='Synthetic',

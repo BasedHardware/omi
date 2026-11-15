@@ -20,7 +20,7 @@ from config.episodes import (
     COMPOSER_MEMORY_QUERY_TOKENS,
     COMPOSER_CONTEXT_MAX_READS,
 )
-from models.knowledge_ledger_policy import is_prompt_memory_eligible
+from models.knowledge_ledger_policy import LEDGER_SCHEMA_VERSION, is_prompt_memory_eligible
 from utils.episodes.composer_context_budget import bounded_gather
 
 logger = logging.getLogger(__name__)
@@ -118,13 +118,17 @@ def composer_memory_eligible(memory: Any) -> bool:
     )
     if not is_prompt_memory_eligible(row):
         return False
+    # Legacy categories/manual creation do not prove who a fact is about.
+    # In particular, "interesting" extraction captures other people's wisdom.
+    # Require explicit fact + primary-owner scope + owner attribution stamps.
+    legacy = data.get('ledger_schema_version') != LEDGER_SCHEMA_VERSION
     for field, safe in (
         ('kind', {'fact'}),
         ('subject_scope', {'primary_user'}),
-        ('subject_attribution', {'user', 'legacy_assumed'}),
+        ('subject_attribution', {'user'}),
     ):
         value = data.get(field)
-        if field in data and getattr(value, 'value', value) not in safe:
+        if (legacy or field in data) and getattr(value, 'value', value) not in safe:
             return False
     return True
 
