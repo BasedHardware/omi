@@ -21,6 +21,15 @@ verification. Account/protection erasure sweeps orphan originals; conversation
 erasure discovers the dedicated prefix in each relevant bucket and the new bundle/file rows in the existing intake collection. These objects are excluded from the live inventory and
 routine batch artifact cleanup.
 
+Use a reader-first deployment. Before any handoff admission, set this one
+admission switch off for the rollout and promote the receipt-capable artifact
+to all sync/status traffic. Verify every active serving revision can read the
+protocol. Then create an admission-on revision from the same artifact and ramp
+its traffic against the receipt-capable admission-off base. Older artifacts
+must never receive new polling handles; disabling admission does not teach an
+old binary how to read them. Rollback shifts traffic to, or disables admission
+on, a receipt-capable artifact while accepted obligations remain.
+
 Before serving promotion, the release owner must validate private-bucket
 lifecycle rules retain `record-wal/` originals while work is pending, then prove
 mixed-version status, erasure, and 503 to 202 behavior with synthetic staging
