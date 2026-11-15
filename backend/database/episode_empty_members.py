@@ -34,7 +34,9 @@ def prepare(transaction: Any, client: Any, uid: str, cid: str, conversation: Map
         row = ref.get(transaction=transaction).to_dict() or {}
         if cid not in (row.get('conversation_ids') or []):
             continue
-        updates = {key: [value for value in row.get(key) or [] if value != cid] for key in _LISTS if key in row}
+        updates: dict[str, Any] = {
+            key: [value for value in row.get(key) or [] if value != cid] for key in _LISTS if key in row
+        }
         updates.update(
             {key: {k: v for k, v in (row.get(key) or {}).items() if k != cid} for key in _MAPS if key in row}
         )
