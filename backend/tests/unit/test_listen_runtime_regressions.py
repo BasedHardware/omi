@@ -199,11 +199,15 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
     )
     await session.connect()
+    # A long-lived session reads the capability while an earlier finalization
+    # is pending; an entirely idle receiver deliberately does not poll recv().
+    session.pending_conversation_requests['earlier-finalization'] = {}
     receiver = asyncio.create_task(session.pusher_receive())
     try:
         async with asyncio.timeout(5):
             while not session.record_close_supported:
                 await asyncio.sleep(0.001)
+        session.pending_conversation_requests.clear()
         session.audio_bytes_send(b'\x01\x00', 100)
         await session._audio_bytes_flush()
         session.audio_bytes_send(b'\x02\x00', 101)  # Accepted tail is still in listen at disconnect.
