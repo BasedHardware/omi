@@ -1762,6 +1762,23 @@ def test_transcript_receipt_rearms_active_wait(store, monkeypatch):
     assert (UID, 'ep1') not in composer._deferred
 
 
+def test_composer_worker_consumes_content_free_projection_receipt(store, monkeypatch):
+    from collections import OrderedDict
+
+    monkeypatch.setattr(composer.transcript_receipts, '_pending', OrderedDict())
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **kw: queued.append(kw))
+    store.rows['c2']['transcript_segments'] = [{'start': 0, 'end': 5, 'text': 'The late launch details.'}]
+    assert composer.transcript_receipts.enqueue(UID, store.rows['c2'])
+    assert not queued and store.episode['compose_transcript_wait_until']
+    composer._receive_transcript_receipts(composer.transcript_receipts.take())
+    assert queued and store.episode['compose_transcript_wait_until'] is None
+    assert composer.needs_compose(store.episode)
+
+
 def test_wait_write_is_fenced_against_a_concurrent_transcript(store, monkeypatch):
     store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
 

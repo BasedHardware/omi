@@ -82,7 +82,7 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
-from utils.episodes import composer_context, metrics, policy
+from utils.episodes import composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
 from utils.episodes.visibility import hidden_member
@@ -1613,11 +1613,29 @@ def _schedule_due() -> None:
 
 async def retry_settled_composes() -> None:
     """Process-local deferral, like the existing executor; reads/finalizes recover work after restart."""
+    receipt_work = None
     try:
         while True:
+            if receipt_work is None or receipt_work.done():
+                receipts = transcript_receipts.take()
+                if receipts:
+                    # The producer neither imports this stack nor performs database work.
+                    # One batch at a time bounds worker admission while paid composes run.
+                    receipt_work = _executor.submit(lambda: _receive_transcript_receipts(receipts))
+                if transcript_receipts.take_dropped():
+                    record_fallback(
+                        component='conversation_notes',
+                        from_mode='episode_transcript_receipt',
+                        to_mode='episode_home_recovery',
+                        reason='capacity_full',
+                        outcome='degraded',
+                        log=logger,
+                    )
             _schedule_due()
             await asyncio.sleep(1)
     finally:
+        if receipt_work is not None:
+            receipt_work.cancel()
         with _inflight_lock:
             _deferred.clear()
 
@@ -1806,6 +1824,29 @@ def schedule_for_conversation(
             schedule(uid, str(episode['id']), collaborators=collaborators, trigger='member_final')
     except Exception as error:
         logger.warning('event=episode_compose_schedule outcome=error exception_type=%s', type(error).__name__)
+
+
+def _receive_transcript_receipts(receipts: Sequence[tuple[str, str, Any]]) -> None:
+    """Composer-worker I/O; re-read committed evidence rather than retaining transcript payloads."""
+    for uid, cid, client in receipts:
+        if not (
+            episodes_enabled_for(uid) and episode_compose_transcript_ready_enabled() and episode_composer_enabled()
+        ):
+            continue
+        try:
+            row = conversations_db.get_conversation(uid, cid, firestore_client=client)
+            if row:
+                transcript_projected(uid, row, firestore_client=client)
+        except Exception as error:
+            record_fallback(
+                component='conversation_notes',
+                from_mode='episode_transcript_receipt',
+                to_mode='episode_home_recovery',
+                reason='transport_error',
+                outcome='degraded',
+                log=logger,
+            )
+            logger.warning('event=episode_transcript_receipt outcome=error exception_type=%s', type(error).__name__)
 
 
 def transcript_projected(uid: str, row: Mapping[str, Any], *, firestore_client: Any = None) -> None:

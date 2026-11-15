@@ -1039,7 +1039,7 @@ def test_transcription_writer_is_fail_open_and_needs_a_capture_identity(monkeypa
 
 def test_committed_transcript_signals_episode_before_playback_or_enrichment(binding, monkeypatch):
     from utils.batch_pipeline.contracts import WorkItem, Priority
-    from utils.episodes import composer
+    from utils.episodes import transcript_receipts
     from utils.capture import batch_coverage
 
     events = []
@@ -1076,7 +1076,7 @@ def test_committed_transcript_signals_episode_before_playback_or_enrichment(bind
         assert kwargs['firestore_client'] is projector.store.client
         events.append('signal')
 
-    monkeypatch.setattr(composer, 'transcript_projected', signal)
+    monkeypatch.setattr(transcript_receipts, 'enqueue', signal)
     projector.finish_part = lambda *a, **kw: events.append('finish')
     projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding)
     assert events == ['commit', 'signal', 'finish']

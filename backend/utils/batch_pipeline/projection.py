@@ -61,6 +61,7 @@ from utils.sync.assignment_errors import (
     SyncAssignmentSuperseded,
 )
 from utils.stt.transcript_admission import filter_admission
+from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -1079,9 +1080,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
-                        from utils.episodes.composer import transcript_projected
-
-                        transcript_projected(binding.owner_id, assigned[0], firestore_client=self.store.client)
+                        transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
                         incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
