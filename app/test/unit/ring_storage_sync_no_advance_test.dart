@@ -356,7 +356,13 @@ void main() {
       final persisted = local.added.single;
       final decoded = raw & 0x80000000 != 0 ? 0 : raw;
       final timed = useDeviceCaptureTime(decoded, phoneSeconds);
-      expect(persisted.timerStart, timed ? decoded : phoneSeconds);
+      expect(
+          persisted.timerStart,
+          timed
+              ? decoded
+              : deviceCaptureClockRepairOff
+                  ? phoneSeconds
+                  : 0);
       expect(persisted.clockRun, timed ? isNull : isNotNull);
       expect(persisted.totalFrames, 1);
       expect(wal.timerStart, 1000, reason: 'the virtual device identity is never repaired');
@@ -383,7 +389,7 @@ void main() {
     card.emit(_done(0, 8));
     await transfer;
     expect(local.added.map((w) => w.totalFrames), [2, 1]);
-    expect(local.added.every((w) => w.timerStart == phoneSeconds), isTrue);
+    expect(local.added.every((w) => w.timerStart == 0), isTrue);
     expect(local.added.map((w) => w.clockRun).toSet(), hasLength(2));
     expect(local.added.every((w) => w.clockRun != null), isTrue);
     expect(card.advanceCalls, [8]);

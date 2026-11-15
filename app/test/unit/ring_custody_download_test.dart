@@ -343,7 +343,7 @@ void main() {
             isTrue);
       }
       expect(ranges..sort(), List.generate(count, (i) => 5 + i));
-      if (!deviceCaptureClockRepairOff && scenario != 'zero duration') {
+      if (!deviceCaptureClockRepairOff) {
         final unknown = indexed.where((row) => row.timerStart == 0);
         expect(unknown, isNotEmpty);
         expect(
