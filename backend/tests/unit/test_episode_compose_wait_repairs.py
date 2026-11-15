@@ -193,3 +193,24 @@ def test_owner_shape_still_waits_for_active_then_composes_and_refreshes(store, c
     store.rows['noise-0']['episode_transcript_updated_at'] = clock.current
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     assert len(calls) == 2
+
+
+def test_cas_retry_cannot_overwrite_winning_replica_first_observation(clock):
+    first = clock.current
+    pending = first - timedelta(seconds=100)
+    winner = {
+        'c': {'pending_at': pending, 'observed_at': first},
+        'other': {'pending_at': pending, 'observed_at': first},
+    }
+    later = first + timedelta(seconds=60)
+    patch = compose_wait.observation_updates(
+        {'c': {'pending_at': pending, 'observed_at': later}},
+        ['c'],
+        later,
+        current={compose_wait.OBSERVATIONS: winner},
+        due=later + timedelta(seconds=1200),
+    )
+    assert patch[compose_wait.OBSERVATIONS]['c']['observed_at'] == first
+    assert patch['compose_transcript_wait_started_at'] == first
+    assert patch['compose_transcript_wait_until'] == first + timedelta(seconds=1200)
+    assert patch[compose_wait.OBSERVATIONS]['other'] == winner['other']

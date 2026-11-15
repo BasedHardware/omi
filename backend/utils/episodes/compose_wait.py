@@ -71,12 +71,34 @@ def stored_deadline(episode: Mapping[str, Any], legacy: datetime | None) -> date
     return min(deadlines)
 
 
-def observation_updates(observations: Mapping[str, Any], waiting: list[str], now: datetime) -> dict[str, Any]:
+def observation_updates(
+    observations: Mapping[str, Any],
+    waiting: list[str],
+    now: datetime,
+    *,
+    current: Mapping[str, Any],
+    due: datetime,
+) -> dict[str, Any]:
     if not anchored_wait_enabled():
         return {'compose_transcript_wait_started_at': now}
+    # A CAS retry must merge with the winning replica, not overwrite its earlier
+    # first observation with this attempt's stale pre-CAS snapshot. Preserve
+    # unrelated generations until their next evaluation too.
+    merged = dict(current.get(OBSERVATIONS) or {})
+    for cid, entry in observations.items():
+        previous = merged.get(cid)
+        observed = entry['observed_at']
+        if isinstance(previous, Mapping) and utc(previous.get('pending_at')) == utc(entry.get('pending_at')):
+            earlier = utc(previous.get('observed_at'))
+            if earlier:
+                observed = min(observed, earlier)
+        merged[cid] = {**entry, 'observed_at': observed}
+    seconds = timedelta(seconds=episode_compose_transcript_wait_seconds())
+    caps = [merged[cid]['observed_at'] + seconds for cid in waiting if cid in merged]
     return {
-        OBSERVATIONS: dict(observations),
+        OBSERVATIONS: merged,
+        'compose_transcript_wait_until': min(due, *caps),
         'compose_transcript_wait_started_at': min(
-            (observations[cid]['observed_at'] for cid in waiting if cid in observations), default=now
+            (merged[cid]['observed_at'] for cid in waiting if cid in merged), default=now
         ),
     }

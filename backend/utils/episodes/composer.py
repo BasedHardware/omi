@@ -1202,10 +1202,12 @@ def _compose(
                     uid,
                     episode_id,
                     c,
-                    {
-                        'compose_pending_since': episode.get('compose_pending_since') or now,
+                    lambda current: {
+                        'compose_pending_since': current.get('compose_pending_since') or now,
                         'compose_transcript_wait_until': due,
-                        **compose_wait.observation_updates(wait_observations, waiting_members, wait_observed_at),
+                        **compose_wait.observation_updates(
+                            wait_observations, waiting_members, wait_observed_at, current=current, due=due
+                        ),
                         'compose_transcript_wait_members': waiting_members,
                         'compose_pending_membership': sorted(_retained_ids(episode)),
                     },

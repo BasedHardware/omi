@@ -3303,8 +3303,12 @@ FIELD_SITES = {
         (
             'observation_updates',
             'compose_transcript_wait_observations',
-            'dict(observations)',
-            ('compose_transcript_wait_observations', 'compose_transcript_wait_started_at'),
+            'merged',
+            (
+                'compose_transcript_wait_observations',
+                'compose_transcript_wait_started_at',
+                'compose_transcript_wait_until',
+            ),
         ),
     ],
     'utils/episodes/composer.py': [
