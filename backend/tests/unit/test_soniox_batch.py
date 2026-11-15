@@ -9,6 +9,14 @@ import pytest
 from utils.stt import soniox_batch as module
 from config.prerecorded_stt import PrerecordedSTTConfigurationError
 
+# Keep the real allowance observation path, but pay its demonstrated first-use
+# imports during collection rather than inside the measured provider call.
+# observe_request intentionally keeps these imports lazy for serving startup.
+from utils.byok import get_byok_uid as _get_byok_uid  # noqa: F401
+from utils.stt.allowance_session import current as _allowance_session_current  # noqa: F401
+from utils.stt.allowance_watch import observe_request as _observe_request  # noqa: F401
+from utils.stt_cap_dispatch import customer_funded as _customer_funded  # noqa: F401
+
 FILE = '11111111-1111-4111-8111-111111111111'
 TRANSCRIPTION = '22222222-2222-4222-8222-222222222222'
 TRANSCRIPT = {

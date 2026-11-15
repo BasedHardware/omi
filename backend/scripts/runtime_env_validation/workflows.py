@@ -427,6 +427,7 @@ def _validate_cloud_run_workflows(
     manifest_path: Path,
     manifest: ConfigDict | None = None,
     workflow_root: Path | None = None,
+    integration_canary_source: str | None = None,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -464,6 +465,11 @@ def _validate_cloud_run_workflows(
         workflow_jobs.update(extracted['jobs'])
 
     workflow_vars = _workflow_variable_map(env_config, expected_services)
+    if integration_canary_source is not None:
+        # The native caller binds this output through inputs.admitted_sha.
+        # Only the validated canary source resolves that exact provenance chain;
+        # arbitrary expressions and literal mismatches remain visible to checks.
+        workflow_vars['${{ needs.firestore_readiness.outputs.admitted_sha }}'] = integration_canary_source
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
         if service_state is None:
