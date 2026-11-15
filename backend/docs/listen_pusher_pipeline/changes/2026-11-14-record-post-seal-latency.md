@@ -239,3 +239,7 @@ condition depends on applying a chart. Ramp only after image/source readbacks
 prove every CPU and GPU merge writer has the sibling guard; the lead then sets
 `RECORD_FRESH_MERGE_ENABLED=true` explicitly across all admission readers.
 Cloud Run continues to receive the rendered false binding.
+
+Cross-service deploy readers use the recognized `default_on` helper name
+for cuts 1–3. This preserves runtime defaults and lets the deploy contract
+verify the actual reader on every bound host; no known-gap exception is used.

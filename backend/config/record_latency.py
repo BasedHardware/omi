@@ -3,7 +3,7 @@
 from datetime import datetime
 import math
 
-from config.refactor_modes import default_off, default_on as kill_switch
+from config.refactor_modes import default_off, default_on
 
 RECENT_RECORD_SECONDS = 1800
 
@@ -24,15 +24,15 @@ def record_fresh_merge_enabled() -> bool:
 
 
 def record_notes_eager_enabled() -> bool:
-    return kill_switch('RECORD_NOTES_EAGER_ENABLED')
+    return default_on('RECORD_NOTES_EAGER_ENABLED')
 
 
 def record_followup_wake_enabled() -> bool:
-    return kill_switch('RECORD_FOLLOWUP_WAKE_ENABLED')
+    return default_on('RECORD_FOLLOWUP_WAKE_ENABLED')
 
 
 def record_seal_wake_preserved_enabled() -> bool:
-    return kill_switch('RECORD_SEAL_WAKE_PRESERVED_ENABLED')
+    return default_on('RECORD_SEAL_WAKE_PRESERVED_ENABLED')
 
 
 def recent_native_record(job: dict, now: float) -> bool:
