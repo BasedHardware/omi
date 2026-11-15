@@ -670,6 +670,7 @@ def validate_runtime_env(
     strict_provisional: bool = False,
     integration_canary_state: Path | None = None,
     integration_canary_source: str | None = None,
+    cloud_run_service: str = 'all',
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
@@ -721,6 +722,19 @@ def validate_runtime_env(
 
     cloud_run_state = None
     live_config = env_config
+    from scripts.cloud_run_scope import selected
+
+    try:
+        service_scope = selected(cloud_run_service)
+    except ValueError:
+        return [ValidationError(env, 'invalid Cloud Run selector')]
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        return [ValidationError(env, 'integration-only selector mismatch')]
+    if cloud_run_service != 'all':
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            name: env_config['cloud_run']['services'][name] for name in service_scope
+        }
     if integration_only:
         # Static source/workflow contracts above stay full-manifest. Live
         # comparison follows the sole service this protected profile mutates.
