@@ -11,6 +11,10 @@ import subprocess
 import time
 import urllib.request
 
+from verify_desktop_backend_image_lineage import (
+    IMAGE_MEDIA_TYPES, INDEX_MEDIA_TYPES, LineageError, verify_lineage,
+)
+
 
 def require(ok, message):
     if not ok:
@@ -41,12 +45,45 @@ def ready(revision):
                for c in revision.get('status', {}).get('conditions', []))
 
 
-def check_state(service, revision, args, baseline):
+def resolve_lineage(build_image, manifest):
+    """Resolve one runnable child; provenance attestations are not runtime images."""
+    require(isinstance(manifest, dict), 'registry manifest is not an object')
+    checked_manifest = manifest
+    if manifest.get('mediaType') in INDEX_MEDIA_TYPES:
+        descriptors = manifest.get('manifests')
+        require(isinstance(descriptors, list), 'image index descriptors missing')
+        descriptors = [d for d in descriptors if not (
+            isinstance(d, dict) and isinstance(d.get('annotations'), dict) and
+            d['annotations'].get('vnd.docker.reference.type') == 'attestation-manifest')]
+        runnable = [d for d in descriptors if isinstance(d, dict) and
+                    isinstance(d.get('platform'), dict) and
+                    d['platform'].get('os') == 'linux' and
+                    d['platform'].get('architecture') == 'amd64']
+        require(len(runnable) == 1, 'image index must select exactly one runnable linux/amd64 child')
+        runtime_image = build_image.split('@')[0] + '@' + str(runnable[0].get('digest'))
+        checked_manifest = {**manifest, 'manifests': descriptors}
+    else:
+        require(manifest.get('mediaType') in IMAGE_MEDIA_TYPES, 'unsupported image manifest')
+        runtime_image = build_image
+    try:
+        evidence = verify_lineage(build_image_reference=build_image,
+                                  runtime_image_reference=runtime_image, manifest=checked_manifest)
+    except LineageError as error:
+        raise RuntimeError(str(error)) from error
+    return {key: evidence[key] for key in ['build_image', 'runtime_image', 'lineage']}
+
+
+def registry_lineage(build_image):
+    return resolve_lineage(build_image, json.loads(
+        run('docker', 'buildx', 'imagetools', 'inspect', '--raw', build_image)))
+
+
+def check_state(service, revision, args, baseline, runtime_image):
     require(traffic(service) == traffic(baseline), 'serving baseline changed')
     require(all(name != args.revision for name, _ in traffic(service)), 'candidate has traffic')
     require(ready(revision), 'candidate is not Ready')
     require(revision.get('metadata', {}).get('name') == args.revision, 'revision mismatch')
-    require(revision.get('status', {}).get('imageDigest') == args.image, 'candidate image mismatch')
+    require(revision.get('status', {}).get('imageDigest') == runtime_image, 'candidate runtime image mismatch')
     require(revision.get('spec', {}).get('containers', [{}])[0].get('image') == args.image,
             'candidate is not pinned to tested digest')
 
@@ -160,27 +197,33 @@ def main():
     require(re.fullmatch('[a-f0-9]{40}', args.source) and re.fullmatch('[a-f0-9]{40}', args.carrier), 'invalid source')
     require(re.fullmatch(r'gcr\.io/[a-z0-9-]+/[a-z0-9-]+@sha256:[a-f0-9]{64}', args.image), 'invalid image digest')
     baseline = json.loads(baseline_path.read_text())
+    lineage = registry_lineage(args.image)
+    runtime_image = lineage['runtime_image']['reference']
     revision = cloud('revisions', args.revision, args)
-    check_state(service, revision, args, baseline)
+    check_state(service, revision, args, baseline, runtime_image)
     receipt_path = Path(args.receipt)
     identity = {k: getattr(args, k) for k in ['revision', 'image', 'source', 'carrier', 'service', 'project', 'region']}
+    identity['runtime_image'] = runtime_image
     if args.mode == 'recheck':
         receipt = json.loads(receipt_path.read_text())
         require(receipt.get('identity') == identity and receipt.get('result') == 'PASS', 'probe receipt mismatch')
+        require(receipt.get('lineage') == lineage, 'probe receipt lineage mismatch')
         require(receipt.get('baseline') == traffic(baseline), 'receipt baseline mismatch')
         return
     require(args.hosting and re.fullmatch(r'[a-z0-9-]+\.firebaseapp\.com', args.hosting), 'invalid Firebase host')
-    run('docker', 'pull', '--platform=linux/amd64', args.image)
-    image = json.loads(run('docker', 'image', 'inspect', args.image))[0]
-    require(args.image in image.get('RepoDigests', []), 'pulled image digest mismatch')
+    run('docker', 'pull', '--platform=linux/amd64', runtime_image)
+    image = json.loads(run('docker', 'image', 'inspect', runtime_image))[0]
+    require(runtime_image in image.get('RepoDigests', []), 'pulled runtime image digest mismatch')
     check_image(image, args.source, args.carrier)
-    synthetic_result = synthetic(args.image, args.hosting)
+    synthetic_result = synthetic(runtime_image, args.hosting)
     base = run('python3', 'backend/scripts/resolve_cloud_run_tagged_url.py', '--project', args.project,
                '--region', args.region, '--service', args.service, '--revision', args.revision, '--tag', args.tag)
     gets = candidate_gets(base)
-    check_state(cloud('services', args.service, args), cloud('revisions', args.revision, args), args, baseline)
+    check_state(cloud('services', args.service, args), cloud('revisions', args.revision, args),
+                args, baseline, runtime_image)
     # JSON normalizes traffic tuples to lists for the recheck.
-    receipt_path.write_text(json.dumps({'identity': identity, 'baseline': traffic(baseline), 'result': 'PASS',
+    receipt_path.write_text(json.dumps({'identity': identity, 'lineage': lineage,
+                                       'baseline': traffic(baseline), 'result': 'PASS',
                                        'synthetic': synthetic_result, 'candidate_gets': gets}, indent=2))
     print('APP_CANDIDATE_PROBE PASS ' + json.dumps(identity))
 
