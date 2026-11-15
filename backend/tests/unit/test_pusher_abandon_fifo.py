@@ -63,3 +63,24 @@ async def test_fifo_count_and_time_limits_keep_unsettled_fence(monkeypatch, expi
     finally:
         active_gate.set()
         await asyncio.gather(*workers)
+
+
+async def test_shutdown_cancellation_does_not_start_queued_owners(monkeypatch):
+    monkeypatch.setattr(finish, 'MAX_ABANDON_RECORD_DRAINS', 1)
+    gate = asyncio.Event()
+    workers = [asyncio.create_task(gate.wait()) for _ in range(2)]
+    barrier = SimpleNamespace(forget_evicted_tokens=Mock(), abandon_recordings=AsyncMock())
+    futures = SimpleNamespace(wait=AsyncMock())
+    try:
+        for worker in workers:
+            assert finish.abandon_evicted_record_drain(worker, barrier, futures)
+        owner = next(iter(finish._abandon_record_drains))
+        owner.cancel()
+        await asyncio.gather(owner, return_exceptions=True)
+        assert not finish._abandon_queue and not finish._abandon_by_worker
+        assert not finish._abandon_record_drains
+        barrier.abandon_recordings.assert_not_awaited()
+        assert all(not worker.cancelled() and not worker.done() for worker in workers)
+    finally:
+        gate.set()
+        await asyncio.gather(*workers)

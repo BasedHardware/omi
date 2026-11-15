@@ -90,6 +90,16 @@ def _start_abandon(entry):
     def finished(done):
         _abandon_record_drains.discard(done)
         _abandon_by_worker.pop(entry.worker, None)
+        if done.cancelled():
+            # Process shutdown snapshots the tracked task set once. Starting
+            # queued owners here would escape that cancellation snapshot.
+            for worker, waiting in _abandon_queue.items():
+                if waiting.expiry is not None:
+                    waiting.expiry.cancel()
+                _abandon_by_worker.pop(worker, None)
+            _abandon_queue.clear()
+            logger.info('event=record_closed_finish outcome=abandon_queue_cancelled')
+            return  # Workers/futures and producer fences remain untouched.
         # FIFO admission is synchronous: no duplicate owner can take this slot.
         while _abandon_queue and len(_abandon_record_drains) < MAX_ABANDON_RECORD_DRAINS:
             _, waiting = _abandon_queue.popitem(last=False)
