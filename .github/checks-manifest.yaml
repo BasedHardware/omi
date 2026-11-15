@@ -44,6 +44,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["linux", "macos"]
     reason: "#23735: share the persistent mute owner instead of resuming on disconnect; queue orderly shutdown outside the system workqueue"
+  - id: cv1-ring-custody-host
+    command: ["make", "-C", "omi/firmware/omi/tests", "run"]
+    triggers: ["omi/firmware/omi/src/sd_card.c", "omi/firmware/omi/src/lib/core/sd_card.h", "omi/firmware/omi/src/lib/core/storage.c", "omi/firmware/omi/src/lib/core/storage.h", "omi/firmware/omi/src/lib/core/custody.c", "omi/firmware/omi/src/lib/core/custody.h", "omi/firmware/omi/tests/Makefile", "omi/firmware/omi/tests/test_custody.c", "omi/firmware/omi/tests/test_sd_card.c", "omi/firmware/omi/tests/test_storage.c", "omi/firmware/omi/tests/stubs/**"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "3.0.24 field report 2026-11-15: a 250 ms status poll flushed the SD batch, rewriting 16 KiB plus a metadata sector about four times a second during live capture; the custody, SD-ring and storage harnesses existed since #20450 but ran in no lane and did not build on Linux"
   - id: cv1-bootloader-region-tests
     command: ["python3", "omi/firmware/scripts/ci/test_cv1_bootloader.py"]
     triggers: ["omi/firmware/scripts/ci/**", "omi/firmware/bootloader/cv1-bootloader-policy.json", "omi/firmware/omi/sysbuild*", "omi/firmware/omi/sysbuild/**", "omi/firmware/omi/src/mcuboot_boot_zephyr.c", ".github/workflows/firmware_release.yml", ".github/checks-manifest.yaml"]
