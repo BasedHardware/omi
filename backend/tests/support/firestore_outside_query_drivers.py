@@ -586,3 +586,10 @@ _driver(
     profile='maintenance-lake-conversation-erasure',
     serving=False,
 )
+
+_driver(
+    'utils.memory.recap_review._source_successor',
+    base={'uid': UID},
+    domains={'memory_id': ['retired-memory', 'another-retired-memory']},
+    profile='recap-learning-source-successor',
+)
