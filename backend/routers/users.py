@@ -431,10 +431,8 @@ async def run_conversation_batch_purge(
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(
-            'conversation_batch_purge handler: attempt %d failed job=%s: %s',
-            retry_count + 1,
-            job_id,
-            type(e).__name__,
+            f'conversation_batch_purge handler: attempt {retry_count + 1} failed kind={kind} job={job_id} '
+            f'generation={generation}: {type(e).__name__}: {sanitize(str(e))}'
         )
         return JSONResponse(status_code=500, content={'status': 'retry'})
     logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
