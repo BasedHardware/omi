@@ -379,3 +379,22 @@ def test_complete_record_preserves_existing_outbox_hold_without_renewing_quiet(r
     saved = row.get().to_dict()
     assert saved['due_at'] == NOW + 40
     assert saved[hold] is True and saved['version'] == 2
+
+
+def test_hold_scheduling_does_not_inspect_encrypted_projection_content(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '120')
+    f.client.rows[f.conversation.path].update(
+        transcript_segments='encrypted-envelope',
+        sync_processing_hold={
+            'held': True,
+            'pending_since': NOW - 300,
+            'last_content_at': NOW - 250,
+            'full_snapshot': {'digest': 'prior-content'},
+        },
+    )
+    for sid in f.binding.segment_ids:
+        f.store.mark_enrichment(sid, f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    assert row.get().to_dict()['due_at'] == NOW

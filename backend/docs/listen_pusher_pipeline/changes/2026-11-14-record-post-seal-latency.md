@@ -16,11 +16,11 @@ those intervals cannot be separated honestly. `timing_store` identifies the
 audio clock domain, not a timing trace. The consenting owner had no recordings
 ending after the cutoff and no ledger transitions in that window.
 
-Changes, all default on with explicit kill switches:
+Cuts 1–3 default on with explicit kill switches. Cut 4 defaults off in code:
 
 - Admission records the already-read conversation end as `record_finished_at`
   for native recordings ended within 30 minutes. `RECORD_FRESH_MERGE_ENABLED`
-  stamps all their siblings fresh, including the first unit of a long capture.
+  stamps all their siblings fresh only when explicitly true, including the first unit of a long capture.
   The existing fresh-first merge, predecessor chain, late-capture handling,
   provider backlog gate, privacy and sibling fences remain authoritative.
 - `RECORD_NOTES_EAGER_ENABLED` enqueues recent, non-partial native record notes
@@ -151,7 +151,7 @@ otherwise its existing lease can become a certified retry only when both
 `RECORD_FRESH_MERGE_ENABLED=false` is explicit in dev/prod runtime overlays
 for Cloud Run backend, backend-integration, backend-sync, backend-sync-backfill,
 and GKE backend-listen, and in worker defaults plus both stage values files.
-The code default remains on. This is staged enablement: the GPU worker image
+The code default is off, including when GKE image-only rolls leave the variable absent. This is staged enablement: the GPU worker image
 will not roll tonight, so no newly broadened fresh class may reach its old
 merge writer. The union flag inventory is 290 declarations with the seeded
 budget unchanged at 161 and four separately owned helper-backed exceptions;
@@ -231,3 +231,11 @@ is added for these clocks. The ledger admitted_at clock is capture admission
 (CAPTURING), before post-seal staging; it cannot substitute for a real intake
 claim or ready timestamp. The first GPU lease field will remain absent on the
 unrolled old worker, so ready-to-lease measurement needs its later qualified roll.
+
+Image-only GKE rollout safety: `RECORD_FRESH_MERGE_ENABLED` defaults off in
+code as well as explicit dev/prod bindings. An absent environment variable on
+backend-listen cannot enable fresh stamping. Cuts 1–3 default on. No safety
+condition depends on applying a chart. Ramp only after image/source readbacks
+prove every CPU and GPU merge writer has the sibling guard; the lead then sets
+`RECORD_FRESH_MERGE_ENABLED=true` explicitly across all admission readers.
+Cloud Run continues to receive the rendered false binding.

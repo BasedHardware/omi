@@ -22,20 +22,23 @@ NOW = 100_000.0
 
 
 @pytest.mark.parametrize(
-    'reader,name',
+    'reader,name,default',
     [
-        (record_latency.record_fresh_merge_enabled, 'RECORD_FRESH_MERGE_ENABLED'),
-        (record_latency.record_notes_eager_enabled, 'RECORD_NOTES_EAGER_ENABLED'),
-        (record_latency.record_followup_wake_enabled, 'RECORD_FOLLOWUP_WAKE_ENABLED'),
-        (record_latency.record_seal_wake_preserved_enabled, 'RECORD_SEAL_WAKE_PRESERVED_ENABLED'),
+        (record_latency.record_fresh_merge_enabled, 'RECORD_FRESH_MERGE_ENABLED', False),
+        (record_latency.record_notes_eager_enabled, 'RECORD_NOTES_EAGER_ENABLED', True),
+        (record_latency.record_followup_wake_enabled, 'RECORD_FOLLOWUP_WAKE_ENABLED', True),
+        (record_latency.record_seal_wake_preserved_enabled, 'RECORD_SEAL_WAKE_PRESERVED_ENABLED', True),
     ],
 )
-def test_latency_controls_default_on_with_explicit_kill_words(monkeypatch, reader, name):
+def test_latency_controls_have_safe_unset_defaults(monkeypatch, reader, name, default):
     monkeypatch.delenv(name, raising=False)
-    assert reader()
+    assert reader() is default
     for value in ('false', 'off', '0', 'no'):
         monkeypatch.setenv(name, value)
         assert not reader()
+    for value in ('true', 'on', '1', 'yes'):
+        monkeypatch.setenv(name, value)
+        assert reader()
 
 
 @pytest.mark.parametrize(
@@ -58,13 +61,17 @@ def test_recent_record_end_has_a_bounded_trusted_clock(end, expected):
 
 
 @pytest.mark.parametrize(
-    'end_lag,enabled,expected', [(700, True, True), (1800, True, True), (1801, True, False), (700, False, False)]
+    'end_lag,enabled,expected',
+    [(700, True, True), (1800, True, True), (1801, True, False), (700, False, False), (900, None, False)],
 )
 def test_native_record_freshness_uses_record_end_for_every_sibling(monkeypatch, end_lag, enabled, expected):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_UID_ALLOWLIST', 'synthetic-owner')
     monkeypatch.setenv('BATCH_PIPELINE_RECORD_PROTOCOL_READY', 'true')
-    monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', str(enabled).lower())
+    if enabled is None:
+        monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('RECORD_FRESH_MERGE_ENABLED', str(enabled).lower())
     store = MemoryStore()
     queue = Scheduler(store)
     # Old unresolved work must keep its own result and append later; it may
@@ -259,3 +266,14 @@ async def test_merge_preserves_claim_clock_and_retry_marker_contract(monkeypatch
     assert ('record_intake_retry_at' in row) is (fresh_repair and dead_letter)
     if fresh_repair and dead_letter:
         assert row['record_intake_retry_at'] == row['available_at']
+
+
+@pytest.mark.parametrize(
+    'process',
+    ['backend', 'backend-integration', 'backend-sync', 'backend-sync-backfill', 'backend-listen', 'batch-worker'],
+)
+def test_image_only_process_without_fresh_merge_env_is_inert(monkeypatch, process):
+    # All process entrypoints use this shared intake reader; no overlay is required.
+    monkeypatch.setenv('K_SERVICE', process)
+    monkeypatch.delenv('RECORD_FRESH_MERGE_ENABLED', raising=False)
+    assert record_latency.record_fresh_merge_enabled() is False

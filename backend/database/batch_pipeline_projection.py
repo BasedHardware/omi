@@ -851,8 +851,21 @@ class ProjectionStore:
                     if hold_owns_delay:
                         # The transcript arrival already started this clock.
                         # Do not add another settle after its absolute deadline.
+                        # Only clocks are needed here: raw Firestore transcript
+                        # fields may be encrypted. The consumer owns fingerprints.
                         _, held_until = (
-                            processing_hold.admission(row, {'first_pending_at': now}, now=now)
+                            processing_hold.admission(
+                                {
+                                    'finished_at': row.get('finished_at'),
+                                    'smart_merge': row.get('smart_merge') or {},
+                                    processing_hold.FIELD: {
+                                        key: hold.get(key)
+                                        for key in ('pending_since', 'last_content_at', 'upload_watermark_at')
+                                    },
+                                },
+                                {'first_pending_at': now},
+                                now=now,
+                            )
                             if processing_hold.enabled_for(row)
                             else ('ready', None)
                         )

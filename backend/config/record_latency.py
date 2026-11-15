@@ -3,7 +3,7 @@
 from datetime import datetime
 import math
 
-from config.refactor_modes import default_on as kill_switch
+from config.refactor_modes import default_off, default_on as kill_switch
 
 RECENT_RECORD_SECONDS = 1800
 
@@ -20,7 +20,7 @@ def recent_record_end(value, now: float) -> bool:
 
 
 def record_fresh_merge_enabled() -> bool:
-    return kill_switch('RECORD_FRESH_MERGE_ENABLED')
+    return default_off('RECORD_FRESH_MERGE_ENABLED')
 
 
 def record_notes_eager_enabled() -> bool:
