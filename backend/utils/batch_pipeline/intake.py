@@ -437,6 +437,34 @@ def upload_capture_trust(context):
     return 'untrusted' if (context or {}).get('capture_clock_policy') == FUTURE_CLOCK_POLICY else None
 
 
+def upload_languages(user, target, admission_language, sampled):
+    """Preserve declared-language selection without expanding the intake flow graph."""
+    language = normalized_stt_language(target.get('language') or user.get('language'))
+    # Switch-off retains legacy sync's input; new custody inherits known
+    # context. Previous batch receipts above always keep their original lane.
+    prefs = user.get('transcription_preferences') or {}
+    input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
+    inherit = language_inheritance_enabled()
+    inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
+    if inherited:
+        language = inherited
+        if language_class(inherited) == 'supported':
+            # Bound supported context outranks a later user single-mode
+            # preference, including in the legacy eligibility guard.
+            input_language = inherited
+    elif inherit:
+        # Unknown declarations are classification inputs, not capability
+        # proof, even if single-language mode was selected.
+        language = input_language = 'multi'
+    if admission_language is not None:
+        language = input_language = admission_language
+    if sampled:
+        # The user's declared language is not capability proof without single-language mode.
+        inherited = None
+        language = input_language = 'multi'
+    return language, input_language, inherited
+
+
 async def completed_upload_response(store, previous, uid, content_id, public_job_id, conversation_id, paths, lane):
     """Keep the existing completed-content receipt behavior outside the intake flow graph."""
     if previous.get('status') == 'completed':
@@ -681,29 +709,7 @@ async def accept_upload(
                     total_files=len(paths),
                     lane=lane,
                 )
-        language = normalized_stt_language(target.get('language') or user.get('language'))
-        # Switch-off retains legacy sync's input; new custody inherits known
-        # context. Previous batch receipts above always keep their original lane.
-        prefs = user.get('transcription_preferences') or {}
-        input_language = normalized_stt_language(user.get('language')) if prefs.get('single_language_mode') else 'multi'
-        inherit = language_inheritance_enabled()
-        inherited = inherited_language(target.get('language'), user.get('language')) if inherit else None
-        if inherited:
-            language = inherited
-            if language_class(inherited) == 'supported':
-                # Bound supported context outranks a later user single-mode
-                # preference, including in the legacy eligibility guard.
-                input_language = inherited
-        elif inherit:
-            # Unknown declarations are classification inputs, not capability
-            # proof, even if single-language mode was selected.
-            language = input_language = 'multi'
-        if admission_language is not None:
-            language = input_language = admission_language
-        if sampled:
-            # The user's declared language is not capability proof without single-language mode.
-            inherited = None
-            language = input_language = 'multi'
+        language, input_language, inherited = upload_languages(user, target, admission_language, sampled)
         if mode is LegacySyncMode.ON and language_guard_enabled() and language_class(input_language) == 'unsupported':
             # Main's prerecorded language guard; with legacy draining or dark the C8
             # provider-STT route below serves unsupported speech instead of legacy.
