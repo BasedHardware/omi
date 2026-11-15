@@ -87,12 +87,12 @@ class WorkItem:
     # Frozen admission provenance; a receipt-clock span cannot bind by time.
     capture_time_trust: str | None = None
 
-    def to_dict(self):
-        """Serialize optional receipt state without widening legacy job documents."""
+    def to_dict(self, *, include_nulls: bool = False):
+        """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict
 
         value = asdict(self)
-        if self.language_receipt_enabled is None:
+        if not include_nulls and self.language_receipt_enabled is None:
             value.pop('language_receipt_enabled')
         if self.capture_time_trust is None:
             value.pop('capture_time_trust')

@@ -40,6 +40,11 @@ def test_future_recovery_has_a_wide_closed_margin(ahead, accepted):
     assert capture_clock.maximum_future_skew_seconds() == 600
 
 
+@pytest.fixture(autouse=True)
+def enable_future_recovery(_default_skew, monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
+
+
 def test_future_staging_keeps_filename_bytes_and_identity(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     upload = _Upload(NAME)

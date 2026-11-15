@@ -505,6 +505,97 @@ async def completed_upload_response(store, previous, uid, content_id, public_job
     return None
 
 
+async def stage_upload_units(
+    iterator,
+    unit_item,
+    store,
+    input_language,
+    uid,
+    target,
+    user,
+    evidence,
+    sampled,
+    *,
+    artifacts,
+    provider,
+    upload_context,
+    set_phase,
+):
+    """Preserve unit language, provenance and staging in a bounded flow graph."""
+    items = []
+    from utils.stt.batch_language import resolve_language
+    from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+
+    # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
+    # speech must be Parakeet-safe vendor audio LID, and every further 30 s of it a Parakeet
+    # language to the self gate, so no admitted unit meets the worker's language barrier or
+    # sends later speech in another language to Parakeet. Strict-silent units keep today's own
+    # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
+    # no unit inherits another's language.
+    queue, decisions = [], {}
+    if sampled:
+
+        sample = await _sample_language_units(
+            iterator, unit_item, store, input_language, uid, target, user, evidence, set_phase
+        )
+        if sample is None:
+            return None
+        queue, decisions = sample
+    # A missing-input repair replays these exact decisions; it never probes again.
+    repair_languages: dict[str, dict] = {}
+    set_phase('decode')
+    while unit := (
+        queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
+    ):
+        if len(items) >= 128:
+            raise ValueError('capture bundle exceeds bounded conversation-unit limit')
+        item = unit_item(unit, len(items))
+        if len(items) in decisions:
+            # This unit was classified above under fresh authority (silent units on their own audio).
+            language_decision = decisions[len(items)]
+        else:
+            set_phase('language_probe')
+            probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
+            # Every self/vendor classification gets fresh dispatch authority on CPU.
+            language_decision = await run_blocking(
+                sync_executor,
+                resolve_language,
+                input_language,
+                unit.wav,
+                surface='batch',
+                cohort_key=uid,
+                before_probe=probe_guard,
+                before_self_probe=probe_guard,
+            )
+            # Refusal preserves the caller's source; never acknowledge or admit it.
+            probe_guard.raise_if_denied()
+        frozen_language = (
+            language_decision.language
+            if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
+            else 'und' if language_guard_enabled() else input_language
+        )
+        repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
+        set_phase('freeze_audio')
+        frozen = await run_blocking(
+            sync_executor,
+            with_context,
+            unit.wav,
+            {
+                **upload_context,
+                'segment_id': item.segment_id,
+                'capture_at': item.capture_at,
+                'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
+                **proof,
+            },
+        )
+        set_phase('stage_audio')
+        uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
+        # Provider units are funded by the provider stage, not GPU compute admission.
+        items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+        set_phase('decode')
+    return items, repair_languages
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -848,7 +939,6 @@ async def accept_upload(
                 decoder=upload_decoder(uid, client_device_id, intake_context),
             )
         )
-        items = []
 
         def unit_item(unit, index):
             return replace(
@@ -868,88 +958,38 @@ async def accept_upload(
                 capture_time_trust=upload_capture_trust(intake_context),
             )
 
-        from utils.stt.batch_language import resolve_language
-        from utils.batch_pipeline.language_probe_authorization import ServingLanguageProbeGuard
+        def set_decode_phase(value):
+            nonlocal phase
+            phase = value
 
-        # A sampled upload is decided whole before anything is staged: every unit's strict-VAD
-        # speech must be Parakeet-safe vendor audio LID, and every further 30 s of it a Parakeet
-        # language to the self gate, so no admitted unit meets the worker's language barrier or
-        # sends later speech in another language to Parakeet. Strict-silent units keep today's own
-        # per-unit LID (an unknown answer preserves the barrier for speech the worker VAD finds);
-        # no unit inherits another's language.
-        queue, decisions = [], {}
-        if sampled:
-
-            def set_sample_phase(value):
-                nonlocal phase
-                phase = value
-
-            sample = await _sample_language_units(
-                iterator, unit_item, store, input_language, uid, target, user, evidence, set_sample_phase
-            )
-            if sample is None:
-                return None
-            queue, decisions = sample
-        # A missing-input repair replays these exact decisions; it never probes again.
-        repair_languages: dict[str, dict] = {}
-        phase = 'decode'
-        while unit := (
-            queue.pop(0) if queue else None if sampled else await run_blocking(sync_executor, _next_unit, iterator)
-        ):
-            if len(items) >= 128:
-                raise ValueError('capture bundle exceeds bounded conversation-unit limit')
-            item = unit_item(unit, len(items))
-            if len(items) in decisions:
-                # This unit was classified above under fresh authority (silent units on their own audio).
-                language_decision = decisions[len(items)]
-            else:
-                phase = 'language_probe'
-                probe_guard = ServingLanguageProbeGuard(store, item, authorize=batch_artifact_authorize)
-                # Every self/vendor classification gets fresh dispatch authority on CPU.
-                language_decision = await run_blocking(
-                    sync_executor,
-                    resolve_language,
-                    input_language,
-                    unit.wav,
-                    surface='batch',
-                    cohort_key=uid,
-                    before_probe=probe_guard,
-                    before_self_probe=probe_guard,
-                )
-                # Refusal preserves the caller's source; never acknowledge or admit it.
-                probe_guard.raise_if_denied()
-            frozen_language = (
-                language_decision.language
-                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-                else 'und' if language_guard_enabled() else input_language
-            )
-            repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
-            phase = 'freeze_audio'
-            frozen = await run_blocking(
-                sync_executor,
-                with_context,
-                unit.wav,
-                {
-                    **(intake_context or {}),
-                    'owner_id': uid,
-                    'job_id': public_job_id,
-                    'content_id': content_id,
-                    'segment_id': item.segment_id,
-                    'capture_at': item.capture_at,
-                    'source': source,
-                    'should_lock': should_lock,
-                    'client_device_id': client_device_id,
-                    'client_platform': client_platform,
-                    'conversation_id': conversation_id,
-                    'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
-                    **proof,
-                },
-            )
-            phase = 'stage_audio'
-            uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
-            # Provider units are funded by the provider stage, not GPU compute admission.
-            items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
-            phase = 'decode'
+        staged = await stage_upload_units(
+            iterator,
+            unit_item,
+            store,
+            input_language,
+            uid,
+            target,
+            user,
+            evidence,
+            sampled,
+            artifacts=artifacts,
+            provider=provider,
+            upload_context={
+                **(intake_context or {}),
+                'owner_id': uid,
+                'job_id': public_job_id,
+                'content_id': content_id,
+                'source': source,
+                'should_lock': should_lock,
+                'client_device_id': client_device_id,
+                'client_platform': client_platform,
+                'conversation_id': conversation_id,
+            },
+            set_phase=set_decode_phase,
+        )
+        if staged is None:
+            return None
+        items, repair_languages = staged
         if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
             return covered_response()
         binding = ProjectionBinding(

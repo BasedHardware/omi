@@ -2,6 +2,8 @@
 
 import ast
 from copy import deepcopy
+from dataclasses import asdict
+from functools import partial
 import importlib.util
 from pathlib import Path
 import subprocess
@@ -12,17 +14,20 @@ from unittest.mock import Mock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.api_core.exceptions import Aborted
+from prometheus_client import Counter, CollectorRegistry
 
 from config.policy import BatchUnitPolicy
 from database.batch_pipeline_staging import artifact_id
 from tests.unit.test_batch_pipeline_audio import pcm
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_sync_capture_time_skew import client, _default_skew
-from utils.batch_pipeline import intake
+from utils.batch_pipeline import intake, contracts, upload_coalescing
 from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.stt import batch_language
 from utils.sync import legacy_dark, receipt_clock
 from routers import sync as router
+from routers import batch_pipeline as batch_router
 
 # Main at the review's scope-reduction decision, not the prior Q12-H tree.
 MAIN = '2d59f75eace67a03cc31dd07effa7ab73b8e15a5'
@@ -40,7 +45,10 @@ def main_module(path, monkeypatch):
     module.__package__ = 'utils.batch_pipeline'
     module.__file__ = str(ROOT / path)
     monkeypatch.setitem(__import__('sys').modules, name, module)
-    exec(compile(main_source(path), f'main:{path}', 'exec'), module.__dict__)
+    with monkeypatch.context() as scoped:
+        if path.endswith('/upload_coalescing.py'):
+            scoped.setattr('prometheus_client.Counter', partial(Counter, registry=CollectorRegistry()))
+        exec(compile(main_source(path), f'main:{path}', 'exec'), module.__dict__)
     return module
 
 
@@ -173,6 +181,7 @@ def test_early_placement_and_coverage_implementations_are_main_bytes():
 
 
 def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monkeypatch, tmp_path):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'true')
     store = MemoryStore()
     store.namespace = 'batch_pipeline_dev'
     monkeypatch.setattr(intake, 'FirestoreStore', lambda *a: store)
@@ -187,8 +196,6 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     monkeypatch.setattr(receipt_clock, 'account_created_at', lambda *a: NOW - 10000)
 
     def unavailable(*a, **k):
-        from google.api_core.exceptions import Aborted
-
         raise Aborted('synthetic transaction contention')
 
     monkeypatch.setattr(receipt_clock, 'frozen_offset', unavailable)
@@ -223,3 +230,69 @@ def test_anchor_contention_is_503_before_staging_or_acknowledgement(client, monk
     admit.assert_not_called()
     assert path.read_bytes() == payload  # Synthetic phone copy is untouched.
     assert not store.rows
+
+
+@pytest.mark.asyncio
+async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_accept(monkeypatch):
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
+    original = main_module('backend/utils/batch_pipeline/contracts.py', monkeypatch)
+    previous_coalescing = main_module('backend/utils/batch_pipeline/upload_coalescing.py', monkeypatch)
+    args = ('segment', 'synthetic-owner', 100, 'intake:pending', 1, contracts.Priority.RECENT)
+    old, current = original.WorkItem(*args), contracts.WorkItem(*args)
+    assert current.to_dict(include_nulls=True) == asdict(old)
+    assert original.WorkItem(**current.to_dict(include_nulls=True)) == old
+
+    lease = contracts.LeasedWork(current, 'synthetic-token', 1, 200)
+    request = types.SimpleNamespace(
+        service=lambda: types.SimpleNamespace(pull=lambda *a, **k: [lease]),
+        limit=1,
+        capacity=None,
+        pool='batch',
+    )
+    response = await batch_router.pull(request)
+    assert response == {'leases': [asdict(original.LeasedWork(old, 'synthetic-token', 1, 200))]}
+    assert original.WorkItem(**response['leases'][0]['item']) == old
+
+    members = []
+
+    def enqueue(store, member, key, now):
+        members.append(deepcopy(member))
+        return None
+
+    monkeypatch.setattr(upload_coalescing.config, 'enabled', lambda: True)
+    monkeypatch.setattr(upload_coalescing.config, 'hold_seconds', lambda **k: 60)
+    monkeypatch.setattr(upload_coalescing.rows, 'enqueue', enqueue)
+    packed = (b'synthetic', 9, 100, 101, 1, 1, ['audio.bin'], 16000)
+    for module in (previous_coalescing, upload_coalescing):
+        monkeypatch.setattr(module, '_pack', lambda *a: packed)
+    arguments = {
+        'uid': 'synthetic-owner',
+        'job_id': 'job',
+        'content_id': 'content',
+        'paths': ['audio.bin'],
+        'lane': 'fresh',
+        'source': 'omi',
+        'should_lock': False,
+        'conversation_id': 'target',
+        'client_device_id': 'pendant',
+        'client_platform': 'ios',
+        'intake_context': {'recording_session_id': 'session'},
+    }
+    artifacts = types.SimpleNamespace(stage_audio=lambda *a: 'gs://synthetic/audio#1')
+    for module, seed in ((previous_coalescing, old), (upload_coalescing, current)):
+        assert (
+            await module.offer(
+                object(),
+                artifacts,
+                seed,
+                arguments=arguments,
+                context=ProtectionContext('standard', 0),
+                language='en',
+                policy=BatchUnitPolicy(batch_enabled=True),
+                now=100,
+            )
+            is None
+        )
+    assert members[0] == members[1]
+    assert 'capture_time_trust' not in members[1]['item']
+    original.WorkItem(**members[1]['item'])

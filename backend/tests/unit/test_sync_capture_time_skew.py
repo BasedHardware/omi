@@ -50,6 +50,7 @@ def _filename(seconds_from_now: float) -> str:
 def _default_skew(monkeypatch):
     monkeypatch.delenv('SYNC_CAPTURE_MAX_FUTURE_SKEW_SECONDS', raising=False)
     monkeypatch.delenv('SYNC_EARLY_CAPTURE_CLAMP_ENABLED', raising=False)
+    monkeypatch.setenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false')
 
 
 # --- shared window ---
