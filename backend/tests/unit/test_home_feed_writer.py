@@ -43,6 +43,19 @@ def test_additive_live_append_and_progress_do_not_require_repreparation():
     assert len(writer.augment_home_writes([renamed])) > 1
 
 
+def test_upload_custody_progress_preserves_home_but_combined_content_edits_invalidate():
+    sessions = Value(map_value={'fields': {'live': Value(boolean_value=True)}})
+    for fields in (
+        {'record_upload_sessions': sessions},
+        {'record_upload_sessions.live': Value(boolean_value=False)},
+        {'record_upload_sessions': sessions, 'audio_files': Value(array_value={'values': []})},
+    ):
+        source = update(**fields)
+        assert writer.augment_home_writes([source]) == [source]
+    edited = update(record_upload_sessions=sessions, user_title=Value(string_value='edited'))
+    assert len(writer.augment_home_writes([edited])) > 1
+
+
 def test_transcript_redaction_invalidates_old_source_display_until_fresh_notes():
     source = update(transcript_segments=Value(string_value='redacted'))
     writes = writer.augment_home_writes([source])

@@ -111,6 +111,22 @@ def test_acknowledged_remote_deletion_invalidates_and_removes_old_display(world)
     assert 'Synthetic member 0' not in json.dumps(after, default=str)
 
 
+def test_upload_custody_progress_keeps_prepared_cards_until_a_content_edit(world):
+    client, uid, user = world
+    ref = user.collection('conversations').document('recording')
+    ref.set(source('Synthetic recording'))
+    drain(client, uid)
+    before = home_feed.feed(uid, firestore_client=client)
+    version = ref.get().to_dict()['home_source_version']
+    ref.update({'record_upload_sessions': {'live': True}})
+    ref.update({'record_upload_sessions': {}, 'audio_files': []})
+    assert ref.get().to_dict()['home_source_version'] == version
+    assert home_feed.feed(uid, firestore_client=client) == before
+    ref.update({'record_upload_sessions': {}, 'user_title': 'Synthetic renamed'})
+    with pytest.raises(home_feed.PreparationRequired):
+        home_feed.feed(uid, firestore_client=client)
+
+
 def test_hard_episode_delete_recovers_surviving_member_history(world):
     client, uid, user = world
     ids = seed_group(user)

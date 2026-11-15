@@ -45,6 +45,7 @@ SAFE_FIELDS = frozenset(
         'audio_files',
         'audio_url',
         'audio_base64_url',
+        'record_upload_sessions',
         'share_email_recipients',
         'share_email_in_flight',
         'external_data',
