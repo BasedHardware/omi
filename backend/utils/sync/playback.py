@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
+from config.pusher_record import close_fast_path_enabled
 from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
@@ -413,7 +414,31 @@ def get_audio_signed_urls(
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not audio_files:
-        return {"audio_files": []}
+        if (
+            close_fast_path_enabled()
+            and conversation
+            and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+        ):
+            from concurrent.futures import TimeoutError
+            from utils.sync.playback_metadata import refresh_on_open
+
+            try:
+                repaired = refresh_on_open(uid, conversation_id)
+            except TimeoutError as pending:
+                from utils.observability.fallback import record_fallback
+
+                record_fallback(
+                    component='audio_merge',
+                    from_mode='playback_metadata',
+                    to_mode='pending',
+                    reason=getattr(pending, 'reason', 'timeout'),
+                    outcome='degraded',
+                )
+                return {'audio_files': [], 'poll_after_ms': 5000}
+            conversation = {**conversation, **repaired}
+            audio_files = repaired.get('audio_files') or []
+        if not audio_files:
+            return {"audio_files": []}
 
     if is_audio_merge_dispatch_enabled():
         return _get_audio_urls_via_artifacts(uid, conversation_id, audio_files, conversation)

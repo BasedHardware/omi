@@ -30,6 +30,15 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Close acceptance wire response only; no lifecycle document write.
+    'utils/pusher_record_close.py': [
+        (
+            'result_frame',
+            'status',
+            'status',
+            ('conversation_id', 'phase', 'request_id', 'status', 'type', 'version', 'watermark'),
+        ),
+    ],
     # Census response metadata only; no lifecycle document writes.
     'utils/sync/batch_census.py': [
         (
