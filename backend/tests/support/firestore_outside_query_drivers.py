@@ -591,5 +591,6 @@ _driver(
     'utils.memory.recap_review._source_successor',
     base={'uid': UID},
     domains={'memory_id': ['retired-memory', 'another-retired-memory']},
+    neutrals={'deadline': (None, 'RPC wall-time bound only; no query-shape change')},
     profile='recap-learning-source-successor',
 )

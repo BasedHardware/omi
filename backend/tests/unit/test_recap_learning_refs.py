@@ -3,6 +3,7 @@
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from threading import Barrier, Event, Lock
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -44,18 +45,29 @@ class _Store:
         self.receipts = {}
         self.reads = []
         self.queries = []
+        self.batches = []
         self.writes = []
 
     def document(self, path):
         store = self
 
         class Ref:
+            id = path.rsplit('/', 1)[-1]
+            _path = path
+
             def get(self, **kwargs):
                 store.reads.append(path)
                 data = store.docs.get(path)
-                return SimpleNamespace(exists=data is not None, to_dict=lambda: deepcopy(data))
+                return SimpleNamespace(id=self.id, exists=data is not None, to_dict=lambda: deepcopy(data))
 
         return Ref()
+
+    def get_all(self, refs, **kwargs):
+        self.batches.append(([ref._path for ref in refs], kwargs))
+        # Firestore does not guarantee input order.
+        for ref in reversed(refs):
+            data = self.docs.get(ref._path)
+            yield SimpleNamespace(id=ref.id, exists=data is not None, to_dict=lambda d=data: deepcopy(d))
 
     def collection(self, path):
         store = self
@@ -217,13 +229,15 @@ def test_production_source_reextraction_chain_recovers_retired_intermediate(stor
 def test_successor_hop_limit_and_response_deadline_are_bounded(store, monkeypatch):
     for index in range(recap_review.MAX_SUCCESSOR_HOPS + 1):
         store.closed(f'old-{index}', superseded_by=f'old-{index + 1}')
-    assert _refresh(store, 'old-0').memories_learned == []
-    assert len(store.reads) == recap_review.MAX_SUCCESSOR_HOPS
+    assert _refresh(store, 'old-0').memories_learned == _summary('old-0').memories_learned
+    assert len(store.reads) == recap_review.MAX_SUCCESSOR_HOPS - 1
     calls = iter([0, recap_review.MAX_RESPONSE_READ_SECONDS])
-    monkeypatch.setattr(recap_review.time, 'monotonic', lambda: next(calls, recap_review.MAX_RESPONSE_READ_SECONDS))
+    monkeypatch.setattr(
+        recap_review, 'time', SimpleNamespace(monotonic=lambda: next(calls, recap_review.MAX_RESPONSE_READ_SECONDS))
+    )
     events = []
     monkeypatch.setattr(recap_review, 'record_fallback', lambda **event: events.append(event))
-    assert _refresh(store, 'old-0').memories_learned == []
+    assert _refresh(store, 'old-0').model_dump() == _summary('old-0').model_dump()
     assert events[0]['outcome'] == 'degraded'
 
 
@@ -240,7 +254,10 @@ def test_source_sets_and_ambiguous_or_foreign_receipts_never_guess_a_successor(s
     store.receipts['old'] = receipts
     store.active('one')
     store.active('two')
-    assert _refresh(store, 'old').memories_learned == []
+    expected = (
+        [] if receipts and receipts[0].get('uid') == UID and len(receipts) == 1 else _summary('old').memories_learned
+    )
+    assert _refresh(store, 'old').memories_learned == expected
 
 
 def test_many_to_one_source_consolidation_keeps_the_live_successor(store):
@@ -267,7 +284,7 @@ def test_depth_limit_does_not_poison_a_shorter_card_in_the_same_response(store):
         store.closed(f'node-{index}', superseded_by=f'node-{index + 1}')
     store.active(f'node-{recap_review.MAX_SUCCESSOR_HOPS}')
     result = _refresh(store, 'node-0', f'node-{recap_review.MAX_SUCCESSOR_HOPS - 2}')
-    assert [ref.memory_id for ref in result.memories_learned] == [f'node-{recap_review.MAX_SUCCESSOR_HOPS}']
+    assert [ref.memory_id for ref in result.memories_learned] == ['node-0', f'node-{recap_review.MAX_SUCCESSOR_HOPS}']
 
 
 def test_live_canonical_root_may_name_itself(store):
@@ -276,28 +293,29 @@ def test_live_canonical_root_may_name_itself(store):
     assert _refresh(store, 'current').memories_learned[0].memory_id == 'current'
 
 
-def test_cross_owner_identity_and_conflicting_pointers_are_excluded(store):
+def test_retired_conflicts_are_omitted_but_unverified_owner_identity_preserves_snapshot(store):
     store.closed('old', superseded_by='one', canonical_memory_id='two')
     store.active('one')
     store.active('two')
     assert _refresh(store, 'old').memories_learned == []
     store.docs[f'users/{UID}/memory_items/old'] = {'uid': 'foreign', 'memory_id': 'old', 'replaced_by': 'one'}
-    assert _refresh(store, 'old').memories_learned == []
+    assert _refresh(store, 'old').memories_learned == _summary('old').memories_learned
 
 
 @pytest.mark.parametrize('mid', ['', 'a/b', ' old '])
 def test_invalid_id_cannot_form_a_document_path(store, mid):
-    assert _refresh(store, mid).memories_learned == []
+    assert _refresh(store, mid).model_dump() == _summary(mid).model_dump()
     assert store.reads == []
 
 
 @pytest.mark.parametrize('fields', [{'is_locked': True}, {'invalid_at': NOW}])
-def test_unreviewable_target_is_not_offered(store, fields):
+def test_invalidated_target_is_omitted_but_locked_target_preserves_snapshot(store, fields):
     store.active('target', **fields)
-    assert _refresh(store, 'target').memories_learned == []
+    expected = _summary('target').memories_learned if fields.get('is_locked') else []
+    assert _refresh(store, 'target').memories_learned == expected
 
 
-def test_provider_fault_ends_reads_and_reports_no_private_content(store, monkeypatch, caplog):
+def test_batch_provider_fault_keeps_snapshot_and_reports_no_private_content(store, monkeypatch, caplog):
     def broken_document(path):
         raise RuntimeError('PRIVATE_MEMORY_DO_NOT_LOG')
 
@@ -305,7 +323,7 @@ def test_provider_fault_ends_reads_and_reports_no_private_content(store, monkeyp
     store.active('later')
     events = []
     monkeypatch.setattr(recap_review, 'record_fallback', lambda **event: events.append(event))
-    assert _refresh(store, 'fault', 'later').memories_learned == []
+    assert _refresh(store, 'fault', 'later').model_dump() == _summary('fault', 'later').model_dump()
     assert not any(path.endswith('/later') for path in store.reads)
     assert len(events) == 1 and events[0]['outcome'] == 'degraded'
     assert 'PRIVATE_MEMORY_DO_NOT_LOG' not in caplog.text
@@ -367,3 +385,154 @@ def test_http_recap_successor_supports_released_right_wrong_and_fix_requests(sto
         ('review', 'current', False),
         ('edit', 'current', 'user correction'),
     ]
+
+
+@pytest.mark.parametrize('failure', ['batch', 'resolution', 'fetch'])
+def test_provider_exception_keeps_all_stored_cards_and_counts(store, monkeypatch, failure):
+    summaries = [_summary('old', 'other'), _summary('third')]
+    for summary in summaries:
+        summary.memories_learned_count = 9
+        summary.stats.memories_learned_count = 12
+    before = [s.model_dump() for s in summaries]
+
+    def broken(*args, **kwargs):
+        raise RuntimeError('PRIVATE_DO_NOT_LOG')
+
+    if failure == 'batch':
+        monkeypatch.setattr(store, 'get_all', broken)
+    elif failure == 'resolution':
+        monkeypatch.setattr(recap_review, '_source_successor', broken)
+    else:
+        for mid in ['old', 'other', 'third']:
+            store.docs[f'users/{UID}/memories/{mid}'] = {'id': mid}
+        monkeypatch.setattr(store.service, 'fetch', broken)
+    result = recap_review.refresh_recap_learning_refs(UID, summaries, firestore_client=store)
+    assert [s.model_dump() for s in result] == before
+    assert [s.model_dump() for s in summaries] == before
+    assert store.writes == []
+
+
+@pytest.mark.parametrize('blocked_stage', ['batch', 'fetch'])
+def test_whole_deadline_includes_batch_and_memory_service_fetch_without_late_mutation(
+    store, monkeypatch, blocked_stage
+):
+    # Controlled time makes expiry deterministic while a real provider worker
+    # stays blocked until after the response has returned.
+    from concurrent.futures import ThreadPoolExecutor
+
+    pool = ThreadPoolExecutor(max_workers=4)
+    monkeypatch.setattr(recap_review, 'db_executor', pool)
+    clock = [0.0]
+    monkeypatch.setattr(recap_review, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    started, release, finished = Event(), Event(), Event()
+    original = [_summary('slow', 'untouched')]
+    before = original[0].model_dump()
+    original_get_all = store.get_all
+
+    def blocked(*args, **kwargs):
+        started.set()
+        try:
+            assert release.wait(10)
+            return _memory('slow')
+        finally:
+            finished.set()
+
+    if blocked_stage == 'fetch':
+        store.docs[f'users/{UID}/memories/slow'] = {'id': 'slow'}
+        monkeypatch.setattr(store.service, 'fetch', blocked)
+
+        def expire(pending, *, timeout, return_when):
+            assert started.wait(5)
+            assert timeout == recap_review.MAX_RESPONSE_READ_SECONDS
+            clock[0] = recap_review.MAX_RESPONSE_READ_SECONDS
+            return set(), set(pending)
+
+        monkeypatch.setattr(recap_review, 'wait', expire)
+    else:
+        # Future.result itself is the batch wait boundary.
+        from concurrent.futures import Future
+
+        original_result = Future.result
+
+        def result(future, timeout=None):
+            if timeout is not None:
+                assert started.wait(5)
+                assert timeout == recap_review.MAX_RESPONSE_READ_SECONDS
+                clock[0] = recap_review.MAX_RESPONSE_READ_SECONDS
+                raise TimeoutError()
+            return original_result(future, timeout=timeout)
+
+        def blocked_batch(*args, **kwargs):
+            blocked()
+            return original_get_all(*args, **kwargs)
+
+        monkeypatch.setattr(store, 'get_all', blocked_batch)
+        monkeypatch.setattr(Future, 'result', result)
+    try:
+        result = recap_review.refresh_recap_learning_refs(UID, original, firestore_client=store)
+        assert result[0].model_dump() == before
+        assert not finished.is_set()
+    finally:
+        release.set()
+        assert finished.wait(5)
+        pool.shutdown(wait=True, cancel_futures=True)
+    assert result[0].model_dump() == before
+    assert original[0].model_dump() == before
+    assert store.writes == []
+
+
+def test_hundred_recap_page_batches_direct_live_and_bounds_remaining_resolution(store, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    summaries = [_summary(f'live-{n}', f'live-{n+100}', f'old-{n}') for n in range(100)]
+    for n in range(200):
+        store.active(f'live-{n}')
+    for n in range(100):
+        store.closed(f'old-{n}')
+    called = []
+    active = [0, 0]
+    lock = Lock()
+    first_wave = Barrier(recap_review.MAX_CONCURRENT_RESOLUTIONS)
+    original_resolve = recap_review._resolve_one
+
+    def tracked(uid, mid, *args):
+        with lock:
+            called.append(mid)
+            active[0] += 1
+            active[1] = max(active)
+            first = len(called) <= recap_review.MAX_CONCURRENT_RESOLUTIONS
+        try:
+            if first:
+                first_wave.wait(timeout=5)
+            return original_resolve(uid, mid, *args)
+        finally:
+            with lock:
+                active[0] -= 1
+
+    monkeypatch.setattr(recap_review, '_resolve_one', tracked)
+    # A larger shared executor proves the per-request limit is the bound.
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        monkeypatch.setattr(recap_review, 'db_executor', pool)
+        result = recap_review.refresh_recap_learning_refs(UID, summaries, firestore_client=store)
+    assert len(store.batches) == 1 and len(store.batches[0][0]) == 300
+    assert store.batches[0][1]['retry'] is None
+    assert 0 < store.batches[0][1]['timeout'] <= recap_review.MAX_RESPONSE_READ_SECONDS
+    assert len(called) == 100 and all(mid.startswith('old-') for mid in called)
+    assert active[1] == recap_review.MAX_CONCURRENT_RESOLUTIONS
+    assert store.reads == []  # initial canonical snapshots are reused, including retired rows
+    assert len(store.queries) == 100
+    for n, summary in enumerate(result):
+        assert [r.memory_id for r in summary.memories_learned] == [f'live-{n}', f'live-{n+100}']
+        assert summary.stats.memories_learned_count == 2
+    assert store.writes == []
+
+
+def test_only_failed_reference_falls_back_and_successful_successor_still_substitutes(store, monkeypatch):
+    store.closed('old', superseded_by='current')
+    store.active('current')
+    store.docs[f'users/{UID}/memories/fault'] = {'id': 'fault'}
+    store.live['fault'] = RuntimeError('provider down')
+    result = _refresh(store, 'old', 'fault')
+    assert [r.memory_id for r in result.memories_learned] == ['current', 'fault']
+    assert result.memories_learned[1] == _summary('fault').memories_learned[0]
+    assert result.stats.memories_learned_count == 2
