@@ -333,7 +333,7 @@ def test_check_reports_unlisted_job_without_deleting():
     ]
 
 
-def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_manifest():
+def test_owner_scheduler_checks_are_scoped_and_central_reconcile_supports_planned_job_selection():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
@@ -365,8 +365,12 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
     assert "owner: .github/workflows/gcp_scheduler_reconcile.yml" in admin_job
 
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
-    assert '--project "$PROJECT_ID" --check' in central
-    assert '--project "$PROJECT_ID" --check --jobs' not in central
+    assert "Optional space-separated declared job names" in central
+    assert 'JOBS: ${{ github.event.inputs.jobs }}' in central
+    assert "JOB_ARGS=()" in central
+    assert 'read -r -a JOB_ARGS <<< "$JOBS"' in central
+    assert '--project "$PROJECT_ID" --apply "${JOB_ARGS[@]}"' in central
+    assert '--project "$PROJECT_ID" --check "${JOB_ARGS[@]}"' in central
 
 
 def test_notifications_cadence_covers_every_local_hour_boundary():
