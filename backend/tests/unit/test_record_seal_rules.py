@@ -186,12 +186,15 @@ def failed_plan(source):
     return repair.plan_seals(store, ['pending'], None, artifacts, repair_upload_failed=True)
 
 
-def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source):
+def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source, monkeypatch):
     store, client, artifacts = source
     plan = failed_plan(source)
     assert plan['entries'][0]['disposition'] == 'eligible'
     assert repair.plan_seals(store, ['pending'], None, artifacts)['entries'][0]['disposition'] == 'upload_failed'
     assert seal_record_audio('synthetic', 'record', firestore_client=client) == 'upload_failed'
+    # StrictFirestore has no update_time; model the newer committed revision
+    # supplied by Firestore for this successful full-proof recovery.
+    monkeypatch.setattr(repair.pipeline_ledger, 'source_revision', lambda snapshot: 2)
     assert repair.apply_seals(store, plan, plan['plan_sha256']) == {'upload_failed_cleared': 1}
     assert client.rows[PATH]['record_audio_closed']
     assert client.rows[PATH]['record_upload_failed'] is False
