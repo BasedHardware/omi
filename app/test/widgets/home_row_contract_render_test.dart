@@ -21,6 +21,17 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/ui/ui.dart';
@@ -29,6 +40,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../helpers/home_fixture_env.dart';
 import '../helpers/home_one_processing_fixture.dart';
+import '../helpers/home_ready_members_fixture.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 
@@ -136,6 +148,9 @@ EpisodeProvider _episodes() => EpisodeProvider(
 Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     {EpisodeProvider? episodeProvider,
     CaptureProvider? capture,
+    bool withNavigation = false,
+    List<ServerConversation> detailItems = const [],
+    void Function(String)? onDetailFetch,
     List<ServerConversation> processing = const []}) async {
   debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
   tester.view.devicePixelRatio = 1;
@@ -158,16 +173,38 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
   await store.refresh();
   addTearDown(store.dispose);
   final boundary = GlobalKey();
+  Widget screen = await buildTypedConversationScreen(
+    conversations,
+    pendingWork: store,
+    episodes: episodes,
+    captureProvider: capture,
+    initializePreferences: false,
+    theme: buildOmiTheme(brightness: Brightness.light),
+  );
+  if (withNavigation) {
+    final apps = AppProvider();
+    final detail = ConversationDetailProvider(fetchConversation: (id) async {
+      onDetailFetch?.call(id);
+      return [...detailItems, ...items].where((c) => c.id == id).firstOrNull;
+    });
+    detail.setProviders(apps, conversations);
+    addTearDown(apps.dispose);
+    addTearDown(detail.dispose);
+    screen = MultiProvider(providers: [
+      ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+      ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+      ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
+      ChangeNotifierProvider<AppProvider>.value(value: apps),
+      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+      ChangeNotifierProvider(create: (_) => FolderProvider()),
+      ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => UsageProvider()),
+      ChangeNotifierProvider(create: (_) => MessageProvider()),
+    ], child: screen);
+  }
   await tester.pumpWidget(RepaintBoundary(
     key: boundary,
-    child: await buildTypedConversationScreen(
-      conversations,
-      pendingWork: store,
-      episodes: episodes,
-      captureProvider: capture,
-      initializePreferences: false,
-      theme: buildOmiTheme(brightness: Brightness.light),
-    ),
+    child: screen,
   ));
   for (var i = 0; i < 4; i++) {
     await tester.pump(const Duration(milliseconds: 300));
@@ -208,10 +245,69 @@ void main() {
   final previousVisibilityInterval = VisibilityDetectorController.instance.updateInterval;
   setUpAll(() async {
     Env.init(HomeFixtureEnv());
+    PlatformManager.initializeForLocalHarness();
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
     await _fonts();
   });
   tearDownAll(() => VisibilityDetectorController.instance.updateInterval = previousVisibilityInterval);
+
+  for (final withLive in [false, true]) {
+    for (final metadataOnly in [false, true]) {
+      testWidgets('READY members are readable before compose, live=$withLive metadataOnly=$metadataOnly',
+          (tester) async {
+        final fixture = HomeReadyMembersFixture(DateTime.now());
+        var current = fixture.waiting;
+        final episodes = EpisodeProvider(
+            fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: withLive ? fixture.live : null)),
+            lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: current)),
+            fetchPage: (from, to, {cursor}) async => ApiSuccess(EpisodePageRead(enabled: true, episodes: [current])));
+        await episodes.refreshLive();
+        episodes.debugSetHomeEpisodes([current]);
+        final capture = withLive ? _LiveCapture() : null;
+        if (capture != null) addTearDown(capture.dispose);
+        final detailReads = <String>[];
+        final boundary = await _pumpHome(tester, metadataOnly ? [] : [...fixture.members],
+            episodeProvider: episodes,
+            capture: capture,
+            withNavigation: true,
+            detailItems: fixture.members,
+            onDetailFetch: detailReads.add);
+        expect(find.text('Transcribing… · 2 recordings'), findsOneWidget);
+        for (final member in fixture.members.take(2)) {
+          final row = tester.widget<ConversationListItem>(find.byKey(ValueKey(member.id)));
+          expect(row.homeEpisode, isNull, reason: 'temporary member opens its own notes');
+          expect(row.conversation.structured.overview, member.structured.overview);
+          expect(_top(tester, find.byKey(_processingKey)) < _top(tester, find.byKey(ValueKey(member.id))), isTrue);
+        }
+        {
+          await tester.tap(find.byKey(ValueKey(fixture.members.first.id)));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+          final page = tester.widget<ConversationDetailPage>(find.byType(ConversationDetailPage));
+          expect(page.conversation.id, fixture.members.first.id);
+          expect(detailReads, contains(fixture.members.first.id), reason: 'metadata rows hydrate the real recording');
+          expect(find.text(fixture.members.first.structured.overview), findsWidgets);
+          Navigator.of(tester.element(find.byType(ConversationDetailPage))).pop();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
+        }
+        await _capture(tester, boundary, 'ready-members-before-compose');
+        current = fixture.composed;
+        episodes.debugSetHomeEpisodes([current]);
+        await tester.pump();
+        expect(find.text('Combined episode fixture'), findsOneWidget);
+        expect(find.byKey(_processingKey), findsNothing);
+        for (final member in fixture.members) {
+          expect(find.byKey(ValueKey(member.id)), findsNothing, reason: 'one frame replaces every temporary row');
+        }
+        final replacement = tester.widget<ConversationListItem>(find.byKey(ValueKey('episode:${current.id}')));
+        expect(replacement.homeEpisode!.members.map((m) => m.id).toSet(), fixture.members.map((m) => m.id).toSet());
+        await _capture(tester, boundary, 'ready-members-after-compose');
+        await tester.pumpWidget(const SizedBox.shrink());
+        episodes.invalidateHome();
+      });
+    }
+  }
 
   for (final withPending in [false, true]) {
     testWidgets('stale ready and noise processing entries never bypass the fold, pending=$withPending', (tester) async {

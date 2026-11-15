@@ -16,9 +16,14 @@ class HomeRow {
       this.episodeConversationIds = const {},
       this.processingEpisodes = const [],
       this.isProcessing = false,
+      this.isTemporaryMember = false,
       this.step,
       this.count = 1});
   final bool isProcessing;
+
+  /// Own notes are ready before the enclosing episode is composed. Keep its
+  /// owner for layout/dedupe, but open the real recording's notes page.
+  final bool isTemporaryMember;
 
   /// Set on every processing row; null on finished rows.
   final HomeStep? step;
@@ -30,6 +35,7 @@ class HomeRow {
       episode: episode,
       episodeConversationIds: episodeConversationIds,
       processingEpisodes: processingEpisodes,
+      isTemporaryMember: isTemporaryMember,
       isProcessing: true,
       step: step,
       count: count);
@@ -221,11 +227,6 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       listeningOwnedIds.addAll({...episode.conversationIds, ...retainedIds});
       hidden.addAll(episode.conversationIds);
     }
-    // A closing episode may still be live in the last server snapshot. The
-    // streaming capture owns its row until it stops; then processing owns it.
-    if (listeningOwns) {
-      continue;
-    }
     final members = <ServerConversation>[];
     hidden.addAll(episode.conversationIds);
     // Server metadata is authoritative about retained membership. Full IDs also
@@ -243,10 +244,27 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       }
     }
     if (members.isEmpty) continue;
+    final awaitingCompose = !episode.composed || (singleProcessingRow && episode.live);
+    if (singleProcessingRow && awaitingCompose) {
+      // A recording's own READY notes do not wait for the episode's compose
+      // settle window. One rebuild chooses either these real-ID rows or the
+      // composed owner below; the full owner IDs remain hidden from list echoes.
+      final finished = members.where((m) => m.homeStep == 'ready' || m.isLocked).toList();
+      for (final member in finished) {
+        rows.add(HomeRow(member,
+            episode: episode.copyWith(members: [member]),
+            episodeConversationIds: {member.id},
+            isTemporaryMember: true));
+      }
+      members.removeWhere((m) => m.homeStep == 'ready' || m.isLocked || isHomeNoise(m));
+    }
+    // Listening owns only unfinished members; an already-ready recording is
+    // independently readable even while its episode is still live.
+    if (listeningOwns || members.isEmpty) continue;
     // Notes that already landed stay on Home: a member still processing (a late joiner, or a
     // stale local processing entry) never turns a composed episode back into "Finishing up…".
     // The episode page applies the same rule, so the row and its page agree.
-    if (pending.isNotEmpty && !episode.composed) {
+    if (pending.isNotEmpty && awaitingCompose) {
       rows.add(HomeRow(
         ServerConversation(
           id: 'episode:${episode.id}',
@@ -271,7 +289,7 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       continue;
     }
     final memberSteps = members.map(homeStepOf).whereType<HomeStep>().where((step) => step != HomeStep.failed).toList();
-    if (!episode.composed && (singleProcessingRow ? memberSteps.isNotEmpty : members.any(awaitingHomeTranscript))) {
+    if (awaitingCompose && (singleProcessingRow ? memberSteps.isNotEmpty : members.any(awaitingHomeTranscript))) {
       rows.add(_processingRun(members, (members.length > 1 ? finishingTitle : processingTitle) ?? '',
           episode: episode, step: singleProcessingRow ? _leastAdvanced(memberSteps) : HomeStep.transcribing));
       continue;
@@ -364,7 +382,11 @@ List<HomeRow> foldProcessingRuns(List<HomeRow> rows,
     final run = <HomeRow>[];
     final finished = <HomeRow>[];
     for (final row in byDay[day]!) {
-      final step = row.step ?? (row.isProcessing ? HomeStep.writingNotes : homeStepOf(row.conversation));
+      // A composed owner is the finished replacement even when its sole retained
+      // member still carries an older pending list projection.
+      final replaced = row.episode?.composed == true && !row.isProcessing && !row.isTemporaryMember;
+      final step =
+          replaced ? null : row.step ?? (row.isProcessing ? HomeStep.writingNotes : homeStepOf(row.conversation));
       if (step == null || step == HomeStep.failed) {
         finished.add(row);
       } else {

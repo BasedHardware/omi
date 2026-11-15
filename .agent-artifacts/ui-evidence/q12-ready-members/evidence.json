@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-ready-before-compose.png",
+      "platform": "mobile-ios",
+      "description": "Synthetic iOS Home: Listening, one Processing row for two pending recordings, and two finished READY member rows. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-own-recording-notes.png",
+      "platform": "mobile-ios",
+      "description": "A temporary member opens its real recording notes before episode composition. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-composed-replacement.png",
+      "platform": "mobile-ios",
+      "description": "The same composed owner replaces all temporary member and Processing rows in Home. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-replacement-members.png",
+      "platform": "mobile-ios",
+      "description": "The composed replacement page retains all four source recordings; the first source was opened again successfully. Fictional fixture; Compose fixture is a harness-only control.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

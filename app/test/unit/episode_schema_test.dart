@@ -12,10 +12,17 @@ void main() {
       'last_activity_at': '2026-11-15T09:01:00Z',
       'conversation_ids': ['member'],
       'members': [
-        {'id': 'member', 'started_at': '2026-11-15T09:00:00Z', 'status': 'processing', 'home_step': 'transcribing'}
+        {
+          'id': 'member',
+          'started_at': '2026-11-15T09:00:00Z',
+          'status': 'processing',
+          'home_step': 'transcribing',
+          'gist': 'A lightweight member preview'
+        }
       ],
     }));
     expect(episode.members.single.homeStep, 'transcribing');
+    expect(episode.members.single.structured.overview, 'A lightweight member preview');
   });
   final startedAt = DateTime.utc(2026, 11, 10);
   final deferred = Episode(

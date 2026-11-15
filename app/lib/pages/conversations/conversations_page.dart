@@ -1102,7 +1102,9 @@ class _ConversationsPageState extends State<ConversationsPage>
                             row.conversation!.id,
                             projectedEpisodes[row.conversation!.id]?.episodeConversationIds,
                           ),
-                          homeEpisode: projectedEpisodes[row.conversation!.id]?.episode,
+                          homeEpisode: projectedEpisodes[row.conversation!.id]?.isTemporaryMember == true
+                              ? null
+                              : projectedEpisodes[row.conversation!.id]?.episode,
                         );
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
