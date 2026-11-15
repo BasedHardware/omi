@@ -24,7 +24,9 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert repair['concurrencyPolicy'] == 'Forbid'
     assert sweep['jobTemplate']['spec']['activeDeadlineSeconds'] == 240
     assert repair['jobTemplate']['spec']['activeDeadlineSeconds'] == 1680
-    assert repair['jobTemplate']['spec']['backoffLimit'] == 0
+    assert repair['jobTemplate']['spec']['backoffLimit'] == 5
+    assert repair['jobTemplate']['spec']['backoffLimitPerIndex'] == 0
+    assert repair['jobTemplate']['spec']['maxFailedIndexes'] == 5
     pod = repair['jobTemplate']['spec']['template']['spec']
     worker = next(doc for (kind, _), doc in docs.items() if kind == 'Deployment')['spec']['template']['spec']
     assert pod['serviceAccountName'] == worker['serviceAccountName']
