@@ -1,6 +1,7 @@
 """Owner-summary searches expand account context; chat defaults stay unchanged."""
 
 from types import SimpleNamespace
+import time
 from unittest.mock import Mock, create_autospec
 
 import pytest
@@ -231,7 +232,7 @@ def test_owner_summary_vector_calls_match_real_proxy_and_scope_signatures(monkey
     from database.pinecone_partition_index import OwnerIndex
 
     embeddings = create_autospec(_OpenAIEmbeddingsProxy, instance=True, spec_set=True)
-    embeddings.embed_query.return_value = [0.1]
+    embeddings.embed_query_once.return_value = [0.1]
     owner = create_autospec(OwnerIndex, instance=True, spec_set=True)
     owner.query.return_value = {'matches': []}
     monkeypatch.setattr(vector_db, 'index', object())
@@ -240,12 +241,15 @@ def test_owner_summary_vector_calls_match_real_proxy_and_scope_signatures(monkey
         vector_db, 'owner_index', create_autospec(vector_db.owner_index, return_value=owner, spec_set=True)
     )
     if legacy:
-        assert vector_db.find_similar_memories('synthetic', 'garden', timeout_seconds=8) == []
+        assert vector_db.find_similar_memories('synthetic', 'garden', timeout_seconds=8, owner_summary=True) == []
     else:
         assert not vector_db.query_memory_vector_candidates(
             'synthetic', 'garden', timeout_seconds=8, owner_summary=True
         ).hits
-    embeddings.embed_query.assert_called_once_with('garden')
+    embeddings.embed_query.assert_not_called()
+    embeddings.embed_query_once.assert_called_once_with(
+        'garden', deadline_monotonic=pytest.approx(time.monotonic() + 8, abs=1)
+    )
     options = owner.query.call_args.kwargs
     assert {'uid': {'$eq': 'synthetic'}} in options['filter']['$and']
     assert 0 < options['_request_timeout'] <= 8
