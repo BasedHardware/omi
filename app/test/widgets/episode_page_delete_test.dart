@@ -45,7 +45,7 @@ void main() {
         ];
         final owner = Episode(
             id: 'owner',
-            live: false,
+            live: synthetic && outcome == 'becomes ready',
             startedAt: at,
             lastActivityAt: at,
             closedAt: at,
@@ -66,9 +66,15 @@ void main() {
           calls.add(id);
           return true;
         };
-        final episodes = EpisodeProvider(detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)))
+        var lookups = 0;
+        final episodes = EpisodeProvider(
+            detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+            lookup: (_) async {
+              lookups++;
+              return ApiSuccess(EpisodeRead(enabled: true, episode: owner));
+            })
           ..debugSetLive(null)
-          ..debugSetHomeEpisodes([owner]);
+          ..debugSetHomeEpisodes(synthetic ? [] : [owner]);
         episodes.observeHomeConversations(history);
         final connectivity = ConnectivityProvider();
         addTearDown(history.dispose);
@@ -86,11 +92,13 @@ void main() {
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(
                   body: ProcessingConversationRow(
-                      conversation: pending, episode: projection, processingEpisodes: [owner])),
+                      conversation: pending, episode: projection, processingEpisodes: synthetic ? [] : [owner])),
             )));
         await tester.tap(find.byKey(const Key('home_processing_row')));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byKey(const ValueKey('processing_episode_owner')), findsOneWidget);
+        expect(lookups, synthetic ? 1 : 0, reason: 'cold cards resolve their owner only on page open');
         if (outcome == 'becomes ready') {
           history.updateConversation(pending.withHomeStep('ready'), preserveHomeStep: false);
           await tester.pump();

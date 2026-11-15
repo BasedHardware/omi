@@ -37,7 +37,7 @@
       "source": "visual-audit"
     }
   ],
-  "captured_at_utc": "2026-11-15T12:05:48Z",
+  "captured_at_utc": "2026-11-15T12:24:54Z",
   "merged_origin_main": "33cf63956cd8a7cc86a9f7bbf99569d547e48e24",
   "source_blobs": {
     "app/lib/backend/schema/episode.dart": "e032e0a34d5399481969e20d7c26fd419ab86a3f",
@@ -46,6 +46,8 @@
     "app/lib/pages/conversations/home_card_rows.dart": "8799d522d6a8d7908c353d922843e3354c06e666",
     "app/lib/pages/conversations/home_rows.dart": "456c771178410ac44a2b3b15336dd33304fbd506",
     "app/lib/pages/conversations/widgets/processing_conversation_row.dart": "bb529d30501f559275ab6d12680e421050bf90cc",
-    "app/lib/pages/episodes/episode_page.dart": "6a9c052a70bb427103e639c705635b99761d41de"
-  }
+    "app/lib/pages/episodes/episode_page.dart": "d9deee5751a419694d34de38a4a4fbf888dc3f5f"
+  },
+  "native_entrypoint_blob": "fcc6954a8d3d71ac3f3b5a7eece7e8b9b52fc7cd",
+  "cold_compact_owner_lookup": true
 }

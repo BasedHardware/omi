@@ -49,6 +49,7 @@ Future<void> main() async {
   PlatformManager.initializeForLocalHarness();
   HomeRowsHealth.report = (_) {};
   const withLive = bool.fromEnvironment('HOME_ONE_ROW_FIXTURE_LIVE', defaultValue: true);
+  const compact = bool.fromEnvironment('HOME_READY_COMPACT', defaultValue: true);
   final fixture = HomeReadyMembersFixture(DateTime.now());
   var current = fixture.waiting;
   final conversations = ConversationProvider(isSignedIn: () => false)
@@ -63,8 +64,7 @@ Future<void> main() async {
     lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: current)),
   );
   await episodes.refreshLive();
-  episodes.debugSetHomeEpisodes([current]);
-  const compact = bool.fromEnvironment('HOME_READY_COMPACT', defaultValue: true);
+  episodes.debugSetHomeEpisodes(compact ? [] : [current]);
   final feed = HomeFeedProvider(
       owner: () => 'synthetic-fixture',
       fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(

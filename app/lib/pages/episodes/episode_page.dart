@@ -7,6 +7,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -192,26 +193,7 @@ class EpisodePage extends StatelessWidget {
       ),
     ];
     final memberRows = <Widget>[
-      for (final source in sources)
-        if (source.conversationIds.any(openedMemberIds.contains))
-          ConversationListItem(
-            key: ValueKey('processing_episode_${source.id}'),
-            conversation: ServerConversation(
-              id: 'episode:${source.id}',
-              createdAt: source.startedAt,
-              startedAt: source.startedAt,
-              finishedAt: source.lastActivityAt,
-              structured: Structured(
-                  source.title.trim().isEmpty ? context.l10n.wrappedProcessingDefault : source.title, '',
-                  emoji: source.emoji),
-            ),
-            date: source.startedAt,
-            conversationIdx: -1,
-            homeEpisode: source,
-            hasLinkedTasks: false,
-            allowSelection: false,
-            embedded: true,
-          ),
+      if (processingAggregate) _ProcessingSourceLinks(members: opened.members, sources: sources),
       for (final member in members)
         Padding(
           padding: const EdgeInsets.only(top: OmiSpacing.sm),
@@ -440,4 +422,77 @@ class _ProcessingBody extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Compact cards omit owner membership. Resolve owners only after this page is
+/// opened, and use the result for navigation only, never pending/Delete scope.
+class _ProcessingSourceLinks extends StatefulWidget {
+  const _ProcessingSourceLinks({required this.members, required this.sources});
+  final List<ServerConversation> members;
+  final List<Episode> sources;
+  @override
+  State<_ProcessingSourceLinks> createState() => _ProcessingSourceLinksState();
+}
+
+class _ProcessingSourceLinksState extends State<_ProcessingSourceLinks> {
+  Future<List<Episode>>? _loaded;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loaded ??= _load(context.read<EpisodeProvider?>());
+  }
+
+  Future<List<Episode>> _load(EpisodeProvider? provider) async {
+    if (provider == null) return [];
+    final owner = SharedPreferencesUtil().uid;
+    final found = <Episode>[...widget.sources];
+    final loaded = <Episode>[];
+    for (final member in widget.members) {
+      if (!mounted || owner != SharedPreferencesUtil().uid) return [];
+      if (found.any((source) => source.conversationIds.contains(member.id))) continue;
+      try {
+        final source = await provider.episodeFor(member.id);
+        if (!mounted || owner != SharedPreferencesUtil().uid) return [];
+        if (source != null && source.id.isNotEmpty && !found.any((e) => e.id == source.id)) {
+          found.add(source);
+          loaded.add(source);
+        }
+      } catch (_) {
+        // Unassigned/unavailable owners never hide the actual recording links.
+      }
+    }
+    return loaded;
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<Episode>>(
+      future: _loaded,
+      builder: (context, snapshot) {
+        final ids = widget.members.map((m) => m.id).toSet();
+        final owners = {
+          for (final source in [...?snapshot.data, ...widget.sources]) source.id: source
+        };
+        return Column(children: [
+          for (final source in owners.values)
+            if (source.conversationIds.any(ids.contains))
+              ConversationListItem(
+                key: ValueKey('processing_episode_${source.id}'),
+                conversation: ServerConversation(
+                  id: 'episode:${source.id}',
+                  createdAt: source.startedAt,
+                  startedAt: source.startedAt,
+                  finishedAt: source.lastActivityAt,
+                  structured: Structured(
+                      source.title.trim().isEmpty ? context.l10n.wrappedProcessingDefault : source.title, '',
+                      emoji: source.emoji),
+                ),
+                date: source.startedAt,
+                conversationIdx: -1,
+                homeEpisode: source,
+                hasLinkedTasks: false,
+                allowSelection: false,
+                embedded: true,
+              ),
+        ]);
+      });
 }
