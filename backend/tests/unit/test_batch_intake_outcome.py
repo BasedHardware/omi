@@ -6,6 +6,7 @@
 owner carries no fresh decision and must not be counted.
 """
 
+import time
 from unittest.mock import AsyncMock, Mock, patch
 from types import SimpleNamespace
 
@@ -68,8 +69,10 @@ def _router():
 
 
 async def _upload(module, BytesIO, *, conversation_id=None):
+    # Intake-outcome tests require a recoverable upload, independent of the calendar.
+    capture_at = int(time.time()) - 60
     return await module.sync_local_files_v2(
-        files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+        files=[UploadFile(filename=f'omi_{capture_at}.bin', file=BytesIO(b'\x00' * 10))],
         uid=UID,
         conversation_id=conversation_id,
     )
