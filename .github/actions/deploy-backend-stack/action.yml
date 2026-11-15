@@ -4,6 +4,10 @@ description: >-
   surfaces, and shared release-vector evidence for manual and auto-dev deploys.
 
 inputs:
+  post_wrap_guard:
+    description: 'internal fails closed without a trusted adapter; explicit external delegates the post-wrap guard to Pipeline under SCA-2283 08:22 ruling'
+    required: false
+    default: 'internal'
   integration_only:
     description: 'SCA-2283 integration transport only; no consumer/GKE mutation'
     required: false
@@ -184,11 +188,14 @@ runs:
           }
         fi
         [[ "${{ inputs.integration_only }}" == false || "${{ inputs.integration_only }}" == true ]] || exit 1
+        [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.post_wrap_guard }}" == external ]] || exit 1
+        [[ "${{ inputs.post_wrap_guard }}" == internal || "${{ inputs.integration_only }}" == true ]] || exit 1
         if [[ "${{ inputs.integration_only }}" == true ]]; then
           [[ "${{ inputs.integration_canary }}" == true &&
              "${{ inputs.admitted_sha }}" =~ ^[0-9a-f]{40}$ &&
              "${{ inputs.integration_image }}" =~ ^gcr\.io/based-hardware/(backend|backend-workers)@sha256:[0-9a-f]{64}$ &&
-             "$SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}" ]] || exit 1
+             ("$SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }},post_wrap_guard=${{ inputs.post_wrap_guard }}" ||
+              ("${{ inputs.post_wrap_guard }}" == internal && "$SERVICE_IMAGES" == "integration-canary=${{ inputs.integration_image }}")) ]] || exit 1
         fi
         if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" && "${{ inputs.deploy_profile }}" != "manual" ]]; then
           echo "service_images (role-image opt-in) is accepted only on the manual profile" >&2
@@ -374,6 +381,7 @@ runs:
         if [[ "${{ inputs.integration_only }}" == true ]]; then extension_args=(--integration-only); fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/integration_canary_controller.py" prepare \
           "${extension_args[@]}" \
+          --post-wrap-guard "${{ inputs.post_wrap_guard }}" \
           --state "$RUNNER_TEMP/integration-canary-private.json" \
           --source "${{ inputs.admitted_sha }}" \
           --image "${{ inputs.integration_image || steps.service-images.outputs.backend_integration }}" \
@@ -1688,12 +1696,19 @@ runs:
             receipt = {key: state.get(key) for key in
                        ('source', 'image', 'candidate', 'candidate_uid', 'rollback', 'run_id', 'run_attempt',
                         'phase', 'prepared_at', 'moved_at', 'baseline_hash', 'metrics_read_at',
-                        'profile', 'control_sha')}
+                        'profile', 'control_sha', 'post_wrap_guard')}
             if state.get('profile') == 'integration-only':
                 receipt['inverse'] = state.get('inverse')
                 decision = state.get('discovery', {})
                 receipt['discovery'] = {key: decision.get(key) for key in
-                                        ('state', 'binding_sha256', 'artifact_digests')}
+                                        ('state', 'binding_sha256', 'artifact_digests', 'owner', 'rollback_executor')}
+                if state.get('post_wrap_guard') == 'external':
+                    handoff = state.get('external_handoff', {})
+                    receipt['external_handoff'] = {key: handoff.get(key) for key in
+                        ('project', 'region', 'service', 'source', 'image', 'revision', 'revision_uid',
+                         'generation', 'config_sha256', 'run_id', 'run_attempt', 'control_sha',
+                         'receiving_verified_at', 'traffic_percent', 'sweep_page_rows', 'tick_seconds',
+                         'provider_release', 'rollback_revision')}
             receipt['moves'] = [{key: row.get(key) for key in ('percent', 'verified_at')}
                                 for row in state.get('moves', [])]
             receipt['health'] = {key: state.get('health', {}).get(key)

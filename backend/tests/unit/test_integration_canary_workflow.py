@@ -156,6 +156,67 @@ def test_unbound_adapter_preflight_precedes_provider_writers_and_native_repair_i
     assert 'integration-transport-prepare.outcome' in recovery['if']
 
 
+@pytest.mark.parametrize('mode', [None, 'internal', 'external', 'disabled'])
+def test_actual_external_guard_selection_is_explicit_and_preserves_the_default(tmp_path, mode):
+    workflow = yaml.safe_load((ROOT / '.github/workflows/gcp_backend.yml').read_text())
+    script = re.sub(r'\$\{\{[^}]*\}\}', 'false', workflow['jobs']['validate-production-boundary']['steps'][0]['run'])
+    image = 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64
+    selection = 'integration-canary=' + image + ('' if mode is None else ',post_wrap_guard=' + mode)
+    output = tmp_path / 'guard-output'
+    result = subprocess.run(
+        ['bash', '-c', script],
+        env=dict(
+            os.environ,
+            DEPLOY_ENVIRONMENT='prod',
+            DEPLOY_TARGETS='cloud-run-only',
+            WORKFLOW_MODE='deploy',
+            REQUESTED_BY='SCA-2283',
+            RELEASE_SHA='d' * 40,
+            SERVICE_IMAGES=selection,
+            SKIP_ELIGIBILITY='false',
+            BREAK_GLASS_LOCK='false',
+            GITHUB_OUTPUT=str(output),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (result.returncode == 0) == (mode != 'disabled')
+    if result.returncode == 0:
+        assert 'post_wrap_guard=' + (mode or 'internal') in output.read_text()
+        result = subprocess.run(
+            [
+                'bash',
+                '-c',
+                step_script(
+                    'Validate deploy profile boundary',
+                    {
+                        'inputs.integration_only': 'true',
+                        'inputs.integration_image': image,
+                        'inputs.admitted_sha': 'd' * 40,
+                        'inputs.post_wrap_guard': mode or 'internal',
+                    },
+                ),
+            ],
+            env=dict(os.environ, SERVICE_IMAGES=selection, GITHUB_WORKSPACE=str(ROOT)),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+
+
+def test_external_guard_cannot_be_selected_without_integration_only_scope():
+    result = subprocess.run(
+        ['bash', '-c', step_script('Validate deploy profile boundary', {'inputs.post_wrap_guard': 'external'})],
+        env=dict(os.environ, SERVICE_IMAGES='', GITHUB_WORKSPACE=str(ROOT)),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0
+
+
 def test_serving_ops_fresh_queue_secret_and_dispositions_are_composed_without_mutating_inputs():
     original, live = config(), snapshot()
     before = deepcopy((original, live))
@@ -328,6 +389,7 @@ def step_script(name, values=None):
         'inputs.integration_canary': 'true',
         'inputs.integration_only': 'false',
         'inputs.integration_image': '',
+        'inputs.post_wrap_guard': 'internal',
         'inputs.deploy_profile': 'manual',
         'inputs.environment': 'prod',
         'inputs.runtime_env': 'prod',
@@ -659,7 +721,8 @@ def test_full_canary_validator_refuses_wrong_workflow_source(composed_canary_run
     assert any('cloud_run_workflow/backend' in str(e) and 'OMI_BACKEND_RELEASE_SHA' in str(e) for e in errors)
 
 
-def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(tmp_path):
+@pytest.mark.parametrize('external', [False, True])
+def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(tmp_path, external):
     state = {
         'source': SOURCE,
         'image': 'gcr.io/based-hardware/backend@sha256:' + 'a' * 64,
@@ -670,6 +733,20 @@ def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(t
         'health': {'state': 'immature', 'provider_body': 'not-for-artifacts'},
         'moves': [{'percent': 25, 'verified_at': 2000, 'extra': 'not-for-artifacts'}],
     }
+    if external:
+        state.update(
+            profile='integration-only',
+            post_wrap_guard='external',
+            phase='external_guard_pending',
+            external_handoff={
+                'revision': 'integration-receiving',
+                'revision_uid': 'receiving-uid',
+                'sweep_page_rows': 100,
+                'tick_seconds': 20,
+                'env': 'not-for-artifacts',
+            },
+            discovery={'state': 'external_pending', 'owner': 'SCA-2015', 'rollback_executor': 'SCA-2283'},
+        )
     (tmp_path / 'integration-canary-private.json').write_text(json.dumps(state))
     result = subprocess.run(
         ['bash', '-c', step_script('Record ruled integration canary metadata receipt')],
@@ -686,3 +763,9 @@ def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(t
     assert receipt['source'] == SOURCE and receipt['health']['state'] == 'immature'
     assert 'services' not in receipt and 'rows' not in receipt['baseline']
     assert receipt['intent']['status'] == 'uncertain' and 'before' not in receipt['intent']
+    if external:
+        assert receipt['post_wrap_guard'] == 'external'
+        assert receipt['discovery']['state'] == 'external_pending'
+        assert receipt['external_handoff']['revision_uid'] == 'receiving-uid'
+        assert receipt['external_handoff']['sweep_page_rows'] == 100
+        assert receipt['phase'] == 'external_guard_pending'

@@ -349,9 +349,15 @@ def extended(harness, *, reader=True):
     return controller, cloud, transport, clock, runtime, source
 
 
-def prepare_extended(parts):
+def prepare_extended(parts, *, post_wrap_guard='internal'):
     controller, _cloud, transport, _clock, _runtime, source = parts
-    controller.prepare(source, transport.image, f'{c.SERVICE}-{source[:7]}-123-1', integration_only=True)
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        post_wrap_guard=post_wrap_guard,
+    )
     return parts
 
 
@@ -380,6 +386,64 @@ def test_extension_without_authenticated_discovery_binding_cannot_prepare_or_wri
     with pytest.raises(m.Refused, match='discovery_reader_not_bound'):
         prepare_extended(parts)
     assert not parts[1].writes and not parts[0].journal.path.exists()
+
+
+def test_explicit_external_mode_hands_off_pending_and_retains_saved_inverse_without_adapter(harness):
+    parts = prepare_extended(extended(harness, reader=False), post_wrap_guard='external')
+    controller, cloud, _transport, clock, runtime, source = parts
+    consumers = {name: copy.deepcopy(doc) for name, doc in cloud.services.items() if name != c.SERVICE}
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+    assert controller.state['phase'] == 'external_guard_pending'
+    assert controller.state['post_wrap_guard'] == 'external'
+    assert controller.state['discovery'] == {
+        'state': 'external_pending',
+        'owner': 'SCA-2015',
+        'rollback_executor': 'SCA-2283',
+    }
+    assert controller.state['health']['state'] == 'below_threshold'
+    handoff = controller.state['external_handoff']
+    assert handoff['revision'] == controller.state['candidate']
+    assert handoff['revision_uid'] == controller.state['candidate_uid']
+    assert handoff['source'] == source and handoff['image'] == controller.state['image']
+    assert handoff['sweep_page_rows'] == 100 and handoff['tick_seconds'] == 20
+    assert handoff['provider_release'] is False and handoff['traffic_percent'] == 100
+    assert handoff['rollback_revision'] == c.ROLLBACK
+    assert handoff['run_id'] == '123' and handoff['run_attempt'] == '1'
+    assert handoff['config_sha256'] == c.digest_bytes(c.canonical(c.service_config(controller.state['known'])).encode())
+    assert controller.state['moves'][1]['verified_at'] - controller.state['moves'][0]['verified_at'] >= 300
+    assert clock.time() - controller.state['moved_at'] >= 1200
+    assert len(cloud.writes) == 3 and all(b['metadata']['name'] == c.SERVICE for b in cloud.writes)
+    assert all(cloud.services[name] == doc for name, doc in consumers.items())
+    with pytest.raises(m.Refused, match='post_wrap_guard_external'):
+        controller.guard()
+    controller.rollback()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+    inverse = c.env_map(c.app(cloud.revisions[c.ROLLBACK]['spec'])['env'])
+    assert all(inverse[key]['value'] == value for key, value in c.RESTORED_DEFAULTS.items())
+
+
+def test_external_mode_still_rolls_back_on_the_native_qualified_http_window(harness):
+    parts = prepare_extended(extended(harness, reader=False), post_wrap_guard='external')
+    controller, cloud, transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    at_move = clock.time()
+    transport.row = lambda at: (1000, 100 if at > at_move else 0, 0.3)
+    with pytest.raises(m.Refused, match='qualified_health_rollback'):
+        controller.complete()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+
+
+@pytest.mark.parametrize('mode', ['disabled', '', 'EXTERNAL'])
+def test_unknown_postwrap_mode_cannot_prepare(harness, mode):
+    parts = extended(harness, reader=False)
+    with pytest.raises(m.Refused, match='post_wrap_guard_invalid'):
+        prepare_extended(parts, post_wrap_guard=mode)
+    assert not parts[1].writes
 
 
 def test_integration_only_runtime_cannot_remove_unruled_live_bindings(harness):

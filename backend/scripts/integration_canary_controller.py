@@ -529,6 +529,9 @@ class Controller:
             self.bind_extension(self.state['source'])
             require(self.state.get('control_sha') == self.environ.get('GITHUB_WORKFLOW_SHA'), 'control_source_changed')
             require(self.state.get('inverse') == RESTORED_DEFAULTS, 'saved_inverse_changed')
+            require(
+                self.state.get('post_wrap_guard', 'internal') in {'internal', 'external'}, 'post_wrap_guard_invalid'
+            )
         baseline = self.state['baseline']
         require(self.state['baseline_hash'] == digest_bytes(canonical(baseline).encode()), 'baseline_changed')
         return self.state
@@ -564,16 +567,30 @@ class Controller:
         )
         return doc
 
-    def prepare(self, source, image, candidate, project=PROJECT, region=REGION, integration_only=False):
+    def prepare(
+        self,
+        source,
+        image,
+        candidate,
+        project=PROJECT,
+        region=REGION,
+        integration_only=False,
+        post_wrap_guard='internal',
+    ):
         run, attempt = self.bind()
         require((source == SOURCE or integration_only) and project == PROJECT and region == REGION, 'release_binding')
+        require(
+            post_wrap_guard in {'internal', 'external'} and (integration_only or post_wrap_guard == 'internal'),
+            'post_wrap_guard_invalid',
+        )
         if integration_only:
             self.bind_extension(source)
             # A fake/captured snapshot is not a live producer. The executable
             # entry point must bind a reviewed authenticated discovery reader;
             # no file or caller-supplied "healthy" switch is accepted here.
-            require(self.discovery is not None, 'discovery_reader_not_bound')
-            self.discovery.preflight(source=source, rollback=ROLLBACK)
+            if post_wrap_guard == 'internal':
+                require(self.discovery is not None, 'discovery_reader_not_bound')
+                self.discovery.preflight(source=source, rollback=ROLLBACK)
         require(self.cloud.head() == source, 'source_checkout_mismatch')
         require(
             candidate == f'{SERVICE}-{source[:7]}-{run}-{attempt}' and len(candidate) <= 63, 'candidate_name_invalid'
@@ -653,6 +670,7 @@ class Controller:
                 profile='integration-only',
                 control_sha=self.environ['GITHUB_WORKFLOW_SHA'],
                 inverse=dict(RESTORED_DEFAULTS),
+                post_wrap_guard=post_wrap_guard,
             )
         self.journal.save(self.state, create=True)
 
@@ -950,7 +968,8 @@ class Controller:
             self.state.get('profile') == 'integration-only' and self.state['intent'] is None, 'scoped_complete_binding'
         )
         require(self.state['phase'] in ('held_25', 'traffic_100', 'awaiting_postwrap'), 'complete_phase_invalid')
-        require(self.discovery is not None, 'discovery_reader_not_bound')
+        external = self.state.get('post_wrap_guard', 'internal') == 'external'
+        require(external or self.discovery is not None, 'discovery_reader_not_bound')
         if self.state['phase'] == 'held_25':
             require(self.continuation_anchor() >= 300, 'verified_hold_incomplete')
             self.verified(self.state['known'], 25)
@@ -962,12 +981,30 @@ class Controller:
         require(self.state['health']['state'] == 'below_threshold', 'final_window_immature')
         self.state['phase'] = 'awaiting_postwrap'
         self.save()
+        if external:
+            # Captain 08:22: Pipeline's read-only guard owns the subsequent
+            # wrap/recount/progress window. This handoff is not a guard pass.
+            self.state.update(
+                phase='external_guard_pending',
+                external_handoff=self.receiving_binding()
+                | {
+                    'traffic_percent': 100,
+                    'sweep_page_rows': 100,
+                    'tick_seconds': 20,
+                    'provider_release': False,
+                    'rollback_revision': ROLLBACK,
+                },
+                discovery={'state': 'external_pending', 'owner': 'SCA-2015', 'rollback_executor': 'SCA-2283'},
+            )
+            self.save()
+            return
         while not self.guard():
             self.tick()
             self.clock.sleep(60)
 
     def guard(self):
         self.load()
+        require(self.state.get('post_wrap_guard', 'internal') == 'internal', 'post_wrap_guard_external')
         require(
             self.state.get('profile') == 'integration-only'
             and self.state['phase'] in ('awaiting_postwrap', 'complete')
@@ -976,21 +1013,7 @@ class Controller:
         )
         require(self.discovery is not None, 'discovery_reader_not_bound')
         self.sample(100)
-        binding = {
-            'project': PROJECT,
-            'region': REGION,
-            'service': SERVICE,
-            'source': self.state['source'],
-            'image': self.state['image'],
-            'revision': self.state['candidate'],
-            'revision_uid': self.state['candidate_uid'],
-            'generation': self.state['known']['metadata']['generation'],
-            'config_sha256': digest_bytes(canonical(service_config(self.state['known'])).encode()),
-            'run_id': self.state['run_id'],
-            'run_attempt': self.state['run_attempt'],
-            'control_sha': self.state['control_sha'],
-            'receiving_verified_at': self.state['moved_at'],
-        }
+        binding = self.receiving_binding()
         # This is an internal adapter boundary, not a file/boolean CLI. Its
         # authenticated producer must bind originating artifact digests, the
         # complete participating committer vector, post-receiving positive wrap,
@@ -1029,6 +1052,24 @@ class Controller:
         self.state['phase'] = 'complete'
         self.save()
         return True
+
+    def receiving_binding(self):
+        """Metadata-only receiving generation, never the private environment."""
+        return {
+            'project': PROJECT,
+            'region': REGION,
+            'service': SERVICE,
+            'source': self.state['source'],
+            'image': self.state['image'],
+            'revision': self.state['candidate'],
+            'revision_uid': self.state['candidate_uid'],
+            'generation': self.state['known']['metadata']['generation'],
+            'config_sha256': digest_bytes(canonical(service_config(self.state['known'])).encode()),
+            'run_id': self.state['run_id'],
+            'run_attempt': self.state['run_attempt'],
+            'control_sha': self.state['control_sha'],
+            'receiving_verified_at': self.state['moved_at'],
+        }
 
     def rollback(self, loaded=False):
         if not loaded:
@@ -1134,6 +1175,7 @@ def main(argv=None):
                 sub.add_argument('--project', default=PROJECT)
                 sub.add_argument('--region', default=REGION)
                 sub.add_argument('--integration-only', action='store_true')
+                sub.add_argument('--post-wrap-guard', choices=('internal', 'external'), default='internal')
             if name == 'candidate':
                 sub.add_argument('--runtime-state', required=True, type=Path)
         args = parser.parse_args(argv)
@@ -1157,6 +1199,7 @@ def main(argv=None):
                         args.project,
                         args.region,
                         integration_only=args.integration_only,
+                        post_wrap_guard=args.post_wrap_guard,
                     )
                 elif args.step == 'candidate':
                     with args.runtime_state.open('rb') as handle:
