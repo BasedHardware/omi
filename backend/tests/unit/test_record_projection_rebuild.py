@@ -143,6 +143,15 @@ def test_kill_switch_and_preview_never_rebuild_or_write(monkeypatch, mode):
         client.collection.assert_not_called()
 
 
+@pytest.mark.parametrize('exists', [False, True])
+def test_demand_observation_has_a_bounded_point_read_and_exact_version(exists):
+    client = MagicMock()
+    ref = client.collection.return_value.document.return_value
+    ref.get.return_value = SimpleNamespace(exists=exists, update_time='observed-version')
+    assert jobs.pending_version('u', 'c', firestore_client=client) == ('observed-version' if exists else None)
+    ref.get.assert_called_once_with(field_paths=['kind'], timeout=1, retry=None)
+
+
 def test_marker_is_content_free_and_coalesces_by_owner():
     client = MagicMock()
     jobs.mark_due('u', 'c', firestore_client=client)

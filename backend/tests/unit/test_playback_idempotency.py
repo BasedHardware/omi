@@ -576,14 +576,15 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['success', 'timeout', 'off', 'newer_marker', 'refused'])
-async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, mode):
+@pytest.mark.parametrize('mode', ['success', 'timeout', 'off', 'newer_marker', 'refused', 'saturated', 'error'])
+async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, route_app, caplog, mode):
     import httpx
     import threading
     import asyncio
     from database import record_projection_rebuild
     from utils.batch_pipeline import record_projection_rebuild as repair
     from utils.sync import playback_metadata
+    from utils.executors import ExecutorSaturatedError
 
     app, sync = route_app
     enabled = mode != 'off'
@@ -609,6 +610,9 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
         if mode == 'refused':
             finished.set()
             return False
+        if mode == 'error':
+            finished.set()
+            raise RuntimeError('PRIVATE-SDK-DETAIL-CANARY')
         row['audio_files'] = [dict(id='part', duration=1, chunk_timestamps=[100])]
         if mode == 'newer_marker':
             marker['version'] = 'new'
@@ -626,13 +630,19 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
     monkeypatch.setattr(repair, 'rebuild', discovery)
     monkeypatch.setattr(record_projection_rebuild, 'retire_observed', deletion)
     monkeypatch.setattr(playback_metadata, 'OPEN_TIMEOUT_SECONDS', 0.01 if mode == 'timeout' else 2)
+    if mode == 'saturated':
+        monkeypatch.setattr(playback_metadata, 'submit_with_context', Mock(side_effect=ExecutorSaturatedError()))
     monkeypatch.setattr(sync.sync_playback, 'is_audio_merge_dispatch_enabled', lambda: True)
     monkeypatch.setattr(sync.sync_playback, 'get_playback_artifact_signed_url', lambda *a: 'signed')
     monkeypatch.setattr(sync.sync_playback, '_conversation_audio_urls_entry', lambda *a: {'status': 'unavailable'})
     try:
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
             response = await client.get('/v1/sync/audio/conversation/urls')
-        if mode == 'refused':
+        if mode in {'saturated', 'error'}:
+            assert response.status_code == 503 and marker
+            assert 'PRIVATE-SDK-DETAIL-CANARY' not in response.text + caplog.text
+            deletion.assert_not_called()
+        elif mode == 'refused':
             assert response.status_code == 404 and marker
             deletion.assert_not_called()
         elif mode in {'timeout', 'off'}:
@@ -651,7 +661,7 @@ async def test_empty_sealed_projection_repairs_on_first_http_open(monkeypatch, r
             deletion.assert_called_once()
     finally:
         release.set()
-        if enabled:
+        if enabled and mode != 'saturated':
             assert await asyncio.to_thread(finished.wait, 5)
-    assert read.call_count == int(enabled)
-    assert discovery.call_count == int(enabled)
+    assert read.call_count == int(enabled and mode != 'saturated')
+    assert discovery.call_count == int(enabled and mode != 'saturated')
