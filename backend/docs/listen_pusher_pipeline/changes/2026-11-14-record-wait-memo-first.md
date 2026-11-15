@@ -24,6 +24,20 @@ client-visible behaviour changes and the phone keeps custody exactly as today.
 A later proposal may turn these into a typed `4xx`, but released client
 versions have not been verified for that path.
 
+## Decode-failure memo Redis path and cost
+
+With `SYNC_RECORD_DECODE_FAILURE_MEMO` enabled, each eligible request handled
+by the built-in decoder (an upload identity can be derived and `decode is
+None`) performs one Redis `GET` for `sync:decode_failure:v1:<hash>` before
+decoding. That read also happens for uploads that decode successfully. A cache
+hit repeats the existing `503` and performs no Redis write. If the read misses
+and decoding ends in the closed set of deterministic failures, the request
+attempts one Redis `SET ... NX` with a 300-second expiry. Successful decodes
+and non-deterministic errors do not write the key. Redis failures fail open to
+the full decode and preserve the existing response. This pays one Redis read
+for each eligible upload to avoid decoding and staging identical deterministic
+failures again during the TTL.
+
 Three default-on switches, read literally at each `getenv` so the flag budget
 and the cross-service deploy contract can see them:
 `SYNC_RECORD_WAIT_MEMO_FIRST` (memo before the copy; `off` restores the old
