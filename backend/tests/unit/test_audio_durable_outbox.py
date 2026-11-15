@@ -316,6 +316,47 @@ async def test_legacy_client_gets_no_unsolicited_audio_receipt(remote):
     assert not h.events and remote.list_blobs('audio-outbox/owner/')
 
 
+@pytest.mark.asyncio
+async def test_retired_archive_drain_commits_original_without_flushing_successor(remote):
+    h = host()
+    archive = LiveAudioArchive(h)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    await archive.append(b'\x02\x00', 'successor', 1001, 1, channel=1)
+    await archive.finish_recording('conversation')
+    assert not archive.uncommitted
+    assert len(h.events) == 1
+    assert read_pcm('owner', AudioReceipt(**h.events[0].receipt)) == b'\x01\x00'
+    assert bytes(archive.packs[1].data) == b'\x02\x00'
+    await archive.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_retired_archive_drain_retains_commit_and_only_copy(remote, monkeypatch):
+    archive = LiveAudioArchive(host())
+    entered, release = asyncio.Event(), asyncio.Event()
+    write = archive._write
+
+    async def blocked(*args):
+        entered.set()
+        await release.wait()
+        return await write(*args)
+
+    monkeypatch.setattr(archive, '_write', blocked)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+    draining = asyncio.create_task(archive.finish_recording('conversation'))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        draining.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await draining
+        assert archive.inflight and archive.uncommitted
+        assert bytes(next(iter(archive.uncommitted.values()))[0].data) == b'\x01\x00'
+    finally:
+        release.set()
+        await archive.finish_recording('conversation')
+    assert not archive.inflight and not archive.uncommitted
+
+
 def test_conversation_deletion_refuses_new_archive_without_audio_ack(remote, monkeypatch):
     monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *a: True)
     with pytest.raises(storage.audio_packs.CaptureDeleted):
@@ -2567,7 +2608,7 @@ async def test_close_defers_only_optional_discovery_after_verified_upload(inline
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('close_path', ['staged_v2', 'finalization', 'rollover'])
+@pytest.mark.parametrize('close_path', ['staged_v3', 'finalization', 'rollover'])
 async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
     inline_session, monkeypatch, close_path
 ):
@@ -2595,7 +2636,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
 
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
     monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
-    if close_path == 'staged_v2':
+    if close_path == 'staged_v3':
         monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
     monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
     # An applied refresh schedules speaker follow-ups that build real datastore
@@ -2625,7 +2666,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
 
     sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + controls)
     handler = asyncio.create_task(
-        pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1, record_close_protocol=2)
+        pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1, record_close_protocol=3)
     )
     try:
         await asyncio.wait_for(entered.wait(), 5)

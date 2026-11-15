@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 
+from config.summary_context import context_stage
 from utils.episodes import composer_context_budget as budget
 from utils import executors
 
@@ -72,4 +74,21 @@ def test_retrieval_error_omits_all_loaded_context_and_counts_once(fallbacks):
         raise RuntimeError('private provider detail never logged')
 
     assert budget.bounded_gather(load, 'default') == ('default', '')
+    fallbacks.assert_called_once_with('transport_error')
+
+
+@pytest.mark.parametrize('stage', ['budget', 'embedding', 'vector', 'hydrate'])
+def test_fallback_logs_only_stage_and_underlying_exception_class(monkeypatch, caplog, fallbacks, stage):
+    monkeypatch.setattr(budget, '_submit', lambda worker: worker())
+
+    def load(_deadline):
+        try:
+            with context_stage(stage):
+                raise ValueError('synthetic sensitive provider message')
+        except ValueError as error:
+            raise HTTPException(503, 'synthetic sensitive wrapper message') from error
+
+    assert budget.bounded_gather(load, 'fallback') == ('fallback', '')
+    assert f'event=episode_context_fallback stage={stage} exception_type=ValueError' in caplog.text
+    assert 'sensitive' not in caplog.text
     fallbacks.assert_called_once_with('transport_error')

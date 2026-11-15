@@ -23,7 +23,6 @@ def test_single_flight_and_user_process_bounds_keep_running_timeout_reserved(coo
     second.set_running_or_notify_cancel()
     submit = Mock(side_effect=[first, second])
     monkeypatch.setattr(module, 'submit_with_context', submit)
-    monkeypatch.setattr(module, 'OPEN_TIMEOUT_SECONDS', 0.001)
     assert coordinator.get('one', 'a') is first
     assert coordinator.get('one', 'a') is first  # Same owner/conversation joins.
     with pytest.raises(module.MetadataPending):
@@ -31,8 +30,12 @@ def test_single_flight_and_user_process_bounds_keep_running_timeout_reserved(coo
     assert coordinator.get('two', 'b') is second
     with pytest.raises(module.MetadataPending):
         coordinator.get('three', 'c')
-    with pytest.raises(module.MetadataPending) as timeout:
-        module.refresh_on_open('one', 'a')
+    result = Mock(side_effect=TimeoutError)
+    with monkeypatch.context() as timeout_patch:
+        timeout_patch.setattr(first, 'result', result)
+        with pytest.raises(module.MetadataPending) as timeout:
+            module.refresh_on_open('one', 'a')
+    result.assert_called_once_with(timeout=module.OPEN_TIMEOUT_SECONDS)
     assert timeout.value.reason == 'timeout'
     assert len(coordinator.active) == 2 and not first.cancelled()
     assert submit.call_count == 2  # Repeated open cannot launch another listing.
