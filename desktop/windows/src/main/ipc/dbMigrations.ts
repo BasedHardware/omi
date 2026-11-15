@@ -89,6 +89,25 @@ export const MIGRATIONS: Migration[] = [
       if (!hasFts) return
       d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
+  },
+  {
+    version: 3,
+    name: 'rewind_screen_activity_sync_state',
+    up: (d) => {
+      const hasRewind = d
+        .prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='rewind_frames'")
+        .get() as { x: number } | undefined
+      if (!hasRewind) return
+      addColumnIfMissing(
+        d,
+        'rewind_frames',
+        'screen_activity_sync_state',
+        'INTEGER NOT NULL DEFAULT 0'
+      )
+      d.exec(
+        'CREATE INDEX IF NOT EXISTS idx_rewind_frames_screen_activity_sync ON rewind_frames(screen_activity_sync_state, id)'
+      )
+    }
   }
 ]
 

@@ -9,7 +9,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { MIGRATIONS, getUserVersion, runMigrations, type Migration, type MigrationDb } from './dbMigrations'
+import {
+  MIGRATIONS,
+  getUserVersion,
+  runMigrations,
+  type Migration,
+  type MigrationDb
+} from './dbMigrations'
 
 // The local_conversation schema as it shipped BEFORE the sync outbox (verbatim
 // from db.ts as of feat/windows-capture — kind/messages/title already present).
@@ -29,7 +35,10 @@ const OLD_SCHEMA = `
 const tempFiles: string[] = []
 
 function makeOldDbFile(): { file: string; db: DatabaseSync } {
-  const file = path.join(os.tmpdir(), `omi-mig-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`)
+  const file = path.join(
+    os.tmpdir(),
+    `omi-mig-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`
+  )
   tempFiles.push(file)
   const db = new DatabaseSync(file)
   db.exec(OLD_SCHEMA)
@@ -68,7 +77,9 @@ describe('runMigrations', () => {
     }
     // Pre-existing data survives and gets the defaults.
     const row = db
-      .prepare('SELECT id, transcript, title, sync_state, sync_attempts, cloud_id FROM local_conversation')
+      .prepare(
+        'SELECT id, transcript, title, sync_state, sync_attempts, cloud_id FROM local_conversation'
+      )
       .get() as Record<string, unknown>
     expect(row.id).toBe('conv-1')
     expect(row.transcript).toBe('You: hello')
@@ -139,12 +150,49 @@ describe('legacy local data compatibility', () => {
     for (const table of legacy) {
       db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`)
     }
-    expect(runMigrations(db)).toBe(0)
+    // Only v3 (screen-activity sync column on rewind_frames) is pending; no
+    // migration drops or rewrites the legacy JIT/ledger tables.
+    expect(runMigrations(db)).toBe(1)
     expect(runMigrations(db)).toBe(0)
     for (const table of legacy) {
       expect(db.prepare(`SELECT id FROM ${table}`).get()).toEqual({ id: 'sentinel' })
     }
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
     db.close()
+  })
+})
+
+describe('screen activity sync migration', () => {
+  it('is v3 on the v1-v2 chain', () => {
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3])
+    expect(MIGRATIONS[2].name).toBe('rewind_screen_activity_sync_state')
+  })
+
+  it('upgrades the shipped v2 schema without losing Rewind rows and is idempotent', () => {
+    const db = new DatabaseSync(':memory:')
+    try {
+      db.exec(OLD_SCHEMA)
+      db.exec('CREATE TABLE rewind_frames (id INTEGER PRIMARY KEY, ocr_text TEXT)')
+      db.exec("INSERT INTO rewind_frames VALUES (42, 'kept transcript')")
+      runMigrations(db, MIGRATIONS.slice(0, 2))
+      expect(getUserVersion(db)).toBe(2)
+      expect(runMigrations(db)).toBe(1)
+      expect(getUserVersion(db)).toBe(3)
+      expect(db.prepare('SELECT * FROM rewind_frames').get()).toEqual({
+        id: 42,
+        ocr_text: 'kept transcript',
+        screen_activity_sync_state: 0
+      })
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE name = 'idx_rewind_frames_screen_activity_sync'"
+          )
+          .get()
+      ).toBeDefined()
+      expect(runMigrations(db)).toBe(0)
+    } finally {
+      db.close()
+    }
   })
 })
