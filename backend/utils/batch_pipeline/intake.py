@@ -22,6 +22,7 @@ from config.batch_pipeline_language import (
 )
 from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
 from config.policy import BatchUnitPolicy, resolve_batch_policy
+from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
@@ -30,6 +31,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_recovery_fence import RecoveryFence
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_shadow_hook import shadow_from_env
+from database.sync_record_wait_cache import cached_decode_failure, remember_decode_failure
 from database.sync_ledger import (
     BATCH_PARTIAL_STATUS,
     is_valid_completed_sync_content_result,
@@ -37,7 +39,7 @@ from database.sync_ledger import (
 )
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
-from utils.batch_pipeline.capture_decode import decode_units
+from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
 from utils.capture.batch_coverage import decode_for_intake, covered_response
 from config.refactor_modes import serving_for
@@ -53,6 +55,7 @@ from utils.batch_pipeline.language_metrics import record_admission_exclusion, re
 from utils.batch_pipeline.retention import batch_artifact_authorize
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 from utils.executors import db_executor, run_blocking, storage_executor, sync_executor
+from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.admission_responses import sync_content_in_progress_response
 from utils.sync.stage import current_stage
@@ -424,6 +427,33 @@ def start_response(status: dict) -> JSONResponse:
     )
 
 
+def _sync_unavailable_response() -> JSONResponse:
+    """Today's single retryable intake answer; every failure path returns exactly this."""
+    return JSONResponse(
+        status_code=503,
+        headers={'Retry-After': '30'},
+        content={
+            'code': 'sync_batch_unavailable',
+            'detail': 'Sync is temporarily unavailable; retain local audio',
+        },
+    )
+
+
+def _decode_failure_key(uid: str, content_id: str, paths: list[str]) -> str | None:
+    """Upload identity only: owner, content hash, file count and total bytes.
+
+    ``content_id`` already HMACs each basename and the SHA-256 of its bytes, so
+    this key cannot move to different audio. Neither the key nor its log line
+    carries a path, file name, uid or id.
+    """
+    try:
+        sizes = [os.path.getsize(path) for path in paths]
+    except OSError:
+        return None
+    payload = f'{uid}\n{content_id}\n{len(paths)}\n{sum(sizes)}'
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 async def accept_upload(
     *,
     uid: str,
@@ -460,6 +490,7 @@ async def accept_upload(
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     sample_directory = None
+    deterministic_key = None
     phase = 'receipt_read'
     started = time.monotonic()
     try:
@@ -579,6 +610,7 @@ async def accept_upload(
         if target.get('record_lane_owner') == 'batch_live_v1':
             phase = 'record_routing'
             if record_router is None:
+                OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL.labels(reason='record_router_missing').inc()
                 logger.info('event=sync_record_upload outcome=pending reason=record_router_missing')
                 return JSONResponse(status_code=503, content={'code': 'record_capture_pending'})
             return await record_router(
@@ -803,6 +835,15 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
+        if decode is None and decode_failure_memo_enabled():
+            # Same bytes, same decoder, same proven failure: answer the existing
+            # retryable 503 without decoding or staging them again. The phone
+            # keeps custody exactly as it does on any other 503.
+            deterministic_key = await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
+            if deterministic_key and await run_blocking(db_executor, cached_decode_failure, deterministic_key):
+                OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo='decode_failure').inc()
+                logger.info('event=batch_intake_decode_memo outcome=hit')
+                return _sync_unavailable_response()
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
         decode_paths = paths
@@ -999,20 +1040,29 @@ async def accept_upload(
     except Exception as error:
         # A transaction may have committed even when its reply was lost. Keep
         # the staging outbox for reconciliation; never release/re-route content.
+        deterministic = phase == 'decode' and decode is None and is_deterministic_decode_failure(error)
+        if deterministic and decode_failure_memo_enabled():
+            # These bytes cannot decode however often they are retried. Remember
+            # the proven failure so the next retry answers the same 503 without
+            # decoding or staging again. The response never changes.
+            try:
+                key = deterministic_key or await run_blocking(
+                    sync_executor, _decode_failure_key, uid, content_id, paths
+                )
+                if key:
+                    await run_blocking(db_executor, remember_decode_failure, key)
+                    logger.info('event=batch_intake_decode_memo outcome=stored')
+            except Exception:
+                # A memo is an optimization: never let it replace the 503.
+                logger.info('event=batch_intake_decode_memo outcome=degraded')
         logger.error(
-            'event=batch_intake outcome=retry exception_type=%s phase=%s elapsed_ms=%d',
+            'event=batch_intake outcome=retry exception_type=%s phase=%s deterministic=%s elapsed_ms=%d',
             type(error).__name__,
             phase,
+            'yes' if deterministic else 'no',
             round((time.monotonic() - started) * 1000),
         )
-        return JSONResponse(
-            status_code=503,
-            headers={'Retry-After': '30'},
-            content={
-                'code': 'sync_batch_unavailable',
-                'detail': 'Sync is temporarily unavailable; retain local audio',
-            },
-        )
+        return _sync_unavailable_response()
     finally:
         if iterator is not None:
             await run_blocking(sync_executor, iterator.close)
