@@ -450,6 +450,14 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     assert 'dispatch' not in iam['if'] and 'platform' in iam['if']
     assert 'dispatch' not in ttl['if'] and 'platform' in ttl['if']
+    # One platform step provisions and then verifies the TTL policy for both
+    # ledgers. The capture lifecycle ledger is content-free and derived; its rows
+    # carry their own expires_at, and without the policy nothing removes them.
+    for group in ('sync_content_ledger', 'pipeline_ledger'):
+        assert ttl['run'].count(f'--collection-group={group}') == 2, group  # enable, then verify
+    assert ttl['run'].count('--enable-ttl') == 2
+    assert ttl['run'].count("grep '/fields/expires_at$'") == 2
+    assert 'delete' not in ttl['run'] and '--disable-ttl' not in ttl['run']
     assert 'dispatch' not in budget['if'] and 'platform' in budget['if']
     assert 'dispatch' in queue['if'] and 'platform' in queue['if']
     assert 'dispatch' in abort['if'] and 'platform' in abort['if']

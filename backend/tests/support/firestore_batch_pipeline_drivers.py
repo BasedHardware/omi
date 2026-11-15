@@ -111,6 +111,7 @@ def entries():
             patchers=(_repair_age_orders,),
             domains={
                 'urgent': [False, True],
+                'fresh': [False, True],
                 'after': [
                     None,
                     {
@@ -132,6 +133,7 @@ def entries():
                 'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
                 'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
+                'exclude': (frozenset(), 'in-memory deduplication only; no query shape change'),
             },
         ),
         DriverEntry(

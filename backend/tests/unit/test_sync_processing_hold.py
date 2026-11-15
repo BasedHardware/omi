@@ -87,6 +87,51 @@ def test_optional_watermark_must_pass_quiet_gap():
     assert hold.admission(conversation, {'first_pending_at': 100}, now=700) == ('ready', None)
 
 
+def test_arrival_gap_is_observed_only_between_arrivals_of_one_hold_epoch():
+    from prometheus_client import REGISTRY
+
+    def count():
+        return REGISTRY.get_sample_value('omi_sync_content_arrival_gap_seconds_count') or 0
+
+    def within_300():
+        return REGISTRY.get_sample_value('omi_sync_content_arrival_gap_seconds_bucket', {'le': '300.0'}) or 0
+
+    before, short_before = count(), within_300()
+    first = {hold.FIELD: hold.activity_patch({}, 1000)}
+    assert count() == before  # The first arrival of an epoch has no gap.
+    second = {hold.FIELD: hold.activity_patch(first, 1250)}
+    assert count() == before + 1 and within_300() == short_before + 1
+    hold.activity_patch(second, 1700)
+    assert count() == before + 2 and within_300() == short_before + 1
+    settled = {hold.FIELD: hold.completion_patch(second, {'digest': 'd'})}
+    hold.activity_patch(settled, 9000)
+    assert count() == before + 2  # A new epoch starts after a completed run.
+
+
+def test_quiet_window_is_read_from_the_environment_per_call(monkeypatch):
+    conversation = row()
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=400)[0] == 'quiet_wait'
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '300')
+    assert hold.quiet_seconds() == 300
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=399) == ('quiet_wait', 400)
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=400) == ('ready', None)
+
+
+@pytest.mark.parametrize(
+    'raw, expected', [('30', 120), ('120', 120), ('9000', 600), ('', 600), ('fast', 600), ('-5', 120)]
+)
+def test_quiet_window_is_clamped_and_malformed_values_keep_the_default(monkeypatch, raw, expected):
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', raw)
+    assert hold.quiet_seconds() == expected
+
+
+def test_outbox_due_time_follows_the_configured_quiet_window(state, monkeypatch):
+    rows, _tasks = state
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '300')
+    outbox.mark('u', 'c', 'en', now=100, sync_hold=True)
+    assert rows[outbox.key('u', 'c')]['due_at'] == 400
+
+
 def test_kill_switch_drains_already_held_obligation_without_waiting(state, monkeypatch):
     rows, tasks = state
     outbox.mark('u', 'c', 'en', now=100, sync_hold=True)

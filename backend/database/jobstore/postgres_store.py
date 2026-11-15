@@ -233,6 +233,35 @@ class PostgresTransaction:
 
 
 class PostgresStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM docs WHERE namespace=%s AND tbl='allowance_holds' "
+                "AND doc->'active'='true'::jsonb AND (doc->>'check_at')::float8 <= %s "
+                "ORDER BY (doc->>'check_at')::float8, key COLLATE \"C\" LIMIT %s",
+                (self.namespace, now, max(1, min(limit, 100))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM jobs WHERE namespace=%s AND state='allowance_held' "
+                "AND (%s::text IS NULL OR owner_key=%s) "
+                "AND (%s::float8 IS NULL OR (capture_at, key COLLATE \"C\") > (%s, %s)) "
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
+                (
+                    self.namespace,
+                    owner_key,
+                    owner_key,
+                    after[0] if after else None,
+                    after[0] if after else None,
+                    after[1] if after else None,
+                    max(1, min(limit, 100)),
+                ),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def __init__(
         self,
         namespace: str,
@@ -459,7 +488,7 @@ class PostgresStore:
 
         def revoke(tx: PostgresTransaction) -> bool:
             job = tx.get('jobs', segment_id)
-            if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+            if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
                 return False
             try:
                 tx.check_privacy(

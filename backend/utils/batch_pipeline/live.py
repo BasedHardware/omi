@@ -55,6 +55,7 @@ from utils.batch_pipeline.record_language import prove_manifest
 from utils.batch_pipeline.language_receipt import admission as language_admission_receipt
 from utils.batch_pipeline.record_partial import drain_partial, record_failure as record_partial_failure
 from config.record_seal_rules import overlap_trim_enabled
+from config.record_seal_repair import fresh_enabled as fresh_seal_repair_enabled
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.other.local_storage import create_storage_client
 from utils.other.storage import list_audio_chunks, private_cloud_sync_bucket
@@ -127,9 +128,19 @@ def observe_admitted(uid: str, conversation: dict, *, now=None) -> bool:
         return False
     try:
         from database import pipeline_ledger
+        from database._client import get_firestore_client
 
+        client = get_firestore_client()
+        owner_ref = client.collection('users').document(uid)
+        source_ref = owner_ref.collection('conversations').document(capture_id)
         return pipeline_ledger.advance(
-            uid, capture_id, pipeline_ledger.CAPTURING, now=time.time() if now is None else now
+            uid,
+            capture_id,
+            pipeline_ledger.CAPTURING,
+            now=time.time() if now is None else now,
+            source_ref=source_ref,
+            owner_ref=owner_ref,
+            firestore_client=client,
         )
     except Exception as error:  # The real admission is already authoritative.
         logger.warning('event=batch_live_ledger outcome=error stage=capturing exception_type=%s', type(error).__name__)
@@ -598,6 +609,7 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             return None
         lease = now + lease_seconds
         latest['available_at'] = lease
+        latest.pop('record_intake_retry_at', None)
         tx.put('jobs', segment, latest)
         return lease
 
@@ -676,6 +688,11 @@ async def drain_recordings(store, *, provider_outbox_factory=None, metrics=None)
             # admission (or another replica's newer lease) is kept.
             current = latest.get('available_at', 0)
             latest['available_at'] = max(0 if current == lease else current, now + delay)
+            if current == lease and fresh_seal_repair_enabled() and batch_held_dead_letter_enabled():
+                # Certify this exact value as a retry, not an active claim.
+                # Claiming changes available_at, so even an older replica that
+                # does not know this marker invalidates it automatically.
+                latest['record_intake_retry_at'] = latest['available_at']
             tx.put('jobs', segment, latest)
             return False, expired
 
