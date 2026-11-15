@@ -2161,6 +2161,18 @@ def test_transcript_wait_tracks_every_pending_blocker(store):
     assert store.episode['compose_transcript_wait_members'] == ['c1', 'c2']
 
 
+def test_wait_stored_under_a_longer_limit_ends_at_the_current_limit(store, monkeypatch):
+    """Lowering the limit releases episodes that were already waiting under the old one."""
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '21600')
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    assert not composer.needs_compose(store.episode)
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS', '1200')
+    assert not composer.needs_compose(store.episode)  # still inside the new limit
+    store.episode['compose_transcript_wait_started_at'] -= timedelta(seconds=1201)
+    assert composer.needs_compose(store.episode)
+
+
 def test_disabling_transcript_wait_bypasses_persisted_blocker_suppression(store, monkeypatch):
     c = _c()
     store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
