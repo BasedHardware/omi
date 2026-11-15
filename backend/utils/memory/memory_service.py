@@ -1253,13 +1253,12 @@ class HistoricalMemoryAdapter:
         try:
             if budget is not None:
                 budget.check()
-            matches = vector_db.find_similar_memories(
-                uid,
-                query,
-                threshold=0.0,
-                limit=min(capped * 3, 60),
-                **({'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}),
-            )
+            if budget is not None:
+                matches = vector_db.find_similar_memories(
+                    uid, query, threshold=0.0, limit=min(capped * 3, 60), timeout_seconds=budget.rpc_timeout()
+                )
+            else:
+                matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=min(capped * 3, 60))
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Historical memory search unavailable") from exc
         if budget is not None:

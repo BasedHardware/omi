@@ -21,7 +21,7 @@ from config.episodes import (
     COMPOSER_MEMORY_QUERY_TOKENS,
     COMPOSER_CONTEXT_MAX_READS,
 )
-from models.knowledge_ledger_policy import is_prompt_memory_eligible, is_prompt_memory_visible
+from models.knowledge_ledger_policy import is_prompt_memory_visible
 from utils.episodes.composer_context_budget import bounded_gather
 
 logger = logging.getLogger(__name__)

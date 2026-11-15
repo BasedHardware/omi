@@ -1054,6 +1054,7 @@ def read_canonical_scan_page(
 
 class _VectorBudgetOptions(TypedDict, total=False):
     timeout_seconds: float
+    owner_summary: bool
 
 
 def search_canonical_memories(
@@ -1133,7 +1134,7 @@ def search_canonical_memories(
         vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
-    vector_options: Any = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
+    vector_options: _VectorBudgetOptions = {'timeout_seconds': budget.rpc_timeout()} if budget is not None else {}
     if owner_summary:
         vector_options['owner_summary'] = True
     if ledger_kinds is None:
@@ -1160,8 +1161,8 @@ def search_canonical_memories(
         now=temporal_clock,
         device_scope=device_scope,
         client_device_id=client_device_id,
-        **({'budget': budget} if budget is not None else {}),
-        **({'owner_summary': True} if owner_summary else {}),
+        budget=budget,
+        owner_summary=owner_summary,
     )
     lineage_items_by_id = hydration.lineage_items_by_id
     survivor_items_by_id = hydration.survivor_items_by_id
