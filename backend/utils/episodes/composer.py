@@ -1821,7 +1821,8 @@ def schedule_for_conversation(
             wait_until = _utc(episode.get('compose_transcript_wait_until'))
             blockers = episode.get('compose_transcript_wait_members')
             if (
-                wait_until
+                episode_compose_transcript_wait_enabled()
+                and wait_until
                 and wait_until > datetime.now(timezone.utc)
                 and blockers is not None
                 and conversation_id not in blockers

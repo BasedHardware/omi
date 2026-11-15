@@ -2104,3 +2104,15 @@ def test_transcript_wait_tracks_every_pending_blocker(store):
         member.update(transcript_segments=[], home_transcription_pending_at=pending)
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
     assert store.episode['compose_transcript_wait_members'] == ['c1', 'c2']
+
+
+def test_disabling_transcript_wait_bypasses_persisted_blocker_suppression(store, monkeypatch):
+    c = _c()
+    store.rows['c2'].update(transcript_segments=[], home_transcription_pending_at=datetime.now(timezone.utc))
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'waiting'
+    monkeypatch.setenv(config.EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENV, 'false')
+    queued = []
+    monkeypatch.setattr(composer.episodes_db, 'get_episode_for_conversation', lambda *_a, **_kw: store.episode)
+    monkeypatch.setattr(composer, 'schedule', lambda *_a, **_kw: queued.append(1) or True)
+    composer.schedule_for_conversation(UID, 'c1', collaborators=c, row=store.rows['c1'], transcript_updated=True)
+    assert queued and store.episode['compose_transcript_wait_until'] is None
