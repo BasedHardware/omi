@@ -5,24 +5,21 @@ keys, collection paths, or runtime call stacks to external callers.
 
 The tests in this file verify:
 1. No raw ``detail=str(exc)`` patterns appear in the router source.
-2. ``submit_csat_rating`` returns 503 (not 500) with a sanitized detail on
-   database failures.
-3. ``get_csat_config`` falls back to DEFAULT_CONFIG on unexpected exceptions
-   rather than propagating a 500.
+2. ``submit_csat_rating`` returns 500 with a sanitized detail on database failures.
+3. ``get_csat_config`` returns 503 on database failures rather than masking an outage as a loaded config.
 4. Input validation rejects invalid platforms, scores, and revisions.
 """
 
 import ast
-import importlib
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Minimal environment bootstrap
 # ---------------------------------------------------------------------------
-os.environ["ENCRYPTION_SECRET"] = "12345678901234567890123456789012"
+os.environ.setdefault("ENCRYPTION_SECRET", "12345678901234567890123456789012")
 
 # Make backend/ importable
 _BACKEND = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
@@ -97,7 +94,7 @@ class TestCsatSourceSanitization(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 2) Behavioural tests — use TestClient with proper dependency overrides
+# 2) Behavioural tests — shared client fixture for fast unit duration guard
 # ---------------------------------------------------------------------------
 
 
@@ -115,22 +112,37 @@ def _make_test_app():
     return app
 
 
-class TestCsatSubmitBehavior(unittest.TestCase):
-    """submit_csat_rating must return sanitized 503 on DB failure."""
+_shared_client = None
+
+
+def _get_shared_client():
+    global _shared_client
+    if _shared_client is None:
+        from fastapi.testclient import TestClient
+
+        app = _make_test_app()
+        _shared_client = TestClient(app)
+    return _shared_client
+
+
+class BaseCsatApiTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.client = _get_shared_client()
+
+
+class TestCsatSubmitBehavior(BaseCsatApiTest):
+    """submit_csat_rating must return sanitized 500 on DB failure."""
 
     @patch("routers.csat.csat")
-    def test_submit_db_failure_returns_503(self, mock_csat_db):
-        """Firestore crash → HTTP 503, sanitized detail, no stack."""
+    def test_submit_db_failure_returns_500(self, mock_csat_db):
+        """Firestore crash -> HTTP 500, sanitized detail, no stack."""
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
         mock_csat_db.MAX_APP_VERSION_LENGTH = 32
         mock_csat_db.MAX_COMMENT_LENGTH = 500
         mock_csat_db.submit_rating.side_effect = RuntimeError("Firestore doc csat_ratings/macos_u123 unavailable")
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "macos",
@@ -147,17 +159,13 @@ class TestCsatSubmitBehavior(unittest.TestCase):
 
     @patch("routers.csat.csat")
     def test_submit_success_returns_201(self, mock_csat_db):
-        """Happy path — rating created → 201."""
+        """Happy path — rating created -> 201."""
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
         mock_csat_db.MAX_APP_VERSION_LENGTH = 32
         mock_csat_db.MAX_COMMENT_LENGTH = 500
         mock_csat_db.submit_rating.return_value = ("macos_uid1", True)
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "macos",
@@ -170,17 +178,13 @@ class TestCsatSubmitBehavior(unittest.TestCase):
 
     @patch("routers.csat.csat")
     def test_submit_duplicate_returns_409(self, mock_csat_db):
-        """Duplicate rating → 409 conflict, no leak."""
+        """Duplicate rating -> 409 conflict, no leak."""
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
         mock_csat_db.MAX_APP_VERSION_LENGTH = 32
         mock_csat_db.MAX_COMMENT_LENGTH = 500
         mock_csat_db.submit_rating.return_value = ("macos_uid1", False)
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "macos",
@@ -192,19 +196,15 @@ class TestCsatSubmitBehavior(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
 
 
-class TestCsatConfigBehavior(unittest.TestCase):
+class TestCsatConfigBehavior(BaseCsatApiTest):
     """get_csat_config must return sanitized 503 on database failure."""
 
     @patch("routers.csat.csat")
     def test_config_failure_returns_503(self, mock_csat_db):
-        """DB failure → 503 service unavailable, never leaks internals or returns fake 200."""
+        """DB failure -> 503 service unavailable, never leaks internals or returns fake 200."""
         mock_csat_db.get_product_config.side_effect = RuntimeError("Firestore collection csat_config unavailable")
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.get("/v1/csat/config?platform=macos")
+        resp = self.client.get("/v1/csat/config?platform=macos")
         self.assertEqual(resp.status_code, 503)
         body = resp.json()
         self.assertNotIn("csat_config", str(body))
@@ -212,7 +212,7 @@ class TestCsatConfigBehavior(unittest.TestCase):
 
     @patch("routers.csat.csat")
     def test_config_success_returns_200(self, mock_csat_db):
-        """Happy path — config fetched → 200."""
+        """Happy path — config fetched -> 200."""
         mock_csat_db.get_product_config.return_value = {
             "enabled": True,
             "title": "Rate us!",
@@ -224,26 +224,18 @@ class TestCsatConfigBehavior(unittest.TestCase):
             "revision": 2,
         }
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.get("/v1/csat/config?platform=macos")
+        resp = self.client.get("/v1/csat/config?platform=macos")
         self.assertEqual(resp.status_code, 200)
 
 
-class TestCsatInputValidation(unittest.TestCase):
+class TestCsatInputValidation(BaseCsatApiTest):
     """Input validation: bad platform, score, revision get 400."""
 
     @patch("routers.csat.csat")
     def test_invalid_platform_returns_400(self, mock_csat_db):
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "linux",
@@ -258,11 +250,7 @@ class TestCsatInputValidation(unittest.TestCase):
     def test_score_out_of_range_returns_400(self, mock_csat_db):
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "macos",
@@ -277,11 +265,7 @@ class TestCsatInputValidation(unittest.TestCase):
     def test_negative_revision_returns_400(self, mock_csat_db):
         mock_csat_db.PLATFORMS = {"macos", "windows", "ios", "android"}
 
-        from fastapi.testclient import TestClient
-
-        app = _make_test_app()
-        client = TestClient(app)
-        resp = client.post(
+        resp = self.client.post(
             "/v1/csat/ratings",
             json={
                 "platform": "macos",

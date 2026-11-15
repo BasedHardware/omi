@@ -48,7 +48,7 @@ def get_csat_config(
     try:
         return CsatConfigResponse(**csat.get_product_config())
     except Exception as e:
-        logger.error("Failed to fetch CSAT config: %s", type(e).__name__)
+        logger.error("Failed to fetch CSAT config: %s", type(e).__name__, exc_info=True)
         raise HTTPException(status_code=503, detail="CSAT service temporarily unavailable") from e
 
 
@@ -76,7 +76,7 @@ def submit_csat_rating(
             revision=payload.revision,
         )
     except Exception as e:
-        logger.error("Failed to submit CSAT rating for uid %s: %s", uid, type(e).__name__)
+        logger.error("Failed to submit CSAT rating for uid %s: %s", uid, type(e).__name__, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to record CSAT rating") from e
 
     if not created:
