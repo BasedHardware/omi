@@ -63,6 +63,18 @@
   ],
   "dynamic": [
     {
+      "site": "backend/database/jobstore/reconcile.py",
+      "expression": "f'{primary.namespace}_{table}'",
+      "collection_pattern": "batch_pipeline_*_*",
+      "owner": "SCA-2288 jobstore-index integration owner",
+      "unit": "one explicitly budgeted reconciliation page across the eleven mirrored batch tables",
+      "reads_per_unit_budget": 2000,
+      "reads_per_day_budget": 1000000,
+      "basis": "planning-bound",
+      "source": "Operator-only, never called from serving: max_rows <=1000, primary-source discovery reads at most1000 documents plus at most1000 exact-key current rereads; copy-source reads at most1000 current documents. Existing mirrored table allowlist only, no new collection. CLI requires explicit page read/statement/row/time budgets. The initial family-wide planning envelope is500 maximal pages/day (including retries), across all tables, sources and environments; smaller owner-supplied page budgets tighten it. This is not an enforced daily quota or measured spend. Before activation the supervised operator must account all attempts against the owning absolute daily budget and measure complete rotation lag; exceeding this envelope needs remeasurement/rebudgeting. No production scan or saving is claimed by this source declaration.",
+      "reviewed": "2026-11-15"
+    },
+    {
       "site": "backend/scripts/fresh_guard_cohort.py",
       "expression": "f'batch_pipeline_{stage}_results'",
       "collection_pattern": "batch_pipeline_*_results",
@@ -204,18 +216,6 @@
       "reads_per_day_budget": 2400000,
       "basis": "planning-bound",
       "source": "Point-read the deterministic intake job once after producer/partial/upload-failure guards. No fleet scan or producer-pending retry reads this job. Planning envelope: 240000 recordings/day (sustained 10000/hour) times up to 10 transaction attempts/duplicate producer closes; not a traffic cap or measured saving. Empty batch playback separately adds at most one existing rebuild-marker document read per URL poll. See backend/docs/listen_pusher_pipeline/changes/2026-11-15-native-close-notify.md.",
-      "reviewed": "2026-11-15"
-    },
-    {
-      "site": "backend/database/jobstore/reconcile.py",
-      "expression": "f'{primary.namespace}_{table}'",
-      "collection_pattern": "batch_pipeline_*_*",
-      "owner": "SCA-2288 jobstore-index integration owner",
-      "unit": "one explicitly budgeted reconciliation page across the eleven mirrored batch tables",
-      "reads_per_unit_budget": 2000,
-      "reads_per_day_budget": 1000000,
-      "basis": "planning-bound",
-      "source": "Operator-only, never called from serving: max_rows <=1000, primary-source discovery reads at most1000 documents plus at most1000 exact-key current rereads; copy-source reads at most1000 current documents. Existing mirrored table allowlist only, no new collection. CLI requires explicit page read/statement/row/time budgets. The initial family-wide planning envelope is500 maximal pages/day (including retries), across all tables, sources and environments; smaller owner-supplied page budgets tighten it. This is not an enforced daily quota or measured spend. Before activation the supervised operator must account all attempts against the owning absolute daily budget and measure complete rotation lag; exceeding this envelope needs remeasurement/rebudgeting. No production scan or saving is claimed by this source declaration.",
       "reviewed": "2026-11-15"
     }
   ],
