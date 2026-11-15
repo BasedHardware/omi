@@ -1256,7 +1256,9 @@ async def _schedule_payment_recovery_notification(
         await dispatch_notification_async(intent)
 
 
-async def _schedule_trial_ending_notification(background_tasks: BackgroundTasks | None, subscription_obj: Mapping) -> None:
+async def _schedule_trial_ending_notification(
+    background_tasks: BackgroundTasks | None, subscription_obj: Mapping
+) -> None:
     """Remind a trialing reader before the first charge (`customer.subscription.trial_will_end`).
 
     Only the account whose stored subscription is this one is reminded; a stale or foreign
