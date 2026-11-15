@@ -8,6 +8,7 @@ maintenance frontier persists; no planner/apply semantics are reimplemented here
 from collections import Counter, deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
+import hashlib
 import json
 import logging
 import math
