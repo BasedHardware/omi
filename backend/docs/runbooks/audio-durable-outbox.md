@@ -9,12 +9,14 @@ and any emergency rollback. This change does not authorize a production write.
 
 `AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true` is the default. Listen and pusher
 share the same optional PCM16 representation helper before immutable commit.
-It tries mono PCM windows from 32,000 bytes through 16 MiB, with two encoder
-slots per process, one FFmpeg codec thread, and a two-second deadline for each
-encode/decode subprocess. Busy capacity, missing FFmpeg, timeouts, invalid
-output or any sample mismatch retain original PCM. Windows below the minimum,
-PCM8, native Opus, multichannel originals and packs without a complete PCM
-identity proof keep their current representation.
+It tries mono PCM windows from 32,000 bytes through 16 MiB, with one encoder
+slot per process, one FFmpeg codec thread, a two-second cap for each
+encode/decode subprocess, and a 0.4-second shared budget for the whole optional
+step (0.08 s of it reserved for the decode check). Busy capacity, missing
+FFmpeg, timeouts, an exhausted budget, invalid output or any sample mismatch
+retain original PCM. Windows below the minimum, PCM8, native Opus, multichannel
+originals and packs without a complete PCM identity proof keep their current
+representation.
 Only an independently decoded, byte-identical FLAC saving at least 5% is used.
 Compression applies regardless of speech classification: quiet speech is safe.
 
@@ -39,20 +41,22 @@ raw read checksum/decode/coverage failures and commit latency versus the prior
 window; no new integrity failures, no sustained increase in custody errors or
 latency. If errors or latency regress, disable compression on that surface.
 The encoder outcome counter distinguishes `disabled`, `ineligible`, `busy`,
-`not_smaller`, `encoder_error`, `mismatch`, and `flac`. Input/saved byte counters
-count admitted encoding attempts, including retries before commit. Input bytes
-exclude disabled, ineligible and busy candidates; saved bytes count only savings
-verified by byte-exact decode for each attempt. These are not billed storage
-savings. Use committed `omi_audio_archive_bytes_total{codec="flac"}` and
+`deadline`, `not_smaller`, `encoder_error`, `mismatch`, and `flac`. Input/saved
+byte counters count admitted encoding attempts, including retries before commit.
+Input bytes exclude disabled, ineligible and busy candidates; saved bytes count
+only savings verified by byte-exact decode for each attempt. These are not billed
+storage savings. Use committed `omi_audio_archive_bytes_total{codec="flac"}` and
 bucket growth to corroborate savings; an absent eligible PCM cohort is UNKNOWN,
 not a successful savings measurement. No >90% silence claim follows from this.
 
 The `omi_audio_pcm_storage_seconds` histogram times the optional representation
 step, including fallback. Outcome counters initialize at zero. Check absolute
 mismatch/over-budget counts as well as deltas to catch a first event before
-the first scrape. The two subprocess timeouts add at most
-four seconds of configured optional waiting, plus process startup/cleanup;
-busy capacity falls back immediately rather than queueing another encoder.
+the first scrape. The shared budget bounds the whole optional step at 0.4 s
+(plus process startup/cleanup), so `deadline` means the pack did not fit the
+surface's CPU rather than a codec fault; busy capacity falls back immediately
+rather than queueing another encoder. A disabled surface still times every call,
+so its p99 measures the disabled path and is not evidence about encoder latency.
 
 Release reads the following PromQL through the project's managed Prometheus
 API with `ro-prod`, separately for `job="prod-omi-backend-listen"` and
