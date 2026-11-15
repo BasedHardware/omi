@@ -1,5 +1,10 @@
 # Smaller lossless storage for new custody PCM
 
+Superseded for encoder concurrency and the wall-clock bound by
+[the pusher codec-latency budget](2026-11-15-pusher-codec-latency-budget.md):
+one process-local slot and a 0.4 s shared budget now replace the two-slot,
+per-child-only bound described below. Everything else here still holds.
+
 SCA-2302. Listen and pusher now share `audio_pcm_storage.compact_pcm` at their
 existing immutable capture boundary. Mono PCM16 can use FLAC only if a fresh
 decode reproduces every original byte and saves at least 5%. Silence compresses
