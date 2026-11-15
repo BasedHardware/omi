@@ -108,7 +108,11 @@ async def authorize(store, leases: list[dict], *, now: float | None = None, budg
                     return None
                 tx.check_privacy(
                     job['owner_id'],
-                    (job['conversation_id'],) if job.get('conversation_id') else (),
+                    tuple(
+                        value
+                        for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+                        if value
+                    ),
                     job.get('privacy_generation'),
                 )
                 binding = job.get('projection_binding') or {}

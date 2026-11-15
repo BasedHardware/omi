@@ -1047,6 +1047,10 @@
     "SYNC_FRESH_MAX_AGE_SECONDS": {
       "seeded": "2026-10-25"
     },
+    "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
+      "owner": "Q12-AD / sync capture recovery",
+      "review_by": "2026-11-15"
+    },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
     },

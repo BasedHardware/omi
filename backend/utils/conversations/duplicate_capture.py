@@ -64,7 +64,7 @@ def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
     def field(name):
         return record.get(name) if isinstance(record, Mapping) else getattr(record, name, None)
 
-    if field('discarded') or field('status') != 'completed':
+    if field('capture_time_trust') == 'untrusted' or field('discarded') or field('status') != 'completed':
         return None
     from utils.conversations.recorded_time import conversation_span
 

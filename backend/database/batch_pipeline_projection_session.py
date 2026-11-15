@@ -134,6 +134,8 @@ class ProjectionSession:
 
     def guard(self, transaction, conversation_ids=()):
         snapshots: dict[str, Any] = {}
+        if self.job.get('capture_source_conversation_id'):
+            conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
         try:
             return assert_batch_write_allowed(
                 self.client,
@@ -171,6 +173,8 @@ class ProjectionSession:
             ids.append(self.binding.target_conversation_id)
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
+        if self.job.get('capture_source_conversation_id'):
+            ids.append(self.job['capture_source_conversation_id'])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)

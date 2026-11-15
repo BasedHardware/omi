@@ -338,6 +338,10 @@ def test_walk_follows_erased_receipts_and_resumes_after_watermark():
 
 
 def test_walk_is_bounded_by_rows_and_time(monkeypatch):
+    # This test controls row/time boundaries, independently of read-ahead I/O.
+    # With prefetch on, its third scripted tick expires take() before an async
+    # load completes, so scheduler timing determines whether a third row lands.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PREFETCH', '0')
     log = ResultLog()
     ids = chain(log, BURST, 'a', 5)
     projector = projector_for(log)
@@ -345,7 +349,13 @@ def test_walk_is_bounded_by_rows_and_time(monkeypatch):
     assert log.persist_order == ids[:2]
     ticks = itertools.chain([0.0, 0.0], itertools.repeat(2.0))
     # Keep other threads and libraries from consuming this walk's clock ticks.
-    monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=lambda: next(ticks)))
+    walk_thread = threading.get_ident()
+
+    def monotonic():
+        assert threading.get_ident() == walk_thread, 'walk clock consumed by another thread'
+        return next(ticks)
+
+    monkeypatch.setattr(projection, 'time', SimpleNamespace(monotonic=monotonic))
     projector.project_owner(BURST, budget_seconds=1.0)
     assert log.persist_order == ids[:3]
     projector.project_owner(BURST, limit=projection.OWNER_CHAIN_LIMIT, budget_seconds=60)
