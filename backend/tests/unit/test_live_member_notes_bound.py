@@ -145,23 +145,24 @@ def test_aged_finalizer_defers_to_detail_lease_without_paying(deferred, monkeypa
     permit.assert_not_called()
 
 
-def test_aged_finalizer_defers_when_owner_read_fails_without_paying(deferred, monkeypatch):
+def test_aged_finalizer_proceeds_unfenced_when_owner_read_fails(deferred, monkeypatch):
+    """An unreadable owner never stalls finalization and never consumes the aged permit."""
     _, job, _ = deferred
     job['created_at'] = NOW - timedelta(seconds=181)
     monkeypatch.setattr(episodes, 'get_episode_owner_snapshot', Mock(side_effect=TimeoutError('synthetic')))
     permit = Mock()
     monkeypatch.setattr(permits, 'claim', permit)
-    model = Mock()
-    with pytest.raises(member_notes.LiveMemberNotesDeferred):
-        member_notes.before_model(
-            'synthetic',
-            SimpleNamespace(id='first', source='omi'),
-            ProcessingTrigger.CAPTURE_END,
-            finalization_fence=('job', 1, 2),
-        )
-        model()
-    model.assert_not_called()
+    unavailable = Mock()
+    monkeypatch.setattr(member_notes, '_unavailable', unavailable)
+    member_notes.before_model(
+        'synthetic',
+        SimpleNamespace(id='first', source='omi'),
+        ProcessingTrigger.CAPTURE_END,
+        finalization_fence=('job', 1, 2),
+    )
     permit.assert_not_called()
+    unavailable.assert_called_once()
+    assert unavailable.call_args.args[0] == 'owner_unavailable'
 
 
 @pytest.mark.parametrize('state', ['closed', 'in_progress', 'no_job'])

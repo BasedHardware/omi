@@ -157,8 +157,11 @@ def before_model(uid, conversation, trigger, *, finalization_fence=None):
     try:
         owner = episodes.get_episode_owner_snapshot(uid, conversation.id)
     except Exception as error:
+        # An unreadable owner must not stall finalization: a persistent read
+        # failure would recreate the unbounded wait this bound removes. Proceed
+        # as main does, unfenced by the extra permit, and count the fallback.
         _unavailable('owner_unavailable', error)
-        raise LiveMemberNotesDeferred('live_episode_notes', time.time() + 60) from error
+        return
     if not owner or owner.get('status') != 'live' or conversation.id not in owned_member_ids(owner):
         return
     detail_lease = None
