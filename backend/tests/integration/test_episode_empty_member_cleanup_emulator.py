@@ -68,7 +68,10 @@ def test_empty_cleanup_atomically_detaches_only_without_audio(monkeypatch, enabl
         assert stored['content'] == b'preserved opaque content'
         assert stored['status'] == 'closed'
         assert conversation.get().exists is audio
-        assert link.get().exists is (audio or not enabled)
+        # The existing Home writer may recreate a home_dirty-only preparation
+        # marker in this same commit. Every ownership reader follows episode_id.
+        linked = link.get().to_dict() or {}
+        assert linked.get('episode_id') == (episode.id if audio or not enabled else None)
         assert stored['conversation_ids'] == (['speech'] if enabled and not audio else ['speech', 'empty'])
         assert session.get().to_dict()['lifecycle_phase'] == ('in_progress' if audio else 'discarded')
         if enabled and not audio:
