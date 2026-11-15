@@ -228,6 +228,7 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
         'candidate_limit': 60,
         'result_filter': context.composer_memory_eligible,
         'vector_only': True,
+        'single_attempt': True,
     }
     assert 'rain sensor' in block and 'locked' not in block
 

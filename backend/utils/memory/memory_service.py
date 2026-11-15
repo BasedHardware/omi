@@ -3430,6 +3430,7 @@ class MemoryService:
         as_of: Optional[datetime] = None,
         vector_only: bool = False,
         budget: Optional[ListReadBudget] = None,
+        single_attempt: bool = False,
     ) -> List[MemorySearchMatch]:
         capped = max(1, min(int(limit or 5), 20))
         # Default 3× oversample so dedup/canonical suppression still yields `limit` hits.

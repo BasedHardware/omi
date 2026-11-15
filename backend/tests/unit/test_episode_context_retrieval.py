@@ -56,6 +56,19 @@ def test_chat_search_does_not_gain_composer_options(monkeypatch):
     assert 'budget' not in query.call_args.kwargs
 
 
+def test_optional_composer_search_does_not_repeat_embedding_vector_operation():
+    from fastapi import HTTPException
+    from google.api_core.exceptions import ServiceUnavailable
+
+    repo = MemoryService(db_client=Mock())
+    repo._canonical.search = create_autospec(
+        repo._canonical.search, side_effect=ServiceUnavailable('synthetic provider failure'), spec_set=True
+    )
+    with pytest.raises(HTTPException):
+        repo.search('synthetic', 'garden', vector_only=True, budget=budget(), single_attempt=True)
+    assert repo._canonical.search.call_count == 1
+
+
 def test_expired_embedding_cannot_start_a_vector_query(monkeypatch):
     from utils.llm.clients import _OpenAIEmbeddingsProxy
 

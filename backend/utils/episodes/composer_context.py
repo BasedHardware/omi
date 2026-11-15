@@ -180,6 +180,7 @@ def _search_memories(uid: str, members: Sequence[Mapping[str, Any]], *, budget: 
         result_filter=composer_memory_eligible,
         vector_only=True,
         budget=budget,
+        single_attempt=True,
     )
     return [match.memory for match in matches]
 
