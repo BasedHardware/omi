@@ -9,6 +9,7 @@ import sys
 
 import pytest
 
+from tests.support.historical_capture import historical_capture_filename
 from utils.sync import legacy_dark
 from utils.sync.legacy_dark import LegacySyncMode
 
@@ -36,7 +37,7 @@ def _restore(saved):
 async def _upload(module, BytesIO):
     from starlette.datastructures import UploadFile
 
-    upload = UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))
+    upload = UploadFile(filename=historical_capture_filename(), file=BytesIO(b'\x00' * 10))
     return await module.sync_local_files_v2(files=[upload], uid='test-uid')
 
 

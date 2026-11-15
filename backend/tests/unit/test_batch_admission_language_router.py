@@ -9,6 +9,7 @@ from starlette.datastructures import UploadFile
 
 from config.policy import BatchUnitPolicy
 from services import summary_debt_repair  # noqa: F401 - initialize the router harness dependency at collection
+from tests.support.historical_capture import historical_capture_filename
 from tests.unit.fixtures.strict_firestore_transaction import (
     StrictFirestore,
     StrictFirestoreDocument,
@@ -103,7 +104,7 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
         monkeypatch.setattr(intake, 'artifacts_for', staging)
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+            files=[UploadFile(filename=historical_capture_filename(), file=BytesIO(b'\x00' * 10))],
             uid=UID,
             conversation_id=CID,
         )

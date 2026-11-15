@@ -15,6 +15,7 @@ from starlette.datastructures import UploadFile
 from config.policy import BatchUnitPolicy, ramp
 from database import batch_ramp
 from services import summary_debt_repair  # noqa: F401 - initialize the router harness dependency at collection
+from tests.support.historical_capture import historical_capture_filename
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from tests.unit.test_legacy_dark_router import _restore
@@ -69,7 +70,7 @@ def _router():
 
 async def _upload(module, BytesIO, *, conversation_id=None):
     return await module.sync_local_files_v2(
-        files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+        files=[UploadFile(filename=historical_capture_filename(), file=BytesIO(b'\x00' * 10))],
         uid=UID,
         conversation_id=conversation_id,
     )
