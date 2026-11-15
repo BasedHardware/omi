@@ -1985,6 +1985,18 @@ _add(DriverEntry('database.goals.get_goal_history', base={'uid': UID, 'goal_id':
 _add(DriverEntry('database.goals.get_user_goal', base={'uid': UID}))
 _add(
     DriverEntry(
+        'utils.episodes.composer_context_io.goals',
+        base={'uid': UID},
+        neutrals={
+            'budget': (
+                ListReadBudget(deadline_monotonic=8.0, max_documents=160, clock=lambda: 0.0, strict_documents=True),
+                'composer context deadline/read allowance; caps RPC/window, not the active-goal filter',
+            ),
+        },
+    )
+)
+_add(
+    DriverEntry(
         'database.goals.get_user_goals',
         base={'uid': UID},
         neutrals={'limit': (3, 'goal cap; fixed, not filter-affecting')},

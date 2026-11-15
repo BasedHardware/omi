@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -776,14 +777,29 @@ def query_memory_vector_candidates(
     mode: SearchMode = SearchMode.default,
     limit: int = 10,
     ledger_kinds: Optional[List[str]] = None,
+    timeout_seconds: Optional[float] = None,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
+        if timeout_seconds is not None:
+            raise RuntimeError('budgeted memory vector provider unavailable')
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
         return VectorCandidateQueryResult()
 
     bounded_limit = max(1, min(int(limit or 10), 60))
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise TimeoutError('memory query deadline')
+    # The production embedding proxy accepts text only. The caller deadline
+    # bounds waiting; recheck it below before issuing any vector RPC.
     vector = embeddings.embed_query(query)
+    query_options = {}
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('memory query deadline')
+        query_options['_request_timeout'] = remaining
+        query_options['deadline_monotonic'] = deadline
     if ledger_kinds is not None and mode == SearchMode.default:
         filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
     else:
@@ -800,6 +816,7 @@ def query_memory_vector_candidates(
         include_values=False,
         filter=filter_data,
         namespace=MEMORIES_NAMESPACE,
+        **query_options,
     )
 
     hits: List[SearchVectorHit] = []
