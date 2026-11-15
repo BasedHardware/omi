@@ -198,6 +198,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
+        {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
@@ -3991,7 +3992,11 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
         for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
     )
     for host in hosts:
-        for key in ('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'BATCH_HELD_DEAD_LETTER_ENABLED'):
+        for key in (
+            'RECORD_SEAL_REPAIR_FRESH_ENABLED',
+            'BATCH_HELD_DEAD_LETTER_ENABLED',
+            'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
+        ):
             assert key in classification['kinds']['config']
             assert host['env'][key] == expected
             assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]

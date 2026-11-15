@@ -1485,6 +1485,7 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
         expected['PUSHER_RECORD_SEAL_WAKE_ENABLED'] = 'true'
     else:
         expected['RECORD_SEAL_REPAIR_FRESH_ENABLED'] = 'true'
+        expected['RECORD_INTAKE_AGE_PRIORITY_ENABLED'] = 'true'
         expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
     expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] = 'true'
     expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'

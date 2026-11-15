@@ -1321,6 +1321,7 @@ def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage)
         'def boom(**kwargs):\n'
         f'    raise RuntimeError({private!r})\n'
         'def ok(**kwargs):\n'
+        '    kwargs.get("before", lambda: None)()\n'
         '    return {"event": "record_seal_repair", "outcome": "ok", "rows": 0}\n'
         f'if {stage!r} == "run":\n'
         '    entry["repair"].run = boom\n'
