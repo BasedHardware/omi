@@ -117,6 +117,16 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
+    value: "false"
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT
+    value: "100"
+  - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S
+    value: ""
+  - name: PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_SEAL_WAKE_ENABLED
+    value: "true"
   - name: EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED
     value: "true"
   - name: EPISODE_COMPOSER_CONTEXT_ENABLED
@@ -167,6 +177,8 @@ env:
     value: "true"
   - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
     value: "86400"
+  - name: HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED
+    value: "true"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS
     value: "21600"
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED

@@ -19,6 +19,7 @@ from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from utils.observability.reasons import ReasonFamily, reason_label
+from database.jobstore.cohort import production_policy_applies
 
 STORE_QUERIES = frozenset(
     {
@@ -143,6 +144,19 @@ def compare_serving_query(
         raise ValueError('only enumerated serving reads may be compared')
     if primary.namespace != shadow.namespace:
         raise ValueError('serving parity requires one namespace')
+    if production_policy_applies(primary.namespace):
+        from database.jobstore.cohort_due_parity import compare_sampled_due
+
+        state = args[0] if args else kwargs.get('state')
+        query_label = f'due_{state}' if query == 'due' and state in {'leased', 'retry', 'result_ready'} else query
+        try:
+            outcome = compare_sampled_due(primary, shadow, args, kwargs, budget_s) if query == 'due' else 'unknown'
+        except Exception:
+            outcome = 'error'
+        SERVING_PARITY_TOTAL.labels(
+            query=query_label, outcome=reason_label(ReasonFamily.PARITY, outcome, ServingParityOutcome)
+        ).inc()
+        return outcome
     try:
 
         def read(store):
