@@ -1207,7 +1207,9 @@ class _ConversationsPageState extends State<ConversationsPage>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
-                            ProcessingConversationRow(conversation: row.conversation!),
+                            ProcessingConversationRow(
+                                conversation: row.conversation!,
+                                step: homeStepOf(row.conversation!) ?? HomeStep.transcribing),
                           ],
                         );
                       case _ConversationListRowKind.conversation:

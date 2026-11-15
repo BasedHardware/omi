@@ -21,12 +21,15 @@ void main() {
       sources: const [],
       summaryAvailable: true,
       revision: 'fixture');
-  for (final a in ['ready', 'transcribing', 'failed']) {
-    for (final b in ['ready', 'writing_notes', 'failed']) {
+  for (final a in ['ready', 'noise', 'transcribing', 'writing_notes', 'failed']) {
+    for (final b in ['ready', 'noise', 'transcribing', 'writing_notes', 'failed']) {
       test('compact pending scope and atomic replacement: $a/$b', () {
         final cards = [card('a', a), card('finished', 'ready', kind: 'episode', minute: 1), card('b', b, minute: 2)];
         final rows = buildHomeCardRows(cards, [], now: now, processingTitle: 'Processing');
-        final pendingIds = {if (a == 'transcribing') 'a', if (b == 'writing_notes') 'b'};
+        final pendingIds = {
+          if (['transcribing', 'writing_notes'].contains(a)) 'a',
+          if (['transcribing', 'writing_notes'].contains(b)) 'b'
+        };
         final processing = rows.where((r) => r.isProcessing).toList();
         expect(processing.length, pendingIds.isEmpty ? 0 : 1);
         if (processing.isNotEmpty) {

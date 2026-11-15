@@ -14,7 +14,10 @@ List<HomeRow> buildHomeCardRows(List<HomeFeedCard> cards, List<ServerConversatio
       // member or an authority for any destructive action.
       card.kind == 'episode' ? card.displaySeed().withHomeStep('ready') : card.displaySeed(),
     for (final member in localPending)
-      if (!cardIds.contains(member.id) && !ownerIds.contains(member.episodeId) && !liveIds.contains(member.id)) member,
+      if (!cardIds.contains(member.id) && !ownerIds.contains(member.episodeId) && !liveIds.contains(member.id))
+        // Local placeholders cannot tell us that note writing has started.
+        // An explicit server step wins, including ready/noise/failed.
+        member.homeStep == null ? member.withHomeStep('transcribing') : member,
   ];
   final rows = [
     for (final seed in seeds)

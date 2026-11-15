@@ -246,6 +246,84 @@ void _expectAbsent(List<String> titles) {
 double _top(WidgetTester tester, Finder finder) => tester.getTopLeft(finder).dy;
 
 void main() {
+  for (final compact in [false, true]) {
+    testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final fixture = HomeSettledNoiseFixture(DateTime.now());
+      final episodes = EpisodeProvider(
+          fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
+          lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)),
+          fetchPage: (from, to, {cursor}) async =>
+              ApiSuccess(EpisodePageRead(enabled: true, episodes: [fixture.waiting, fixture.older])));
+      await episodes.refreshLive();
+      episodes.debugSetHomeEpisodes(compact ? [] : [fixture.waiting, fixture.older]);
+      final feed = HomeFeedProvider(
+          owner: () => 'synthetic-shape',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(items: [
+                for (final member in fixture.members)
+                  HomeFeedCard(
+                      id: 'conversation:${member.id}',
+                      kind: 'conversation',
+                      detailId: member.id,
+                      startedAt: member.startedAt,
+                      finishedAt: member.finishedAt,
+                      title: member.structured.title,
+                      emoji: '',
+                      preview: member.structured.overview,
+                      status: 'completed',
+                      homeStep: member.homeStep,
+                      starred: false,
+                      isLocked: false,
+                      hasTasks: false,
+                      memberCount: 1,
+                      sources: const [],
+                      summaryAvailable: member.homeStep == 'ready',
+                      revision: 'shape')
+              ], nextCursor: null, hasMore: false, truncated: false, generation: 'shape')));
+      addTearDown(feed.dispose);
+      if (compact) await feed.start();
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      final boundary = await _pumpHome(tester, compact ? [] : fixture.members,
+          episodeProvider: episodes, feed: compact ? feed : null, capture: capture, processing: fixture.localPending);
+      expect(find.byType(LiveEpisodeRow), findsOneWidget);
+      if (_baseline) {
+        expect(find.byType(ProcessingConversationRow), findsNWidgets(4));
+        expect(find.text('Transcribing… · 13 recordings'), findsOneWidget);
+        expect(find.text('Writing notes… · 1h 45m'), findsOneWidget);
+        expect(find.text('Writing notes… · 22m'), findsOneWidget);
+        expect(find.text('Writing notes… · 2m 52s'), findsOneWidget);
+      } else {
+        expect(find.byType(ProcessingConversationRow), findsOneWidget);
+        final pending = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+        expect(pending.count, 3);
+        expect(pending.step.name, 'transcribing');
+        expect(pending.episode!.members.map((m) => m.id).toSet(), fixture.localPending.map((m) => m.id).toSet());
+        expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+        expect(find.textContaining('Writing notes'), findsNothing);
+        expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+        for (final member in fixture.members.take(10)) {
+          expect(find.text(member.structured.title), findsOneWidget);
+          expect(_top(tester, find.byKey(_processingKey)),
+              lessThan(_top(tester, find.byKey(ValueKey(compact ? 'conversation:${member.id}' : member.id)))));
+        }
+        for (final member in fixture.members.skip(10)) {
+          expect(find.byKey(ValueKey(member.id)), findsNothing);
+        }
+      }
+      await _capture(
+          tester,
+          boundary,
+          _baseline
+              ? '007-mobile-ios-reported-shape-before'
+              : compact
+                  ? '008-mobile-ios-reported-shape-after'
+                  : 'reported-shape-legacy-after');
+      await tester.pumpWidget(const SizedBox.shrink());
+      episodes.invalidateHome();
+    }, skip: _baseline && compact);
+  }
+
   testWidgets('compact cards fold pending only and atomically replace READY members on compose', (tester) async {
     addTearDown(() => debugDefaultTargetPlatformOverride = null);
     final fixture = HomeReadyMembersFixture(DateTime.now());

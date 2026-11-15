@@ -125,6 +125,10 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     ];
   }
   if (singleProcessingRow) {
+    final knownSteps = {
+      for (final c in [for (final e in episodes) ...e.members, ...knownConversations, ...conversations])
+        if (c.homeStep != null) c.id: c.homeStep!,
+    };
     // The optimistic slot has a local id, but may already name a real recording.
     // Resolve that alias before counting/ownership so it cannot duplicate a
     // member or leave the aggregate's page pointing at the local sentinel.
@@ -151,8 +155,12 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
           );
     }
 
-    conversations = {for (final c in conversations.map(resolve)) c.id: c}.values.toList();
-    processingConversations = {for (final c in processingConversations.map(resolve)) c.id: c}.values.toList();
+    final localPending = {for (final c in processingConversations.map(resolve)) c.id: c};
+    ServerConversation projectLocal(ServerConversation c) => c.homeStep == null && localPending.containsKey(c.id)
+        ? c.withHomeStep(knownSteps[c.id] ?? localPending[c.id]?.homeStep ?? 'transcribing')
+        : c;
+    conversations = {for (final c in conversations.map(resolve).map(projectLocal)) c.id: c}.values.toList();
+    processingConversations = localPending.values.map(projectLocal).toList();
   }
   final failedIds = <String>{
     if (activityOnlyFailures)
@@ -268,8 +276,11 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
       rows.add(HomeRow(
         ServerConversation(
           id: 'episode:${episode.id}',
-          createdAt: episode.startedAt,
-          startedAt: episode.startedAt,
+          // A long-running owner can begin yesterday while its genuinely
+          // pending recordings belong to Today. Its source identity is kept
+          // on the episode; the pending slot follows the recordings it shows.
+          createdAt: singleProcessingRow ? _latestMemberStart(members) : episode.startedAt,
+          startedAt: singleProcessingRow ? _latestMemberStart(members) : episode.startedAt,
           finishedAt: episode.lastActivityAt,
           structured: retainedIds.length > 1
               ? Structured(finishingTitle ?? '', '', emoji: pending.first.structured.emoji)
@@ -291,7 +302,9 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     final memberSteps = members.map(homeStepOf).whereType<HomeStep>().where((step) => step != HomeStep.failed).toList();
     if (awaitingCompose && (singleProcessingRow ? memberSteps.isNotEmpty : members.any(awaitingHomeTranscript))) {
       rows.add(_processingRun(members, (members.length > 1 ? finishingTitle : processingTitle) ?? '',
-          episode: episode, step: singleProcessingRow ? _leastAdvanced(memberSteps) : HomeStep.transcribing));
+          episode: episode,
+          anchor: singleProcessingRow ? _latestMemberStart(members) : null,
+          step: singleProcessingRow ? _leastAdvanced(memberSteps) : HomeStep.transcribing));
       continue;
     }
     if (members.length == 1) {
@@ -472,6 +485,9 @@ List<HomeRow> _foldContiguousProcessingRuns(List<HomeRow> rows, {required String
 
 HomeStep _leastAdvanced(Iterable<HomeStep> steps) =>
     steps.fold(HomeStep.failed, (least, step) => step.index < least.index ? step : least);
+
+DateTime _latestMemberStart(List<ServerConversation> members) =>
+    members.map((m) => m.startedAt ?? m.createdAt).reduce((a, b) => a.isAfter(b) ? a : b);
 
 /// The step a conversation row is waiting on, or null when it is finished and may show
 /// as its own Home row. The server's `home_step` wins; older servers fall back to the
