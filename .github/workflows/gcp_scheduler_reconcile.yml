@@ -64,9 +64,11 @@ jobs:
           PROD_CONFIRMATION: ${{ github.event.inputs.production_confirmation }}
         run: |
           set -euo pipefail
+          SELECTED_JOBS=()
           JOB_ARGS=()
           if [[ -n "$JOBS" ]]; then
-            read -r -a JOB_ARGS <<< "$JOBS"
+            read -r -a SELECTED_JOBS <<< "$JOBS"
+            JOB_ARGS=(--jobs "${SELECTED_JOBS[@]}")
           fi
           if [[ "$OPERATION" == "reconcile" ]]; then
             if [[ "$INPUT_ENVIRONMENT" == "prod" && "$PROD_CONFIRMATION" != "APPLY_PROD_SCHEDULER" ]]; then
