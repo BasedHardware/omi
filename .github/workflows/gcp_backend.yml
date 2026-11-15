@@ -14,7 +14,7 @@
 
 name: Deploy Backend to Cloud RUN
 
-run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
+run-name: Deploy Backend (${{ inputs.environment || github.event_name }} ${{ inputs.mode || github.event_name }} service=${{ inputs.cloud_run_service || 'all' }} source=${{ inputs.release_sha || '' }} lock=${{ github.event.inputs.break_glass_lock == 'true' && 'break-glass' || 'prod-train' }} images=${{ inputs.service_images == '' && 'default' || 'override' }} eligibility=${{ github.event.inputs.skip_eligibility_proof == 'true' && 'bypass' || 'proof' }}) by ${{ inputs.requested_by || github.actor }}
 
 on:
   workflow_dispatch:

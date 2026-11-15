@@ -959,24 +959,6 @@ runs:
     # commits that were not in production. The label cannot be corrected here,
     # so the fix is to publish a marker that is true by construction and then
     # prove it: read the value back off the revision that was actually created.
-    - name: Verify ${{ inputs.service }} release provenance
-      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend') && (inputs.integration_only != 'true' && (success())) }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        expected='${{ inputs.admitted_sha }}'
-        revision='${{ steps.capture-backend-revision.outputs.revision }}'
-        actual="$(gcloud run revisions describe "$revision" \
-          --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' --format=json \
-          | jq -r '[.spec.containers[0].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value] | first // ""')"
-        if [[ "$actual" != "$expected" ]]; then
-          echo "ERROR: ${{ inputs.service }} revision $revision reports release sha '$actual'," >&2
-          echo "       but this deploy admitted '$expected'. Refusing to report success:" >&2
-          echo "       an untrue provenance marker is worse than none." >&2
-          exit 1
-        fi
-        echo "$revision publishes OMI_BACKEND_RELEASE_SHA=$actual"
-
     - name: Deploy sync-backfill worker
       if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync-backfill') && (inputs.integration_only != 'true' && (success())) }}
       id: sync-backfill
@@ -992,7 +974,9 @@ runs:
         identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
         forbidden_env_names: ${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}
         remove_env_extra: ${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}
-        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+        backfill_env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
 
@@ -1055,6 +1039,7 @@ runs:
           --memory=${{ inputs.backend_sync_memory }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
           ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
@@ -1076,7 +1061,9 @@ runs:
         service: ${{ inputs.service }}
         provision_sync_ledger_ttl: 'true'
         # The manifest names the live backfill queue the reconcile step manages.
-        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+        backfill_env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}
         alert_notification_channels: ${{ inputs.sync_backfill_alert_channels }}
 
@@ -1209,7 +1196,9 @@ runs:
           --min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}
           --max-instances=${{ inputs.runtime_env == 'prod' && '35' || '50' }}
           --no-cpu-throttling
-        env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+        env_vars: |-
+          ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
         secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
     - name: Create ruled integration candidate by CAS from serving configuration
@@ -1273,6 +1262,24 @@ runs:
           --env ${{ inputs.runtime_env }} \
           --project ${{ inputs.project_id }} \
           --region ${{ inputs.region }} \
+    - name: Verify ${{ inputs.service }} release provenance
+      if: ${{ inputs.integration_only != 'true' && success() }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected='${{ inputs.admitted_sha }}'
+        for service in $SELECTED_CLOUD_RUN_SERVICES; do
+          revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
+          actual="$(gcloud run revisions describe "$revision" \
+            --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
+            --format='json(metadata.name,metadata.labels,spec.containers.env)' \
+            | jq -er --arg revision "$revision" --arg service "$service" '
+                select(.metadata.name == $revision and .metadata.labels["serving.knative.dev/service"] == $service)
+                | [.spec.containers[].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value]
+                | unique | if length == 1 then .[0] else error("source stamp missing or ambiguous") end')"
+          [[ "$actual" == "$expected" ]] || { echo "Candidate source stamp mismatch: $service" >&2; exit 1; }
+        done
+
     - name: Capture exact no-traffic candidate URLs
       id: candidate-urls
       if: >-

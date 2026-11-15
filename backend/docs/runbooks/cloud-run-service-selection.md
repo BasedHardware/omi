@@ -54,3 +54,5 @@ Tooling rollback disables the adapter while retaining the global lock and the
 fail-closed durable reservation fence. Unresolved operations must not be erased
 or bypassed by restoring a legacy writer. Source tests/green CI/independent SHIP
 remain separate from installation, live qualification and actual serving.
+
+Selected roles stamp `OMI_BACKEND_RELEASE_SHA` from the admitted application SHA. After the sidecar creates the final named receiving revision, provenance verification reads that exact revision and service ownership before promotion. Omitted services are neither stamped nor verified as part of the selected operation. The native run identity also proves `prod-train`, normal eligibility and default image selection before approval.

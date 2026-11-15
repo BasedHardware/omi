@@ -25,6 +25,7 @@ def step(name):
 def render(script):
     values = {
         'inputs.project_id': 'based-hardware',
+        'inputs.admitted_sha': 'a' * 40,
         'inputs.region': 'us-central1',
         'inputs.runtime_env': 'prod',
         'steps.image-tag.outputs.revision_suffix': 'aabbccd-17-1',
@@ -47,6 +48,48 @@ def render(script):
         return values[key]
 
     return re.sub(r'\$\{\{(.*?)\}\}', sub, script)
+
+
+@pytest.mark.parametrize('service', ['all', *SERVICES])
+@pytest.mark.parametrize('stamp', ['a' * 40, 'b' * 40])
+def test_created_revision_source_stamp_is_checked_only_for_selected_services(tmp_path, service, stamp):
+    fake = tmp_path / 'gcloud'
+    fake.write_text('''#!/usr/bin/env python3
+import json, os, sys
+n = sys.argv[4]
+with open(os.environ['CALLS'], 'a') as out: out.write(n + '\\n')
+print(json.dumps({'metadata': {'name': n, 'labels': {'serving.knative.dev/service': n.removesuffix('-aabbccd-17-1')}}, 'spec': {'containers': [{'env': [{'name': 'OMI_BACKEND_RELEASE_SHA', 'value': os.environ['STAMP']}]}]}}))
+''')
+    fake.chmod(0o700)
+    log = tmp_path / 'calls'
+    result = subprocess.run(
+        ['bash', '-c', render(step('Verify ${{ inputs.service }} release provenance')['run'])],
+        env=dict(
+            os.environ,
+            PATH=str(tmp_path) + ':' + os.environ['PATH'],
+            CALLS=str(log),
+            STAMP=stamp,
+            SELECTED_CLOUD_RUN_SERVICES=' '.join(selected(service)),
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (result.returncode == 0) == (stamp == 'a' * 40), result.stderr
+    seen = log.read_text().splitlines()
+    assert all(n.removesuffix('-aabbccd-17-1') in selected(service) for n in seen)
+    if stamp == 'a' * 40:
+        assert seen == [s + '-aabbccd-17-1' for s in selected(service)]
+
+
+def test_every_role_explicitly_stamps_the_admitted_source():
+    for name, key in [
+        ('Deploy ${{ inputs.service }} to Cloud Run', 'env_vars'),
+        ('Deploy ${{ inputs.service }}-sync to Cloud Run', 'env_vars'),
+        ('Deploy ${{ inputs.service }}-integration to Cloud Run', 'env_vars'),
+        ('Deploy sync-backfill worker', 'backfill_env_vars'),
+    ]:
+        assert 'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}' in step(name)['with'][key]
 
 
 @pytest.mark.parametrize('service', ['all', *SERVICES])
@@ -153,7 +196,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     # A new step requires updating this census with a target-scope disposition.
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "bae83f9b8e212e7fc94d0fbd57ba48b102118de4f5b79bc29a772a072863535c"
+        == "0f93bc0dcfc339f3631cf7deff49439a71b0c98ff1981b6ad38b22b54729957f"
     )
 
 
