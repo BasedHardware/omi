@@ -1816,7 +1816,7 @@ async def test_close_only_keeps_control_pending_when_tail_send_fails(monkeypatch
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize('version', [1, True, 2])
+@pytest.mark.parametrize('version', [1, True, 2, 3])
 async def test_close_capability_ack_drains_pending_notification_only_for_supported_version(version, monkeypatch):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
     from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
@@ -1827,12 +1827,14 @@ async def test_close_capability_ack_drains_pending_notification_only_for_support
         + json.dumps({'type': 'record_close_ack', 'version': version}).encode()
     )
     ws = FakePusherWebSocket(incoming=[ack, b''])
-    session = make_session(ws=ws, active_ref=active)
+    session = make_session(
+        ws=ws, active_ref=active, deps_overrides={'finish_recording_audio': AsyncMock(return_value=True)}
+    )
     await session.connect()
     assert not await session.request_recording_close('conv-1')
     ws.on_recv = lambda: active.update(active=len(ws.incoming) > 1)
     await session.pusher_receive()
-    assert session.record_close_supported is (type(version) is int and version == 2)
+    assert session.record_close_supported is (type(version) is int and version == 3)
     assert any(frame_type(f) == 104 for f in ws.sent) is session.record_close_supported
 
 

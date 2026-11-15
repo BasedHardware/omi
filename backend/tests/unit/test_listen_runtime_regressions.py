@@ -195,13 +195,16 @@ async def test_negotiated_disconnect_uses_socket_end_proof_without_stranding_pre
         ws=Relay(),
         current_conversation_id='conversation',
         config_overrides={'uid': 'owner', 'sample_rate': 16000},
-        deps_overrides={'is_active': lambda: runtime.state.active},
+        deps_overrides={
+            'is_active': lambda: runtime.state.active,
+            'finish_recording_audio': AsyncMock(return_value=True),
+        },
     )
     runtime.request_recording_close = session.request_recording_close
     runtime.request_conversation_processing = session.request_conversation_processing
     runtime.pusher_close = session.close
     handler = asyncio.create_task(
-        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=2)
+        pusher._websocket_util_trigger(Server(), 'owner', 16000, audio_custody=1, record_close_protocol=3)
     )
     await session.connect()
     # A long-lived session reads the capability while an earlier finalization

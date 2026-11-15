@@ -1123,9 +1123,13 @@ class ListenSessionRuntime:
                 get_byok_keys=get_byok_keys,
                 on_conversation_processed=self.conversations.on_conversation_processed,
                 wait_for_event=wait_for_event,
+                finish_recording_audio=(
+                    getattr(self.receiver, 'finish_recording_audio', None) if self.private_cloud_sync_enabled else None
+                ),
             ),
         )
         self.pusher_close = session.close
+        self.pusher_audio_session = session
         self.transcript_send = session.transcript_send
         self.audio_bytes_send = session.audio_bytes_send if session.config.audio_bytes_enabled else None
         self.request_conversation_processing = session.request_conversation_processing

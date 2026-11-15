@@ -328,6 +328,23 @@ class LiveConversationController:
             except Exception:
                 observation.flush_failed(snapshot)
 
+    async def _notify_recording_close(self, conversation_id: str) -> None:
+        if close_notify_enabled():
+            close_recording = getattr(self.host, 'request_recording_close', None)
+            if close_recording is not None:
+                try:
+                    await close_recording(conversation_id)
+                except Exception:
+                    logger.warning('event=record_close_notify outcome=deferred')
+                    record_fallback(
+                        component='pusher',
+                        from_mode='record_close_v2',
+                        to_mode='deferred_record_close',
+                        reason='unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+
     async def schedule_finalization(self, conversation_id: str) -> bool:
         observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
         if observation:
@@ -344,21 +361,8 @@ class LiveConversationController:
             client_kind=self.host.client_kind,
         )
         route = finalization['route']
-        if close_notify_enabled() and route in {'pusher', 'cloud_tasks', 'queued', 'blocked_byok'}:
-            close_recording = getattr(self.host, 'request_recording_close', None)
-            if close_recording is not None:
-                try:
-                    await close_recording(conversation_id)
-                except Exception:
-                    logger.warning('event=record_close_notify outcome=deferred')
-                    record_fallback(
-                        component='pusher',
-                        from_mode='record_close_v2',
-                        to_mode='deferred_record_close',
-                        reason='unavailable',
-                        outcome='degraded',
-                        log=logger,
-                    )
+        if route in {'pusher', 'cloud_tasks', 'queued', 'blocked_byok'}:
+            await self._notify_recording_close(conversation_id)
         if route == 'pusher':
             if not self.host.request_conversation_processing:
                 return False
@@ -1060,6 +1064,10 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            if conversation.get('status') != ConversationStatus.in_progress:
+                # Cloud Tasks has no socket callback. Observe its durable
+                # boundary before calendar/occasion holds or successor awaits.
+                await self._notify_recording_close(conversation_id)
             conversation = await self._continuity_row(conversation)
             finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             if server_batch_owned(conversation) and self.host.state.last_audio_received_time is not None:
