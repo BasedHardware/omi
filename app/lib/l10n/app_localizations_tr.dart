@@ -15468,4 +15468,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Bugün $price ödendi. Her ay yenilenir.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
 }

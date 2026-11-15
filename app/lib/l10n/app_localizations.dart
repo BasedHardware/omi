@@ -27116,6 +27116,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{price} paid today. Renews monthly.'**
   String monthlySwitchDoneBody(String price);
+
+  /// Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing changed. Review the list and try again.'**
+  String get processingDeleteScopeChanged;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

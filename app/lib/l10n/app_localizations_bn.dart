@@ -15452,4 +15452,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'আজ $price পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
 }

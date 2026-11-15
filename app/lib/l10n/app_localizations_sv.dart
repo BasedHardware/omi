@@ -15466,4 +15466,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Förnyas varje månad.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
 }

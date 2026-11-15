@@ -15236,4 +15236,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '오늘 $price이 결제되었습니다. 매월 갱신됩니다.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
 }

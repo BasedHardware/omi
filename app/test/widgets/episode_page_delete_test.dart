@@ -15,9 +15,152 @@ import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/ui/ui.dart';
 
 void main() {
+  for (final change in ['ready', 'composed', 'card ready', 'card composed', 'legacy ready', 'cold composed']) {
+    testWidgets('processing confirmation cancels stale $change scope; Delete and Undo touch nothing', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
+      final at = DateTime(2026, 11, 15, 9);
+      final members = [
+        for (final id in ['a', 'b'])
+          ServerConversation(
+              id: id, createdAt: at, startedAt: at, homeStep: 'transcribing', structured: Structured('Fixture $id', ''))
+      ];
+      final owner = Episode(
+          id: 'owner',
+          live: false,
+          startedAt: at,
+          lastActivityAt: at,
+          closedAt: at,
+          conversationIds: ['a', 'b'],
+          members: members);
+      var changed = false;
+      final feed = HomeFeedProvider(
+          owner: () => 'fixture',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
+              items: (changed || change == 'legacy ready')
+                  ? [
+                      HomeFeedCard(
+                          id: 'changed',
+                          kind: change.endsWith('composed') ? 'episode' : 'conversation',
+                          detailId: change.endsWith('composed') ? 'owner' : 'a',
+                          startedAt: at,
+                          title: 'Ready',
+                          emoji: '',
+                          preview: '',
+                          status: 'completed',
+                          homeStep: change == 'legacy ready' ? 'transcribing' : 'ready',
+                          starred: false,
+                          isLocked: false,
+                          hasTasks: false,
+                          memberCount: 1,
+                          sources: const [],
+                          summaryAvailable: true,
+                          revision: 'new')
+                    ]
+                  : [],
+              nextCursor: null,
+              hasMore: false,
+              truncated: false,
+              generation: changed ? 'new' : 'old')));
+      await feed.start();
+      addTearDown(feed.dispose);
+      final calls = <String>[];
+      final history = ConversationProvider(isSignedIn: () => true)..conversations = members;
+      history.conversationDeleteFetcherOverride = (id) async {
+        calls.add(id);
+        return true;
+      };
+      final episodes = EpisodeProvider(
+          detail: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+          lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: owner)))
+        ..debugSetLive(null)
+        ..debugSetHomeEpisodes(change == 'cold composed' ? [] : [owner]);
+      final connectivity = ConnectivityProvider();
+      addTearDown(history.dispose);
+      addTearDown(episodes.dispose);
+      addTearDown(connectivity.dispose);
+      await tester.pumpWidget(MultiProvider(
+          providers: [
+            ChangeNotifierProvider<ConversationProvider>.value(value: history),
+            ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
+            ChangeNotifierProvider<ConnectivityProvider>.value(value: connectivity),
+            ChangeNotifierProvider<HomeFeedProvider>.value(value: feed),
+          ],
+          child: MaterialApp(
+              theme: buildOmiTheme(brightness: Brightness.light),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                  body: ProcessingConversationRow(
+                      conversation: members.first,
+                      episode: change == 'cold composed'
+                          ? Episode(
+                              id: '',
+                              live: false,
+                              startedAt: at,
+                              lastActivityAt: at,
+                              members: members,
+                              conversationIds: ['a', 'b'])
+                          : owner,
+                      processingEpisodes: change == 'cold composed' ? [] : [owner])))));
+      await tester.tap(find.byKey(const Key('home_processing_row')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('episode_more')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+      if (change == 'ready') {
+        history.updateConversation(members.first.withHomeStep('ready'), preserveHomeStep: false);
+      } else if (change == 'legacy ready') {
+        history.updateConversation(
+            ServerConversation(
+                id: 'a',
+                createdAt: at,
+                startedAt: at,
+                status: ConversationStatus.completed,
+                structured: Structured('Ready own notes', 'Finished notes')),
+            preserveHomeStep: false);
+      } else if (change.startsWith('card') || change == 'cold composed') {
+        changed = true;
+        await feed.refresh();
+      } else {
+        episodes.debugSetHomeEpisodes([
+          Episode(
+              id: owner.id,
+              live: false,
+              startedAt: at,
+              lastActivityAt: at,
+              closedAt: at,
+              conversationIds: owner.conversationIds,
+              members: members,
+              lede: 'Finished episode',
+              title: 'Finished episode')
+        ]);
+      }
+      await tester.pump();
+      await tester.tap(find.text('Delete').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(history.memoriesToDelete, isEmpty);
+      expect(episodes.hiddenHomeMembers, isEmpty);
+      expect(find.text('Undo'), findsNothing);
+      expect(find.byKey(const Key('episode_page')), findsOneWidget);
+      expect(find.text('Processing changed. Review the list and try again.'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 11));
+      expect(calls, isEmpty);
+      expect(history.conversations.map((m) => m.id), unorderedEquals(['a', 'b']));
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
   for (final synthetic in [false, true]) {
     for (final outcome in ['undo', 'commit', 'becomes ready']) {
       final undo = outcome == 'undo';

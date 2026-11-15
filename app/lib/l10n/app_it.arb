@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Pagamento rifiutato. Il tuo piano non è cambiato.",
     "monthlySwitchUnavailable": "Il passaggio non è disponibile ora. Aggiorna invece la carta.",
     "monthlySwitchDoneTitle": "Ora sei sul mensile",
-    "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese."
+    "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese.",
+    "processingDeleteScopeChanged": "L'elenco in elaborazione è cambiato. Controllalo e riprova."
 }

@@ -883,7 +883,9 @@ class _ConversationsPageState extends State<ConversationsPage>
             groupAwaitingTranscript: true,
             now: clock.now(),
             processingTodayOnly: _pendingWork.homeProcessingToday,
-            singleProcessingRow: _pendingWork.homeProcessingToday,
+            singleProcessingRow: true,
+            neutralUnknownSteps: true,
+            processingDay: localHomeDay(clock.now()),
             activityOnlyFailures: _pendingWork.homeProcessingToday,
             processingTitle: context.l10n.wrappedProcessingDefault,
             finishingTitle: context.l10n.episodeFinishingUp,
@@ -914,9 +916,12 @@ class _ConversationsPageState extends State<ConversationsPage>
                 .map((row) => row.id));
           }
         }
-        if (defaultHome && cardsOn && _pendingWork.homeProcessingToday) {
+        if (defaultHome && cardsOn) {
           final projected = buildHomeCardRows(cardById.values.toList(), snapshot.processingConversations,
-              now: clock.now(), processingTitle: context.l10n.wrappedProcessingDefault, liveIds: hiddenByLive);
+              now: clock.now(),
+              processingTitle: context.l10n.wrappedProcessingDefault,
+              liveIds: hiddenByLive,
+              processingTodayOnly: _pendingWork.homeProcessingToday);
           conversationsByDate = {};
           for (final row in projected) {
             final card = cardById[row.conversation.id];
@@ -951,17 +956,15 @@ class _ConversationsPageState extends State<ConversationsPage>
               heldByDate: heldByDate,
             ),
             projectedProcessingIds,
-            enabled: _pendingWork.homeProcessingToday);
+            enabled: defaultHome);
         final localToday = localHomeDay(clock.now());
         final withLive =
             episodeLive ? _withTodayRow(builtRows, clock.now(), _ConversationListRowKind.liveEpisode) : builtRows;
         // Only the default view: a search or folder shows what it matched.
         // Default Home already projected every local entry together with server
         // rows. A second insertion can resurrect stale ready/noise entries and
-        // bypass the one-row fold. Filtered views and rollback keep their adapter.
-        final conversationRows = showRecordings &&
-                !convoProvider.isSelectionModeActive &&
-                !(defaultHome && _pendingWork.homeProcessingToday)
+        // bypass the one-row fold. Filtered views keep their adapter; capability negotiation never disables the fold.
+        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive && !defaultHome
             ? _withProcessingRows(
                 withLive,
                 [

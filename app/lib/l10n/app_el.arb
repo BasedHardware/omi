@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Η πληρωμή απορρίφθηκε. Το πρόγραμμά σας δεν άλλαξε.",
     "monthlySwitchUnavailable": "Η αλλαγή δεν είναι διαθέσιμη τώρα. Ενημερώστε την κάρτα σας.",
     "monthlySwitchDoneTitle": "Είστε πλέον σε μηνιαία χρέωση",
-    "monthlySwitchDoneBody": "Πληρώθηκαν {price} σήμερα. Ανανεώνεται κάθε μήνα."
+    "monthlySwitchDoneBody": "Πληρώθηκαν {price} σήμερα. Ανανεώνεται κάθε μήνα.",
+    "processingDeleteScopeChanged": "Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά."
 }

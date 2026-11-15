@@ -15465,4 +15465,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'आज $price भरले. दर महिन्याला नूतनीकरण होते.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
 }

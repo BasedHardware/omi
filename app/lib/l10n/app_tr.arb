@@ -4689,5 +4689,6 @@
     "monthlySwitchDeclined": "Ödeme reddedildi. Planınız değişmedi.",
     "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
-    "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir."
+    "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
+    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin."
 }

@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Betalingen ble avvist. Abonnementet ditt er ikke endret.",
     "monthlySwitchUnavailable": "Bytte er ikke tilgjengelig akkurat nå. Oppdater kortet i stedet.",
     "monthlySwitchDoneTitle": "Du betaler nå månedlig",
-    "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig."
+    "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig.",
+    "processingDeleteScopeChanged": "Behandlingslisten er endret. Se gjennom listen og prøv igjen."
 }

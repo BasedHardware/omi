@@ -15457,4 +15457,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Dnes zaplaceno $price. Obnovuje se měsíčně.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
 }

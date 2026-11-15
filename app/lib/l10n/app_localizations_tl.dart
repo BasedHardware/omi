@@ -15579,4 +15579,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Nabayaran ang $price ngayon. Nire-renew buwan-buwan.';
   }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
 }

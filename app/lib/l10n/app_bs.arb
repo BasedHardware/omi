@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "Plaćanje je odbijeno. Vaš plan se nije promijenio.",
     "monthlySwitchUnavailable": "Prelazak trenutno nije dostupan. Umjesto toga ažuriraj karticu.",
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
-    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno."
+    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
+    "processingDeleteScopeChanged": "Lista obrade se promijenila. Pregledajte je i pokušajte ponovo."
 }

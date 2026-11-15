@@ -39,6 +39,67 @@ class EpisodePage extends StatelessWidget {
   final bool processingAggregate;
   final List<Episode> processingEpisodes;
 
+  /// Read current stores at the action boundary. A card/owner replacement or any
+  /// settled/hidden state removes a recording from this aggregate immediately.
+  /// Conflicting snapshots only narrow a destructive scope; they never expand it.
+  List<ServerConversation> _currentPendingMembers(BuildContext context, Set<String> initialIds) {
+    final history = context.read<ConversationProvider>();
+    final episodes = context.read<EpisodeProvider?>();
+    final cards = context.read<HomeFeedProvider?>()?.items ?? [];
+    final sourceSeeds = [
+      episode,
+      ...processingEpisodes,
+      ...?episodes?.homeEpisodes,
+      for (final id in initialIds)
+        if (episodes?.cachedEpisodeFor(id) case final source?) source,
+    ];
+    final sources = [
+      ...sourceSeeds,
+      for (final source in sourceSeeds)
+        if (episodes?.openedEpisode(source.id) case final opened?) opened,
+    ];
+    final variants = <String, List<ServerConversation>>{};
+    for (final c in [
+      for (final source in sources) ...source.members,
+      ...history.processingConversations,
+      ...history.conversations
+    ]) {
+      (variants[c.id] ??= []).add(c);
+    }
+    final pending = <ServerConversation>[];
+    for (final id in initialIds) {
+      final versions = variants[id] ?? const <ServerConversation>[];
+      final card = cards.where((c) => c.kind == 'conversation' && c.detailId == id).firstOrNull;
+      final owners = {
+        for (final source in sources)
+          if (source.conversationIds.contains(id)) source.id,
+        for (final member in versions)
+          if (member.episodeId != null) member.episodeId!,
+      };
+      if (history.memoriesToDelete.containsKey(id) ||
+          (episodes?.hiddenHomeMembers.contains(id) ?? false) ||
+          sources.any((s) => !s.live && s.composed && s.conversationIds.contains(id)) ||
+          cards.any((c) => c.kind == 'episode' && owners.contains(c.detailId)) ||
+          versions.any((m) =>
+              m.discarded ||
+              m.deleted ||
+              m.isLocked ||
+              m.homeStep == 'ready' ||
+              m.homeStep == 'noise' ||
+              homeStepOf(m) == HomeStep.failed ||
+              (m.status == ConversationStatus.completed && homeStepOf(m) == null)) ||
+          (card != null &&
+              (card.homeStep == 'ready' || card.homeStep == 'noise' || card.homeStep == 'failed' || card.isLocked))) {
+        continue;
+      }
+      final latest = versions.lastOrNull;
+      if (latest == null) continue;
+      final member = card?.homeStep == null ? latest : latest.withHomeStep(card!.homeStep!);
+      if ({HomeStep.transcribing, HomeStep.writingNotes}.contains(homeStepOf(member))) pending.add(member);
+    }
+    return pending;
+  }
+
   Future<void> _delete(BuildContext context, List<ServerConversation> displayedMembers) async {
     final authoritative = displaySeedOnly ? context.read<EpisodeProvider?>()?.openedEpisode(episode.id) : episode;
     if (authoritative == null) {
@@ -63,7 +124,7 @@ class EpisodePage extends StatelessWidget {
       for (final c in history.conversations) c.id: c,
       for (final c in displayedMembers) c.id: c,
     };
-    final targets = [
+    var targets = [
       for (final id in ids)
         if (!history.memoriesToDelete.containsKey(id))
           known[id] ??
@@ -78,6 +139,17 @@ class EpisodePage extends StatelessWidget {
       destructive: true,
     );
     if (!confirmed || !context.mounted) return;
+    if (processingAggregate) {
+      final initialIds = targets.map((m) => m.id).toSet();
+      final current = _currentPendingMembers(context, initialIds);
+      if (current.length != initialIds.length) {
+        OmiFeedback.info(context, context.l10n.processingDeleteScopeChanged);
+        return;
+      }
+      // No await between the fresh scope and staging Delete/Undo. Undo receives
+      // exactly these latest records, never the pre-confirmation snapshot.
+      targets = current;
+    }
     final listContext = Navigator.of(context).context;
     Navigator.pop(context);
     unawaited(deleteConversationsWithUndo(listContext, targets));

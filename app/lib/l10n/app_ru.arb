@@ -4689,5 +4689,6 @@
     "monthlySwitchDeclined": "Платёж отклонён. Ваш план не изменился.",
     "monthlySwitchUnavailable": "Переход сейчас недоступен. Вместо этого обновите карту.",
     "monthlySwitchDoneTitle": "Теперь вы платите ежемесячно",
-    "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно."
+    "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно.",
+    "processingDeleteScopeChanged": "Список обработки изменился. Проверьте его и попробуйте снова."
 }

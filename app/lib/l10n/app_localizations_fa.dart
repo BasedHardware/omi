@@ -15450,4 +15450,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'امروز $price پرداخت شد. ماهانه تمدید می‌شود.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
 }

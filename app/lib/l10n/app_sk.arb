@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Platba bola zamietnutá. Váš plán sa nezmenil.",
     "monthlySwitchUnavailable": "Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.",
     "monthlySwitchDoneTitle": "Teraz platíte mesačne",
-    "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne."
+    "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne.",
+    "processingDeleteScopeChanged": "Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova."
 }
