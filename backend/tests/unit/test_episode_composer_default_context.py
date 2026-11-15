@@ -550,6 +550,8 @@ def test_prior_deadline_reserves_actions_time(monkeypatch):
         raise TimeoutError('prior deadline')
 
     fake.prior.side_effect = prior
-    sections = context.collect(UID, MEMBERS, budget(), sources=fake)
-    assert seen[0] >= context.SECTION_SECONDS
+    # With 2 s left an unreserved prior section would run to 0.75 s before the
+    # deadline (its own 1.25 s share); the reservation must leave half, about 1 s.
+    sections = context.collect(UID, MEMBERS, context.ReadBudget(time.monotonic() + 2), sources=fake)
+    assert 0.9 <= seen[0] <= 1.0
     assert context.HEADINGS[3] in sections
