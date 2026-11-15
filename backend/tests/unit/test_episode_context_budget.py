@@ -19,17 +19,16 @@ def fallbacks(monkeypatch):
     return recorder
 
 
-def test_one_deadline_keeps_cheap_profile_and_discards_late_memories(monkeypatch, fallbacks):
+def test_one_deadline_discards_all_partial_context_and_late_memories(monkeypatch, fallbacks):
     monkeypatch.setattr(budget, 'COMPOSER_CONTEXT_TIMEOUT_SECONDS', 0.1)
     release, ended = threading.Event(), threading.Event()
     identity = ContextVar('synthetic_owner', default='missing')
     token = identity.set('owner-context')
 
-    def load(deadline, publish):
+    def load(deadline):
         try:
             assert identity.get() == 'owner-context'
             assert deadline - time.monotonic() <= 0.1
-            publish('cheap owner profile')
             release.wait(1)
             return 'late profile', 'late private memories'
         finally:
@@ -39,12 +38,12 @@ def test_one_deadline_keeps_cheap_profile_and_discards_late_memories(monkeypatch
         started = time.monotonic()
         result = budget.bounded_gather(load, 'fallback')
         assert time.monotonic() - started < 0.5
-        assert result == ('cheap owner profile', '')
+        assert result == ('fallback', '')
     finally:
         release.set()
         assert ended.wait(1)
         identity.reset(token)
-    assert result == ('cheap owner profile', '')
+    assert result == ('fallback', '')
     fallbacks.assert_called_once_with('timeout')
 
 
@@ -55,11 +54,10 @@ def test_saturated_context_workers_fail_empty_without_queuing(monkeypatch):
     assert not calls
 
 
-def test_retrieval_error_preserves_already_loaded_profile_and_counts_once(fallbacks):
+def test_retrieval_error_omits_all_loaded_context_and_counts_once(fallbacks):
 
-    def load(_deadline, publish):
-        publish('owner')
+    def load(_deadline):
         raise RuntimeError('private provider detail never logged')
 
-    assert budget.bounded_gather(load, 'default') == ('owner', '')
+    assert budget.bounded_gather(load, 'default') == ('default', '')
     fallbacks.assert_called_once_with('transport_error')

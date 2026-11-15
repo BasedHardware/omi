@@ -221,9 +221,9 @@ def gather(
     uid: str, members: Sequence[Mapping[str, Any]], *, owner: str, language: str, timezone: str
 ) -> tuple[str, str]:
     """One eight-second budget for profile, retrieval, hydration and rendering."""
-    fallback = json.dumps({'name': owner[:200], 'output_language': language[:100], 'timezone': timezone[:100]})
+    fallback = json.dumps({'name': owner[:200], 'output_language': language[:100]})
 
-    def load(deadline, publish):
+    def load(deadline):
         from utils.episodes import composer_context_io as sources
         from utils.other.list_budget import ListReadBudget
 
@@ -255,10 +255,10 @@ def gather(
                 elif ids:
                     people = sources.people(uid, ids, budget)
                 budget.check()
-                publish(render())
             except Exception as error:
                 budget.check()
                 logger.warning('event=episode_context source=%s exception_type=%s', source, type(error).__name__)
+                raise
         # Fail-empty on search/hydration errors, including budget exhaustion.
         # Only a successful empty search may use bounded default-visible list intake.
         budget.check()

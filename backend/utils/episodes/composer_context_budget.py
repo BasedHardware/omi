@@ -25,9 +25,7 @@ def _submit(worker: Callable[[], None]) -> None:
     submit_with_context(get_context_executor(), worker)
 
 
-def bounded_gather(
-    load: Callable[[float, Callable[[str], None]], tuple[str, str]], fallback_profile: str
-) -> tuple[str, str]:
+def bounded_gather(load: Callable[[float], tuple[str, str]], fallback_profile: str) -> tuple[str, str]:
     """Bound the caller even if an SDK ignores its remaining-time RPC timeout.
 
     The existing optional-context executor has four workers and no queue. Slots
@@ -40,14 +38,9 @@ def bounded_gather(
     lock = threading.Lock()
     state = {'profile': fallback_profile, 'memories': '', 'reason': ''}
 
-    def publish(profile: str) -> None:
-        with lock:
-            if time.monotonic() < deadline:
-                state['profile'] = profile
-
     def worker() -> None:
         try:
-            profile, memories = load(deadline, publish)
+            profile, memories = load(deadline)
             with lock:
                 if time.monotonic() < deadline:
                     state.update(profile=profile, memories=memories)
@@ -76,4 +69,5 @@ def bounded_gather(
         reason = 'timeout' if not completed.is_set() or time.monotonic() >= deadline else state['reason']
         if reason:
             _fallback(reason)
-        return state['profile'], '' if reason else state['memories']
+            return fallback_profile, ''
+        return state['profile'], state['memories']

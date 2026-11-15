@@ -248,7 +248,7 @@ def test_search_outage_omits_memories_without_list_fallback(monkeypatch):
     )
     monkeypatch.setattr(context, '_list_memories', lambda *_a: pytest.fail('no list fallback after search failure'))
     profile, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
-    assert 'A gardener' in profile and block == ''
+    assert profile == '{"name": "Synthetic", "output_language": "English"}' and block == ''
     assert counter.get() == before + 1
 
 
