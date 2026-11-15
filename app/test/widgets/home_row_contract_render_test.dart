@@ -327,6 +327,7 @@ void main() {
     expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
     await _capture(tester, boundary, '003-mobile-ios-delete-scope-changed');
     await tester.pumpWidget(const SizedBox.shrink());
+    episodes.invalidateHome();
   });
   for (final compact in [false, true]) {
     testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
