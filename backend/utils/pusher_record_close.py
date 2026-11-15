@@ -6,14 +6,14 @@ import uuid
 from dataclasses import dataclass, field
 from collections import OrderedDict
 
-VERSION = 2
+VERSION = 3
 CAPABILITY_OPCODE = 204
 RESULT_OPCODE = 206
 MAX_CLOSES = 128
 
 
 def capability_frame():
-    return struct.pack('<I', CAPABILITY_OPCODE) + b'{"type":"record_close_ack","version":2}'
+    return struct.pack('<I', CAPABILITY_OPCODE) + json.dumps(dict(type='record_close_ack', version=VERSION)).encode()
 
 
 def result_frame(cid, request_id, phase, status, watermark=0):
@@ -41,6 +41,7 @@ class PendingClose:
     frozen: bool = False
     base: int = 0
     sent: int = 0
+    deadline: float = 0
     reported_fallbacks: set[str] = field(default_factory=set)
 
 
@@ -88,6 +89,8 @@ class PusherCloseState:
             return 'invalid_watermark'
         if self.received.get(cid, 0) < watermark:
             return 'watermark_pending'
+        if self.received.get(cid, 0) != watermark:
+            return 'invalid_watermark'
         if accept:
             self.committed.add(cid)
             self.watermarks[cid] = watermark

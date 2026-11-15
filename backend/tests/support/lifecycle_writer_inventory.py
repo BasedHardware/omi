@@ -30,6 +30,15 @@ FIELD_SITES = {
             ),
         ),
     ],
+    # Read-only gate input for the member-notes wait; no lifecycle document write.
+    'utils/episodes/member_notes.py': [
+        (
+            'before_notes',
+            'status',
+            "getattr(conversation, 'status', None)",
+            ('finalization_job_id', 'id', 'record_lane_owner', 'source', 'status'),
+        ),
+    ],
     # Close acceptance wire response only; no lifecycle document write.
     'utils/pusher_record_close.py': [
         (

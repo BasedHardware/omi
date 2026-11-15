@@ -210,6 +210,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
     # outside the pipeline scanner's scope. Keep helper kill switches separate.
     rollout_name = 'SERVER_BATCH_ONLY_WEB_PERCENT'
     assert helper_names == HELPER_KILL_SWITCHES | {
+        'HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED',
         'STT_FREE_ALLOWANCE_WATCH_ENABLED',
         'PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED',
         'CONVERSATION_TERMINAL_FAMILY_MODE',
@@ -326,7 +327,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
             assert flag['review_by'] == '2026-11-16'
-            assert flag['ramp']['cohorts'][-1] == 'fleet after independent custody review'
+            assert flag['ramp']['cohorts'][0].startswith('consenting owner account only')
+            assert flag['ramp']['cohorts'][-1] == 'fleet only after clean owner and small-cohort windows'
+            assert 'stranded live-producer tokens' in flag['ramp']['clean_metric']
+            assert 'quality lead' in flag['ramp']['expander']
         else:
             assert flag['lifecycle'] == 'ops_kill'
             assert flag['fail'] == 'open'
