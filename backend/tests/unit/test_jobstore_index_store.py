@@ -155,10 +155,14 @@ def test_cursor_page_and_other_reads_keep_the_entire_primary_contract(setup):
     setup.mirror.projection_page = Mock(return_value=result)
     setup.mirror.oldest = Mock(return_value=123)
     setup.mirror.control_candidates = Mock(return_value=['shard'])
+    ready_rows = [{'segment_id': 'ready', 'merge_pending': True}]
+    setup.mirror.ready_pending = Mock(return_value=ready_rows)
     assert setup.store.projection_page(1, after=cursor, due_before=99) is result
     setup.mirror.projection_page.assert_called_once_with(1, after=cursor, due_before=99)
     assert setup.store.oldest(1) == 123
     assert setup.store.control_candidates(0, 'batch', 100) == ['shard']
+    assert setup.store.ready_pending('synthetic-owner-key', 1, after=cursor) is ready_rows
+    setup.mirror.ready_pending.assert_called_once_with('synthetic-owner-key', 1, after=cursor)
     setup.read.assert_not_called()
 
 

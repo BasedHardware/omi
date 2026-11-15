@@ -187,6 +187,7 @@ def failed_plan(source):
 
 
 def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source, monkeypatch):
+    monkeypatch.setattr(repair, 'time', SimpleNamespace(time=lambda: 1000))
     store, client, artifacts = source
     plan = failed_plan(source)
     assert plan['entries'][0]['disposition'] == 'eligible'
@@ -213,6 +214,7 @@ def test_upload_failed_clear_requires_explicit_repair_and_full_proof(source, mon
                 'record_audio_closed': True,
                 'record_upload_failed': False,
                 'record_admitted_at': client.rows[PATH]['record_admitted_at'],
+                'record_sealed_at': 1000,
             },
         )
     ]
