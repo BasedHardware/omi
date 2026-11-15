@@ -634,6 +634,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},'
         r'\n        {"name": "PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED", "value": "true"},'
+        r'\n        {"name": "HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED", "value": "true"},'
         r'\n        {"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_TERMINAL_FAMILY_MODE", "value": "on"},',
         payload,
@@ -709,6 +710,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             for name in (
                 'HOSTED_LID_API_URL',
                 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
+                'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
                 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
                 'BATCH_INPUT_EXPIRING_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
@@ -4041,6 +4044,14 @@ def _assert_record_close_listener_bindings(config):
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
         assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == {'value': 'false', 'category': 'rollout'}
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT') == {
+            'value': '100',
+            'category': 'rollout',
+        }
+        assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S') == {
+            'value': '',
+            'category': 'rollout',
+        }
         assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
@@ -4057,11 +4068,18 @@ def test_record_close_notify_bound_on_all_listener_hosts(environment):
             _assert_record_close_listener_bindings(missing)
 
 
-@pytest.mark.parametrize('key', ['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'])
-def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key):
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'false'),
+        ('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100'),
+        ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S', ''),
+    ],
+)
+def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key, value):
     validator = load_validator()
     payload = with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
-    value = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
     payload = payload.replace(json.dumps({'name': key, 'value': value}) + ',', '')
     path = tmp_path / 'missing-close-switch.json'
     path.write_text(payload)

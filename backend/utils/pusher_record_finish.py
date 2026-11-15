@@ -34,24 +34,41 @@ def log_closed_record_drain_cap() -> None:
     logger.info('event=record_abandon_cap value=%s', MAX_ABANDON_RECORD_DRAINS)
 
 
-def abandon_evicted_record_drain(task, barrier, futures) -> bool:
-    """A small metadata coordinator; never restart the evicted projection."""
+PREPARED_ABANDON_DEADLINE_SECONDS = 30.0
+
+
+def abandon_evicted_record_drain(task, barrier, futures, *, prepared: set[str] | None = None) -> bool:
+    """Settle an ended producer, then attest only its own tokens; never certify a tail.
+
+    Prepared EOF uses the same capped metadata lane as eviction, with a fixed
+    deadline and a recording filter. Overflow/timeout retain the durable fence.
+    """
     # Even refusal must fence local reconnect recovery while late I/O settles.
     # This removes only a hint; the durable producer token remains unchanged.
-    barrier.forget_evicted_tokens()
+    if prepared is None:
+        barrier.forget_evicted_tokens()
+    else:
+        barrier.forget_evicted_tokens(prepared)
     if len(_abandon_record_drains) >= MAX_ABANDON_RECORD_DRAINS:
         logger.warning('event=record_closed_finish outcome=abandon_overflow')
         return False  # No coordinator or abandon write; retain the producer fence.
 
     async def abandon(worker):
-        await asyncio.wait([worker])  # Settlement, not cancellation, is the proof.
         try:
-            worker.exception()  # Release a cancellation traceback's upload locals.
-        except asyncio.CancelledError:
-            pass
-        del worker  # Metadata retries must not retain a settled socket/PCM frame.
-        await futures.wait()
-        await barrier.abandon_recordings()
+            async with asyncio.timeout(PREPARED_ABANDON_DEADLINE_SECONDS if prepared is not None else None):
+                await asyncio.wait([worker])  # Settlement, not cancellation, is the proof.
+                try:
+                    worker.exception()  # Release a cancellation traceback's upload locals.
+                except asyncio.CancelledError:
+                    pass
+                del worker  # Metadata retries must not retain a settled socket/PCM frame.
+                await futures.wait()
+                if prepared is None:
+                    await barrier.abandon_recordings()
+                else:
+                    await barrier.abandon_recordings(prepared)
+        except TimeoutError:
+            logger.warning('event=record_closed_finish outcome=prepared_unsettled')
 
     owner = start_background_task(abandon(task), name='pusher:abandon_evicted_record_tokens')
     _abandon_record_drains.add(owner)
