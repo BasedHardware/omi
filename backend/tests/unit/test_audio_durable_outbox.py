@@ -17,10 +17,12 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import google.auth
 import pytest
 from starlette.websockets import WebSocketState
 from fastapi.websockets import WebSocketDisconnect
 from google.api_core.exceptions import InvalidArgument, PreconditionFailed
+from google.auth.exceptions import DefaultCredentialsError
 from google.rpc.error_details_pb2 import ErrorInfo
 from google.cloud.exceptions import NotFound
 
@@ -2607,6 +2609,19 @@ async def test_close_defers_only_optional_discovery_after_verified_upload(inline
     assert order == (['verified_upload', 'debt'] if fast == 'true' else ['verified_upload'])
 
 
+def _parked_at(task) -> str:
+    """The chain of awaits a suspended task is parked on, outermost first."""
+    chain, awaited = [], task.get_coro()
+    while awaited is not None and len(chain) < 12:
+        frame = getattr(awaited, 'cr_frame', None) or getattr(awaited, 'gi_frame', None)
+        if frame is None:
+            chain.append(type(awaited).__name__)
+            break
+        chain.append(f'{frame.f_code.co_name}:{frame.f_lineno}')
+        awaited = getattr(awaited, 'cr_await', None) or getattr(awaited, 'gi_yieldfrom', None)
+    return ' <- '.join(chain)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('close_path', ['staged_v3', 'finalization', 'rollover'])
 async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
@@ -2615,6 +2630,12 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
     client, path, barrier, projected = inline_session
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    # The durable queue loop sleeps this long between passes; at the real 1 s the
+    # handler's shutdown needs several wall-clock seconds and races a loaded runner.
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.001)
+    # No path in this test may build a real cloud client: credential discovery
+    # probes the network and its duration depends on the runner.
+    monkeypatch.setattr(google.auth, 'default', MagicMock(side_effect=DefaultCredentialsError('hermetic unit test')))
     entered = asyncio.Event()
     sealed = asyncio.Event()
     release = threading.Event()
@@ -2677,4 +2698,10 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         assert client.rows[path]['record_upload_sessions'] == {}
     finally:
         release.set()
-        await asyncio.wait_for(handler, 5)
+        try:
+            await asyncio.wait_for(asyncio.shield(handler), 5)
+        except asyncio.TimeoutError:
+            # Name the await the handler is parked on instead of a bare timeout.
+            parked = _parked_at(handler)
+            handler.cancel()
+            pytest.fail(f'pusher handler still running 5 s after release; parked at: {parked}')
