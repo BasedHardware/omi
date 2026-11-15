@@ -14,6 +14,8 @@ from config import batch_pipeline_coalescing as config
 from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_staging import reap_one
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, MemoryTransaction, item
+
+# Load the supervisor once during collection, outside per-test call CPU accounting.
 from utils.batch_pipeline import serving, upload_coalescing
 from utils.batch_pipeline.upload_coalescing import _pack, _unpack, member_status, queued
 

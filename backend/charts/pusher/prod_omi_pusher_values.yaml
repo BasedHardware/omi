@@ -142,6 +142,12 @@ env:
     value: "true"
   - name: HOME_TRANSCRIPTION_DEADLINE_SECONDS
     value: "7200"
+  - name: HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED
+    value: "true"
+  - name: PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED
+    value: "true"
+  - name: HOME_TRANSCRIPTION_MAX_AGE_SECONDS
+    value: "86400"
   - name: HOME_PROCESSING_MAX_AGE_SECONDS
     value: "21600"
   # lead2 88ba4d: pusher train, canary one pod before fleet expansion.
