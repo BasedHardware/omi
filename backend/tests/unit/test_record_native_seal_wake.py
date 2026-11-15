@@ -93,7 +93,8 @@ def test_native_wake_kill_switch_and_foreign_job_are_preserved(records, monkeypa
 
 
 @pytest.mark.parametrize('ledger_fails', [False, True])
-def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monkeypatch, ledger_fails):
+@pytest.mark.parametrize('failure_site', ['transaction', 'observer'])
+def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monkeypatch, ledger_fails, failure_site):
     from database import pipeline_ledger
 
     monkeypatch.setenv('PIPELINE_LEDGER', 'true')
@@ -108,7 +109,8 @@ def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monke
         available_at=now + 900,
         record_intake_retry_at=now + 900,
     )
-    original = pipeline_ledger._commit
+    attribute = '_commit' if failure_site == 'transaction' else 'advance'
+    original = getattr(pipeline_ledger, attribute)
     observed = []
 
     def after_seal(*args, **kwargs):
@@ -119,7 +121,7 @@ def test_post_seal_ledger_observes_atomic_wake_and_cannot_undo_it(records, monke
             raise OSError('synthetic ledger failure after authoritative seal')
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(pipeline_ledger, '_commit', after_seal)
+    monkeypatch.setattr(pipeline_ledger, attribute, after_seal)
     assert seal_record_audio('uid-at', 'record', firestore_client=records) is None
     assert observed == [True]
     seal_tx = next(
