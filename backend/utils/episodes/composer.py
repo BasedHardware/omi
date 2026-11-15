@@ -794,6 +794,8 @@ def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
 
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
     pending = compose_wait.transcript_anchor(row)
+    if pending is None and compose_wait.unstamped_audio_wait(row):
+        pending = datetime.now(timezone.utc)
     if (
         episode_compose_transcript_wait_enabled()
         and pending

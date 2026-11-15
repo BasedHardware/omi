@@ -314,17 +314,24 @@ def test_committed_stt_empty_needs_no_summary_exhaustion_verdict(store, clock):
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
 
 
-def test_registered_audio_without_legacy_pending_stamp_uses_finished_clock(store, clock, monkeypatch):
+def test_registered_audio_without_legacy_pending_stamp_uses_first_observation(store, clock, monkeypatch):
     row = terminal(store)
     row.pop(empty_transcription.FIELD)
     row.pop('home_transcription_pending_at')
-    row.update(server_batch_audio_received=True, finished_at=clock.current)
+    row.update(server_batch_audio_received=True, finished_at=T0)
     assert composer._transcript_wait_until(row) == clock.current + timedelta(seconds=1200)
     calls = []
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
     assert not calls
-    clock.current += timedelta(seconds=1200)
+    first = clock.current
+    clock.current += timedelta(seconds=600)
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert store.episode['compose_transcript_wait_until'] == first + timedelta(seconds=1200)
+    clock.current += timedelta(seconds=600)
     assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
     assert len(calls) == 1
     monkeypatch.setenv('EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED', 'false')
+    assert composer._transcript_wait_until(row) is None
+    monkeypatch.setenv('EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED', 'true')
+    monkeypatch.setenv('EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED', 'false')
     assert composer._transcript_wait_until(row) is None

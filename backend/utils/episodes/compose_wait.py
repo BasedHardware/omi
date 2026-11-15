@@ -37,16 +37,20 @@ def settled_terminal(row: Mapping[str, Any]) -> bool:
 
 
 def transcript_anchor(row: Mapping[str, Any]) -> datetime | None:
-    pending = utc(row.get('home_transcription_pending_at')) or utc(row.get('episode_transcription_pending_at'))
-    if pending or not settled_terminal_enabled():
-        return pending
-    # Older registered batch rows may predate pending stamps. Audio custody is
-    # positive evidence of expected STT; empty text by itself is not.
-    if row.get('server_batch_audio_received') is True or any(
-        row.get(key) is not None for key in ('server_batch_audio_start', 'server_batch_audio_end')
-    ):
-        return utc(row.get('finished_at')) or utc(row.get('created_at'))
-    return None
+    return utc(row.get('home_transcription_pending_at')) or utc(row.get('episode_transcription_pending_at'))
+
+
+def unstamped_audio_wait(row: Mapping[str, Any]) -> bool:
+    # Old capture timestamps can predate a fresh upload by days. Only the
+    # first-observation map can bound this otherwise unstamped registered work.
+    return bool(
+        settled_terminal_enabled()
+        and anchored_wait_enabled()
+        and (
+            row.get('server_batch_audio_received') is True
+            or any(row.get(key) is not None for key in ('server_batch_audio_start', 'server_batch_audio_end'))
+        )
+    )
 
 
 OBSERVATIONS = 'compose_transcript_wait_observations'
