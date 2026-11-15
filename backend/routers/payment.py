@@ -29,11 +29,8 @@ from database import (
     action_items as action_items_db,
 )
 from database.locked_content import has_recoverable_locked_content
-from database.redis_db import (
-    claim_payment_recovery_notification,
-    claim_trial_ending_notification,
-    set_credits_invalidation_signal,
-)
+from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
+from database.redis_db import claim_trial_ending_notification
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
