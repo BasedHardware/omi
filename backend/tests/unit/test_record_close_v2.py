@@ -27,6 +27,7 @@ from utils.pusher_record_close import result_frame
 def staged_protocol_opt_in(monkeypatch):
     # Experimental handshake proofs opt in explicitly; shipping defaults are off.
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
 
 
 @pytest.mark.asyncio

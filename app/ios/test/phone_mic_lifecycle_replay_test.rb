@@ -19,6 +19,57 @@ require 'json'
 class PhoneMicLifecycleReplayTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
 
+  def test_recovery_heartbeat_with_manual_deadlines
+    controller = File.read(File.join(IOS_ROOT, 'Runner/PhoneMic/PhoneMicController.swift'))
+    # Instrument only a temporary compilation input, never the shipping file.
+    # Exact-count replacements fail closed if the controller's timer seam moves.
+    controller = replace_once(controller, 'private var progressTimer: DispatchSourceTimer?',
+                              'private var progressTimer: ManualProgressTimer?')
+    controller = replace_once(controller, 'let timer = DispatchSource.makeTimerSource(queue: controlQueue)',
+                              'let timer = ManualProgressTimer(queue: controlQueue)')
+    deadline = 'timer.schedule(deadline: .now() + first, repeating: repeating, leeway: leeway)'
+    assert_equal 2, controller.scan(deadline).length, 'progress timer schedule seam changed'
+    controller = controller.gsub(deadline, deadline.sub('.now()', 'ManualProgressTimer.now'))
+    sources = %w[
+      Runner/PhoneMic/PhoneMicEventEmitter.swift
+      Runner/PhoneMic/PhoneMicControllerSeams.swift
+      Runner/PhoneMic/PhoneMicCaptureEngine.swift
+      Runner/PhoneMic/PhoneMicConverterPipeline.swift
+      test/phone_mic_lifecycle_replay_test.swift
+      test/phone_mic_manual_progress_timer.swift
+    ].map { |path| File.join(IOS_ROOT, path) }
+    Dir.mktmpdir('omi-phonemic-heartbeat') do |directory|
+      stub = File.join(directory, 'pigeon_stub.swift')
+      File.write(stub, extract_pigeon_contract_stub)
+      fixture = File.join(directory, 'PhoneMicController.swift')
+      binary = File.join(directory, 'heartbeat-test')
+      [false, true].each do |delayed|
+        candidate = controller
+        if delayed
+          # Negative control: reaching running discards the fast deadline and
+          # postpones the beat to the healthy cadence. The same oracle must fail.
+          candidate = replace_once(candidate,
+            "            applyProgressCadence()\n        }\n        resolvePendingStarts(.success(()))",
+            "            syncProgressTimer(first: Self.healthyProgressTickInterval, repeating: Self.healthyProgressTickInterval)\n        }\n        resolvePendingStarts(.success(()))")
+        end
+        File.write(fixture, candidate)
+        stdout, stderr, status = Open3.capture3('swiftc', '-D', 'PHONE_MIC_MANUAL_PROGRESS_TIMER',
+          '-parse-as-library', *sources, fixture, stub, '-o', binary)
+        assert status.success?, "manual heartbeat swiftc failed:\n#{stdout}\n#{stderr}"
+        [[], ['--immediate-beat']].each do |arguments|
+          stdout, stderr, status = Open3.capture3(binary, *arguments)
+          if delayed
+            refute status.success?, 'delayed recovery beat escaped the heartbeat oracle'
+            assert_includes stderr, 'recovery must emit its pending fast beat within ~1s'
+          else
+            assert status.success?, "manual heartbeat failed:\n#{stdout}\n#{stderr}"
+            assert_includes stdout, 'manual recovery heartbeat passed:'
+          end
+        end
+      end
+    end
+  end
+
   def test_native_lifecycle_replay_vectors
     sources = %w[
       Runner/PhoneMic/PhoneMicController.swift
@@ -93,6 +144,11 @@ class PhoneMicLifecycleReplayTest < Minitest::Test
   end
 
   private
+
+  def replace_once(source, before, after)
+    assert_equal 1, source.scan(before).length, "controller fixture seam changed: #{before}"
+    source.sub(before, after)
+  end
 
   # Extract the enum + error-type definitions the controller compiles against.
   # Anchored, greedy-until-brace-close; fails when Pigeon's layout changes.

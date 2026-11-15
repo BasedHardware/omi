@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 
 from tests.unit.test_timeliness_metrics_are_scraped import FRESH_NEWEST
-from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
+from tests.unit.test_batch_pipeline_projection_release import rows as projection_rows, store_for, OWNER, TARGET
 from prometheus_client import CollectorRegistry
 
 from config.batch_pipeline import scheduler_control_key
@@ -290,7 +290,7 @@ def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
 
 def test_terminal_assignment_is_not_automatically_released_but_operator_uses_existing_target_gate(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
-    seeded = rows()
+    seeded = projection_rows()
     key = ('batch_pipeline_prod_jobs', 'held')
     seeded[key].update(state='dead', dead_letter_reason='input_expiring', input_expiring_leg='assignment')
     client, projection = store_for(seeded)

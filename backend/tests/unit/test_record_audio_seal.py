@@ -751,6 +751,7 @@ async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeyp
     from utils.pusher_protocol import PUSHER_RECORD_CLOSE_ACK_OPCODE
 
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', enabled)
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     ws = FakeWebSocket([])
     ws.sent = []
 
