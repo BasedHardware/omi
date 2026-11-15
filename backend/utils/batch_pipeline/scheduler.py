@@ -34,6 +34,7 @@ from utils.batch_pipeline.control import activate, consume_frontier_hint, field,
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
+from database import batch_pipeline_allowance_hold as allowance_hold
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -862,6 +863,8 @@ class Scheduler:
             if held_reason:
                 job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
                 job['last_policy_hold'] = {'reason': held_reason, 'at': now}
+            if allowance_hold.enabled() and held_reason == 'allowance_exhausted' and allowance_hold.park(tx, job, now):
+                return True
             tx.put('jobs', segment_id, job)
             return True
 
@@ -915,6 +918,8 @@ class Scheduler:
                             defer=_defer,
                         )
                     elif job.get('state') == 'retry' and job['available_at'] <= now:
+                        if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
+                            return ('allowance_parked', 0, None)
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
@@ -934,6 +939,15 @@ class Scheduler:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
         return recovered
+
+    @staticmethod
+    def release_allowance_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Capture-ordered owner release rejoins DRR; current admission is still mandatory."""
+        allowance_hold.restore_retry(job, now)
+        job.update(state='ready', compute_decision={'outcome': 'unattempted'})
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
     def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:

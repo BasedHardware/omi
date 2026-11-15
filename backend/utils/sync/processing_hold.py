@@ -13,11 +13,12 @@ import json
 import os
 from typing import Any
 
-from prometheus_client import Counter, REGISTRY
+from prometheus_client import Counter, Histogram, REGISTRY
 from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
 QUIET_SECONDS = 600
+MIN_QUIET_SECONDS = 120
 MAX_HOLD_SECONDS = 3600
 MAX_LATE_RUNS = 1
 FIELD = 'sync_processing_hold'
@@ -42,6 +43,19 @@ def _outcomes() -> Counter:
         return REGISTRY._names_to_collectors['omi_sync_processing_hold_total']  # type: ignore[attr-defined]
 
 
+@cache
+def _arrival_gap() -> Histogram:
+    name = 'omi_sync_content_arrival_gap_seconds'
+    try:
+        return Histogram(
+            name,
+            'Seconds between consecutive content arrivals on one held sync conversation',
+            buckets=(5, 15, 30, 60, 120, 180, 240, 300, 450, 600, 900, 1800, 3600),
+        )
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
+
+
 def record(outcome: str) -> None:
     _outcomes().labels(
         outcome=reason_label(ReasonFamily.SYNC_PROCESSING_HOLD, outcome, SyncProcessingHoldOutcome)
@@ -50,6 +64,22 @@ def record(outcome: str) -> None:
 
 def enabled() -> bool:
     return os.getenv('SYNC_PROCESSING_HOLD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off', 'no'}
+
+
+def quiet_seconds() -> int:
+    """Arrival-quiet window before full processing, read per call.
+
+    Clients that send no end-of-recording proof wait this long after the last
+    content arrival. ``SYNC_PROCESSING_QUIET_SECONDS`` tunes it without a
+    release; a missing or malformed value keeps the 600 s default, and the
+    value is clamped to [120, 600] so a typo can neither remove the debounce
+    nor lengthen the wait.
+    """
+    try:
+        value = int(os.getenv('SYNC_PROCESSING_QUIET_SECONDS', str(QUIET_SECONDS)))
+    except (TypeError, ValueError):
+        return QUIET_SECONDS
+    return max(MIN_QUIET_SECONDS, min(QUIET_SECONDS, value))
 
 
 def enabled_for(row: Mapping[str, Any]) -> bool:
@@ -106,6 +136,14 @@ def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
     # A successful full run ends an epoch. The next append starts a bounded new one.
     if not state.get('pending_since'):
         state['pending_since'] = now
+    elif timestamp(state.get('last_content_at')):
+        # The share of gaps longer than a candidate quiet window is the late
+        # re-run rate that window would buy. Content-free; a retried assignment
+        # transaction may observe one gap twice, which a distribution tolerates.
+        try:
+            _arrival_gap().observe(max(0.0, now - timestamp(state.get('last_content_at'))))
+        except Exception:  # Metrics must never break assignment.
+            pass
     state['held'] = True
     state['last_content_at'] = max(timestamp(state.get('last_content_at')), now)
     return state
@@ -121,14 +159,15 @@ def admission(row: Mapping[str, Any], obligation: Mapping[str, Any], *, now: flo
     first = timestamp(state.get('pending_since')) or float(obligation['first_pending_at'])
     last = max(timestamp(state.get('last_content_at')), timestamp((row.get('smart_merge') or {}).get('last_merged_at')))
     last = last or first
-    due = min(last + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+    quiet = quiet_seconds()
+    due = min(last + quiet, first + MAX_HOLD_SECONDS)
     watermark = state.get('upload_watermark_at')
-    gap = timestamp(row.get('finished_at')) + QUIET_SECONDS
+    gap = timestamp(row.get('finished_at')) + quiet
     if now < first + MAX_HOLD_SECONDS:
         if now < due:
             return 'quiet_wait', due
         if watermark is not None and timestamp(watermark) < gap:
-            return 'watermark_wait', min(now + QUIET_SECONDS, first + MAX_HOLD_SECONDS)
+            return 'watermark_wait', min(now + quiet, first + MAX_HOLD_SECONDS)
     previous = state.get('full_snapshot')
     if previous:
         current = content_snapshot(row)

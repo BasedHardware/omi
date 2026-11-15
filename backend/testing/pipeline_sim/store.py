@@ -225,6 +225,25 @@ class SimStore:
         self.observers: list[Callable[[tuple[str, str], dict, dict], None]] = []
 
     # -- Store protocol -------------------------------------------------
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        rows = sorted(
+            (row['check_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'allowance_holds' and row.get('active') and row['check_at'] <= now
+        )
+        return [key for _, key in rows[: max(1, min(limit, 100))]]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        rows = sorted(
+            (row['capture_at'], key)
+            for (table, key), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'allowance_held'
+            and (owner_key is None or row['owner_key'] == owner_key)
+            and (after is None or (row['capture_at'], key) > tuple(after))
+        )
+        return [key for _, key in rows[: max(1, min(limit, 100))]]
+
     def run(self, body: Callable[[SimTransaction], T]) -> T:
         self.transactions += 1
         tx = SimTransaction(self)
@@ -334,7 +353,7 @@ class SimStore:
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         """Model of database/batch_pipeline_recovery.quarantine_fenced (fence recheck, revoke only)."""
         job = self.rows.get(('jobs', segment_id), {})
-        if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+        if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
             return False
         if not self.customer.blocked(
             job['owner_id'],

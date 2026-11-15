@@ -5,6 +5,95 @@ selects emergency legacy behavior; empty or malformed values retain custody.
 The rollout lead owns merge, coordinated listen/pusher rollout, alert activation
 and any emergency rollback. This change does not authorize a production write.
 
+## Lossless PCM storage (new writes)
+
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true` is the default. Listen and pusher
+share the same optional PCM16 representation helper before immutable commit.
+It tries mono PCM windows from 32,000 bytes through 16 MiB, with two encoder
+slots per process, one FFmpeg codec thread, and a two-second deadline for each
+encode/decode subprocess. Busy capacity, missing FFmpeg, timeouts, invalid
+output or any sample mismatch retain original PCM. Windows below the minimum,
+PCM8, native Opus, multichannel originals and packs without a complete PCM
+identity proof keep their current representation.
+Only an independently decoded, byte-identical FLAC saving at least 5% is used.
+Compression applies regardless of speech classification: quiet speech is safe.
+
+This changes storage representation, not retention. No historical objects are
+read, rewritten, expired, deleted or moved between storage classes. Mobile
+original files and PCM projections are unchanged. Capture frame byte offsets
+and hashes describe original decoded PCM; media SHA-256 describes the stored
+plaintext container. Existing readers already support both formats. Custody
+still requires both immutable object generations and the manifest before ACK.
+A retry in the same configuration reuses content-addressed media and manifest;
+a retry crossing a writer-switch change can leave both valid representations,
+so neither representation may be treated as deletion eligibility.
+
+Rollback: set `AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=false` on listen/pusher
+through the release lane. This stops new compression without disabling custody
+or reads of existing FLAC. No reader-first deployment or data migration is needed.
+
+Release acceptance: deploy listen and pusher through their owned trains, record
+each serving source SHA plus a fresh `omi_audio_pcm_storage_total{result="flac"}`
+increment, and observe one full 30-minute window. Confirm custody commit/failure,
+raw read checksum/decode/coverage failures and commit latency versus the prior
+window; no new integrity failures, no sustained increase in custody errors or
+latency. If errors or latency regress, disable compression on that surface.
+The encoder outcome counter distinguishes `disabled`, `ineligible`, `busy`,
+`not_smaller`, `encoder_error`, `mismatch`, and `flac`. Input/saved byte counters
+count admitted encoding attempts, including retries before commit. Input bytes
+exclude disabled, ineligible and busy candidates; saved bytes count only savings
+verified by byte-exact decode for each attempt. These are not billed storage
+savings. Use committed `omi_audio_archive_bytes_total{codec="flac"}` and
+bucket growth to corroborate savings; an absent eligible PCM cohort is UNKNOWN,
+not a successful savings measurement. No >90% silence claim follows from this.
+
+The `omi_audio_pcm_storage_seconds` histogram times the optional representation
+step, including fallback. Outcome counters initialize at zero. Check absolute
+mismatch/over-budget counts as well as deltas to catch a first event before
+the first scrape. The two subprocess timeouts add at most
+four seconds of configured optional waiting, plus process startup/cleanup;
+busy capacity falls back immediately rather than queueing another encoder.
+
+Release reads the following PromQL through the project's managed Prometheus
+API with `ro-prod`, separately for `job="prod-omi-backend-listen"` and
+`job="prod-omi-pusher"`, always with `namespace="prod-omi-backend"`. Pin the
+evaluation time and use windows entirely after the serving readback. Replace
+`JOB` with that one job, never a fleet-wide sum:
+
+```promql
+sum(increase(omi_audio_pcm_storage_total{namespace="prod-omi-backend",job="JOB",result="flac"}[30m]))
+sum(increase(omi_audio_archive_bytes_total{namespace="prod-omi-backend",job="JOB",source="live",codec="flac"}[30m]))
+sum(increase(omi_audio_pcm_storage_input_bytes_total{namespace="prod-omi-backend",job="JOB"}[30m]))
+sum(increase(omi_audio_pcm_storage_saved_bytes_total{namespace="prod-omi-backend",job="JOB"}[30m]))
+sum(omi_audio_pcm_storage_total{namespace="prod-omi-backend",job="JOB",result="mismatch"})
+sum(increase(omi_audio_raw_read_total{namespace="prod-omi-backend",job="JOB",result=~"checksum_mismatch|decode_error|coverage_mismatch|decrypt_error"}[5m]))
+sum(increase(omi_audio_custody_failures_total{namespace="prod-omi-backend",job="JOB"}[5m])) / clamp_min(sum(increase(omi_audio_custody_commits_total{namespace="prod-omi-backend",job="JOB"}[5m])), 1)
+histogram_quantile(0.99, sum by (le) (rate(omi_audio_pcm_storage_seconds_bucket{namespace="prod-omi-backend",job="JOB"}[5m])))
+sum(omi_audio_pcm_storage_seconds_count{namespace="prod-omi-backend",job="JOB"}) - sum(omi_audio_pcm_storage_seconds_bucket{namespace="prod-omi-backend",job="JOB",le="5.0"})
+```
+
+Before rollout, record the same custody-failure fraction over the immediately
+preceding 30-minute window as `baseline_failure_fraction`. Wait for one full
+five-minute window of the new serving state before evaluating guards. Disable
+compression on that surface for any new sample mismatch or raw integrity
+failure, or any observed optional step over five seconds. After at least 100
+timed calls, disable it if optional-step p99 exceeds 0.5 seconds in two
+consecutive complete five-minute windows. Also disable for a custody-failure
+fraction above `min(0.01, baseline_failure_fraction + 0.001)` in two consecutive
+complete windows. These are conservative compression rollback triggers; keep
+custody itself on. Release records the actual observations and trigger.
+
+The full 30-minute acceptance window must have at least 100 representation
+calls, ten verified FLAC outcomes and positive committed FLAC bytes per surface,
+with no rollback trigger. Insufficient traffic/metric coverage is UNKNOWN.
+Verified FLAC outcomes prove actual byte-exact decode checks before write;
+zero raw-read errors without successful read traffic cannot certify a separate
+playback exercise. Record that distinction. The histogram measures the added
+codec step, not total custody-commit latency. Total commit latency remains UNKNOWN
+unless an independent metric is identified; record downstream backpressure
+separately with existing custody meters. Net dollar savings remain
+uncredited until actual eligible byte savings and compute cost are measured.
+
 This switch is the sole custody kill switch. `AUDIO_ARCHIVE_LIVE_ENABLED`
 controls legacy raw admission only after the outbox switch is set to `false`;
 it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
@@ -254,8 +343,9 @@ fence, tombstone and protection reads occur per committed window rather than
 per relay cycle; no safety authority is cached across windows.
 Measure GCS operation spend and listen latency during
 the staging canary; tune batching only while preserving the custody barrier.
-PCM custody writes preserve the original bytes without invoking an encoder;
-encoding/decoding failure cannot prevent custody of even a one-sample frame.
+PCM custody writes preserve the original samples; eligible proven PCM may use
+the optional lossless representation described above. Encoding/decoding failure
+cannot prevent custody of even a one-sample frame.
 Do not count savings or assume the rollout's extra cost is zero.
 
 Emergency rollback: set `AUDIO_DURABLE_OUTBOX_ENABLED=false` on both listen and

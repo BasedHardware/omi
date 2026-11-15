@@ -30,6 +30,14 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         DriverEntry(
+            'database.batch_pipeline_delivered_share.delivered_share_page',
+            domains={'namespace': namespaces},
+            neutrals={
+                'now': (2000000000.0, 'fixed cohort clock; no shape change'),
+                'limit': (5000, 'bounded page size only'),
+            },
+        ),
+        DriverEntry(
             'database.batch_pipeline_fresh_guard.fresh_committed_counts',
             domains={'namespace': namespaces},
             neutrals={'now': (2000000000.0, 'fixed cohort clock; no shape change')},
@@ -103,6 +111,7 @@ def entries():
             patchers=(_repair_age_orders,),
             domains={
                 'urgent': [False, True],
+                'fresh': [False, True],
                 'after': [
                     None,
                     {
@@ -124,6 +133,7 @@ def entries():
                 'invalid_clock_counts': (None, 'content-free aggregate output only; no query shape change'),
                 'progress': (lambda _: None, 'content-free fallback diagnostic only'),
                 'metric_ages': (None, 'output-only validated gauge samples; no filter or ordering change'),
+                'exclude': (frozenset(), 'in-memory deduplication only; no query shape change'),
             },
         ),
         DriverEntry(
