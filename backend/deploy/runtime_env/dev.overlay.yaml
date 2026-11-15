@@ -337,8 +337,6 @@ overlay:
       name: dev-omi-backend-config
   desktop_backend:
     env:
-      PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
-      PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
     secrets:

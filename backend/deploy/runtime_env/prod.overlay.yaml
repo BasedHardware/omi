@@ -482,8 +482,6 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
-      PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
-      PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
       OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
       OMI_FLAGS_SOURCE: {value: dual, category: rollout}

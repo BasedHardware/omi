@@ -94,7 +94,7 @@ of the protocol connection.
 
 All switches default on and have explicit dev/prod runtime and chart bindings:
 `PUSHER_RECORD_CLOSE_NOTIFY_ENABLED` and `PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED`
-on pusher, backend-listen, every Cloud Run backend service and desktop backend
+on pusher, backend-listen, every Cloud Run backend service
 (dev/prod); the cohost gate requires identical GKE literals. The native
 `PUSHER_RECORD_SEAL_WAKE_ENABLED` remains pusher-only. All three are registered in
 the helper-aware flag budget. Set notify=false on every listener host and pusher,
@@ -126,3 +126,8 @@ Normal one-attempt, B=1, P=0 is480000 reads/day, not a measured production savin
 The two optional executors can create four additional lazy threads/process:
 68 threads across17 pusher pods if all are exercised. RSS is unmeasured. Global
 coordinator bounds remain128 keys/2048 paths/two active calls; marker queue32.
+
+Desktop backend uses the separate desktop_backend:create_app entrypoint, which
+mounts neither transcribe/listen nor sync playback; it needs neither shared flag.
+All four Cloud Run main:app services bind both switches even where a listener
+cannot connect to a hosted pusher.

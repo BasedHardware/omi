@@ -4000,7 +4000,7 @@ def test_quality_push_switches_are_bound_on_every_owning_backend_host(environmen
 
 def _assert_record_close_listener_bindings(config):
     # main.py defaults to ALL: every declared backend service can mount /v4/listen.
-    hosts = [config['gke']['backend-listen'], config['gke']['pusher'], config['desktop_backend']]
+    hosts = [config['gke']['backend-listen'], config['gke']['pusher']]
     hosts.extend(config['cloud_run']['services'].values())
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
