@@ -1327,7 +1327,7 @@ def test_job_failure_logs_exception_type_and_site_never_message(tmp_path, stage)
         '    entry["repair"].run = boom\n'
         'else:\n'
         '    entry["repair"].run = ok\n'
-        '    sys.modules["utils.record_projection_rebuild"] = types.SimpleNamespace(run_job=lambda: boom())\n'
+        '    sys.modules["utils.record_projection_rebuild"] = types.SimpleNamespace(run_job=lambda **kwargs: boom())\n'
         '    import utils\n'
         '    utils.record_projection_rebuild = sys.modules["utils.record_projection_rebuild"]\n'
         f'sys.argv = [{str(entrypoint)!r}]\n'
@@ -1896,3 +1896,59 @@ def test_active_full_repair_counts_shadow_lease_would_expire(source, monkeypatch
     assert record_token_lease_metrics.EXPIRED_WOULD._value.get() == before + 1
     if observed is not None:
         assert observed['lease_reason'] == 'lease_would_expire'
+
+
+@pytest.mark.parametrize('stop_at', ['discovery', 'checkpoint'])
+def test_phase_budget_never_fabricates_seals_and_final_checkpoint_retains_counts(source, proof, monkeypatch, stop_at):
+    from database import _client
+    from utils.batch_pipeline import record_seal_sweeper, record_seal_budget
+    from utils.batch_pipeline.record_seal_repair_cursor import RepairCursor
+
+    monkeypatch.setattr(config, 'jobs_enabled', lambda: False)
+    monkeypatch.setattr(config, 'require_runtime', lambda: None)
+    monkeypatch.setattr(config, 'server_flags', lambda: SERVER)
+    monkeypatch.setattr(config, 'settings', lambda: (2, 240, 1500, 'apply'))
+    client = CursorClient()
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(record_seal_sweeper, 'read_pusher_pod_proof', proof)
+    monkeypatch.setattr(cluster, 'promote_record_recoveries', lambda *a, **kw: 0)
+    monkeypatch.setattr(cluster.record_custody_receipts, 'prune', lambda *a, **kw: 0)
+    selected = {
+        'path': 'users/synthetic/conversations/a',
+        'finished_at': datetime.now(timezone.utc),
+        'horizon': datetime.now(timezone.utc),
+    }
+
+    def discover(*args, **kwargs):
+        if stop_at == 'discovery':
+            raise record_seal_budget.BudgetExhausted()
+        kwargs['selected_cursors'][selected['path']] = selected
+        return [(selected['path'], 100)], False, selected
+
+    monkeypatch.setattr(cluster, 'discover', discover)
+    writes = []
+
+    def write(self, cursor, budget):
+        writes.append(cursor)
+        if len(writes) == 2:
+            raise record_seal_budget.BudgetExhausted()
+
+    monkeypatch.setattr(RepairCursor, 'write', write)
+
+    def coordinate(rows, **kwargs):
+        kwargs['attempted'](selected['path'])
+        return {'rows': 1, 'dispositions': {'sealed': 1}}
+
+    work = Mock(side_effect=coordinate)
+    monkeypatch.setattr(cluster, 'coordinate', work)
+    events = []
+    if stop_at == 'discovery':
+        with pytest.raises(record_seal_budget.BudgetExhausted):
+            cluster.run(progress=events.append)
+        work.assert_not_called()
+    else:
+        report = cluster.run(progress=events.append)
+        assert report['outcome'] == 'budget_exhausted'
+        assert report['cursor_checkpoint_outcome'] == 'budget_exhausted' and report['work_incomplete']
+        assert report['dispositions'] == {'sealed': 1} and report['rows'] == 1
+        assert {'event': 'record_seal_repair_checkpoint', 'outcome': 'budget_exhausted'} in events

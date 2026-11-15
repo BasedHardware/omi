@@ -139,6 +139,9 @@ def process_deadline(started, hostname, wall_now, monotonic_now):
     return deadline
 
 
+PROJECTION_PREPASS_SHARD = 0
+
+
 def main():
     def terminate(*_):
         # Unwind the coordinator's finally block and reap all children.
@@ -155,6 +158,8 @@ def main():
         ), repair.silent_dependencies(), (
             repair_probe_server() if sys.argv[1:] != ['--row'] and repair.config.enabled() else nullcontext()
         ):
+            projection_report = {}
+            phase = 'setup'
             try:
                 if sys.argv[1:] == ['--row']:
                     payload = json.loads(sys.stdin.buffer.read(8193))
@@ -168,31 +173,65 @@ def main():
                     shard, shards = partition_arguments(sys.argv[1:])
                     deadline = process_deadline(PROCESS_STARTED, socket.gethostname(), time.time(), time.monotonic())
 
+                    from utils.batch_pipeline.record_seal_budget import BudgetExhausted, SweepBudget
+
+                    outer_budget = SweepBudget(max(0, deadline - time.monotonic()))
+
                     def projection():
+                        nonlocal phase
+                        if shard != PROJECTION_PREPASS_SHARD:
+                            return
+                        phase = 'projection_prepass'
                         try:
                             from utils import record_projection_rebuild
-                            from utils.batch_pipeline.record_seal_budget import SweepBudget
 
                             remaining = deadline - time.monotonic() - 30
-                            if shard == 0 and remaining > 0:
-                                with SweepBudget(min(60, remaining)).interrupt_io():
-                                    report = record_projection_rebuild.run_job()
-                                if report['outcome'] != 'disabled':
-                                    emit(report)
+                            outer_budget.check()
+                            if remaining <= 0:
+                                projection_report.update(event='record_projection_rebuild', outcome='not_started')
+                            else:
+                                # One local timer: run_job retains completed counts on cancellation.
+                                projection_report.update(record_projection_rebuild.run_job(seconds=min(60, remaining)))
+                        except BudgetExhausted:
+                            projection_report.update(event='record_projection_rebuild', outcome='budget_exhausted')
                         except Exception as error:
-                            emit(failure('record_projection_rebuild', error))
+                            projection_report.update(failure('record_projection_rebuild', error))
+                        # An expired process budget is never mistaken for local truncation.
+                        outer_budget.check()
+                        if projection_report.get('outcome') != 'disabled':
+                            emit(projection_report)
+                        phase = 'seal'
 
-                    from utils.batch_pipeline.record_seal_budget import SweepBudget
-
-                    with SweepBudget(max(0, deadline - time.monotonic())).interrupt_io():
-                        emit(
-                            repair.run(
-                                progress=emit,
-                                deadline=deadline,
-                                before=projection,
-                                **({'shard': shard, 'shards': shards} if shards > 1 else {}),
-                            )
+                    phase = 'seal'
+                    with outer_budget.interrupt_io():
+                        report = repair.run(
+                            progress=emit,
+                            deadline=deadline,
+                            before=projection,
+                            **({'shard': shard, 'shards': shards} if shards > 1 else {}),
                         )
+                        if projection_report:
+                            report['projection_prepass'] = projection_report
+                            report['projection_prepass_budget_exhausted'] = int(
+                                projection_report.get('outcome') == 'budget_exhausted'
+                            )
+                        emit(report)
+
+            except repair.BudgetExhausted:
+                # Cancellation is incomplete work, not a shard failure or a successful seal.
+                report = {
+                    'event': 'record_seal_repair',
+                    'outcome': 'budget_exhausted',
+                    'work_incomplete': True,
+                    'phase': phase,
+                }
+                if projection_report:
+                    report['projection_prepass'] = projection_report
+                    report['projection_prepass_budget_exhausted'] = int(
+                        projection_report.get('outcome') == 'budget_exhausted'
+                    )
+                emit(report)
+                return 0
 
             except BaseException as error:
                 emit(failure('record_seal_repair', error))
