@@ -13,6 +13,8 @@ import yaml
 
 from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, compose
 from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
+from scripts.runtime_env_validation.manifest import validate_runtime_env
+from scripts.runtime_env_validation import workflows as workflow_validation
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -388,6 +390,107 @@ def test_actual_renderer_and_native_cloud_validator_share_same_canary_compositio
         assert state['services'][s]['forbidden_env']
     effective = compose(base, snapshot(), SOURCE)
     assert not _validate_cloud_run(effective, state, strict_provisional=True)
+
+
+@pytest.fixture
+def composed_canary_runtime(tmp_path):
+    private = tmp_path / 'private.json'
+    private.write_text(json.dumps(snapshot()))
+    state = tmp_path / 'state.json'
+    output = tmp_path / 'github-output'
+    environment = dict(
+        os.environ,
+        GITHUB_OUTPUT=str(output),
+        CLOUD_RUN_VPC_NETWORK='omi-prod-vpc',
+        CLOUD_RUN_VPC_SUBNET='omi-prod-subnet',
+    )
+    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    for job in manifest['environments']['prod']['cloud_run']['jobs'].values():
+        for entry in job.get('env', {}).values():
+            if isinstance(entry, dict) and entry.get('env_var'):
+                environment[entry['env_var']] = str(entry.get('default', 'offline-value'))
+    for service in manifest['environments']['prod']['cloud_run']['services'].values():
+        for entry in service.get('env', {}).values():
+            if isinstance(entry, dict) and entry.get('env_var') and not entry.get('provisional'):
+                environment[entry['env_var']] = str(entry.get('default', 'offline-value'))
+    result = subprocess.run(
+        [
+            'python3',
+            str(ROOT / 'backend/scripts/render_backend_runtime_env.py'),
+            '--env',
+            'prod',
+            '--state-output',
+            str(state),
+            '--integration-canary-state',
+            str(private),
+            '--integration-canary-source',
+            SOURCE,
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    return private, state
+
+
+def test_full_validator_checks_composed_state_and_bound_workflow_provenance(composed_canary_runtime):
+    private, state = composed_canary_runtime
+    errors = validate_runtime_env(
+        env='prod',
+        cloud_run_state_path=state,
+        check_workflows=True,
+        workflow_root=ROOT,
+        integration_canary_state=private,
+        integration_canary_source=SOURCE,
+    )
+    assert not errors, [str(e) for e in errors]
+
+
+def test_full_canary_validator_refuses_wrong_rendered_source(composed_canary_runtime):
+    private, state = composed_canary_runtime
+    rendered = json.loads(state.read_text())
+    for entry in rendered['services']['backend']['env']:
+        if entry['name'] == 'OMI_BACKEND_RELEASE_SHA':
+            entry['value'] = 'wrong-source'
+    state.write_text(json.dumps(rendered))
+    assert validate_runtime_env(
+        env='prod',
+        cloud_run_state_path=state,
+        check_workflows=True,
+        workflow_root=ROOT,
+        integration_canary_state=private,
+        integration_canary_source=SOURCE,
+    )
+
+
+def test_full_canary_validator_refuses_wrong_workflow_source(composed_canary_runtime, monkeypatch):
+    private, state = composed_canary_runtime
+    load = workflow_validation._load_yaml
+
+    def corrupt_provenance(path):
+        doc = load(path)
+        if path == ROOT / '.github/actions/deploy-backend-stack/action.yml':
+            for step in doc['runs']['steps']:
+                values = step.get('with', {}).get('env_vars')
+                if isinstance(values, str):
+                    step['with']['env_vars'] = values.replace(
+                        'OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}',
+                        'OMI_BACKEND_RELEASE_SHA=wrong-workflow-source',
+                    )
+        return doc
+
+    monkeypatch.setattr(workflow_validation, '_load_yaml', corrupt_provenance)
+    errors = validate_runtime_env(
+        env='prod',
+        cloud_run_state_path=state,
+        check_workflows=True,
+        workflow_root=ROOT,
+        integration_canary_state=private,
+        integration_canary_source=SOURCE,
+    )
+    assert any('cloud_run_workflow/backend' in str(e) and 'OMI_BACKEND_RELEASE_SHA' in str(e) for e in errors)
 
 
 def test_receipt_exports_only_metadata_never_private_snapshot_or_intent_bodies(tmp_path):

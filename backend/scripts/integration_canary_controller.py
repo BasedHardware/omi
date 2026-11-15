@@ -118,7 +118,12 @@ def env_map(entries):
         require(isinstance(entry, dict) and isinstance(entry.get('name'), str), 'invalid_env')
         name = entry['name']
         require(re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name) and name not in result, 'invalid_env')
-        require(set(entry) in ({'name', 'value'}, {'name', 'valueFrom'}), 'invalid_env')
+        require(set(entry) in ({'name'}, {'name', 'value'}, {'name', 'valueFrom'}), 'invalid_env')
+        entry = copy.deepcopy(entry)
+        if set(entry) == {'name'}:
+            # Cloud Run omits the default empty literal on export. Normalize
+            # here so preparation and all template comparisons agree.
+            entry['value'] = ''
         if 'value' in entry:
             require(isinstance(entry['value'], str), 'invalid_env_literal')
         else:
@@ -676,6 +681,11 @@ class Controller:
             if row.get('percent', 0) > 0 and row.get('tag') and row['tag'] not in tags:
                 alias = copy.deepcopy(row)
                 alias['percent'] = 0
+                if alias.pop('latestRevision', False):
+                    serving = doc.get('status', {}).get('latestReadyRevisionName')
+                    require(isinstance(serving, str) and bool(serving), 'traffic_not_named')
+                    alias['revisionName'] = serving
+                require(alias.get('revisionName'), 'tag_not_named')
                 zero.append(alias)
                 tags.add(row['tag'])
         return [{'revisionName': name, 'percent': pct} for name, pct in targets.items()] + zero

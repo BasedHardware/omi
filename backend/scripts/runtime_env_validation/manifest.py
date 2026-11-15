@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -679,6 +680,10 @@ def validate_runtime_env(
             env_config = compose(
                 env_config, json.loads(integration_canary_state.read_text()), integration_canary_source
             )
+            # Workflow reconstruction must validate the same effective manifest
+            # as the rendered candidate, including serving-ops composition.
+            manifest = deepcopy(manifest)
+            manifest['environments'][env] = env_config
         except (ValueError, KeyError, TypeError, OSError):
             return [ValidationError(env, 'integration canary ops evidence invalid')]
     errors = _validate_manifest_shape(env_config, env)
@@ -709,6 +714,7 @@ def validate_runtime_env(
                 manifest_path=manifest_path,
                 manifest=manifest,
                 workflow_root=workflow_root,
+                integration_canary_source=integration_canary_source,
             )
         )
 

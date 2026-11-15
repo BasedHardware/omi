@@ -328,6 +328,69 @@ def test_failed_actual_serving_revision_still_refuses_preparation(harness):
     assert cloud.writes == []
 
 
+@pytest.mark.parametrize(
+    'literal', [{'name': 'STT_CAP_DISPATCH_COHORT'}, {'name': 'STT_CAP_DISPATCH_COHORT', 'value': ''}]
+)
+def test_empty_serving_literals_survive_prepare_candidate_and_api_canonicalization(harness, literal):
+    controller, cloud, transport, _clock, runtime = harness
+    controller.journal.path.unlink()
+    original = copy.deepcopy(literal)
+    for service in c.SERVICES:
+        revision_name = c.ROLLBACK if service == c.SERVICE else service + '-serving'
+        c.app(cloud.revisions[revision_name]['spec'])['env'].append(copy.deepcopy(literal))
+        c.app(cloud.services[service]['spec']['template']['spec'])['env'].append(copy.deepcopy(literal))
+    controller.prepare(c.SOURCE, transport.image, controller.state['candidate'])
+    controller.candidate(runtime)
+    candidate = controller.state['candidate']
+    # A subsequent API read may omit an explicit empty value. Both service and
+    # revision comparisons must treat it identically without hiding secret drift.
+    for spec in (cloud.services[c.SERVICE]['spec']['template']['spec'], cloud.revisions[candidate]['spec']):
+        entry = next(e for e in c.app(spec)['env'] if e['name'] == literal['name'])
+        entry.pop('value', None)
+    controller.verify_revision()
+    controller.promote()
+    assert controller.state['phase'] == 'complete'
+    assert literal == original
+    assert c.env_map([literal])[literal['name']] == {'name': literal['name'], 'value': ''}
+
+
+@pytest.mark.parametrize(
+    'entries',
+    [
+        [{'name': 'EMPTY', 'value': None}],
+        [{'name': 'EMPTY', 'value': '', 'valueFrom': {'secretKeyRef': {'name': 's', 'key': '1'}}}],
+        [{'name': 'EMPTY', 'valueFrom': {}}],
+        [{'name': 'EMPTY', 'valueFrom': {'secretKeyRef': {'name': 's', 'key': ''}}}],
+        [{'name': 'EMPTY', 'unknown': ''}],
+        [{'name': 'EMPTY'}, {'name': 'EMPTY', 'value': ''}],
+    ],
+)
+def test_empty_literal_normalization_keeps_malformed_and_secret_entries_fail_closed(entries):
+    with pytest.raises(m.Refused):
+        c.env_map(entries)
+
+
+def test_positive_latest_revision_tag_is_pinned_before_candidate_and_all_traffic_moves(harness):
+    controller, cloud, transport, _clock, runtime = harness
+    controller.journal.path.unlink()
+    service = cloud.services[c.SERVICE]
+    service['spec']['traffic'][0] = {'latestRevision': True, 'percent': 100, 'tag': 'original-serving'}
+    service['status']['traffic'][0]['tag'] = 'original-serving'
+    controller.prepare(c.SOURCE, transport.image, controller.state['candidate'])
+    controller.candidate(runtime)
+    assert cloud.services[c.SERVICE]['status']['latestReadyRevisionName'] == controller.state['candidate']
+    controller.promote()
+    controller.rollback()
+    for written in cloud.writes:
+        alias = next(t for t in written['spec']['traffic'] if t.get('tag') == 'original-serving')
+        assert alias == {'revisionName': c.ROLLBACK, 'percent': 0, 'tag': 'original-serving'}
+        c.check_traffic(
+            {'spec': {'traffic': written['spec']['traffic']}, 'status': {'traffic': written['spec']['traffic']}},
+            c.traffic(written['spec']['traffic']),
+        )
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+
+
 def test_monotonic_hold_cannot_be_shortened_by_wall_clock_jump(harness, monkeypatch):
     controller, _cloud, _transport, clock, _runtime = make_candidate(harness)
     controller.move(25)
