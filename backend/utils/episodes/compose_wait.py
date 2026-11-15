@@ -38,6 +38,19 @@ def settled_terminal(row: Mapping[str, Any]) -> bool:
     return bool(settled_terminal_enabled() and row.get('status') == 'completed' and stt_terminal_empty(row))
 
 
+def transcript_anchor(row: Mapping[str, Any]) -> datetime | None:
+    pending = utc(row.get('home_transcription_pending_at')) or utc(row.get('episode_transcription_pending_at'))
+    if pending or not settled_terminal_enabled():
+        return pending
+    # Older registered batch rows may predate pending stamps. Audio custody is
+    # positive evidence of expected STT; empty text by itself is not.
+    if row.get('server_batch_audio_received') is True or any(
+        row.get(key) is not None for key in ('server_batch_audio_start', 'server_batch_audio_end')
+    ):
+        return utc(row.get('finished_at')) or utc(row.get('created_at'))
+    return None
+
+
 OBSERVATIONS = 'compose_transcript_wait_observations'
 
 
@@ -52,7 +65,7 @@ def member_deadline(
     """A blocker generation's first observation cannot be renewed by another member."""
     if not anchored_wait_enabled():
         return due
-    pending = utc(row.get('home_transcription_pending_at')) or utc(row.get('episode_transcription_pending_at'))
+    pending = transcript_anchor(row)
     previous = (episode.get(OBSERVATIONS) or {}).get(cid)
     observed = None
     if isinstance(previous, Mapping) and utc(previous.get('pending_at')) == pending:

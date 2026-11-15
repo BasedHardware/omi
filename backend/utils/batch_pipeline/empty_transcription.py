@@ -28,18 +28,18 @@ def stamp(current, result, span):
     previous = current.get(FIELD) or {}
     generation = pending_generation(current)
     spans = (
-        [list(span) for span in previous.get('spans') or []]
+        [dict(span) for span in previous.get('spans') or []]
         if previous.get('pending_generation') == generation
         and previous.get('projection_revision') == current.get('record_projection_revision')
         else []
     )
-    spans.append([span['start'], span['end']])
+    spans.append({'start': span['start'], 'end': span['end']})
     merged = []
-    for start, end in sorted(spans):
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
+    for span in sorted(spans, key=lambda item: item['start']):
+        if merged and span['start'] <= merged[-1]['end']:
+            merged[-1]['end'] = max(merged[-1]['end'], span['end'])
         else:
-            merged.append([start, end])
+            merged.append(span)
     result[FIELD] = {
         'version': 1,
         'projection_revision': result['record_projection_revision'],
@@ -72,10 +72,9 @@ def terminal(row):
     if not all(type(value) in (int, float) and math.isfinite(value) for value in (start, end)) or end <= start:
         return False
     return any(
-        isinstance(span, (list, tuple))
-        and len(span) == 2
-        and all(type(value) in (int, float) and math.isfinite(value) for value in span)
-        and span[0] <= start + 1e-6
-        and span[1] >= end - 1e-6
+        isinstance(span, Mapping)
+        and all(type(span.get(key)) in (int, float) and math.isfinite(span[key]) for key in ('start', 'end'))
+        and span['start'] <= start + 1e-6
+        and span['end'] >= end - 1e-6
         for span in receipt.get('spans') or []
     )

@@ -454,7 +454,7 @@ def test_registered_nonterminal_stt_is_not_settled_by_summary_exhaustion(lane):
         lane.conversations.encode_conversation_for_write(lane.uid, live, 'standard')
     )
     assert register_recording(lane.uid, live, store=lane.store, now=0)
-    job = lane.store.ref('jobs', item.segment_id).get().to_dict()
+    job = lane.projector.store.ref('jobs', item.segment_id).get().to_dict()
     assert job['state'] == 'record_pending'
     assert not empty_transcription.terminal(active_rows(lane)[0])
     assert composer._transcript_wait_until(live) == pending + timedelta(seconds=1200)

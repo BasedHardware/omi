@@ -793,7 +793,7 @@ def _stored_wait_until(episode: Mapping[str, Any]) -> Optional[datetime]:
 
 
 def _transcript_wait_until(row: Mapping[str, Any]) -> Optional[datetime]:
-    pending = _utc(row.get('home_transcription_pending_at')) or _utc(row.get('episode_transcription_pending_at'))
+    pending = compose_wait.transcript_anchor(row)
     if (
         episode_compose_transcript_wait_enabled()
         and pending

@@ -39,8 +39,8 @@ def test_all_units_must_cover_the_closed_record_without_a_gap():
     assert not empty.terminal(second)
     final = project(second, 140, 150)
     assert empty.terminal(final)
-    assert final[empty.FIELD]['spans'] == [[100, 200]]
-    assert first[empty.FIELD]['spans'] == [[100, 140]]
+    assert final[empty.FIELD]['spans'] == [{'start': 100, 'end': 200}]
+    assert first[empty.FIELD]['spans'] == [{'start': 100, 'end': 140}]
 
 
 @pytest.mark.parametrize(
