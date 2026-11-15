@@ -14,6 +14,8 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -147,6 +149,7 @@ EpisodeProvider _episodes() => EpisodeProvider(
 /// built for assertions. Returns the boundary key used by [_capture].
 Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     {EpisodeProvider? episodeProvider,
+    HomeFeedProvider? feed,
     CaptureProvider? capture,
     bool withNavigation = false,
     List<ServerConversation> detailItems = const [],
@@ -177,6 +180,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     conversations,
     pendingWork: store,
     episodes: episodes,
+    feed: feed,
     captureProvider: capture,
     initializePreferences: false,
     theme: buildOmiTheme(brightness: Brightness.light),
@@ -241,6 +245,113 @@ void _expectAbsent(List<String> titles) {
 double _top(WidgetTester tester, Finder finder) => tester.getTopLeft(finder).dy;
 
 void main() {
+  testWidgets('compact cards fold pending only and atomically replace READY members on compose', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final fixture = HomeReadyMembersFixture(DateTime.now());
+    var composed = false;
+    final feed = HomeFeedProvider(
+        owner: () => 'fixture',
+        fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
+            items: composed
+                ? [
+                    HomeFeedCard(
+                        id: 'episode:owner',
+                        kind: 'episode',
+                        detailId: 'owner',
+                        startedAt: fixture.waiting.startedAt,
+                        title: 'Combined fixture',
+                        emoji: '',
+                        preview: 'Combined notes',
+                        status: 'completed',
+                        homeStep: 'ready',
+                        starred: false,
+                        isLocked: false,
+                        hasTasks: false,
+                        memberCount: 4,
+                        sources: const [],
+                        summaryAvailable: true,
+                        revision: 'composed')
+                  ]
+                : [
+                    for (final member in fixture.members)
+                      HomeFeedCard(
+                          id: 'conversation:${member.id}',
+                          kind: 'conversation',
+                          detailId: member.id,
+                          startedAt: member.startedAt,
+                          title: member.structured.title,
+                          emoji: '',
+                          preview: member.structured.overview,
+                          status: 'completed',
+                          homeStep: member.homeStep,
+                          starred: false,
+                          isLocked: false,
+                          hasTasks: false,
+                          memberCount: 1,
+                          sources: const [],
+                          summaryAvailable: member.homeStep == 'ready',
+                          revision: 'waiting')
+                  ],
+            nextCursor: null,
+            hasMore: false,
+            truncated: false,
+            generation: composed ? 'composed' : 'waiting')));
+    addTearDown(feed.dispose);
+    await feed.start();
+    await _pumpHome(tester, [], feed: feed, withNavigation: true, detailItems: fixture.members);
+    expect(find.byType(ProcessingConversationRow), findsOneWidget);
+    expect(tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow)).count, 2);
+    expect(find.text('Ready recording 1'), findsOneWidget);
+    expect(find.text('Ready recording 2'), findsOneWidget);
+    final aggregate = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+    expect(aggregate.episode!.members.map((m) => m.id).toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    expect(aggregate.episode!.conversationIds.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    await tester.tap(find.byKey(_processingKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    for (final member in fixture.members.take(2)) {
+      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsNothing);
+    }
+    for (final member in fixture.members.skip(2)) {
+      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
+    }
+    final history =
+        Provider.of<ConversationProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
+    final deleted = <String>[];
+    history.conversationDeleteFetcherOverride = (id) async {
+      deleted.add(id);
+      return true;
+    };
+    await tester.tap(find.byKey(const Key('episode_more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete.keys.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+    // The typed Home fixture nests Scaffolds; invoke the rendered Undo action
+    // directly. The standalone destructive-scope suite verifies its tap path.
+    tester.widget<SnackBarAction>(find.byType(SnackBarAction)).onPressed();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete, isEmpty);
+    expect(deleted, isEmpty);
+    expect(find.text('Ready recording 1'), findsOneWidget);
+    expect(find.text('Ready recording 2'), findsOneWidget);
+    composed = true;
+    await feed.refresh();
+    await tester.pump();
+    expect(find.text('Combined fixture'), findsOneWidget);
+    expect(find.text('Ready recording 1'), findsNothing);
+    expect(find.text('Ready recording 2'), findsNothing);
+    expect(find.byType(ProcessingConversationRow), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   TestWidgetsFlutterBinding.ensureInitialized();
   final previousVisibilityInterval = VisibilityDetectorController.instance.updateInterval;
   setUpAll(() async {

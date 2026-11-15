@@ -25,6 +25,7 @@ import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
 import 'home_rows.dart';
+import 'home_card_rows.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'home_rows_health.dart';
@@ -822,7 +823,9 @@ class _ConversationsPageState extends State<ConversationsPage>
           conversationsByDate = {};
           final hidden = {...convoProvider.memoriesToDelete.keys, ...hiddenByLive};
           for (final card in feed.items) {
-            if (card.kind == 'conversation' && hidden.contains(card.detailId)) continue;
+            if (card.kind == 'conversation' &&
+                (convoProvider.memoriesToDelete.containsKey(card.detailId) ||
+                    (hidden.contains(card.detailId) && card.homeStep != 'ready'))) continue;
             if (card.kind == 'episode' && episodeLive && card.detailId == episodes?.live?.id) continue;
             final seed = card.displaySeed();
             cardById[seed.id] = card;
@@ -907,6 +910,19 @@ class _ConversationsPageState extends State<ConversationsPage>
             _paintedStandaloneIds.addAll(snapshot.processingConversations
                 .where((row) => !projectedMemberIds.contains(row.id))
                 .map((row) => row.id));
+          }
+        }
+        if (defaultHome && cardsOn && _pendingWork.homeProcessingToday) {
+          final projected = buildHomeCardRows(cardById.values.toList(), snapshot.processingConversations,
+              now: clock.now(), processingTitle: context.l10n.wrappedProcessingDefault, liveIds: hiddenByLive);
+          conversationsByDate = {};
+          for (final row in projected) {
+            final card = cardById[row.conversation.id];
+            final day = card?.startedAt == null && card != null ? unknownCardDay : row.day;
+            (conversationsByDate[day] ??= []).add(row.conversation);
+            projectedMemberIds.addAll(row.episodeConversationIds);
+            if (row.isProcessing) projectedProcessingIds.add(row.conversation.id);
+            if (row.episode != null) projectedEpisodes[row.conversation.id] = row;
           }
         }
         // Only the default view: a search or folder shows what it matched.

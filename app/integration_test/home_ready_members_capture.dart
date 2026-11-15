@@ -4,6 +4,8 @@ import 'package:marionette_flutter/marionette_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/conversations/home_rows_health.dart';
@@ -61,6 +63,57 @@ Future<void> main() async {
   );
   await episodes.refreshLive();
   episodes.debugSetHomeEpisodes([current]);
+  const compact = bool.fromEnvironment('HOME_READY_COMPACT', defaultValue: true);
+  final feed = HomeFeedProvider(
+      owner: () => 'synthetic-fixture',
+      fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
+          items: current.composed
+              ? [
+                  HomeFeedCard(
+                      id: 'episode:${current.id}',
+                      kind: 'episode',
+                      detailId: current.id,
+                      startedAt: current.startedAt,
+                      finishedAt: current.lastActivityAt,
+                      title: current.title,
+                      emoji: '💬',
+                      preview: current.lede,
+                      status: 'completed',
+                      homeStep: 'ready',
+                      starred: false,
+                      isLocked: false,
+                      hasTasks: false,
+                      memberCount: 4,
+                      sources: const [],
+                      summaryAvailable: true,
+                      revision: 'composed')
+                ]
+              : [
+                  for (final member in fixture.members)
+                    HomeFeedCard(
+                        id: 'conversation:${member.id}',
+                        kind: 'conversation',
+                        detailId: member.id,
+                        startedAt: member.startedAt,
+                        finishedAt: member.finishedAt,
+                        title: member.structured.title,
+                        emoji: '💬',
+                        preview: member.structured.overview,
+                        status: 'completed',
+                        homeStep: member.homeStep,
+                        starred: false,
+                        isLocked: false,
+                        hasTasks: false,
+                        memberCount: 1,
+                        sources: const [],
+                        summaryAvailable: member.homeStep == 'ready',
+                        revision: 'waiting')
+                ],
+          nextCursor: null,
+          hasMore: false,
+          truncated: false,
+          generation: current.composed ? 'composed' : 'waiting')));
+  if (compact) await feed.start();
   final apps = AppProvider();
   final detail =
       ConversationDetailProvider(fetchConversation: (id) async => fixture.members.where((m) => m.id == id).firstOrNull);
@@ -73,6 +126,7 @@ Future<void> main() async {
   await store.refresh();
   final home = await buildTypedConversationScreen(conversations,
       episodes: episodes,
+      feed: compact ? feed : null,
       pendingWork: store,
       captureProvider: withLive ? _LiveCapture() : null,
       theme: buildOmiTheme(brightness: Brightness.light));
@@ -100,9 +154,10 @@ Future<void> main() async {
                     child: Material(
                         child: TextButton(
                             key: const Key('fixture_compose'),
-                            onPressed: () {
+                            onPressed: () async {
                               current = fixture.composed;
                               episodes.debugSetHomeEpisodes([current]);
+                              if (compact) await feed.refresh();
                             },
                             child: const Text('Compose fixture'))))),
           ]))));
