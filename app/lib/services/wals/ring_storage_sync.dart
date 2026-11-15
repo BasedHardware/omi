@@ -771,7 +771,8 @@ class RingStorageSyncImpl implements RingStorageSync {
           } else {
             // Fallback: now - estimated duration of the unread region.
             final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = estimatedDeviceStart(phoneNow, estSecs);
+            firstRecordTs = estimatedDeviceStart(
+                deviceCaptureClockRepairOff ? _clock().millisecondsSinceEpoch ~/ 1000 : phoneNow, estSecs);
           }
         }
 

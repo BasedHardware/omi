@@ -1,3 +1,6 @@
+// Shared admission policy for device-supplied recording dates. Impossible
+// device values may become explicit phone-clock estimates; those estimates
+// never supply ring identity, ordering proofs or device-reclaim authority.
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart' show walMinPlausibleTimerStartSeconds;
 
