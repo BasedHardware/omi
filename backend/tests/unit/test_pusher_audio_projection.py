@@ -852,3 +852,34 @@ def test_full_discovery_names_its_cause_once_per_listing(world):
     cache.refresh('c', [world.add(104)], force=True)
     assert delta(before)['forced'] == 1
     assert len(world.lists) == sum(delta(before).values())
+
+
+@pytest.mark.asyncio
+async def test_all_close_switches_off_preserves_legacy_debt_handoff(world, monkeypatch):
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'false')
+    cache = projection.PusherAudioProjection('u')
+    scheduled = MagicMock()
+    execute = MagicMock(side_effect=AssertionError('rollback may only schedule legacy handoff'))
+    monkeypatch.setattr(cache, '_start_marker_task', scheduled)
+    monkeypatch.setattr(projection, 'run_blocking', execute)
+    assert await cache.defer_rebuild('c')
+    assert cache.marker_retry == {'c': 1}
+    scheduled.assert_called_once_with()
+    execute.assert_not_called()
+    projection.record_projection_rebuild.mark_many.assert_not_called()
+    calls = []
+
+    async def legacy_execute(pool, fn, *args):
+        calls.append(pool)
+        fn(*args)
+
+    monkeypatch.setattr(projection, 'run_blocking', legacy_execute)
+    await cache._persist_markers()
+    assert calls == [projection.db_executor]
+    assert not cache.durable_debt
+    projection.record_projection_rebuild.mark_many.assert_called_once_with('u', {'c'})

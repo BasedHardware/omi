@@ -36,6 +36,7 @@ ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
     "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED",
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
     "MEMORY_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
     "CLIENT_SUMMARIES_AT_CAP_ENABLED",
@@ -402,7 +403,6 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUSHER_STORAGE_PCM_BUDGET_MB",
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
-            "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
             "PUSHER_RECORD_SEAL_WAKE_ENABLED",
         }
     ),
@@ -411,7 +411,6 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
-            "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
             "PUSHER_RECORD_SEAL_WAKE_ENABLED",
             # Only pusher owns closed recording workers and their eviction proof.
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",

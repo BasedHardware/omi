@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydub import AudioSegment
 
 from config.repeat_work import playback_on_demand
+from config.pusher_record import close_fast_path_enabled
 from utils.other.playback_identity import resolve_sources, validate_sources
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.executors import postprocess_executor, storage_executor, submit_with_context
@@ -413,7 +414,11 @@ def get_audio_signed_urls(
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not audio_files:
-        if conversation and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
+        if (
+            close_fast_path_enabled()
+            and conversation
+            and conversation.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+        ):
             from database import record_projection_rebuild
 
             try:

@@ -372,3 +372,23 @@ def test_build_playback_artifact_encodes_mp3(monkeypatch):
 
     monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', lambda *args, **kwargs: b'')
     assert playback.build_playback_artifact('u', 'c', [1.0]) == b''
+
+
+def test_all_close_switches_off_preserves_empty_playback_without_new_io(monkeypatch):
+    from database import record_projection_rebuild
+
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'false')
+    read = MagicMock(side_effect=AssertionError('rollback must not read metadata debt'))
+    write = MagicMock(side_effect=AssertionError('rollback must not write metadata debt'))
+    monkeypatch.setattr(record_projection_rebuild, 'pending', read)
+    monkeypatch.setattr(record_projection_rebuild, 'mark_many', write)
+    assert playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'}) == {
+        'audio_files': []
+    }
+    read.assert_not_called()
+    write.assert_not_called()

@@ -11,6 +11,7 @@ from google.api_core.exceptions import InvalidArgument
 from prometheus_client import Counter
 
 from config import audio_archive
+from config.pusher_record import close_fast_path_enabled
 from config.batch_pipeline_projection_rebuild import enabled as durable_debt_enabled
 from database import conversations as conversations_db, record_projection_rebuild
 from database.audio_chunk_metadata import audio_chunk_entry
@@ -20,7 +21,7 @@ from utils.batch_pipeline.record_projection_rebuild import (
     discover,
 )
 from utils.observability.fallback import record_fallback
-from utils.executors import run_blocking, storage_executor, playback_debt_executor, start_background_task
+from utils.executors import run_blocking, storage_executor, playback_debt_executor, db_executor, start_background_task
 from utils.other.audio_outbox_metrics import record_failure
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retry
 
@@ -340,6 +341,8 @@ class PusherAudioProjection:
         """Success means a committed write, never only a scheduled task."""
         if not durable_debt_enabled():
             return True
+        if not close_fast_path_enabled():
+            return self._defer_rebuild_legacy(conv_id)
         if conv_id in self.durable_debt:
             return True
         if conv_id not in self.marker_retry and len(self.marker_retry) >= MAX_MARKER_RETRIES - MAX_CONVERSATIONS:
@@ -361,6 +364,19 @@ class PusherAudioProjection:
         MARKER_WRITES.labels(outcome='persisted').inc()
         return True
 
+    def _defer_rebuild_legacy(self, conv_id: str) -> bool:
+        """Original optional-debt handoff, unchanged with fast closure disabled."""
+        if not durable_debt_enabled():
+            return True
+        if conv_id not in self.marker_retry and len(self.marker_retry) >= MAX_MARKER_RETRIES - MAX_CONVERSATIONS:
+            MARKER_WRITES.labels(outcome='marker_retry_overflow').inc()
+            logger.error('Projection debt retry inventory full; optional marker handoff refused')
+            return False
+        self.marker_sequence += 1
+        self.marker_retry[conv_id] = self.marker_sequence
+        self._start_marker_task()
+        return True
+
     def _start_marker_task(self) -> None:
         if self.marker_retry and (self.marker_task is None or self.marker_task.done()):
             self.marker_task = start_background_task(self._persist_markers(), name='projection-debt-handoff')
@@ -375,7 +391,10 @@ class PusherAudioProjection:
             try:
                 async with asyncio.timeout(MARKER_ATTEMPT_SECONDS):
                     await run_blocking(
-                        playback_debt_executor, record_projection_rebuild.mark_many, self.uid, set(pending)
+                        playback_debt_executor if close_fast_path_enabled() else db_executor,
+                        record_projection_rebuild.mark_many,
+                        self.uid,
+                        set(pending),
                     )
             except Exception as exc:
                 MARKER_WRITES.labels(outcome='marker_write_failed').inc()
@@ -385,7 +404,7 @@ class PusherAudioProjection:
                 if self.marker_retry.get(cid) == sequence:
                     self.marker_retry.pop(cid, None)
                     self.close_debt.discard(cid)
-                    if len(self.durable_debt) < MAX_CONVERSATIONS:
+                    if close_fast_path_enabled() and len(self.durable_debt) < MAX_CONVERSATIONS:
                         self.durable_debt.add(cid)
             MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 

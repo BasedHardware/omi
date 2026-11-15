@@ -4003,6 +4003,7 @@ def _assert_record_close_listener_bindings(config):
     expected = {'value': 'true', 'category': 'ops_kill'}
     for host in hosts:
         assert host['env'].get('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED') == expected
+        assert host['env'].get('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED') == expected
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])

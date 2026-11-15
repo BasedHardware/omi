@@ -46,6 +46,7 @@ overlay:
     backend-listen:
       env:
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
         # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
         # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
@@ -482,6 +483,7 @@ overlay:
   desktop_backend:
     env:
       PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+      PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
       OMI_FLAGS_FIRESTORE_PROJECT: {value: based-hardware, category: service_discovery}
       OMI_FLAGS_FIRESTORE_DATABASE: {value: omi-flags, category: service_discovery}
       OMI_FLAGS_SOURCE: {value: dual, category: rollout}
@@ -562,6 +564,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
@@ -932,6 +935,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
@@ -1339,6 +1343,7 @@ overlay:
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
@@ -1695,6 +1700,7 @@ overlay:
         - HOSTED_DIARIZATION_API_URL
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.

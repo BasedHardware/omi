@@ -17,6 +17,7 @@ overlay:
     backend-listen:
       env:
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -337,6 +338,7 @@ overlay:
   desktop_backend:
     env:
       PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+      PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
       OMI_FIRESTORE_DATA_PLANE_PROJECT:
         value: based-hardware
     secrets:
@@ -366,6 +368,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -447,6 +450,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -541,6 +545,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
@@ -613,6 +618,7 @@ overlay:
             version: latest
         env:
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'true', category: ops_kill}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
