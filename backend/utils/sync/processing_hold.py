@@ -13,7 +13,7 @@ import json
 import os
 from typing import Any
 
-from prometheus_client import Counter, REGISTRY
+from prometheus_client import Counter, Histogram, REGISTRY
 from config.merge_before_processing import enabled as merge_before_processing_enabled
 from utils.observability.reasons import ReasonFamily, SyncProcessingHoldOutcome, reason_label
 
@@ -41,6 +41,19 @@ def _outcomes() -> Counter:
         return Counter('omi_sync_processing_hold_total', 'Sync full-processing admission outcomes', ['outcome'])
     except ValueError:
         return REGISTRY._names_to_collectors['omi_sync_processing_hold_total']  # type: ignore[attr-defined]
+
+
+@cache
+def _arrival_gap() -> Histogram:
+    name = 'omi_sync_content_arrival_gap_seconds'
+    try:
+        return Histogram(
+            name,
+            'Seconds between consecutive content arrivals on one held sync conversation',
+            buckets=(5, 15, 30, 60, 120, 180, 240, 300, 450, 600, 900, 1800, 3600),
+        )
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[attr-defined]
 
 
 def record(outcome: str) -> None:
@@ -123,6 +136,14 @@ def activity_patch(row: Mapping[str, Any], now: float) -> dict[str, Any]:
     # A successful full run ends an epoch. The next append starts a bounded new one.
     if not state.get('pending_since'):
         state['pending_since'] = now
+    elif timestamp(state.get('last_content_at')):
+        # The share of gaps longer than a candidate quiet window is the late
+        # re-run rate that window would buy. Content-free; a retried assignment
+        # transaction may observe one gap twice, which a distribution tolerates.
+        try:
+            _arrival_gap().observe(max(0.0, now - timestamp(state.get('last_content_at'))))
+        except Exception:  # Metrics must never break assignment.
+            pass
     state['held'] = True
     state['last_content_at'] = max(timestamp(state.get('last_content_at')), now)
     return state
