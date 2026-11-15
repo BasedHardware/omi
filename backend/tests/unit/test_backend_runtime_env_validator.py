@@ -2618,11 +2618,46 @@ def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
     assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
 
 
-def test_backend_listen_chart_only_workflow_preserves_runtime_project():
+def test_backend_listen_chart_only_workflow_preserves_runtime_project(tmp_path):
+    import subprocess
+
     workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
     workflow_text = workflow_path.read_text(encoding='utf-8')
-
-    assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
+    workflow = yaml.safe_load(workflow_text)
+    steps = {s['name']: s for s in workflow['jobs']['helm-upgrade']['steps']}
+    dry_run = steps['Helm diff (dry run)']['run']
+    upgrade = steps['Upgrade backend-listen Helm chart']['run']
+    assert dry_run.count('--runtime-project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"') == 1
+    assert 'DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)' in dry_run
+    assert 'mapfile -t DEPLOY_ARGV < "$RUNNER_TEMP/listen-deploy.argv"' in upgrade
+    assert '"${DEPLOY_ARGV[@]}"' in upgrade
+    # Exercise the actual shared builder with distinct control/runtime projects;
+    # matching two old literal strings would miss a swapped or dropped binding.
+    argv_file = tmp_path / 'listen.argv'
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT.parent / '.github/scripts/listen_overlay_evidence.py'),
+            'argv',
+            '--output',
+            str(argv_file),
+            '--image-tag',
+            'abcdef1',
+            '--environment',
+            'prod',
+            '--project',
+            'infra-control',
+            '--runtime-project',
+            'based-hardware',
+        ],
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
+    argv = argv_file.read_text().splitlines()
+    assert 'gcpProjectId=infra-control' in argv
+    assert 'runtimeGcpProjectId=based-hardware' in argv
+    assert 'runtimeGcpProjectId=infra-control' not in argv
 
 
 def test_repo_rendered_cloud_run_artifact_matches_manifest(tmp_path, monkeypatch):
