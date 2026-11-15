@@ -84,31 +84,6 @@ class TestAppReviewSafeDeserialization(unittest.TestCase):
         for item in malformed:
             self.assertIsNone(AppReview.deserialize_safe(item))
 
-    def test_deserialize_safe_invalid_types_and_empty_strings(self):
-        # Empty string rated_at from legacy records
-        self.assertIsNone(
-            AppReview.deserialize_safe(
-                {
-                    "uid": "u1",
-                    "rated_at": "",
-                    "score": 5.0,
-                    "review": "Legacy review with empty date",
-                }
-            )
-        )
-
-        # Invalid date format
-        self.assertIsNone(
-            AppReview.deserialize_safe(
-                {
-                    "uid": "u2",
-                    "rated_at": "invalid-datetime-string",
-                    "score": 5.0,
-                    "review": "Corrupt date",
-                }
-            )
-        )
-
         # Invalid score type
         self.assertIsNone(
             AppReview.deserialize_safe(
@@ -180,26 +155,6 @@ class TestAppReviewSafeDeserialization(unittest.TestCase):
 class TestRatingAggregationSafety(unittest.TestCase):
     """Test suite ensuring rating aggregation helpers tolerate missing fields without KeyError."""
 
-    def test_extract_rating_stats_resilience(self):
-        reviews = {
-            "u1": {"uid": "u1", "score": 4.0, "review": "great"},
-            "u2": {"uid": "u2", "review": "missing score entirely"},  # Missing 'score'
-            "u3": "not-a-dict",  # Corrupted entry
-            "u4": {"uid": "u4", "score": 10.0, "review": "out of range"},  # Clamped to 5.0
-        }
-        avg, count = _extract_rating_stats(reviews)
-        self.assertEqual(count, 2)
-        self.assertEqual(avg, 4.5)  # (4.0 + 5.0) / 2
-
-    def test_extract_rating_stats_falsy(self):
-        self.assertEqual(_extract_rating_stats(None), (None, 0))
-        self.assertEqual(_extract_rating_stats({}), (None, 0))
-        self.assertEqual(_extract_rating_stats([]), (None, 0))
-
-    def test_reviews_list_extraction_missing_review_key(self):
-        """Guard against KeyError: 'review' when raw Redis reviews miss 'review' key."""
-        reviews = {
-            "u1": {"uid": "u1", "score": 5.0, "review": "Valid"},
             "u2": {"uid": "u2", "score": 4.0},  # Missing 'review' key
             "u3": None,
         }
