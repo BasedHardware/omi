@@ -875,6 +875,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 }
                 if enabled
@@ -890,6 +891,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 },
             )
@@ -1030,6 +1032,7 @@ def test_cohort_is_written_only_with_the_single_ghost_update(monkeypatch, label)
                 'projection_state': 'ready',
                 'ghost_settled_cohort': label,
                 'projection_finish_due_at': GHOST_NOW,
+                'projection_followup_due_at': GHOST_NOW,
                 'projection_finish_backoff_step': 0,
             },
         )
@@ -1170,6 +1173,7 @@ def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabl
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 }
                 if settled
@@ -1185,6 +1189,7 @@ def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabl
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 },
             )

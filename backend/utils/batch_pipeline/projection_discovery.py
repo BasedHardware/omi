@@ -39,15 +39,22 @@ class ProjectionDiscovery:
         # The finish page's dark backoff adds a range filter, which moves the
         # ordering (and therefore the cursor) to the row's next-attempt clock.
         self.due_mode = False
+        self.clock_mode = None
 
-    def next(self, limit: int = 100, due_before: float | None = None) -> list[str]:
-        due_mode = due_before is not None
-        if due_mode != self.due_mode:
+    def next(
+        self, limit: int = 100, due_before: float | None = None, *, followup_due_before: float | None = None
+    ) -> list[str]:
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        clock_mode = 'followup' if followup_due_before is not None else 'finish' if due_before is not None else None
+        due_mode = clock_mode is not None
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        if clock_mode != self.clock_mode:
             # A cursor from one ordering is meaningless in the other.
-            self.due_mode, self.after, self.seeded = due_mode, None, False
+            self.clock_mode, self.due_mode, self.after, self.seeded = clock_mode, due_mode, None, False
         scope: dict[str, object] = {} if self.states is None else {'states': self.states}
         if due_mode:
-            scope['due_before'] = due_before
+            scope['followup_due_before' if clock_mode == 'followup' else 'due_before'] = cutoff
         if not projection_pagination_enabled():
             self.after = None
             self.seeded = True
@@ -62,7 +69,7 @@ class ProjectionDiscovery:
             if head is not None:
                 oldest = float(head[0])
                 # A timestamp-only cursor includes every tie at the lower bound.
-                ceiling = float(due_before) if due_mode else time.time()
+                ceiling = float(cutoff) if cutoff is not None else time.time()
                 offset = oldest + max(0.0, ceiling - oldest) * self.stripe / PROJECTION_DISCOVERY_STRIPES
                 after = (offset,) if due_mode else (offset, '')
         recent_on = self.recent and not due_mode and projection_recent_discovery_seconds() > 0
