@@ -7041,6 +7041,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple सह साइन इन करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple ने साइन इन झाले नाही. पुन्हा प्रयत्न करा किंवा Google सह सुरू ठेवा.';
+
+  @override
   String get authFailedToRetrieveToken => 'firebase टोकन प्राप्त करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.';
 
   @override
@@ -15461,4 +15465,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'आज $price भरले. दर महिन्याला नूतनीकरण होते.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
 }

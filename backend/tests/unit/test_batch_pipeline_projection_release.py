@@ -22,6 +22,7 @@ from database.batch_pipeline_projection_release import (
 )
 from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, projector_for
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 
@@ -170,8 +171,6 @@ def test_release_page_releases_only_restorable_rows_and_wraps(monkeypatch):
 def test_redriven_reassignment_does_not_regress_the_watermark():
     """The fake-session mirror of ProjectionSession.persist's guard: a released
     unit behind the watermark persists its receipt without moving the chain."""
-    from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, projector_for
-
     log = ResultLog()
     ids = [f'd-{n}' for n in range(2)]
     for sid in ids:
@@ -876,6 +875,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 }
                 if enabled
@@ -891,6 +891,7 @@ def test_ghost_repair_is_hint_only_and_reads_target_only_when_enabled(monkeypatc
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 },
             )
@@ -1031,6 +1032,7 @@ def test_cohort_is_written_only_with_the_single_ghost_update(monkeypatch, label)
                 'projection_state': 'ready',
                 'ghost_settled_cohort': label,
                 'projection_finish_due_at': GHOST_NOW,
+                'projection_followup_due_at': GHOST_NOW,
                 'projection_finish_backoff_step': 0,
             },
         )
@@ -1171,6 +1173,7 @@ def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabl
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 }
                 if settled
@@ -1186,6 +1189,7 @@ def test_completed_assignment_receipt_never_stamps_or_expires(monkeypatch, enabl
                     'projection_state': 'ready',
                     'ghost_settled_cohort': 'g1',
                     'projection_finish_due_at': GHOST_NOW,
+                    'projection_followup_due_at': GHOST_NOW,
                     'projection_finish_backoff_step': 0,
                 },
             )

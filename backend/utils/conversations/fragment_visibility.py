@@ -28,6 +28,14 @@ SETTLING_FIELDS = (
     'record_projection_revision',
     'record_upload_failed',
     'record_audio_partial',
+    # Slim list/feed reads need the same positive STT-empty proof as full rows.
+    'record_transcription_empty',
+    'episode_transcription_pending_at',
+    'server_batch_audio_closed',
+    'server_batch_audio_start',
+    'server_batch_audio_end',
+    'record_audio_closed',
+    'record_upload_sessions',
 )
 
 

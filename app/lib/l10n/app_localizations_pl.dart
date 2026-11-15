@@ -7043,6 +7043,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nie udało się zalogować przez Apple, spróbuj ponownie.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Logowanie przez Apple nie powiodło się. Spróbuj ponownie lub kontynuuj przez Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nie udało się pobrać tokenu Firebase, spróbuj ponownie.';
 
   @override
@@ -15498,4 +15502,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Zapłacono dziś $price. Odnawia się co miesiąc.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.';
 }

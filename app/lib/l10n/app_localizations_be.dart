@@ -7049,6 +7049,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не вдалося ўвайсці праз Apple, спрабуйце яшчэ раз.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не атрымалася ўвайсці праз Apple. Паспрабуйце яшчэ раз або працягніце з Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не вдалося атрымаць токен firebase, спрабуйце яшчэ раз.';
 
   @override
@@ -15489,4 +15493,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Сёння аплачана $price. Падаўжаецца штомесяц.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
 }

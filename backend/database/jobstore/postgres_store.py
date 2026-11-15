@@ -38,6 +38,10 @@ from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -380,6 +384,17 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        cursor = 'AND (capture_at, key COLLATE "C") > (%s, %s) ' if after is not None else ''
+        params = (self.namespace, owner_key, *after) if after is not None else (self.namespace, owner_key)
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                f"AND state = 'result_ready' {cursor}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 160))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]:
@@ -569,6 +584,10 @@ class PostgresStore:
         # native maintenance evidence keeps the legacy page active.
         return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
+    def projection_followup_backfill_complete(self) -> bool:
+        # Only this backend's native control marker can certify its population.
+        return followup_backfill_marker_complete(self.run(lambda tx: tx.get('control', FOLLOWUP_BACKFILL_KEY)))
+
     def projection_page(
         self,
         limit: int = 100,
@@ -576,21 +595,29 @@ class PostgresStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
         size = max(1, min(limit, 200))
         columns = ['committed_at', 'key COLLATE "C"']
         fields, clauses = 'key, committed_at', ['committed_at IS NOT NULL']
         params: list[Any] = [self.namespace, list(states)]
-        if due_before is not None:
-            due = "(doc->>'projection_finish_due_at')::float8"
+        if cutoff is not None:
+            due = f"(doc->>'{clock_field}')::float8"
             columns.insert(0, due)
             fields += f', {due}'
             clauses.append(f'{due} <= %s')
-            params.append(float(due_before))
+            params.append(float(cutoff))
+            if exclude_async and due_before is not None:
+                clauses.append(f'{due} >= 0')
         if after is not None:
-            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
                 clauses.append(f'{columns[0]} >= %s')
                 params.append(after[0])
             else:

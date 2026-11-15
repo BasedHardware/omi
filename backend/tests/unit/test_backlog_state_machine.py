@@ -9,10 +9,16 @@ Classes from the 2026-11-07 backlog root-cause review:
 """
 
 from copy import deepcopy
+from functools import lru_cache
 from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from routers import batch_pipeline as operator_router
+from scripts import alert_backtest as backtest
 
 from config import backlog_state_machine as sm
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
@@ -523,15 +529,12 @@ def test_client_poll_multiple_redrives_buffer_writes_until_all_raw_reads_finish(
 def operator_redrive_app(store, monkeypatch):
     from types import SimpleNamespace
 
-    from fastapi import FastAPI
-    from routers import batch_pipeline as router
-
     monkeypatch.setattr(
-        router, 'serving_for_stage', lambda stage: SimpleNamespace(store=store, queue=lambda: Scheduler(store))
+        operator_router, 'serving_for_stage', lambda stage: SimpleNamespace(store=store, queue=lambda: Scheduler(store))
     )
     app = FastAPI()
-    app.include_router(router.router)
-    app.dependency_overrides[router.verify_worker] = lambda: None
+    app.include_router(operator_router.router)
+    app.dependency_overrides[operator_router.verify_worker] = lambda: None
     return app
 
 
@@ -547,8 +550,6 @@ def test_operator_redrive_dead_route_keeps_the_switched_accounting(setup, monkey
     """
     # Class 3 resets only where the retry cap enforces for the owner (class 1 on).
     monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
-    from fastapi.testclient import TestClient
-
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
     monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, budget)
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
@@ -602,17 +603,6 @@ def backlog_alert(uid):
     return next(rule for rule in json.loads(path.read_text(encoding='utf-8')) if rule['uid'] == uid)
 
 
-def alert_backtest():
-    import importlib.util
-    from pathlib import Path
-
-    script = Path(__file__).resolve().parents[2] / 'scripts/alert_backtest.py'
-    spec = importlib.util.spec_from_file_location('alert_backtest', script)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def nightly_counter_samples(setup, monkeypatch, nights, prior):
     """Exercise the real scan, content/privacy CAS and post-commit metric."""
     from utils.batch_pipeline import held_dead_letter as sweep
@@ -638,7 +628,6 @@ def alert_episodes(rule, samples, end_day):
     """Evaluate the rule every five minutes: A is PromQL increase(counter[window]) from the sampled counter."""
     import re
 
-    b = alert_backtest()
     expr = rule['data'][0]['model']['expr']
     amount, unit = re.search(r'\[(\d+)([hd])\]', expr).groups()
     window = int(amount) * (86400 if unit == 'd' else 3600)
@@ -646,12 +635,16 @@ def alert_episodes(rule, samples, end_day):
     def counter_at(t):
         return max([value for at, value in samples if at <= t], default=0)
 
+    @lru_cache(maxsize=None)
+    def evaluate(increase):
+        # The expression is pure and has only a few distinct inputs. Keep every
+        # five-minute tick for the real episode state machine, but evaluate each
+        # identical expression input once rather than thousands of times.
+        return backtest.evaluate(rule, {'A': {(): [increase]}})
+
     step = 300
-    frames = [
-        (t, b.evaluate(rule, {'A': {(): [counter_at(t) - counter_at(t - window)]}}))
-        for t in range(0, end_day * 86400, step)
-    ]
-    return b.episodes(rule, frames, 0, end_day * 86400 - step, step)
+    frames = [(t, evaluate(counter_at(t) - counter_at(t - window))) for t in range(0, end_day * 86400, step)]
+    return backtest.episodes(rule, frames, 0, end_day * 86400 - step, step)
 
 
 @pytest.mark.parametrize(
@@ -682,8 +675,6 @@ def test_one_looping_held_recording_fires_the_unit_alert(setup, monkeypatch, pri
 @pytest.mark.parametrize('prior', [0, sm.MAX_HELD_REDRIVES])
 def test_operator_requeue_quarantined_route_reports_a_spent_budget(setup, monkeypatch, counter, prior):
     """Custody review: /requeue-quarantined counts and signals like /redrive-dead, after commit."""
-    from fastapi.testclient import TestClient
-
     monkeypatch.setenv(sm.HELD_REDRIVE_COUNTER_SWITCH, counter)
     monkeypatch.setenv('BATCH_HELD_DEAD_LETTER_ENABLED', 'false')
     client, store, _, _, _, _ = setup
@@ -1030,8 +1021,6 @@ def test_staging_repair_does_not_consume_grants_or_page(setup, monkeypatch):
 @pytest.mark.parametrize('path', ['/requeue-quarantined', '/redrive-dead'])
 @pytest.mark.parametrize('reason', ['input_expiring', 'held_expired'])
 def test_operator_routes_agree_on_held_grants(setup, monkeypatch, path, reason):
-    from fastapi.testclient import TestClient
-
     monkeypatch.setenv(sm.RETRY_CAP_SWITCH, 'true')
     monkeypatch.setenv(sm.HELD_REDRIVE_BUDGET_SWITCH, 'true')
     client, store, _, _, _, _ = setup

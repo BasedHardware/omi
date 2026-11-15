@@ -10,6 +10,7 @@
     "onboardingGetStartedTapped",
     "signInStarted",
     "signInFailed",
+    "signInFailureDetail",
     "onboardingPermissionResult",
     "devicePairingBlocked",
     "deviceScanEmpty",

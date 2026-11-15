@@ -478,6 +478,7 @@ class Conversation(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     capture_timezone: Optional[str] = Field(default=None, max_length=128)
+    capture_time_trust: Optional[Literal['untrusted']] = None
     recorded_start: Optional[datetime] = None
     recorded_end: Optional[datetime] = None
     arrival_at: Optional[datetime] = None

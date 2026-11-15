@@ -14,7 +14,7 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations import transcribing_hold
+from utils.conversations import transcribing_hold, legacy_empty_wire
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
@@ -125,6 +125,7 @@ MEMBER_FIELDS = [
     'photos',
     'starred',
     'folder_user_set',
+    'episode_transcript_updated_at',
     'episode_transcription_pending_at',
     'episode_transcription_deadline_at',
     'server_batch_audio_start',
@@ -448,6 +449,19 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Read-only evidence for legacy dangling references; never put it on the wire.
+    episode.pop('_member_absent_ids', None)
+    absent = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+    if absent:
+        episode['_member_absent_ids'] = absent
+    # Private read observation only; never persisted or included in the wire projection.
+    episode.pop('_member_transcript_updated_at', None)
+    episode.pop('_member_transcript_updates', None)
+    transcript_updates = []
+    transcript_member_updates = {}
+    excluded = set(episode.get('discarded_conversation_ids') or []) | set(
+        episode.get('duplicate_conversation_ids') or []
+    )
     retained: list[dict[str, Any]] = []
     transcription_states: list[str] = []
     hidden = 0
@@ -476,11 +490,15 @@ def project_episode(
             phase_shadow.observe('episode_member', row, False, episode=episode)
             continue
         phase_shadow.observe('episode_member', row, True, episode=episode)
+        if cid not in excluded and (updated := utc(row.get('episode_transcript_updated_at'))):
+            transcript_updates.append(updated)
+            transcript_member_updates[cid] = updated
         from utils.conversations.home_titles import neutralize_minimum_title
 
         # Classify on the stored read copy, before the presentation rewrite below.
         step = home_step_projection.classify(row)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
+        row = legacy_empty_wire.project(row, noise=step == home_step_projection.NOISE)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'
@@ -524,6 +542,10 @@ def project_episode(
         episode_metrics.record_home_members(shown=len(retained), hidden=hidden)
     if not retained:
         return None
+    if episode.get('compose_transcript_wait_members') is not None:
+        episode['_member_transcript_updates'] = transcript_member_updates
+    if transcript_updates:
+        episode['_member_transcript_updated_at'] = max(transcript_updates)
     retained.sort(key=lambda member: str(member['started_at']))
     ids = {member['id'] for member in retained}
     wire = wire_episode(episode)

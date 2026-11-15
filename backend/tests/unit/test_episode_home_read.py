@@ -498,6 +498,42 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
         assert wire['home_step'] == ('failed' if wire['status'] == 'failed' else 'transcribing')
 
 
+def test_lost_projection_signal_is_recovered_from_visible_member_on_read(monkeypatch):
+    from utils.episodes import composer
+
+    monkeypatch.setenv('EPISODE_COMPOSER', 'true')
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', raising=False)
+
+    episode = _episode('c')
+    episode.update(
+        status='closed',
+        closed_at=START,
+        composed_at=START,
+        composed_fingerprint='existing',
+        composer_version=composer.COMPOSER_VERSION,
+    )
+    episode['composed_notes'] = composer.notes_hash(episode)
+    member = {
+        'id': 'c',
+        'status': 'completed',
+        'structured': {'title': 'Recovered speech'},
+        'started_at': START,
+        'finished_at': START + timedelta(hours=1),
+        'episode_transcript_updated_at': START + timedelta(hours=2),
+    }
+    assert not composer.needs_compose(episode)
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda *a: 'UTC')
+    wire = home_read.project_episode('u', episode, members={'c': member})
+    assert composer.needs_compose(episode)
+    assert '_member_transcript_updated_at' not in wire
+    monkeypatch.setenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED', 'false')
+    assert not composer.needs_compose(episode)
+    monkeypatch.delenv('EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED')
+    member['deleted'] = True
+    assert home_read.project_episode('u', episode, members={'c': member}) is None
+    assert not composer.needs_compose(episode)
+
+
 @pytest.mark.parametrize('switch', ['on', 'off'])
 def test_queued_episode_title_and_member_share_bound_and_rollback(monkeypatch, switch):
     monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', switch)
@@ -526,3 +562,40 @@ def test_queued_episode_title_and_member_share_bound_and_rollback(monkeypatch, s
     )
     assert projected['title'] == ('Transcribing…' if switch == 'on' else 'Stored title')
     assert member['status'] == 'completed' and episode['title'] == 'Stored title'
+
+
+def test_home_24_hour_hold_and_composer_transcript_wait_are_independent(monkeypatch):
+    from utils.episodes import composer
+
+    monkeypatch.setenv('EPISODE_COMPOSER', 'true')
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', 'true')
+    now = datetime.now(timezone.utc)
+    episode = _episode('c')
+    episode.update(
+        status='closed',
+        closed_at=now - timedelta(hours=3),
+        compose_pending_since=now,
+        compose_transcript_wait_started_at=now,
+        compose_transcript_wait_until=now + timedelta(hours=3),
+    )
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': now - timedelta(hours=4),
+        'finished_at': now - timedelta(hours=3),
+        'episode_transcription_pending_at': now - timedelta(hours=3),
+        'episode_transcription_deadline_at': now - timedelta(hours=1),
+        'structured': {},
+    }
+    monkeypatch.setattr(home_read, 'user_zone_provider', lambda _uid: lambda: 'UTC')
+    wire = home_read.project_episode('u', episode, members={'c': row})
+    assert wire['members'][0]['title'] == 'Transcribing…'
+    assert not composer.needs_compose(episode)
+    row['episode_transcript_updated_at'] = now + timedelta(seconds=1)
+    home_read.project_episode('u', episode, members={'c': row})
+    assert composer.needs_compose(episode)  # Receipt wakes a wait before any first compose.
+    row.pop('episode_transcript_updated_at')
+    episode['compose_transcript_wait_until'] = now - timedelta(seconds=1)
+    home_read.project_episode('u', episode, members={'c': row})
+    assert composer.needs_compose(episode)  # Compose expiry never flips the Home label to failed.
+    assert home_read.project_episode('u', episode, members={'c': row})['members'][0]['title'] == 'Transcribing…'

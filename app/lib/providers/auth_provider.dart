@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -21,6 +22,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -259,18 +261,21 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  /// Asks Apple (or the web flow) for a credential. Tests stand in for the platform here.
+  @visibleForTesting
+  Future<UserCredential?> requestAppleCredential() {
+    if (PlatformService.isMobile && !Env.useWebAuth && !Platform.isAndroid) {
+      return AuthService.instance.signInWithAppleMobile();
+    }
+    return AuthService.instance.authenticateWithProvider('apple');
+  }
+
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('apple');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
-          credential = await AuthService.instance.signInWithAppleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('apple');
-        }
+        final credential = await requestAppleCredential();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
@@ -280,12 +285,17 @@ class AuthenticationProvider extends BaseProvider {
                 'Failed to sign in with Apple, please try again.',
           );
         }
-      } catch (e) {
-        Logger.debug('OAuth Apple sign in error: $e');
+      } catch (e, stackTrace) {
         PlatformManager.instance.analytics.signInFailed('apple', error: e);
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
-        );
+        if (isSignInCancellation(e)) {
+          Logger.debug('Apple sign in cancelled');
+        } else {
+          Logger.handle(e, stackTrace, message: 'Apple sign in failed');
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authAppleSignInFailedUseGoogle ??
+                "Sign in with Apple didn't work. Try again or continue with Google.",
+          );
+        }
       }
       setLoadingState(false);
     }

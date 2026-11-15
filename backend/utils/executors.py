@@ -329,6 +329,22 @@ cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, th
 # front of account wipes on cleanup's four workers.
 erasure_executor = MonitoredThreadPoolExecutor(name="erasure", max_workers=20, thread_name_prefix="erasure")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Optional playback discovery cannot consume mandatory custody/readback workers.
+# Its process coordinator admits at most two calls; this pool has no queue.
+playback_metadata_executor = MonitoredThreadPoolExecutor(
+    name="playback_metadata",
+    max_workers=2,
+    max_queue_size=0,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-metadata",
+)
+playback_debt_executor = MonitoredThreadPoolExecutor(
+    name="playback_debt",
+    max_workers=2,
+    max_queue_size=32,
+    wait_on_saturation=True,
+    thread_name_prefix="playback-debt",
+)
 # Prompt-list verification may outlive its caller while a provider finishes.
 # Keep both the clip cut and inline STT away from shared feature pools.
 speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
@@ -369,6 +385,8 @@ _ALL_EXECUTORS = [
     cleanup_executor,
     erasure_executor,
     storage_executor,
+    playback_metadata_executor,
+    playback_debt_executor,
     speaker_tag_verify_executor,
     cimd_executor,
     open_loops_executor,

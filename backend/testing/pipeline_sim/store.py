@@ -31,6 +31,10 @@ from typing import Any, Callable, TypeVar
 
 from config.batch_pipeline import held_poll_skip_enabled, MERGE_POLL_TERMINAL_STATES
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
 
 from database.batch_pipeline_privacy import (
     PRIVACY_COLLECTION,
@@ -433,6 +437,10 @@ class SimStore:
     def projection_finish_backfill_complete(self) -> bool:
         return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
+    def projection_followup_backfill_complete(self) -> bool:
+        # Only this backend's native control marker can certify its population.
+        return followup_backfill_marker_complete(self.run(lambda tx: tx.get('control', FOLLOWUP_BACKFILL_KEY)))
+
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         """The owner's result committed directly after ``previous``; two matches fail closed (Firestore hint)."""
         matches = sorted(
@@ -452,29 +460,28 @@ class SimStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         """Mirror Firestore's legacy or due-clock keyset scan, including inclusive seed cursors."""
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
         wanted = set(states)
         ordered = sorted(
-            (
-                (row['committed_at'], key)
-                if due_before is None
-                else (row['projection_finish_due_at'], row['committed_at'], key)
-            )
+            ((row['committed_at'], key) if cutoff is None else (row[clock_field], row['committed_at'], key))
             for (table, key), row in self.rows.items()
             if table == 'results'
             and row.get('projection_state') in wanted
             and 'committed_at' in row
-            and (
-                due_before is None
-                or row.get('projection_finish_due_at') is not None
-                and row['projection_finish_due_at'] <= float(due_before)
-            )
+            and (not exclude_async or due_before is None or row.get('projection_finish_due_at', -1) >= 0)
+            and (cutoff is None or row.get(clock_field) is not None and row[clock_field] <= float(cutoff))
         )
         if after is not None:
-            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
                 ordered = [entry for entry in ordered if entry[0] >= after[0]]
             else:
                 ordered = [entry for entry in ordered if entry > after]
@@ -501,6 +508,18 @@ class SimStore:
             and (not skip or row.get('state') not in (None, *MERGE_POLL_TERMINAL_STATES))
         )
         return [deepcopy(self.rows[('jobs', segment_id)]) for _, segment_id in rows[:limit]]
+
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('state') == 'result_ready'
+            and (after is None or (row['capture_at'], row['segment_id']) > tuple(after))
+        ]
+        return deepcopy(sorted(rows, key=lambda row: (row['capture_at'], row['segment_id']))[: max(1, min(limit, 160))])
 
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False

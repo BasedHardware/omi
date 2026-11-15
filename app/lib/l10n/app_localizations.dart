@@ -13251,6 +13251,12 @@ abstract class AppLocalizations {
   /// **'Failed to sign in with Apple, please try again.'**
   String get authFailedToSignInWithApple;
 
+  /// Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple didn\'t work. Try again or continue with Google.'**
+  String get authAppleSignInFailedUseGoogle;
+
   /// Error message when retrieving Firebase token fails
   ///
   /// In en, this message translates to:
@@ -27110,6 +27116,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{price} paid today. Renews monthly.'**
   String monthlySwitchDoneBody(String price);
+
+  /// Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing changed. Review the list and try again.'**
+  String get processingDeleteScopeChanged;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

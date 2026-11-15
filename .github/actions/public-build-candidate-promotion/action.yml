@@ -1,6 +1,14 @@
 name: Promote public-build candidate
 description: Browser-smoke an exact Cloud Run candidate before shifting traffic. A service whose ingress hides the tagged candidate URL from CI is promoted first, smoked through its declared public URL, and rolled back when that smoke fails. Existing services start with no traffic and first creates receive initial traffic.
 inputs:
+  app_probe_image:
+    description: App image identity requiring a pre-promotion probe receipt.
+    required: false
+    default: ''
+  app_probe_carrier:
+    description: Workflow carrier identity bound to the app probe receipt.
+    required: false
+    default: ''
   target:
     description: Canonical public-build target name.
     required: true
@@ -96,6 +104,15 @@ runs:
     - name: Promote browser-accepted candidate
       shell: bash
       run: |
+        set -euo pipefail
+        if [[ '${{ inputs.target }}' == app ]]; then
+          python3 .github/scripts/app_candidate_probe.py recheck \
+            --project '${{ inputs.project_id }}' --region '${{ inputs.region }}' \
+            --service '${{ inputs.service }}' --revision '${{ inputs.revision }}' \
+            --image '${{ inputs.app_probe_image }}' \
+            --source '${{ inputs.sha }}' --carrier '${{ inputs.app_probe_carrier }}' \
+            --baseline "$RUNNER_TEMP/app-baseline.json" --receipt "$RUNNER_TEMP/app-probe.json"
+        fi
         gcloud run services update-traffic "${{ inputs.service }}" \
           --project="${{ inputs.project_id }}" \
           --region="${{ inputs.region }}" \

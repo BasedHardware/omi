@@ -1048,7 +1048,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_app.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 7,
       "display_name": "deploy",
       "expected_runs_class": "estimated-non-pr-push-day",
       "expected_runs_per_day": 1,
@@ -1057,7 +1057,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Keep the 5-minute p50; estimate one path-matched main/development push run per day as a non-PR deployment.",
+      "rationale": "SCA-763 budgets two additional minutes above the prior five-minute p50 for digest-bound Linux image admission, network-disabled synthetic checks and exact-candidate helper GETs before promotion. Forecast remains one non-PR path-matched deployment/day; new probe-script triggers are included in that estimate and the app concurrency group is unchanged.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1258,16 +1258,16 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 12,
+      "budget_p50_minutes": 11,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
-      "if": "${{ github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}",
+      "if": "${{ inputs.mode == 'deploy' && github.event.inputs.environment == 'prod' && needs.helm-upgrade.outputs.neg_coverage_exporter_image_tag != '' }}",
       "matrix": {},
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change. 2026-10-29 ghguards adds the expected_sha dispatch input upstream of this job; this job is unchanged, and the one-minute bump records the trigger change",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change. 2026-10-29 ghguards adds the expected_sha dispatch input upstream of this job; this job is unchanged, and the one-minute bump records the trigger change SCA-2225 excludes evidence mode explicitly; deploy-only exporter eligibility is narrower. No exporter is started by evidence, and the numeric bookkeeping is explicitly dispositioned by ruling 01a1e09e. SCA-2225 ruling 01a1e09e explicitly sets 12 to 11 as conservative bookkeeping for the narrowed condition; exporter code/timeout/frequency are unchanged and no runtime improvement is claimed.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1279,13 +1279,13 @@
       "budget_p50_minutes": 16,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 1,
+      "expected_runs_per_day": 2,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50. 2026-10-29 ghguards adds the expected_sha dispatch input: the admission step gains a SHA format/object check plus one merge-base containment test before any mutation (seconds on the full clone); the one-minute bump records the trigger change",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50. 2026-10-29 ghguards adds the expected_sha dispatch input: the admission step gains a SHA format/object check plus one merge-base containment test before any mutation (seconds on the full clone); the one-minute bump records the trigger change SCA-2225 rollout-lead ruling 01a1e09e (2026-11-15): one existing deploy forecast plus at most one manually requested evidence run/day, evidence ceiling 10 minutes within retained p50 allowance 16; no automatic evidence retry. No runtime improvement is asserted.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1764,14 +1764,14 @@
     "gcp_scheduler_reconcile.yml/reconcile": {
       "budget_p50_minutes": 5,
       "display_name": "reconcile",
-      "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_class": "manual-operator-infrequent",
+      "expected_runs_per_day": 0.14285714285714285,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "Manual planned-job selection is production-gated; conservatively budget one 5-minute operator run per week",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4468,7 +4468,7 @@
     "gcp_app.yml": {
       "name": "Deploy App to Cloud Run",
       "owner": "CI maintainers",
-      "rationale": "The app follows the frontend's main/development auto-deploy pattern for app, shared-package, and public-build configuration changes. The no-traffic candidate, browser smoke, and automatic rollback pipeline addresses the 2026-09-29 rejected-production-deploy concern; expect one path-matched main/development push run per day, outside the PR run budget.",
+      "rationale": "The app follows the frontend's main/development auto-deploy pattern for app, shared-package, and public-build configuration changes. The no-traffic candidate, browser smoke, and automatic rollback pipeline addresses the 2026-09-29 rejected-production-deploy concern; expect one path-matched main/development push run per day, outside the PR run budget. SCA-763 adds an approved ancestor product-source input and two app-only probe script paths; the exact Linux candidate gate now precedes promotion, with the same app/environment concurrency and no new PR trigger.",
       "triggers": {
         "push": {
           "branches": [
@@ -4489,6 +4489,8 @@
             ".github/scripts/check_public_build_contract.py",
             ".github/scripts/smoke_public_build_browser.py",
             ".github/scripts/public_build_acceptance_route.py",
+            ".github/scripts/app_candidate_probe.py",
+            ".github/scripts/app_candidate_probe_preload.ts",
             "backend/scripts/wait_cloud_run_candidate_readiness.py",
             "backend/scripts/resolve_cloud_run_tagged_url.py"
           ]
@@ -4504,6 +4506,12 @@
               ],
               "required": "false",
               "type": "choice"
+            },
+            "product_source": {
+              "default": "",
+              "description": "Optional approved full product SHA; carrier workflow remains at its dispatched main revision",
+              "required": "false",
+              "type": "string"
             }
           }
         }
@@ -4620,7 +4628,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs. 2026-10-29 ghguards: expected_sha dispatch input (blank default) admits only a checked-out tree that contains the pinned commit before any mutation; no new event trigger, no PR runs",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs. 2026-10-29 ghguards: expected_sha dispatch input (blank default) admits only a checked-out tree that contains the pinned commit before any mutation; no new event trigger, no PR runs SCA-2225 approved overlay-evidence design adds evidence mode and two request bindings in this existing workflow only; evidence cannot reach deploy, rollback, index, build or downstream exporter work. Numeric disposition is explicitly authorized by SCA-2225 ruling 01a1e09e; global caps stay unchanged.",
       "triggers": {
         "push": {
           "branches": [
@@ -4676,6 +4684,16 @@
               "required": "true",
               "type": "choice"
             },
+            "evidence_request": {
+              "default": "",
+              "description": "Nonsecret Release request bindings; evidence mode only, no overlay payload",
+              "required": "false"
+            },
+            "evidence_request_id": {
+              "default": "",
+              "description": "Single-use Release evidence request ID; evidence mode only",
+              "required": "false"
+            },
             "expected_sha": {
               "default": "",
               "description": "Full commit SHA the checked-out tree must contain before any mutation (blank keeps the unpinned behavior; prod dispatches should pin the reviewed SHA)",
@@ -4714,7 +4732,8 @@
               "description": "deploy applies the chart; rollback restores an earlier Helm revision",
               "options": [
                 "deploy",
-                "rollback"
+                "rollback",
+                "evidence"
               ],
               "required": "true",
               "type": "choice"
@@ -5489,7 +5508,7 @@
     "gcp_scheduler_reconcile.yml": {
       "name": "Reconcile Cloud Scheduler",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "Optional exact job selection enables planned-job deployment; blank selection retains full-manifest reconciliation",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -5501,6 +5520,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "jobs": {
+              "description": "Optional space-separated declared job names; required to select planned jobs",
+              "required": "false",
+              "type": "string"
             },
             "operation": {
               "default": "check",

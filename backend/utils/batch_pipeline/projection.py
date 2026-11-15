@@ -30,6 +30,7 @@ from config.batch_pipeline import (
     sweep_owner_chain_enabled,
     serving_sweep_page_rows,
 )
+from config.record_latency import recent_native_record
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
@@ -61,6 +62,7 @@ from utils.sync.assignment_errors import (
     SyncAssignmentSuperseded,
 )
 from utils.stt.transcript_admission import filter_admission
+from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -122,6 +124,8 @@ class Walk(NamedTuple):
     stop: str = ''
     # Scheduling hint only: the privacy-blocked head and its observed row version.
     blocked_head: tuple[str, object] | None = None
+    # Already-read recent single-unit records can finish without another scan.
+    eager_followups: tuple[str, ...] = ()
 
 
 def error_type(error: BaseException) -> str:
@@ -322,6 +326,15 @@ def build_incoming(
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    # Consumed by the existing assignment transaction, never a separate write.
+    incoming['_episode_transcript_receipt'] = True
+    if item.capture_time_trust is not None:
+        incoming['capture_time_trust'] = item.capture_time_trust
+        # Use raw-source identity rather than receipt time for replay. This
+        # pre-existing partition also fences new rows from older row readers.
+        incoming['id'] = item.conversation_id or incoming['id']
+        incoming['sync_clock_run'] = incoming['id']
+        incoming['clock'] = 'imported'
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)
@@ -856,7 +869,11 @@ class Projector:
             'data_protection_level': binding.data_protection_level,
             '_batch_require_live_target': True,
             '_batch_redrive_target': bool(session.entry.get('projection_redriven_at')),
-            '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
+            '_batch_replace_live': {
+                'start': item.capture_at,
+                'end': item.capture_at + item.duration_seconds,
+                'terminal_empty_outcome': (session.entry.get('result') or {}).get('outcome'),
+            },
         }
         try:
             conversations_db.assign_sync_conversation(
@@ -1002,7 +1019,12 @@ class Projector:
                     hint is not None and hint.successor and not entry.get('projection') and str(index) not in receipts
                 ):
                     self.store.check(session)
-                if hint is not None and hint.parallel_candidate and not binding.target_conversation_id:
+                if (
+                    hint is not None
+                    and hint.parallel_candidate
+                    and not binding.target_conversation_id
+                    and item.capture_time_trust != 'untrusted'
+                ):
                     pending_candidate = self._start_candidate(binding, part, part_payload)
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None and item.requires_compute_admission:
@@ -1053,7 +1075,11 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None and incoming['transcript_segments']:
+                    if (
+                        context.target_id is None
+                        and incoming['transcript_segments']
+                        and item.capture_time_trust != 'untrusted'
+                    ):
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
@@ -1079,6 +1105,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
                         incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
@@ -1389,6 +1416,7 @@ class Projector:
         groups: dict[str, dict[str, None]] = {}
         first = None
         advanced: list[str] = []
+        eager_followups: list[str] = []
         more = False
         blocked_head = snapshot = None
 
@@ -1549,12 +1577,14 @@ class Projector:
                 if not privacy_held and not owe(segment_id, binding):
                     stop = 'owe_error'
                     break
+                if not privacy_held and len(binding.segment_ids) == 1 and recent_native_record(job, self.clock()):
+                    eager_followups.append(segment_id)
         else:
             more = True
             stop = 'limit'
         ordered = [groups.pop(first)] if first is not None else []
         followups = list(dict.fromkeys(sid for group in ordered + list(groups.values()) for sid in group))
-        return Walk(followups, advanced, more, stop, blocked_head)
+        return Walk(followups, advanced, more, stop, blocked_head, tuple(eager_followups))
 
     def sweep(self, limit: int | None = None) -> dict[str, int]:
         """Bounded durable-log recovery; no in-memory callback is an outbox."""
@@ -1720,7 +1750,7 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
-        The dark finish backoff owns page selection and deferral; see
+        FinishBackoff owns async discovery hints and synchronous deferral; see
         utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1738,7 +1768,7 @@ class Projector:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
-                    self.has_async_followups = True
+                    self.finish_backoff.observed_async(segment_id, entry)
                     defer = False
                     continue
                 result = self._project_read(segment_id, job, entry, binding)

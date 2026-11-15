@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "Неуспешно влизане с Google, моля опитайте отново.",
     "authenticationFailed": "Удостоверяването е неуспешно. Моля, опитайте отново.",
     "authFailedToSignInWithApple": "Неуспешно влизане с Apple, моля опитайте отново.",
+    "authAppleSignInFailedUseGoogle": "Влизането с Apple не успя. Опитайте отново или продължете с Google.",
     "authFailedToRetrieveToken": "Неуспешно извличане на Firebase токен, моля опитайте отново.",
     "authUnexpectedErrorFirebase": "Неочаквана грешка при влизане, грешка на Firebase, моля опитайте отново.",
     "authUnexpectedError": "Неочаквана грешка при влизане, моля опитайте отново",
@@ -4653,5 +4654,6 @@
     "monthlySwitchDeclined": "Плащането е отказано. Планът ви не е променен.",
     "monthlySwitchUnavailable": "Преминаването в момента не е достъпно. Вместо това обновете картата.",
     "monthlySwitchDoneTitle": "Вече плащате месечно",
-    "monthlySwitchDoneBody": "Днес са платени {price}. Подновява се всеки месец."
+    "monthlySwitchDoneBody": "Днес са платени {price}. Подновява се всеки месец.",
+    "processingDeleteScopeChanged": "Списъкът за обработка се промени. Прегледайте го и опитайте отново."
 }

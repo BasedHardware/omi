@@ -5,6 +5,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/mobile_batch_vad.dart';
 
 /// Routing owner for pendant Standard capture. No server capability, model,
@@ -18,9 +20,11 @@ class MobileStandardBatch {
     required this.ownerUid,
     required this.now,
     this.onSpeech,
-  });
+    PendantRingCustody? custody,
+  }) : custody = custody ?? PendantRingCustody.shared;
 
   final MobileBatchBuffer buffer;
+  final PendantRingCustody custody;
   final Future<MobileBatchVad> Function() loadVad;
   final Future<int?> Function() freeDiskBytes;
   final ValueListenable<ListenClientStateSnapshot> visibility;
@@ -148,6 +152,9 @@ class MobileStandardBatch {
     required bool realtimeConsumer,
     Geolocation? geolocation,
     String? recordingSessionId,
+    String? deviceId,
+    int? packetCounter,
+    int? fragmentIndex,
   }) {
     if (!eligible || realtimeConsumer || !codec.isOpusSupported()) {
       buffer.seal();
@@ -158,8 +165,18 @@ class MobileStandardBatch {
       _lastSpaceCheck = clock;
       unawaited(_checkSpace());
     }
+    final context = batchRingProofEnabled && deviceId != null && packetCounter != null && fragmentIndex != null
+        ? custody.batchLiveContext(deviceId)
+        : null;
     final accepted = buffer.append(payload,
-        uid: ownerUid(), codec: codec, now: clock, geolocation: geolocation, recordingSessionId: recordingSessionId);
+        uid: ownerUid(),
+        codec: codec,
+        now: clock,
+        geolocation: geolocation,
+        recordingSessionId: recordingSessionId,
+        liveContext: context,
+        observeLiveOrdinal:
+            context == null ? null : () => custody.observeBatchFrame(context, packetCounter!, fragmentIndex!));
     if (!accepted) {
       buffer.seal();
       return false;

@@ -7043,6 +7043,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не вдалося увійти через Apple, спробуйте ще раз.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не вдалося увійти через Apple. Спробуйте ще раз або продовжте з Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не вдалося отримати токен Firebase, спробуйте ще раз.';
 
   @override
@@ -15487,4 +15491,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Сьогодні сплачено $price. Подовжується щомісяця.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Список обробки змінився. Перевірте його та спробуйте знову.';
 }

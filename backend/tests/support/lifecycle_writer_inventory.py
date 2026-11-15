@@ -1,6 +1,62 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'utils/batch_pipeline/empty_transcription.py': [
+        (
+            'stamp',
+            'record_transcription_empty',
+            "{'version': 1, 'projection_revision': result['record_projection_revision'], 'pending_generation': "
+            "generation, 'spans': merged}",
+            ('record_transcription_empty',),
+        )
+    ],
+    # Home visibility defaults and response metadata only; no lifecycle writes.
+    'database/home_feed.py': [
+        ('_visible', 'status', "'completed'", ('status',)),
+        (
+            'feed.project',
+            'status',
+            "row.get('home_status') or 'completed'",
+            (
+                'detail_id',
+                'emoji',
+                'finished_at',
+                'has_tasks',
+                'home_step',
+                'id',
+                'is_locked',
+                'kind',
+                'member_count',
+                'preview',
+                'revision',
+                'sort_at',
+                'sources',
+                'starred',
+                'started_at',
+                'status',
+                'summary_available',
+                'title',
+            ),
+        ),
+    ],
+    # Read-only gate input for the member-notes wait; no lifecycle document write.
+    'utils/episodes/member_notes.py': [
+        (
+            'before_notes',
+            'status',
+            "getattr(conversation, 'status', None)",
+            ('finalization_job_id', 'id', 'record_lane_owner', 'source', 'status'),
+        ),
+    ],
+    # Close acceptance wire response only; no lifecycle document write.
+    'utils/pusher_record_close.py': [
+        (
+            'result_frame',
+            'status',
+            'status',
+            ('conversation_id', 'phase', 'request_id', 'status', 'type', 'version', 'watermark'),
+        ),
+    ],
     # Census response metadata only; no lifecycle document writes.
     'utils/sync/batch_census.py': [
         (
@@ -232,6 +288,12 @@ FIELD_SITES = {
             'state',
             "'ready' if finished else 'persisted'",
             ('conversation_id', 'state'),
+        ),
+        (
+            'ProjectionStore.mark_enrichment.commit',
+            'state',
+            "'ready' if finished else 'persisted'",
+            ('record_notes_deferred', 'state'),
         ),
         ('ProjectionStore.ready.commit', 'state', "'ready'", ('state',)),
         (
@@ -3244,6 +3306,19 @@ FIELD_SITES = {
                 'weighted_tokens',
             ),
         )
+    ],
+    # Per-blocker scheduling metadata only; no recording lifecycle transition.
+    'utils/episodes/compose_wait.py': [
+        (
+            'observation_updates',
+            'compose_transcript_wait_observations',
+            'merged',
+            (
+                'compose_transcript_wait_observations',
+                'compose_transcript_wait_started_at',
+                'compose_transcript_wait_until',
+            ),
+        ),
     ],
     'utils/episodes/composer.py': [
         (

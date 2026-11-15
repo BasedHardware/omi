@@ -107,6 +107,9 @@ class PgSimStore(SimStore):
     def projection_finish_backfill_complete(self) -> bool:
         return self.pg.projection_finish_backfill_complete()
 
+    def projection_followup_backfill_complete(self) -> bool:
+        return self.pg.projection_followup_backfill_complete()
+
     def __init__(self, customer: CustomerData, *, namespace: str, pool: Pool):
         super().__init__(customer, namespace=namespace)
         self.pg = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
@@ -173,6 +176,9 @@ class PgSimStore(SimStore):
     def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
         return self.pg.fresh_pending(owner_key, limit)
 
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        return self.pg.ready_pending(owner_key, limit, after=after)
+
     def ready_owners(
         self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
     ) -> list[tuple[str, str | None]]:
@@ -188,8 +194,17 @@ class PgSimStore(SimStore):
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return self.pg.projection_page(limit, after=after, states=states, due_before=due_before)
+        return self.pg.projection_page(
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            exclude_async=exclude_async,
+            followup_due_before=followup_due_before,
+        )
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return self.pg.projection_successor(owner_key, previous)

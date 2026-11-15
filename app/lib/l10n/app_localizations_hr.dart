@@ -7054,6 +7054,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Prijava s Apple-om nije uspjela, molim vas pokušajte ponovno.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prijava putem Applea nije uspjela. Pokušajte ponovno ili nastavite s Googleom.';
+
+  @override
   String get authFailedToRetrieveToken => 'Dohvaćanje firebase tokena nije uspjelo, molim vas pokušajte ponovno.';
 
   @override
@@ -15490,4 +15494,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Danas plaćeno $price. Obnavlja se mjesečno.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
 }

@@ -4079,6 +4079,78 @@ class TestV2EndpointExecution:
         await module._renew_custody_lease('synthetic', 'record')
         forbidden.assert_not_awaited()
 
+    @staticmethod
+    def _capture_end_payload(**changes):
+        base = dict(
+            recording_session_id='session',
+            end_type='user_initiated',
+            last_speech_at=1000.0,
+            end_decided_at=1002.0,
+            sent_at=1010.0,
+            pending_wals=0,
+        )
+        return SimpleNamespace(**{**base, **changes})
+
+    @pytest.mark.parametrize(
+        'stored, accepted, retry', [('stored', True, False), ('duplicate', True, False), ('unbound', False, True)]
+    )
+    async def test_capture_end_stores_the_marker_and_types_the_ledger_end(
+        self, sync_endpoint_module, monkeypatch, stored, accepted, retry
+    ):
+        _, _, module = sync_endpoint_module
+        monkeypatch.delenv('SYNC_UPLOAD_WATERMARK_ENABLED', raising=False)
+        saved, ended = [], []
+        module.capture_end_db = SimpleNamespace(
+            store=lambda uid, session, marker: saved.append((uid, session, marker)) or (stored, 'conversation')
+        )
+        module.pipeline_ledger = SimpleNamespace(record_end=lambda uid, cid, **kw: ended.append((uid, cid, kw)))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        result = await module.record_sync_capture_end(self._capture_end_payload(), uid='synthetic')
+        assert (result.accepted, result.retry) == (accepted, retry)
+        uid, session, marker = saved[0]
+        assert (uid, session, marker['end_type'], marker['pending_wals']) == (
+            'synthetic',
+            'session',
+            'user_initiated',
+            0,
+        )
+        if stored == 'stored':
+            assert ended[0][:2] == ('synthetic', 'conversation')
+            assert ended[0][2]['end_at'] == marker['end_at'] and ended[0][2]['last_speech_at'] == 1000.0
+        else:
+            assert not ended
+
+    async def test_capture_end_refuses_a_malformed_marker_and_reports_a_store_outage(
+        self, sync_endpoint_module, monkeypatch
+    ):
+        _, _, module = sync_endpoint_module
+        monkeypatch.delenv('SYNC_UPLOAD_WATERMARK_ENABLED', raising=False)
+        module.capture_end_db = SimpleNamespace(store=MagicMock(side_effect=OSError('synthetic')))
+
+        async def run(executor, fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        module.run_blocking = run
+        with pytest.raises(HTTPException) as error:
+            await module.record_sync_capture_end(self._capture_end_payload(last_speech_at=9999.0), uid='synthetic')
+        assert error.value.status_code == 422
+        module.capture_end_db.store.assert_not_called()
+        with pytest.raises(HTTPException) as error:
+            await module.record_sync_capture_end(self._capture_end_payload(), uid='synthetic')
+        assert error.value.status_code == 503
+
+    async def test_capture_end_kill_switch_stores_nothing(self, sync_endpoint_module, monkeypatch):
+        _, _, module = sync_endpoint_module
+        monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+        module.capture_end_db = SimpleNamespace(store=MagicMock())
+        result = await module.record_sync_capture_end(self._capture_end_payload(), uid='synthetic')
+        assert (result.accepted, result.retry) == (False, False)
+        module.capture_end_db.store.assert_not_called()
+
     @pytest.fixture
     def sync_endpoint_module(self):
         """Keep real router import/setup outside the endpoint execution budget."""
@@ -4091,6 +4163,7 @@ class TestV2EndpointExecution:
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            module.retained_source_offsets = MagicMock(return_value={})  # Fake staged paths have no source bytes.
             gc.collect()
             yield saved, jobs, module
         finally:

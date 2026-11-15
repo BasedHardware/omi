@@ -33,7 +33,9 @@ def assert_same_projection(baseline, result):
     assert result['index'] == baseline['index']
 
 
-def test_drain_beats_the_sweep_walk_on_a_short_backlog():
+def test_drain_beats_the_sweep_walk_on_a_short_backlog(monkeypatch):
+    # Serving defaults must not activate unmodelled finish work in this benchmark.
+    monkeypatch.setenv('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED', 'true')
     today = sim.run('sweep_walk', rows=100)
     phase1 = sim.run('drain', rows=100)
     assert today['all_persisted'] and today['chain_order']

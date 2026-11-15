@@ -195,12 +195,14 @@ def test_workflow_exposes_optional_override_inputs_and_applies_them_on_both_helm
         ".github/scripts/listen_helm_env_overrides.py",
         'LISTEN_ENV_OVERRIDES=()',
         'done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"',
-        '${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}',
+        '.github/scripts/listen_overlay_evidence.py argv',
+        '--overrides-file "$LISTEN_HELM_ENV_OVERRIDES_ARGV"',
     ):
         assert fragment in text, fragment
     # Dry-run and real upgrade both expand the same override argv.
     assert text.count('done < "${LISTEN_HELM_ENV_OVERRIDES_ARGV}"') == 2
-    assert text.count('${LISTEN_ENV_OVERRIDES[@]+"${LISTEN_ENV_OVERRIDES[@]}"}') == 2
+    assert 'DRY_RUN=("${DEPLOY_ARGV[@]}" --dry-run=client)' in text
+    assert '"${DEPLOY_ARGV[@]}"' in _step('Upgrade backend-listen Helm chart')['run']
     # Auto-push / blank overrides must still leave chart defaults authoritative:
     # the helper is only invoked with input env vars, never hard-coded modes.
     # FEATURE_MODE uses FEATURE_MODE_VALUE after mapping workflow token disabled -> off
@@ -537,7 +539,11 @@ MATERIALIZE = "Materialize private listen values (prod only)"
 
 def test_secret_reaches_only_the_prod_materialize_step_via_env():
     text = WORKFLOW.read_text(encoding="utf-8")
-    assert text.count("secrets.LISTEN_PRIVATE_VALUES_YAML") == 1
+    assert text.count("secrets.LISTEN_PRIVATE_VALUES_YAML") == 2
+    evidence = _step("Produce private-overlay effect receipt without mutation")
+    assert evidence["if"] == "${{ inputs.mode == 'evidence' }}"
+    assert evidence["env"]["LISTEN_PRIVATE_VALUES_YAML"] == "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"
+    assert "secrets." not in evidence["run"]
     step = _step(MATERIALIZE)
     assert step["env"]["LISTEN_PRIVATE_VALUES_YAML"] == "${{ secrets.LISTEN_PRIVATE_VALUES_YAML }}"
     assert "github.event.inputs.environment == 'prod'" in step["if"]
@@ -567,7 +573,7 @@ def test_private_values_are_validated_before_any_cluster_mutation():
         assert names.index(later) > materialize, later
     assert names[-1] == "Remove private listen values file"
     cleanup = _step("Remove private listen values file")
-    assert cleanup["if"] == "${{ always() && env.LISTEN_PRIVATE_VALUES_FILE != '' }}"
+    assert cleanup["if"] == "${{ inputs.mode != 'evidence' && (always() && env.LISTEN_PRIVATE_VALUES_FILE != '') }}"
 
 
 def test_both_helm_paths_carry_private_file_via_argv_and_dry_run_withholds_manifest():
