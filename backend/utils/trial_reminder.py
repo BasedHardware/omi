@@ -53,8 +53,11 @@ def trial_ending_reminder_body(uid: str, subscription: Mapping[str, Any], now: i
     if len(items) != 1:
         return None
     price = items[0].get('price') or {}
+    price_id = price.get('id')
+    if not isinstance(price_id, str):
+        return None
     try:
-        if not is_paid_plan(get_plan_type_from_price_id(price.get('id'))):
+        if not is_paid_plan(get_plan_type_from_price_id(price_id)):
             return None
     except ValueError:
         return None
