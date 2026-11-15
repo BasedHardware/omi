@@ -183,3 +183,25 @@ async def test_cloud_tasks_poll_notifies_before_waiting_for_successor(monkeypatc
     finally:
         release.set()
         await asyncio.wait_for(polling, 1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_cloud_tasks_close_signal_is_not_suppressed_by_boundary_hold(monkeypatch, enabled):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', str(enabled).lower())
+    notify = AsyncMock(return_value=False)
+    host = SimpleNamespace(
+        state=SimpleNamespace(active=True, current_conversation_id='current', last_audio_received_time=None),
+        request=SimpleNamespace(uid='test-owner'),
+        wait=AsyncMock(side_effect=[False, True]),
+        persistence=SimpleNamespace(call=AsyncMock(return_value={'id': 'current', 'status': 'completed'})),
+        conversation_creation_timeout=120,
+        request_recording_close=notify,
+    )
+    controller = LiveConversationController(host)
+    monkeypatch.setattr(conversation_module, 'poll_calendar', AsyncMock())
+    monkeypatch.setattr(conversation_module, 'conversation_action', AsyncMock(return_value='hold'))
+    controller.create_new_in_progress_conversation = AsyncMock()
+    await controller.lifecycle_loop()
+    assert notify.await_count == int(enabled)
+    controller.create_new_in_progress_conversation.assert_not_awaited()

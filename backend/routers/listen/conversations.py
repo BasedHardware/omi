@@ -1064,6 +1064,10 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            if conversation.get('status') != ConversationStatus.in_progress:
+                # Cloud Tasks has no socket callback. Observe its durable
+                # boundary before calendar/occasion holds or successor awaits.
+                await self._notify_recording_close(conversation_id)
             conversation = await self._continuity_row(conversation)
             finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             if server_batch_owned(conversation) and self.host.state.last_audio_received_time is not None:
@@ -1099,10 +1103,6 @@ class LiveConversationController:
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
                 action = ConversationLifecycleAction.process_and_create_new
             if action == ConversationLifecycleAction.create_new:
-                # Cloud Tasks may finalize this row without any socket callback.
-                # This existing five-second poll observes the durable boundary
-                # before successor persistence can fail or wait indefinitely.
-                await self._notify_recording_close(conversation_id)
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:
                 await self.host.transcripts.flush_speaker_assignments(conversation_id)
