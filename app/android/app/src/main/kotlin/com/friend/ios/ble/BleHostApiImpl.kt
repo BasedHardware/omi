@@ -73,6 +73,12 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
             ?: bleManager.closeGatt(uuid) // Fallback if service not running
     }
 
+    override fun recoverSilentAudio(uuid: String) {
+        val service = OmiBleForegroundService.instance
+            ?: throw IllegalStateException("BLE foreground service unavailable")
+        service.recoverSilentAudio(uuid)
+    }
+
     // ── Bonding ──
 
     override fun requestBond(uuid: String, callback: (Result<Boolean>) -> Unit) {

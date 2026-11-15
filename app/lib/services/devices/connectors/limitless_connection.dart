@@ -58,7 +58,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   int _streamHealthGeneration = 0;
   int _rxPacketsSinceStreamActivation = 0;
   int _audioFramesSinceStreamActivation = 0;
+  DateTime? _firstAudioFrameAt;
+  DateTime? _lastAudioFrameAt;
   int _streamReactivationAttempts = 0;
+  int _silentAudioRecoveryAttempts = 0;
   bool _streamHealthCheckInFlight = false;
 
   /// Drift of pendant RTC vs phone at connect, before forward clock sync.
@@ -97,6 +100,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<void> _connect(Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged) async {
     _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
+    _resetStreamRecoveryBudget();
     _resetClockDriftCapture();
     try {
       await super.connect(onConnectionStateChanged: onConnectionStateChanged);
@@ -252,7 +256,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       final cmd = _encodeEnableDataStream(enable: !suppressed);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
       if (!_isCurrentSession(epoch)) return;
-      if (!suppressed && !_realtimeSuppressed) _armStreamHealthWatch(reason: 'realtime_resumed');
+      if (!suppressed && !_realtimeSuppressed) {
+        _resetStreamRecoveryBudget();
+        _armStreamHealthWatch(reason: 'realtime_resumed');
+      }
       DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
     } catch (e) {
       Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
@@ -446,15 +453,22 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _publishAudioFrames(List<List<int>> frames) {
     if (frames.isEmpty) return;
+    final now = DateTime.now();
+    final previousLastFrameAt = _lastAudioFrameAt;
+    if (previousLastFrameAt == null || now.difference(previousLastFrameAt) >= _streamHealthWindow) {
+      _firstAudioFrameAt = now;
+    }
+    _lastAudioFrameAt = now;
     if (_audioFramesSinceStreamActivation == 0) {
       Logger.debug('Limitless: First decoded audio frame observed after stream activation');
       DebugLogManager.logEvent('limitless_first_audio_frame', {'frames': frames.length});
     }
     _audioFramesSinceStreamActivation += frames.length;
-    _streamHealthTimer?.cancel();
-    _streamHealthTimer = null;
     for (final frame in frames) {
       _audioController.add(frame);
+    }
+    if (_streamHealthTimer == null && !_streamHealthCheckInFlight && _shouldMonitorRealtimeStream) {
+      _scheduleStreamHealthCheck(generation: _streamHealthGeneration, reason: 'audio_resumed');
     }
   }
 
@@ -475,42 +489,92 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _streamHealthCheckInFlight = false;
   }
 
-  void _armStreamHealthWatch({required String reason, bool resetAttempts = true}) {
+  bool get _shouldMonitorRealtimeStream => !_closed && _isInitialized && !_isBatchMode && !_realtimeSuppressed;
+
+  void _resetStreamRecoveryBudget() {
+    _streamReactivationAttempts = 0;
+    _silentAudioRecoveryAttempts = 0;
+  }
+
+  void _scheduleStreamHealthCheck({
+    required int generation,
+    required String reason,
+    Duration? delay,
+  }) {
+    if (generation != _streamHealthGeneration || !_shouldMonitorRealtimeStream) return;
+    _streamHealthTimer?.cancel();
+    final requestedDelay = delay ?? _streamHealthWindow;
+    final effectiveDelay = requestedDelay.isNegative ? Duration.zero : requestedDelay;
+    _streamHealthTimer = Timer(effectiveDelay, () {
+      if (generation != _streamHealthGeneration) return;
+      _streamHealthTimer = null;
+      unawaited(_checkStreamHealth(generation: generation, reason: reason));
+    });
+  }
+
+  void _armStreamHealthWatch({required String reason}) {
     _streamHealthGeneration++;
     final generation = _streamHealthGeneration;
     _streamHealthTimer?.cancel();
     _rxPacketsSinceStreamActivation = 0;
     _audioFramesSinceStreamActivation = 0;
-    if (resetAttempts) _streamReactivationAttempts = 0;
-    _streamHealthTimer = Timer(
-      _streamHealthWindow,
-      () => unawaited(_checkStreamHealth(generation: generation, reason: reason)),
-    );
+    _firstAudioFrameAt = null;
+    _lastAudioFrameAt = null;
+    _scheduleStreamHealthCheck(generation: generation, reason: reason);
   }
 
   Future<void> _checkStreamHealth({required int generation, required String reason}) async {
     if (generation != _streamHealthGeneration || _streamHealthCheckInFlight) return;
-    if (!_isInitialized || _isBatchMode || _realtimeSuppressed || _audioFramesSinceStreamActivation > 0) return;
+    if (!_shouldMonitorRealtimeStream) return;
+
+    final now = DateTime.now();
+    final lastAudioFrameAt = _lastAudioFrameAt;
+    if (lastAudioFrameAt != null) {
+      final silenceDuration = now.difference(lastAudioFrameAt);
+      if (silenceDuration < _streamHealthWindow) {
+        final firstAudioFrameAt = _firstAudioFrameAt;
+        if (firstAudioFrameAt != null &&
+            lastAudioFrameAt.difference(firstAudioFrameAt) >= _streamHealthWindow &&
+            (_streamReactivationAttempts > 0 || _silentAudioRecoveryAttempts > 0)) {
+          DebugLogManager.logInfo('Limitless realtime stream sustained; recovery budget restored', {
+            'decodedFrames': _audioFramesSinceStreamActivation,
+          });
+          _resetStreamRecoveryBudget();
+        }
+        _scheduleStreamHealthCheck(
+          generation: generation,
+          reason: 'continuous_audio',
+          delay: _streamHealthWindow - silenceDuration,
+        );
+        return;
+      }
+    }
 
     _streamHealthCheckInFlight = true;
     final rxPackets = _rxPacketsSinceStreamActivation;
-    final stage = rxPackets == 0 ? 'no_rx_packets' : 'rx_without_audio_frames';
+    final stage = _audioFramesSinceStreamActivation > 0
+        ? 'audio_stalled'
+        : rxPackets == 0
+            ? 'no_rx_packets'
+            : 'rx_without_audio_frames';
     Logger.debug(
       'Limitless: Realtime stream silent ($stage, reason=$reason, rxPackets=$rxPackets, '
-      'reactivationAttempts=$_streamReactivationAttempts)',
+      'reactivationAttempts=$_streamReactivationAttempts, '
+      'linkRecoveryAttempts=$_silentAudioRecoveryAttempts)',
     );
     DebugLogManager.logWarning('Limitless realtime stream is silent', {
       'reason': reason,
       'stage': stage,
       'rxPackets': rxPackets,
       'reactivationAttempts': _streamReactivationAttempts,
+      'linkRecoveryAttempts': _silentAudioRecoveryAttempts,
     });
 
     try {
       // A status round-trip distinguishes a dead notify/control path from a
       // firmware that accepts commands but does not emit realtime audio.
       final status = await getStorageStatus();
-      if (generation != _streamHealthGeneration || _isBatchMode || _realtimeSuppressed) return;
+      if (generation != _streamHealthGeneration || !_shouldMonitorRealtimeStream) return;
       DebugLogManager.logEvent('limitless_stream_health_probe', {
         'stage': stage,
         'statusReceived': status != null,
@@ -524,15 +588,45 @@ class LimitlessDeviceConnection extends DeviceConnection {
         'freePages=${status?['free_capture_pages']}',
       );
 
-      if (_streamReactivationAttempts == 0 && _audioFramesSinceStreamActivation == 0) {
+      final latestAudioFrameAt = _lastAudioFrameAt;
+      if (latestAudioFrameAt != null && DateTime.now().difference(latestAudioFrameAt) < _streamHealthWindow) {
+        _scheduleStreamHealthCheck(generation: generation, reason: 'audio_resumed_during_probe');
+        return;
+      }
+
+      if (_streamReactivationAttempts == 0) {
         _streamReactivationAttempts = 1;
         final dataStreamCmd = _encodeEnableDataStream();
         await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
-        DebugLogManager.logInfo('Limitless realtime stream reactivation sent after silent start');
-        _armStreamHealthWatch(reason: 'silent_start_retry', resetAttempts: false);
+        DebugLogManager.logInfo('Limitless realtime stream reactivation sent after silence', {'stage': stage});
+        _armStreamHealthWatch(reason: 'silent_stream_retry');
+        return;
       }
+
+      final recovery = transport;
+      final silentAudioRecovery = recovery is SilentAudioRecovery ? recovery as SilentAudioRecovery : null;
+      if (_silentAudioRecoveryAttempts == 0 &&
+          silentAudioRecovery != null &&
+          silentAudioRecovery.supportsSilentAudioRecovery) {
+        _silentAudioRecoveryAttempts = 1;
+        DebugLogManager.logWarning('Limitless replacing connected-but-silent BLE link', {'stage': stage});
+        await silentAudioRecovery.recoverSilentAudio();
+        if (generation == _streamHealthGeneration && _shouldMonitorRealtimeStream) {
+          _armStreamHealthWatch(reason: 'silent_link_recovery');
+        }
+        return;
+      }
+
+      DebugLogManager.logWarning('Limitless realtime recovery budget exhausted', {
+        'stage': stage,
+        'reactivationAttempts': _streamReactivationAttempts,
+        'linkRecoveryAttempts': _silentAudioRecoveryAttempts,
+      });
     } catch (e) {
       DebugLogManager.logError(e, null, 'Limitless stream health probe failed', {'stage': stage});
+      if (generation == _streamHealthGeneration && _shouldMonitorRealtimeStream) {
+        _scheduleStreamHealthCheck(generation: generation, reason: 'health_recovery_error');
+      }
     } finally {
       _streamHealthCheckInFlight = false;
     }

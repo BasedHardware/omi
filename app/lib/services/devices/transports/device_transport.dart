@@ -32,6 +32,13 @@ abstract interface class CaptureSubscriptionErrors {
   Stream<Object> get audioSubscriptionErrors;
 }
 
+/// A transport that can replace a connected-but-silent audio link without
+/// changing pairing, saved reconnect, or the user's disconnect intent.
+abstract interface class SilentAudioRecovery {
+  bool get supportsSilentAudioRecovery;
+  Future<void> recoverSilentAudio();
+}
+
 /// Pendant audio that reached a transport while no capture listener held the
 /// stream. The GATT notification subscription outlives Dart listeners, and a
 /// legacy pendant does not write its own storage while subscribed, so these
