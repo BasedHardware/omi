@@ -26,7 +26,7 @@ def empty(**overrides):
         server_batch_audio_end=row['finished_at'].timestamp(),
     )
     empty_transcription.stamp(
-        {},
+        row,
         row,
         {
             'start': row['started_at'].timestamp(),
@@ -34,7 +34,6 @@ def empty(**overrides):
             'terminal_empty_outcome': 'silence',
         },
     )
-    row[empty_transcription.FIELD]['pending_generation'] = empty_transcription.pending_generation(row)
     row.update(overrides)
     return row
 

@@ -37,7 +37,7 @@ def terminal(store, cid='empty'):
         server_batch_audio_end=row['finished_at'].timestamp(),
     )
     empty_transcription.stamp(
-        {},
+        row,
         row,
         {
             'start': row['started_at'].timestamp(),
@@ -45,7 +45,6 @@ def terminal(store, cid='empty'):
             'terminal_empty_outcome': 'silence',
         },
     )
-    row[empty_transcription.FIELD]['pending_generation'] = empty_transcription.pending_generation(row)
     store.rows[cid] = row
     if cid not in store.episode['conversation_ids']:
         store.episode['conversation_ids'].append(cid)

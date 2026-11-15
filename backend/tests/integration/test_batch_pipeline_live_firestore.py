@@ -434,3 +434,27 @@ def test_native_reference_proof_outlives_gpu_result_for_first_late_wal(lane):
     audio = refs.document('audio').get().to_dict()['cleanup_after']
     result = refs.document('results').get().to_dict()['cleanup_after']
     assert audio - result == timedelta(days=44)
+
+
+def test_registered_nonterminal_stt_is_not_settled_by_summary_exhaustion(lane):
+    from datetime import timedelta
+    from utils.episodes import composer
+
+    item, binding, live = native(lane)
+    pending = datetime(2026, 11, 15, 15, tzinfo=timezone.utc)
+    live.update(
+        transcript_segments=[],
+        structured={},
+        summary_blocked_reason='empty_output_exhausted',
+        summary_output_present=False,
+        home_transcription_pending_at=pending,
+        server_batch_audio_received=True,
+    )
+    lane.user.collection('conversations').document('live-record').set(
+        lane.conversations.encode_conversation_for_write(lane.uid, live, 'standard')
+    )
+    assert register_recording(lane.uid, live, store=lane.store, now=0)
+    job = lane.store.ref('jobs', item.segment_id).get().to_dict()
+    assert job['state'] == 'record_pending'
+    assert not empty_transcription.terminal(active_rows(lane)[0])
+    assert composer._transcript_wait_until(live) == pending + timedelta(seconds=1200)
