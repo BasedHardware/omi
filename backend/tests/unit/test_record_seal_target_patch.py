@@ -165,3 +165,61 @@ def test_cli_private_packet_before_apply_and_verified_rollback(tmp_path, monkeyp
     TOOL['main']()
     assert apply(after, json.loads((tmp_path / 'rollback.json').read_text()))['spec'] == before['spec']
     assert capsys.readouterr().out == ''
+
+
+@pytest.mark.parametrize(
+    'field',
+    [
+        'selector',
+        'hostname',
+        'command',
+        'args',
+        'deadline',
+        'backoff',
+        'per_index',
+        'cpu',
+        'memory',
+        'affinity',
+        'tolerations',
+        'mount',
+        'workers',
+        'fresh_off',
+        'image',
+    ],
+)
+def test_incompatible_live_owned_fields_are_rejected_before_packet(field):
+    live = live_cron()
+    expected = image(live)
+    job, pod, c = TOOL['target'](live)
+    if field == 'selector':
+        pod['nodeSelector'] = {'cloud.google.com/gke-nodepool': 'batch-pipeline-pool'}
+    elif field == 'hostname':
+        pod['hostname'] = 'unexpected'
+    elif field == 'command':
+        c['command'] = ['different']
+    elif field == 'args':
+        c['args'] = ['--unexpected']
+    elif field == 'deadline':
+        job['activeDeadlineSeconds'] = 1710
+    elif field == 'backoff':
+        job['backoffLimit'] = 10
+    elif field == 'per_index':
+        job['backoffLimitPerIndex'] = 2
+    elif field == 'cpu':
+        c['resources']['requests']['cpu'] = '8'
+    elif field == 'memory':
+        c['resources']['limits']['memory'] = '16Gi'
+    elif field == 'affinity':
+        pod['affinity'] = {}
+    elif field == 'tolerations':
+        pod['tolerations'] = []
+    elif field == 'mount':
+        c['volumeMounts'].append({'name': 'other', 'mountPath': '/etc/repair-partition'})
+    elif field == 'workers':
+        next(e for e in c['env'] if e['name'] == 'RECORD_SEAL_REPAIR_WORKERS')['value'] = '16'
+    elif field == 'fresh_off':
+        next(e for e in c['env'] if e['name'] == TOOL['FRESH'])['value'] = 'false'
+    elif field == 'image':
+        c['image'] = 'unexpected@sha256:' + 'c' * 64
+    with pytest.raises(ValueError):
+        TOOL['prepare'](live, rendered(), expected)

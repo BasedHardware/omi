@@ -75,6 +75,7 @@ def validate_before(live, expected_image):
         == {'requests': {'cpu': '4', 'memory': '4Gi'}, 'limits': {'cpu': '4', 'memory': '8Gi'}},
         'unexpected resources',
     )
+    require(not pod.get('nodeSelector') and not pod.get('hostname'), 'incompatible pod selector/hostname')
     require(pod.get('affinity') == node_affinity('batch-pipeline-pool'), 'unexpected original affinity')
     tolerations = [
         {'effect': 'NoSchedule', 'key': 'omi.ai/batch-pipeline', 'operator': 'Equal', 'value': 'true'},
