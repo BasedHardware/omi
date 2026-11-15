@@ -176,9 +176,7 @@ def get_action_items_tool(
 
         uid, configurable = _extract_user_context(cfg)
         if not uid:
-            logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Config keys: {list(cfg.keys()) if isinstance(cfg, dict) else 'None'}"
-            )
+            logger.info(f"❌ get_action_items_tool - no user_id in config. Config keys: {list(cfg.keys())}")
             return "Error: User ID not found in configuration"
         clock = clock_for_config(cfg, uid)
 
@@ -392,7 +390,7 @@ def _extract_user_context(cfg: Any) -> Tuple[Optional[str], Dict[str, Any]]:
         return None, {}
     raw_configurable = cfg.get('configurable') if hasattr(cfg, 'get') else None
     configurable: Dict[str, Any] = raw_configurable if isinstance(raw_configurable, dict) else {}
-    raw_uid = configurable.get('user_id') if isinstance(configurable, dict) else None
+    raw_uid = configurable.get('user_id')
     if not raw_uid and hasattr(cfg, 'get'):
         raw_uid = cfg.get('user_id')
     if isinstance(raw_uid, str) and raw_uid.strip():
