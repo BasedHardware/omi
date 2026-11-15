@@ -13330,6 +13330,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'لديك رمز Omi Pro؟ أدخله في الشاشة التالية.';
+
+  @override
   String get paywallTrialCancelNote => 'يمكنك الإلغاء في أي وقت. لا توجد رسوم أو غرامات.';
 
   @override

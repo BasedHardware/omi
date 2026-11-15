@@ -13498,6 +13498,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro குறியீடு உள்ளதா? அடுத்த திரையில் அதை உள்ளிடவும்.';
+
+  @override
   String get paywallTrialCancelNote => 'எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.';
 
   @override

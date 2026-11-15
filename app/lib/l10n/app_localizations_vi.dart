@@ -13404,6 +13404,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Bạn có mã Omi Pro? Hãy nhập ở màn hình tiếp theo.';
+
+  @override
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override

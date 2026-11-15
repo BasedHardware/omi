@@ -13434,6 +13434,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.';
+
+  @override
   String get paywallTrialCancelNote => 'Prekličite kadar koli. Brez stroškov, brez kazni.';
 
   @override

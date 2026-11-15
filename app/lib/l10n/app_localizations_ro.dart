@@ -13463,6 +13463,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ai un cod Omi Pro? Introdu-l pe ecranul următor.';
+
+  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override

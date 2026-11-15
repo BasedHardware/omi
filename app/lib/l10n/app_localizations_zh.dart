@@ -13198,6 +13198,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '有 Omi Pro 兑换码？请在下一个页面输入。';
+
+  @override
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
