@@ -61,6 +61,11 @@ OVERFLOW_AUDIO = Counter(
     'Billed vendor audio seconds for units routed to a vendor over a capable GPU (overflow)',
     ['route'],
 )
+SHORT_SPEECH_SKIPPED_AUDIO = Counter(
+    contracts.METRIC_SHORT_SPEECH_SKIPPED_AUDIO,
+    'Unit audio seconds not sent to a vendor because measured speech was under the minimum',
+    ['provider'],
+)
 COLLECTORS = (
     ROUTE_DECISIONS,
     TABLE_LOADS,
@@ -80,6 +85,7 @@ COLLECTORS = (
     AUDIO_HOURS_CAP,
     CAP_HITS,
     OVERFLOW_AUDIO,
+    SHORT_SPEECH_SKIPPED_AUDIO,
 )
 
 
@@ -219,5 +225,14 @@ def cap_hit(provider: str, reason: VendorHealthReason | str) -> None:
         CAP_HITS.labels(
             provider=_vendor(provider), reason=reason_label(ReasonFamily.VENDOR_ROUTE, reason, VendorHealthReason)
         ).inc()
+    except Exception:
+        pass
+
+
+def short_speech_skip(provider: str, audio_seconds: float) -> None:
+    """Count the unbilled audio of a unit answered as silence below the speech minimum."""
+    try:
+        if audio_seconds > 0:
+            SHORT_SPEECH_SKIPPED_AUDIO.labels(provider=_vendor(provider)).inc(audio_seconds)
     except Exception:
         pass

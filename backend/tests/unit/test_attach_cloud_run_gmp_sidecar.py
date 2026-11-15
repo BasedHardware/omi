@@ -1402,6 +1402,10 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
             if family.endswith('_'):
                 assert kept(family + 'duration_seconds_bucket')
     assert kept('omi_batch_projection_drains_skipped_total')
+    # The finish-backoff re-enable bar and its reads-per-completion alert read these two; only
+    # backend-integration runs the finish sweep, so a drop here makes both read 'no data'.
+    assert kept('omi_batch_projection_finish_reads_total')
+    assert kept('omi_batch_projection_finish_completed_total')
     assert kept('omi_batch_projection_claim_busy_backoffs_total')
     assert kept('omi_batch_projection_privacy_blocked_stops_total')
     assert kept('omi_batch_projection_privacy_backoffs_total')

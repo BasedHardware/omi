@@ -308,7 +308,17 @@ def test_worker_deploy_gates_selected_source_before_build_or_helm():
     assert not gate.get('continue-on-error', False)
     assert gate['with']['source_sha'] == '${{ steps.vars.outputs.source_sha }}'
     assert gate['with']['project_id'] == '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
-    controls = steps[gate_index - 1]
+    # The optional worker helper has its own checkout; the Firestore gate owns
+    # this path, not whichever step happens to be immediately before the gate.
+    control_checkouts = [
+        (i, step)
+        for i, step in enumerate(steps)
+        if step.get('uses', '').startswith('actions/checkout@')
+        and step.get('with', {}).get('path') == '.github/firestore-workflow'
+    ]
+    assert len(control_checkouts) == 1
+    controls_index, controls = control_checkouts[0]
+    assert controls_index < gate_index
     assert 'if' not in controls
     assert controls['with']['ref'] == '${{ github.workflow_sha }}'
     assert controls['with']['path'] == '.github/firestore-workflow'
@@ -319,5 +329,20 @@ def test_worker_deploy_gates_selected_source_before_build_or_helm():
         for i, step in enumerate(steps)
         if step.get('name') in {'Build and Push Docker image', 'Verify promoted worker digest'}
         or 'upgrade --install' in step.get('run', '')
+        or 'worker_image_only.py deploy' in step.get('run', '')
     ]
-    assert len(mutations) == 3 and all(i > gate_index for i in mutations)
+    assert len(mutations) == 4 and all(i > gate_index for i in mutations)
+
+
+def test_fresh_lane_has_minute_cadence_and_explicit_rollback():
+    repair = documents()[('CronJob', 'record-seal-repair')]['spec']
+    assert repair['schedule'] == '* * * * *'
+    assert repair['concurrencyPolicy'] == 'Forbid'
+    env = {e['name']: e.get('value') for e in repair['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+    old = documents(
+        '--set', 'recordSealRepair.freshEnabled=false', '--set-string', 'recordSealRepair.schedule=*/5 * * * *'
+    )[('CronJob', 'record-seal-repair')]['spec']
+    assert old['schedule'] == '*/5 * * * *'
+    env = {e['name']: e.get('value') for e in old['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'false'

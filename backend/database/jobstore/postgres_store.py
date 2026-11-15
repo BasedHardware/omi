@@ -37,6 +37,7 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -232,6 +233,35 @@ class PostgresTransaction:
 
 
 class PostgresStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM docs WHERE namespace=%s AND tbl='allowance_holds' "
+                "AND doc->'active'='true'::jsonb AND (doc->>'check_at')::float8 <= %s "
+                "ORDER BY (doc->>'check_at')::float8, key COLLATE \"C\" LIMIT %s",
+                (self.namespace, now, max(1, min(limit, 100))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM jobs WHERE namespace=%s AND state='allowance_held' "
+                "AND (%s::text IS NULL OR owner_key=%s) "
+                "AND (%s::float8 IS NULL OR (capture_at, key COLLATE \"C\") > (%s, %s)) "
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
+                (
+                    self.namespace,
+                    owner_key,
+                    owner_key,
+                    after[0] if after else None,
+                    after[0] if after else None,
+                    after[1] if after else None,
+                    max(1, min(limit, 100)),
+                ),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def __init__(
         self,
         namespace: str,
@@ -350,6 +380,29 @@ class PostgresStore:
             ).fetchall()
         return [row[0] for row in rows]
 
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        owners = []
+        with self._read_conn() as conn:
+            for _ in range(max(1, min(limit, 100))):
+                bound = 'AND owner_key COLLATE "C" > %s ' if after_owner_key is not None else ''
+                params = (self.namespace, after_owner_key) if bound else (self.namespace,)
+                if ceiling_owner_key is not None:
+                    bound += 'AND owner_key COLLATE "C" <= %s '
+                    params += (ceiling_owner_key,)
+                row = conn.execute(
+                    "SELECT owner_key, doc->>'owner_id' FROM jobs "
+                    "WHERE namespace = %s AND state = 'result_ready' AND merge_pending "
+                    f'{bound}ORDER BY owner_key COLLATE "C" {"DESC" if descending else "ASC"} LIMIT 1',
+                    params,
+                ).fetchone()
+                if row is None:
+                    break
+                owners.append(tuple(row))
+                after_owner_key = row[0]
+        return owners
+
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         """Owners whose catch-up commits are held: (owner key, owner id from the earliest pending job, or None)."""
         with self._read_conn() as conn:
@@ -435,7 +488,7 @@ class PostgresStore:
 
         def revoke(tx: PostgresTransaction) -> bool:
             job = tx.get('jobs', segment_id)
-            if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+            if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
                 return False
             try:
                 tx.check_privacy(
@@ -510,6 +563,11 @@ class PostgresStore:
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
+
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
 
     def projection_page(
         self,

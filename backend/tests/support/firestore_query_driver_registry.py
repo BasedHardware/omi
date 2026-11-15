@@ -46,6 +46,7 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
@@ -154,6 +155,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
+    'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
+    'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
     'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
     'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
     'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
@@ -210,6 +214,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
+    'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
     # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
     'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
@@ -254,6 +259,8 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
+    'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
+    'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
 
 # Retained application entry-point recipes. Their query bodies now belong to
@@ -3286,6 +3293,12 @@ _add(
     )
 )
 _add(DriverEntry('database.user_usage.get_daily_history_for_month', base={'uid': UID, 'date': T0}))
+_add(
+    DriverEntry(
+        'utils.backfill_hours_cap.transcribed_seconds_for_day',
+        base={'uid': UID, 'day': FROZEN_TODAY},
+    )
+)
 _add(DriverEntry('database.user_usage.get_hourly_history_for_today', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
@@ -3548,6 +3561,7 @@ _add(
 
 for entry in (
     *batch_pipeline_entries(),
+    *allowance_hold_entries(),
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
     *memory_ledger_drivers(),
@@ -3560,6 +3574,25 @@ for entry in (
 ):
     _add(entry)
 
+
+# Account-purge verification: bounded single-field read of one route's operation journal.
+_add(
+    DriverEntry(
+        'database.pinecone_partition_state._uncertain_operation_refs',
+        base={'ref': ref_document('pinecone_partition_routes/route-1'), 'transaction': ref_transaction()},
+        neutrals={'limit': (2, 'uncertain_count + 1 overflow bound; not filter-affecting')},
+    )
+)
+for _name in ('_uncertain_mutations_are_deletes', 'uncertain_mutations_are_deletes'):
+    _add(
+        CoveredByEntry(
+            f'database.pinecone_partition_state.{_name}',
+            covered_by=('database.pinecone_partition_state._uncertain_operation_refs',),
+            reason='transactional wrapper; its only query is _uncertain_operation_refs',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[f'database.pinecone_partition_state.{_name}'],
+        )
+    )
 
 _add(
     DriverEntry(
@@ -4155,6 +4188,43 @@ _add(
                 'dev:dream-agent',
             ]
         },
+    )
+)
+
+
+# W3 stuck-state census (SCA-2119): the exporter samples every registered stock.
+# Every entry is a domain member, so one driver iteration per stock proves its
+# count and oldest-age query shape is served by the generated manifest.
+from config.batch_census import ENTRIES as _CENSUS_ENTRIES
+
+_add(
+    DriverEntry(
+        'database.batch_census_export.sample_entry',
+        domains={'entry': list(_CENSUS_ENTRIES)},
+        neutrals={
+            'now': (1_700_000_000.0, 'sample moment; resolves relative age cutoffs only'),
+            'timeout': (60.0, 'per-RPC budget; does not change the query shape'),
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._scope',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Collection scope builder consumed by the registered exporter driver; the recorded shape '
+        'is attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._filtered',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Filter builder consumed by the registered exporter driver; the recorded shape is '
+        'attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
     )
 )
 

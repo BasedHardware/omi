@@ -85,6 +85,10 @@ worker:
   capDispatchEnforcement: false
   capDispatchCohort: ""
   capDispatchLanes: live
+  # Default-off unlimited_v2 backfill/import daily transcribed-hours cap (see
+  # utils/backfill_hours_cap.py). false restores current behavior exactly.
+  unlimitedV2BackfillHoursCapEnabled: false
+  unlimitedV2BackfillHoursCapHours: "24"
   # HTTPS policy host and exact OIDC audience; admission remains on CPU hosts.
   apiUrl: ""
   audience: ""
@@ -230,6 +234,11 @@ recordSealRepair:
   suspend: true
   runtimeEnabled: true
   jobsDiscovery: "on"
+  # Shared by repair, CPU seal worker and every GPU Deployment variant.
+  # Serving hosts also need the matching runtime-env/listen overlay switch.
+  freshEnabled: true
+  # Forbid still prevents overlap; minute ticks bound restart gaps after a 25m run.
+  schedule: "* * * * *"
   projectionDebtDurableEnabled: true
   mode: apply
   workers: 8

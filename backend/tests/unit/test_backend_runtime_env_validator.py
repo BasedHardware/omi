@@ -168,8 +168,11 @@ def load_validator():
 
 
 def write_yaml(path: Path, payload: dict) -> None:
+    # Same safe schema as ``yaml.safe_dump``; the C dumper avoids ~0.16 s of Python
+    # serialization per call for the ~280 KB runtime manifest, which several tests
+    # here rewrite before validating.
     with path.open('w', encoding='utf-8') as handle:
-        yaml.safe_dump(payload, handle, sort_keys=False)
+        yaml.dump(payload, handle, Dumper=getattr(yaml, 'CSafeDumper', yaml.SafeDumper), sort_keys=False)
 
 
 def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
@@ -193,10 +196,15 @@ def with_memory_env(payload: str) -> str:
     memory_env = '''\
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
+        {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
+        {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
         {"name": "HOME_PROCESSING_MAX_AGE_SECONDS", "value": "21600"},
         {"name": "STT_CAP_DISPATCH_ENFORCEMENT", "value": "false"},
         {"name": "STT_CAP_DISPATCH_COHORT", "value": ""},
         {"name": "STT_CAP_DISPATCH_LANES", "value": "live"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED", "value": "false"},
+        {"name": "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS", "value": "24"},
         {"name": "BATCH_PIPELINE_ENABLED", "value": "false"},
         {"name": "BATCH_PIPELINE_UID_ALLOWLIST", "value": ""},
         {"name": "BATCH_PIPELINE_PERCENT", "value": "0"},
@@ -3698,22 +3706,24 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
     generated = read_lever_manifest.build_manifest()
     assert json.loads(read_lever_manifest.OUTPUT.read_text()) == generated
     notes = '\n'.join(generated['notes'])
-    assert 'UNRESOLVED: chart-vs-CR batch_timeliness_leader' in notes
+    assert 'RESOLVED: prod chart-vs-CR batch_timeliness_leader is 100' in notes
     assert 'UNRESOLVED: README-vs-base triple' in notes
     for lever in ('memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'):
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
     integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert prod_worker['explicit'] == integration['explicit']
+    assert prod_worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
     assert prod_worker['effective']['bpp_decision_cache'] == 100
-    assert prod_worker['effective']['batch_timeliness_leader'] == 0
+    assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
         assert surface['explicit']['bpp_decision_cache'] == 100
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
-    assert generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 0
+    assert (
+        generated['surfaces']['runtime/prod/cloud_run/services/backend']['effective']['batch_timeliness_leader'] == 100
+    )
 
 
 @pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries', 'all'])
@@ -3770,7 +3780,7 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
     generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
-    assert generated['notes'] == read_lever_manifest.UNRESOLVED_NOTES
+    assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
 
@@ -3836,9 +3846,17 @@ def test_read_lever_partial_code_default_cannot_hide_behind_chart_inheritance(mo
 
 
 @pytest.mark.parametrize(
-    'prefix', ['base/', 'overlay/prod/', 'runtime/dev/', 'runtime/prod/', 'chart/dev/', 'chart/prod/']
+    ('prefix', 'has_partials'),
+    [
+        ('base/', True),
+        ('overlay/prod/', True),
+        ('runtime/dev/', True),
+        ('runtime/prod/', True),
+        ('chart/dev/', True),
+        ('chart/prod/', True),
+    ],
 )
-def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix):
+def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_sources, prefix, has_partials):
     policy, sources, _ = read_lever_sources
     selected = {surface: values for surface, values in sources.items() if surface.startswith(prefix)}
     assert selected
@@ -3849,7 +3867,7 @@ def test_read_lever_expiry_covers_every_partial_source_surface(read_lever_source
             del expiry[surface][lever]
             errors = read_lever_manifest.expiry_errors(sources, expiry, today=date(2026, 11, 11))
             assert any(f'{surface}/{lever}=' in error for error in errors)
-    assert any(0 < value < 100 for values in selected.values() for value in values.values())
+    assert any(0 < value < 100 for values in selected.values() for value in values.values()) == has_partials
 
 
 @pytest.mark.parametrize(
@@ -3930,3 +3948,49 @@ def test_read_lever_unknown_declaration_is_rejected_from_actual_source_files(tmp
         target.write_text(target.read_text().replace('"action_items_page":100', '"dead_lever":100', 1))
     with pytest.raises(ValueError, match='unknown lever dead_lever'):
         read_lever_manifest.collect_sources(**kwargs)
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_home_transcription_queue_hold_is_pinned_on_every_existing_host(env):
+    manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
+    config = manifest['environments'][env]
+    targets = [
+        config['gke']['backend-listen'],
+        config['gke']['pusher'],
+        *(
+            config['cloud_run']['services'][name]
+            for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+        ),
+    ]
+    for target in targets:
+        assert target['env']['HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'] == {'value': 'true', 'category': 'ops_kill'}
+        assert target['env']['HOME_TRANSCRIPTION_MAX_AGE_SECONDS'] == {'value': '86400', 'category': 'config'}
+    for name in ('backend-listen', 'pusher'):
+        values = yaml.safe_load((ROOT.parent / config['gke'][name]['values_file']).read_text())
+        chart_env = {entry['name']: entry.get('value') for entry in values['env']}
+        assert chart_env['HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED'] == 'true'
+        assert chart_env['HOME_TRANSCRIPTION_MAX_AGE_SECONDS'] == '86400'
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_quality_push_switches_are_bound_on_every_owning_backend_host(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'true', 'category': 'ops_kill'}
+    assert config['gke']['pusher']['env']['PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'] == expected
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='quality_push_switch_renderer')
+    for host, key in [
+        (config['gke']['pusher'], 'PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED'),
+    ]:
+        assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    hosts = [config['gke']['backend-listen']]
+    hosts.extend(
+        config['cloud_run']['services'][name]
+        for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+    )
+    for host in hosts:
+        for key in ('RECORD_SEAL_REPAIR_FRESH_ENABLED', 'BATCH_HELD_DEAD_LETTER_ENABLED'):
+            assert key in classification['kinds']['config']
+            assert host['env'][key] == expected
+            assert renderer['_render_env_entries']({key: host['env'][key]}) == [{'name': key, 'value': 'true'}]
+    assert 'RECORD_SEAL_REPAIR_FRESH_ENABLED' not in config['gke']['pusher']['env']

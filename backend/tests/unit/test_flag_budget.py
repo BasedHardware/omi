@@ -50,6 +50,7 @@ FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED',
+    'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     'PROJECTION_DRAIN_LIVE_TARGET_BACKOFF',
     'PROJECTION_DRAIN_CLAIM_AWARE',
     'PROJECTION_DRAIN_PRIVACY_BACKOFF',
@@ -218,6 +219,8 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         'BATCH_PIPELINE_PROJECTION_RESTORABLE_CAP_EXPIRY_ENABLED',
         'BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED',
         'BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED',
+        'BATCH_PIPELINE_READY_DISCOVERY_CURSOR_ENABLED',
+        'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED',
     }
 
     # Keep this inventory check inside the fast-unit CPU budget; the C safe
@@ -284,6 +287,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert data['retired']['SYNC_BACKFILL_INFLIGHT_LIMIT']['replaced_by'] == name
             assert entry['owner'] == 'omi-pipeline'
             assert entry['review_by'] == '2026-12-08'
+        elif name == 'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED':
+            assert entry['owner'] == 'Goal: Pipeline'
+            assert entry['review_by'] == '2026-12-13'
         elif name in {
             'EPISODE_COMPOSER_THRIFT',
             'SUMMARY_PROJECTION_DEBT_ENABLED',
