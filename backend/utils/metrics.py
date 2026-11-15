@@ -1092,6 +1092,18 @@ OMI_SYNC_CAPTURE_TIME_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL = Counter(
+    'omi_pipeline_record_wait_answers_total',
+    'Registered-record upload waits answered by bounded reason',
+    ['reason'],
+)
+
+OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL = Counter(
+    'omi_pipeline_record_wait_memo_hits_total',
+    'Registered-record upload wait memo hits by bounded memo kind',
+    ['memo'],
+)
+
 OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
