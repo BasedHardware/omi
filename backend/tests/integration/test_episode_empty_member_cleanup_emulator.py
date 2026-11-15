@@ -41,7 +41,15 @@ def test_empty_cleanup_atomically_detaches_only_without_audio(monkeypatch, enabl
             }
         )
         link.set({'episode_id': episode.id})
-        session.set({'uid': uid, 'conversation_id': 'empty', 'lifecycle_phase': 'in_progress', 'lifecycle_sequence': 2})
+        session.set(
+            {
+                'uid': uid,
+                'recording_session_id': 'session',
+                'conversation_id': 'empty',
+                'lifecycle_phase': 'in_progress',
+                'lifecycle_sequence': 2,
+            }
+        )
         assert recording_sessions.tombstone_and_delete_empty_conversation(
             uid, 'empty', 'session', firestore_client=client
         ) is (not audio)
