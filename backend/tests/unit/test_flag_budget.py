@@ -50,6 +50,8 @@ FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
     'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+    'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
+    'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
     'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
     'PUSHER_RECORD_SEAL_WAKE_ENABLED',
     'RECORD_FRESH_MERGE_ENABLED',
@@ -322,10 +324,15 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
-        elif name == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED':
+        elif name.startswith('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'):
+            default = (
+                'Default 100'
+                if name.endswith('_SERVE_PERCENT')
+                else 'Default empty' if name.endswith('_SERVE_UID_SHA256S') else 'Default off'
+            )
             assert flag['lifecycle'] == 'rollout'
             assert flag['fail'] == 'closed'
-            assert flag['summary'].startswith('Default off')
+            assert flag['summary'].startswith(default)
             assert flag['review_by'] == '2026-11-16'
             assert flag['ramp']['cohorts'][0].startswith('consenting owner account only')
             assert flag['ramp']['cohorts'][-1] == 'fleet only after clean owner and small-cohort windows'
