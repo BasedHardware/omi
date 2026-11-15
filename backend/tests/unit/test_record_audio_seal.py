@@ -739,7 +739,7 @@ async def test_close_only_seals_empty_record_while_socket_continues_without_fina
             return await super().receive_bytes()
 
     await pusher._websocket_util_trigger(
-        StillOpen([_conversation('record'), *controls]), 'uid-at', RATE, record_close_protocol=2
+        StillOpen([_conversation('record'), *controls]), 'uid-at', RATE, record_close_protocol=3
     )
     assert records.rows[PATH]['record_audio_closed'] is True
     pusher.process_conversation_task.assert_not_called()
@@ -758,5 +758,5 @@ async def test_close_capability_requires_opt_in_and_kill_switch(records, monkeyp
         ws.sent.append(data)
 
     ws.send_bytes = send
-    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=2)
+    await pusher._websocket_util_trigger(ws, 'uid-at', RATE, record_close_protocol=3)
     assert any(struct.unpack('<I', f[:4])[0] == PUSHER_RECORD_CLOSE_ACK_OPCODE for f in ws.sent) is (enabled == 'true')

@@ -326,7 +326,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
             assert flag['review_by'] == '2026-11-16'
-            assert flag['ramp']['cohorts'][-1] == 'fleet after independent custody review'
+            assert flag['ramp']['cohorts'][0].startswith('consenting owner account only')
+            assert flag['ramp']['cohorts'][-1] == 'fleet only after clean owner and small-cohort windows'
+            assert 'stranded live-producer tokens' in flag['ramp']['clean_metric']
+            assert 'quality lead' in flag['ramp']['expander']
         else:
             assert flag['lifecycle'] == 'ops_kill'
             assert flag['fail'] == 'open'

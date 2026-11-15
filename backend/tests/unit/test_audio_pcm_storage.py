@@ -24,19 +24,22 @@ from tests.unit.test_audio_durable_outbox import _window_harness, _audio_frames,
 @pytest.fixture(autouse=True)
 def compression_enabled(monkeypatch):
     monkeypatch.setenv('AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED', 'true')
+    # Only the codec admission clock is frozen; subprocesses and async harnesses
+    # retain their real clocks. Budget tests below advance their own fake clock.
+    monkeypatch.setattr(audio_pcm_storage, 'time', SimpleNamespace(monotonic=lambda: 100.0))
 
 
 @pytest.fixture
-def native_codec_success(monkeypatch):
-    # Native codec correctness is independent of admission scheduling. Keep real
-    # ffmpeg encode/decode, with a test-harness child bound instead of the shared
-    # production deadline. Dedicated deadline tests below exercise that policy,
-    # including a real hung child and the original-PCM custody commit.
-    monkeypatch.setattr(audio_pcm_storage, '_stage_timeout', lambda *_args: 30.0)
+def real_codec_budget(monkeypatch):
+    # A real ffmpeg round trip proves codec correctness, not runner speed. Keep
+    # a generous child watchdog; deterministic deadline tests cover the 0.4 s
+    # production policy independently, without sleeping or running a codec.
+    monkeypatch.setattr(audio_pcm_storage, '_TOTAL_BUDGET_SECONDS', 60.0)
+    monkeypatch.setattr(audio_pcm_storage, '_TIMEOUT_SECONDS', 60.0)
 
 
 @pytest.mark.parametrize('kind', ['silence', 'quiet', 'mixed'])
-def test_real_encoder_preserves_every_sample_and_is_deterministic(kind, native_codec_success):
+def test_real_encoder_preserves_every_sample_and_is_deterministic(kind, real_codec_budget):
     samples = [
         0 if kind == 'silence' or (kind == 'mixed' and i < 16000) else round(20 * math.sin(i * 0.13))
         for i in range(32000)
@@ -53,7 +56,7 @@ def test_real_encoder_preserves_every_sample_and_is_deterministic(kind, native_c
     assert pack.encoded(preserve_pcm=True)[0] == pcm
 
 
-def test_incompressible_pcm_does_not_grow(native_codec_success):
+def test_incompressible_pcm_does_not_grow(real_codec_budget):
     pcm = random.Random(42).randbytes(64000)
     assert audio_pcm_storage.compact_pcm(pcm, 16000, 1) == (pcm, 'pcm16')
 
@@ -331,7 +334,7 @@ def test_ineligible_input_never_invokes_encoder(monkeypatch, size, channels):
 
 @pytest.mark.parametrize('protection', ['standard', 'enhanced'])
 def test_compressed_receipt_and_existing_raw_reader_preserve_gapped_frames(
-    remote, monkeypatch, protection, native_codec_success
+    remote, monkeypatch, protection, real_codec_budget
 ):
     first, second = bytes(32000), struct.pack('<h', 7) * 16000
     pcm = first + second
@@ -377,7 +380,7 @@ def test_compressed_receipt_and_existing_raw_reader_preserve_gapped_frames(
 
 
 @pytest.mark.asyncio
-async def test_listen_writer_compresses_only_new_pcm_and_keeps_native_packets(remote, native_codec_success):
+async def test_listen_writer_compresses_only_new_pcm_and_keeps_native_packets(remote, real_codec_budget):
     h = host()
     archive = LiveAudioArchive(h)
     pcm = bytes(64000)
@@ -396,7 +399,7 @@ async def test_listen_writer_compresses_only_new_pcm_and_keeps_native_packets(re
 
 
 @pytest.mark.asyncio
-async def test_pusher_commits_compressed_pcm_before_receipt_and_projection(remote, monkeypatch, native_codec_success):
+async def test_pusher_commits_compressed_pcm_before_receipt_and_projection(remote, monkeypatch, real_codec_budget):
     _window_harness(remote, monkeypatch)
     monkeypatch.setenv('AUDIO_CUSTODY_FRAMED_PERCENT', '100')
     captured = [bytes(32000), struct.pack('<h', 5) * 16000]
