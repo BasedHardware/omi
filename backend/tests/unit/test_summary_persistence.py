@@ -56,7 +56,10 @@ def test_terminal_receipt_after_fenced_commit_and_expired_transaction_retry(writ
 
     monkeypatch.setattr(delivery, 'emit', emit)
     assert db.persist_processing_result_with_lifecycle('u', payload())
-    assert len(client.transactions) == 2 and len(receipts) == 1
+    # One expired real transaction, one retry, and the ledger's own noted and
+    # done stages in one ledger write.
+    assert len(client.commits) == 1 and len(client.ledger_commits) == 1 and len(receipts) == 1
+    assert client.ledger_commits[0]['stage'] == 'done' and client.ledger_commits[0]['home_ready_at']
     assert receipts[0]['reason'] == 'summary' and receipts[0]['present']
 
 
