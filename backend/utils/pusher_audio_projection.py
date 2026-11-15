@@ -371,7 +371,7 @@ class PusherAudioProjection:
         self.marker_retry.pop(conv_id, None)
         if len(self.durable_debt) < MAX_CONVERSATIONS:
             self.durable_debt.add(conv_id)
-            if isinstance(versions, dict) and (version := versions.get(conv_id)) is not None:
+            if type(versions) is dict and (version := versions.get(conv_id)) is not None:
                 self.debt_versions[conv_id] = version
         self.close_debt.discard(conv_id)
         MARKER_WRITES.labels(outcome='persisted').inc()
@@ -419,7 +419,7 @@ class PusherAudioProjection:
                     self.close_debt.discard(cid)
                     if close_fast_path_enabled() and len(self.durable_debt) < MAX_CONVERSATIONS:
                         self.durable_debt.add(cid)
-                        if isinstance(versions, dict) and (version := versions.get(cid)) is not None:
+                        if type(versions) is dict and (version := versions.get(cid)) is not None:
                             self.debt_versions[cid] = version
             MARKER_WRITES.labels(outcome='persisted').inc(len(pending))
 
