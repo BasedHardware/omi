@@ -115,15 +115,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  # Captain 2026-11-15 02:55Z: keep codec off pending SCA-2304 requalification.
+  - name: AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED
+    value: "false"
   # SCA-2185: preserve observed production overrides; rollback changes these pins.
-  - name: LIVE_CAPTURE_WINDOW_RETENTION
-    value: "false"
-  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
-    value: "false"
   - name: NOTES_SHORT_CLIP_FLOOR
     value: "true"
-  - name: REPEAT_WORK_LLM_VERSION
-    value: "2026-10-16-v1"
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}

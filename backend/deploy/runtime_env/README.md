@@ -208,11 +208,18 @@ a live/source discrepancy, not permission to delete their declarations.
 This contribution does not authorize deployment. Keep GKE changes image-only
 until a fresh ro-prod comparison against main proves the required agreement.
 
-Seven baseline live-only keys are retired under David's 2026-11-09 ruling:
+Ten baseline live-only keys are retired under David's 2026-11-09 ruling:
 `SPEAKER_MATCH_SCORES_ENABLED`, `FIRST_SUMMARY_DEADLINE_ENABLED`,
 `FIRST_SUMMARY_DEADLINE_PERCENT`, `AUDIO_ARCHIVE_COALESCE_ENABLED`,
 `AUDIO_ARCHIVE_UID_ALLOWLIST`, `SPEAKER_GROUPING_MODE`, and
-`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED`.
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED`, `LIVE_CAPTURE_WINDOW_RETENTION`,
+`LIVE_CAPTURE_WINDOW_STRICT_PROJECTION`, and `REPEAT_WORK_LLM_VERSION`.
 They remain absent from source; the registry and graduation tests continue to
 reject their reintroduction. The rollout owner must dispose of those stale
 production entries before claiming literal environment agreement.
+
+The captain's 2026-11-15 02:55Z contingency additionally pins prod pusher
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=false` after two codec-latency breaches.
+Listen retains its accepted default-on behavior. Keep pusher off until the
+custody owner requalifies the codec under SCA-2304; this disables optional
+compression only, preserving PCM custody and existing FLAC readers.

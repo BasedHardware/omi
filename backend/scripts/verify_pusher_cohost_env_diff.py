@@ -430,14 +430,9 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
-    # SCA-2185 records existing pusher rollout scope without enabling it on listen.
-    | frozenset(
-        [
-            'LIVE_CAPTURE_WINDOW_RETENTION',
-            'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION',
-            'REPEAT_WORK_LLM_VERSION',
-        ]
-    ),
+    # Captain 02:55Z keeps pusher codec off after latency breaches (SCA-2304).
+    # Listen remains accepted with the code default on.
+    | frozenset({'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED'}),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the

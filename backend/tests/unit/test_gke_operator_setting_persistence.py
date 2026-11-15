@@ -14,10 +14,8 @@ PINS = {
         'NOTES_SHORT_CLIP_FLOOR': 'true',
     },
     'pusher': {
-        'LIVE_CAPTURE_WINDOW_RETENTION': 'false',
-        'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION': 'false',
+        'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED': 'false',
         'NOTES_SHORT_CLIP_FLOOR': 'true',
-        'REPEAT_WORK_LLM_VERSION': '2026-10-16-v1',
     },
 }
 
@@ -47,6 +45,9 @@ def test_operator_pins_survive_actual_helm_render_and_composition(host):
     entries = deployment['spec']['template']['spec']['containers'][0]['env']
     env = {e['name']: e for e in entries}
     assert len(entries) == len(env), 'Duplicate env entries break Helm strategic merge'
+    registry = yaml.safe_load((ROOT / 'config/feature-flags.yaml').read_text())
+    retired = {row['key'] for row in registry['retired'] if 'David flag docket 2026-11-09' in row.get('reason', '')}
+    assert retired.isdisjoint(env), 'A stale production binding must not restore a retired chart control'
     manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
     composed = manifest['environments']['prod']['gke'][host]['env']
     for key, value in PINS[host].items():
