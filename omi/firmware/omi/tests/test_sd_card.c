@@ -856,6 +856,7 @@ static void test_timed_flush_policy(void)
     disk_reset();
     ram_reset();
     CHECK(sd_mount() == 0);
+    ble_connected = true;
 
     z_stub_now_ms = 100000;
     CHECK(!timed_flush_due(z_stub_now_ms));
@@ -893,7 +894,47 @@ static void test_timed_flush_policy(void)
     push_records(2, 0x35, 0, 0);
     CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS - 1));
     CHECK(timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    ble_connected = false;
     printf("timed_flush ok\n");
+}
+
+/* A record is marked live when the stack accepts it, not when the phone has it.
+ * One queued just before a disconnect reaches the batch after the disconnect
+ * flush has run; with no link it must not sit on the four-second interval. */
+static void test_live_record_after_link_loss_keeps_one_second_bound(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    sd_prio_msgq.head = sd_prio_msgq.used = 0;
+    z_stub_now_ms = 200000;
+
+    ble_connected = true;
+    push_records(4, 0x71, 9, 4);
+    sd_notify_ble_state(false);
+    /* The worker serves the disconnect flush from the priority queue first. */
+    sd_req_t req;
+    CHECK(k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0 && req.type == REQ_FLUSH);
+    CHECK(flush_current_batch(true) == 0);
+    CHECK(!current_batch_dirty);
+
+    /* Then the record that was still waiting in the write queue. */
+    z_stub_now_ms += 5;
+    push_records(1, 0x72, 9, 5);
+    CHECK(current_batch_dirty && !batch_sole_copy_pending);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS - 1));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+
+    /* Reconnected and receiving again: the longer wait applies again. */
+    CHECK(flush_current_batch(false) == 0);
+    sd_notify_ble_state(true);
+    z_stub_now_ms += 5;
+    push_records(1, 0x73, 10, 6);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_LIVE_FLUSH_INTERVAL_MS));
+    ble_connected = false;
+    sd_prio_msgq.head = sd_prio_msgq.used = 0;
+    printf("link_loss_flush ok\n");
 }
 
 /* A full batch is written exactly once, whatever the timers say. */
@@ -1038,6 +1079,7 @@ int main(void)
     test_rtc_flag();
     test_advance_rules();
     test_timed_flush_policy();
+    test_live_record_after_link_loss_keeps_one_second_bound();
     test_full_live_batch_single_write();
     test_peek_info_never_writes();
     test_peek_info_clamps_to_capacity();

@@ -302,7 +302,12 @@ static void start_empty_batch(uint64_t base_seq)
 
 /* Whether the dirty batch has waited long enough to be written without filling
  * up. Audio that exists only on the pendant keeps the one-second bound; a batch
- * of records the phone already received live may wait for more audio. */
+ * of records the phone is receiving live may wait for more audio.
+ *
+ * The longer wait needs a link. A record is marked live when the stack accepts
+ * it, not when the phone has it, and one queued just before a disconnect can
+ * reach the batch after the disconnect flush has already run. With no link,
+ * every record is back on the one-second bound. */
 static bool timed_flush_due(int64_t now_ms)
 {
     if (!current_batch_dirty) {
@@ -311,7 +316,8 @@ static bool timed_flush_due(int64_t now_ms)
     if (batch_sole_copy_pending && (now_ms - batch_sole_copy_since_ms) >= RAW_FLUSH_INTERVAL_MS) {
         return true;
     }
-    return (now_ms - batch_dirty_since_ms) >= RAW_LIVE_FLUSH_INTERVAL_MS;
+    int64_t limit_ms = ble_connected ? RAW_LIVE_FLUSH_INTERVAL_MS : RAW_FLUSH_INTERVAL_MS;
+    return (now_ms - batch_dirty_since_ms) >= limit_ms;
 }
 
 static int sync_media(void)
@@ -1838,7 +1844,8 @@ void sd_notify_ble_state(bool connected)
 {
     /* Connect: publish buffered audio before the app first asks for the ring.
      * Disconnect: records marked as sent live may never have reached the phone,
-     * so stop holding them in RAM under the relaxed live flush interval. */
+     * so write what is buffered now. Records still queued behind this request
+     * are caught by timed_flush_due(), which allows one second without a link. */
     if (connected != ble_connected) {
         sd_req_t req = {0};
         req.type = REQ_FLUSH;
