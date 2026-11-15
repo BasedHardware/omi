@@ -89,6 +89,15 @@ field alone cannot exclude it. Deploy in this exact order:
    all five hosts (ten environment overlay values and two listener chart
    values), regenerate the runtime manifest, and verify serving readback.
 
+The ordinary full-manifest deploy renders the committed true values. Merely
+setting false on old services before invoking that deploy is insufficient:
+it would overwrite the override as readers roll one by one. Build the exact
+immutable CPU image through the existing backend `build-only` Actions mode,
+then perform the reader image roll retaining the temporary false admission
+value (or use an explicit transition manifest with all twelve values false).
+Only after the reader vector is qualified may the release owner apply the
+committed true manifest/charts. No deployment workflow is changed here.
+
 The GPU scheduler/compute/OrderedMerge path does not project conversations and
 updates the original full job map, retaining unknown fields. Its existing
 compatibility is tested from source; the GPU image is unchanged and a live
