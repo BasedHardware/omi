@@ -180,7 +180,7 @@ def prior(
                         scope, label = json.loads(key)
                         seed.update(speaker_id_scope=scope, speaker=label)
                     segments.append(seed)
-            segments = apply_manual_assignments(segments, receipt)
+            segments = apply_manual_assignments(segments, dict(receipt))
         shared = sorted(set(person_ids([{'transcript_segments': segments}])) & set(ids))
         if not shared:
             continue
