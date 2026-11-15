@@ -221,6 +221,7 @@ class ListenSessionRuntime:
         )
         self.state.shutdown_event = self.task_supervisor.shutdown_event
         self.request_conversation_processing: Optional[Callable[..., Awaitable[Any]]] = None
+        self.request_recording_close: Optional[Callable[..., Awaitable[Any]]] = None
         self.transcript_send: Optional[Callable[..., Any]] = None
         self.audio_bytes_send: Optional[Callable[..., Any]] = None
         self.send_speaker_sample_request: Optional[Callable[..., Awaitable[Any]]] = None
@@ -1128,6 +1129,7 @@ class ListenSessionRuntime:
         self.transcript_send = session.transcript_send
         self.audio_bytes_send = session.audio_bytes_send if session.config.audio_bytes_enabled else None
         self.request_conversation_processing = session.request_conversation_processing
+        self.request_recording_close = session.request_recording_close
         self.send_speaker_sample_request = session.send_speaker_sample_request
         try:
             await session.connect()
