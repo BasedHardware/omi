@@ -152,17 +152,33 @@ def repair_patch(live, documents, *, expected_image):
     partition = {
         'name': 'partition',
         'downwardAPI': {
+            'defaultMode': 420,
             'items': [
                 {
                     'path': 'index',
-                    'fieldRef': {'fieldPath': "metadata.annotations['batch.kubernetes.io/job-completion-index']"},
+                    'fieldRef': {
+                        'apiVersion': 'v1',
+                        'fieldPath': "metadata.annotations['batch.kubernetes.io/job-completion-index']",
+                    },
                 }
-            ]
+            ],
         },
     }
     mounts = {'name': 'partition', 'mountPath': '/etc/repair-partition', 'readOnly': True}
+    # CronJob nested defaulting in Kubernetes v1.35 supplies these two fields.
+    # Accept either Helm spelling, but always receipt the server's exact shape.
+    # Conflicting defaults and all other unexpected fields remain forbidden.
+    partition_volumes = deepcopy([v for v in pod.get('volumes', []) if v['name'] == 'partition'])
+    for volume in partition_volumes:
+        downward = volume.get('downwardAPI')
+        if isinstance(downward, dict):
+            downward.setdefault('defaultMode', 420)
+            for item in downward.get('items', []):
+                field = item.get('fieldRef')
+                if isinstance(field, dict):
+                    field.setdefault('apiVersion', 'v1')
     require(
-        [v for v in pod.get('volumes', []) if v['name'] == 'partition'] == [partition]
+        partition_volumes == [partition]
         and [v for v in after.get('volumeMounts', []) if v['name'] == 'partition'] == [mounts],
         'unexpected partition volume',
     )

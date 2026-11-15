@@ -109,6 +109,13 @@ a present true switch is retained; an explicit false kill switch blocks this
 expansion. Workers stay8. Prepare saves a mode0600 receipt containing the full
 before/after specs, hashes, complete approved delta, and original image. It also
 saves a private inverse template BEFORE apply; no reviewed field is omitted.
+The partition volume explicitly includes Kubernetes v1.35 defaults
+`downwardAPI.defaultMode: 420` and `fieldRef.apiVersion: v1` in both the chart
+and the expected receipt. Rendered input may omit these defaults; conflicting
+values are rejected. Existing container and PodSpec defaults come from the live
+pre-read. New affinity, literal env, mounts and explicit Indexed failure fields
+introduce no other defaults in the v1.35 CronJob defaulter. Job-only defaults
+apply later to created Jobs, not this CronJob receipt.
 
 ```sh
 set -e
@@ -148,6 +155,9 @@ Every command is gated on the preceding command succeeding. Run with shell
 `set -e` or stop at the first failure. A server-dry-run/defaulting difference,
 object replacement, resourceVersion race, receipt mutation or unapproved spec
 change is a HOLD: re-read and review a new packet; never weaken its checks.
+The first real server dry-run belongs to the release owner and has not been
+verified by this lane. If it reports any delta, STOP and send the diff back for
+review; never hand-edit the receipt to make it pass.
 Checks compare the entire spec, so every changed field and every unchanged
 policy field must match. The tool never calls Kubernetes and never writes an
 account or recording. No GPU Deployment, worker runtime, RBAC or monitoring
@@ -228,8 +238,12 @@ new repair image identity, and retain the private before/after packet.
 
 The process records a monotonic clock before dependency imports. Its outer
 IO budget ends by1560s after that clock, and earlier when necessary to leave60s
-before scheduled-minute+1680s. The standard CronJob minute in the pod name
-includes cold-node scheduling/image-pull waits. Unknown in-cluster pod identity
+before scheduled-minute+1680s. The standard CronJob minute in the hostname
+includes cold-node scheduling/image-pull waits. Accepted forms are the Indexed
+hostname `record-seal-repair-<minute>-<index>`, the ordinary hostname
+`record-seal-repair-<minute>-<random>`, and an Indexed pod's metadata name with
+both index and random suffix. The existing downward API mounts only the index;
+it does not expose the Job's scheduled timestamp. Unknown in-cluster identity
 fails closed. Nested IO budgets cannot extend the outer deadline. Coordination
 is shortened after projection/discovery/maintenance to reserve30s for final
 checkpoint/reaping; the hard Kubernetes1680s ceiling is unchanged.

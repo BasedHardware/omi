@@ -108,6 +108,61 @@ def test_any_unapproved_server_spec_change_blocks_forward_and_inverse(phase):
             TOOL['check'](after, receipt, 'after')
 
 
+@pytest.mark.parametrize('explicit_mode', [False, True])
+@pytest.mark.parametrize('explicit_version', [False, True])
+def test_packet_includes_server_volume_defaults_with_either_rendered_spelling(explicit_mode, explicit_version):
+    before = live_cron()
+    before_container = TOOL['target'](before)[2]
+    before_container.update(
+        imagePullPolicy='IfNotPresent',
+        terminationMessagePath='/dev/termination-log',
+        terminationMessagePolicy='File',
+    )
+    manifests = rendered()
+    cron = next(d for d in manifests if d['kind'] == 'CronJob' and d['metadata']['name'] == TOOL['NAME'])
+    volume = next(
+        v for v in cron['spec']['jobTemplate']['spec']['template']['spec']['volumes'] if v['name'] == 'partition'
+    )['downwardAPI']
+    assert volume['defaultMode'] == 420  # Chart also spells the API defaults explicitly.
+    assert volume['items'][0]['fieldRef']['apiVersion'] == 'v1'
+    if not explicit_mode:
+        volume.pop('defaultMode')
+    if not explicit_version:
+        volume['items'][0]['fieldRef'].pop('apiVersion')
+    original_manifests = deepcopy(manifests)
+    patch, receipt, _ = TOOL['prepare'](before, manifests, image(before))
+    assert manifests == original_manifests
+    server_response = apply(before, patch)
+    pod = TOOL['target'](server_response)[1]
+    downward = next(v for v in pod['volumes'] if v['name'] == 'partition')['downwardAPI']
+    # The v1.35 CronJob defaulter traverses this volume and ObjectFieldSelector.
+    assert downward['defaultMode'] == 420
+    assert downward['items'][0]['fieldRef']['apiVersion'] == 'v1'
+    downward.setdefault('defaultMode', 420)
+    downward['items'][0]['fieldRef'].setdefault('apiVersion', 'v1')
+    TOOL['check'](server_response, receipt, 'after')
+    after_container = TOOL['target'](server_response)[2]
+    for key in ('imagePullPolicy', 'terminationMessagePath', 'terminationMessagePolicy'):
+        assert after_container[key] == before_container[key]
+    assert apply(server_response, TOOL['rollback'](server_response, receipt))['spec'] == before['spec']
+
+
+@pytest.mark.parametrize('field,value', [('defaultMode', 384), ('apiVersion', 'v2'), ('extra', True)])
+def test_conflicting_or_unapproved_partition_defaults_are_refused(field, value):
+    before = live_cron()
+    manifests = rendered()
+    cron = next(d for d in manifests if d['kind'] == 'CronJob' and d['metadata']['name'] == TOOL['NAME'])
+    downward = next(
+        v for v in cron['spec']['jobTemplate']['spec']['template']['spec']['volumes'] if v['name'] == 'partition'
+    )['downwardAPI']
+    if field == 'apiVersion':
+        downward['items'][0]['fieldRef'][field] = value
+    else:
+        downward[field] = value
+    with pytest.raises(ValueError, match='unexpected partition volume'):
+        TOOL['prepare'](before, manifests, image(before))
+
+
 def test_inverse_refuses_replaced_object_and_changed_receipt():
     before = live_cron()
     patch, receipt, _ = TOOL['prepare'](before, rendered(), image(before))

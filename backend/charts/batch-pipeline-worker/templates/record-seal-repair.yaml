@@ -140,9 +140,11 @@ spec:
             {{- if gt $shards 1 }}
             - name: partition
               downwardAPI:
+                defaultMode: 420
                 items:
                   - path: index
                     fieldRef:
+                      apiVersion: v1
                       fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
             {{- end }}
             - name: tmp
