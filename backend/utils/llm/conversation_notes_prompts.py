@@ -135,6 +135,10 @@ EVENTS AND CONSISTENCY
 
 
 def conversation_note_density(word_count: int, rich: bool) -> str:
+    from utils.llm.notes_lengths import length_guide, scaled_length_range
+
+    if scaled_length_range(word_count):
+        return length_guide(word_count)
     if word_count < 500:
         return f'Use 1-2 sections; target ~{95 if rich else 80} words across the entire note.'
     if word_count < 2500:

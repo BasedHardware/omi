@@ -62,6 +62,7 @@ from utils.sync.assignment_errors import (
     SyncAssignmentSuperseded,
 )
 from utils.stt.transcript_admission import filter_admission
+from utils.episodes import transcript_receipts
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection_prefetch import Prefetched
@@ -325,6 +326,8 @@ def build_incoming(
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    # Consumed by the existing assignment transaction, never a separate write.
+    incoming['_episode_transcript_receipt'] = True
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)
@@ -1082,6 +1085,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        transcript_receipts.enqueue(binding.owner_id, assigned[0], firestore_client=self.store.client)
                         incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
