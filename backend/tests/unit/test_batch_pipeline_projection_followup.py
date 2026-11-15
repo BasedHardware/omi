@@ -165,6 +165,39 @@ def followup(monkeypatch, owner_claim):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('state', ['ready', 'quarantined'])
+async def test_terminal_followup_part_performs_no_policy_read_or_write(followup, state):
+    f = followup
+    f.projector.store.policy.side_effect = AssertionError('terminal receipt performed a policy read')
+    item = WorkItem(**{key: value for key, value in f.jobs['head'].items() if key in WorkItem.__dataclass_fields__})
+    receipt = {**f.receipts['head'], 'state': state}
+
+    await f.runner.finish_part(item, f.binding, receipt, None)
+
+    f.projector.store.policy.assert_not_called()
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_unfinished_followup_part_retains_policy_refusal_before_side_effects(followup):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+
+    f = followup
+    f.projector.store.policy.side_effect = BatchPrivacyBlocked('account_deleted')
+    item = WorkItem(**{key: value for key, value in f.jobs['head'].items() if key in WorkItem.__dataclass_fields__})
+
+    with pytest.raises(BatchPrivacyBlocked):
+        await f.runner.finish_part(item, f.binding, f.receipts['head'], None)
+
+    f.projector.store.policy.assert_called_once_with('head')
+    f.projector.store.mark_enrichment.assert_not_called()
+    f.projector.store.ready.assert_not_called()
+    f.projector.complete_content.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pass(followup, monkeypatch):
     f = followup
     started, release, later_done = asyncio.Event(), asyncio.Event(), asyncio.Event()
