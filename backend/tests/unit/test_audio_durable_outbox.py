@@ -1,6 +1,7 @@
 """Fault injection for the capture -> immutable receipt custody boundary."""
 
 from utils import pusher_audio_projection
+from utils import speaker_learning_jobs
 from utils.batch_pipeline import record_projection_rebuild as projection_rebuild
 import asyncio
 from concurrent.futures import Future
@@ -1019,6 +1020,9 @@ def _legacy_chunk(remote, start, pcm, name=None, *, is_batch=True):
     blob.upload_from_string(pcm, if_generation_match=0)
 
 
+# Sixty real immutable packs plus full-minute readback is a stress proof; the
+# surrounding small-pack tests keep the same custody boundaries in fast CI.
+@pytest.mark.slow
 def test_sixty_custody_packs_and_projected_minute_publish_one_audio_file(remote):
     pcm = b'\x01\x00' * 16000
     for sequence in range(60):
@@ -1314,6 +1318,7 @@ async def test_projection_failure_while_inline_waits_keeps_token(inline_session,
 
 @pytest.mark.asyncio
 async def test_invalid_argument_projection_keeps_custody_and_allows_seal(inline_session, monkeypatch, caplog):
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     client, path, barrier, projected = inline_session
     fail = AsyncMock(wraps=barrier.fail_recording)
     monkeypatch.setattr(barrier, 'fail_recording', fail)
@@ -1891,6 +1896,8 @@ async def test_closed_drain_capacity_and_early_shutdown_keep_tokens(inline_sessi
 async def test_capacity_eviction_abandons_after_late_io_and_preserves_raw_custody(
     inline_session, monkeypatch, stage, kill_switch, abandon_cap
 ):
+    if stage == 'projection':
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'false')
     client, path, barrier, projected = inline_session
     entered = asyncio.Event()
     release = threading.Event()
@@ -2525,3 +2532,107 @@ async def test_projection_retry_budget_resets_after_a_dropped_batch(remote, monk
     await task
     assert failures == [('projection', 'transient')], 'only the first batch dropped'
     assert [read_pcm('owner', receipt) for receipt in _sent_receipts(sock)] == [pcm, pcm]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fast', ['true', 'false'])
+async def test_close_defers_only_optional_discovery_after_verified_upload(inline_session, monkeypatch, fast):
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', fast)
+    order = []
+    original_upload = pusher.upload_audio_chunks_batch
+
+    def upload(*args, **kwargs):
+        order.append('verified_upload')
+        return original_upload(*args, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', upload)
+    original_defer = pusher_audio_projection.PusherAudioProjection.defer_close_refresh
+
+    async def defer(self, cid, paths=None, *, closing=True):
+        if order == ['verified_upload', 'debt']:
+            return True
+        assert order == ['verified_upload']
+        assert not client.rows[path].get('record_audio_closed')
+        order.append('debt')
+        return await original_defer(self, cid, paths, closing=closing)
+
+    monkeypatch.setattr(pusher_audio_projection.PusherAudioProjection, 'defer_close_refresh', defer)
+    sock = Socket(_audio_frames('conversation', [b'\x01\x00' * 160]))
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert client.rows[path]['record_audio_closed'] is True
+    assert client.rows[path]['record_upload_sessions'] == {}
+    assert order == (['verified_upload', 'debt'] if fast == 'true' else ['verified_upload'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('close_path', ['staged_v2', 'finalization', 'rollover'])
+async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream(
+    inline_session, monkeypatch, close_path
+):
+    client, path, barrier, projected = inline_session
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
+    entered = asyncio.Event()
+    sealed = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def slow_refresh(self, *args, **kwargs):
+        loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+        return True
+
+    monkeypatch.setattr(pusher_audio_projection.PusherAudioProjection, 'refresh', slow_refresh)
+    original = record_audio_db.seal_record_audio
+
+    def seal(*args, **kwargs):
+        result = original(*args, **kwargs)
+        if result is None:
+            loop.call_soon_threadsafe(sealed.set)
+        return result
+
+    monkeypatch.setattr(record_audio_db, 'seal_record_audio', seal)
+    monkeypatch.delenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', raising=False)
+    if close_path == 'staged_v2':
+        monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock())
+    # An applied refresh schedules speaker follow-ups that build real datastore
+    # clients; on CI their credential discovery outlasts this test's teardown wait.
+    monkeypatch.setattr(speaker_learning_jobs, 'run_speaker_learning_jobs', AsyncMock())
+    monkeypatch.setattr(pusher, 'schedule_completed_identity_retries', MagicMock(return_value=False))
+    controls = [
+        struct.pack('<I', 104)
+        + json.dumps(
+            dict(conversation_id='conversation', record_close_only=True, request_id='test', phase=phase, watermark=320)
+        ).encode()
+        for phase in ('prepare', 'commit')
+    ]
+
+    if close_path == 'finalization':
+        controls = [struct.pack('<I', 104) + json.dumps({'conversation_id': 'conversation'}).encode()]
+    elif close_path == 'rollover':
+        controls = [struct.pack('<I', 103) + b'successor']
+
+    class OpenStream(Socket):
+        async def receive_bytes(self):
+            if len(self.frames) == 1:
+                await asyncio.wait_for(entered.wait(), 5)
+            if not self.frames:
+                await asyncio.wait_for(sealed.wait(), 5)
+            return await super().receive_bytes()
+
+    sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + controls)
+    handler = asyncio.create_task(
+        pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1, record_close_protocol=2)
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), 5)
+        await asyncio.wait_for(sealed.wait(), 2)
+        assert not release.is_set()
+        assert projected and client.rows[path]['record_audio_closed']
+        assert client.rows[path]['record_upload_sessions'] == {}
+    finally:
+        release.set()
+        await asyncio.wait_for(handler, 5)

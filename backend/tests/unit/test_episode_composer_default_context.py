@@ -2,6 +2,7 @@
 
 import json
 import threading
+from types import SimpleNamespace
 import time
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -436,15 +437,29 @@ def test_ambiguous_person_names_do_not_assign_memory_facts():
 
 
 def test_completed_section_survives_noncooperative_timeout_and_late_results(monkeypatch):
-    monkeypatch.setattr(composer_context_budget, 'COMPOSER_CONTEXT_TIMEOUT_SECONDS', 0.04)
-    release = threading.Event()
+    # The caller's whole budget elapses on an injected clock while the calendar
+    # source is still inside its call; no real-clock budget races the runner.
+    elapsed = [0.0]
+    release, entered = threading.Event(), threading.Event()
     futures = []
+
+    class ExpiringEvent(threading.Event):
+        def wait(self, timeout=None):
+            assert entered.wait(5)
+            elapsed[0] += timeout
+            return self.is_set()
+
+    monkeypatch.setattr(
+        composer_context_budget, 'time', SimpleNamespace(monotonic=lambda: time.monotonic() + elapsed[0])
+    )
+    monkeypatch.setattr(composer_context_budget, 'threading', SimpleNamespace(Event=ExpiringEvent, Lock=threading.Lock))
 
     def submit(worker):
         futures.append(executors.submit_with_context(executors.get_context_executor(), worker))
 
     def calendar(uid, members, budget, *, firestore_client=None):
-        release.wait(1)
+        entered.set()
+        release.wait(5)
         return [{'title': 'late result'}]
 
     original_load = create_autospec(lambda deadline: ('profile', 'memories'), return_value=('profile', 'memories'))
@@ -454,9 +469,9 @@ def test_completed_section_survives_noncooperative_timeout_and_late_results(monk
     monkeypatch.setattr(sources, 'people', create_autospec(sources.people, return_value=[{'name': 'Avery'}]))
     monkeypatch.setattr(sources, 'calendar', create_autospec(sources.calendar, side_effect=calendar))
     try:
-        started = time.monotonic()
         result = context.gather_with_defaults(UID, MEMBERS, original_load, 'fallback')
-        assert time.monotonic() - started < 0.5
+        # Returned at the deadline while the calendar source was still running.
+        assert not release.is_set() and futures and not futures[0].done()
         assert (
             result[0] == 'profile'
             and 'memories' in result[1]
@@ -466,7 +481,7 @@ def test_completed_section_survives_noncooperative_timeout_and_late_results(monk
     finally:
         release.set()
         for future in futures:
-            future.result(timeout=1)
+            future.result(timeout=5)
     assert 'late result' not in result[1]
     original_load.assert_called_once()
 
