@@ -255,13 +255,20 @@ class FirestoreTransaction:
             if table not in {'jobs', 'results', 'coalesce_groups', 'coalesce_sources', 'coalesce_heads'}:
                 continue
             job = self.get('jobs', key) if table == 'results' else value
-            identity = (job['owner_id'], job.get('conversation_id'), job.get('privacy_generation'))
+            identity = (
+                job['owner_id'],
+                job.get('conversation_id'),
+                job.get('capture_source_conversation_id'),
+                job.get('privacy_generation'),
+            )
             if identity in guarded:
                 continue
             guarded.add(identity)
             generation = self.check_privacy(
                 job['owner_id'],
-                conversation_ids=(job['conversation_id'],) if job.get('conversation_id') else (),
+                conversation_ids=tuple(
+                    value for value in (job.get('conversation_id'), job.get('capture_source_conversation_id')) if value
+                ),
                 expected_generation=job.get('privacy_generation'),
             )
             if table == 'jobs' and value.get('privacy_generation') is None:
@@ -433,6 +440,8 @@ class FirestoreStore:
             binding = normalized_binding(job['projection_binding'])
             ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
             ids.extend(job.get('conversation_ids') or [])
+            if job.get('capture_source_conversation_id'):
+                ids.append(job['capture_source_conversation_id'])
             try:
                 assert_batch_write_allowed(
                     self.client,

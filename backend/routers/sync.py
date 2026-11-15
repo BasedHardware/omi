@@ -36,6 +36,8 @@ from config.policy import resolve_batch_policy
 from config.policy.ramp import audio_span
 from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.sync_recovery_source import recovery_source_conversation
+from utils.sync.deleted_conversation import deleted_conversation_result, is_conversation_deleted
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from utils.batch_pipeline.intake import (
@@ -764,7 +766,18 @@ async def sync_local_files_v2(
         )
     except (IndexError, ValueError):
         recovery_hint = False  # Ordinary staging still returns the typed malformed-name refusal.
+    recovery_source_id = None
     if recovery_hint:
+        try:
+            recovery_source_id = await run_blocking(
+                db_executor, recovery_source_conversation, uid, supplied_conversation_id
+            )
+        except BatchPrivacyBlocked as error:
+            return (
+                JSONResponse(status_code=200, content=deleted_conversation_result(0))
+                if is_conversation_deleted(error)
+                else privacy_blocked_response()
+            )
         conversation_id = None  # No stale record wait, live-owner lookup or explicit binding for unknown time.
     if repair_identity is None and (recent_wait := await memoized_record_wait(uid, conversation_id)) is not None:
         # The same conversation-level custody wait answered moments ago: repeat
@@ -1008,6 +1021,16 @@ async def sync_local_files_v2(
             for path in paths
         )
         if future_capture or estimated_capture or retained_capture:
+            try:
+                recovery_source_id = await run_blocking(
+                    db_executor, recovery_source_conversation, uid, supplied_conversation_id
+                )
+            except BatchPrivacyBlocked as error:
+                return (
+                    JSONResponse(status_code=200, content=deleted_conversation_result(0))
+                    if is_conversation_deleted(error)
+                    else privacy_blocked_response()
+                )
             # Old WALs may carry a live conversation stamp. Keep custody proof
             # authenticated against the submitted ID, but never use it as a
             # temporal target for this isolated recovery source.
@@ -1178,6 +1201,7 @@ async def sync_local_files_v2(
                 client_platform=client_device_context.platform,
                 byok_enabled=byok_enabled,
                 intake_context={
+                    **({'capture_source_conversation_id': recovery_source_id} if recovery_source_id else {}),
                     **({'capture_clock_policy': capture_clock_policy} if capture_clock_policy is not None else {}),
                     **(
                         {

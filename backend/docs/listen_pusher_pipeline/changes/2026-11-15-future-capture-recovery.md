@@ -65,7 +65,17 @@ and wall-clock duplicate proposals, so it remains a standalone Home recording.
 Nearest/overlap discovery, absorption and time-only coverage cannot bind
 another source in either direction. Same-source frame coverage remains valid
 only under the existing exact provenance and custody proof. Synthetic time
-never authorizes a covered-audio ACK. Existing deletion/privacy fences apply.
+never authorizes a covered-audio ACK. Before discarding a supplied conversation ID, recovery transactionally checks only
+`users/{uploader}/conversations/{id}` and its same-account tombstone through the
+existing privacy authority. Deleted sources return the existing ID-free HTTP 200
+all-success deletion response, without staging or admitting new work. Other privacy
+locks retain the existing typed 409. Live source IDs are persisted as
+`capture_source_conversation_id`, strictly a privacy fence, not an assignment target.
+Admission, artifact access, CPU compute authorization, job writes, projection and
+status keep that source fence, so deletion during or after intake cannot resurrect
+the audio. Missing/foreign IDs yield no source authority and no other account is read.
+Exact-content retries without an ID use the retained content ledger and its original
+result/source IDs to apply the same deletion authority; time overlap proves nothing.
 The original batch content ledger gives atomic admission and re-ACK after a
 lost reply. Timestamp refusals occur before that ledger and create no negative
 receipt; replaying an original refused name is evaluated under the new policy.
@@ -77,8 +87,10 @@ marks it synced and drains Pending. No success response is invented before
 durable custody/admission. Unsupported or unavailable processing keeps the
 phone copy on a non-success response; estimated uploads return retryable 503
 instead of falling through to legacy processing without isolation. The server cannot retrieve a file an
-older app stopped retrying: the client must resend/requeue it. Manual Sync
-retries eligible rows now; otherwise the existing retry scheduler applies.
+older app stopped retrying: the client must resend/requeue it. Build 1563 general Sync retries only due refused rows; a direct row Sync skips
+`uploadRejected`. Invalid-date refusal retries are spaced one day while the first
+refusal is younger than seven days, then seven days, measured from the persisted
+last attempt. Manual Sync does not override that eligibility.
 
 ## Reader-first rollout and same-day enablement
 
@@ -136,13 +148,14 @@ by this implementation lane.
 Set the same admission switch false on every host to stop new recovery.
 Already admitted offsets, IDs, trust and frame evidence remain immutable and
 continue draining independently of the flag. Keep compatible CPU readers
-until that work drains; do not roll back to marker-dropping projectors.
+while untrusted jobs or stored conversations remain reachable; do not roll back
+to marker-dropping projectors or episode/duplicate readers, even after jobs drain.
 No raw audio is renamed, rewritten or deleted by rollback.
 
 No capacity tuning: the dedicated unit default remains 3600 seconds with the
 existing 7200-second hard ceiling, and serving still supplies its configured
-provider-unit limit. The recovery threshold changes from 86400 seconds to the
-existing normal tolerance (600 seconds by default). No new numeric env or
+provider-unit limit. The recovery threshold remains strictly more than 86400 seconds ahead; the
+ordinary tolerance remains 600 seconds by default, with the intervening band refused. No new numeric env or
 queue/provider capacity is added. Existing early-clock request packing remains
 unchanged; correcting its cross-request chronology needs a separate migration.
 

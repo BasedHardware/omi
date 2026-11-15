@@ -255,7 +255,12 @@ def durable_status(store, uid: str, job_id: str) -> dict | None:
             return {'_coalescing_intake': intake}
         ledger = tx.get('content', f"{uid}/{intake['content_id']}")
         jobs = [tx.get('jobs', segment) for segment in intake['segment_ids']]
-        sources = {job.get('conversation_id') for job in jobs if job.get('conversation_id')}
+        sources = {
+            value
+            for job in jobs
+            for value in (job.get('conversation_id'), job.get('capture_source_conversation_id'))
+            if value
+        }
         result_ids = ledger.get('result') or {}
         sources.update(result_ids.get('new_memories') or [])
         sources.update(result_ids.get('updated_memories') or [])
@@ -614,6 +619,7 @@ async def accept_upload(
             requires_compute_admission=True,
             conversation_id=conversation_id,
             privacy_generation=_coalescing_generation(_coalescing_group),
+            capture_source_conversation_id=(intake_context or {}).get('capture_source_conversation_id'),
         )
         phase = 'authorization'
         snapshots = {}
