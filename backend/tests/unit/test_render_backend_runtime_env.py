@@ -1612,6 +1612,8 @@ def test_quality_push_switch_is_present_in_rendered_gke_pod(environment, chart):
         expected['RECORD_INTAKE_AGE_PRIORITY_ENABLED'] = 'true'
         expected['BATCH_HELD_DEAD_LETTER_ENABLED'] = 'true'
     expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'] = 'false'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT'] = '100'
+    expected['PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S'] = ''
     expected['PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'] = 'true'
     contract = _MANIFEST['environments'][environment]['gke'][chart]['env']
     for key, value in expected.items():
@@ -1628,6 +1630,10 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
     rendered = _MODULE['_parse_deploy_cloud_run_env_vars'](
         _MODULE['_render_env_vars'](config['cloud_run']['services'][service]['env'])
     )
-    for key in ('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED'):
-        expected = 'false' if key == 'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED' else 'true'
+    for key, expected in {
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED': 'false',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED': 'true',
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT': '100',
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
+    }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
