@@ -28,6 +28,8 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_STATES as PROJECTION_FINISH_STATES,
 )
 from database.batch_pipeline_projection_finish_backfill import backfill_complete
+from database.batch_pipeline_projection_followup_clock import DUE_FIELD as FOLLOWUP_DUE_FIELD
+from database.batch_pipeline_projection_followup_backfill import backfill_complete as followup_backfill_complete
 from database.firestore_read_origin import read_origin
 from database._client import get_data_plane_firestore_client
 from database import record_recovery_gate
@@ -482,6 +484,9 @@ class FirestoreStore:
     def projection_finish_backfill_complete(self) -> bool:
         return backfill_complete(self.client, self.namespace)
 
+    def projection_followup_backfill_complete(self) -> bool:
+        return followup_backfill_complete(self.client, self.namespace)
+
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
 
@@ -492,8 +497,17 @@ class FirestoreStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
-        return projection_page(self.client, self.namespace, limit, after=after, states=states, due_before=due_before)
+        return projection_page(
+            self.client,
+            self.namespace,
+            limit,
+            after=after,
+            states=states,
+            due_before=due_before,
+            followup_due_before=followup_due_before,
+        )
 
     def projection_successor(self, owner_key: str, previous: str | None) -> str | None:
         return projection_successor(self.client, self.namespace, owner_key, previous)
@@ -511,6 +525,7 @@ def projection_page(
     after: tuple | None = None,
     states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
     due_before: float | None = None,
+    followup_due_before: float | None = None,
 ) -> tuple[list[str], Any]:
     """Stable keyset page; the cursor survives removal of its source row.
 
@@ -520,6 +535,10 @@ def projection_page(
     A seed cursor ``(committed_at, '')`` starts at that time, before every key
     (the follow-up desync offset); keys are never empty.
 
+    ``followup_due_before`` selects the independent follow-up due clock, only
+    after that clock's separately admitted writer/backfill rollout. It cannot
+    be combined with ``due_before`` on a shared cursor.
+
     ``due_before`` adds the dark finish-backoff range filter: only rows whose
     ``projection_finish_due_at`` has passed. That field leads the ordering
     because Firestore serves a range filter on the first ordered field only, so
@@ -528,29 +547,33 @@ def projection_page(
     """
     if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
+    if due_before is not None and followup_due_before is not None:
+        raise ValueError('finish and follow-up clocks require independent discovery cursors')
+    clock_field = FOLLOWUP_DUE_FIELD if followup_due_before is not None else PROJECTION_FINISH_DUE_FIELD
+    cutoff = followup_due_before if followup_due_before is not None else due_before
     collection = client.collection(f'{namespace}_results')
-    if due_before is None:
+    if cutoff is None:
         query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
     else:
         query = (
             collection.where('projection_state', 'in', list(states))
-            .where(PROJECTION_FINISH_DUE_FIELD, '<=', float(due_before))
-            .order_by(PROJECTION_FINISH_DUE_FIELD)
+            .where(clock_field, '<=', float(cutoff))
+            .order_by(clock_field)
             .order_by('committed_at')
             .order_by('__name__')
         )
     seeded = after is not None and len(after) == 2 and after[1] == ''
-    if due_before is not None:
+    if cutoff is not None:
         if after is not None and len(after) == 3:
             query = query.start_after(
                 {
-                    PROJECTION_FINISH_DUE_FIELD: after[0],
+                    clock_field: after[0],
                     'committed_at': after[1],
                     '__name__': collection.document(after[2]),
                 }
             )
         elif after is not None:
-            query = query.start_at({PROJECTION_FINISH_DUE_FIELD: after[0]})
+            query = query.start_at({clock_field: after[0]})
     elif after is not None and seeded:
         query = query.start_at({'committed_at': after[0]})
     elif after is not None:
@@ -561,10 +584,10 @@ def projection_page(
     # revisited on the next cycle; no durable obligation is skipped or mutated.
     if len(docs) == size:
         last = docs[-1].to_dict()
-        if due_before is None:
+        if cutoff is None:
             cursor = (last['committed_at'], docs[-1].id)
         else:
-            cursor = (last[PROJECTION_FINISH_DUE_FIELD], last['committed_at'], docs[-1].id)
+            cursor = (last[clock_field], last['committed_at'], docs[-1].id)
     else:
         cursor = None
     return [doc.id for doc in docs], cursor
