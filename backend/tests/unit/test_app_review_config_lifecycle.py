@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from routers import app_review_config_sweep as router
 from services import app_review_config_lifecycle as lifecycle
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.other import endpoints as endpoint_utils
 
 NOW = datetime(2026, 11, 12, 12, 0, tzinfo=timezone.utc)
@@ -308,31 +309,26 @@ def test_fresh_receipt_replaces_a_past_deadline_with_a_full_lease():
 
 
 def test_firestore_helpers_resolve_the_client_at_call_time(monkeypatch):
-    client = Mock()
-    reference = Mock()
-    snapshot = Mock(exists=True)
-    snapshot.to_dict.return_value = {"existing": True}
-    client.collection.return_value.document.return_value = reference
-    reference.get.return_value = snapshot
-    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: client)
+    path = ('app_review_config', 'ios')
+    first_client = StrictFirestore({path: {"existing": True}})
+    second_client = StrictFirestore({path: {"resolved": "again"}})
+    resolved = [first_client]
+    monkeypatch.setattr(lifecycle, "get_firestore_client", lambda: resolved[0])
 
     assert lifecycle._firestore_config("ios") == {"existing": True}
+    resolved[0] = second_client
+    assert lifecycle._firestore_config("ios") == {"resolved": "again"}
 
-    monkeypatch.setattr(lifecycle.firestore, "transactional", lambda callback: callback)
-    transaction = Mock()
+    client = StrictFirestore({path: {"existing": True}})
+    resolved[0] = client
     cache = Mock()
     monkeypatch.setattr(lifecycle, "get_memory_cache", lambda: cache)
-
-    def run_transactional(resolved_client, callback, *, transient):
-        assert resolved_client is client
-        assert transient is True
-        return callback(transaction)
-
-    monkeypatch.setattr(lifecycle, "run_transactional", run_transactional)
     updated = lifecycle._update_config("ios", lambda current: {**current, "added": True})
 
     assert updated == {"existing": True, "added": True}
-    transaction.set.assert_called_once_with(reference, updated, merge=True)
+    assert client.rows[path] == updated
+    assert len(client.transactions) == 1
+    assert client.transactions[0].sets == [(path, updated)]
     cache.delete.assert_called_once_with("app_review_config:ios")
 
 

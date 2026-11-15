@@ -961,6 +961,12 @@ def test_minimal_redrive_attach_lookup_compares_on_server_clock(
     assert attached['start'] == pytest.approx(now_test - 10, abs=1.0)
     assert attached['end'] == pytest.approx(now_test, abs=1.0)
     assert len(conversations(store)) == 1
+    # The applied shift is kept beside the row end it describes, for the end-of-recording proof.
+    (stored,) = conversations(store)
+    hold_state = stored['sync_processing_hold']
+    assert hold_state['content_clock_offset'] == 181.0
+    assert hold_state['content_clock_end'] == pytest.approx(stored['finished_at'].timestamp(), abs=0.001)
+    assert '_sync_capture_clock_offset' not in stored
 
 
 # --- fix round 2: v1 staging keeps the pre-PR zero future tolerance ---

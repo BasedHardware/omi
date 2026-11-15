@@ -101,6 +101,8 @@ def entries():
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (1024, 'in-memory candidate cap only'),
                 'max_scan': (10000, 'aggregate scan bound only'),
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'advance_rows': (1024, 'resume checkpoint only; no filter or ordering change'),
                 'selected_cursors': (None, 'output-only selected metadata; no filter or ordering change'),
             },
@@ -112,6 +114,7 @@ def entries():
             domains={
                 'urgent': [False, True],
                 'fresh': [False, True],
+                'newest': [False, True],
                 'after': [
                     None,
                     {
@@ -126,6 +129,8 @@ def entries():
                 ],
             },
             neutrals={
+                'shard': (0, 'local canonical hash partition; no query shape change'),
+                'shards': (1, 'local canonical hash partition; no query shape change'),
                 'budget': (SimpleNamespace(check=lambda: None, timeout=lambda: 10), 'RPC deadline only'),
                 'max_rows': (8, 'in-memory candidate cap only'),
                 'max_scan': (128, 'aggregate scan bound only'),
@@ -555,6 +560,7 @@ def entries():
                 'namespace': namespaces,
                 'state': ['leased', 'retry', 'result_ready', 'record_pending', 'record_recovery_waiting'],
                 'limit': [1, 100, 500, 999],
+                'promote_recoveries': [False, True],
             },
             neutrals={'now': (1.0, 'timestamp operand only')},
         ),

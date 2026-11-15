@@ -155,3 +155,13 @@ def test_other_errors_are_not_retried():
     with pytest.raises(KeyError):
         store(Conn()).run(body)
     assert calls == [1]
+
+
+def test_observation_never_starts_a_connection_or_credential_refresh():
+    from database.jobstore.connection import Pool as ConnectionPool
+
+    pool = ConnectionPool('', connect=lambda: pytest.fail('observation initiated a connection'))
+    with pytest.raises(TimeoutError, match='warm connection'):
+        with pool.connection(existing_only=True):
+            pytest.fail('an empty pool cannot lend a connection')
+    pool.close()
