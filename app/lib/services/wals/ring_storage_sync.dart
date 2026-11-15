@@ -114,11 +114,32 @@ class _RingPass {
   int recordsCredited = 0;
   int recordsDownloaded = 0;
   int recordsDeduped = 0;
+
+  // Recording continuity across the reads of one pass. A recording that spans
+  // two reads is still one recording: it keeps its clock run and, when the
+  // pendant has no usable clock, one estimated start with frames counted on.
+  int? lastRecordTs;
+  String? clockRun;
+  int? firstRecordTs;
+  int elapsedFrames = 0;
+
+  /// Records were released without being read, so the next read does not
+  /// continue the recording the last one ended in.
+  void breakContinuity() {
+    lastRecordTs = null;
+    clockRun = null;
+    firstRecordTs = null;
+    elapsedFrames = 0;
+  }
 }
 
 class RingStorageSyncImpl implements RingStorageSync {
   static const Duration _fullReadTimeout = Duration(minutes: 30);
   static const Duration _windowReadTimeout = Duration(minutes: 5);
+
+  /// The pendant notifies the live mark for a commit just after the INFO that
+  /// reported it. How long to let it arrive before judging the live tail.
+  static const Duration liveMarkSettle = Duration(milliseconds: 400);
 
   List<Wal> _wals = [];
   BtDevice? _device;
@@ -161,6 +182,11 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   @visibleForTesting
   set testWindowRecords(int records) => _windowRecords = records;
+
+  Duration _liveMarkSettle = liveMarkSettle;
+
+  @visibleForTesting
+  set testLiveMarkSettle(Duration settle) => _liveMarkSettle = settle;
 
   PendantRingCustody _custody = PendantRingCustody.shared;
 
@@ -339,7 +365,9 @@ class RingStorageSyncImpl implements RingStorageSync {
     final epoch = connection.ringCustodyEpoch;
     if (_custody.liveProofStartSeq(deviceId, epoch) == null) return false;
     final info = await connection.getRingInfo();
-    if (info == null || connection.ringCustodyEpoch != epoch) return false;
+    if (info == null) return false;
+    await Future<void>.delayed(_liveMarkSettle);
+    if (connection.ringCustodyEpoch != epoch) return false;
     return _custody.liveRunCoversUnread(deviceId, epoch, info);
   }
 
@@ -598,6 +626,11 @@ class RingStorageSyncImpl implements RingStorageSync {
     // read to the write head could be an hour of transfer with the phone falling
     // behind on storing it, and whatever was still in memory when the link
     // dropped was fetched again on the next pass.
+    if (_custody.liveProofStartSeq(custodyDeviceId, epoch) != null) {
+      // Let the mark for the commit this INFO reported arrive before judging.
+      await Future<void>.delayed(_liveMarkSettle);
+      if (!stillEpoch()) return false;
+    }
     if (_custody.liveRunCoversUnread(custodyDeviceId, epoch, ringInfo)) {
       Logger.debug('RingStorageSync._syncRing: unread records are the live tail, nothing to fetch');
       return true;
@@ -623,6 +656,7 @@ class RingStorageSyncImpl implements RingStorageSync {
             await _custodyAdvance(connection, custodyDeviceId, epoch, proven, ringId)) {
           recordsReleasedUnread += proven - next;
           next = proven;
+          pass.breakContinuity();
           continue;
         }
         // From where this connection's live marks begin, the live proof releases
@@ -692,14 +726,14 @@ class RingStorageSyncImpl implements RingStorageSync {
     // spans one), and the estimated-clock run it belongs to (null = device clock).
     final recordBreaks = <bool>[];
     final recordRuns = <String?>[];
-    int? lastRecordTs;
-    String? currentRun;
+    int? lastRecordTs = pass.lastRecordTs;
+    String? currentRun = pass.clockRun;
     int provenSeq = readStart;
     int skippedDuplicates = 0;
     int recordsConsumed = 0;
-    int? firstRecordTs;
-    int elapsedTotal = 0;
-    int bufferBaseElapsed = 0;
+    int? firstRecordTs = pass.firstRecordTs;
+    int elapsedTotal = pass.elapsedFrames;
+    int bufferBaseElapsed = pass.elapsedFrames;
     final fps = wal.codec.getFramesPerSecond();
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
@@ -1124,6 +1158,10 @@ class RingStorageSyncImpl implements RingStorageSync {
       });
       if (!ok) return null;
       pass.recordsCredited += recordsConsumed;
+      pass.lastRecordTs = lastRecordTs;
+      pass.clockRun = currentRun;
+      pass.firstRecordTs = firstRecordTs;
+      pass.elapsedFrames = elapsedTotal;
       return doneNextSeq;
     } else {
       Logger.debug(

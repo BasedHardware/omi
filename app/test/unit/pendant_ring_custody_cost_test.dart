@@ -205,21 +205,19 @@ void main() {
       expect(await c.isDurableLiveRecord('dev', 42, 100), isFalse);
     });
 
-    test('the unread ring is a live tail only from the first mark and while marks reach the write head', () async {
+    test('the unread ring is a live tail only from the first mark and while a mark covers the write head', () async {
       final c = await proven(); // marks at ring seq 0, 30, 60, 90 and 120
 
       expect(c.liveProofStartSeq('dev', 1), 0);
+      expect(c.liveMarksReach('dev', 1, 120), isTrue);
       expect(c.liveRunCoversUnread('dev', 1, _info(readSeq: 90, writeSeq: 120)), isTrue);
-      expect(
-        c.liveRunCoversUnread('dev', 1, _info(readSeq: 90, writeSeq: 120 + PendantRingCustody.liveTailSlackRecords)),
-        isTrue,
-        reason: 'records committed since the last mark are within two batches',
-      );
-      expect(
-        c.liveRunCoversUnread('dev', 1, _info(readSeq: 90, writeSeq: 121 + PendantRingCustody.liveTailSlackRecords)),
-        isFalse,
-        reason: 'the ring grew with no mark: the pendant holds audio the phone was not sent',
-      );
+      // The pendant marks every commit of an unbroken live run at the committed
+      // write position. One committed record beyond the last mark is therefore
+      // a record the phone was not sent; with any slack here, a short unsent
+      // stretch followed by silence would never be read.
+      expect(c.liveMarksReach('dev', 1, 121), isFalse);
+      expect(c.liveRunCoversUnread('dev', 1, _info(readSeq: 90, writeSeq: 121)), isFalse);
+      expect(c.liveRunCoversUnread('dev', 1, _info(readSeq: 120, writeSeq: 156)), isFalse);
       expect(c.liveRunCoversUnread('dev', 1, _info(readSeq: 90, writeSeq: 120, ringId: 7)), isFalse);
 
       // A broken live proof (here: a packet counter gap) can vouch for nothing.

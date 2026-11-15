@@ -762,10 +762,6 @@ class PendantRingCustody {
     return observeLiveFrame(deviceId, epoch, packetCounter, fragmentIndex);
   }
 
-  /// Ring records the pendant may write between two live marks without that
-  /// meaning the live run was broken: two SD batches of 36 records.
-  static const int liveTailSlackRecords = 72;
-
   _DeviceCustody? _liveProving(String deviceId, int epoch) {
     final state = _state(deviceId, epoch);
     if (state == null || !state.liveEnabled || state.evidenceBroken || state.incarnationInvalid) return null;
@@ -783,14 +779,19 @@ class PendantRingCustody {
   /// so that stretch is what a ring read is for.
   int? liveProofStartSeq(String deviceId, int epoch) => _liveProving(deviceId, epoch)?.liveAnchorSeq;
 
-  /// Whether live marks have kept up with the ring as far as [writeSeq].
+  /// Whether a live mark covers the ring as far as [writeSeq], a committed
+  /// write position the pendant reported.
   ///
-  /// The pendant stops emitting marks as soon as a record the phone was not
-  /// sent joins the ring, so marks at the write head mean nothing unsent is
-  /// waiting; when they stop while the ring keeps growing, something is.
+  /// The pendant emits a mark at the committed write position with every commit
+  /// of an unbroken live run, and none once a record the phone was not sent has
+  /// joined the ring. So this holds exactly when nothing unsent is waiting. It
+  /// allows no slack: a few unmarked records followed by silence would
+  /// otherwise never be read. The mark for a commit is notified just after the
+  /// INFO that reported it, so callers give it a moment to arrive; judging too
+  /// early only costs a short read of audio that also arrived live.
   bool liveMarksReach(String deviceId, int epoch, int writeSeq) {
     final state = _liveProving(deviceId, epoch);
-    return state != null && writeSeq - state.marks.last.ringSeq <= liveTailSlackRecords;
+    return state != null && state.marks.last.ringSeq >= writeSeq;
   }
 
   /// Whether everything still unread on the ring is audio this connection's

@@ -161,8 +161,9 @@ than on 3.0.21, and its ring backlog never cleared.
 - **Timed flush depends on who else holds the audio.** A partly filled batch that contains a record
   the phone was not sent (offline, unsubscribed, failed send) is written within one second of that
   record arriving, as before. A batch whose records were all sent live may wait up to four seconds for
-  more audio; at speech rate it fills and is written once in that time. Either edge of the BLE link
-  flushes at once, because "sent" is not "received" on a link that is dropping.
+  more audio; at speech rate it fills and is written once in that time. That longer wait needs a link:
+  "sent" is not "received" on a link that is dropping, so a disconnect writes what is buffered and,
+  while there is no link, every record is back on the one-second bound.
 - **Mark cadence** follows commits, so marks now arrive about every four seconds of speech, as section
   3 always said, rather than several times a second. The app must not assume a cadence (section 5).
 - **The storage worker sleeps** until a command, a stop or a live mark wakes it. It used to poll every
@@ -183,13 +184,21 @@ than on 3.0.21, and its ring backlog never cleared.
   just-released live ranges remains, so a read already in flight can still drop those records. Each
   proof check reads the WAL index once, not once per referenced file.
 - **The live tail is not a backlog.** With live persistence the ring always holds audio the phone
-  has received live and not yet released. Marks are suppressed until the read pointer reaches the
-  live run and stop when an unsent record joins the ring (section 5), so marks that keep reaching
-  `write_seq` mean nothing unsent is waiting. A range is proven between two marks, though, so nothing
-  below the first mark of a connection can be proven live. The app therefore reads the ring only up
-  to that first mark and leaves everything after it to the live proof; once `read_seq` has passed the
-  first mark and marks reach the write head, it does not start a ring read at all. When marks stop
-  while `write_seq` keeps growing past two batches, it reads to the write head as before.
+  has received live and not yet released. The pendant emits a mark at the committed `write_seq` with
+  every commit of an unbroken live run, suppresses marks until the read pointer reaches that run, and
+  stops when an unsent record joins the ring (section 5). So a mark equal to the `write_seq` that INFO
+  reports means nothing unsent is waiting, and one committed record beyond the last mark means
+  something is. The comparison is exact: with any slack, a short unsent stretch followed by silence
+  would never be read. The mark for a commit is notified just after the INFO that reported it, so the
+  app waits `liveMarkSettle` before judging; judging early only costs a short read of audio that also
+  arrived live.
+  A range is proven between two marks, so nothing below the first mark of a connection can be proven
+  live. The app therefore reads the ring only up to that first mark and leaves everything after it to
+  the live proof. Once `read_seq` has passed the first mark and a mark covers the write head, it does
+  not start a ring read at all. Otherwise it reads to the write head as before.
+- **A recording that spans several reads is one recording.** The clock run and, when the pendant has
+  no usable clock, the estimated start and the frame count since carry from one read to the next.
+  They restart only where records were released without being read.
 
 **Still true, and still costly.** After an offline backlog the pendant suppresses marks until the
 backlog is read and advanced, so audio streamed live during that catch-up has no mark and is read from

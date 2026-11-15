@@ -111,6 +111,10 @@ class _RingModel implements DeviceConnection {
   /// Drop the link after this many records of the next read (then clears).
   int? dropAfterRecords;
 
+  /// Whether the pendant's clock has been set. When it has not, records carry
+  /// no usable time and the phone estimates one.
+  bool rtcValid = true;
+
   void Function(List<int>)? _onBytes;
   StreamController<List<int>> _controller = StreamController<List<int>>.broadcast();
 
@@ -134,7 +138,7 @@ class _RingModel implements DeviceConnection {
 
   @override
   Future<RingStatus?> getRingStatus() async =>
-      RingStatus(usedBytes: 0, unreadPackets: writeSeq - readSeq, freeBytes: 0, rtcValid: 1);
+      RingStatus(usedBytes: 0, unreadPackets: writeSeq - readSeq, freeBytes: 0, rtcValid: rtcValid ? 1 : 0);
 
   @override
   Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
@@ -268,7 +272,8 @@ void main() {
       ..testConnection = ring
       ..testCustody = custody ?? newCustody()
       ..testWals = [wal]
-      ..testWindowRecords = 120;
+      ..testWindowRecords = 120
+      ..testLiveMarkSettle = Duration.zero;
     sync.setLocalSync(local);
     sync.setDevice(BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40));
     return sync;
@@ -405,6 +410,34 @@ void main() {
     expect(wal.status, WalStatus.synced);
   });
 
+  test('a recording that spans several reads stays one recording when the pendant has no clock', () async {
+    // Without a usable device clock the phone estimates each chunk's time from
+    // one starting point and the frames counted since. Restarting that estimate
+    // for every read would split one recording into several and shift each
+    // later part by however long the transfer took.
+    final ring = _RingModel(readSeq: 1000, writeSeq: 1450)..rtcValid = false;
+    final local = _FakeLocalSync();
+    final wal = ringWal(ring);
+    final sync = syncFor(ring, local, wal)..testWindowRecords = 150;
+
+    await sync.syncAll();
+
+    expect(ring.reads, [(1000, 150), (1150, 150), (1300, 150)]);
+    expect(local.added, hasLength(9), reason: 'three chunks of 60, 60 and 30 records from each read');
+    final runs = local.added.map((w) => w.clockRun).toSet();
+    expect(runs, hasLength(1), reason: 'one recording, one estimated clock run');
+    expect(runs.single, isNotNull);
+    final fps = BleAudioCodec.opus.getFramesPerSecond();
+    for (var i = 1; i < local.added.length; i++) {
+      final previous = local.added[i - 1];
+      expect(
+        local.added[i].timerStart,
+        previous.timerStart + previous.totalFrames ~/ fps,
+        reason: 'chunk $i starts where chunk ${i - 1} ended, across the read boundary too',
+      );
+    }
+  });
+
   group('the live tail is not a backlog', () {
     Future<PendantRingCustody> liveCustody(_RingModel ring, {required List<int> markSeqs}) async {
       final custody = newCustody(trustAll: true);
@@ -426,7 +459,7 @@ void main() {
     }
 
     test('audio the phone is receiving and proving is left to the live proof', () async {
-      final ring = _RingModel(readSeq: 1000, writeSeq: 1070);
+      final ring = _RingModel(readSeq: 1000, writeSeq: 1060);
       final custody = await liveCustody(ring, markSeqs: [1000, 1030, 1060]);
       final wal = ringWal(ring);
       final sync = syncFor(ring, _FakeLocalSync(), wal, custody: custody);
@@ -441,7 +474,7 @@ void main() {
     test('only the stretch before the first mark is read; the rest is the live run', () async {
       // The batch written before a connection's first mark cannot be proven
       // live. Reading just that lets the live proof release everything after it.
-      final ring = _RingModel(readSeq: 1000, writeSeq: 1100);
+      final ring = _RingModel(readSeq: 1000, writeSeq: 1096);
       final custody = await liveCustody(ring, markSeqs: [1036, 1066, 1096]);
       final local = _FakeLocalSync();
       final wal = ringWal(ring);
@@ -453,6 +486,25 @@ void main() {
       expect(ring.reads, [(1000, 36)]);
       expect(ring.delivered, List.generate(36, (i) => 1000 + i));
       expect(ring.readSeq, 1036, reason: 'the pendant is released up to where the live proof takes over');
+      expect(framesStored(local), 36 * _framesPerRecord);
+      expect(wal.status, WalStatus.synced);
+    });
+
+    test('a short unsent stretch after the last mark is read, not left for a mark that will never come', () async {
+      // The phone is past the first mark and has released everything up to the
+      // last one. Then one batch the phone was not sent is committed and the
+      // wearer goes quiet: no mark follows, and nothing else will move the ring.
+      final ring = _RingModel(readSeq: 1030, writeSeq: 1066);
+      final custody = await liveCustody(ring, markSeqs: [1000, 1030]);
+      final local = _FakeLocalSync();
+      final wal = ringWal(ring);
+      final sync = syncFor(ring, local, wal, custody: custody);
+
+      expect(await sync.hasFilesToSync(), isTrue);
+      await sync.syncAll();
+
+      expect(ring.reads, [(1030, 36)]);
+      expect(ring.readSeq, 1066);
       expect(framesStored(local), 36 * _framesPerRecord);
       expect(wal.status, WalStatus.synced);
     });
