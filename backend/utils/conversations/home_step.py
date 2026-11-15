@@ -40,7 +40,7 @@ from config.episodes import (
     home_transcription_queue_hold_enabled,
 )
 from utils.conversations import transcribing_hold
-from utils.conversations import home_latency
+from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
@@ -171,4 +171,5 @@ def project(row: dict[str, Any]) -> dict[str, Any]:
     step = classify(row)
     if step == READY:
         home_latency.observe(row)
-    return row if step is None else {**row, 'home_step': step}
+    wire = row if step is None else {**row, 'home_step': step}
+    return legacy_empty_wire.project(wire, noise=step == NOISE)

@@ -637,6 +637,11 @@
       "registry": "config/feature-flags.yaml",
       "review_by": "2026-12-14"
     },
+    "HOME_SETTLED_EMPTY_WIRE_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "HOSTED_LID_API_URL": {
       "owner": "planscost",
       "review_by": "2026-11-30"

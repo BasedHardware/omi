@@ -13,3 +13,7 @@ def anchored_wait_enabled() -> bool:
 
 def empty_member_cleanup_enabled() -> bool:
     return default_on('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED')
+
+
+def legacy_empty_wire_enabled() -> bool:
+    return default_on('HOME_SETTLED_EMPTY_WIRE_ENABLED')

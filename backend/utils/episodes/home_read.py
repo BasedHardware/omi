@@ -14,7 +14,7 @@ from typing import Any, get_args
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations import transcribing_hold
+from utils.conversations import transcribing_hold, legacy_empty_wire
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
@@ -498,6 +498,7 @@ def project_episode(
         # Classify on the stored read copy, before the presentation rewrite below.
         step = home_step_projection.classify(row)
         row = neutralize_minimum_title(row, tz_name_provider=zone)
+        row = legacy_empty_wire.project(row, noise=step == home_step_projection.NOISE)
         structured: dict[str, Any] = row.get('structured') or {}
         title = structured.get('title') or ''
         status = row.get('status') or 'completed'
