@@ -27,7 +27,6 @@ from datetime import datetime, timezone
 from typing import Any, Iterator, Mapping, NamedTuple
 
 from google.cloud import firestore
-from google.api_core.exceptions import DeadlineExceeded, ServiceUnavailable
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 from config.refactor_modes import pipeline_ledger_enabled
@@ -348,10 +347,12 @@ def observe_seal_failure(error: BaseException) -> None:
         component='firestore_read',
         from_mode='record_seal_ledger',
         to_mode='sealed_without_ledger',
+        # Classified by class name so this module keeps no google.api_core import:
+        # it is loaded under minimal SDK stubs by read-path contract tests.
         reason=(
             'timeout'
-            if isinstance(error, (TimeoutError, DeadlineExceeded))
-            else 'unavailable' if isinstance(error, ServiceUnavailable) else 'other'
+            if isinstance(error, TimeoutError) or type(error).__name__ == 'DeadlineExceeded'
+            else 'unavailable' if type(error).__name__ == 'ServiceUnavailable' else 'other'
         ),
         outcome='degraded',
     )
