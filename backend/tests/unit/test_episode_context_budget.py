@@ -2,7 +2,7 @@
 
 from contextvars import ContextVar
 import threading
-import time
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -20,28 +20,40 @@ def fallbacks(monkeypatch):
 
 
 def test_one_deadline_discards_all_partial_context_and_late_memories(monkeypatch, fallbacks):
-    monkeypatch.setattr(budget, 'COMPOSER_CONTEXT_TIMEOUT_SECONDS', 0.5)
-    release, ended = threading.Event(), threading.Event()
+    """The caller's budget elapses on an injected clock while the provider call is still running."""
+    now = [1000.0]
+    release, ended, entered = threading.Event(), threading.Event(), threading.Event()
+
+    class ExpiringEvent(threading.Event):
+        def wait(self, timeout=None):
+            # The whole remaining budget passes with the worker inside its provider call.
+            assert entered.wait(5)
+            now[0] += timeout
+            return self.is_set()
+
+    monkeypatch.setattr(budget, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(budget, 'threading', SimpleNamespace(Event=ExpiringEvent, Lock=threading.Lock))
     identity = ContextVar('synthetic_owner', default='missing')
     token = identity.set('owner-context')
 
     def load(deadline):
         try:
             assert identity.get() == 'owner-context'
-            assert deadline - time.monotonic() <= 0.5
-            release.wait(3)
+            assert 0 < deadline - now[0] <= budget.COMPOSER_CONTEXT_TIMEOUT_SECONDS
+            entered.set()
+            release.wait(5)
             return 'late profile', 'late private memories'
         finally:
             ended.set()
 
     try:
-        started = time.monotonic()
         result = budget.bounded_gather(load, 'fallback')
-        assert time.monotonic() - started < 2
+        # Returned at the deadline, not when the non-cooperative provider finished.
+        assert not ended.is_set()
         assert result == ('fallback', '')
     finally:
         release.set()
-        assert ended.wait(3)
+        assert ended.wait(5)
         identity.reset(token)
     assert result == ('fallback', '')
     fallbacks.assert_called_once_with('timeout')
