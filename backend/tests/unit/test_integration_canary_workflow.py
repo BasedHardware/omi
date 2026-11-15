@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES, SOURCE, compose
+from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -88,6 +89,51 @@ def test_serving_ops_fresh_queue_secret_and_dispositions_are_composed_without_mu
             assert env[BACKOFF]['value'] == 'false'
         else:
             assert BACKOFF not in env and BACKOFF in role['forbidden_env']
+
+
+def test_projection_and_firestore_read_ops_are_preserved_from_serving():
+    source, live = config(), snapshot()
+    values = {'PFX_SAMPLE_PERCENT': '17', 'FSR_SAMPLE_PERCENT': '23', 'FIRESTORE_READ_SAMPLE_PERCENT': '29'}
+    for service in SERVICES:
+        source['cloud_run']['services'][service]['env'].update({key: {'value': 'source'} for key in values})
+        live['services'][service]['revision']['spec']['containers'][0]['env'].extend(
+            {'name': key, 'value': value} for key, value in values.items()
+        )
+    actual = compose(source, live, SOURCE)
+    for service in SERVICES:
+        assert {key: actual['cloud_run']['services'][service]['env'][key]['value'] for key in values} == values
+
+
+@pytest.mark.parametrize('outcome', ['failure', 'cancelled'])
+@pytest.mark.parametrize(
+    'step_id',
+    [
+        'shift-cloud-run-traffic',
+        'verify-serving-release-vector',
+        'smoke-promoted-production-serving-api',
+        'smoke-what-matters-now-datastore-query',
+    ],
+)
+def test_actual_restore_condition_recovers_cancelled_and_failed_steps(step_id, outcome):
+    action = yaml.safe_load((ROOT / '.github/actions/deploy-backend-stack/action.yml').read_text())
+    condition = [
+        s['if']
+        for s in action['runs']['steps']
+        if s.get('name') == 'Restore Cloud Run traffic snapshot after failed promotion'
+    ][-1]
+    expression = condition.removeprefix('${{').removesuffix('}}').strip()
+    expression = expression.replace("inputs.deploy_profile", repr('manual'))
+    expression = expression.replace('failure()', str(outcome == 'failure')).replace(
+        'cancelled()', str(outcome == 'cancelled')
+    )
+
+    def evaluate(snapshot_outcome):
+        states = {'cloud-run-traffic-snapshot': snapshot_outcome, step_id: outcome}
+        rendered = re.sub(r'steps\.([a-z0-9-]+)\.outcome', lambda m: repr(states.get(m[1], 'success')), expression)
+        return eval(rendered.replace('&&', ' and ').replace('||', ' or ').replace('\n', ' '), {'__builtins__': {}})
+
+    assert evaluate('success')
+    assert not evaluate('skipped')
 
 
 @pytest.mark.parametrize('failure', ['source', 'scope', 'duplicate', 'ingress', 'secret', 'quality-conflict'])
@@ -310,8 +356,6 @@ def test_other_services_still_restore_when_integration_rollback_refuses_foreign_
 
 
 def test_actual_renderer_and_native_cloud_validator_share_same_canary_composition(monkeypatch, tmp_path):
-    from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
-
     module = runpy.run_path(str(ROOT / 'backend/scripts/render_backend_runtime_env.py'))
     base = config()
     for role in base['cloud_run']['services'].values():

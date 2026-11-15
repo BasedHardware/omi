@@ -16,6 +16,7 @@ if str(ROOT / 'backend') not in sys.path:
     sys.path.insert(0, str(ROOT / 'backend'))
 
 from scripts.runtime_env_compat import normalize_runtime_manifest  # noqa: E402
+from scripts.runtime_env_canary_ops import compose  # noqa: E402
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -237,8 +238,6 @@ def main() -> int:
             or not (args.integration_canary_state and args.integration_canary_source)
         ):
             parser.error('integration canary requires a full prod render and bound source/state')
-        from scripts.runtime_env_canary_ops import compose
-
         env_config = compose(
             env_config, json.loads(args.integration_canary_state.read_text()), args.integration_canary_source
         )

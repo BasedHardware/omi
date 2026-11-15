@@ -16,7 +16,6 @@ PREFIXES = (
     'BATCH_PIPELINE_',
     'SYNC_ASSIGNMENT',
     'VAD_CACHE',
-    'SYNC_LEGACY_FRESH',
     'SYNC_JOB_',
     'FIRST_SUMMARY',
     'SUMMARY_DEBT',
@@ -30,6 +29,9 @@ PREFIXES = (
     'STT_CAP_',
     'SYNC_LINEAGE_',
     'STT_PRERECORDED_',
+    'PFX_',
+    'FSR_',
+    'FIRESTORE_READ_',
 )
 QUALITY = {
     'HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED': 'true',

@@ -1507,9 +1507,13 @@ runs:
         ${{ inputs.deploy_profile == 'manual' && (failure() || cancelled()) &&
         steps.cloud-run-traffic-snapshot.outcome == 'success' &&
         (steps.shift-cloud-run-traffic.outcome == 'failure' ||
+        steps.shift-cloud-run-traffic.outcome == 'cancelled' ||
         steps.verify-serving-release-vector.outcome == 'failure' ||
+        steps.verify-serving-release-vector.outcome == 'cancelled' ||
         steps.smoke-promoted-production-serving-api.outcome == 'failure' ||
-        steps.smoke-what-matters-now-datastore-query.outcome == 'failure') }}
+        steps.smoke-promoted-production-serving-api.outcome == 'cancelled' ||
+        steps.smoke-what-matters-now-datastore-query.outcome == 'failure' ||
+        steps.smoke-what-matters-now-datastore-query.outcome == 'cancelled') }}
       shell: bash
       run: |
         set -euo pipefail

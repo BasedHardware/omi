@@ -23,6 +23,7 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.runtime_env_canary_ops import compose  # noqa: E402
 from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
@@ -674,8 +675,6 @@ def validate_runtime_env(
     if integration_canary_state or integration_canary_source:
         if env != 'prod' or not (integration_canary_state and integration_canary_source):
             return [ValidationError(env, 'integration canary requires bound prod source/state')]
-        from scripts.runtime_env_canary_ops import compose
-
         try:
             env_config = compose(
                 env_config, json.loads(integration_canary_state.read_text()), integration_canary_source
