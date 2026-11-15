@@ -66,8 +66,8 @@ survives. Incomplete/empty discovery retains debt.
 
 The request waits at most eight seconds on the existing two-thread metadata
 executor, with zero queued calls. A timed-out worker may finish later, bounded
-by those two slots. Saturation and unknown storage/database failures return503;
-privacy/deletion refusals return404. Only timeout returns the existing modelled
+by those two slots. Saturation, cooldown, timeout and transient storage/database failures return the
+existing pending hint; privacy/deletion refusals return404. Pending uses the modelled
 `poll_after_ms=5000` with an empty list. Shipped mobile/desktop clients can still
 show no audio on that timeout, and a desktop which skips the request cannot use
 request-side repair. No fake file or URL is emitted.
@@ -204,3 +204,59 @@ third close. The150-close stress proof remains supplementary documentation.
 Every new closing upload batch invalidates completed metadata/debt ACK state;
 only pathless close scans deduplicate. A first refresh retiring its marker
 before a second upload cannot suppress the second batch's repair request.
+
+## Final delta: live rollover, privacy preflight and demand admission
+
+A prepared close does not freeze while the receiver's current binding still
+points at that recording. Finalization precedes successor persistence; frames
+arriving during that await continue into the old tail. After the binding switches
+or detaches, listen flushes the accepted tail, rechecks the binding and empty
+buffer synchronously, and sends the final watermark. The real receiver/parser/
+receipt/seal regression injects delayed successor creation and keeps accepting
+frames. Normal closure adds the next lifecycle poll (up to5s) and successor RPC
+latency before the existing close budget; no timer may override the fence.
+
+Demand repair preflights the shared privacy/consent authority before any encoded
+or raw listing. The projection transaction independently rechecks it. Refused
+account, generation, migration, E2EE, tombstone and private-cloud-sync cases do
+not list storage. Existing main's artifact URL lookup/enqueue consumes recorded
+metadata; its cold-rebuild discovery-before-transaction ordering remains a
+separate repair-lane issue, not authority for this new request entry point.
+
+Demand work is single-flight per conversation/process, one active per user and
+two active per process, using the existing zero-queue executor. Fresh attempts
+are limited to4/user and32/process in a rolling60s window. Failed or empty
+attempts cool down30s; negative history is capped at1024 entries. Joining opens
+share the Future and IO. Timeout, cooldown, capacity and transient unavailable
+work return the modelled pending hint, retaining debt. Privacy/deletion/lock
+refusals remain404/402. Started work may outlive the8s request wait; it keeps its
+single-flight/user/process slot until the SDK calls finish. There is no forced
+thread termination or audio/token action. Two stuck workers exhaust optional
+demand admission until recovery/restart; no additional tasks queue behind them.
+
+Mobile maps HTTP errors to load failure and desktop to unavailable. Returning
+HTTP200 pending avoids those errors; empty pending lists can still show no audio
+on shipped clients, and desktop can skip the request. Successful demand repair
+returns real files on the first open. These client limitations remain explicit.
+
+Fallback telemetry now covers deferred playback admission and cleanup timeout,
+local/remote close capacity, send/notification failures, unsupported capability,
+invalid-watermark/producer/conflict refusals, lost-history re-prepare, prepared
+EOF, demand pending outcomes and failed optional marker retirement. Static
+labels and per-request refusal deduplication keep inventories bounded. Expected
+binding wait and configured rollback are not degraded fallbacks. Privacy and
+custody failures never continue through a seal.
+
+The rolling-deploy exposure is only closes caught mid-handshake: around one
+consumer tick plus ACK/flush in a healthy session, unbounded during network or
+custody stalls. Such prepare-only EOF remains fenced for proof-based repair.
+The repair logger subprocess test uses an ephemeral loopback probe port.
+
+Each admitted demand rebuild adds its privacy/account/owner/conversation
+preflight reads to the earlier cost envelope. Joined opens and admission or
+cooldown refusals issue no new IO. At most46080 attempts/process/day and
+5760 attempts/user/process/day can enter at the minute limits; multiply by
+serving process count and each attempt's reads. These are attempt bounds, not
+billed-read or spend measurements. All limits have code defaults; image-only
+GKE rollout requires no chart-only safety setting. Full rollback settings above
+remain mandatory on every host. Production latency and RSS are unmeasured.
