@@ -9,3 +9,7 @@ def settled_terminal_enabled() -> bool:
 
 def anchored_wait_enabled() -> bool:
     return default_on('EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED')
+
+
+def empty_member_cleanup_enabled() -> bool:
+    return default_on('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED')

@@ -148,3 +148,48 @@ def test_anchored_wait_rollback_restores_membership_reset(store, clock, monkeypa
     assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
     assert store.episode['compose_transcript_wait_started_at'] == clock.current
     assert 'compose_transcript_wait_observations' not in store.episode
+
+
+def test_absent_ids_do_not_reopen_visible_membership_wait_forever(store, clock, monkeypatch):
+    from utils.episodes import home_read
+
+    store.episode['conversation_ids'].extend(['absent-1', 'absent-2', 'absent-3'])
+    store.rows['c2'].update(structured={}, transcript_segments=[], home_transcription_pending_at=clock.current)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'waiting'
+    projected = home_read.project_episode(UID, store.episode, members=store.rows)
+    visible = [m['id'] for m in projected['members']]
+    assert visible == ['c1', 'c2']
+    assert not composer.needs_compose(store.episode, visible_member_ids=visible)
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', 'false')
+    assert composer.needs_compose(store.episode, visible_member_ids=visible)
+    monkeypatch.delenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED')
+    clock.current += timedelta(seconds=1201)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    assert not composer.needs_compose(store.episode, visible_member_ids=visible)
+
+
+def test_owner_shape_still_waits_for_active_then_composes_and_refreshes(store, clock):
+    for i in range(3):
+        terminal(store, f'noise-{i}')
+    for i in range(8):
+        cid = f'ready-{i}'
+        store.rows[cid] = _row(cid, T0 + timedelta(minutes=i), 1)
+        store.episode['conversation_ids'].append(cid)
+    store.episode['conversation_ids'].extend(['absent-1', 'absent-2', 'absent-3', 'active'])
+    store.rows['active'] = _row('active', T0 + timedelta(hours=3), 1, status='in_progress')
+    calls = []
+    assert len(store.episode['conversation_ids']) == 17
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert not calls and not store.episode.get('compose_transcript_wait_until')
+    store.rows['joined'] = _row('joined', T0 + timedelta(hours=3, minutes=5), 1)
+    store.episode['conversation_ids'].append('joined')
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'waiting'
+    assert not calls
+    store.rows['active']['status'] = 'completed'
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 1
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    store.rows['noise-0']['transcript_segments'] = [{'text': 'Late speech', 'start': 0, 'end': 10}]
+    store.rows['noise-0']['episode_transcript_updated_at'] = clock.current
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    assert len(calls) == 2

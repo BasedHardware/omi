@@ -43,6 +43,7 @@ from zoneinfo import ZoneInfo
 
 from utils.conversations import phase_shadow
 
+from config.episode_composition import empty_member_cleanup_enabled
 from config.episodes import (
     COMPOSER_FEATURE,
     episode_composer_context_enabled,
@@ -1213,6 +1214,24 @@ def _compose(
                 if written != 'written':
                     return written  # A concurrent transcript cannot acquire a stale six-hour wait.
             _defer(uid, episode_id, c, max(0.0, (due - now).total_seconds()))
+        elif (
+            empty_member_cleanup_enabled()
+            and episode.get('compose_transcript_wait_until')
+            and all(cid in member_revisions for cid in episode.get('compose_transcript_wait_members') or [])
+        ):
+            written = _write(
+                uid,
+                episode_id,
+                c,
+                {
+                    'compose_transcript_wait_until': None,
+                    'compose_transcript_wait_started_at': None,
+                    'compose_transcript_wait_members': None,
+                },
+                expected_member_revisions=member_revisions,
+            )
+            if written != 'written':
+                return written
         return 'waiting'
     member_ids = sorted(str(row['id']) for row in members)
     if not members or not any(_segments(row) for row in members):
@@ -1645,9 +1664,21 @@ def needs_compose(
         if (
             episode.get('summary_needs_regeneration')
             or (waiting_members is not None and sorted(waiting_members) != retained)
-            or (visible_member_ids is not None and sorted(visible_member_ids) != retained)
+            or (
+                visible_member_ids is not None
+                and sorted(visible_member_ids)
+                != sorted(
+                    set(retained) - set(episode.get('_member_absent_ids') or [])
+                    if empty_member_cleanup_enabled()
+                    else retained
+                )
+            )
         ):
             return True  # A removed blocker must reach _members again without a transcript receipt.
+        if empty_member_cleanup_enabled() and set(episode.get('compose_transcript_wait_members') or []) & set(
+            episode.get('_member_absent_ids') or []
+        ):
+            return True
         # Home already read the bounded member metadata. A newer transcript receipt
         # can wake this wait, including an episode that has never been composed.
         blockers = episode.get('compose_transcript_wait_members')

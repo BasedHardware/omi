@@ -594,6 +594,11 @@
       "review_by": "2026-12-15",
       "registry": "config/feature-flags.yaml"
     },
+    "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
       "owner": "rollout-meetings / occasion architecture",
       "review_by": "2026-11-28",

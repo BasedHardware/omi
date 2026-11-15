@@ -18,6 +18,7 @@ from utils.conversations import transcribing_hold
 from utils.conversations import home_step as home_step_projection
 from utils.conversations import phase_shadow
 
+from config.episode_composition import empty_member_cleanup_enabled
 from config.episodes import (
     home_hide_below_floor_rows_enabled,
     home_step_projection_enabled,
@@ -449,6 +450,10 @@ def project_episode(
     if episode is None:
         return None
     by_id = members if members is not None else _read_members(uid, [episode])
+    # Read-only evidence for legacy dangling references; never put it on the wire.
+    episode.pop('_member_absent_ids', None)
+    if empty_member_cleanup_enabled():
+        episode['_member_absent_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
     # Private read observation only; never persisted or included in the wire projection.
     episode.pop('_member_transcript_updated_at', None)
     episode.pop('_member_transcript_updates', None)
