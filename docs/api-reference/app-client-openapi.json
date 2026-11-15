@@ -35166,6 +35166,81 @@
         "title": "SyncBatchRequest",
         "type": "object"
       },
+      "SyncCaptureEndRequest": {
+        "description": "The phone's statement that a recording ended. Times are device-clock epoch seconds.",
+        "properties": {
+          "end_decided_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Decided At",
+            "type": "number"
+          },
+          "end_type": {
+            "enum": [
+              "user_initiated",
+              "silence_backstop",
+              "disconnect"
+            ],
+            "title": "End Type",
+            "type": "string"
+          },
+          "last_speech_at": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Speech At"
+          },
+          "pending_wals": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Pending Wals",
+            "type": "integer"
+          },
+          "recording_session_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Recording Session Id",
+            "type": "string"
+          },
+          "sent_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sent At",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recording_session_id",
+          "end_type",
+          "end_decided_at",
+          "sent_at",
+          "pending_wals"
+        ],
+        "title": "SyncCaptureEndRequest",
+        "type": "object"
+      },
+      "SyncCaptureEndResponse": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "retry": {
+            "default": false,
+            "title": "Retry",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SyncCaptureEndResponse",
+        "type": "object"
+      },
       "SyncCaptureManifestFile": {
         "properties": {
           "name": {
@@ -87339,6 +87414,91 @@
         "tags": [
           "review"
         ]
+      }
+    },
+    "/v2/sync-capture-end": {
+      "post": {
+        "description": "The phone states that a recording ended and how much of it is uploaded.\n\nStored on the recording's own session document. It lets notes start once\nthe recording's speech has landed, without the arrival-quiet wait. It never\nchanges custody and never deletes or finalizes anything itself.",
+        "operationId": "record_sync_capture_end_v2_sync_capture_end_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureEndRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCaptureEndResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Sync Capture End"
       }
     },
     "/v2/sync-capture-manifest": {
