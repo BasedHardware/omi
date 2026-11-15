@@ -24,6 +24,11 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from scripts import redrive_staging_inputs as cli
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup as setup, row, ledger_row
 from tests.unit.test_batch_pipeline_timeliness import _sample, NOW, EPOCH  # pyright: ignore[reportPrivateUsage]
+
+# Resolve shared fixture/provider-model imports at collection, as the fixture's
+# own module does. The fast call budget must measure the retained/release checks,
+# rather than the first import of another test module's dependencies.
+from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
 from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS, WARNING_SECONDS, staged_enqueue
 from utils.batch_pipeline.intake import durable_status, get_durable_job_status
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -288,8 +293,6 @@ def test_metric_uses_current_object_and_does_not_mask_older_legacy_input():
 
 
 def test_terminal_assignment_is_not_automatically_released_but_operator_uses_existing_target_gate(monkeypatch):
-    from tests.unit.test_batch_pipeline_projection_release import rows, store_for, OWNER, TARGET
-
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_HOLD_RECOVERY_ENABLED', 'true')
     seeded = rows()
     key = ('batch_pipeline_prod_jobs', 'held')
