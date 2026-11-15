@@ -223,3 +223,24 @@ record per-index dispositions and CPU usage. A CronJob inverse controls future
 Jobs; immediate termination of running Jobs is a separate release-owner action,
 not part of this tool. Verify the unchanged GPU Deployment identities and the
 new repair image identity, and retain the private before/after packet.
+
+## Deadline and lease limits
+
+The process records a monotonic clock before dependency imports. Its outer
+IO budget ends by1560s after that clock, and earlier when necessary to leave60s
+before scheduled-minute+1680s. The standard CronJob minute in the pod name
+includes cold-node scheduling/image-pull waits. Unknown in-cluster pod identity
+fails closed. Nested IO budgets cannot extend the outer deadline. Coordination
+is shortened after projection/discovery/maintenance to reserve30s for final
+checkpoint/reaping; the hard Kubernetes1680s ceiling is unchanged.
+
+Projection rebuild now runs AFTER the per-index coordinator lease is acquired,
+so a duplicate shard-zero pod does not rebuild before refusing overlap.
+The1800s lease remains longer than the hard deadline. We deliberately do not
+let a new Job identity steal an unexpired lease: a new name alone is not proof
+that the prior pod/children are dead. A killed owner can therefore leave one
+index idle for up to30min, yielding4/5 capacity until expiry; watch overlap and
+missing indexes. The expiry protocol assumes synchronized node clocks; clock
+skew above the120s lease/deadline margin can undermine exclusion. Immediate
+safe takeover requires a server-fenced owner-death proof and is future work.
+No privacy or producer-token proof is supplied by this maintenance lease.
