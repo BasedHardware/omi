@@ -47,6 +47,8 @@ Before an account's source coverage is established, GET returns HTTP 409 with `d
 
 Use a dedicated card model/provider/cache. First cached/remote page paints immediately. One request per query; stale account/filter completions cannot publish. Near-bottom prefetch targets a bounded seven-day card buffer (record/byte/request caps), never waits for a whole week before first paint, and handles sparse and dense windows. Retry remains possible; partial responses are distinct from end of history. Preserve live/local capture overlays and prevent duplicates.
 
+Hydrated conversation and episode reads omit the separate encrypted display payload and its display metadata. Source-version and member-proof metadata remain owned by the source fence; logical detail mutations cannot replay stale encrypted display fields. Mobile wire decoding is generated from the Home OpenAPI models.
+
 Opening a card navigates immediately with its cached display fields, then hydrates the owning episode or conversation through existing detail APIs. Member cards and transcript/audio are deeper demand. Do not synthesize loaded-empty detail from omitted content. Keep existing deletion, selection, starring, lock/paywall and processing/recovery behavior truthful; use authoritative server membership for episode-wide operations.
 
 ## Lifecycle and migration

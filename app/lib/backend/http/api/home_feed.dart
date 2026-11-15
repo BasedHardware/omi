@@ -3,6 +3,7 @@
 import 'dart:convert';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/home_feed.dart';
+import 'package:omi/backend/schema/gen/home_feed_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 
@@ -48,6 +49,7 @@ extension HomeFeedPreparationApi on HomeFeedApi {
         if (j is! Map || j['ready'] is! bool || j['processed'] is! int || j['has_more'] is! bool) {
           throw const FormatException('Invalid preparation response');
         }
-        return HomeFeedPreparation(ready: j['ready'], processed: j['processed'], hasMore: j['has_more']);
+        final value = wire.GeneratedHomeFeedPreparationResponse.fromJson(Map<String, dynamic>.from(j));
+        return HomeFeedPreparation(ready: value.ready, processed: value.processed, hasMore: value.hasMore);
       });
 }

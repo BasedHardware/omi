@@ -1,6 +1,7 @@
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'gen/home_feed_wire.g.dart' as wire;
 
 /// A display projection, never a conversation detail or episode membership receipt.
 /// Omitted source content remains unknown until the existing detail API hydrates it.
@@ -37,61 +38,54 @@ class HomeFeedCard {
   final List<String> sources;
   final String revision;
 
-  factory HomeFeedCard.fromJson(Map<String, dynamic> j) {
-    if (j['kind'] != 'episode' && j['kind'] != 'conversation') throw const FormatException('Invalid card kind');
-    if (j['id'] is! String ||
-        j['detail_id'] is! String ||
-        j['sort_at'] is! String ||
-        (j['started_at'] != null && j['started_at'] is! String) ||
-        j['title'] is! String ||
-        j['preview'] is! String ||
-        j['status'] is! String ||
-        j['revision'] is! String ||
-        j['member_count'] is! int ||
-        j['sources'] is! List) {
-      throw const FormatException('Invalid Home card');
+  factory HomeFeedCard.fromJson(Map<String, dynamic> json) =>
+      HomeFeedCard.fromGenerated(wire.GeneratedHomeFeedCard.fromJson(json));
+
+  factory HomeFeedCard.fromGenerated(wire.GeneratedHomeFeedCard value) {
+    if (value.kind != 'episode' && value.kind != 'conversation') {
+      throw const FormatException('Invalid card kind');
     }
     return HomeFeedCard(
-        id: j['id'],
-        kind: j['kind'],
-        detailId: j['detail_id'],
-        sortAt: DateTime.parse(j['sort_at']),
-        startedAt: j['started_at'] == null ? null : DateTime.parse(j['started_at']),
-        finishedAt: j['finished_at'] == null ? null : DateTime.parse(j['finished_at']),
-        title: j['title'],
-        emoji: j['emoji'] as String,
-        preview: j['preview'],
-        status: j['status'],
-        homeStep: j['home_step'] as String?,
-        starred: j['starred'] as bool,
-        isLocked: j['is_locked'] as bool,
-        hasTasks: j['has_tasks'] as bool,
-        memberCount: j['member_count'],
-        sources: List<String>.from(j['sources']),
-        summaryAvailable: j['summary_available'] as bool,
-        revision: j['revision']);
+        id: value.id,
+        kind: value.kind,
+        detailId: value.detailId,
+        sortAt: value.sortAt.toUtc(),
+        startedAt: value.startedAt?.toUtc(),
+        finishedAt: value.finishedAt?.toUtc(),
+        title: value.title,
+        emoji: value.emoji,
+        preview: value.preview,
+        status: value.status,
+        homeStep: value.homeStep,
+        starred: value.starred,
+        isLocked: value.isLocked,
+        hasTasks: value.hasTasks,
+        memberCount: value.memberCount,
+        sources: value.sources ?? const [],
+        summaryAvailable: value.summaryAvailable,
+        revision: value.revision);
   }
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind,
-        'detail_id': detailId,
-        'sort_at': sortAt.toUtc().toIso8601String(),
-        'started_at': startedAt?.toUtc().toIso8601String(),
-        'finished_at': finishedAt?.toUtc().toIso8601String(),
-        'title': title,
-        'emoji': emoji,
-        'preview': preview,
-        'status': status,
-        'home_step': homeStep,
-        'starred': starred,
-        'is_locked': isLocked,
-        'has_tasks': hasTasks,
-        'member_count': memberCount,
-        'sources': sources,
-        'summary_available': summaryAvailable,
-        'revision': revision
-      };
+  Map<String, dynamic> toJson() => wire.GeneratedHomeFeedCard(
+          id: id,
+          kind: kind,
+          detailId: detailId,
+          sortAt: sortAt,
+          startedAt: startedAt,
+          finishedAt: finishedAt,
+          title: title,
+          emoji: emoji,
+          preview: preview,
+          status: status,
+          homeStep: homeStep,
+          starred: starred,
+          isLocked: isLocked,
+          hasTasks: hasTasks,
+          memberCount: memberCount,
+          sources: sources,
+          summaryAvailable: summaryAvailable,
+          revision: revision)
+      .toJson();
 
   HomeFeedCard withoutText() => HomeFeedCard(
       id: id,
@@ -153,12 +147,13 @@ class HomeFeedPage {
         (j['next_cursor'] != null && j['next_cursor'] is! String)) {
       throw const FormatException('Invalid Home envelope');
     }
+    final value = wire.GeneratedHomeFeedResponse.fromJson(j);
     final page = HomeFeedPage(
-        items: [for (final item in j['items']) HomeFeedCard.fromJson(Map<String, dynamic>.from(item))],
-        nextCursor: j['next_cursor'],
-        hasMore: j['has_more'],
-        truncated: j['truncated'],
-        generation: j['generation']);
+        items: [for (final item in value.items ?? <wire.GeneratedHomeFeedCard>[]) HomeFeedCard.fromGenerated(item)],
+        nextCursor: value.nextCursor,
+        hasMore: value.hasMore,
+        truncated: value.truncated,
+        generation: value.generation);
     if (page.hasMore && page.nextCursor == null) throw const FormatException('Missing continuation');
     return page;
   }

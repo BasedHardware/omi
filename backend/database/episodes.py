@@ -46,7 +46,7 @@ from database.transcript_pointer import run_preloaded_transactional as run_trans
 from database.conversations import decode_transcript_segments_verified
 from database.conversation_revisions import firestore_revision_datetime
 from utils.encryption import decrypt, encrypt
-from utils.home_feed.projection import stamp as stamp_home_display
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
@@ -92,7 +92,9 @@ def seal(uid: str, episode: Mapping[str, Any]) -> dict[str, Any]:
 def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     if not raw:
         return None
-    episode = {key: value for key, value in raw.items() if key != 'content'}
+    # Compact encrypted display belongs to the list projection, never to a
+    # hydrated episode or the next logical-state mutation.
+    episode = {key: value for key, value in raw.items() if key != 'content' and key not in DISPLAY_FIELDS}
     blob = raw.get('content')
     content: dict[str, Any] = {}
     if isinstance(blob, str) and blob:

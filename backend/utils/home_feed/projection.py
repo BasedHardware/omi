@@ -16,6 +16,7 @@ SCHEMA = 1
 DISPLAY = 'home_display'
 VERSION = 'home_display_version'
 SORT = 'home_sort_at'
+DISPLAY_FIELDS = frozenset({DISPLAY, VERSION, SORT, 'home_started_at', 'home_projection_schema', 'home_has_tasks'})
 
 
 def text(value: Any, limit: int) -> str:

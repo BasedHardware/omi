@@ -1,6 +1,35 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Home visibility defaults and response metadata only; no lifecycle writes.
+    'database/home_feed.py': [
+        ('_visible', 'status', "'completed'", ('status',)),
+        (
+            'feed.project',
+            'status',
+            "row.get('home_status') or 'completed'",
+            (
+                'detail_id',
+                'emoji',
+                'finished_at',
+                'has_tasks',
+                'home_step',
+                'id',
+                'is_locked',
+                'kind',
+                'member_count',
+                'preview',
+                'revision',
+                'sort_at',
+                'sources',
+                'starred',
+                'started_at',
+                'status',
+                'summary_available',
+                'title',
+            ),
+        ),
+    ],
     # Census response metadata only; no lifecycle document writes.
     'utils/sync/batch_census.py': [
         (

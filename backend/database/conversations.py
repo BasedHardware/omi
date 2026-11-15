@@ -76,7 +76,7 @@ from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from database import transcript_pointer
-from utils.home_feed.projection import stamp as stamp_home_display
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
@@ -700,6 +700,10 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    # Separate encrypted card data must not leak into hydrated detail or be
+    # replayed as stale projection metadata by a logical-state writer.
+    for field in DISPLAY_FIELDS:
+        data.pop(field, None)
     if isinstance(data.get('transcript_segments'), dict):
         try:
             data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
