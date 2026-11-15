@@ -70,9 +70,22 @@ and deployed. Confirm the deployed child code preserves all of these behaviors:
 held Android submissions write `draft`; a fresh receipt renews an expired
 lease; first-sight reconciliation repairs a missing receipt without reviving an
 expired tombstone; unavailable and rejected submission tokens reach the real
-paging rule; and the rollout brake proves Cloud Scheduler is `PAUSED` with no
-active writer runs. Use the child regressions and deployment receipts for this
-check. Parent-only checks do not satisfy these gates.
+paging rule; and the rollout brake can read the app-review job as `PAUSED`.
+The brake's scheduler check does not prove full writer quiescence. Before
+invoking the brake, separately deploy the still-planned job in `PAUSED` state
+by explicitly selecting `app-review-config-sweep-hourly` with the reconciler's
+`--jobs` argument; default reconciliation skips planned jobs. Confirm the job
+exists and remains `PAUSED`. Use the existing `gcp_scheduler_reconcile.yml`
+workflow with its `jobs` input set to `app-review-config-sweep-hourly`, along
+with the production environment approval and typed confirmation. Parent-only
+checks do not satisfy these gates.
+
+Before the brake check, record the exact `google_play` Codemagic principal and
+verify its existing `cloudscheduler.jobs.get` permission for this job. Do not
+create or broaden IAM bindings. Separately retain Scheduler history or
+backend-sync log evidence that any already-started sweep request has finished,
+and terminal build receipts for previously dispatched Codemagic writers. A
+`PAUSED` job and the brake result do not replace these drain receipts.
 
 After those release gates pass, and only under separate activation
 authorization, keep manual promote and daily-train submissions frozen while
@@ -83,32 +96,52 @@ following this order:
    `/v2/app-review-config/sweep` are mounted on `backend-sync`, and both run
    under `backend-runtime`. Keep the scheduler `PAUSED` during credential and
    role probes.
-2. Create the secrets and scoped accessor bindings above. Verify the ASC role
+2. Separately deploy `app-review-config-sweep-hourly` while it remains
+   `lifecycle: planned` and GCP `PAUSED`, explicitly selecting it with
+   `--jobs app-review-config-sweep-hourly`. A default reconciliation skips
+   planned jobs. Use the existing `gcp_scheduler_reconcile.yml` workflow with
+   its `jobs` input set to `app-review-config-sweep-hourly`. Confirm the
+   deployed job is `PAUSED` before the brake check.
+3. Record the `google_play` principal and verify its existing
+   `cloudscheduler.jobs.get` permission. Separately confirm through Scheduler
+   history or backend-sync logs that any started sweep request has finished,
+   and retain terminal build receipts for dispatched Codemagic writers. The
+   brake result is not proof of these independent drain checks. Then run the
+   authorized brake status check and retain its receipt.
+4. Create the secrets and scoped accessor bindings above. Verify the ASC role
    against its versions endpoint and the Play role against a staging app by
    opening a temporary edit, reading its production track, and deleting the
    edit without committing it.
-3. Before the first scheduler tick, capture the documented read-only snapshot
+5. Before the first scheduler tick, capture the documented read-only snapshot
    of `app_review_config/ios` and `app_review_config/android` for rollback and
    comparison through the approved operator process.
-4. In a separately reviewed scheduler-manifest change, remove
+6. Before enabling the job, record the operator review of any legacy
+   completed-but-held production releases and hand-created releases with names
+   the lifecycle cannot parse. The poller treats `status == "completed"` as
+   live, so these cases need an explicit manual disposition. Record that the
+   submission token is intentionally absent until the first successful tick;
+   after attaching it, verify it is present and that missing/rejected-token
+   alerts page before resuming submissions.
+7. In a separately reviewed scheduler-manifest change, remove
    `lifecycle: planned` and set `state: ENABLED` on
    `app-review-config-sweep-hourly`. The job runs at minute 17 UTC. Apply with
-   the existing `gcp_scheduler_reconcile.yml` workflow and typed
+   the existing `gcp_scheduler_reconcile.yml` workflow, selecting
+   `app-review-config-sweep-hourly` in its `jobs` input, and the typed
    `APPLY_PROD_SCHEDULER` confirmation.
-5. Confirm the first tick succeeds and
+8. Confirm the first tick succeeds and
    `omi_app_review_config_last_sweep_timestamp_seconds` advances. If separately
    authorized and needed, run the job through the approved scheduler workflow;
    verify its response and backend-sync logs. With missing store credentials,
    the sweep still enforces TTL and reports a credential alert.
-6. Enable the `omi-app-review-config-sweep-silent` deadman rule only after the
+9. Enable the `omi-app-review-config-sweep-silent` deadman rule only after the
    successful first tick, then verify the provisioned rule is unpaused.
-7. Validate token authentication without writing a submission: send a validly
+10. Validate token authentication without writing a submission: send a validly
    shaped but stale receipt to `/v2/internal/app-review-config/submissions`
    through the approved operator runner, with the token supplied from Secret
    Manager without printing it. Expect HTTP 409 (`submission receipt is stale`)
    and confirm neither Firestore document changed. A 401 means the token is
    missing or mismatched and must be fixed before continuing.
-8. Add the same token to the pre-created Codemagic `app_review_config` group.
+11. Add the same token to the pre-created Codemagic `app_review_config` group.
    Verify the group is attached only to `mobile-store-promote` and
    `mobile-daily-train`, then release the submission freeze.
 
@@ -134,7 +167,7 @@ receipt authentication check above, confirm the two Firestore documents did
 not change, and resume submissions. A missing secret reports
 `submission_token_unavailable`; a missing or mismatched request token reports
 `submission_token_rejected`. Resolve either page before resuming submissions.
- Run scrape contracts declare all four app-review lifecycle metrics:
+Scrape contracts declare all four app-review lifecycle metrics:
 `omi_app_review_config_alert_total`,
 `omi_app_review_config_last_alert_timestamp_seconds`,
 `omi_app_review_config_sweep_total`, and
