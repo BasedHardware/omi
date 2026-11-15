@@ -15450,4 +15450,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Täna makstud $price. Uueneb igakuiselt.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
 }

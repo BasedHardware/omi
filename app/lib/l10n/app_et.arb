@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Makse lükati tagasi. Sinu pakett ei muutunud.",
     "monthlySwitchUnavailable": "Üleminek pole praegu saadaval. Uuenda selle asemel kaarti.",
     "monthlySwitchDoneTitle": "Maksad nüüd igakuiselt",
-    "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt."
+    "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt.",
+    "processingDeleteScopeChanged": "Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti."
 }

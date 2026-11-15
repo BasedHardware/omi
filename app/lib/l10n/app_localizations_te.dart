@@ -15520,4 +15520,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'ఈరోజు $price చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
 }

@@ -15560,4 +15560,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'இன்று $price செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.';
   }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
 }

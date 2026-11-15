@@ -15345,4 +15345,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price שולמו היום. מתחדש מדי חודש.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
 }

@@ -15491,4 +15491,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Сьогодні сплачено $price. Подовжується щомісяця.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Список обробки змінився. Перевірте його та спробуйте знову.';
 }

@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Pembayaran ditolak. Pelan anda tidak berubah.",
     "monthlySwitchUnavailable": "Pertukaran tidak tersedia sekarang. Kemas kini kad anda sebaliknya.",
     "monthlySwitchDoneTitle": "Anda kini membayar bulanan",
-    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan."
+    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan.",
+    "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi."
 }

@@ -15229,4 +15229,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '本日$priceをお支払いいただきました。毎月更新されます。';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
 }

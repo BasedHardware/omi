@@ -15516,4 +15516,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Ma kifizetve: $price. Havonta megújul.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
 }

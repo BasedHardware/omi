@@ -15469,4 +15469,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'آج $price ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
 }

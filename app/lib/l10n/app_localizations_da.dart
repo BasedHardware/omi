@@ -15448,4 +15448,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Fornyes månedligt.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
 }

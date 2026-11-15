@@ -48,6 +48,7 @@ import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
 const _baseline = bool.fromEnvironment('HOME_OVERLAP_BASELINE');
+const _followupBaseline = bool.fromEnvironment('HOME_FOLLOWUP_BASELINE');
 
 class _LiveCapture extends CaptureProvider {
   _LiveCapture()
@@ -152,6 +153,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     HomeFeedProvider? feed,
     CaptureProvider? capture,
     bool withNavigation = false,
+    bool capability = true,
     List<ServerConversation> detailItems = const [],
     void Function(String)? onDetailFetch,
     List<ServerConversation> processing = const []}) async {
@@ -170,12 +172,18 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     episodes.dispose();
   });
   final store = PendingWorkStore(
-      loadPending: () async => const ApiSuccess(
-          PendingWorkSnapshot(enabled: true, items: [], attentionUnseenCount: 0, homeProcessingToday: true)),
+      loadPending: () async => ApiSuccess(PendingWorkSnapshot(
+          enabled: capability, items: [], attentionUnseenCount: 0, homeProcessingToday: capability)),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled));
   await store.refresh();
   addTearDown(store.dispose);
   final boundary = GlobalKey();
+  final captureTheme = buildOmiTheme(brightness: Brightness.light);
+  // A native iOS snackbar resolves its unspecified family to SF Pro. The test
+  // engine otherwise falls back to Ahem for this standalone TextStyle.
+  final theme = captureTheme.copyWith(
+      snackBarTheme: captureTheme.snackBarTheme.copyWith(
+          contentTextStyle: captureTheme.snackBarTheme.contentTextStyle?.copyWith(fontFamily: 'SF Pro Display')));
   Widget screen = await buildTypedConversationScreen(
     conversations,
     pendingWork: store,
@@ -183,7 +191,7 @@ Future<GlobalKey> _pumpHome(WidgetTester tester, List<ServerConversation> items,
     feed: feed,
     captureProvider: capture,
     initializePreferences: false,
-    theme: buildOmiTheme(brightness: Brightness.light),
+    theme: theme,
   );
   if (withNavigation) {
     final apps = AppProvider();
@@ -246,6 +254,87 @@ void _expectAbsent(List<String> titles) {
 double _top(WidgetTester tester, Finder finder) => tester.getTopLeft(finder).dy;
 
 void main() {
+  testWidgets('older-server capability-off Home renders one neutral aggregate under Listening', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    SharedPreferences.setMockInitialValues({'uid': 'fixture-home'});
+    await SharedPreferencesUtil.init();
+    final now = DateTime.now();
+    final fixture = HomeOneProcessingFixture(now);
+    final episodes = EpisodeProvider(
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: fixture.live)),
+        fetchPage: (from, to, {cursor}) async => const ApiSuccess(EpisodePageRead(enabled: true)),
+        lookup: (_) async => const ApiSuccess(EpisodeRead(enabled: true)));
+    await episodes.refreshLive();
+    ServerConversation pending(String id, DateTime at) => ServerConversation(
+        id: id,
+        createdAt: at,
+        startedAt: at,
+        status: ConversationStatus.processing,
+        structured: Structured('Draft title', ''));
+    final capture = _LiveCapture();
+    addTearDown(capture.dispose);
+    final boundary = await _pumpHome(
+        tester,
+        [
+          pending('new', now.subtract(const Duration(minutes: 10))),
+          fixture.finished,
+          pending('old', now.subtract(const Duration(days: 1)))
+        ],
+        episodeProvider: episodes,
+        capture: capture,
+        capability: false,
+        processing: [pending('local', now.subtract(const Duration(minutes: 20)))]);
+    if (_followupBaseline) {
+      expect(find.byType(ProcessingConversationRow), findsNWidgets(2));
+      expect(find.textContaining('Writing notes'), findsNWidgets(2));
+    } else {
+      expect(find.byType(ProcessingConversationRow), findsOneWidget);
+      final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+      expect(row.count, 3);
+      expect(row.step.name, 'transcribing');
+      expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+      expect(find.textContaining('Writing notes'), findsNothing);
+      expect(find.text('Listening now'), findsOneWidget);
+      expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+    }
+    await _capture(tester, boundary,
+        _followupBaseline ? '001-mobile-ios-capability-off-before' : '002-mobile-ios-capability-off-after');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('processing changed during confirmation cancels deletion and shows review notice', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final fixture = HomeReadyMembersFixture(DateTime.now());
+    final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async =>
+            ApiSuccess(EpisodePageRead(enabled: true, episodes: [fixture.waiting])),
+        detail: (_) async => ApiSuccess(fixture.waiting));
+    episodes.debugSetHomeEpisodes([fixture.waiting]);
+    final boundary = await _pumpHome(tester, fixture.members, episodeProvider: episodes, withNavigation: true);
+    final history = tester.element(find.byType(ProcessingConversationRow)).read<ConversationProvider>();
+    await tester.tap(find.byKey(_processingKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('episode_more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+    history.updateConversation(fixture.members[2].withHomeStep('ready'), preserveHomeStep: false);
+    await tester.pump();
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete, isEmpty);
+    expect(find.text('Undo'), findsNothing);
+    expect(find.text('Processing changed. Review the list and try again.'), findsOneWidget);
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+    await _capture(tester, boundary, '003-mobile-ios-delete-scope-changed');
+    await tester.pumpWidget(const SizedBox.shrink());
+    episodes.invalidateHome();
+  });
   for (final compact in [false, true]) {
     testWidgets('reported settled-noise and older-local shape compact=$compact', (tester) async {
       addTearDown(() => debugDefaultTargetPlatformOverride = null);
@@ -753,7 +842,8 @@ void main() {
     expect(find.byKey(_processingKey), findsOneWidget);
     expect(find.text('Middle finished review'), findsOneWidget);
     expect(find.text(_processing), findsOneWidget);
-    expect(find.textContaining(_transcribing), findsNWidgets(0));
+    expect(find.text('Transcribing… · 2 recordings'), findsOneWidget,
+        reason: 'a provisional title without a server step does not prove note writing');
     // All pending recordings share the first row; finished work keeps its own row.
     final runs = find.byKey(_processingKey);
     final late = _top(tester, runs.at(0));

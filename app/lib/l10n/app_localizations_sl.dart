@@ -15486,4 +15486,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Danes plačano $price. Obnavlja se mesečno.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.';
 }

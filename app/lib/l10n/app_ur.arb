@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "ادائیگی مسترد ہو گئی۔ آپ کا پلان تبدیل نہیں ہوا۔",
     "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
-    "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔"
+    "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
+    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔"
 }

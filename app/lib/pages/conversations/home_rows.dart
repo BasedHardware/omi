@@ -116,13 +116,23 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     bool groupAwaitingTranscript = false,
     bool processingTodayOnly = false,
     bool singleProcessingRow = true,
+    bool neutralUnknownSteps = false,
     bool activityOnlyFailures = false,
+    DateTime? processingDay,
     DateTime? now}) {
   if (!enabled && !groupAwaitingTranscript) {
     return [
       for (final c in conversations)
         if (!activityOnlyFailures || !isFailedHomeConversation(c)) HomeRow(c)
     ];
+  }
+  if (neutralUnknownSteps) {
+    ServerConversation neutral(ServerConversation c) =>
+        c.homeStep == null && homeStepOf(c) == HomeStep.writingNotes ? localHomeProcessingEntry(c) : c;
+    conversations = conversations.map(neutral).toList();
+    knownConversations = knownConversations.map(neutral).toList();
+    processingConversations = processingConversations.map(neutral).toList();
+    episodes = [for (final e in episodes) e.copyWith(members: e.members.map(neutral).toList())];
   }
   if (singleProcessingRow) {
     final knownSteps = {
@@ -371,7 +381,9 @@ List<HomeRow> buildHomeRows(List<ServerConversation> conversations, List<Episode
     final today = localHomeDay(now ?? DateTime.now());
     folded.removeWhere((row) => row.isProcessing && row.day != today);
   }
-  return folded;
+  return processingDay == null
+      ? folded
+      : foldProcessingRuns(folded, processingTitle: processingTitle ?? '', processingDay: processingDay);
 }
 
 DateTime localHomeDay(DateTime at) {
@@ -383,23 +395,30 @@ DateTime localHomeDay(DateTime at) {
 /// finished rows and episode boundaries. The page places Today's row below live capture.
 /// Failures remain terminal rows. Every source episode and recording stays reachable.
 List<HomeRow> foldProcessingRuns(List<HomeRow> rows,
-    {required String processingTitle, bool singleProcessingRow = true}) {
+    {required String processingTitle, bool singleProcessingRow = true, DateTime? processingDay}) {
   if (!singleProcessingRow) return _foldContiguousProcessingRuns(rows, processingTitle: processingTitle);
   final folded = <HomeRow>[];
   final byDay = <DateTime, List<HomeRow>>{};
+  HomeStep? processingStep(HomeRow row) {
+    final replaced = row.episode?.composed == true && !row.isProcessing && !row.isTemporaryMember;
+    return replaced
+        ? null
+        : row.step ??
+            (row.isProcessing ? homeStepOf(row.conversation) ?? HomeStep.transcribing : homeStepOf(row.conversation));
+  }
+
   for (final row in rows) {
-    (byDay[row.day] ??= []).add(row);
+    final step = processingStep(row);
+    final day =
+        processingDay != null && step != null && step != HomeStep.failed ? localHomeDay(processingDay) : row.day;
+    (byDay[day] ??= []).add(row);
   }
   final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
   for (final day in days) {
     final run = <HomeRow>[];
     final finished = <HomeRow>[];
     for (final row in byDay[day]!) {
-      // A composed owner is the finished replacement even when its sole retained
-      // member still carries an older pending list projection.
-      final replaced = row.episode?.composed == true && !row.isProcessing && !row.isTemporaryMember;
-      final step =
-          replaced ? null : row.step ?? (row.isProcessing ? HomeStep.writingNotes : homeStepOf(row.conversation));
+      final step = processingStep(row);
       if (step == null || step == HomeStep.failed) {
         finished.add(row);
       } else {
@@ -407,7 +426,7 @@ List<HomeRow> foldProcessingRuns(List<HomeRow> rows,
       }
     }
     final first = run.length == 1 ? run.single : null;
-    if (first != null && first.isProcessing && first.episode != null) {
+    if (first != null && first.isProcessing && first.episode != null && first.day == day) {
       folded.add(first);
     } else if (run.isNotEmpty) {
       final members = <ServerConversation>[];
@@ -430,17 +449,18 @@ List<HomeRow> foldProcessingRuns(List<HomeRow> rows,
       }
       members.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
       folded.add(_processingRun(members, processingTitle,
-          step: _leastAdvanced(run.map((r) => r.step ?? HomeStep.writingNotes)),
+          step: _leastAdvanced(run.map((r) => r.step ?? HomeStep.transcribing)),
           ids: ids,
           processingEpisodes: episodes.values.toList(),
-          anchor: run.first.startedAt));
+          anchor: processingDay ?? run.first.startedAt));
     }
     folded.addAll(finished);
   }
   return folded;
 }
 
-/// Rollback for the existing server-driven HOME_STEP_PROJECTION capability.
+/// Legacy contiguous projection for explicit callers and the historical render fixture.
+/// Default Home always applies the one-row invariant, independent of server capabilities.
 List<HomeRow> _foldContiguousProcessingRuns(List<HomeRow> rows, {required String processingTitle}) {
   final folded = <HomeRow>[];
   var run = <HomeRow>[];

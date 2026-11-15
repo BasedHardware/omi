@@ -15369,4 +15369,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'تم دفع $price اليوم. يتجدد شهريًا.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
 }

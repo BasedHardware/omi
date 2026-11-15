@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "Plată refuzată. Planul tău nu s-a schimbat.",
     "monthlySwitchUnavailable": "Trecerea nu este disponibilă acum. Actualizează cardul în schimb.",
     "monthlySwitchDoneTitle": "Acum plătești lunar",
-    "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar."
+    "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar.",
+    "processingDeleteScopeChanged": "Lista de procesare s-a schimbat. Verifică lista și încearcă din nou."
 }

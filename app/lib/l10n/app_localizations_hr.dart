@@ -15494,4 +15494,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Danas plaćeno $price. Obnavlja se mjesečno.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
 }

@@ -4431,7 +4431,13 @@ FIELD_SITES = {
     'utils/workers/consumer.py': [('http_response', 'status', 'result.outcome.value', ('reason', 'status'))],
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
-        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured'))
+        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # API response only; never sent to a lifecycle persistence helper.
+        ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
+    ],
+    'utils/conversations/empty_capture.py': [
+        # Expired-placeholder wire copy, not a stored terminal transition.
+        ('project', 'status', "'completed'", ('status', 'structured', 'summary_retryable')),
     ],
 }
 

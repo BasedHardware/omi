@@ -1,5 +1,6 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
+import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -15,7 +16,10 @@ import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/wals/ring_drain_policy.dart' show waitForRingRead, decodeCustodyRingAudio;
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
 /// Ring-buffer storage sync for firmware 3.0.20+ (omi PR #7216).
@@ -39,9 +43,9 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 /// ADVANCE is sent after a DONE that consumed the expected records. Legacy
 /// firmware may reclaim during BLE delivery; interruption can lose its RAM
 /// tail. Custody firmware preserves ONLY unadvanced records; already durable
-/// chunk advances remain. On any failure (cancel, BLE drop, READ_BEGIN/DONE
-/// mismatch, refused admission) no further advance is sent — the next sync
-/// resumes from the same read_seq.
+/// chunk advances remain. Interrupted custody reads still commit their exact
+/// indexed prefix; an epoch change retains receipts for the next connection.
+/// Unproven records remain on the pendant. Legacy completion rules stay intact.
 /// Device-clock steps between consecutive ring records above this are a real
 /// recording gap (pendant off, or a clock correction), never one recording.
 const ringRecordGapBreakSeconds = 60;
@@ -87,6 +91,7 @@ class _RingPass {
     required this.epoch,
     required this.ringInfo,
     required this.rtcValid,
+    required this.phoneNow,
     required this.deviceId,
     required this.effectiveCaps,
     required this.ringId,
@@ -100,6 +105,7 @@ class _RingPass {
   final int epoch;
   final RingInfo ringInfo;
   final bool rtcValid;
+  final int phoneNow;
   final String deviceId;
   final int effectiveCaps;
   final int? ringId;
@@ -119,6 +125,7 @@ class _RingPass {
   // two reads is still one recording: it keeps its clock run and, when the
   // pendant has no usable clock, one estimated start with frames counted on.
   int? lastRecordTs;
+  int? lastRawRecordTs;
   String? clockRun;
   int? firstRecordTs;
   int elapsedFrames = 0;
@@ -127,6 +134,7 @@ class _RingPass {
   /// continue the recording the last one ended in.
   void breakContinuity() {
     lastRecordTs = null;
+    lastRawRecordTs = null;
     clockRun = null;
     firstRecordTs = null;
     elapsedFrames = 0;
@@ -147,6 +155,13 @@ class RingStorageSyncImpl implements RingStorageSync {
   StreamSubscription? _notifyStream;
   String? _activeSyncDeviceId;
   bool _firmwareStopRequested = false;
+  static final Map<String, Object> _readOwners = {};
+  Completer<void>? _activeReadDone;
+  void Function()? _cancelRead;
+  DeviceConnection? _sourceConnection;
+  int? _sourceEpoch;
+  Future<void>? _sourceStop;
+  Timer? _persistenceTimer;
 
   IWalSyncListener listener;
   LocalWalSync? _localSync;
@@ -166,9 +181,20 @@ class RingStorageSyncImpl implements RingStorageSync {
   double get currentSpeedKBps => _currentSpeedKBps;
 
   final Timer Function(Duration, void Function()) _transferTimer;
+  final Timer Function(Duration, void Function()) _persistenceDeadlineTimer;
+  final Future<DeviceConnection?> Function(String)? _connectionResolver;
+  final DateTime Function() _clock;
 
-  RingStorageSyncImpl(this.listener, {Timer Function(Duration, void Function())? transferTimer})
-      : _transferTimer = transferTimer ?? Timer.new;
+  RingStorageSyncImpl(
+    this.listener, {
+    Timer Function(Duration, void Function())? transferTimer,
+    Timer Function(Duration, void Function())? persistenceTimer,
+    Future<DeviceConnection?> Function(String)? connectionResolver,
+    DateTime Function()? clock,
+  })  : _transferTimer = transferTimer ?? Timer.new,
+        _persistenceDeadlineTimer = persistenceTimer ?? Timer.new,
+        _connectionResolver = connectionResolver,
+        _clock = clock ?? DateTime.now;
 
   @visibleForTesting
   set testWals(List<Wal> wals) => _wals = wals;
@@ -209,6 +235,13 @@ class RingStorageSyncImpl implements RingStorageSync {
     _isCancelled = true;
     Logger.debug('RingStorageSync: Cancel requested');
 
+    if (ringDrainRecoveryEnabled) {
+      _cancelRead?.call();
+      final source = _sourceConnection;
+      final epoch = _sourceEpoch;
+      if (source != null && epoch != null) unawaited(_stopRingTransfer(source, epoch));
+      return;
+    }
     final sub = _notifyStream;
     if (sub != null) {
       unawaited(sub.cancel());
@@ -239,6 +272,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     _isSyncing = false;
     _activeSyncDeviceId = null;
     _firmwareStopRequested = false;
+    _sourceStop = null;
     _totalBytesDownloaded = 0;
     _downloadStartTime = null;
     _currentSpeedKBps = 0.0;
@@ -444,11 +478,13 @@ class RingStorageSyncImpl implements RingStorageSync {
   @override
   Future stop() async {
     cancelSync();
+    if (ringDrainRecoveryEnabled) await _activeReadDone?.future;
     await _notifyStream?.cancel();
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
+    if (ringDrainRecoveryEnabled && _isSyncing) return null;
     if (_device == null) {
       Logger.debug('RingStorageSync.syncAll: _device is null');
       return null;
@@ -502,6 +538,7 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    if (ringDrainRecoveryEnabled && _isSyncing) throw StateError('Ring read already in progress');
     _resetSyncState();
     _isSyncing = true;
     // A recording page can hold a Wal from before setDevice() rebuilt the list,
@@ -544,17 +581,48 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// chunks with LocalWalSync, and advance the ring past what was stored.
   /// Returns true if everything unread when the pass began was dealt with.
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
+    if (!ringDrainRecoveryEnabled) return _readRing(wal, progress: progress);
+    final deviceId = _device?.id;
+    if (deviceId == null || _readOwners.containsKey(deviceId)) return false;
+    final owner = Object();
+    _readOwners[deviceId] = owner;
+    final done = Completer<void>();
+    _activeReadDone = done;
+    try {
+      return await _readRing(wal, progress: progress);
+    } finally {
+      _persistenceTimer?.cancel();
+      _persistenceTimer = null;
+      _cancelRead = null;
+      _sourceConnection = null;
+      _sourceEpoch = null;
+      _sourceStop = null;
+      _activeReadDone = null;
+      if (identical(_readOwners[deviceId], owner)) _readOwners.remove(deviceId);
+      done.complete();
+    }
+  }
+
+  Future<bool> _readRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
     _syncPhase = 'connection';
     final admittedGeneration = _localSync?.sessionGeneration ?? -1;
-    final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
-    if (connection == null) throw Exception('Device not connected');
+    final connection = _testConnection ??
+        await (_connectionResolver?.call(_device!.id) ??
+            ServiceManager.instance().device.ensureConnection(_device!.id));
+    if (connection == null) {
+      if (!ringDrainRecoveryEnabled) throw Exception('Device not connected');
+      DebugLogManager.logEvent('pendant_custody', {'action': 'read_deferred', 'reason': 'disconnected'});
+      return false;
+    }
 
     _activeSyncDeviceId = _device!.id;
     _downloadStartTime = DateTime.now();
     _totalBytesDownloaded = 0;
 
     final epoch = connection.ringCustodyEpoch;
+    _sourceConnection = connection;
+    _sourceEpoch = epoch;
     bool stillEpoch() => connection.ringCustodyEpoch == epoch && !_isCancelled;
 
     _syncPhase = 'list-read';
@@ -562,12 +630,13 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (!stillEpoch()) return false;
 
     // Snapshot ring state so we know what range we're consuming.
-    final ringInfo = await connection.getRingInfo();
+    final initialInfo = await connection.getRingInfo();
     if (!stillEpoch()) return false;
-    if (ringInfo == null) {
+    if (initialInfo == null) {
       Logger.debug('RingStorageSync._syncRing: getRingInfo returned null');
       return false;
     }
+    var ringInfo = initialInfo;
     if (ringInfo.unreadPackets <= 0) {
       Logger.debug('RingStorageSync._syncRing: nothing to read');
       return true;
@@ -580,7 +649,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     final status = await connection.getRingStatus();
     if (!stillEpoch()) return false;
     final rtcValid = status?.isRtcValid ?? false;
-
+    final phoneNow = _clock().millisecondsSinceEpoch ~/ 1000;
     final custodyDeviceId = _device!.id;
     final effectiveCaps = connection.ringEffectiveCaps;
     final ringId = (effectiveCaps & RingProtocol.capRingId) != 0 ? ringInfo.ringId : null;
@@ -596,7 +665,42 @@ class RingStorageSyncImpl implements RingStorageSync {
             (await connection.advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: ringId))?.status,
       );
       if (!stillEpoch()) return false;
+      if (ringDrainRecoveryEnabled) {
+        // beginConnection can replay an ACK. Do not feed its older INFO back
+        // into custody or start a READ at the pre-replay frontier.
+        final afterReplay = await connection.getRingInfo();
+        if (!stillEpoch() || afterReplay == null || afterReplay.ringId != ringId) return false;
+        ringInfo = afterReplay;
+      }
     }
+    Future<void> advanceDurablePrefix(String reason) async {
+      if (ringId == null || (effectiveCaps & RingProtocol.capAppAckReclaim) == 0) return;
+      if (connection.ringCustodyEpoch != epoch || _localSync?.sessionGeneration != admittedGeneration) return;
+      try {
+        final target = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
+        if (target == null || _localSync?.sessionGeneration != admittedGeneration) {
+          return;
+        }
+        await _custodyAdvance(connection, custodyDeviceId, epoch, target, ringId, reason: reason);
+      } catch (error) {
+        // The durable receipt survives a failed ACK/checkpoint write. Never
+        // turn a recoverable transport failure into another audio download.
+        Logger.debug('RingStorageSync: durable advance deferred: $error');
+      }
+    }
+
+    if (ringDrainRecoveryEnabled && ringId != null) {
+      _custody.noteInfo(custodyDeviceId, epoch, ringInfo);
+      await _custody.restoreDownloadedRanges(custodyDeviceId, epoch, ringId, reportedReadSeq: ringInfo.readSeq);
+      await advanceDurablePrefix('before_read');
+      if (!stillEpoch()) return false;
+      final fresh = await connection.getRingInfo();
+      if (!stillEpoch() || fresh == null || fresh.ringId != ringId) return false;
+      ringInfo = fresh;
+      _custody.noteInfo(custodyDeviceId, epoch, fresh);
+      if (fresh.unreadPackets <= 0) return true;
+    }
+    if (!stillEpoch()) return false;
     final droppedKey = '$custodyDeviceId:${ringInfo.ringId}';
     final lastDropped = _droppedBaseline[droppedKey];
     final droppedDelta = lastDropped == null ? null : (ringInfo.droppedPackets - lastDropped).clamp(0, 1 << 62);
@@ -609,6 +713,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       epoch: epoch,
       ringInfo: ringInfo,
       rtcValid: rtcValid,
+      phoneNow: phoneNow,
       deviceId: custodyDeviceId,
       effectiveCaps: effectiveCaps,
       ringId: ringId,
@@ -643,6 +748,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     var complete = false;
     try {
       while (stillEpoch()) {
+        final acknowledged = _custody.acknowledgedReadSeqFor(custodyDeviceId, epoch, ringId);
+        if (ringDrainRecoveryEnabled && acknowledged != null && acknowledged > next) {
+          recordsReleasedUnread += acknowledged - next;
+          next = acknowledged;
+          pass.breakContinuity();
+        }
         if (next >= pass.endSeq) {
           complete = true;
           break;
@@ -650,7 +761,7 @@ class RingStorageSyncImpl implements RingStorageSync {
         // Audio the phone already holds durably (it arrived live, or an earlier
         // read stored it) is released without being transferred again.
         final proven = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
-        if (!stillEpoch()) break;
+        if (!stillEpoch() || (ringDrainRecoveryEnabled && _localSync?.sessionGeneration != admittedGeneration)) break;
         if (proven != null &&
             proven > next &&
             await _custodyAdvance(connection, custodyDeviceId, epoch, proven, ringId)) {
@@ -715,8 +826,37 @@ class RingStorageSyncImpl implements RingStorageSync {
     final admittedGeneration = pass.admittedGeneration;
     // One read's worth of live-proof checks; see [CustodyProofMemo].
     final proofMemo = CustodyProofMemo();
+    final phoneNow = pass.phoneNow;
+    bool useRecordTime(int ts) => rtcValid && useDeviceCaptureTime(ts, phoneNow);
+    _persistenceTimer?.cancel();
+    _persistenceTimer = null;
+    _sourceStop = null;
+    CustodyReadValidation? readValidator;
+    Future<void> advanceDurablePrefix(String reason) async {
+      if (ringId == null || (effectiveCaps & RingProtocol.capAppAckReclaim) == 0) return;
+      if (connection.ringCustodyEpoch != epoch || _localSync?.sessionGeneration != admittedGeneration) return;
+      try {
+        final target =
+            await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId, readValidator: readValidator);
+        if (target == null ||
+            (readValidator != null && !readValidator!.isCurrent) ||
+            _localSync?.sessionGeneration != admittedGeneration) {
+          return;
+        }
+        await _custodyAdvance(connection, custodyDeviceId, epoch, target, ringId, reason: reason);
+      } catch (error) {
+        // The durable receipt survives a failed ACK/checkpoint write. Never
+        // turn a recoverable transport failure into another audio download.
+        Logger.debug('RingStorageSync: durable advance deferred: $error');
+      }
+    }
+
+    if (ringDrainRecoveryEnabled && ringId != null) readValidator = await _custody.createReadValidator();
 
     final completer = Completer<bool>();
+    _cancelRead = () {
+      if (!completer.isCompleted) completer.complete(false);
+    };
     final reassembler = RingRecordReassembler();
     final List<List<int>> bytesData = []; // parsed opus frames awaiting flush
     final recordSeqs = <int>[];
@@ -726,10 +866,13 @@ class RingStorageSyncImpl implements RingStorageSync {
     // spans one), and the estimated-clock run it belongs to (null = device clock).
     final recordBreaks = <bool>[];
     final recordRuns = <String?>[];
+    bool clockWarningReported = false;
     int? lastRecordTs = pass.lastRecordTs;
+    int? lastRawRecordTs = pass.lastRawRecordTs;
     String? currentRun = pass.clockRun;
     int provenSeq = readStart;
     int skippedDuplicates = 0;
+    bool skippedProofGap = false;
     int recordsConsumed = 0;
     int? firstRecordTs = pass.firstRecordTs;
     int elapsedTotal = pass.elapsedFrames;
@@ -747,8 +890,25 @@ class RingStorageSyncImpl implements RingStorageSync {
     bool idleExpired = false;
     bool acceptingNotifications = true;
     bool firstDataReceived = false;
+    int radioBytes = 0;
+    int queuedNotifications = 0;
+    DateTime lastRadioReport = DateTime.now();
     DateTime lastProgressUpdate = DateTime.now();
     const progressInterval = Duration(milliseconds: 200);
+
+    // Independent from radio DATA/DONE. Once storage work is outstanding,
+    // only a completed queue operation / indexed chunk renews this deadline.
+    // Timeout stops admission and BLE; an uncancellable OS write keeps the
+    // owner fenced until it actually settles, never a second overlapping read.
+    void persistenceProgress({bool startOnly = false}) {
+      if (!ringDrainRecoveryEnabled || _isCancelled) return;
+      if (startOnly && _persistenceTimer != null) return;
+      _persistenceTimer?.cancel();
+      _persistenceTimer = _persistenceDeadlineTimer(const Duration(seconds: 45), () {
+        DebugLogManager.logEvent('pendant_custody', {'action': 'persistence_timeout', 'ring_id': ringId});
+        cancelSync();
+      });
+    }
 
     void receivedTransferData() {
       firstDataReceived = true;
@@ -794,53 +954,82 @@ class RingStorageSyncImpl implements RingStorageSync {
 
         final chunkSeqs = recordSeqs.sublist(0, recordsToTake);
         final chunk = bytesData.sublist(0, framesToTake);
-        final chunkTimerStart = (recordTimestamps.isNotEmpty && recordTimestamps.first > 0 && rtcValid)
+        var chunkTimerStart = (recordTimestamps.isNotEmpty && useRecordTime(recordTimestamps.first))
             ? recordTimestamps.first
-            : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
-                bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
+            : !deviceCaptureClockRepairOff && firstRecordTs == 0
+                ? 0
+                : (firstRecordTs ?? DateTime.now().millisecondsSinceEpoch ~/ 1000) +
+                    bufferBaseElapsed ~/ (fps > 0 ? fps : 1);
         final chunkClockRun = recordRuns.isNotEmpty ? recordRuns.first : null;
         final flushStartedAt = DateTime.now().millisecondsSinceEpoch;
         try {
-          if (chunk.isEmpty) {
-            for (final s in chunkSeqs) {
-              if (s == provenSeq) provenSeq = s + 1;
-            }
-            if (ringId != null && connection.ringCustodyEpoch == epoch) {
-              for (final range in contiguousRanges(chunkSeqs)) {
-                await _custody.recordDurableRingRange(custodyDeviceId, epoch, ringId, range.$1, range.$2, const []);
-              }
-            }
-            recordSeqs.removeRange(0, recordsToTake);
-            recordFrameCounts.removeRange(0, recordsToTake);
-            recordTimestamps.removeRange(0, recordsToTake);
-            recordBreaks.removeRange(0, recordsToTake);
-            recordRuns.removeRange(0, recordsToTake);
-            bufferBaseElapsed = elapsedTotal - bytesData.length;
-            if (finalFlush && recordFrameCounts.isEmpty) break;
-            continue;
+          // An empty record still needs durable, indexed accounting. Leave
+          // ambiguous/legacy zero-frame ranges unproven when receipts are OFF.
+          if (chunk.isEmpty && (!ringDrainRecoveryEnabled || ringId == null)) {
+            throw StateError('Empty ring records require indexed markers');
+          }
+          // Capture time is metadata, never admission to phone custody. If
+          // estimation fails, preserve every decoded byte with explicit unknown
+          // time (zero + clock-run), without manufacturing a calendar date.
+          if (!deviceCaptureClockRepairOff &&
+              chunkClockRun != null &&
+              (!phoneCaptureClockPlausible(phoneNow) || !deviceCaptureTimePlausible(chunkTimerStart, phoneNow))) {
+            chunkTimerStart = 0;
           }
           final localSync = _localSync;
           if (localSync == null) throw StateError('LocalWalSync unavailable; refusing release');
           try {
-            final localWal = await localSync.persistDeviceChunk(
-                source: wal,
-                frames: chunk,
-                timerStart: chunkTimerStart,
-                admittedGeneration: admittedGeneration,
-                clockRun: chunkClockRun,
-                nextCollisionSequence: () => _storageFileSeq++);
+            final indexedRing = ringDrainRecoveryEnabled ? ringId : null;
+            if (indexedRing != null && chunkSeqs.last - chunkSeqs.first + 1 != chunkSeqs.length) {
+              throw StateError('Ring chunk crosses an unproven sequence gap');
+            }
+            final localWal = chunk.isEmpty
+                ? await localSync.persistEmptyRingRecords(
+                    source: wal,
+                    ringId: ringId!,
+                    start: chunkSeqs.first,
+                    end: chunkSeqs.last + 1,
+                    admittedGeneration: admittedGeneration)
+                : await localSync.persistDeviceChunk(
+                    source: wal,
+                    frames: chunk,
+                    timerStart: chunkTimerStart,
+                    admittedGeneration: admittedGeneration,
+                    clockRun: chunkClockRun,
+                    downloadRingId: indexedRing,
+                    downloadSeqStart: indexedRing != null ? chunkSeqs.first : null,
+                    downloadSeqEnd: indexedRing != null ? chunkSeqs.last + 1 : null,
+                    nextCollisionSequence: () => _storageFileSeq++);
+            if (ringDrainRecoveryEnabled && ringId != null) {
+              readValidator = await _custody.createReadValidator();
+            }
             final file = File((await Wal.getFilePath(localWal.filePath))!);
             final fileBytes = await file.length();
+            if (ringDrainRecoveryEnabled && localSync.sessionGeneration != admittedGeneration) {
+              throw StateError('Ring chunk belongs to a retired account session');
+            }
             for (final s in chunkSeqs) {
               if (s == provenSeq) provenSeq = s + 1;
             }
-            if (ringId != null && connection.ringCustodyEpoch == epoch) {
+            if (ringId != null && (ringDrainRecoveryEnabled || connection.ringCustodyEpoch == epoch)) {
               for (final range in contiguousRanges(chunkSeqs)) {
                 await _custody.recordDurableRingRange(custodyDeviceId, epoch, ringId, range.$1, range.$2, [
-                  CustodyWalRef(fileName: file.path.split('/').last, bytes: fileBytes, frames: chunk.length),
+                  CustodyWalRef(
+                    fileName: file.path.split('/').last,
+                    bytes: fileBytes,
+                    frames: chunk.length,
+                    fileSha256: localWal.fileSha256,
+                    ownerUid: ringDrainRecoveryEnabled ? localWal.ownerUid : null,
+                    downloadRingId: indexedRing,
+                    downloadSeqStart: indexedRing != null ? chunkSeqs.first : null,
+                    downloadSeqEnd: indexedRing != null ? chunkSeqs.last + 1 : null,
+                    downloadDeviceId: indexedRing != null ? custodyDeviceId : null,
+                  ),
                 ]);
               }
             }
+            persistenceProgress();
+            RecordingTransferCoordinator.instance.noteDeviceProgress();
             DebugLogManager.logEvent('pendant_custody', {
               'action': 'chunk_durable',
               'device': custodyDeviceId,
@@ -859,9 +1048,11 @@ class RingStorageSyncImpl implements RingStorageSync {
             final managerFrontier = ringId != null ? _custody.durableFrontierFor(custodyDeviceId, epoch) : null;
             if (managerFrontier != null && managerFrontier > provenSeq) provenSeq = managerFrontier;
             if (ringId != null && (effectiveCaps & RingProtocol.capAppAckReclaim) != 0) {
-              final target = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
-              if (target != null) {
-                await _custodyAdvance(connection, custodyDeviceId, epoch, target, ringId);
+              if (ringDrainRecoveryEnabled) {
+                await advanceDurablePrefix('chunk');
+              } else {
+                final target = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
+                if (target != null) await _custodyAdvance(connection, custodyDeviceId, epoch, target, ringId);
               }
             }
           } catch (e) {
@@ -942,47 +1133,97 @@ class RingStorageSyncImpl implements RingStorageSync {
       reassembler.append(payload);
       _updateSpeed(payload.length);
 
-      for (final record in reassembler.drainRecords()) {
+      final records = reassembler.drainRecords();
+      final intervalStart = readStart + recordsConsumed;
+      final durableNow = ringDrainRecoveryEnabled && ringId != null && records.isNotEmpty
+          ? await _custody.validatedRecordRanges(custodyDeviceId, epoch, ringId,
+              startSeq: intervalStart, endSeq: intervalStart + records.length, readValidator: readValidator)
+          : const <(int, int)>[];
+      for (final record in records) {
         final seq = readStart + recordsConsumed;
         recordsConsumed += 1;
-        final ts = RingProtocol.readRecordTimestamp(record);
+        final rawTs = RingProtocol.readRecordTimestamp(record);
+        // Normalize only presentation time. seq/ringId and every durability
+        // proof below continue to come from the untouched ring coordinates.
+        final ts = deviceCaptureClockRepairOff || useRecordTime(rawTs) ? rawTs : 0;
+        if (rawTs > 0 && ts == 0 && !clockWarningReported) {
+          clockWarningReported = true;
+          DebugLogManager.logWarning('Implausible ring timestamp; capture date estimated, byte integrity unverified', {
+            'device_time_seconds': rawTs,
+            'phone_time_seconds': phoneNow,
+            'ring_id': ringId,
+            'seq': seq,
+          });
+        }
         final audio = record.sublist(RingProtocol.timestampBytes);
-        final frames = RingProtocol.parseAudioPayload(audio);
+        final frames = ringDrainRecoveryEnabled ? decodeCustodyRingAudio(audio) : RingProtocol.parseAudioPayload(audio);
+        RingCustodyDiagnostics.shared.record(custodyDeviceId,
+            epoch: epoch,
+            ringId: ringId,
+            ordinal: seq,
+            record: record,
+            timestamp: rawTs,
+            frames: frames.length,
+            phoneSeconds: phoneNow);
         elapsedTotal += frames.length;
 
         // Anchor timerStart on the first usable timestamp.
         if (firstRecordTs == null) {
-          if (rtcValid && ts > 0) {
+          if (useRecordTime(ts)) {
             firstRecordTs = ts;
           } else {
-            // Fallback: now - estimated duration of the region still unread.
+            // Fallback: now - estimated duration of the unread region.
             final passRecords = math.max(1, pass.endSeq - pass.startSeq);
             final aheadRecords = (pass.endSeq - readStart).clamp(0, passRecords);
             final estSecs = (wal.totalFrames * aheadRecords ~/ passRecords) ~/ (fps == 0 ? 1 : fps);
-            firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
+            try {
+              firstRecordTs = !deviceCaptureClockRepairOff && estSecs <= 0
+                  ? 0
+                  : estimatedDeviceStart(
+                      deviceCaptureClockRepairOff ? _clock().millisecondsSinceEpoch ~/ 1000 : phoneNow, estSecs);
+            } on StateError {
+              firstRecordTs = 0; // Unknown capture time must never discard decoded audio.
+            }
           }
         }
 
-        if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq, memo: proofMemo)) {
+        if (durableNow.any((r) => r.$1 <= seq && seq < r.$2) ||
+            ((!ringDrainRecoveryEnabled || ringId == null) &&
+                await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq, memo: proofMemo))) {
           skippedDuplicates++;
+          skippedProofGap = true;
           if (seq == provenSeq) provenSeq = seq + 1;
           continue;
         }
 
+        final lastUsableRecordTs = lastRecordTs;
         final boundary = ringRecordClockBoundary(
           previousTs: lastRecordTs,
           ts: ts,
           rtcValid: rtcValid,
           currentRun: currentRun,
         );
-        currentRun = boundary.run;
+        // Invalid wall time cannot place audio on a calendar, but a reset or
+        // jump still forbids claiming that two stretches share one clock run.
+        final rawStep = lastRawRecordTs == null ? null : rawTs - lastRawRecordTs!;
+        final untrustedBreak = !deviceCaptureClockRepairOff &&
+            ts == 0 &&
+            ((lastUsableRecordTs != null && lastUsableRecordTs > 0) ||
+                (rtcValid &&
+                    rawTs > 0 &&
+                    lastRawRecordTs != null &&
+                    lastRawRecordTs! > 0 &&
+                    (rawStep! < 0 || rawStep > ringRecordGapBreakSeconds)));
+        currentRun = untrustedBreak ? Wal.newClockRun() : boundary.run;
         lastRecordTs = ts;
+        lastRawRecordTs = rawTs;
 
         recordSeqs.add(seq);
         recordTimestamps.add(ts);
         recordFrameCounts.add(frames.length);
-        recordBreaks.add(boundary.breaks);
-        recordRuns.add(boundary.run);
+        recordBreaks.add(boundary.breaks || untrustedBreak || (ringDrainRecoveryEnabled && skippedProofGap));
+        skippedProofGap = false;
+        recordRuns.add(currentRun);
         bytesData.addAll(frames);
       }
 
@@ -1030,9 +1271,30 @@ class RingStorageSyncImpl implements RingStorageSync {
     _notifyStream = await connection.getBleStorageBytesListener(
       onStorageBytesReceived: (List<int> value) {
         if (!acceptingNotifications || completer.isCompleted) return;
+        if (ringDrainRecoveryEnabled &&
+            (connection.ringCustodyEpoch != epoch || _localSync?.sessionGeneration != admittedGeneration)) {
+          if (!completer.isCompleted) completer.complete(false);
+          return;
+        }
         final snapshot = List<int>.of(value);
         final opcode = snapshot.isEmpty ? null : snapshot.first;
         final begin = opcode == RingProtocol.notifyReadBegin ? RingProtocol.parseReadBeginNotification(snapshot) : null;
+        if (ringDrainRecoveryEnabled && opcode == RingProtocol.notifyData && snapshot.length > 1) {
+          radioBytes += snapshot.length - 1;
+          final now = DateTime.now();
+          if (now.difference(lastRadioReport) >= const Duration(seconds: 30)) {
+            lastRadioReport = now;
+            DebugLogManager.logEvent('pendant_custody', {
+              'action': 'read_progress',
+              'ring_id': ringId,
+              'radio_data_bytes': radioBytes,
+              'processed_records': recordsConsumed,
+              'queued_notifications': queuedNotifications,
+              'buffered_frames': bytesData.length,
+              'elapsed_ms': now.difference(_downloadStartTime!).inMilliseconds,
+            });
+          }
+        }
         // Observe radio progress before queueing disk/custody work: a slow
         // flush must not masquerade as a silent peripheral. Control chatter
         // and empty DATA cannot extend the transfer's lifetime.
@@ -1041,10 +1303,22 @@ class RingStorageSyncImpl implements RingStorageSync {
           receivedTransferData();
         } else if (opcode == RingProtocol.notifyDone && RingProtocol.parseDoneNotification(snapshot) != null) {
           // Radio delivery has ended; validating DONE may still be queued
-          // behind custody I/O. The overall deadline bounds that work.
+          // behind custody I/O. Ownership remains held while that work settles.
           idleTimer?.cancel();
         }
-        notifyQueue = notifyQueue.then((_) => handleNotification(snapshot)).catchError((e) {
+        persistenceProgress(startOnly: true);
+        queuedNotifications++;
+        notifyQueue = notifyQueue.then((_) => handleNotification(snapshot)).whenComplete(() {
+          queuedNotifications--;
+          if (inFlightFlush == null) {
+            if (queuedNotifications == 0) {
+              _persistenceTimer?.cancel();
+              _persistenceTimer = null;
+            } else {
+              persistenceProgress();
+            }
+          }
+        }).catchError((e) {
           Logger.debug('RingStorageSync: notification handler error: $e');
           if (!completer.isCompleted) completer.complete(false);
         });
@@ -1064,7 +1338,11 @@ class RingStorageSyncImpl implements RingStorageSync {
     firstDataTimer = Timer(const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         Logger.debug('RingStorageSync: no data within 5s');
-        completer.completeError(TimeoutException('No data from device'));
+        if (ringDrainRecoveryEnabled) {
+          completer.complete(false);
+        } else {
+          completer.completeError(TimeoutException('No data from device'));
+        }
       }
     });
 
@@ -1085,7 +1363,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       Logger.debug(
         'RingStorageSync: reading from seq=$readStart count=${packetCount ?? "all"} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
       );
-      reachedDone = await completer.future.timeout(packetCount == null ? _fullReadTimeout : _windowReadTimeout);
+      reachedDone = ringDrainRecoveryEnabled
+          ? await waitForRingRead(completer.future)
+          : await completer.future.timeout(packetCount == null ? _fullReadTimeout : _windowReadTimeout);
     } catch (e, st) {
       Logger.debug('RingStorageSync: transfer error: $e');
       DebugLogManager.logError(e, st, 'RingStorageSync failed', {
@@ -1124,10 +1404,24 @@ class RingStorageSyncImpl implements RingStorageSync {
 
     // Flush whatever frames are buffered, even on partial failure — those frames
     // are safe to upload to cloud regardless. ADVANCE is gated separately.
+    persistenceProgress(startOnly: true);
     try {
       await flushChunks(finalFlush: true);
     } catch (e) {
       Logger.debug('RingStorageSync: final flush error: $e');
+    }
+    if (ringDrainRecoveryEnabled) await advanceDurablePrefix('read_exit');
+    if (ringDrainRecoveryEnabled) {
+      DebugLogManager.logEvent('pendant_custody', {
+        'action': 'read_exit',
+        'ring_id': ringId,
+        'radio_data_bytes': radioBytes,
+        'processed_records': recordsConsumed,
+        'deduped': skippedDuplicates,
+        'reached_done': reachedDone,
+        'cancelled': _isCancelled,
+        'idle_expired': idleExpired,
+      });
     }
 
     final beginConsistent = !beginAborted &&
@@ -1138,11 +1432,22 @@ class RingStorageSyncImpl implements RingStorageSync {
         reassembler.pendingBytes == 0 &&
         beginConsistent;
     final fullyProven = doneNextSeq != null && provenSeq >= doneNextSeq!;
-    final advancedOk = reachedDone && doneOk && !flushError && !_isCancelled && doneConsistent && fullyProven;
+    final advancedOk = reachedDone &&
+        doneOk &&
+        !flushError &&
+        !_isCancelled &&
+        doneConsistent &&
+        fullyProven &&
+        (!ringDrainRecoveryEnabled || _localSync?.sessionGeneration == admittedGeneration);
     pass.recordsDownloaded += recordsConsumed;
     pass.recordsDeduped += skippedDuplicates;
     if (advancedOk) {
-      final ok = await _custodyAdvance(connection, custodyDeviceId, epoch, doneNextSeq!, ringId);
+      final bool ok;
+      if (ringDrainRecoveryEnabled && ringId != null && (effectiveCaps & RingProtocol.capAppAckReclaim) != 0) {
+        ok = (_custody.acknowledgedReadSeqFor(custodyDeviceId, epoch, ringId) ?? readStart) >= doneNextSeq!;
+      } else {
+        ok = await _custodyAdvance(connection, custodyDeviceId, epoch, doneNextSeq!, ringId);
+      }
       Logger.debug('RingStorageSync: advance(seq=$doneNextSeq) -> $ok (records=$recordsConsumed)');
       DebugLogManager.logEvent('pendant_custody', {
         'action': 'sync_advance',
@@ -1159,6 +1464,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (!ok) return null;
       pass.recordsCredited += recordsConsumed;
       pass.lastRecordTs = lastRecordTs;
+      pass.lastRawRecordTs = lastRawRecordTs;
       pass.clockRun = currentRun;
       pass.firstRecordTs = firstRecordTs;
       pass.elapsedFrames = elapsedTotal;
@@ -1172,7 +1478,12 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
   }
 
-  Future<void> _stopRingTransfer(DeviceConnection connection, int epoch) async {
+  Future<void> _stopRingTransfer(DeviceConnection connection, int epoch) {
+    if (!ringDrainRecoveryEnabled) return _sendRingStop(connection, epoch);
+    return _sourceStop ??= _sendRingStop(connection, epoch);
+  }
+
+  Future<void> _sendRingStop(DeviceConnection connection, int epoch) async {
     try {
       if (connection.ringCustodyEpoch != epoch) return;
       await connection.stopStorageSync();
@@ -1182,10 +1493,20 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
   }
 
-  Future<bool> _custodyAdvance(DeviceConnection connection, String deviceId, int epoch, int seq, int? ringId) async {
+  Future<bool> _custodyAdvance(DeviceConnection connection, String deviceId, int epoch, int seq, int? ringId,
+      {String reason = 'done'}) async {
     if (connection.ringCustodyEpoch != epoch) return false;
     if (_custody.isIncarnationInvalid(deviceId, epoch)) return false;
     final ack = await connection.advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: ringId);
+    if (ringDrainRecoveryEnabled) {
+      DebugLogManager.logEvent('pendant_custody', {
+        'action': 'ring_advance',
+        'ring_id': ringId,
+        'seq': seq,
+        'reason': reason,
+        'ack_status': ack?.status,
+      });
+    }
     if (ack == null) {
       // The pendant commits an advance before acknowledging it, and the
       // acknowledgement shares the link with audio. Losing it must not cost a

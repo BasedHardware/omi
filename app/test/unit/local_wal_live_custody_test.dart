@@ -66,7 +66,7 @@ void main() {
   final custodies = <PendantRingCustody>[];
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'uid': 'owner'});
     await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('live_custody_');
     custodyDir = await Directory.systemTemp.createTemp('live_custody_cp_');
@@ -374,7 +374,9 @@ void main() {
     await pump();
     expect(saves, 2);
     expect(await WalFileManager.loadWals(), hasLength(1));
-    expect(await custody.isDurableLiveRecord('dev', 42, 3), isTrue);
+    expect(await custody.isDurableLiveRecord('dev', 42, 3), isTrue,
+        reason: 'spent live refs remain fresh-validation candidates for an in-flight read');
+    expect(custody.advanceTarget('dev', 1), isNull, reason: 'spent proofs never reopen ADVANCE work');
     expect(conn.advances, hasLength(1));
     expect(conn.advances.single.seq, 5);
     expect(conn.advances.single.ringId, 42);

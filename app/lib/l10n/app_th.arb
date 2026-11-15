@@ -4654,5 +4654,6 @@
     "monthlySwitchDeclined": "การชำระเงินถูกปฏิเสธ แพ็กเกจของคุณไม่เปลี่ยนแปลง",
     "monthlySwitchUnavailable": "ตอนนี้ยังเปลี่ยนไม่ได้ อัปเดตบัตรแทน",
     "monthlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายเดือนแล้ว",
-    "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน"
+    "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน",
+    "processingDeleteScopeChanged": "รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง"
 }

@@ -12211,5 +12211,6 @@
     "monthlySwitchDeclined": "Плаќањето е одбиено. Вашиот план не е променет.",
     "monthlySwitchUnavailable": "Префрлањето моментално не е достапно. Наместо тоа, ажурирајте ја картичката.",
     "monthlySwitchDoneTitle": "Сега плаќате месечно",
-    "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно."
+    "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно.",
+    "processingDeleteScopeChanged": "Списокот за обработка се промени. Прегледајте го и обидете се повторно."
 }

@@ -15462,4 +15462,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price maksettu tänään. Uusiutuu kuukausittain.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
 }
