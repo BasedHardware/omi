@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:uuid/uuid.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/wals/batch_ring_proof.dart';
 
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
@@ -18,6 +22,9 @@ class CustodyWalRef {
   final int? liveRingId;
   final int? liveOrdinalStart;
   final int? liveOrdinalEnd;
+  final String? batchLiveSession;
+  final String? liveDeviceId;
+  final String? ownerUid;
 
   const CustodyWalRef({
     required this.fileName,
@@ -26,6 +33,9 @@ class CustodyWalRef {
     this.liveRingId,
     this.liveOrdinalStart,
     this.liveOrdinalEnd,
+    this.batchLiveSession,
+    this.liveDeviceId,
+    this.ownerUid,
   });
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +45,9 @@ class CustodyWalRef {
         if (liveRingId != null) 'live_ring': liveRingId,
         if (liveOrdinalStart != null) 'live_start': liveOrdinalStart,
         if (liveOrdinalEnd != null) 'live_end': liveOrdinalEnd,
+        if (batchLiveSession != null) 'batch_session': batchLiveSession,
+        if (liveDeviceId != null) 'live_device': liveDeviceId,
+        if (ownerUid != null) 'owner': ownerUid,
       };
 
   static CustodyWalRef? fromJson(Object? json) {
@@ -49,7 +62,59 @@ class CustodyWalRef {
       liveRingId: asInt(json['live_ring']),
       liveOrdinalStart: asInt(json['live_start']),
       liveOrdinalEnd: asInt(json['live_end']),
+      batchLiveSession: json['batch_session'] as String?,
+      liveDeviceId: json['live_device'] as String?,
+      ownerUid: json['owner'] as String?,
     );
+  }
+}
+
+typedef _LiveMark = ({int ringSeq, int liveIndex, int ordinalBoundary});
+typedef _LiveChunk = ({int start, int end, CustodyWalRef wal});
+
+/// Persisted mappings are not custody: only validated disk/index references
+/// can fill their ordinal intervals. Session IDs prevent reconnect aliasing.
+class _BatchLiveSession {
+  _BatchLiveSession(this.id);
+  final String id;
+  final List<_LiveMark> marks = [];
+  final List<_LiveChunk> chunks = [];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'marks': [
+          for (final m in marks) [m.ringSeq, m.liveIndex, m.ordinalBoundary]
+        ],
+        'chunks': [for (final c in chunks) c.wal.toJson()],
+      };
+
+  static _BatchLiveSession? fromJson(Object? json) {
+    if (json is! Map || json['id'] is! String || (json['id'] as String).isEmpty) return null;
+    final session = _BatchLiveSession(json['id']);
+    final marks = json['marks'], chunks = json['chunks'];
+    if (marks is! List || chunks is! List || marks.length > 4096 || chunks.length > 4096) return null;
+    for (final m in marks) {
+      if (m is! List || m.length != 3 || m.any((v) => v is! int)) return null;
+      final mark = (ringSeq: m[0] as int, liveIndex: m[1] as int, ordinalBoundary: m[2] as int);
+      if (mark.ringSeq < 0 || mark.ordinalBoundary < 0 || mark.liveIndex < 0 || mark.liveIndex > 0xFFFF) return null;
+      if (session.marks.isNotEmpty &&
+          (mark.ringSeq <= session.marks.last.ringSeq || mark.ordinalBoundary <= session.marks.last.ordinalBoundary)) {
+        return null;
+      }
+      session.marks.add(mark);
+    }
+    for (final c in chunks) {
+      final ref = CustodyWalRef.fromJson(c);
+      if (ref == null ||
+          ref.liveOrdinalStart == null ||
+          ref.liveOrdinalEnd == null ||
+          ref.liveOrdinalStart! < 0 ||
+          ref.liveOrdinalEnd! <= ref.liveOrdinalStart!) {
+        return null;
+      }
+      session.chunks.add((start: ref.liveOrdinalStart!, end: ref.liveOrdinalEnd!, wal: ref));
+    }
+    return session;
   }
 }
 
@@ -135,6 +200,8 @@ class RingCustodyCheckpoint {
   final List<LiveRangeProof> liveRanges;
   final List<RingRangeProof> ringRanges;
 
+  final Map<String, _BatchLiveSession> _batchSessions = {};
+
   int reportedReadSeq;
 
   int reportedWriteSeq;
@@ -164,6 +231,7 @@ class RingCustodyCheckpoint {
         'last_advanced_mark': lastAdvancedMarkSeq,
         'live_ranges': liveRanges.map((r) => r.toJson()).toList(),
         'ring_ranges': ringRanges.map((r) => r.toJson()).toList(),
+        if (_batchSessions.isNotEmpty) 'batch_sessions': [for (final s in _batchSessions.values) s.toJson()],
         'reported_read_seq': reportedReadSeq,
         'reported_write_seq': reportedWriteSeq,
       };
@@ -184,7 +252,7 @@ class RingCustodyCheckpoint {
       if (parsed == null) return null;
       ringRanges.add(parsed);
     }
-    return RingCustodyCheckpoint(
+    final checkpoint = RingCustodyCheckpoint(
       deviceId: deviceId,
       ringId: asInt(json['ring_id']),
       durableSeq: asInt(json['durable_seq']) ?? 0,
@@ -197,6 +265,15 @@ class RingCustodyCheckpoint {
       reportedReadSeq: asInt(json['reported_read_seq']) ?? 0,
       reportedWriteSeq: asInt(json['reported_write_seq']) ?? 0,
     );
+    if (batchRingProofEnabled && json['batch_sessions'] is List) {
+      for (final raw in (json['batch_sessions'] as List).take(64)) {
+        final session = _BatchLiveSession.fromJson(raw);
+        if (session != null) {
+          checkpoint._batchSessions[session.id] = session;
+        }
+      }
+    }
+    return checkpoint;
   }
 }
 
@@ -204,7 +281,7 @@ typedef CustodyWalValidator = Future<bool> Function(CustodyWalRef ref);
 
 Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
   try {
-    final wals = await WalFileManager.loadWals();
+    final wals = await WalFileManager.loadIndexedWals();
     Wal? indexed;
     for (final wal in wals) {
       final name =
@@ -215,7 +292,17 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
       }
     }
     if (indexed == null) return false;
-    if (indexed.totalFrames != ref.frames) return false;
+    if (indexed.storage != WalStorage.disk || indexed.totalFrames != ref.frames) return false;
+    if (ref.batchLiveSession != null &&
+        (!batchRingProofEnabled ||
+            indexed.batchLiveSession != ref.batchLiveSession ||
+            indexed.liveDeviceId != ref.liveDeviceId ||
+            ref.ownerUid == null ||
+            ref.ownerUid!.isEmpty ||
+            indexed.ownerUid != ref.ownerUid ||
+            SharedPreferencesUtil().uid != ref.ownerUid)) {
+      return false;
+    }
     if (ref.liveRingId != null && indexed.liveRingId != ref.liveRingId) return false;
     if (ref.liveOrdinalStart != null && indexed.liveOrdinalStart != ref.liveOrdinalStart) return false;
     if (ref.liveOrdinalEnd != null && indexed.liveOrdinalEnd != ref.liveOrdinalEnd) return false;
@@ -223,7 +310,8 @@ Future<bool> walFileManagerCustodyValidator(CustodyWalRef ref) async {
     if (path == null) return false;
     final file = File(path);
     if (!file.existsSync()) return false;
-    return (await file.length()) == ref.bytes;
+    final matches = (await file.length()) == ref.bytes;
+    return matches && (ref.batchLiveSession == null || SharedPreferencesUtil().uid == ref.ownerUid);
   } catch (e) {
     Logger.debug('PendantRingCustody: WAL validation failed for ${ref.fileName}: $e');
     return false;
@@ -280,6 +368,7 @@ class LivePacketOrdinals {
 
 class _DeviceCustody {
   int epoch = 0;
+  String batchSessionId = const Uuid().v4();
   Object? sessionToken;
   RingCustodyCheckpoint checkpoint;
   bool liveEnabled = false;
@@ -289,9 +378,9 @@ class _DeviceCustody {
 
   LivePacketOrdinals ordinals = LivePacketOrdinals();
 
-  final List<({int ringSeq, int liveIndex, int ordinalBoundary})> marks = [];
+  final List<_LiveMark> marks = [];
 
-  final List<({int start, int end, CustodyWalRef wal})> durableLiveChunks = [];
+  final List<_LiveChunk> durableLiveChunks = [];
 
   bool evidenceBroken = false;
 
@@ -364,6 +453,7 @@ class PendantRingCustody {
         ..sessionToken = token;
       _devices[deviceId] = state;
     }
+    state.batchSessionId = const Uuid().v4();
     state.connected = true;
     state.advanceCallback = onAdvanceReady ?? replayAdvance;
     state.marks.clear();
@@ -397,12 +487,18 @@ class PendantRingCustody {
     state.checkpoint.reportedWriteSeq = info.writeSeq;
     if (info.readSeq > state.checkpoint.durableSeq) state.checkpoint.durableSeq = info.readSeq;
 
+    if (batchRingProofEnabled && ringId != null && state.checkpoint._batchSessions.isNotEmpty) {
+      await _restoreBatchProofs(state, deviceId, epoch, token);
+      if (!_isSession(state, deviceId, epoch, token)) return;
+    }
+
     final frontier = state.checkpoint.durableSeq;
     if (ringId != null &&
         !state.incarnationInvalid &&
         frontier > info.readSeq &&
         frontier <= info.writeSeq &&
-        replayAdvance != null) {
+        replayAdvance != null &&
+        _batchAuthorityValid(state, frontier)) {
       final status = await replayAdvance(frontier);
       if (!_isSession(state, deviceId, epoch, token)) return;
       if (status == RingProtocol.ackOk) {
@@ -474,6 +570,13 @@ class PendantRingCustody {
       return;
     }
     state.marks.add((ringSeq: mark.ringSeq, liveIndex: mark.liveIndex, ordinalBoundary: boundary));
+    final batch = state.checkpoint._batchSessions[state.batchSessionId];
+    if (batchRingProofEnabled && batch != null) {
+      // Bound speculative state. Discarding mappings only forces re-download.
+      if (batch.marks.length >= 4096) batch.marks.removeAt(0);
+      batch.marks.add(state.marks.last);
+      _foldBatchSession(state, batch);
+    }
 
     _foldProvenRanges(state);
     _queuePersistThenAdvance(state, deviceId, epoch);
@@ -492,6 +595,7 @@ class PendantRingCustody {
       if (!stillSession()) return;
       final cb = state.advanceCallback;
       if (target == null || cb == null) return;
+      if (!_batchAuthorityValid(state, target)) return;
       final markSeq = state.checkpoint.lastMarkSeq;
       final status = await cb(target);
       if (!stillSession()) return;
@@ -523,6 +627,12 @@ class PendantRingCustody {
     }
     if (wal.fileName.isEmpty || wal.liveRingId == null || wal.liveRingId != state.checkpoint.ringId) return;
     state.durableLiveChunks.add((start: startOrdinal, end: endOrdinal, wal: wal));
+    final batch = state.checkpoint._batchSessions[state.batchSessionId];
+    if (batchRingProofEnabled && batch != null) {
+      _addBatchChunk(batch, wal);
+      _foldBatchSession(state, batch);
+    }
+
     _foldProvenRanges(state);
     await _persist(state.checkpoint);
   }
@@ -579,6 +689,23 @@ class PendantRingCustody {
     return target;
   }
 
+  bool _batchAuthorityValid(_DeviceCustody state, int target) {
+    for (final range in state.checkpoint.liveRanges) {
+      if (range.endSeq <= state.checkpoint.reportedReadSeq || range.startSeq >= target) continue;
+      for (final ref in range.wals) {
+        if (ref.batchLiveSession != null &&
+            (!batchRingProofEnabled ||
+                ref.ownerUid == null ||
+                ref.ownerUid != SharedPreferencesUtil().uid ||
+                ref.liveRingId != state.checkpoint.ringId ||
+                ref.liveDeviceId != state.checkpoint.deviceId)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   Future<int?> validatedAdvanceTarget(String deviceId, int epoch, int? ringId) async {
     final state = _state(deviceId, epoch);
     if (state?.incarnationInvalid ?? true) return null;
@@ -630,7 +757,7 @@ class PendantRingCustody {
     final after = _state(deviceId, epoch);
     if (after == null || !identical(after.sessionToken, token) || after.checkpoint.ringId != cpRingId) return null;
     final current = advanceTarget(deviceId, epoch);
-    if (current == null) return null;
+    if (current == null || !_batchAuthorityValid(after, current)) return null;
     return current < target ? current : target;
   }
 
@@ -649,6 +776,129 @@ class PendantRingCustody {
   int? latestEpoch(String deviceId) {
     final s = _devices[deviceId];
     return (s != null && s.connected) ? s.epoch : null;
+  }
+
+  BatchLiveContext? batchLiveContext(String deviceId) {
+    if (!batchRingProofEnabled) return null;
+    final s = _devices[deviceId];
+    final ring = s?.checkpoint.ringId;
+    if (s == null || !s.connected || !s.liveEnabled || s.incarnationInvalid || ring == null) return null;
+    return BatchLiveContext(deviceId, ring, s.epoch, s.batchSessionId);
+  }
+
+  /// Called only after the batch writer accepted a whole frame. A declined
+  /// append must leave this tracker untouched for the ordinary WAL fallback.
+  int? observeBatchFrame(BatchLiveContext context, int counter, int fragment) {
+    if (batchLiveContext(context.deviceId) != context) return null;
+    final s = _devices[context.deviceId]!;
+    final ordinal = observeLiveFrame(context.deviceId, context.epoch, counter, fragment);
+    if (ordinal == null) return null;
+    final sessions = s.checkpoint._batchSessions;
+    if (!sessions.containsKey(context.sessionId)) {
+      if (sessions.length >= 64) sessions.remove(sessions.keys.first);
+      sessions[context.sessionId] = _BatchLiveSession(context.sessionId)
+        ..marks.addAll(s.marks)
+        ..chunks.addAll(s.durableLiveChunks);
+    }
+    return ordinal;
+  }
+
+  static void _addBatchChunk(_BatchLiveSession session, CustodyWalRef ref) {
+    if (ref.liveOrdinalStart == null || ref.liveOrdinalEnd == null) return;
+    session.chunks.removeWhere((c) => c.wal.fileName == ref.fileName);
+    if (session.chunks.length >= 4096) session.chunks.removeAt(0);
+    session.chunks.add((start: ref.liveOrdinalStart!, end: ref.liveOrdinalEnd!, wal: ref));
+  }
+
+  void _foldBatchSession(_DeviceCustody state, _BatchLiveSession session) {
+    // Use the ordinary exact interval union and mark-pair implementation.
+    // Historical sessions have their own coordinates, never the new tracker.
+    final folding = _DeviceCustody(state.checkpoint)
+      ..marks.addAll(session.marks)
+      ..durableLiveChunks.addAll(session.chunks);
+    _foldProvenRanges(folding);
+    session.marks
+      ..clear()
+      ..addAll(folding.marks);
+    session.chunks
+      ..clear()
+      ..addAll(folding.durableLiveChunks);
+  }
+
+  Future<void> recordDurableBatchWal(Wal wal) async {
+    if (!batchRingProofEnabled) return;
+    final device = wal.liveDeviceId;
+    final s = device == null ? null : _devices[device];
+    final token = s?.sessionToken;
+    if (s == null || token == null || !s.connected) return;
+    await _recordBatchWal(s, device!, s.epoch, token, wal);
+  }
+
+  Future<void> _recordBatchWal(_DeviceCustody s, String device, int epoch, Object token, Wal wal) async {
+    final checkpoint = s.checkpoint;
+    final session = checkpoint._batchSessions[wal.batchLiveSession];
+    final start = wal.liveOrdinalStart, end = wal.liveOrdinalEnd;
+    if (session == null ||
+        s.incarnationInvalid ||
+        wal.liveRingId != s.checkpoint.ringId ||
+        wal.liveDeviceId != device ||
+        wal.ownerUid == null ||
+        wal.ownerUid!.isEmpty ||
+        wal.ownerUid != SharedPreferencesUtil().uid ||
+        start == null ||
+        end == null ||
+        start < 0 ||
+        end <= start ||
+        end - start > wal.totalFrames ||
+        wal.storage != WalStorage.disk) {
+      return;
+    }
+    final ref = CustodyWalRef(
+        fileName: wal.filePath ?? wal.getFileName(),
+        bytes: wal.storageTotalBytes,
+        frames: wal.totalFrames,
+        liveRingId: wal.liveRingId,
+        liveOrdinalStart: start,
+        liveOrdinalEnd: end,
+        batchLiveSession: wal.batchLiveSession,
+        liveDeviceId: wal.liveDeviceId,
+        ownerUid: wal.ownerUid);
+    if (!await _walValidator(ref) || !_isSession(s, device, epoch, token)) return;
+    if (!identical(s.checkpoint, checkpoint) ||
+        checkpoint.ringId != wal.liveRingId ||
+        !identical(checkpoint._batchSessions[wal.batchLiveSession], session) ||
+        wal.ownerUid != SharedPreferencesUtil().uid) {
+      return;
+    }
+    _addBatchChunk(session, ref);
+    // A broken current run cannot prove later packets. Already validated old
+    // session mappings can still recover their own exact intervals.
+    if (session.id == s.batchSessionId && s.evidenceBroken) return;
+    if (session.id == s.batchSessionId) {
+      s.durableLiveChunks.removeWhere((c) => c.wal.fileName == ref.fileName);
+      s.durableLiveChunks.add((start: start, end: end, wal: ref));
+    }
+    _foldBatchSession(s, session);
+    _foldProvenRanges(s);
+    await _persist(s.checkpoint);
+  }
+
+  Future<void> _restoreBatchProofs(_DeviceCustody s, String device, int epoch, Object token) async {
+    for (final session in s.checkpoint._batchSessions.values.toList()) {
+      for (final chunk in session.chunks.toList()) {
+        final valid = await _walValidator(chunk.wal);
+        if (!_isSession(s, device, epoch, token)) return;
+        if (!valid) session.chunks.remove(chunk);
+      }
+    }
+    final indexed = await WalFileManager.loadIndexedWals();
+    if (!_isSession(s, device, epoch, token)) return;
+    for (final wal in indexed) {
+      if (wal.batchLiveSession != null && wal.liveDeviceId == device) {
+        await _recordBatchWal(s, device, epoch, token, wal);
+        if (!_isSession(s, device, epoch, token)) return;
+      }
+    }
   }
 
   int? currentRingId(String deviceId) {
@@ -676,6 +926,7 @@ class PendantRingCustody {
     state.durableLiveChunks.clear();
     state.marks.clear();
     final cp = state.checkpoint;
+    cp._batchSessions.clear();
     cp.liveRanges.clear();
     cp.ringRanges.clear();
     cp.durableSeq = 0;
@@ -701,6 +952,7 @@ class PendantRingCustody {
       state.evidenceBroken = false;
       state.incarnationInvalid = false;
       state.ordinals = LivePacketOrdinals();
+      state.batchSessionId = const Uuid().v4();
       final ncp = state.checkpoint;
       ncp.reportedReadSeq = info.readSeq;
       ncp.reportedWriteSeq = info.writeSeq;

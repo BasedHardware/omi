@@ -231,3 +231,37 @@ The marker is latency information only. It never seals, uploads, deletes or rele
 and no custody rule above reads it: a marker that is lost, refused or switched off (PostHog
 `upload_end_marker_off`) leaves the server's ordinary wait in place. It is held in memory, so an app killed
 before the resend simply takes that wait.
+
+## Standard mobile batch live-ring proof
+
+Automatic Standard batch retains the original BLE header and device at its
+routing boundary. Only a complete accepted append observes the shared live
+packet counter; a refusal falls through untouched to ordinary capture. A file
+never spans two ring incarnations or live sessions. Missing, reordered and
+fragmented packets keep the existing fail-closed behavior.
+
+`batch_live_session` is a unique session identity, not a persisted integer BLE
+epoch. `live_device_id`, `live_ring_id` and the contiguous live ordinal interval
+bind its phone samples to the pendant. At each existing one-second audio fsync,
+the journal atomically checkpoints that exact prefix. Seal fsyncs and checkpoints
+before publishing. Replay parses and fsyncs complete bytes, preserves at most the
+checkpointed ordinal prefix, and persists the recovered WAL index before it can
+publish custody. Bytes after the checkpoint remain recoverable without invented
+ordinals; a short or inconsistent prefix loses its proof.
+
+Validated mark boundaries are persisted separately as mapping evidence under the
+original session identity. They carry no reclaim authority by themselves. The
+same mark-pair/contiguous-union implementation combines them with exact indexed
+WAL references, including ordinary fallback chunks. Reconnect can complete an
+old session proof only against the same ring incarnation, existing phone bytes
+and persisted index; old ordinals never enter the new session's tracker. The
+custody validator reads the index without journal discovery. Owner/generation
+checks still fence publication and commands, and an unproven oldest prefix still
+blocks every newer range.
+
+Default-on kill switch: build with `--dart-define=OMI_BATCH_RING_PROOF_OFF=true`
+to retain today's batch behavior: no batch counter observation, live metadata,
+mapping restoration or new reclaim proof. Audio, upload choice, retry caps,
+legacy firmware, Custom STT routing and ordinary live custody are unchanged.
+Regression guard: `test/services/wals/batch_ring_proof_test.dart` (also executed
+with the real compile-time switch off).

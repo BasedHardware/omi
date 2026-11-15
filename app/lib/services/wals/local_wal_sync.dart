@@ -38,6 +38,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/experiments/wal_delta_index_gate.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/batch_ring_proof.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/deleted_account_uids.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -256,7 +257,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       ..addAll(foreign);
     _confirmedDurableWalKeys
       ..clear()
-      ..addAll(loaded.where((w) => w.storage == WalStorage.disk).map(_durableKey));
+      ..addAll(loaded.where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal).map(_durableKey));
   }
 
   void _notifyUpdated(int generation) {
@@ -474,6 +475,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!_confirmedDurableWalKeys.contains(_durableKey(existing))) {
           await _saveWalsToFile(admittedGeneration);
         }
+        if (_isCurrent(admittedGeneration) && await hasDurableWal(existing, admittedGeneration: admittedGeneration)) {
+          await _reportDurableBatchWal(existing, admittedGeneration);
+        }
         return;
       }
       Logger.debug("LocalWalSync: WAL id collision on ${wal.id}; admitting both on distinct file paths");
@@ -488,6 +492,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (reservedBytes != null) _consumeAdmission(reservedBytes);
     await _evaluateRetentionPressure();
     await _saveWalsToFile(admittedGeneration);
+    if (_isCurrent(admittedGeneration) && await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
+      await _reportDurableBatchWal(wal, admittedGeneration);
+    }
     _notifyUpdated(admittedGeneration);
     if (_isCurrent(admittedGeneration) && wal.holdForUser && _wals.contains(wal)) heldRevision.value++;
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
@@ -648,6 +655,22 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
+    }
+
+    // Journal replay fsynced the file, but it did not commit an index entry.
+    // Only recovered batch proof needs this startup save; ordinary startup
+    // continues to avoid speculative index writes.
+    if (batchRingProofEnabled && _wals.any((w) => w.recoveredBatchJournal && w.batchLiveSession != null)) {
+      try {
+        if (await _saveWalsToFile(generation)) {
+          for (final wal in _wals.where((w) => w.batchLiveSession != null).toList()) {
+            if (!_isCurrent(generation)) break;
+            await _reportDurableBatchWal(wal, generation);
+          }
+        }
+      } catch (e) {
+        Logger.debug('Batch proof recovery index unavailable: $e');
+      }
     }
 
     await _evaluateRetentionPressure();
@@ -1167,6 +1190,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  Future<void> _reportDurableBatchWal(Wal wal, int generation) async {
+    if (!batchRingProofEnabled || wal.batchLiveSession == null || !_isCurrent(generation)) return;
+    await _custody.recordDurableBatchWal(wal);
+    if (!_isCurrent(generation)) return;
+    final device = wal.liveDeviceId;
+    if (device == null || wal.liveRingId != _custody.currentRingId(device)) return;
+    final epoch = _custody.latestEpoch(device);
+    if (epoch != null) await _maybeAdvanceCustody(device, epoch, wal.liveRingId);
+  }
+
   Future<void> _reportDurableLiveWal(Wal wal, int generation) async {
     final ringId = wal.liveRingId;
     final start = wal.liveOrdinalStart;
@@ -1207,8 +1240,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<void> _maybeAdvanceCustody(String deviceId, int epoch, int? proofRingId) async {
+    final generation = _sessionGeneration;
+    final owner = _currentWalOwnerUid();
+    bool current() => _isCurrent(generation) && owner == _currentWalOwnerUid();
     final target = await _custody.validatedAdvanceTarget(deviceId, epoch, proofRingId);
-    if (target == null) return;
+    if (target == null || !current()) return;
     DeviceConnection? connection;
     try {
       connection =
@@ -1217,7 +1253,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       Logger.debug('LocalWalSync: custody advance skipped, no connection: $e');
       return;
     }
-    if (connection == null) return;
+    if (connection == null || !current()) return;
     if (connection.ringCustodyEpoch != epoch) return;
     final ack = await connection.advanceRingCustody(target, expectedEpoch: epoch, expectedRingId: proofRingId);
     if (ack == null) return;

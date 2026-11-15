@@ -143,3 +143,17 @@ Limitless's app-side ACK ordering (ACK only after fsync). No live packet format 
   non-live records. A missing mark means retain and re-download. Do not assume a fixed mark cadence.
 - **Uptime-flagged timestamps:** bit 31 (`0x80000000`) of a record timestamp means the low 31 bits are
   seconds since boot (RTC unset), not epoch UTC. The app reads such records as "no usable time".
+
+## 6. Recoverable mobile batch mapping (app-only)
+
+Automatic mobile batch may retain validated mark mappings across process death
+under a unique original live-session identity. These speculative mappings never
+constitute custody. Replay may pair them only with the same device/ring/session's
+exact on-disk ordinal prefix after audio fsync and persisted WAL indexing, using
+the ordinary mark-pair union and contiguous reclaim frontier. The index validator
+must exclude unindexed replay discoveries. A different ring, missing file/index,
+short prefix, counter gap, ambiguous mapping or foreign owner keeps the pendant
+copy. The ordinary live path's process-local epochs are still not serialized.
+This replaces re-download only where those exact proofs survive; it adds no
+firmware command, server receipt or weaker sample-durability rule. See CUSTODY.md
+for the default-on batch kill switch and recovery guard.

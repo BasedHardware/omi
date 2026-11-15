@@ -37,14 +37,22 @@ class WalFileManager {
 
   static Future<List<Wal>> loadWals() => _saveLock.withResource(_loadWals);
 
+  /// Custody must never mistake a replayed, unindexed journal for an index
+  /// commit. This reader deliberately excludes journal discovery/repair.
+  static Future<List<Wal>> loadIndexedWals() => _saveLock.withResource(_loadIndexedWals);
+
   static Future<List<Wal>> _loadWals() async {
+    final indexed = await _loadIndexedWals();
+    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+  }
+
+  static Future<List<Wal>> _loadIndexedWals() async {
     if (_walFile == null) {
       await init();
     }
 
     final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
-    final indexed = loaded ?? await _loadFromBackup();
-    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+    return loaded ?? await _loadFromBackup();
   }
 
   /// Null means the index is unusable; a partially valid index retains every
@@ -131,6 +139,8 @@ class WalFileManager {
           'owner_uid',
           'capture_root',
           'job_id',
+          'batch_live_session',
+          'live_device_id',
         ]) {
           if (entry[key] != null && entry[key] is! String) throw const FormatException();
         }

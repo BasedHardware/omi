@@ -622,6 +622,26 @@ class Wal {
 
   int? liveConnectionEpoch;
 
+  // Persisted batch coordinates. Ordinary live epochs remain process-local.
+  String? _batchLiveSession;
+  String? get batchLiveSession => _batchLiveSession;
+  set batchLiveSession(String? value) {
+    if (_batchLiveSession == value) return;
+    _batchLiveSession = value;
+    _changed();
+  }
+
+  String? _liveDeviceId;
+  String? get liveDeviceId => _liveDeviceId;
+  set liveDeviceId(String? value) {
+    if (_liveDeviceId == value) return;
+    _liveDeviceId = value;
+    _changed();
+  }
+
+  /// A replayed journal is recoverable audio, not yet a persisted index row.
+  bool recoveredBatchJournal = false;
+
   /// Canonical start-time location snapshot for delayed/offline finalization.
   Geolocation? _geolocation;
   Geolocation? get geolocation => _geolocation;
@@ -900,6 +920,8 @@ class Wal {
     int? liveRingId,
     int? liveOrdinalStart,
     int? liveOrdinalEnd,
+    String? batchLiveSession,
+    String? liveDeviceId,
     Geolocation? geolocation,
     int retryCount = 0,
     int lastRetryAt = 0,
@@ -946,6 +968,8 @@ class Wal {
         _liveRingId = liveRingId,
         _liveOrdinalStart = liveOrdinalStart,
         _liveOrdinalEnd = liveOrdinalEnd,
+        _batchLiveSession = batchLiveSession,
+        _liveDeviceId = liveDeviceId,
         _geolocation = geolocation,
         _retryCount = retryCount,
         _lastRetryAt = lastRetryAt,
@@ -1002,6 +1026,8 @@ class Wal {
       liveRingId: json['live_ring_id'],
       liveOrdinalStart: json['live_ordinal_start'],
       liveOrdinalEnd: json['live_ordinal_end'],
+      batchLiveSession: json['batch_live_session'],
+      liveDeviceId: json['live_device_id'],
       geolocation: json['geolocation'] is Map<String, dynamic>
           ? Geolocation.fromJson(json['geolocation'] as Map<String, dynamic>)
           : null,
@@ -1060,6 +1086,8 @@ class Wal {
       if (liveRingId != null) 'live_ring_id': liveRingId,
       if (liveOrdinalStart != null) 'live_ordinal_start': liveOrdinalStart,
       if (liveOrdinalEnd != null) 'live_ordinal_end': liveOrdinalEnd,
+      if (batchLiveSession != null) 'batch_live_session': batchLiveSession,
+      if (liveDeviceId != null) 'live_device_id': liveDeviceId,
       'geolocation': geolocation?.toJson(),
       'retry_count': retryCount,
       'last_retry_at': lastRetryAt,
@@ -1121,6 +1149,8 @@ class Wal {
     h = _mixFingerprint(h, liveRingId ?? -1);
     h = _mixFingerprint(h, liveOrdinalStart ?? -1);
     h = _mixFingerprint(h, liveOrdinalEnd ?? -1);
+    h = _mixFingerprint(h, batchLiveSession?.hashCode ?? 0);
+    h = _mixFingerprint(h, liveDeviceId?.hashCode ?? 0);
     h = _mixFingerprint(h, identityHashCode(geolocation));
     h = _mixFingerprint(h, retryCount);
     h = _mixFingerprint(h, lastRetryAt);
