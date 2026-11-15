@@ -257,8 +257,22 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     caplog.set_level(logging.INFO)
 
     if fail_usage:
-        with pytest.raises(RuntimeError, match='synthetic teardown persistence failure'):
-            await runtime.run()
+        # The final usage flush is the usage_flush exit row: the fault
+        # books its line once (a real fault keeps the ERROR channel) and
+        # the exit completes, so the parity capture still persists and
+        # exports exactly once.
+        await runtime.run()
+        exit_fault_lines = [
+            record
+            for record in caplog.records
+            if 'event=listen_session_exit outcome=usage_flush_failed' in record.getMessage()
+        ]
+        assert len(exit_fault_lines) == 1
+        assert exit_fault_lines[0].levelno == logging.ERROR
+        assert 'fault_type=RuntimeError' in exit_fault_lines[0].getMessage()
+        # A real fault does not replay: no race fields on the line.
+        assert 'attempt=' not in exit_fault_lines[0].getMessage()
+        assert 'retry_after_ms=' not in exit_fault_lines[0].getMessage()
     else:
         await runtime.run()
 

@@ -77,7 +77,11 @@ def test_cloud_run_merge_and_helm_replace_are_paired_with_cohort_aware_runtime(m
     monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
     assert not summary_guarantee.enabled('nonmember')
     listen = (ROOT / 'backend/routers/transcribe.py').read_text()
-    assert listen.index('await warm_rollout_cohorts(request.uid)') < listen.index('run_listen_session(request)')
+    # The cohort warm stays bounded by the session-exit table but must
+    # still precede the session it warms.
+    assert listen.index(
+        "run_exit_step(SESSION_EXIT_STEPS['warm_cohorts'], warm_rollout_cohorts, request.uid"
+    ) < listen.index('run_listen_session(request)')
 
 
 @pytest.mark.parametrize('stage', ['dev', 'prod'])

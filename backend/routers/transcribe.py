@@ -20,6 +20,7 @@ from firebase_admin.auth import InvalidIdTokenError
 from models.geolocation import Geolocation, geolocation_from_private_header
 from routers.listen.contracts import CustomSttMode, ListenRequest
 from routers.listen.runtime import run_listen_session
+from routers.listen.session_exit import SESSION_EXIT_STEPS, run_exit_step
 from utils.client_device import (
     ClientDeviceContext,
     resolve_client_device_from_websocket_auth_message,
@@ -61,7 +62,10 @@ async def _watch_account_deletion(request: ListenRequest) -> None:
 
 
 async def _run_listen_session_with_deletion_fence(request: ListenRequest) -> None:
-    await warm_rollout_cohorts(request.uid)
+    # A fault in the pre-session cohort warm must not escape the ASGI
+    # callable as an unclassified server crash: the cohorts start cold
+    # and the session runs.
+    await run_exit_step(SESSION_EXIT_STEPS['warm_cohorts'], warm_rollout_cohorts, request.uid, logger=logger)
     session = asyncio.create_task(run_listen_session(request), name=f'listen:{request.uid}:session')
     deletion_watcher = asyncio.create_task(
         _watch_account_deletion(request),

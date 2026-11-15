@@ -78,4 +78,6 @@ class TestListenRuntimeUsesClampedBilling:
         # Periodic and final writes share one tested flush boundary.
         assert len(calls) == 1, f'expected one shared clamped billing site, found {len(calls)}'
         assert '_flush_usage(final=False)' in source
-        assert '_flush_usage(final=True)' in source
+        # The final write rides the session-exit custody replay row; the
+        # periodic write stays the bare in-body call.
+        assert "run_exit_step_replay(SESSION_EXIT_STEPS['usage_flush'], self._flush_usage, final=True" in source

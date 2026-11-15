@@ -134,6 +134,8 @@ from . import receiver as receiver_module
 from .receiver import ListenReceiver
 from .registry import register as register_listen_session
 from .registry import unregister as unregister_listen_session
+from .session_exit import SESSION_EXIT_STEPS, run_exit_step, run_exit_step_replay, run_exit_step_sync
+from .session_exit import exit_step_site_field
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
@@ -1349,19 +1351,35 @@ class ListenSessionRuntime:
     async def _teardown(self) -> None:
         observation = getattr(self, '_no_audio_observation', None)
         if observation is not None:
-            observation.close()
+            run_exit_step_sync(SESSION_EXIT_STEPS['no_audio_observation_close'], observation.close, logger=logger)
         teardown_started_at = time.monotonic()
         held_at_close = self._cap_held_at_close()
         try:
             await self._teardown_components()
         finally:
-            record_listen_ws_close(self.state, held=held_at_close, teardown_started_at=teardown_started_at)
+            # The exit bookkeeping is raise-proof: one fault on the close
+            # record or the cohort finish books its line and the rest of
+            # the envelope still runs.
+            run_exit_step_sync(
+                SESSION_EXIT_STEPS['ws_close_record'],
+                record_listen_ws_close,
+                self.state,
+                held=held_at_close,
+                teardown_started_at=teardown_started_at,
+                logger=logger,
+            )
             # Receiver finish/drain can settle an exhausted leg or admit a
             # pending paid onset. Count the complete socket after those seams.
             cohort = getattr(self, '_routing_cohort', None)
             completion = getattr(self, '_routing_cohort_completion', None)
             if cohort is not None and completion is not None:
-                cohort.finish(completion[0], terminal_after_text=completion[1])
+                run_exit_step_sync(
+                    SESSION_EXIT_STEPS['cohort_finish'],
+                    cohort.finish,
+                    completion[0],
+                    terminal_after_text=completion[1],
+                    logger=logger,
+                )
             if not self.request.owner_persistence_blocked.is_set():
                 try:
                     await run_blocking(storage_executor, self.parity_capture.persist)
@@ -1369,7 +1387,7 @@ class ListenSessionRuntime:
                     logger.warning('Listen parity capture teardown failed type=%s', type(error).__name__)
 
     async def _teardown_components(self) -> None:
-        unregister_listen_session(self)
+        run_exit_step_sync(SESSION_EXIT_STEPS['unregister_session'], unregister_listen_session, self, logger=logger)
         self.state.shutdown_event.set()
         self.task_supervisor.end_session()
         owner_persistence_blocked = self.request.owner_persistence_blocked.is_set()
@@ -1379,30 +1397,55 @@ class ListenSessionRuntime:
                     _account_deletion_blocks_owner_persistence, self.request.uid
                 )
             except Exception as error:
-                logger.error('Listen teardown deletion fence unavailable type=%s', type(error).__name__)
+                logger.error(
+                    'Listen teardown deletion fence unavailable type=%s%s',
+                    type(error).__name__,
+                    exit_step_site_field(error),
+                )
                 owner_persistence_blocked = True
         if owner_persistence_blocked:
             self.request.owner_persistence_blocked.set()
-            await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        self._finish_live_transcription()
-        self._record_session_transcript_outcome()
+            await run_exit_step(
+                SESSION_EXIT_STEPS['final_drain'],
+                self.task_supervisor.drain_all,
+                timeout=5.0,
+                cancel=True,
+                logger=logger,
+            )
+        run_exit_step_sync(
+            SESSION_EXIT_STEPS['finish_live_transcription'], self._finish_live_transcription, logger=logger
+        )
+        run_exit_step_sync(
+            SESSION_EXIT_STEPS['transcript_outcome'], self._record_session_transcript_outcome, logger=logger
+        )
         if not owner_persistence_blocked:
             try:
                 await self.transcripts.flush_translations()
             except Exception as error:
                 logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
-        telemetry_call(getattr(self, 'receiver', None), 'lane_meter', 'close')
+        run_exit_step_sync(
+            SESSION_EXIT_STEPS['lane_meter'],
+            telemetry_call,
+            getattr(self, 'receiver', None),
+            'lane_meter',
+            'close',
+            logger=logger,
+        )
         demand = getattr(self.receiver, 'live_demand', None)
         if demand is not None:
-            demand.close()
-            await demand.publish()
+
+            async def _close_and_publish_demand() -> None:
+                demand.close()
+                await demand.publish()
+
+            await run_exit_step(SESSION_EXIT_STEPS['demand_publish'], _close_and_publish_demand, logger=logger)
         try:
             self.receiver.finish()
         except Exception as error:
             logger.error('STT finish failed type=%s', type(error).__name__)
         if not owner_persistence_blocked:
-            await self._flush_usage(final=True)
+            await run_exit_step_replay(SESSION_EXIT_STEPS['usage_flush'], self._flush_usage, final=True, logger=logger)
         await self._observe_pending_client_close()
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
@@ -1462,30 +1505,55 @@ class ListenSessionRuntime:
                                 )
             except Exception as error:
                 logger.error('Conversation disconnect finalization failed type=%s', type(error).__name__)
-        try:
+        if not owner_persistence_blocked:
+            await run_exit_step(
+                SESSION_EXIT_STEPS['multi_channel_tail'],
+                self.receiver.flush_multi_channel_tail,
+                logger=logger,
+            )
+        if self.pusher_close:
             try:
-                if not owner_persistence_blocked:
-                    await self.receiver.flush_multi_channel_tail()
-            finally:
-                if self.pusher_close:
-                    try:
-                        await self.pusher_close()
-                    except Exception as error:
-                        logger.error('Pusher close failed type=%s', type(error).__name__)
-            if self.onboarding_handler:
-                self.onboarding_handler.cleanup()
-            if self.language_observations is not None:
-                await self.language_observations.summarize(None if owner_persistence_blocked else self.request.uid)
-            if not owner_persistence_blocked:
-                await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
-        finally:
-            # After the transcript loop drained and before the matcher's maps clear (also when
-            # cleanup failed): the ordinal ledger needs both the final segments and final naming.
-            speakers = record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
-            soniox_idle_arm.record_session(self, speakers)
-        self.receiver.clear()
-        self.transcripts.clear()
-        self.speakers.clear()
+                await self.pusher_close()
+            except Exception as error:
+                logger.error('Pusher close failed type=%s', type(error).__name__)
+        if self.onboarding_handler:
+            run_exit_step_sync(SESSION_EXIT_STEPS['onboarding_cleanup'], self.onboarding_handler.cleanup, logger=logger)
+        if self.language_observations is not None:
+            await run_exit_step(
+                SESSION_EXIT_STEPS['language_summary'],
+                self.language_observations.summarize,
+                None if owner_persistence_blocked else self.request.uid,
+                logger=logger,
+            )
+        if not owner_persistence_blocked:
+            await run_exit_step(
+                SESSION_EXIT_STEPS['final_drain'],
+                self.task_supervisor.drain_all,
+                timeout=5.0,
+                cancel=True,
+                logger=logger,
+            )
+        # After the transcript loop drained and before the matcher's maps clear (also when
+        # cleanup failed): the ordinal ledger needs both the final segments and final naming.
+        # Every step above is bounded, so these records always run.
+        ordinal_holder: list = []
+
+        def _record_live_speaker_ordinals() -> None:
+            ordinal_holder.append(
+                record_live_speaker_ordinals(getattr(self, 'speaker_ordinal_tracker', None), self.speakers)
+            )
+
+        run_exit_step_sync(SESSION_EXIT_STEPS['speaker_ordinals'], _record_live_speaker_ordinals, logger=logger)
+        run_exit_step_sync(
+            SESSION_EXIT_STEPS['idle_arm_record'],
+            soniox_idle_arm.record_session,
+            self,
+            ordinal_holder[0] if ordinal_holder else None,
+            logger=logger,
+        )
+        run_exit_step_sync(SESSION_EXIT_STEPS['receiver_clear'], self.receiver.clear, logger=logger)
+        run_exit_step_sync(SESSION_EXIT_STEPS['transcripts_clear'], self.transcripts.clear, logger=logger)
+        run_exit_step_sync(SESSION_EXIT_STEPS['speakers_clear'], self.speakers.clear, logger=logger)
 
 
 async def run_listen_session(request: ListenRequest) -> None:
@@ -1526,11 +1594,17 @@ async def run_listen_session(request: ListenRequest) -> None:
         )
         await _close_admission_failed_socket(request)
     finally:
-        soniox_idle_arm.record_session(runtime, None)  # idempotent; covers exits that skip teardown
+        # Idempotent; covers exits that skip teardown.
+        run_exit_step_sync(
+            SESSION_EXIT_STEPS['idle_arm_session'], soniox_idle_arm.record_session, runtime, None, logger=logger
+        )
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
-            record_listen_no_audio_teardown(
+            run_exit_step_sync(
+                SESSION_EXIT_STEPS['no_audio_record'],
+                record_listen_no_audio_teardown,
                 source=request.source,
                 platform=runtime.client_device_context.platform,
+                logger=logger,
             )
 
 
