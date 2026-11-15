@@ -264,7 +264,9 @@ void main() {
                 surface: YearlySwitchSurface.engaged,
                 claim: (_) async {
                   claims++;
-                  return qualified ? offer : wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged');
+                  return qualified
+                      ? offer
+                      : const wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged');
                 },
                 readEnabled: () async => true)));
     final mountedState = placementKey.currentState;
@@ -330,7 +332,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(claims, 1);
-    pending.complete(wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged'));
+    pending.complete(const wire.GeneratedYearlySwitchResponse(eligible: false, reason: 'not_engaged'));
     await tester.pumpAndSettle();
     usage.notifyListeners();
     await tester.pumpAndSettle();
