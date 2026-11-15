@@ -180,3 +180,28 @@ kubectl -n prod-omi-backend get cronjob record-seal-repair -o json > "$TASK_DIR/
 Keep intake age priority enabled during a repair rollback. The packet preserves
 policy; refreshing RECORD_SEAL_REPAIR_SERVER_FLAGS is a separate operation and
 is not implemented by this stock-drain tool.
+
+## Complete approved production delta
+
+The before object must match the measured single-pod shape (or its first-shipment
+image/minute-cadence/fresh=true update). The private receipt records every actual
+changed path and its before/after values, not just this descriptive inventory:
+
+- Schedule: */5 or already every minute -> every minute.
+- completionMode: absent/NonIndexed or single Indexed -> Indexed;
+  completions/parallelism absent or1 ->5.
+- Global backoffLimit0 ->5; add backoffLimitPerIndex0 and maxFailedIndexes5.
+  Thus a failed index cannot abort its four healthy siblings. ro-prod server
+  v1.35.8-gke.1796000 exposes both fields (kubectl explain verified2026-11-15).
+- Node-affinity pool batch-pipeline-pool -> api-pool; add required hostname
+  anti-affinity matching repair pods; remove the two batch/GPU tolerations.
+- Image: independently approved original pin -> smoke-verified CPU repair pin.
+- CPU request4 ->3; limit4 unchanged; memory request4Gi/limit8Gi unchanged.
+- Command unchanged; add args --shards5 --shard-index-file/etc/repair-partition/index.
+- Workers stay8. Fresh env absent ->true, or already true ->unchanged.
+  All other env, policy maps, cohorts and secret refs remain byte-identical.
+- Add partition downward-API volume and read-only /etc/repair-partition mount.
+  The tmp volume/mount, KSA, labels, security and all unrelated fields remain.
+- Hard Job deadline1680 and Forbid remain unchanged. No Deployment is patched.
+
+Do not apply if the dry-run changes anything beyond the receipt's exact delta.
