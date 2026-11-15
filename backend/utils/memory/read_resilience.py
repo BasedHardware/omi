@@ -19,6 +19,7 @@ from typing import Any, Callable, Literal
 from fastapi import HTTPException
 from google.api_core import exceptions as google_errors
 
+from config.summary_context import mark_failure
 from utils.other.list_budget import ListReadBudgetExhausted
 
 logger = logging.getLogger(__name__)
@@ -203,14 +204,23 @@ class MemoryReadResilience:
                 self._probe = True
         if denied:
             self._log(operation, 'circuit_open', 0, started, MemoryReadCircuitOpen())
-            raise MemoryReadCircuitOpen()
+            error = MemoryReadCircuitOpen()
+            if single_attempt:
+                mark_failure(error, 'budget')
+            raise error
         # Budget normally travels serially through the router; also preserve
         # one state if internal callers fan out with the same request budget.
         with _request_state_lock:
-            state = getattr(budget, '_memory_read_attempts', None) if budget is not None else None
+            # A summary's distinct single-attempt queries are not retries of
+            # one list read. Keep circuit/process admission, but let their
+            # shared context deadline govern each new logical operation.
+            state = (
+                getattr(budget, '_memory_read_attempts', None) if budget is not None and not single_attempt else None
+            )
             if not isinstance(state, MemoryReadAttempts):
-                state = MemoryReadAttempts(started + 1.0)
-                if budget is not None:
+                remaining = budget.remaining_seconds if single_attempt and budget is not None else 1.0
+                state = MemoryReadAttempts(started + remaining)
+                if budget is not None and not single_attempt:
                     budget._memory_read_attempts = state
         attempts = 0
         transient = False
@@ -242,6 +252,8 @@ class MemoryReadResilience:
                             allowance.release()
                 if not admitted:
                     self._log(operation, 'admission_denied', attempts, started, state.error)
+                    if single_attempt:
+                        mark_failure(state.error, 'budget')
                     raise state.error
                 attempts += 1
                 evidence.succeeded = False

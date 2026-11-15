@@ -35,7 +35,10 @@ ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
+    "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED",
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
     # Episode context, completeness and notes run on both cohosts. Missing bindings refuse the roll.
+    "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED",
     "EPISODE_COMPOSER_CONTEXT_ENABLED",
     "EPISODE_COMPOSER_DETAIL_ENABLED",
     "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
@@ -421,6 +424,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PUSHER_STORAGE_PCM_BUDGET_MB",
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
         }
     ),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
@@ -428,6 +432,7 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             # Only pusher owns the drained recording worker's producer-pending retry bound.
             "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
             # Only pusher owns closed recording workers and their eviction proof.
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",
             "PUSHER_ABANDON_EVICTED_TOKENS",

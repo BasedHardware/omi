@@ -41,17 +41,22 @@
       "reviewed": "2026-11-13"
     },
     {
-      "collection": "batch_pipeline_prod_backlog_release", "owner": "SCA-2015",
+      "collection": "batch_pipeline_prod_backlog_release",
+      "owner": "SCA-2015",
       "unit": "held-backlog owner attempt",
-      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 172800,
+      "basis": "planning-bound",
       "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
       "reviewed": "2026-11-14"
     },
-
     {
-      "collection": "batch_pipeline_dev_backlog_release", "owner": "SCA-2015",
+      "collection": "batch_pipeline_dev_backlog_release",
+      "owner": "SCA-2015",
       "unit": "held-backlog owner attempt",
-      "reads_per_unit_budget": 1, "reads_per_day_budget": 172800, "basis": "planning-bound",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 172800,
+      "basis": "planning-bound",
       "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
       "reviewed": "2026-11-14"
     }
@@ -188,6 +193,18 @@
       "basis": "planning-bound",
       "source": "Operator-run only, never scheduled. One result read selects projection_state, projection.persisted_at and projection_part_count. A completed legacy receipt without a summary timestamp gets one additional read selecting projection_state and explicit projection_parts.<index>.persisted_at leaves for 1..5000 parts; unsupported counts abort the report. At most two result reads per admitted unstamped unit (~800k reads at 400k units/day). Job pages stay capped at 5000 rows per 900-second UTC cohort. No whole receipt map or identifiers are selected. The release operator must declare the complete target/baseline query budget before reading production.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "site": "backend/database/record_seal_wake.py",
+      "expression": "f'batch_pipeline_{stage}_jobs'",
+      "collection_pattern": "batch_pipeline_*_jobs",
+      "owner": "quality-12h/Q12-A native seal wake",
+      "unit": "one eligible native seal transaction attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 2400000,
+      "basis": "planning-bound",
+      "source": "Point-read the deterministic intake job once after producer/partial/upload-failure guards. No fleet scan or producer-pending retry reads this job. Planning envelope: 240000 recordings/day (sustained 10000/hour) times up to 10 transaction attempts/duplicate producer closes; not a traffic cap or measured saving. Empty batch playback separately adds at most one existing rebuild-marker document read per URL poll. See backend/docs/listen_pusher_pipeline/changes/2026-11-15-native-close-notify.md.",
+      "reviewed": "2026-11-15"
     }
   ],
   "exempt": [
