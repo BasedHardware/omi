@@ -583,6 +583,9 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (fresh.unreadPackets <= 0) return true;
     }
     final readStart = ringInfo.readSeq;
+    final alreadyDurable = ringDrainRecoveryEnabled && ringId != null
+        ? await _custody.validatedRecordRanges(custodyDeviceId, epoch, ringId)
+        : const <(int, int)>[];
     if (!stillEpoch()) return false;
     final droppedKey = '$custodyDeviceId:${ringInfo.ringId}';
     final lastDropped = _droppedBaseline[droppedKey];
@@ -606,6 +609,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     String? currentRun;
     int provenSeq = readStart;
     int skippedDuplicates = 0;
+    bool skippedProofGap = false;
     int recordsConsumed = 0;
     int? firstRecordTs;
     int elapsedTotal = 0;
@@ -862,8 +866,10 @@ class RingStorageSyncImpl implements RingStorageSync {
           }
         }
 
-        if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
+        if (alreadyDurable.any((r) => r.$1 <= seq && seq < r.$2) ||
+            await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
           skippedDuplicates++;
+          skippedProofGap = true;
           if (seq == provenSeq) provenSeq = seq + 1;
           continue;
         }
@@ -880,7 +886,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         recordSeqs.add(seq);
         recordTimestamps.add(ts);
         recordFrameCounts.add(frames.length);
-        recordBreaks.add(boundary.breaks);
+        recordBreaks.add(boundary.breaks || (ringDrainRecoveryEnabled && skippedProofGap));
+        skippedProofGap = false;
         recordRuns.add(boundary.run);
         bytesData.addAll(frames);
       }

@@ -832,6 +832,39 @@ class PendantRingCustody {
     return false;
   }
 
+  /// Stable exact ranges for avoiding duplicate files inside an interrupted
+  /// READ. Skipping payload is not ADVANCE authority: the release path validates
+  /// the refs again, so later deletion/index loss still retains the pendant copy.
+  Future<List<(int, int)>> validatedRecordRanges(String deviceId, int epoch, int ringId) async {
+    final state = _state(deviceId, epoch);
+    if (state == null || state.incarnationInvalid || state.checkpoint.ringId != ringId) return [];
+    final token = state.sessionToken;
+    final cp = state.checkpoint;
+    final candidates = <(int, int, List<CustodyWalRef>)>[
+      for (final r in cp.ringRanges) (r.startSeq, r.endSeq, List.of(r.wals)),
+      for (final r in cp.liveRanges) (r.startSeq, r.endSeq, List.of(r.wals)),
+    ];
+    final result = <(int, int)>[];
+    final validate = await _validationSnapshot();
+    for (final range in candidates) {
+      var valid = true;
+      for (final ref in range.$3) {
+        if (!await validate(ref)) {
+          valid = false;
+          break;
+        }
+      }
+      if (token == null ||
+          !_isSession(state, deviceId, epoch, token) ||
+          !identical(state.checkpoint, cp) ||
+          cp.ringId != ringId) {
+        return [];
+      }
+      if (valid) result.add((range.$1, range.$2));
+    }
+    return result;
+  }
+
   int? advanceTarget(String deviceId, int epoch) {
     final state = _state(deviceId, epoch);
     if (state == null || state.incarnationInvalid) return null;

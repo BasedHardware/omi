@@ -572,6 +572,33 @@ void main() {
     await sync.stop();
   }, skip: !ringDrainRecoveryEnabled);
 
+  test('a proven downloaded island is skipped while the missing prefix alone creates a file', () async {
+    final card = _FakeRingDevice(
+        ringInfo: _info(writeSeq: 8, caps: RingProtocol.capMaskV1, ringId: 42), caps: RingProtocol.capMaskV1);
+    final local = _FakeLocalSync();
+    final wal = ringWal(records: 3);
+    final sync = syncWith(local, card, wal);
+    final custody = custodies.last;
+    await custody.beginConnection('devkit-1', 7, card.ringInfo);
+    await File('${tempDir.path}/existing.bin').writeAsBytes([1, 17], flush: true);
+    await custody.recordDurableRingRange(
+        'devkit-1', 7, 42, 6, 8, [const CustodyWalRef(fileName: 'existing.bin', bytes: 2, frames: 1)]);
+    final pending = sync.syncWal(wal: wal);
+    await card.readReady;
+    expect(card.advances, isEmpty, reason: 'no proof for [5,6)');
+    card.emit(_readBegin(5, 3));
+    for (var i = 0; i < 3; i++) {
+      card.emit(_record());
+    }
+    card.emit(_done(0, 8));
+    await pending;
+    expect(local.added, hasLength(1));
+    expect(local.added.single.totalFrames, 1, reason: 'already indexed [6,8) is not written again');
+    expect(card.advances.last.seq, 8);
+    await card.controller.close();
+    await sync.stop();
+  }, skip: !ringDrainRecoveryEnabled);
+
   test('31 minutes of an owned read never abandons its completion future', () {
     fakeAsync((time) {
       final done = Completer<bool>();
