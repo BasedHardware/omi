@@ -310,10 +310,16 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['owner'] == ('omi-pipeline' if striped else 'rollout-meetings / occasion architecture')
             assert entry['review_by'] == ('2026-12-06' if striped else '2026-11-28')
         assert flag['kind'] == 'env'
-        assert flag['lifecycle'] == 'ops_kill'
         assert 'backend' in flag['surfaces']
-        assert flag['fail'] == 'open'
-        assert flag['summary'].startswith('Default on')
+        if name == 'RECORD_FRESH_MERGE_ENABLED':
+            # Image-only GKE rolls do not install an explicit false binding.
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Default off')
+        else:
+            assert flag['lifecycle'] == 'ops_kill'
+            assert flag['fail'] == 'open'
+            assert flag['summary'].startswith('Default on')
 
 
 def _data(retired=None, **names):
