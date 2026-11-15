@@ -11,6 +11,7 @@ from typing import Any
 from pydub import AudioSegment
 
 from utils.other.audio_opus import _get_opuslib  # type: ignore[reportPrivateUsage]  # shared lazy native binding
+from utils.other.audio_pcm_storage import compact_pcm
 
 WAL_FORMAT = 'omi-wal-uint32le-opus-v1'
 UNKNOWN = 'unknown'
@@ -205,9 +206,11 @@ class CapturePack:
             self.pcm_proven = False
         self.data.extend(payload if self.codec in {'pcm16', 'pcm8'} else struct.pack('<I', len(payload)) + payload)
 
-    def encoded(self, *, preserve_pcm: bool = False) -> tuple[bytes, dict[str, Any]]:
+    def encoded(self, *, preserve_pcm: bool = False, compact_custody_pcm: bool = False) -> tuple[bytes, dict[str, Any]]:
         raw = bytes(self.data)
         codec = self.codec
+        if preserve_pcm and compact_custody_pcm and codec == 'pcm16' and self.pcm_proven:
+            raw, codec = compact_pcm(raw, self.sample_rate, self.channels)
         if codec in {'pcm16', 'pcm8'} and not preserve_pcm:
             if codec == 'pcm8':
                 raw = audioop.bias(raw, 1, -128)
