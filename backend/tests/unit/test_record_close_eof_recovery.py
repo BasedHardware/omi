@@ -332,3 +332,50 @@ async def test_pusher_abort_requires_source_proof_and_hands_off_current_buffer(r
     else:
         assert not row.get('record_audio_closed')
         assert all('abandoned_at' in token for token in row['record_upload_sessions'].values())
+
+
+async def test_abort_keeps_existing_close_queue_fenced_during_pusher_tail_commit(recovery, monkeypatch):
+    socket, task = await start_prepared()
+    legacy = asyncio.Event()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def finalized(*args, **kwargs):
+        legacy.set()
+
+    monkeypatch.setattr(pusher, 'process_conversation_task', AsyncMock(side_effect=finalized))
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 60)
+    try:
+        # A prior ordinary close request exists, followed by a source tail that
+        # the prepared fence still owns. Abort must not unblock that queue yet.
+        socket.incoming.put_nowait(struct.pack('<I', 104) + json.dumps({'conversation_id': 'conversation'}).encode())
+        await asyncio.wait_for(legacy.wait(), 2)
+        commit = pusher._commit_durable_audio_window
+
+        async def paused_commit(**kwargs):
+            entered.set()
+            await release.wait()
+            return await commit(**kwargs)
+
+        monkeypatch.setattr(pusher, '_commit_durable_audio_window', paused_commit)
+        socket.incoming.put_nowait(_audio_frames('conversation', [b'\x02\x00' * 2], start=1000 + 2 / 16000)[1])
+        abort = dict(
+            conversation_id='conversation',
+            record_close_only=True,
+            request_id='request',
+            phase='abort',
+            watermark=8,
+            source_tail_durable=True,
+        )
+        socket.incoming.put_nowait(struct.pack('<I', 104) + json.dumps(abort).encode())
+        await asyncio.wait_for(entered.wait(), 2)
+        row = recovery.client.rows[recovery.path]
+        assert row['record_upload_sessions'] and not row.get('record_audio_closed')
+        assert not task.done()
+        release.set()
+        async with asyncio.timeout(2):
+            while not row.get('record_audio_closed'):
+                await asyncio.sleep(0)
+        assert not row['record_upload_sessions'] and not task.done()
+    finally:
+        release.set()
+        await end_socket(socket, task, recovery.owners)
