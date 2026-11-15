@@ -201,9 +201,9 @@
       "owner": "quality-12h/Q12-A native seal wake",
       "unit": "one eligible native seal transaction attempt",
       "reads_per_unit_budget": 1,
-      "reads_per_day_budget": 1000000,
+      "reads_per_day_budget": 2400000,
       "basis": "planning-bound",
-      "source": "Point-read the deterministic intake job once after producer/partial/upload-failure guards. No fleet scan or producer-pending retry reads this job. Planning envelope: 100000 recordings/day times up to 10 transaction attempts/duplicate producer closes; not a traffic cap or measured saving. Empty batch playback separately adds at most one existing rebuild-marker document read per URL poll. See backend/docs/listen_pusher_pipeline/changes/2026-11-15-native-close-notify.md.",
+      "source": "Point-read the deterministic intake job once after producer/partial/upload-failure guards. No fleet scan or producer-pending retry reads this job. Planning envelope: 240000 recordings/day (sustained 10000/hour) times up to 10 transaction attempts/duplicate producer closes; not a traffic cap or measured saving. Empty batch playback separately adds at most one existing rebuild-marker document read per URL poll. See backend/docs/listen_pusher_pipeline/changes/2026-11-15-native-close-notify.md.",
       "reviewed": "2026-11-15"
     }
   ],

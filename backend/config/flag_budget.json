@@ -24,7 +24,7 @@
   },
   "seed_review_by": "2026-11-15",
   "budget": 161,
-  "count": 286,
+  "count": 289,
   "names": {
     "BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS": {"owner": "Goal: Pipeline / SCA-1960", "review_by": "2026-11-28"},
     "BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED": {"owner": "SCA-2015", "review_by": "2026-12-14", "registry": "config/feature-flags.yaml"},
@@ -50,6 +50,9 @@
     "BATCH_HELD_DEAD_LETTER_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-06"},
     "BATCH_PIPELINE_SERVING_TICK_SECONDS": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-06"},
+    "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED": {"owner": "quality-12h/Q12-A", "review_by": "2026-12-15", "registry": "config/feature-flags.yaml"},
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED": {"owner": "quality-12h/Q12-A", "review_by": "2026-12-15", "registry": "config/feature-flags.yaml"},
+    "PUSHER_RECORD_SEAL_WAKE_ENABLED": {"owner": "quality-12h/Q12-A", "review_by": "2026-12-15", "registry": "config/feature-flags.yaml"},
     "PUSHER_PROJECTION_DEBT_DURABLE_ENABLED": {"owner": "uicleanup / omi-lifecycle", "review_by": "2026-12-06"},
     "BATCH_PIPELINE_SERVING_PROJECTION_SWEEP": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
     "BATCH_PIPELINE_PROJECTION_PUMP_ENABLED": {"owner": "omi-pipeline / lead2", "review_by": "2026-12-05", "registry": "config/feature-flags.yaml"},
