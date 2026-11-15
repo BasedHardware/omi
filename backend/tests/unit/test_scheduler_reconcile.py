@@ -367,10 +367,24 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_supports_planne
     central = (root / ".github/workflows/gcp_scheduler_reconcile.yml").read_text(encoding="utf-8")
     assert "Optional space-separated declared job names" in central
     assert 'JOBS: ${{ github.event.inputs.jobs }}' in central
+    assert "SELECTED_JOBS=()" in central
     assert "JOB_ARGS=()" in central
-    assert 'read -r -a JOB_ARGS <<< "$JOBS"' in central
+    assert 'read -r -a SELECTED_JOBS <<< "$JOBS"' in central
+    assert 'JOB_ARGS=(--jobs "${SELECTED_JOBS[@]}")' in central
     assert '--project "$PROJECT_ID" --apply "${JOB_ARGS[@]}"' in central
     assert '--project "$PROJECT_ID" --check "${JOB_ARGS[@]}"' in central
+
+
+def test_scheduler_cli_parses_unfiltered_and_multiple_job_selections_without_io():
+    prefix = ["--environment", "dev", "--project", "based-hardware-dev"]
+
+    unfiltered = reconcile._parser().parse_args([*prefix, "--check"])
+    assert unfiltered.jobs is None
+
+    selected = reconcile._parser().parse_args(
+        [*prefix, "--apply", "--jobs", "app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
+    )
+    assert selected.jobs == ["app-review-config-sweep-hourly", "dream-agent-sweep-hourly"]
 
 
 def test_notifications_cadence_covers_every_local_hour_boundary():
