@@ -47,13 +47,11 @@ def test_known_backlog_pages_are_active_with_unchanged_thresholds_and_owned_disp
     assert uid in runbook and disposition in runbook
 
 
-def test_no_page_tier_rule_lands_paused():
-    """S5.2: a paused page rule is a blind spot with no owner and no deadline."""
+def test_no_target_page_tier_rule_lands_paused():
+    """SCA-2116 owns these five dispositions; other rules retain their own contracts."""
     for name, rules in (('split', SPLIT), ('combined', COMBINED)):
-        paused = sorted(
-            uid for uid, rule in rules.items() if rule.get('labels', {}).get('tier') == 'page' and rule.get('isPaused')
-        )
-        assert paused == [], f'{name} export pauses page-tier rules: {paused}'
+        paused = sorted(uid for uid in ACTIVE if rules[uid].get('isPaused'))
+        assert paused == [], f'{name} export pauses target page-tier rules: {paused}'
 
 
 def test_queue_blind_budget_covers_worker_cadence_without_changing_other_arms():
