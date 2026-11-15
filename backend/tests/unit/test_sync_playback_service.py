@@ -55,9 +55,7 @@ def test_empty_batch_audio_distinguishes_durable_metadata_debt(monkeypatch, pend
 
     monkeypatch.setattr(record_projection_rebuild, 'pending', lambda *args: pending)
     result = playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'})
-    assert result == (
-        {'audio_files': [], 'metadata_status': 'pending', 'retry_after_seconds': 5} if pending else {'audio_files': []}
-    )
+    assert result == ({'audio_files': [], 'poll_after_ms': 5000} if pending else {'audio_files': []})
 
 
 class FakeFuture:

@@ -435,7 +435,7 @@ def get_audio_signed_urls(
                 )
                 pending = True  # Unknown repair state cannot assert that no audio exists.
             if pending:
-                return {'audio_files': [], 'metadata_status': 'pending', 'retry_after_seconds': 5}
+                return {'audio_files': [], 'poll_after_ms': 5000}
         return {"audio_files": []}
 
     if is_audio_merge_dispatch_enabled():

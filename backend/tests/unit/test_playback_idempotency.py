@@ -573,3 +573,35 @@ async def test_http_corrupt_sidecar_recovers_on_last_attempt_without_unavailable
     marker.assert_not_called()
     encoder.assert_called_once()
     assert cache.cached_manifest(blob) == (3, _SPANS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_empty_projection_pending_hint_survives_real_http_response(monkeypatch, route_app, enabled):
+    import httpx
+    from database import record_projection_rebuild
+
+    app, sync = route_app
+    for key in (
+        'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
+        'PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED',
+        'PUSHER_RECORD_SEAL_WAKE_ENABLED',
+    ):
+        monkeypatch.setenv(key, 'true' if enabled else 'false')
+    app.dependency_overrides[sync.auth.get_current_user_uid] = lambda: 'synthetic'
+    monkeypatch.setattr(
+        sync.conversations_db,
+        'get_conversation',
+        lambda *args, **kwargs: {'audio_files': [], 'record_lane_owner': 'batch_live_v1'},
+    )
+    read = Mock(return_value=True)
+    monkeypatch.setattr(record_projection_rebuild, 'pending', read)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+        response = await client.get('/v1/sync/audio/conversation/urls')
+    assert response.status_code == 200
+    assert response.json() == {
+        'audio_files': [],
+        'conversation_audio': None,
+        'poll_after_ms': 5000 if enabled else None,
+    }
+    assert read.call_count == int(enabled)
