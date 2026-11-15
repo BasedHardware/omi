@@ -14,6 +14,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/ring_custody_diagnostics.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -41,6 +42,8 @@ class OmiDeviceConnection extends DeviceConnection {
   Future<void> _storageCmdQueue = Future.value();
 
   StreamSubscription? _custodyNotifySub;
+  int? _diagnosticReadStart;
+  int _diagnosticReadBytes = 0;
 
   @override
   RingInfo? get lastRingInfo => _lastRingInfo;
@@ -107,6 +110,7 @@ class OmiDeviceConnection extends DeviceConnection {
     _ringEffectiveCaps = 0;
     _custodyToken = Object();
     _custodyEpoch = ++_custodyEpochAlloc;
+    RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.connection, epoch: _custodyEpoch);
     _custodyProbeResolved = false;
     _optInAttempted = false;
     _probeFuture = null;
@@ -170,10 +174,61 @@ class OmiDeviceConnection extends DeviceConnection {
       _custodyNotifySub = await getBleStorageBytesListener(
         onStorageBytesReceived: (value) {
           if (epoch != _custodyEpoch || token != _custodyToken || value.isEmpty) return;
+          if (value[0] == RingProtocol.notifyReadBegin) {
+            final begin = RingProtocol.parseReadBeginNotification(value);
+            if (begin != null) {
+              RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.readBegin,
+                  epoch: epoch,
+                  ringId: _lastRingInfo?.ringId,
+                  start: begin.transferStartSeq,
+                  records: begin.packetCount);
+            }
+          } else if (value[0] == RingProtocol.notifyData && _diagnosticReadStart != null) {
+            _diagnosticReadBytes += value.length - 1;
+          } else if (value[0] == RingProtocol.notifyDone) {
+            final done = RingProtocol.parseDoneNotification(value);
+            if (done != null) {
+              final start = _diagnosticReadStart;
+              RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.readDone,
+                  epoch: epoch,
+                  ringId: _lastRingInfo?.ringId,
+                  start: start,
+                  end: done.nextSeq,
+                  records: _diagnosticReadBytes ~/ RingProtocol.recordSize,
+                  status: done.status);
+              _diagnosticReadStart = null;
+            }
+          }
           if (value[0] == RingProtocol.notifyLiveMark) {
             final mark = RingProtocol.parseLiveMarkNotification(value);
             if (mark != null) {
+              final before = _custody.diagnosticMarkStateByDevice[device.id];
               _custody.observeLiveMark(device.id, epoch, mark);
+              final after = _custody.diagnosticMarkStateByDevice[device.id];
+              final reason = !_livePersistEnabled
+                  ? RingDiagnosticReason.notEnabled
+                  : after?['ring_id'] != mark.ringId
+                      ? RingDiagnosticReason.ringMismatch
+                      : before?['evidence_broken'] == true || before?['incarnation_invalid'] == true
+                          ? RingDiagnosticReason.evidenceBroken
+                          : before?['last_observed_mark_seq'] == mark.ringSeq &&
+                                  before?['last_observed_mark_index'] == mark.liveIndex
+                              ? RingDiagnosticReason.duplicate
+                              : after?['evidence_broken'] == true || after?['last_observed_mark_seq'] != mark.ringSeq
+                                  ? RingDiagnosticReason.boundaryUnresolved
+                                  : RingDiagnosticReason.none;
+              RingCustodyDiagnostics.shared.event(
+                  device.id,
+                  reason == RingDiagnosticReason.none
+                      ? RingDiagnosticEvent.markAccepted
+                      : RingDiagnosticEvent.markRejected,
+                  epoch: epoch,
+                  ringId: mark.ringId,
+                  start: mark.ringSeq,
+                  reason: reason);
+            } else {
+              RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.markRejected,
+                  epoch: epoch, reason: RingDiagnosticReason.malformed);
             }
           } else if (value[0] == RingProtocol.notifyInfo) {
             final info = RingProtocol.parseInfoNotification(value);
@@ -303,6 +358,8 @@ class OmiDeviceConnection extends DeviceConnection {
   }
 
   void _emitCustodyTelemetry(String action, RingInfo info) {
+    RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.liveGrant,
+        epoch: _custodyEpoch, ringId: info.ringId, granted: _livePersistEnabled);
     DebugLogManager.logEvent('pendant_custody', {
       'action': action,
       'caps': _ringEffectiveCaps,
@@ -646,6 +703,15 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performStopStorageSync() async {
+    if (_diagnosticReadStart != null) {
+      RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.readStopped,
+          epoch: _custodyEpoch,
+          ringId: _lastRingInfo?.ringId,
+          start: _diagnosticReadStart,
+          records: _diagnosticReadBytes ~/ RingProtocol.recordSize,
+          reason: RingDiagnosticReason.incomplete);
+      _diagnosticReadStart = null;
+    }
     try {
       await transport.writeCharacteristic(storageDataStreamServiceUuid, storageDataStreamCharacteristicUuid, [0x03]);
       Logger.debug('OmiDeviceConnection: Sent STOP_SYNC command');
@@ -723,6 +789,13 @@ class OmiDeviceConnection extends DeviceConnection {
 
   @override
   Future<bool> performReadRingFromSeq(int startSeq, {int? packetCount}) async {
+    _diagnosticReadStart = startSeq;
+    _diagnosticReadBytes = 0;
+    RingCustodyDiagnostics.shared.beginRead(device.id,
+        epoch: _custodyEpoch,
+        ringId: _lastRingInfo?.ringId,
+        start: startSeq,
+        records: packetCount ?? _lastRingInfo?.unreadPackets ?? 0);
     try {
       await transport.writeCharacteristic(
         storageDataStreamServiceUuid,
@@ -749,7 +822,9 @@ class OmiDeviceConnection extends DeviceConnection {
     required int expectedEpoch,
     required int? expectedRingId,
   }) async {
-    return _enqueueStorageCommand(() async {
+    RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.advanceAttempt,
+        epoch: expectedEpoch, ringId: expectedRingId, end: newReadSeq);
+    final result = await _enqueueStorageCommand<RingCommandAck?>(() async {
       int? currentRingId() => (_ringEffectiveCaps & RingProtocol.capRingId) != 0 ? _lastRingInfo?.ringId : null;
       if (expectedEpoch != _custodyEpoch || expectedRingId != currentRingId()) {
         Logger.debug(
@@ -812,6 +887,13 @@ class OmiDeviceConnection extends DeviceConnection {
         await sub?.cancel();
       }
     });
+    RingCustodyDiagnostics.shared.event(device.id, RingDiagnosticEvent.advanceResult,
+        epoch: expectedEpoch,
+        ringId: expectedRingId,
+        end: newReadSeq,
+        status: result?.status,
+        reason: result == null ? RingDiagnosticReason.commandFailed : RingDiagnosticReason.none);
+    return result;
   }
 
   @override

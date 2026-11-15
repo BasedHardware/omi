@@ -175,23 +175,33 @@ void main() {
       return c;
     }
 
-    test('one ring read checks a live range once, not once per record', () async {
+    test('one ring read reuses its index while rechecking every duplicate skip', () async {
       final c = await proven();
       final memo = CustodyProofMemo();
       for (var seq = 0; seq < 30; seq++) {
         expect(await c.isDurableLiveRecord('dev', 42, seq, memo: memo), isTrue);
       }
       expect(indexLoads, 1);
-      expect(fileChecks, 1);
+      expect(fileChecks, 30, reason: 'each suppression revalidates current bytes; positive results are not cached');
 
       // A different range in the same read reuses the index and adds one file check.
       expect(await c.isDurableLiveRecord('dev', 42, 45, memo: memo), isTrue);
       expect(indexLoads, 1);
-      expect(fileChecks, 2);
+      expect(fileChecks, 31);
 
       // Without a memo every call stands alone, as before.
       expect(await c.isDurableLiveRecord('dev', 42, 5), isTrue);
       expect(indexLoads, 2);
+    });
+
+    test('a read memo never retains a positive recording check', () async {
+      final c = await proven();
+      final memo = CustodyProofMemo();
+      expect(await c.isDurableLiveRecord('dev', 42, 5, memo: memo), isTrue);
+      missing.add('live.bin');
+      expect(await c.isDurableLiveRecord('dev', 42, 6, memo: memo), isFalse);
+      expect(indexLoads, 1);
+      expect(fileChecks, 2);
     });
 
     test('a read already in flight still drops records the pendant has just released', () async {

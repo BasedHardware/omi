@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -52,7 +53,7 @@ class _FakeLocalSync implements LocalWalSync {
 
 const _framesPerRecord = 100;
 
-List<int> _record(int seq) {
+List<int> _record(int seq, {int? timestamp}) {
   final audio = <int>[];
   for (var i = 0; i < _framesPerRecord; i++) {
     audio
@@ -60,7 +61,7 @@ List<int> _record(int seq) {
       ..add(seq & 0xFF);
   }
   audio.addAll(List<int>.filled(440 - audio.length, 0));
-  final ts = ByteData(4)..setUint32(0, 1700000000 + seq, Endian.big);
+  final ts = ByteData(4)..setUint32(0, timestamp ?? 1700000000 + seq, Endian.big);
   return [RingProtocol.notifyData, ...ts.buffer.asUint8List(), ...audio];
 }
 
@@ -114,6 +115,7 @@ class _RingModel implements DeviceConnection {
   /// Whether the pendant's clock has been set. When it has not, records carry
   /// no usable time and the phone estimates one.
   bool rtcValid = true;
+  int Function(int)? timestampFor;
 
   void Function(List<int>)? _onBytes;
   StreamController<List<int>> _controller = StreamController<List<int>>.broadcast();
@@ -158,7 +160,7 @@ class _RingModel implements DeviceConnection {
           return;
         }
         delivered.add(startSeq + i);
-        _onBytes?.call(_record(startSeq + i));
+        _onBytes?.call(_record(startSeq + i, timestamp: timestampFor?.call(startSeq + i)));
         if (i % 50 == 49) await Future<void>.delayed(Duration.zero);
       }
       _onBytes?.call(_done(startSeq + count));
@@ -261,14 +263,16 @@ void main() {
         timerStart: 1000,
         codec: BleAudioCodec.opus,
         seconds: 60,
+        totalFrames: (ring.writeSeq - ring.readSeq) * _framesPerRecord,
         status: WalStatus.miss,
         storage: WalStorage.sdcard,
         device: 'pendant-1',
         storageTotalBytes: (ring.writeSeq - ring.readSeq) * 444,
       );
 
-  RingStorageSyncImpl syncFor(_RingModel ring, _FakeLocalSync local, Wal wal, {PendantRingCustody? custody}) {
-    final sync = RingStorageSyncImpl(_Listener())
+  RingStorageSyncImpl syncFor(_RingModel ring, _FakeLocalSync local, Wal wal,
+      {PendantRingCustody? custody, DateTime Function()? clock}) {
+    final sync = RingStorageSyncImpl(_Listener(), clock: clock)
       ..testConnection = ring
       ..testCustody = custody ?? newCustody()
       ..testWals = [wal]
@@ -334,12 +338,17 @@ void main() {
     ring.reads.clear();
     await sync2.syncAll();
 
-    expect(ring.reads.first.$1, creditedAtDrop, reason: 'nothing below the read pointer is fetched again');
+    final resumedFrom = ring.reads.first.$1;
+    expect(resumedFrom, greaterThanOrEqualTo(creditedAtDrop),
+        reason: 'completed indexed tail receipts may advance before the next READ');
     expect(ring.readSeq, 1500);
     expect(wal2.status, WalStatus.synced);
     final redelivered = ring.delivered.length - 500;
     expect(redelivered, lessThanOrEqualTo(120), reason: 'only the interrupted read may repeat');
-    expect(ring.delivered.length - deliveredAtDrop, 1500 - creditedAtDrop);
+    expect(ring.delivered.length - deliveredAtDrop, 1500 - resumedFrom);
+    if (ringDrainRecoveryEnabled) {
+      expect(redelivered, 0, reason: 'the indexed partial tail is replayed without a second transfer');
+    }
   });
 
   test('firmware that frees ring space itself keeps the single unbounded read', () async {
@@ -437,6 +446,34 @@ void main() {
       );
     }
   });
+
+  for (final scenario in ['bad phone', 'absurd duration', 'zero duration', 'bad between good']) {
+    test('windowed capture time cannot discard bytes: $scenario', () async {
+      final ring = _RingModel(readSeq: 1000, writeSeq: 1003)..rtcValid = scenario == 'bad between good';
+      final phone = scenario == 'bad phone' ? DateTime.utc(1970) : DateTime.utc(2026, 11, 15);
+      if (scenario == 'bad between good') {
+        final good = phone.millisecondsSinceEpoch ~/ 1000 - 100;
+        ring.timestampFor = (seq) => seq == 1001 ? good + 400000 : good + (seq - 1000) * 2;
+      }
+      final local = _FakeLocalSync();
+      final wal = ringWal(ring);
+      if (scenario == 'absurd duration') wal.totalFrames = 1000000000000;
+      if (scenario == 'zero duration') wal.totalFrames = 0;
+      final sync = syncFor(ring, local, wal, clock: () => phone)..testWindowRecords = 1;
+      await sync.syncAll();
+      expect(ring.reads, [(1000, 1), (1001, 1), (1002, 1)]);
+      expect(framesStored(local), 3 * _framesPerRecord);
+      expect(ring.readSeq, 1003);
+      expect(wal.status, WalStatus.synced);
+      if (ringDrainRecoveryEnabled) {
+        expect(
+            local.added.map((w) => (w.downloadSeqStart, w.downloadSeqEnd)), [(1000, 1001), (1001, 1002), (1002, 1003)]);
+      }
+      if (!deviceCaptureClockRepairOff && scenario != 'bad between good') {
+        expect(local.added.every((w) => w.timerStart == 0 && w.clockRun != null), isTrue);
+      }
+    });
+  }
 
   group('the live tail is not a backlog', () {
     Future<PendantRingCustody> liveCustody(_RingModel ring, {required List<int> markSeqs}) async {
