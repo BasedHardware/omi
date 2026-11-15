@@ -391,6 +391,18 @@ environments:
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
             value: 'true'
             category: ops_kill
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -1235,6 +1247,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1600,6 +1624,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1950,6 +1986,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -2261,6 +2309,18 @@ environments:
               value: 'true'
               category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
@@ -2971,6 +3031,18 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           EPISODE_COMPOSER_CONTEXT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3960,6 +4032,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4458,6 +4542,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4949,6 +5045,18 @@ environments:
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5383,6 +5491,18 @@ environments:
               value: 'true'
               category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
               value: 'true'
               category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
