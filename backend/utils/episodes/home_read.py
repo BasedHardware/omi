@@ -453,7 +453,9 @@ def project_episode(
     # Read-only evidence for legacy dangling references; never put it on the wire.
     episode.pop('_member_absent_ids', None)
     if empty_member_cleanup_enabled():
-        episode['_member_absent_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+        absent = [cid for cid in episode.get('conversation_ids') or [] if cid not in by_id]
+        if absent:
+            episode['_member_absent_ids'] = absent
     # Private read observation only; never persisted or included in the wire projection.
     episode.pop('_member_transcript_updated_at', None)
     episode.pop('_member_transcript_updates', None)
