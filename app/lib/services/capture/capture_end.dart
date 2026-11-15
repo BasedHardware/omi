@@ -121,13 +121,17 @@ typedef CaptureEndPoster = Future<bool> Function(CaptureEndSignal signal,
 class CaptureEndReporter {
   CaptureEndReporter({
     required CaptureEndPoster post,
-    required int Function(CaptureEndSignal signal) pendingWals,
+    required FutureOr<int> Function(CaptureEndSignal signal) pendingWals,
     required Future<bool> Function() disabled,
     DateTime Function()? now,
+    Object? Function()? scope,
+    int Function()? observationVersion,
   })  : _post = post,
         _pendingWals = pendingWals,
         _disabled = disabled,
-        _now = now ?? DateTime.now;
+        _now = now ?? DateTime.now,
+        _scope = scope ?? (() => null),
+        _observationVersion = observationVersion ?? (() => 0);
 
   static const int maxTracked = 16;
 
@@ -136,32 +140,44 @@ class CaptureEndReporter {
   /// Audio of the signal's recording, up to its end, that the server has not
   /// accepted: registered files, and anything still being written or
   /// published. The reporter only reads this; it never seals or uploads.
-  final int Function(CaptureEndSignal signal) _pendingWals;
+  final FutureOr<int> Function(CaptureEndSignal signal) _pendingWals;
   final Future<bool> Function() _disabled;
 
   final DateTime Function() _now;
+  final Object? Function() _scope;
+  final int Function() _observationVersion;
+  final Map<String, Object?> _scopes = {};
   final Map<String, CaptureEndSignal> _open = {};
   final Set<String> _accepted = {};
   Future<void> _queue = Future.value();
 
   /// Sends complete before later ones start, so a resend never overtakes the
   /// first report of the same end.
-  Future<void> report(CaptureEndSignal signal) => _queue = _queue.then((_) => _send(signal, first: true));
+  Future<void> report(CaptureEndSignal signal) {
+    final scope = _scope(); // Bind before this report waits for any queued work.
+    return _queue = _queue.then((_) => _send(signal, first: true, scope: scope));
+  }
 
   /// A file of [recordingSessionId] was accepted by the server.
   Future<void> uploadAccepted(String? recordingSessionId) {
     final signal = recordingSessionId == null ? null : _open[recordingSessionId];
     if (signal == null) return Future.value();
-    return _queue = _queue.then((_) => _send(signal, first: false));
+    final scope = _scopes[recordingSessionId];
+    return _queue = _queue.then((_) => _send(signal, first: false, scope: scope));
   }
 
   void _forget(String id) {
     _open.remove(id);
     _accepted.remove(id);
+    _scopes.remove(id);
   }
 
-  Future<void> _send(CaptureEndSignal signal, {required bool first}) async {
+  Future<void> _send(CaptureEndSignal signal, {required bool first, required Object? scope}) async {
     final id = signal.recordingSessionId;
+    if (scope != _scope()) {
+      if (identical(_open[id], signal)) _forget(id);
+      return;
+    }
     if (first) {
       // A later end of the same recording replaces the earlier one.
       _forget(id);
@@ -169,6 +185,7 @@ class CaptureEndReporter {
         _forget(_open.keys.first);
       }
       _open[id] = signal;
+      _scopes[id] = scope;
     } else if (!identical(_open[id], signal)) {
       return;
     }
@@ -177,7 +194,17 @@ class CaptureEndReporter {
         _forget(id);
         return;
       }
-      final pending = _pendingWals(signal);
+      final version = _observationVersion();
+      final pending = await _pendingWals(signal);
+      // Disk observation may yield through logout or a successor account.
+      // Its emptied active index must never become an old recording's zero.
+      if (scope != _scope()) {
+        _forget(id);
+        return;
+      }
+      // Keep the end for a later accepted-file wake if capture changed the
+      // inventory during the read. A stale empty snapshot proves nothing.
+      if (version != _observationVersion()) return;
       // Once the server holds this end, only "nothing left" is worth a call.
       if (_accepted.contains(id) && pending != 0) return;
       final accepted = await _post(signal, pendingWals: pending, sentAt: _now());

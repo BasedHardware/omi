@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/capture/capture_end.dart';
 
@@ -146,6 +148,56 @@ void main() {
       await reporter.report(signal('s'));
       await reporter.uploadAccepted('s');
       expect(sent, [('s', 0)]);
+    });
+
+    test('account switch during disk observation cannot turn an emptied ledger into zero', () async {
+      var owner = ('old-owner', 0);
+      final started = Completer<void>();
+      final disk = Completer<int>();
+      final fenced = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add((signal.recordingSessionId, pendingWals));
+          return true;
+        },
+        pendingWals: (_) {
+          started.complete();
+          return disk.future;
+        },
+        disabled: () async => false,
+        scope: () => owner,
+      );
+      final reporting = fenced.report(signal('s'));
+      await started.future;
+      owner = ('new-owner', 1);
+      disk.complete(0);
+      await reporting;
+      await fenced.uploadAccepted('s');
+      expect(sent, isEmpty);
+    });
+
+    test('a queued end remains bound to its original account generation', () async {
+      var generation = 0;
+      final firstStarted = Completer<void>();
+      final disk = Completer<int>();
+      final fenced = CaptureEndReporter(
+        post: (signal, {required pendingWals, required sentAt}) async {
+          sent.add((signal.recordingSessionId, pendingWals));
+          return true;
+        },
+        pendingWals: (_) {
+          firstStarted.complete();
+          return disk.future;
+        },
+        disabled: () async => false,
+        scope: () => generation,
+      );
+      final first = fenced.report(signal('s'));
+      await firstStarted.future;
+      final queued = fenced.report(signal('queued'));
+      generation++;
+      disk.complete(0);
+      await Future.wait([first, queued]);
+      expect(sent, isEmpty, reason: 'the queued old end cannot adopt the new scope');
     });
 
     test('a refused first report is retried on the next accepted file', () async {
