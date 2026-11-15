@@ -167,3 +167,14 @@ def test_partial_projection_counts_include_only_finished_markers(monkeypatch):
     docs[0].reference.delete.assert_called_once()
     docs[1].reference.delete.assert_not_called()
     docs[2].reference.update.assert_not_called()
+
+
+def test_disabled_prepass_preserves_existing_disabled_exit_report(cron, monkeypatch):
+    monkeypatch.setattr(
+        projection, 'run_job', lambda **kwargs: {'event': 'record_projection_rebuild', 'outcome': 'disabled'}
+    )
+    monkeypatch.setattr(
+        cluster, 'run', lambda *, before, **kw: (before(), {'event': 'record_seal_repair', 'outcome': 'disabled'})[1]
+    )
+    assert job.main() == 0
+    assert cron == [{'event': 'record_seal_repair', 'outcome': 'disabled'}]

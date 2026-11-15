@@ -210,7 +210,7 @@ def main():
                             before=projection,
                             **({'shard': shard, 'shards': shards} if shards > 1 else {}),
                         )
-                        if projection_report:
+                        if projection_report and projection_report.get('outcome') != 'disabled':
                             report['projection_prepass'] = projection_report
                             report['projection_prepass_budget_exhausted'] = int(
                                 projection_report.get('outcome') == 'budget_exhausted'
@@ -225,7 +225,7 @@ def main():
                     'work_incomplete': True,
                     'phase': phase,
                 }
-                if projection_report:
+                if projection_report and projection_report.get('outcome') != 'disabled':
                     report['projection_prepass'] = projection_report
                     report['projection_prepass_budget_exhausted'] = int(
                         projection_report.get('outcome') == 'budget_exhausted'
