@@ -15,6 +15,7 @@ from scripts.runtime_env_canary_ops import BACKOFF, PROVIDER, QUALITY, SERVICES,
 from scripts.runtime_env_validation.cloud_run import _validate_cloud_run
 from scripts.runtime_env_validation.manifest import validate_runtime_env
 from scripts.runtime_env_validation import workflows as workflow_validation
+from scripts.runtime_env_validation import manifest as manifest_validation
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -392,8 +393,38 @@ def test_actual_renderer_and_native_cloud_validator_share_same_canary_compositio
     assert not _validate_cloud_run(effective, state, strict_provisional=True)
 
 
+@pytest.fixture(scope='module')
+def parsed_canary_validation_inputs():
+    """Parse immutable repository inputs once, not once per provenance case.
+
+    Every test still runs the complete validator. Each loader call gets its own
+    copy, so the negative workflow mutation cannot contaminate another case.
+    This follows the renderer suite's parsed-manifest fixture pattern without
+    changing the CPU guard or replacing any validation behavior.
+    """
+    manifest_path = ROOT / 'backend/deploy/runtime_env.yaml'
+    load = workflow_validation._load_yaml
+    manifest = load(manifest_path)
+    prod = manifest['environments']['prod']
+    paths = {ROOT / path for path in prod['cloud_run']['workflow_files']}
+    paths.update(ROOT / service['values_file'] for service in prod['gke'].values() if 'values_file' in service)
+    paths.add(ROOT / 'backend/charts/llm-gateway/prod_omi_llm_gateway_values.yaml')
+    paths.update((ROOT / '.github/actions').glob('*/action.yml'))
+    paths.update((ROOT / '.github/actions').glob('*/action.yaml'))
+    return {manifest_path: manifest, **{path: load(path) for path in paths}}
+
+
 @pytest.fixture
-def composed_canary_runtime(tmp_path):
+def composed_canary_runtime(tmp_path, monkeypatch, parsed_canary_validation_inputs):
+    original_load = workflow_validation._load_yaml
+
+    def load_parsed_input(path):
+        if path in parsed_canary_validation_inputs:
+            return deepcopy(parsed_canary_validation_inputs[path])
+        return original_load(path)
+
+    monkeypatch.setattr(workflow_validation, '_load_yaml', load_parsed_input)
+    monkeypatch.setattr(manifest_validation, '_load_yaml', load_parsed_input)
     private = tmp_path / 'private.json'
     private.write_text(json.dumps(snapshot()))
     state = tmp_path / 'state.json'
@@ -404,7 +435,7 @@ def composed_canary_runtime(tmp_path):
         CLOUD_RUN_VPC_NETWORK='omi-prod-vpc',
         CLOUD_RUN_VPC_SUBNET='omi-prod-subnet',
     )
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())
+    manifest = parsed_canary_validation_inputs[ROOT / 'backend/deploy/runtime_env.yaml']
     for job in manifest['environments']['prod']['cloud_run']['jobs'].values():
         for entry in job.get('env', {}).values():
             if isinstance(entry, dict) and entry.get('env_var'):
