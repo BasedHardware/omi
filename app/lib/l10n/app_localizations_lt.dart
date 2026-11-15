@@ -7034,6 +7034,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepavyko prisijungti su Apple, bandykite dar kartą.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepavyko gauti Firebase žetono, bandykite dar kartą.';
 
   @override

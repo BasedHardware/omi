@@ -206,7 +206,8 @@ def test_legacy_episode_redacts_locked_member_and_suppresses_only_when_group_vis
     store.put('users/u/conversations/c', conversation(is_locked=True, episode_id='e'))
     store.put('users/u/episode_links/c', {'episode_id': 'e'})
     store.put(
-        'users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['c'], 'content': 'untrusted'}
+        'users/u/episodes/e',
+        {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ['c'], 'content': 'untrusted'},
     )
     drain(store)
     result = home_feed.feed('u', firestore_client=store)
@@ -271,7 +272,9 @@ def test_legacy_composed_display_requires_unchanged_visible_members(store, monke
 
 def test_dirty_deleted_member_cannot_leak_old_episode_text(store):
     store.put('users/u/conversations/c', conversation())
-    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['c']})
+    store.put(
+        'users/u/episodes/e', {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ['c']}
+    )
     store.put('users/u/episode_links/c', {'episode_id': 'e'})
     drain(store)
     store.docs.pop('users/u/conversations/c')
@@ -306,7 +309,7 @@ def test_oversized_episode_finishes_preparation_and_keeps_member_history(store, 
     for cid in ids:
         store.put(f'users/u/conversations/{cid}', conversation(cid, episode_id='e'))
         store.put(f'users/u/episode_links/{cid}', {'episode_id': 'e'})
-    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ids})
+    store.put('users/u/episodes/e', {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ids})
     drain(store)
     result = home_feed.feed('u', firestore_client=store)
     assert {item['detail_id'] for item in result['items']} == set(ids)
@@ -319,7 +322,9 @@ def test_prepared_member_migration_skips_rehydrating_its_episode(store, monkeypa
     for cid in ['a', 'b']:
         store.put(f'users/u/conversations/{cid}', conversation(cid, episode_id='e'))
         store.put(f'users/u/episode_links/{cid}', {'episode_id': 'e'})
-    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['a', 'b']})
+    store.put(
+        'users/u/episodes/e', {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ['a', 'b']}
+    )
     home_feed.prepare('u', firestore_client=store)
     store.reads.clear()
     home_feed.prepare('u', firestore_client=store)
@@ -343,7 +348,10 @@ def test_authoritative_owner_change_does_not_show_old_aggregate(store):
     store.put('users/u/conversations/c', conversation(episode_id='new'))
     store.put('users/u/episode_links/c', {'episode_id': 'new'})
     for eid in ['old', 'new']:
-        store.put(f'users/u/episodes/{eid}', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['c']})
+        store.put(
+            f'users/u/episodes/{eid}',
+            {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ['c']},
+        )
     drain(store)
     assert [item['detail_id'] for item in home_feed.feed('u', firestore_client=store)['items']] == ['new']
 
@@ -354,7 +362,7 @@ def test_normal_large_episode_prepares_in_chunks_and_stays_grouped(store, monkey
     for cid in ids:
         store.put(f'users/u/conversations/{cid}', conversation(cid, episode_id='e'))
         store.put(f'users/u/episode_links/{cid}', {'episode_id': 'e'})
-    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ids})
+    store.put('users/u/episodes/e', {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ids})
     for _ in range(100):
         store.reads.clear()
         result = home_feed.prepare('u', firestore_client=store)
@@ -372,7 +380,9 @@ def test_normal_large_episode_prepares_in_chunks_and_stays_grouped(store, monkey
 def test_episode_hard_delete_recovers_member_conversations(store):
     store.put('users/u/conversations/c', conversation(episode_id='e'))
     store.put('users/u/episode_links/c', {'episode_id': 'e'})
-    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['c']})
+    store.put(
+        'users/u/episodes/e', {'started_at': AT, 'composed_at': AT, 'status': 'closed', 'conversation_ids': ['c']}
+    )
     drain(store)
     store.docs.pop('users/u/episodes/e')
     store.docs['users/u/episode_links/home_feed_control'].update(ready=False, policy_dirty=True, policy_epoch='delete')
@@ -409,3 +419,57 @@ def test_prepare_reserves_query_limit_before_early_stream_cancel(store, monkeypa
     # Only consumed snapshots count as processed; the reservation also includes
     # source snapshots the SDK may have prefetched before iterator cancellation.
     assert requested > len(store.reads)
+
+
+@pytest.mark.parametrize('live', [False, True])
+@pytest.mark.parametrize('composed', [False, True])
+@pytest.mark.parametrize('enabled', [False, True])
+def test_ready_member_cards_replace_atomically_without_detail_reads(store, monkeypatch, live, composed, enabled):
+    monkeypatch.setattr(home_feed, 'home_step_projection_enabled', lambda: enabled)
+    # This test owns representation transitions, not the wall-clock age policy.
+    monkeypatch.setattr(home_feed.home_step, '_older_than', lambda _anchor, _seconds: False)
+    # A one-member prepare budget forces the replacement across chunks. GET
+    # must reject every partial state rather than publish both representations.
+    monkeypatch.setattr(home_feed, 'MEMBERS_PER_PREPARE', 1)
+    for cid, raw in [('ready', conversation()), ('pending', conversation())]:
+        raw['episode_id'] = 'e'
+        if cid == 'pending':
+            raw['status'] = 'processing'
+        store.put(f'users/u/conversations/{cid}', raw)
+        store.put(f'users/u/episode_links/{cid}', {'episode_id': 'e'})
+    episode = {'started_at': AT, 'status': 'live' if live else 'closed', 'conversation_ids': ['ready', 'pending']}
+    if composed:
+        episode['composed_at'] = AT
+    store.put('users/u/episodes/e', episode)
+    drain(store)
+    store.reads.clear()
+    cards = home_feed.feed('u', firestore_client=store)['items']
+    separate = enabled and (live or not composed)
+    assert {c['kind'] for c in cards} == ({'conversation'} if separate else {'episode'})
+    assert len(cards) == (2 if separate else 1)
+    assert all(fields == home_feed.FEED_FIELDS for path, fields in store.reads if '/conversations/' in path)
+    if separate:
+        assert {c['detail_id'] for c in cards} == {'ready', 'pending'}
+        episode.update(status='closed', composed_at=AT)
+        store.docs['users/u/episodes/e'].update(episode, home_needs_prepare=True, home_content_epoch='composed')
+        store.docs['users/u/episode_links/home_feed_control']['ready'] = False
+        result = home_feed.prepare('u', firestore_client=store)
+        assert not result['ready']
+        with pytest.raises(home_feed.PreparationRequired):
+            home_feed.feed('u', firestore_client=store)
+        drain(store)
+        cards = home_feed.feed('u', firestore_client=store)['items']
+        assert [(c['kind'], c['member_count']) for c in cards] == [('episode', 2)]
+
+
+def test_ready_member_policy_rollback_requires_fully_prepared_replacement(store, monkeypatch):
+    store.put('users/u/conversations/c', conversation(episode_id='e'))
+    store.put('users/u/episode_links/c', {'episode_id': 'e'})
+    store.put('users/u/episodes/e', {'started_at': AT, 'status': 'closed', 'conversation_ids': ['c']})
+    drain(store)
+    assert home_feed.feed('u', firestore_client=store)['items'][0]['kind'] == 'conversation'
+    monkeypatch.setattr(home_feed, 'home_step_projection_enabled', lambda: False)
+    with pytest.raises(home_feed.PreparationRequired):
+        home_feed.feed('u', firestore_client=store)
+    drain(store)
+    assert home_feed.feed('u', firestore_client=store)['items'][0]['kind'] == 'episode'

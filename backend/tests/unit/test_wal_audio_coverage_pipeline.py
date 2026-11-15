@@ -74,7 +74,7 @@ def _claim(frame_count=10):
     }
 
 
-def _ts(path):
+def _ts(path, **_kwargs):
     return float(Path(path).stem.rsplit('_', 1)[-1])
 
 

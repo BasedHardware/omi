@@ -15,7 +15,7 @@ import hashlib
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.types import Write
-from config.episodes import home_hide_below_floor_rows_enabled
+from config.episodes import home_hide_below_floor_rows_enabled, home_step_projection_enabled
 from prometheus_client import Counter, Histogram
 
 from database._client import get_firestore_client, run_transactional
@@ -297,10 +297,12 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
         snapshot = get(control_ref)
         state = snapshot.to_dict() or {}
         phase = state.get('phase', 'conversations')
-        rebuild_all = state.get('rebuild_all', False)
-        if state.get('policy_dirty'):
+        ready_members = home_step_projection_enabled()
+        policy_changed = state.get('schema') == SCHEMA and state.get('ready_members') != ready_members
+        rebuild_all = state.get('rebuild_all', False) or policy_changed
+        if state.get('policy_dirty') or policy_changed:
             phase, rebuild_all = 'conversations', True
-        cursor = None if state.get('policy_dirty') else state.get('cursor')
+        cursor = None if state.get('policy_dirty') or policy_changed else state.get('cursor')
         if state.get('schema') != SCHEMA:
             phase, cursor = 'conversations', None
         generation = state.get('generation', '')
@@ -408,9 +410,11 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 or staged.get('epoch') != row.get('home_content_epoch', '')
                 or staged.get('policy_epoch') != policy_epoch
                 or staged.get('membership') != membership
+                or staged.get('ready_members') != ready_members
             ):
                 staged = {
                     'epoch': row.get('home_content_epoch', ''),
+                    'ready_members': ready_members,
                     'policy_epoch': policy_epoch,
                     'membership': membership,
                     'offset': 0,
@@ -435,6 +439,9 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 continue
             offset = int(staged['offset'])
             oversized = len(ids) > MAX_MEMBERS
+            # Until composition, the compact recording cards are the actual
+            # readable notes and pending units. No member wire/hydration on GET.
+            member_cards = ready_members and (row.get('status') == 'live' or not utc(row.get('composed_at')))
             proof = row.get('home_content_member_versions') or {}
             for cid in ids[offset:]:
                 if counts['members'] >= MEMBERS_PER_PREPARE or not available(3) or counts['bytes'] >= MAX_PREPARE_BYTES:
@@ -454,7 +461,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     visible = belongs and _visible(raw, episode_member=True)
                     projection = _conversation_projection(uid, raw)
                     if belongs:
-                        projection['home_standalone'] = oversized
+                        projection['home_standalone'] = oversized or member_cards
                         if owner is None:
                             projection['home_compat_owner'] = eid
                         source_updates[cid] = projection
@@ -514,6 +521,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     home_display=seal_display(uid, compact),
                     home_visible=bool(staged['visible'])
                     and not oversized
+                    and not member_cards
                     and not bool(row.get('recorded_merged_into')),
                     home_member_count=staged['visible'],
                     home_sources=staged['sources'],
@@ -553,6 +561,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                 'phase': phase,
                 'cursor': cursor,
                 'ready': ready,
+                'ready_members': ready_members,
                 'policy_dirty': False,
                 'rebuild_all': rebuild_all and not ready,
             },
@@ -593,7 +602,11 @@ def feed(
     authority_version = _revision(authority)
     state_doc = _control(user).get()
     control = state_doc.to_dict() or {}
-    if control.get('schema') != SCHEMA or control.get('ready') is not True:
+    if (
+        control.get('schema') != SCHEMA
+        or control.get('ready') is not True
+        or control.get('ready_members') != home_step_projection_enabled()
+    ):
         raise PreparationRequired('home_feed_preparation_required')
     generation = control.get('generation', '')
     policy = f'home:{SCHEMA}:{int(episodes_admitted)}'

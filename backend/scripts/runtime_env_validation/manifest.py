@@ -673,13 +673,14 @@ def validate_runtime_env(
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
+    integration_only = False
     if integration_canary_state or integration_canary_source:
         if env != 'prod' or not (integration_canary_state and integration_canary_source):
             return [ValidationError(env, 'integration canary requires bound prod source/state')]
         try:
-            env_config = compose(
-                env_config, json.loads(integration_canary_state.read_text()), integration_canary_source
-            )
+            snapshot = json.loads(integration_canary_state.read_text())
+            integration_only = snapshot.get('profile') == 'integration-only'
+            env_config = compose(env_config, snapshot, integration_canary_source)
             # Workflow reconstruction must validate the same effective manifest
             # as the rendered candidate, including serving-ops composition.
             manifest = deepcopy(manifest)
@@ -719,12 +720,20 @@ def validate_runtime_env(
         )
 
     cloud_run_state = None
+    live_config = env_config
+    if integration_only:
+        # Static source/workflow contracts above stay full-manifest. Live
+        # comparison follows the sole service this protected profile mutates.
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            'backend-integration': env_config['cloud_run']['services']['backend-integration']
+        }
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:
-        cloud_run_state = _fetch_live_cloud_run_state(env_config)
+        cloud_run_state = _fetch_live_cloud_run_state(live_config)
 
     if cloud_run_state is not None:
-        errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
-        errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
+        errors.extend(_validate_cloud_run(live_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_sync_ledger_fence_mode(live_config, cloud_run_state))
     return errors

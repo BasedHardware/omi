@@ -49,6 +49,10 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'HOME_SETTLED_EMPTY_WIRE_ENABLED',
+    'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+    'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+    'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
     'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED',
     'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT',
     'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S',
@@ -310,6 +314,16 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == 'refactor-lead'
             assert entry['review_by'] == '2026-12-10'
+        elif name in {
+            'EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED',
+            'EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED',
+            'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
+            'HOME_SETTLED_EMPTY_WIRE_ENABLED',
+        }:
+            assert entry['owner'] == flag['owner'] == 'quality-lead'
+            assert entry['review_by'] == (
+                '2026-11-17' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
+            )
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
             assert entry['review_by'] == '2026-12-14'
@@ -324,6 +338,12 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
+        elif name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED':
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'closed'
+            assert flag['summary'].startswith('Default off')
+            assert 'read tolerance' in flag['notes']
+            assert '48 hours' in flag['notes']
         elif name.startswith('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED'):
             default = (
                 'Default 100'

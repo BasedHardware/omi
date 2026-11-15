@@ -400,6 +400,18 @@ environments:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
             value: 'true'
             category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
             value: 'true'
             category: ops_kill
@@ -424,6 +436,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -620,6 +633,18 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
             value: 'true'
             category: ops_kill
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
@@ -1283,6 +1308,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1307,6 +1344,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1672,6 +1710,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1696,6 +1746,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2046,6 +2097,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2070,6 +2133,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2383,6 +2447,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2407,6 +2483,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -3142,6 +3219,18 @@ environments:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
             value: 'true'
             category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3155,6 +3244,7 @@ environments:
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
             value: 'true'
             category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3458,6 +3548,18 @@ environments:
             value: 'true'
             category: ops_kill
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
             value: 'true'
             category: ops_kill
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
@@ -4137,10 +4239,28 @@ environments:
             EPISODE_COMPOSER_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS:
+              value: '1200'
+              category: config
+            FIRST_SUMMARY_DEADLINE_SECONDS:
+              value: '60'
+              category: config
             EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
               value: 'true'
               category: ops_kill
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
               value: 'true'
               category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
@@ -4171,6 +4291,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4665,6 +4786,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4697,6 +4830,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5180,6 +5314,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5215,6 +5361,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5640,6 +5787,18 @@ environments:
             EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
               value: 'true'
               category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
             CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5679,6 +5838,7 @@ environments:
             HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
             RECORD_SEAL_REPAIR_FRESH_ENABLED:
               value: 'true'
               category: ops_kill

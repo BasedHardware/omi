@@ -190,6 +190,14 @@ per-replica path. Queue age still needs a designated
 transactional job claims and recovery cadence are unchanged. See
 [Firestore spend guard](runbooks/firestore-spend-guard.md).
 
+Upload-coalescing discovery uses a separate strict namespace lease: one scanner
+per fleet, including when producers are OFF so existing holds drain. The advisory
+`BATCH_PIPELINE_LEADER_LEASE_ENABLED` bypass does not disable this role. Ownership
+errors skip discovery; cursor, heartbeat and new claims check the acquisition
+token transactionally. Existing 120s group custody leases and privacy/erasure
+checks remain authoritative for already claimed audio. See
+[coalescing scan coordination](listen_pusher_pipeline/changes/2026-11-14-coalescing-scan-leader.md).
+
 ## Retained seal proof rules
 
 `RECORD_SEAL_REPAIR_FRESH_ENABLED` defaults true (`false`, `off`, or `0` disables
@@ -6805,6 +6813,8 @@ unchanged. Batch jobs freeze that stored clock with their audio; legacy queued
 jobs carry receipt time in their durable payload. Setting the switch to `false`
 restores pre-2024 rejection; deprecated V1 keeps its original rejection policy.
 
+The future-clock V2 batch extension defaults off in code and all twelve bindings until every reader and admitter is upgraded and drained. The quality lead enables everyone in one config change on the image-rollout day. Only stamps more than 24 hours ahead recover; the 600-second-to-24-hour band stays refused. Unmarked sources keep immutable owner/content receipt anchors; marked future runs preserve relative offsets. Retained provenance survives clock-window changes and missing-input repair. Untrusted parts use distinct stable identities and cannot join trusted conversations, episodes or temporal duplicate groups. Stale conversation targets are ignored for recovery. Details and ramp metrics: [future capture recovery](listen_pusher_pipeline/changes/2026-11-15-future-capture-recovery.md).
+
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
 record the final fresh-gate decision. Reasons include `recent_legacy_capture`,
 `legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. Per-file
@@ -9961,3 +9971,13 @@ creation is not a close prerequisite. Each attempt has a five-second bound and
 the pending handshake a thirty-second deadline; expiry preserves custody fences.
 Prepared EOF/deadline recovery still blocks default-on admission. See the
 [Q12-S boundary note](./listen_pusher_pipeline/changes/2026-11-15-q12-s-source-close-boundary.md).
+
+### Episode transcript-wait repairs
+
+`EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED` defaults on: completed results with a validated STT-empty receipt covering all closed audio are settled for episode composition. Summary exhaustion, below-floor decisions or empty text alone do not qualify. The additive receipt is fenced to projection revision and pending timestamps; historical rows without proof retain the bounded wait. Off restores the prior transcript wait; late transcript evidence still schedules recomposition. The all-members-complete gate and episode boundaries are unchanged. See [rollout contract](listen_pusher_pipeline/changes/2026-11-15-episode-wait-repairs.md).
+
+`EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED` defaults on. `compose_transcript_wait_observations` is an internal member-ID map of pending-generation and first-observed timestamps. Continuing blockers retain their cap across unrelated joins; a new generation gets its own limit. New readers cap legacy waits using those observations; old images ignore the map. Off restores aggregate wait-start renewal.
+
+`EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED` defaults off: only explicit true adds atomic removal of the stub's episode/reverse references to existing guarded empty-live deletion. Dangling-ID read tolerance, membership acknowledgement and registered-audio protection stay active independently of this switch. The quality lead owns a 1% then 100% traffic ramp within 48 hours of this image serving on listen and pusher, gated on clean attach abort/409 lock-timeout logs; see the rollout contract above. This does not finish/discard a recording beyond the cleanup's preexisting status decision, change episode bounds, or repair production history.
+
+`HOME_SETTLED_EMPTY_WIRE_ENABLED` defaults on. Conversation-list and episode-member reads give an empty-title affirmative settled-empty noise row the terminal caption `No summary`, preserving `home_step=noise`, empty notes/transcript, status and action IDs. This prevents released clients' empty-title STT inference across both merged wire shapes. Off restores the prior empty-title wire. No title is persisted and actual pending transcripts remain pending.

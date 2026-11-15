@@ -2197,6 +2197,7 @@
     "authFailedToSignInWithGoogle": "Kunne ikke logge ind med Google, prøv venligst igen.",
     "authenticationFailed": "Godkendelse mislykkedes. Prøv venligst igen.",
     "authFailedToSignInWithApple": "Kunne ikke logge ind med Apple, prøv venligst igen.",
+    "authAppleSignInFailedUseGoogle": "Log ind med Apple virkede ikke. Prøv igen, eller fortsæt med Google.",
     "authFailedToRetrieveToken": "Kunne ikke hente Firebase-token, prøv venligst igen.",
     "authUnexpectedErrorFirebase": "Uventet fejl under login, Firebase-fejl, prøv venligst igen.",
     "authUnexpectedError": "Uventet fejl under login, prøv venligst igen",

@@ -7047,6 +7047,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Gagal log masuk dengan Apple, sila cuba lagi.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Log masuk dengan Apple tidak berjaya. Cuba lagi atau teruskan dengan Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Gagal mendapatkan token Firebase, sila cuba lagi.';
 
   @override

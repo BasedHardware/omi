@@ -110,10 +110,12 @@ def enqueue(store, member, key, now):
     return store.run(commit)
 
 
-def claim(store, group_id, now, *, producer_enabled):
+def claim(store, group_id, now, *, producer_enabled, scan=None):
     token = uuid4().hex
 
     def commit(tx):
+        if scan is not None:
+            scan.check(tx)
         row = tx.get('coalesce_groups', group_id)
         if not row or row['state'] == 'done' or row.get('lease_until', 0) > now:
             return None
@@ -237,15 +239,16 @@ def due(client, namespace, now, *, producer_enabled, after=None):
     return [{'id': doc.id, 'scan_at': doc.to_dict()['scan_at']} for doc in query.limit(config.DRAIN_PAGE).stream()]
 
 
-def scan_position(store):
+def scan_position(store, *, scan):
     def read(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         return quota.get('scan_epoch', 0), quota.get('scan_after')
 
     return store.run(read)
 
 
-def advance_scan(store, epoch, after):
+def advance_scan(store, epoch, after, *, scan):
     """Fair scan progress only; never mutate denied custody or grant processing.
 
     Advance even for a failed page. A stale concurrent scanner cannot move the
@@ -254,6 +257,7 @@ def advance_scan(store, epoch, after):
     """
 
     def commit(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         if not quota or quota.get('scan_epoch', 0) != epoch or quota.get('scan_after') == after:
             return
@@ -263,13 +267,14 @@ def advance_scan(store, epoch, after):
     store.run(commit)
 
 
-def note_scan(store, now, *, producer_enabled):
+def note_scan(store, *, producer_enabled, scan):
     def commit(tx):
+        scan.check(tx)
         quota = tx.get('coalesce_quota', 'global')
         if not quota and not producer_enabled:
             return  # Default OFF + no accepted holds: no heartbeat writes.
         quota = quota or {'groups': 0, 'owners': {}}
-        quota['last_scan_at'] = now
+        quota['last_scan_at'] = scan.clock()
         tx.put('coalesce_quota', 'global', quota)
 
     store.run(commit)
