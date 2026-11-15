@@ -764,11 +764,11 @@ def _schedule_seam(store, monkeypatch):
     monkeypatch.setattr(composer._executor, 'submit', lambda fn: fn())
 
 
-def test_sync_update_summary_drift_skips_before_member_reads(store, monkeypatch):
+def test_sync_update_label_drift_skips_before_member_reads(store, monkeypatch):
     calls = []
     c = _c(calls=calls)
     assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
-    store.rows['c1']['structured']['overview'] = 'Reprocessed summary'
+    store.rows['c1']['structured']['title'] = 'Reprocessed title'
     store.rows['c1']['transcript_segments'][0]['speaker'] = 'SPEAKER_77'
     _schedule_seam(store, monkeypatch)
     monkeypatch.setattr(composer.conversations_db, 'get_conversation', lambda *a, **kw: pytest.fail('redundant read'))
@@ -1839,7 +1839,7 @@ def test_receipt_promotes_real_deferred_wait_without_a_home_request(store, monke
 
 @pytest.mark.parametrize('quiet_seconds', [120, 300, 600])
 @pytest.mark.parametrize('notes_finish_first', [False, True])
-def test_transcript_receipt_and_notes_hold_overlap_without_another_paid_compose(
+def test_transcript_receipt_refreshes_notes_only_if_they_finish_after_compose(
     store, monkeypatch, quiet_seconds, notes_finish_first
 ):
     _schedule_seam(store, monkeypatch)
@@ -1886,7 +1886,7 @@ def test_transcript_receipt_and_notes_hold_overlap_without_another_paid_compose(
         assert store.episode['compose_pending_since'] == pending
         finish_compose()
     composer.after_finalized(UID, 'c2', 'finalized', c, row=member)
-    assert len(calls) == 1 and not composer._deferred
+    assert len(calls) == (1 if notes_finish_first else 2) and not composer._deferred
     assert processing_hold.admission(member, obligation, now=arrived + quiet_seconds) == ('unchanged', None)
 
 
