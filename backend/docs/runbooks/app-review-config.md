@@ -52,10 +52,23 @@ must be merged and deployed. Confirm that deployed child code preserves all of
 these behaviors: held Android releases are written as drafts; a fresh receipt
 renews an expired lease; reconciliation repairs a missing receipt on first
 sight without reviving an expired tombstone; unavailable and rejected
-submission tokens reach the real paging rule; and the rollout brake proves
-Cloud Scheduler is `PAUSED` with no active writer runs. Use the child
-regressions and deployment receipts for this check. Do not use a successful
-parent-only check as evidence for these child gates.
+submission tokens reach the real paging rule; and the rollout brake can read
+the app-review job as `PAUSED`. The brake's scheduler check does not prove full
+writer quiescence. Before invoking the brake, separately deploy the still-
+planned job in `PAUSED` state by explicitly selecting
+`app-review-config-sweep-hourly` with the reconciler's `--jobs` argument; the
+default reconciliation skips planned jobs. Confirm the job exists and remains
+`PAUSED`. Use the existing `gcp_scheduler_reconcile.yml` workflow with its
+`jobs` input set to `app-review-config-sweep-hourly`; retain the production
+environment approval and typed confirmation.
+Do not use a successful parent-only check as evidence for these child gates.
+
+Before the brake check, record the exact `google_play` Codemagic principal and
+verify its existing `cloudscheduler.jobs.get` permission for this job. Do not
+create or broaden IAM bindings. Separately retain Scheduler history or
+backend-sync log evidence that any already-started sweep request has finished,
+and terminal build receipts for previously dispatched Codemagic writers. A
+`PAUSED` job and the brake result do not replace these drain receipts.
 
 After those release gates pass, and only under separate activation
 authorization, use this order. The submission and sweep routes run on
@@ -66,26 +79,43 @@ identity access for them.
    scoped Secret Manager bindings to `backend-runtime`. Deploy the final
    stacked backend revision and confirm both routes are mounted on
    `backend-sync`.
-2. Verify the Play role against a staging app: create a temporary edit, read
+2. Separately deploy `app-review-config-sweep-hourly` while it remains
+   `lifecycle: planned` and GCP `PAUSED`, explicitly selecting it with
+   `--jobs app-review-config-sweep-hourly`. A default reconciliation skips
+   planned jobs. Use the existing `gcp_scheduler_reconcile.yml` workflow with
+   its `jobs` input set to `app-review-config-sweep-hourly`. Confirm the
+   deployed job is `PAUSED` before the brake check.
+3. Verify the Play role against a staging app: create a temporary edit, read
    its production track, and delete the edit without committing it. If a step
    is denied, establish the narrowest app-scoped role that passes before
    enabling store polling.
-3. Verify the deployed metric scrape and alert path, including
-   `submission_token_unavailable` and `submission_token_rejected`, and retain
-   the successful child brake-quiescence receipt.
-4. In a separately reviewed scheduler-manifest change, remove
+4. Verify the deployed metric scrape and alert path, including
+   `submission_token_unavailable` and `submission_token_rejected`. Verify the
+   recorded brake principal and `jobs.get` permission, and retain separate
+   Scheduler/backend-sync drain evidence plus terminal Codemagic build receipts.
+   Then run the authorized brake status check and retain its receipt. That
+   receipt records the brake's own checks; it does not prove full quiescence.
+5. Before enabling the job, record the operator review of any legacy
+   completed-but-held production releases and hand-created releases with names
+   the lifecycle cannot parse. The poller treats `status == "completed"` as
+   live, so these cases need an explicit manual disposition. Record that the
+   submission token is intentionally absent until the first successful tick;
+   after attaching it, verify it is present and that missing/rejected-token
+   alerts page before resuming submissions.
+6. In a separately reviewed scheduler-manifest change, remove
    `lifecycle: planned` and set `state: ENABLED` on
    `app-review-config-sweep-hourly`. The job runs at minute 17, away from the
    rollout-watch and daily-train edit windows. Apply it with the existing
-   `gcp_scheduler_reconcile.yml` workflow and typed
+   `gcp_scheduler_reconcile.yml` workflow, selecting
+   `app-review-config-sweep-hourly` in its `jobs` input, and the typed
    `APPLY_PROD_SCHEDULER` confirmation. Confirm a successful route response
    and advancing `last_sweep_timestamp`. With missing store credentials, the
    sweep still enforces TTL and reports a credential alert.
-5. After the first successful sweep tick, create the submission-token secret
-   and add its value to the pre-created Codemagic group. Verify the group is
+7. After the first successful sweep tick, add the submission-token secret's
+   value to the pre-created Codemagic group. Verify the group is
    attached only to `mobile-store-promote` and `mobile-daily-train`. The hook
    can target staging with `APP_REVIEW_CONFIG_ENDPOINT` or `--endpoint`.
-6. Enable the `App Review Config - sweep silent` Grafana rule after the first
+8. Enable the `App Review Config - sweep silent` Grafana rule after the first
    successful tick. Confirm that the paging rule covers credential, store API,
    and submission-token failures; routine reconciliation repairs and live
    clears do not page.
