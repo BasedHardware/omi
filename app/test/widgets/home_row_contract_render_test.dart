@@ -48,6 +48,7 @@ import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('HOME_ROW_RENDER_OUTPUT');
 const _baseline = bool.fromEnvironment('HOME_OVERLAP_BASELINE');
+const _followupBaseline = bool.fromEnvironment('HOME_FOLLOWUP_BASELINE');
 
 class _LiveCapture extends CaptureProvider {
   _LiveCapture()
@@ -277,15 +278,54 @@ void main() {
         capture: capture,
         capability: false,
         processing: [pending('local', now.subtract(const Duration(minutes: 20)))]);
-    expect(find.byType(ProcessingConversationRow), findsOneWidget);
-    final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
-    expect(row.count, 3);
-    expect(row.step.name, 'transcribing');
-    expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
-    expect(find.textContaining('Writing notes'), findsNothing);
-    expect(find.text('Listening now'), findsOneWidget);
-    expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
-    await _capture(tester, boundary, '009-mobile-ios-older-server-one-row');
+    if (_followupBaseline) {
+      expect(find.byType(ProcessingConversationRow), findsNWidgets(2));
+      expect(find.textContaining('Writing notes'), findsNWidgets(2));
+    } else {
+      expect(find.byType(ProcessingConversationRow), findsOneWidget);
+      final row = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+      expect(row.count, 3);
+      expect(row.step.name, 'transcribing');
+      expect(find.text('Transcribing… · 3 recordings'), findsOneWidget);
+      expect(find.textContaining('Writing notes'), findsNothing);
+      expect(find.text('Listening now'), findsOneWidget);
+      expect(_top(tester, find.byType(LiveEpisodeRow)), lessThan(_top(tester, find.byKey(_processingKey))));
+    }
+    await _capture(tester, boundary,
+        _followupBaseline ? '001-mobile-ios-capability-off-before' : '002-mobile-ios-capability-off-after');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('processing changed during confirmation cancels deletion and shows review notice', (tester) async {
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    final fixture = HomeReadyMembersFixture(DateTime.now());
+    final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        fetchPage: (from, to, {cursor}) async =>
+            ApiSuccess(EpisodePageRead(enabled: true, episodes: [fixture.waiting])),
+        detail: (_) async => ApiSuccess(fixture.waiting));
+    episodes.debugSetHomeEpisodes([fixture.waiting]);
+    final boundary = await _pumpHome(tester, fixture.members, episodeProvider: episodes, withNavigation: true);
+    final history = tester.element(find.byType(ProcessingConversationRow)).read<ConversationProvider>();
+    await tester.tap(find.byKey(_processingKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byKey(const Key('episode_more')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Delete 2 Conversations?'), findsOneWidget);
+    history.updateConversation(fixture.members[2].withHomeStep('ready'), preserveHomeStep: false);
+    await tester.pump();
+    await tester.tap(find.text('Delete').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(history.memoriesToDelete, isEmpty);
+    expect(find.text('Undo'), findsNothing);
+    expect(find.text('Processing changed. Review the list and try again.'), findsOneWidget);
+    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+    await _capture(tester, boundary, '003-mobile-ios-delete-scope-changed');
     await tester.pumpWidget(const SizedBox.shrink());
   });
   for (final compact in [false, true]) {
