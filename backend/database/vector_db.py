@@ -555,7 +555,13 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
 
 
 def find_similar_memories(
-    uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
+    uid: str,
+    content: str,
+    threshold: float = 0.85,
+    limit: int = 5,
+    subject_entity_id: str | None = None,
+    *,
+    timeout_seconds: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Find memories similar to the given content.
@@ -563,10 +569,21 @@ def find_similar_memories(
     Used for duplicate detection and semantic search.
     """
     if index is None:
+        if timeout_seconds is not None:
+            raise RuntimeError('budgeted historical vector provider unavailable')
         logger.warning('Pinecone index not initialized, skipping similarity search')
         return []
 
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+    if timeout_seconds is not None and timeout_seconds <= 0:
+        raise TimeoutError('memory query deadline')
     vector = embeddings.embed_query(content)
+    options = {}
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('memory query deadline')
+        options.update(_request_timeout=remaining, deadline_monotonic=deadline)
     filter_data = build_legacy_memory_vector_filter(uid, subject_entity_id=subject_entity_id)
 
     xc = owner_index(index, uid, index_name=_pinecone_index_name).query(
@@ -576,6 +593,7 @@ def find_similar_memories(
         include_metadata=True,
         filter=filter_data,
         namespace=MEMORIES_NAMESPACE,
+        **options,
     )
 
     results: List[Dict[str, Any]] = []
@@ -778,6 +796,7 @@ def query_memory_vector_candidates(
     limit: int = 10,
     ledger_kinds: Optional[List[str]] = None,
     timeout_seconds: Optional[float] = None,
+    owner_summary: bool = False,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
@@ -800,7 +819,11 @@ def query_memory_vector_candidates(
             raise TimeoutError('memory query deadline')
         query_options['_request_timeout'] = remaining
         query_options['deadline_monotonic'] = deadline
-    if ledger_kinds is not None and mode == SearchMode.default:
+    if owner_summary:
+        # Owner ruling 2026-11-15: all tiers/subjects inside this account.
+        # Authoritative hydration still removes deleted/rejected/invalidated rows.
+        filter_data = {'$and': [{'uid': {'$eq': uid}}, {'memory_schema_version': {'$exists': True}}]}
+    elif ledger_kinds is not None and mode == SearchMode.default:
         filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
     else:
         filter_data = (

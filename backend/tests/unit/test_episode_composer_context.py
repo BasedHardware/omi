@@ -54,7 +54,7 @@ def owner_fact(content, **fields):
 
 
 def test_selector_reuses_chat_policy_without_importing_runtime_clients():
-    assert context.is_prompt_memory_eligible is chat_memory.is_prompt_memory_eligible
+    assert context.is_prompt_memory_visible is chat_memory._is_prompt_visible
     result = subprocess.run(
         [
             sys.executable,
@@ -224,16 +224,17 @@ def test_loader_prefers_chat_hydrated_vector_search_and_rechecks_eligibility(mon
     monkeypatch.setattr(users, 'get_ai_user_profile', lambda _uid: {})
     monkeypatch.setattr(goals, 'get_user_goals', lambda *_a, **_kw: [])
     _, block = context.gather('synthetic', [member()], owner='Synthetic', language='English', timezone='UTC')
-    assert len(seen) == 1 and 'irrigation' in seen[0][1]
+    assert len(seen) == len(context.retrieval_queries([member()])) <= 3 and 'irrigation' in seen[0][1]
     options = seen[0][2]
     budget = options.pop('budget')
-    assert 0 < budget.remaining_seconds <= 8 and budget.max_documents == 160
+    assert 0 < budget.remaining_seconds <= 8 and budget.max_documents == 640
     assert options == {
-        'limit': 20,
-        'candidate_limit': 60,
+        'limit': 10,
+        'candidate_limit': 10,
         'result_filter': context.composer_memory_eligible,
         'vector_only': True,
         'single_attempt': True,
+        'owner_summary': True,
     }
     assert 'rain sensor' in block and 'locked' not in block
 
@@ -343,3 +344,57 @@ def test_more_than_eight_chapters_survive_write_and_wire(monkeypatch):
     assert all(m['points'][0]['details'] == ['Supporting detail'] for m in wire['moments'])
     monkeypatch.setenv(config.EPISODE_COMPOSER_DETAIL_ENV, 'false')
     assert len(composer.to_updates(data, [row], ZoneInfo('UTC'))['moments']) == 8
+
+
+def test_three_searches_share_one_budget_dedupe_and_reject_cross_account(monkeypatch):
+    from types import SimpleNamespace
+    from utils.memory.memory_service import MemoryService
+    from utils.other.list_budget import ListReadBudget
+    import time
+
+    seen = []
+    row = member(20)
+    row['structured'] = {'title': 'Atlas launch', 'overview': 'Release commitments'}
+    row['transcript_segments'] = [{'text': 'Priya ships Atlas.'}, {'text': 'Priya reviews Atlas.'}]
+    bounded = ListReadBudget(deadline_monotonic=time.monotonic() + 8, max_documents=640, strict_documents=True)
+
+    def search(_self, uid, query, **kwargs):
+        assert uid == 'synthetic' and kwargs['budget'] is bounded and kwargs['single_attempt'] is True
+        seen.append(query)
+        return [
+            SimpleNamespace(memory={'id': 'same', 'uid': uid, 'content': 'Atlas launch'}),
+            SimpleNamespace(memory={'id': 'foreign', 'uid': 'other', 'content': 'Atlas foreign'}),
+        ]
+
+    monkeypatch.setattr(
+        MemoryService, 'search', create_autospec(MemoryService.search, side_effect=search, spec_set=True)
+    )
+    result = context._search_memories('synthetic', [row], budget=bounded)
+    assert len(seen) == 3 and len(set(seen)) == 3 and len(result) == 1
+    assert result[0]['id'] == 'same'
+
+
+def test_attribution_date_and_category_are_information_not_owner_fact_claims():
+    block = context.relevant_memories(
+        [member()],
+        [
+            {
+                'content': 'Garden irrigation advice from another speaker',
+                'category': 'interesting',
+                'kind': 'document',
+                'subject_scope': 'third_party',
+                'subject_attribution': 'third_party',
+                'created_at': '2026-11-01',
+            }
+        ],
+    )
+    assert all(
+        value in block
+        for value in [
+            'category=interesting',
+            'kind=document',
+            'subject=third_party',
+            'attribution=third_party',
+            'date=2026-11-01',
+        ]
+    )

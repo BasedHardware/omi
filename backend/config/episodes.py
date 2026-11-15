@@ -441,7 +441,7 @@ COMPOSER_MEMORY_TOKENS = 3500
 COMPOSER_PROFILE_TOKENS = 1000
 COMPOSER_MEMORY_QUERY_TOKENS = 1000
 COMPOSER_CONTEXT_TIMEOUT_SECONDS = 8.0
-COMPOSER_CONTEXT_MAX_READS = 160
+COMPOSER_CONTEXT_MAX_READS = 640
 # Read-side safety net: at most this many closed, uncomposed episodes queued per list read.
 COMPOSER_MAX_SCHEDULED_PER_READ = 2
 # A read-side caller re-queues the same episode at most this often per process.
