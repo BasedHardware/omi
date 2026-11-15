@@ -24,9 +24,9 @@ def mirror_refresh(namespace: str, keys: Iterable[tuple[str, str]]) -> None:
     if not _shadow_mode():
         return
     try:
-        from utils.staging_fence import jobstore_shadow_admits
+        from utils.staging_fence import jobstore_mirror_factory_admits
 
-        if not jobstore_shadow_admits(namespace):  # prod namespace outside the staging DB (L02-2)
+        if not jobstore_mirror_factory_admits(namespace):
             return
         import database.jobstore.dual_store as dual_store
 
@@ -84,8 +84,8 @@ def shadow_parity_collectors() -> tuple:
 def shadow_from_env(primary):
     """The A2 seam: ``primary`` unchanged unless this process runs in shadow or index mode.
 
-    In shadow mode it defers to ``database.jobstore.dual_store.shadow_from_env`` (which still refuses prod,
-    a missing setting or a missing driver); any failure there keeps the plain primary.
+    In shadow mode it defers to ``database.jobstore.dual_store.shadow_from_env`` (which requires explicit namespace/context,
+    a complete target and a driver); any failure there keeps the plain primary.
     """
     if not _shadow_mode():
         return primary

@@ -1,14 +1,14 @@
 # Production jobstore mirror: source contract and release prerequisites
 
-Status: **production copying remains closed**. The owner-aware admission helper
-is preparation for the index-first production mirror; existing namespace-only
-factory and refresh callers still refuse `batch_pipeline_prod` in production.
+Status: **activation requires the release packet below**. Explicit production
+configuration constructs a lazy handle; owner resolution and live cohort policy
+are enforced on every freshly reread document before any production upsert.
 This document establishes no deployment, retained production copy, live parity,
 serving acceptance or savings. No production data or credentials were read for
 this preparation.
 
-The source baseline is `6a0fe352db1220059456488b2ac752420ebd1c44`, inspected
-2026-11-15 in `BasedHardware/omi`, branch `lane/jobstore-index-mode`. The later
+The source is maintained in `BasedHardware/omi`, branch
+`lane/jobstore-index-mode`, with the exact reviewed candidate pinned in the PR. The later
 production-mirror ruling is recorded in the owning omi-workspace record
 `data/run-2026-11-14-jobstore-index/lead-state.md` (David's 2026-11-14 rulings).
 It approves starting `prod-jobs` for a sampled production mirror once source is
@@ -26,7 +26,7 @@ a staging deployment reach the production database. The boot-time staging
 isolation fence is unchanged.
 
 `utils.staging_fence.jobstore_production_mirror_configured(env=None)` validates
-the proposed production configuration. It is only a pure configuration check.
+the production configuration. It is only a pure configuration check.
 It does not construct a client, establish actual identity or select any row.
 It requires all of the following, with exact values and no inferred defaults:
 
@@ -49,7 +49,7 @@ It requires all of the following, with exact values and no inferred defaults:
 into an accepted value. Existing comma-separated namespace entries retain their
 existing whitespace handling; the caller's namespace itself is exact.
 
-The two new configuration keys are `JOBSTORE_PRODUCTION_MIRROR` (default `off`)
+The two production configuration keys are `JOBSTORE_PRODUCTION_MIRROR` (default `off`)
 and `JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS` (default `0`, refusing admission).
 Missing, zero, negative, decimal, signed, leading-zero, whitespace, non-ASCII
 or out-of-range sample values refuse admission. These declarations must enter
@@ -72,124 +72,97 @@ Explicit `10000` supports a later release-owned full-cohort ramp; it is not a
 sampled-cohort approval. Even at `10000`, a namespace-only call returns false.
 Keep the sample domain stable when changing thresholds.
 
-## Source work required before opening the production factory
+## Enforced copy policy
 
-Sampling belongs at the current-document copy boundary in
-`database/jobstore/dual_store.py`, not at namespace construction. Live writes,
-post-commit refreshes and backfill converge on `DualStore.copy_current`; its
-advisory key locks, primary re-read and namespace purge barrier must remain.
-A namespace declaration does not sample owners.
+`jobstore_mirror_factory_admits` may construct a lazy handle for an explicitly
+configured production target. It does not admit a document. Every live write,
+claim refresh, outside-transaction refresh and operator backfill goes through
+`DualStore.copy_current`: shared namespace purge barrier, sorted per-key locks,
+then a fresh authoritative read and `cohort.project_document`.
 
-The integration owner must complete and test these contracts before a factory
-uses `jobstore_production_mirror_configured` to build any production copy:
+| Tables | Owner resolution / production policy |
+| --- | --- |
+| jobs, results, intakes, artifacts | Current `owner_id` hash and/or canonical `owner_key`; present claims must agree |
+| owners, merge_holds, allowance_holds | Canonical document key plus every explicit owner claim must agree |
+| queues | `<priority>_<owner_key>`, priority 0..2; explicit owner/priority fields must agree |
+| control, gpus, pull_claims | Shared/global rows are excluded entirely |
 
-1. Resolve ownership from the freshly re-read document and its table/key
-   contract, checking any `owner_id` against `owner_key`. Owner-keyed `owners`,
-   `merge_holds` and `allowance_holds` can lack an owner field; queues use
-   `<priority>_<owner_key>`. Missing, conflicting or malformed ownership cannot
-   authorize an upsert. Do not sample segment IDs or individual rows.
-2. Apply `jobstore_shadow_admits(..., owner_key=resolved_owner)` before every
-   production upsert, including direct refresh, claim refresh and backfill.
-   A missing primary document must still delete its copy. Exclusion, malformed
-   ownership or a reduced cohort must retire a pre-existing copy rather than
-   skip and retain it. Test a queued copy across a cohort change.
-3. Classify every mirrored table: `jobs`, `results`, `owners`, `queues`,
-   `control`, `intakes`, `artifacts`, `allowance_holds`, `merge_holds`, `gpus`
-   and `pull_claims`. Scheduler control rings contain multiple owners; GPU and
-   pull-claim rows are shared; global control markers have no owner. Omit a
-   shared row from the initial production mirror unless an explicit projection
-   can prove it contains only selected owners and recomputes derived fields
-   consistently. Never admit the entire shard because one owner is selected.
-4. Filter captured transaction reads, convergence rechecks and diagnostics
-   consistently. A raw pre-image may include excluded owners before the
-   copy-time filter. Sampled discovery results are incomplete by design;
-   whole-population Firestore-vs-PG queries must not claim a match or raise an
-   actionable divergence from an intentionally partial index. Add a common
-   cohort projection or decline those observations explicitly. Query parity
-   remains off until that contract is implemented.
-5. Preserve synchronous erasure independently of cohort, mode, namespace
-   admission and write kill switches. Shrinking the cohort or turning mirroring
-   off must not suppress deletion, leak a retained shared row or recreate an
-   excluded owner's full document during reconciliation.
-6. Make the initial census/backfill cohort-aware, bounded and resumable, with
-   explicit read/copy budgets and counts for selected, excluded, unknown-owner,
-   stale and deleted rows. The current `python -m database.jobstore backfill`
-   explicitly refuses every non-staging deployment. Do not remove that guard
-   as a shortcut: its whole-table census, `seen`/PG key sets and counts are not
-   a bounded production sampled backfill. A live mirror alone leaves older
-   unchanged rows absent; a dropped queue item remains a coverage gap.
+Unknown/malformed/conflicting ownership cannot authorize an upsert. Every copy
+rereads the live sample and write kill. Missing primary documents, excluded
+owners, killed cohorts and unknown owners retire a retained copy under the same
+locks. No owner decision is cached in a queued work item. Firestore retains all
+transactions, claims, privacy and paid-routing authority. `repair_lineage` and
+`gpus.segment_id` remain omitted from every copy.
 
-## Retention and erasure blockers
+Captured transaction pre-images are filtered before queueing. Read comparisons,
+convergence and diagnostics reapply the live cohort; intentionally excluded rows
+do not become whole-population divergences. Production discovery observations
+support only `due` leased/retry/result_ready. Other methods return UNKNOWN.
 
-Production retention is a source prerequisite even while Firestore owns all
-claims and transactions. A non-authoritative database can still retain
-customer data after it should have been erased.
+`cohort_due_parity` proves a bounded selected prefix: selected rows from the
+primary's existing due prefix must appear in the PG hints, in order; every PG
+hint must equal its freshly read, selected primary document and remain due.
+Valid selected hints beyond the global primary prefix are permitted. Two stable
+observations must agree within one warm-connection SQL/socket/RPC deadline.
+No selected traffic is UNKNOWN. The metric's query labels are `due_leased`,
+`due_retry`, `due_result_ready`, so traffic cannot be conflated across states.
+This proof does not establish complete backlog coverage. Existing Firestore
+safety reads and rotating census remain necessary.
 
-The current mirror omits `repair_lineage` and `gpus.segment_id`. Keep both
-omissions. They do not settle retention of the rest of a document.
-`utils/batch_pipeline/retention.py` stamps Firestore `expires_at` on completed
-jobs, results, intake receipts and cleaned artifact metadata, and schedules a
-best-effort refresh of that state. Firestore's later TTL deletion does not run
-that Python hook. Migrations `0001` through `0008` and `PostgresStore` contain
-no copy-expiry sweep. The staging backfill counts PG-only rows but does not
-delete them. Without an additional retirement mechanism, a production mirror
-can retain an expired row indefinitely.
+## Bounded backfill and copy retirement
 
-Before real rows are copied, the release packet needs the owning retention
-contract for each table and evidence of copy retirement after primary TTL,
-including a dropped final refresh and an unavailable PG target. Derive erasure
-from the authoritative source and existing retention/legal-hold rules; this
-preparation defines no new TTL, custody rule or authority fence. Any retained
-copy and backup lifetime must satisfy the same approved contract. This gap
-cannot be cleared by admission tests or by omitting lineage alone.
+`python -m database.jobstore reconcile-page` runs one bounded primary-source
+backfill page or copy-source retirement page. The old `backfill` command remains
+staging-only; its unbounded key-set census is never a production shortcut.
 
-### Minimal bounded copy-retirement design (not implemented)
+The operator supplies explicit row, primary-document-read, SQL-statement and
+wall-time budgets. Key-ordered pages never allocate whole-table sets. A copy
+page revisits existing rows even when their last expiry-stamping refresh was
+dropped. Each key is freshly reread under the existing copy/purge locks.
 
-Use a release-owned, resumable reconciliation pass scoped to the registered
-production target and exact `batch_pipeline_prod` namespace. Bound each run by
-row count, primary-read count, PG statements and a hard deadline; checkpoint
-only committed pages using an opaque cursor in approved operator state. A due
-expiry index can prioritize work, but a rotating key-ordered census must also
-visit rows with missing/stale expiry metadata: the final expiry-stamping refresh
-may have been dropped. Do not allocate the current backfill's whole-table key
-sets. Publish counts, cursor progress, last successful coverage and oldest
-unresolved candidate without customer payloads or raw keys.
+The retirement engine **never deletes from a clock or lease deadline**. A
+present document, including a legal hold, removed/extended expiry, unknown clock
+or legacy shape, follows its current primary and cohort policy. Only primary
+absence or exclusion retires a copy. Firestore's existing retention/hold rules
+therefore remain authoritative; no new TTL or deletion rule is introduced.
+No Firestore document is mutated by these commands.
 
-Maintain an audited per-table classification of existing retention fields.
-Firestore datetime `expires_at` values are encoded by `codec.py` as
-`{"$datetime": ...}`; numeric `pull_claims.expires_at` is a lease deadline,
-not a document-retention deadline. Do not infer a TTL from a similarly named
-field, row age, terminal state or a missing clock. No new interval is needed.
+The one-page transaction uses a warm-only pool, SQL/lock and transport deadlines.
+Cold IAM auth/connection startup is a separate phase; the supervising operator
+job must impose a hard whole-process deadline as well. Failure rolls back the
+page and does not advance its checkpoint. Successful retries are idempotent.
+An end-of-pass observation while writers are active is not a snapshot or proof
+of complete coverage; the release owner schedules repeated rotations.
 
-For each candidate, acquire the existing shared namespace purge barrier and
-per-key lock, then re-read its authoritative primary document. An absent primary
-must retire the copy under the applicable approved hold contract. A present
-primary with changed or removed expiry refreshes the copy's classification
-through the same cohort/projection policy. A valid, current retention deadline
-can retire only the copy when the owning table contract permits it; never
-delete or advance Firestore state. Confirm legal-hold precedence and the
-authoritative hold lookup with the retention owner before implementing this
-step. An unresolved hold is an explicit blocker, not permission to expire or
-retain production data indefinitely.
+Checkpoint files are private operator state, bound to target, namespace, source,
+table and apply/dry-run mode. Their opaque base64 cursors are not encryption;
+never publish them. Counts-only reports omit cursor, target, payloads and keys.
+Use separate state files for each source/table/mode. Atomic replacement advances
+only after PG commit. Keep operator state/writers outside sweepable worktrees.
 
-Unknown-owner, malformed-clock and legacy rows need a bounded reconciliation
-route and named disposition. Re-read by exact primary key, never guess an
-owner or extend retention. Missing clocks require the rotating census; missing
-ownership cannot authorize a new upsert. Cohort shrink must retire excluded
-copies using the same locks and must not strand them behind an admission
-refusal. If legacy or hold semantics cannot be resolved, keep production
-admission closed rather than calling quarantine a completed retirement.
+Example template (budgets shown are command arguments, not approved production
+operating thresholds):
 
-Retirement and synchronous privacy erasure must run independently of mirror
-write enablement, owner sampling and cached writer handles. Keep target
-configuration and service reachability until both have no retained obligations.
-Required emulator/PG tests include dropped expiry refresh, Firestore TTL removal,
-expiry extended/removed before reread, legal hold, unknown owner, malformed or
-missing clock, legacy row, cohort shrink, copy/purge concurrency, PG failure
-and resumed pages. A run deadline or PG outage leaves an explicit retryable
-obligation; it cannot publish successful full coverage. The release packet must
-set and measure the maximum retirement lag against the existing retention
-contract before any real production copy is admitted.
+```bash
+python -m database.jobstore reconcile-page batch_pipeline_prod \
+  --source copy --table jobs --apply \
+  --state-file /approved/private/state/jobs-copy.json \
+  --max-rows <rows> --max-primary-reads <reads> \
+  --max-statements <statements> --page-seconds <seconds>
+```
+
+Production primary-source backfill requires complete production-mirror
+configuration. Copy-source retirement requires exact production data-plane
+context and the complete retained target, independently of mirror mode, sample,
+namespace allowlist and write kills. Turning mirroring off does not erase copies
+or turn off retirement. Keep every deletion executor's target/reachability until
+all retained obligations have retired.
+
+Before copying real rows, the release owner must configure the supervised
+rotation, maximum accepted retirement lag, per-pass budgets and failure alert,
+and measure a complete rotation within that bound. Confirm the target's backup
+retention against the owning deletion contract. Source tests do not establish
+those operating conditions or permit production copying without them.
 
 Existing deletion seams to preserve and exercise are:
 
@@ -231,7 +204,7 @@ obligations still apply.
 1. Pin the reviewed source head and complete terminal CI for the dark mirror
    and the separate production cohort/retirement integration. Record the
    approved source scope, actual producer inventory and deletion executors.
-   Resolve every source blocker above. There is no time-only soak gate.
+   Verify the integrated copy, cohort and reconciliation tests above. There is no time-only soak gate.
 2. Through the release executor, verify the intended `based-hardware`
    `prod-jobs` instance, database name, private host and runtime IAM database
    user from current control-plane evidence. Start it only when source is

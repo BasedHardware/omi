@@ -12,6 +12,8 @@ import threading
 from typing import Any
 
 from database.jobstore.index_store import INDEX_QUERIES, IndexStore
+from database.jobstore.cohort import production_policy_applies
+from utils.staging_fence import jobstore_production_mirror_configured
 
 logger = logging.getLogger(__name__)
 _OFF = frozenset({'0', 'false', 'off', 'no'})
@@ -48,7 +50,9 @@ def index_from_env(mirror: Any) -> Any:
         store = IndexStore(
             mirror,
             enabled_queries=queries,
-            enabled=lambda: reads_enabled() and selected_queries() == queries,
+            enabled=lambda: reads_enabled()
+            and selected_queries() == queries
+            and (not production_policy_applies(mirror.namespace) or jobstore_production_mirror_configured()),
             observe=mirror.observe_discovery,
         )
         _INDEXED[mirror.namespace] = (mirror, queries, store)

@@ -159,11 +159,7 @@ def jobstore_production_mirror_configured(env: Mapping[str, str] | None = None) 
     env = os.environ if env is None else env
     if env.get('JOBSTORE_PRODUCTION_MIRROR') != 'on' or not _production_mirror_sample_bps(env):
         return False
-    if any(env.get(name) != expected for name, expected in _PRODUCTION_MIRROR_CONTEXT.items()):
-        return False
-    if any(env.get(name) and env[name] != 'based-hardware' for name in _OPTIONAL_PROJECT_ENV):
-        return False
-    if env.get('FIRESTORE_EMULATOR_HOST'):
+    if not jobstore_production_context_matches(env):
         return False
     if not all(
         (env.get(name) or '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')
@@ -172,6 +168,16 @@ def jobstore_production_mirror_configured(env: Mapping[str, str] | None = None) 
     return PROD_JOBSTORE_NAMESPACE in {
         name.strip() for name in env.get('JOBSTORE_SHADOW_NAMESPACES', '').split(',') if name.strip()
     }
+
+
+def jobstore_production_context_matches(env: Mapping[str, str] | None = None) -> bool:
+    """Exact production data-plane binding, independently of copying/owner admission."""
+    env = os.environ if env is None else env
+    return (
+        all(env.get(name) == expected for name, expected in _PRODUCTION_MIRROR_CONTEXT.items())
+        and not any(env.get(name) and env[name] != 'based-hardware' for name in _OPTIONAL_PROJECT_ENV)
+        and not env.get('FIRESTORE_EMULATOR_HOST')
+    )
 
 
 def jobstore_shadow_admits(
@@ -207,6 +213,13 @@ def jobstore_shadow_admits(
         return False
     bucket = int(hashlib.sha256(f'{_MIRROR_SAMPLE_DOMAIN}{owner_key}'.encode()).hexdigest(), 16) % 10000
     return bucket < _production_mirror_sample_bps(env)
+
+
+def jobstore_mirror_factory_admits(namespace: str) -> bool:
+    """Allow a lazy production handle; individual upserts still require resolved-owner admission."""
+    return jobstore_shadow_admits(namespace) or (
+        namespace == PROD_JOBSTORE_NAMESPACE and jobstore_production_mirror_configured()
+    )
 
 
 def _sha(value: str) -> str:

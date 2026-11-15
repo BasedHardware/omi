@@ -4,9 +4,9 @@
 discovery reader. Firestore still performs every transaction, lease, claim,
 privacy check and state change. Default mode remains `firestore`.
 
-This source is dependent on dark-mirror PR #25323. Production namespace-only
-factories remain refused. It prepares synthetic/staging verification and a
-later release; it does not open the production mirror or establish savings.
+This source is dependent on dark-mirror PR #25323. Production factories require explicit target/context configuration; all copies
+enforce the resolved-owner cohort. Release activation and savings still need
+the production runtime acceptance packet.
 See [production mirror prerequisites](jobstore-production-mirror.md).
 
 ## Selection and rollback
@@ -66,10 +66,11 @@ worker's private registry includes it in index mode. Optional
 bounded asynchronous observer, including after index answers. An error or
 dropped comparison is unknown, never a match.
 
-The existing serving-parity metric labels the method `due`, rather than its
-state argument. Its count alone cannot prove traffic coverage for a selected
-state. Record the exact selector/source and state-specific index-route traffic
-alongside actual comparison evidence. Include mirror rereads and parity/census
+Production sampled-prefix parity uses distinct `due_leased`, `due_retry` and
+`due_result_ready` query labels. It checks selected primary-prefix coverage and
+every returned hint against current primary documents; it does not claim
+whole-backlog equality. Record the selector/source and state-specific route
+traffic alongside this proof. Other sampled discovery comparisons are UNKNOWN. Include mirror rereads and parity/census
 overhead when measuring net Firestore reads.
 
 The release owner first completes mirror cohort enforcement, copy retirement,
