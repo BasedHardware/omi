@@ -194,3 +194,36 @@ def test_legacy_conversation_and_job_discovery_have_identical_partition_ownershi
         assert not paths.intersection(all_paths)
         all_paths.update(paths)
     assert len(all_paths) == 100
+
+
+@pytest.mark.parametrize('count', [1, 2, 5])
+@pytest.mark.parametrize(
+    'patch',
+    [
+        {'owner_id': None},
+        {'owner_id': 42},
+        {'owner_id': 'bad/path'},
+        {'conversation_id': None},
+        {'conversation_id': []},
+        {'conversation_id': 'bad/path'},
+        {'record_content_id': None},
+        {'owner_id': 'wrong-canonical-owner'},
+    ],
+)
+def test_malformed_pending_has_exactly_one_counted_owner_and_no_user_path(count, patch):
+    stamp = datetime.now(timezone.utc).timestamp()
+    doc = pending_job(0, stamp - 8000, **patch)
+    events = []
+    for shard in range(count):
+        rows, _, _ = cluster.discover_jobs(
+            OrderedJobsClient([doc]),
+            budget=SweepBudget(10),
+            newest=True,
+            shard=shard,
+            shards=count,
+            progress=events.append,
+        )
+        assert rows == []
+    refusals = [e for e in events if e.get('outcome') == 'malformed_pending']
+    assert sum(e['count'] for e in refusals) == 1
+    assert all(set(e) == {'event', 'outcome', 'count'} for e in refusals)

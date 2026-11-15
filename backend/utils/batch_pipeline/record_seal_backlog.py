@@ -15,7 +15,8 @@ class BacklogLane:
     No account fields or seal-authority decisions are added.
     """
 
-    def __init__(self, client, frontier, *, mode, shard=0, shards=1):
+    def __init__(self, client, frontier, *, mode, shard=0, shards=1, progress=lambda _: None):
+        self.progress = progress
         self.client, self.mode = client, mode
         self.frontier: Any = frontier  # Encrypted cursor or its lazy factory.
         self.shard, self.shards = shard, shards
@@ -50,6 +51,7 @@ class BacklogLane:
                     shards=self.shards,
                     exclude=exclude,
                     metric_ages=ages,
+                    progress=self.progress,
                 )
                 self.oldest_seen = max(self.oldest_seen, max(ages, default=0))
                 cluster.REPAIR_OLDEST.set(self.oldest_seen)

@@ -504,15 +504,27 @@ def discover_jobs(
             if age_order
             else {'path': doc.reference.path, 'finished_at': horizon}
         )
+        valid_ids = (
+            isinstance(uid, str)
+            and bool(uid)
+            and '/' not in uid
+            and isinstance(cid, str)
+            and bool(cid)
+            and '/' not in cid
+        )
+        if not valid_ids or doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
+            # Invalid identities cannot supply a user path or proof authority.
+            # Their metadata-only refusal still has exactly one owner, including
+            # the legacy single-shard path (which previously skipped silently).
+            owner = int(hashlib.sha256(doc.id.encode()).hexdigest(), 16) % shards
+            if shard == owner:
+                progress({'event': 'record_seal_repair_discovery', 'outcome': 'malformed_pending', 'count': 1})
+            continue
+        if not owns_record(uid, cid, shard=shard, shards=shards):
+            continue
         if urgent and not valid_metric_clock(job.get(order_field)):
             if invalid_clock_counts is not None:
                 invalid_clock_counts['invalid_clock_rows'] += 1
-            continue
-        if not isinstance(uid, str) or not uid or '/' in uid or not isinstance(cid, str) or not cid or '/' in cid:
-            continue
-        if doc.id != record_identity(uid, cid)[1] or not job.get('record_content_id'):
-            continue
-        if not owns_record(uid, cid, shard=shard, shards=shards):
             continue
         if not isinstance(enqueued, (int, float)) or isinstance(enqueued, bool) or not math.isfinite(enqueued):
             continue
@@ -554,7 +566,8 @@ class FreshLane:
     a retry exclusion set prevents chronic refusals consuming every fresh poll.
     """
 
-    def __init__(self, client, *, shard=0, shards=1):
+    def __init__(self, client, *, shard=0, shards=1, progress=lambda _: None):
+        self.progress = progress
         self.client, self.after = client, None
         self.shard, self.shards = shard, shards
 
@@ -571,6 +584,7 @@ class FreshLane:
                 exclude=exclude,
                 shard=self.shard,
                 shards=self.shards,
+                progress=self.progress,
             )
             rows = head
             if saturated:
@@ -583,6 +597,7 @@ class FreshLane:
                     exclude=exclude | {path for path, _ in head},
                     shard=self.shard,
                     shards=self.shards,
+                    progress=self.progress,
                 )
                 rows += tail
             else:
@@ -1033,6 +1048,7 @@ def _run(*, progress, shard, shards):
                             shards=shards,
                             invalid_clock_counts=invalid_clock_counts,
                             metric_ages=job_metric_ages,
+                            progress=progress,
                         )
                         jobs_saturated = jobs_saturated or urgent_saturated
                     except FailedPrecondition:
@@ -1142,6 +1158,7 @@ def _run(*, progress, shard, shards):
             mode=mode,
             shard=shard,
             shards=shards,
+            progress=progress,
         )
         if config.jobs_enabled()
         else None
@@ -1154,7 +1171,7 @@ def _run(*, progress, shard, shards):
         mode=mode,
         progress=progress,
         attempted=attempted,
-        fresh=FreshLane(client, shard=shard, shards=shards) if fresh_slots else None,
+        fresh=FreshLane(client, shard=shard, shards=shards, progress=progress) if fresh_slots else None,
         fresh_workers=fresh_slots,
         bootstrap_rows=min(workers, len(rows)),
         backlog=backlog,
