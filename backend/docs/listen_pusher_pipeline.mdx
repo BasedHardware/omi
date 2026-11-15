@@ -9308,11 +9308,38 @@ Passing the quiet deadline alone is insufficient: full processing must settle
 first. Demand priority cannot bypass this prerequisite. A new settled effects
 mark clears the deferral and uses the updated notes/transcript fingerprint.
 
-No current WAL producer provides a contiguous device upload watermark. A
-future `sync_processing_hold.upload_watermark_at`, if supplied, must pass
-`finished_at + 600 seconds`; a lagging value waits up to the same maximum hold.
-Until that producer exists, quiet time plus the hard ceiling are the available
-settling evidence; one uploaded file is never treated as a watermark.
+**End-of-recording proof (2026-11-14).** A phone that knows its recording ended says so with
+`POST /v2/sync-capture-end`: `recording_session_id`, `end_type` (`user_initiated`, `silence_backstop`,
+`disconnect`), `last_speech_at`, `end_decided_at`, `sent_at` and `pending_wals`, all device-clock epoch
+seconds and counts. `last_speech_at` is null when the phone detected no speech; such a marker types the end but can
+never prove it (`no_speech_clock`). The marker is stored as `capture_end` on the recording's own session document; it never
+creates a session, changes a binding, finalizes or deletes anything, or alters custody. A recording with no
+session document answers `accepted: false, retry: true`, and the phone resends after its last accepted file.
+
+At hold admission, a row that would otherwise wait and carries `external_data.recording_session_id` reads
+that one document. The wait is skipped, with outcome `end_proof`, only when all three hold: the marker has
+`pending_wals == 0`; `finished_at >= last_speech_at - 5 s` (assigned content reaches the phone's last
+speech); and `finished_at <= end_decided_at + 5 s` (nothing later, which would mean the recording resumed or
+the row holds another recording). Both comparisons are on the phone clock: an upload from a phone running
+ahead is stored shifted onto the server clock, the hold state keeps that shift beside the end it applies to
+(`content_clock_offset`, `content_clock_end`), and the proof adds it back before comparing. If the row's end
+has since moved for another reason the result is `clock_unknown` and the quiet rule applies. Unchanged, immaterial
+and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
+`omi_sync_capture_end_total{end_type,outcome}` counts markers and
+`omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
+`no_speech_clock`, `content_behind`, `resumed`).
+
+`SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
+reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,
+clamped to 60..1800, `0` withdraws it) is sent to phones as `end_silence_seconds` on the
+`mobile_batch_admission` status event; a phone that receives none sends no silence end.
+
+`X-Omi-Upload-Trace: sealed=<epoch>;first=<epoch>;gate=<label>;attempts=<n>` on `/v2/sync-local-files` is
+measurement only: `omi_sync_seal_to_accept_seconds{gate}` records how long the batch's oldest file waited on
+the phone and which gate held it. A malformed header is ignored.
+
+The older `sync_processing_hold.upload_watermark_at` slot is unchanged and still has no producer: if
+supplied it must pass `finished_at` plus the quiet window, and a lagging value waits up to the maximum hold.
 
 Rollback: set `SYNC_PROCESSING_HOLD_ENABLED=false`. New intake resumes legacy
 coalescing configuration. On its next bounded discovery pass, the sweeper
