@@ -78,6 +78,18 @@ def transfer_redirect(document_id: str, token: str, owner: str, canonical: str, 
         while isinstance(current, str) and current not in seen:
             seen.add(current)
             data = snapshots.get('conversations', {}).get(current, {})
+            if not data:
+                # A certified memo decision serves no rows; read the redirect
+                # hop this caller needs in the same transaction.
+                data = (
+                    client.collection('users')
+                    .document(donor['uid'])
+                    .collection('conversations')
+                    .document(current)
+                    .get(transaction=transaction)
+                    .to_dict()
+                    or {}
+                )
             if data.get('owner_uid', donor['uid']) != donor['uid'] or data.get('id', current) != current:
                 raise reprocess.FirstSummaryCallbackPending('redirect ownership changed')
             if not data.get('deleted'):

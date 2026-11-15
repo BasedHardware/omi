@@ -22,6 +22,8 @@ COUNTERS = frozenset(
         'privacy_check_reads',
         'privacy_conversations_walked',
         'privacy_decision_mismatch',
+        'privacy_decision_comparison',
+        'privacy_owner_comparison',
         'privacy_shadow_checks',
         'privacy_memo_requests',
         'privacy_memo_ineligible',
