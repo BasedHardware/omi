@@ -8,6 +8,8 @@
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'native_custody_diagnostics.dart';
+import 'ring_custody_diagnostics.dart';
+import 'recording_inventory.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/watch_live_coverage.dart';
@@ -36,6 +38,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/wal_backlog_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
@@ -1246,6 +1249,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       'ordinal_end': end,
       'file_bytes': fileBytes,
     });
+    RingCustodyDiagnostics.shared
+        .route(deviceId, RingCaptureRoute.ordinaryWal, frames: wal.totalFrames, proofPublished: true);
     await _maybeAdvanceCustody(deviceId, epoch, ringId);
   }
 
@@ -1908,6 +1913,27 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return _publishedWals!;
   }
 
+  /// Synchronous metadata snapshot only: no lock, flush, load, repair or save.
+  /// Export aggregation/JSON decoding happens off the UI isolate.
+  Map<String, List<RecordingInventoryRow>> get recordingInventorySnapshot => {
+        for (final bucket in [('active', _wals), ('retired', _retiredWals), ('foreign', _foreignWals)])
+          bucket.$1: [
+            for (final wal in bucket.$2)
+              RecordingInventoryRow(
+                  status: wal.status.name,
+                  captureSeconds: wal.timerStart,
+                  audioSeconds: wal.totalFrames > 0
+                      ? wal.totalFrames / wal.codec.getFramesPerSecond()
+                      : wal.seconds >= 0
+                          ? wal.seconds.toDouble()
+                          : null,
+                  indexBytes: wal.storageTotalBytes.clamp(0, 1 << 62),
+                  disk: wal.storage == WalStorage.disk,
+                  filePath: wal.filePath ?? (wal.storage == WalStorage.disk ? wal.getFileName() : null),
+                  owner: wal.ownerUid),
+          ],
+      };
+
   @override
   Future<void> deleteAllSyncedWals() async {
     final generation = _sessionGeneration;
@@ -2021,6 +2047,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _frames.add(positioned);
     _frameSynced.add(false);
     _lastFrameAccepted = true;
+    if (_isPendantFrame(frame) && _deviceId != null) {
+      RingCustodyDiagnostics.shared.route(_deviceId!, RingCaptureRoute.ordinaryWal);
+    }
     return positioned;
   }
 

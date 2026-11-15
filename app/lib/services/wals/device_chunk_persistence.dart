@@ -99,7 +99,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           final nonce = nextCollisionSequence();
           name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
               ? '${stem}_u$nonce$ext'
-              : '${prefix}_u${nonce}_$timestamp$ext';
+              : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
         } while (await File('${dir.path}/$name').exists());
       }
       await File('${dir.path}/$name').writeAsBytes(data, flush: true);
