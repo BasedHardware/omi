@@ -376,6 +376,18 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
@@ -1190,6 +1202,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1540,6 +1564,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -1875,6 +1911,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -2173,6 +2221,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
@@ -2881,6 +2941,18 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
@@ -3825,6 +3897,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4308,6 +4392,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4784,6 +4880,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5205,6 +5313,18 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             BATCH_HELD_POLL_SKIP_ENABLED:
               value: 'true'
               category: ops_kill
