@@ -69,7 +69,7 @@ existing empty-audio response. The reader never manufactures an audio URL.
 
 ## Intake wake, rollout and rollback
 
-The intake claim/defer marker writer from integration2b1690066827 is a deployment
+The intake claim/defer marker writer from integration2b1690066827 is an optional wake
 dependency: claims remove `record_intake_retry_at`; certified deferrals set it to
 exactly `available_at`. Native seal reads the job before transaction writes and
 wakes only a due clock or an exact matching marker. Future retries cannot be
@@ -114,7 +114,7 @@ not production storage latency or five-minute Home delivery.
 
 Per recording with B uploaded drain batches and P empty playback polls: B owner
 point reads and B marker writes (one of each per uploaded drain batch), one job
-read per eligible seal transaction attempt, at most one intake wake write, P
+read and at most one intake wake write per eligible seal transaction attempt, P
 marker point reads, and at most one conditional debt delete per successful closing
 refresh. Existing custody/storage/privacy work is additional and unchanged.
 At sustained10000 recordings/hour (240000/day), ten eligible seal attempts alone
