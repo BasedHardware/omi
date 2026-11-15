@@ -14,7 +14,7 @@ from google.cloud import firestore
 from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, privacy_owner_key
 from database.firestore_read_origin import read_origin
-from database.batch_pipeline_store import intake_reference
+from database.batch_pipeline_store import FirestoreTransaction
 
 SCHEMA = 'record_wal_handoff_v1'
 VERSION = 1
@@ -39,11 +39,11 @@ def bundle_id(uid, cid, files):
 
 def intake_collection(client, namespace):
     # Existing admission receipt storage; only tagged WAL files own this index.
-    return intake_reference(client, namespace, '_wal_schema').parent
+    return _ref(client, namespace, '_wal_schema').parent
 
 
 def _ref(client, namespace, key):
-    return intake_reference(client, namespace, key)
+    return FirestoreTransaction.intake_reference(client, namespace, key)
 
 
 def _file_ref(client, namespace, file_id):

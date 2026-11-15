@@ -25,6 +25,16 @@ def _get_opuslib() -> Any:
     return opuslib
 
 
+def opus_packet_samples(packet: bytes, sample_rate: int) -> int:
+    """Read packet geometry without creating or advancing a decoder.
+
+    opuslib 3.x's Python samples-per-frame wrapper calls the wrong C symbol;
+    use its correctly typed native binding for this header-only operation.
+    """
+    api = _get_opuslib().api.decoder
+    return int(api.packet_get_nb_frames(packet) * api.libopus_packet_get_samples_per_frame(packet, sample_rate))
+
+
 def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
     """
     Encode PCM16 audio to Opus.

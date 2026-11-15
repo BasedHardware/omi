@@ -159,6 +159,11 @@ class FirestoreTransaction:
     def _note_hinted_activation(self, key: str, priority: int) -> None:
         self.hinted_activations.add((key, int(priority)))
 
+    @classmethod
+    def intake_reference(cls, client: Any, namespace: str, key: str):
+        """Join canonical intake storage to a raw transaction without doing IO."""
+        return cls(client, namespace, None)._ref('intakes', key)
+
     def _ref(self, table: str, key: str):
         if table == 'conversations':
             uid, conversation_id = key.split('/', 1)
@@ -279,15 +284,6 @@ class FirestoreTransaction:
             self.transaction.update(self._ref(table, key), fields)
         for ref, value in self.external.values():
             self.transaction.set(ref, value)
-
-
-def intake_reference(client: Any, namespace: str, key: str):
-    """Join an existing canonical intake receipt to a raw transaction.
-
-    Keep collection naming in the same resolver used by normal admission;
-    callers do not create a parallel receipt namespace or construct clients.
-    """
-    return FirestoreTransaction(client, namespace, None)._ref('intakes', key)
 
 
 class FirestoreStore:

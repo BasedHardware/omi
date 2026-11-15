@@ -9,7 +9,7 @@ from database import record_wal_handoff as receipts
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.raw_audio import filename_provenance, wal_packets
-from utils.other.audio_opus import _get_opuslib
+from utils.other.audio_opus import opus_packet_samples
 from utils.other.storage import archive_record_wal_bytes, delete_record_wal_original
 from utils.batch_pipeline import record_wal_metrics as metrics
 
@@ -51,10 +51,7 @@ def inspect_files(paths):
             if frames > MAX_FRAMES:
                 raise ValueError('WAL frame budget exceeded')
             if codec == 'opus':
-                api = _get_opuslib().api.decoder
-                # opuslib 3.x's Python wrapper calls the wrong C symbol.
-                # Use its correctly typed native binding for this header-only read.
-                count = api.packet_get_nb_frames(packet) * api.libopus_packet_get_samples_per_frame(packet, rate)
+                count = opus_packet_samples(packet, rate)
                 if not 0 < count <= rate * 120 // 1000 or count != info['frame_size']:
                     raise ValueError('invalid Opus packet header')
             else:
