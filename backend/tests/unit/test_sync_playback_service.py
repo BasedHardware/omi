@@ -56,7 +56,7 @@ def test_empty_batch_audio_distinguishes_durable_metadata_debt(monkeypatch, pend
     def repair(*args):
         if pending:
             raise TimeoutError
-        return None
+        return {'audio_files': []}
 
     monkeypatch.setattr(playback_metadata, 'refresh_on_open', repair)
     result = playback.get_audio_signed_urls('u', 'c', [], conversation={'record_lane_owner': 'batch_live_v1'})

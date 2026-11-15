@@ -435,9 +435,8 @@ def get_audio_signed_urls(
                     outcome='degraded',
                 )
                 return {'audio_files': [], 'poll_after_ms': 5000}
-            if repaired is not None:
-                conversation = {**conversation, **repaired}
-                audio_files = repaired.get('audio_files') or []
+            conversation = {**conversation, **repaired}
+            audio_files = repaired.get('audio_files') or []
         if not audio_files:
             return {"audio_files": []}
 
