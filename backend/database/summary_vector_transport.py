@@ -5,8 +5,7 @@ from copy import copy
 from functools import partial
 from typing import Any
 
-from aiohttp_retry import ExponentialRetry
-from pinecone.db_data import IndexAsyncio
+from pinecone import Pinecone
 
 
 class SummaryVectorIndex:
@@ -21,15 +20,13 @@ class SummaryVectorIndex:
             # outer cancellation scope bounds connection, response body and cleanup.
             async with asyncio.timeout(_request_timeout):
                 config = copy(self.index._openapi_config)
-                config.retries = ExponentialRetry(attempts=1)
-                async with IndexAsyncio(
-                    api_key=self.index._config.api_key,
-                    host=self.index._config.host,
-                    openapi_config=config,
-                ) as client:
+                config.retries = None
+                controller = Pinecone(api_key=self.index._config.api_key, openapi_config=config)
+                async with controller.IndexAsyncio(host=self.index._config.host) as client:
                     # Pinned 7.3.0 has no public redirect option. This handle is
                     # private to one summary request; redirects must not add IO.
                     transport: Any = client._api_client.rest_client._retry_client
+                    transport._retry_options = type(transport._retry_options)(attempts=1)
                     transport.request = partial(transport.request, allow_redirects=False)
                     return await client.query(**kwargs)
 

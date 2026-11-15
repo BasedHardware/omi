@@ -3,8 +3,6 @@
 # same FastAPI/Pydantic stack without installing the full backend runtime.
 aenum==3.1.15
 aiofiles==24.1.0
-aiohttp==3.14.4
-aiohttp-retry==2.9.1
 annotated-types==0.7.0
 annotated-doc==0.0.4
 anthropic==0.111.0
