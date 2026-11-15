@@ -214,3 +214,16 @@ def test_cas_retry_cannot_overwrite_winning_replica_first_observation(clock):
     assert patch['compose_transcript_wait_started_at'] == first
     assert patch['compose_transcript_wait_until'] == first + timedelta(seconds=1200)
     assert patch[compose_wait.OBSERVATIONS]['other'] == winner['other']
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_detached_absent_id_reconciles_membership_without_rebuy(store, clock, monkeypatch, enabled):
+    store.episode['conversation_ids'].append('absent')
+    calls = []
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'composed'
+    store.episode['conversation_ids'].remove('absent')
+    monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', str(enabled).lower())
+    assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2'])
+    assert composer.compose(UID, 'ep1', collaborators=_c(calls=calls)) == 'unchanged'
+    assert len(calls) == 1
+    assert composer.needs_compose(store.episode, visible_member_ids=['c1', 'c2']) is (not enabled)

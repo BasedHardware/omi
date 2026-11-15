@@ -1298,6 +1298,7 @@ def _compose(
             episode.get('compose_pending_since')
             or _unacknowledged_transcript(episode, members)
             or (episode_compose_settle_enabled() and episode.get('composed_evidence') is None)
+            or (empty_member_cleanup_enabled() and episode.get('composed_membership') != sorted(_retained_ids(episode)))
         ):
             _write(uid, episode_id, c, _trigger_stamp(episode, members), expected_member_revisions=member_revisions)
         return 'unchanged'
