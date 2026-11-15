@@ -13,6 +13,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_STATES,
     projection_finish_state_fields,
 )
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 BACKFILL_VERSION = 1
 BACKFILL_KEY = f'projection_finish_clock_v{BACKFILL_VERSION}'
@@ -81,4 +82,7 @@ def stamp_page(store, now: float, *, size: int = 200, apply: bool = False) -> di
         )
         return {'complete': cursor is None, 'scanned': len(ids), 'missing': count, 'stamped': count}
 
-    return commit(store.client.transaction())
+    report = commit(store.client.transaction())
+    # This commit is outside Store.run: re-copy the stamped rows and the marker (no-op unless shadow mode).
+    mirror_refresh(store.namespace, [('control', BACKFILL_KEY), *(('results', sid) for sid in ids)])
+    return report

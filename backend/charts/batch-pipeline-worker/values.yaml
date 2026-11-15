@@ -59,6 +59,9 @@ borrowedNodePools:
   # autoscaler's expendable cutoff (-10), so a Pending borrower is not ignored.
   priority: -1
 worker:
+  # Staged ordering guard; enable on every merge writer before CPU fresh admission.
+  RECORD_FRESH_MERGE_ENABLED: false
+  # Post-seal rollback controls, shared with the CPU serving hosts.
   heldDeadLetterEnabled: true
   inputExpiringEnabled: true
   # Match the serving hosts; prod overrides this below the 120s guard blind window.
@@ -228,6 +231,10 @@ t4Fallback:
 podMonitoring:
   enabled: true
 recordSealRepair:
+  shards: 1
+  # Independently pin the repair artifact; never change the GPU image for a repair-only patch.
+  imageRepository: ""
+  imageDigest: ""
   # Independent CPU CronJob: never extends or consumes the sweeper's 240s loop.
   enabled: true
   # Retained for evening overlap and rollback; lead overrides false for the first peak.
@@ -247,9 +254,8 @@ recordSealRepair:
   # pool, so repair landed on the monitoring pool at 101% CPU and received ~2 of
   # its 4-core limit; the batch-pipeline pool sits at 8-19% CPU. Empty nodePool
   # restores the old exclusion (and empty tolerations the old no-toleration pod).
-  # g2-standard-8 allocatable is ~7.8 vCPU and the GPU worker requests 4, so a
-  # 4-CPU request does not co-schedule with a worker: the pool autoscaler adds a
-  # node. Lower cpuRequest to "3" to share a worker's node instead.
+  # Current GPU nodes have only 1.3 CPU / 2.5 GiB free by requests; do not co-locate repair.
+  # Prod uses separate CPU-only api-pool nodes; this default preserves the one-pod footprint.
   nodePool: batch-pipeline-pool
   tolerations:
     - key: omi.ai/batch-pipeline

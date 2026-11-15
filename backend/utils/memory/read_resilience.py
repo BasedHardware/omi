@@ -193,7 +193,7 @@ class MemoryReadResilience:
         self._probe = False
         self._generation = 0
 
-    def call(self, operation: str, fn: Callable[[], Any], *, budget: Any = None) -> Any:
+    def call(self, operation: str, fn: Callable[[], Any], *, budget: Any = None, single_attempt: bool = False) -> Any:
         started = self.clock()
         with self._lock:
             generation = self._generation
@@ -257,7 +257,13 @@ class MemoryReadResilience:
                     delay = self.jitter(0.025, 0.075)
                     # A retry needs headroom, request attempts, a global token,
                     # and a still-closed circuit. Check again after backoff.
-                    if transient and state.used < 2 and not probing and self._headroom(state, budget) > delay + 0.05:
+                    if (
+                        not single_attempt
+                        and transient
+                        and state.used < 2
+                        and not probing
+                        and self._headroom(state, budget) > delay + 0.05
+                    ):
                         self.sleep(delay)
                         continue
                     if transient or (isinstance(exc, HTTPException) and exc.status_code == 503):
@@ -323,6 +329,7 @@ def resilient_memory_read(method: Callable[..., Any]) -> Callable[..., Any]:
             method.__name__,
             lambda: method(*args, **kwargs),
             budget=kwargs.get('request_budget') or kwargs.get('budget'),
+            single_attempt=kwargs.get('single_attempt', False),
         )
 
     return wrapped
