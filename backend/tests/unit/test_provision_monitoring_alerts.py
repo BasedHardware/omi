@@ -504,3 +504,44 @@ def test_scoped_keep_last_probe_failure_blocks_writes(provisioner, tmp_path):
     assert differences and all('query failed' in item for item in differences)
     assert api.writes == []
     assert not backup.exists()
+
+
+def mixed_provenance_group(folder='other', rule_group='other-group', prefix='other'):
+    """Two live rules in one group that no single provisioner owns."""
+    return {
+        f'{prefix}-ui': {**rule(f'{prefix}-ui'), 'folderUID': folder, 'ruleGroup': rule_group, 'provenance': ''},
+        f'{prefix}-api': {**rule(f'{prefix}-api'), 'folderUID': folder, 'ruleGroup': rule_group, 'provenance': 'api'},
+    }
+
+
+def test_unscoped_apply_still_rejects_mixed_provenance_in_an_unrelated_live_group(provisioner, tmp_path):
+    """A full run keeps the pre-scope guard: every live group must be single-provenance."""
+    live = {'example': rule(), **mixed_provenance_group()}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    with pytest.raises(ValueError, match='mixed provenance'):
+        provisioner.reconcile(api, {'example': {**rule(), 'title': 'new'}}, backup=backup)
+    assert api.writes == []
+    assert not backup.exists()
+
+
+def test_scoped_apply_ignores_an_unrelated_group_even_with_mixed_provenance(provisioner, tmp_path):
+    """The census scope must not be blocked by provenance drift it cannot touch."""
+    live = {'example': {**rule(), 'title': 'old'}, **mixed_provenance_group()}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    assert provisioner.reconcile(api, {'example': rule()}, backup=backup, scope='census') == []
+    assert [write[0] for write in api.writes] == ['PUT']
+    snapshot = json.loads(backup.read_text())
+    assert [item['uid'] for item in snapshot['rules']] == ['example']
+
+
+def test_scoped_apply_still_rejects_mixed_provenance_in_a_group_it_can_write(provisioner, tmp_path):
+    """Narrowing the scan must not license a partial takeover of the census group."""
+    live = {'example': {**rule(), 'provenance': ''}, 'sibling': {**rule('sibling'), 'provenance': 'api'}}
+    api = FakeGrafana(live)
+    backup = tmp_path / 'backup'
+    with pytest.raises(ValueError, match='mixed provenance'):
+        provisioner.reconcile(api, {'example': {**rule(), 'title': 'new'}}, backup=backup, scope='census')
+    assert api.writes == []
+    assert not backup.exists()

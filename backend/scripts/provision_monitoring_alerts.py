@@ -350,13 +350,14 @@ def reconcile(
     # Grafana forbids mixing API- and UI-provisioned rules in a group. Preserve
     # each existing group's provenance; new groups are API-managed. File-owned
     # resources require their owning provisioner, never partial API takeover.
-    # Only groups this run can write are inspected, so a scoped dispatch is not
-    # blocked by an unrelated group elsewhere in the live export.
+    # A full run keeps checking every live group. Only a scoped run narrows the
+    # scan to the groups it can write, so an unrelated group elsewhere in the
+    # live export cannot block the census dispatch.
     groups = {(rule['folderUID'], rule['ruleGroup']) for rule in desired.values()}
     provenance = {}
     for rule in live.values():
         group = (rule.get('folderUID'), rule.get('ruleGroup'))
-        if group not in groups:
+        if scoped and group not in groups:
             continue
         value = rule.get('provenance', '')
         if group in provenance and provenance[group] != value:
