@@ -207,7 +207,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
-        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "false"},
+        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "true"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
         {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},

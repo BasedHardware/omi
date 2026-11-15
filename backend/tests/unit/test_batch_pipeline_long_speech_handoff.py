@@ -187,7 +187,10 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, inherit, us
 
     def decode_units(paths, max_seconds, **kwargs):
         unit = audio_unit(100, b'\x00\x00' * 1600)
-        yield replace(unit, stored_capture_at=1800000000) if clock != 'trusted' else unit
+        if clock == 'future':
+            yield replace(unit, stored_capture_at=1800000000, recovery_id='receipt-synthetic-source')
+        else:
+            yield replace(unit, stored_capture_at=1800000000) if clock == 'early' else unit
 
     monkeypatch.setattr(intake, 'decode_units', decode_units)
     monkeypatch.setattr(intake, 'decode_future_units', decode_units)

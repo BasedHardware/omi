@@ -296,3 +296,35 @@ async def test_unmarked_rpc_and_coalescing_documents_equal_main_and_old_readers_
     assert members[0] == members[1]
     assert 'capture_time_trust' not in members[1]['item']
     original.WorkItem(**members[1]['item'])
+
+
+def test_old_readers_require_reader_first_roll_and_existing_row_partition_fences_sources(monkeypatch):
+    old_contract = main_module('backend/utils/batch_pipeline/contracts.py', monkeypatch)
+    future = contracts.WorkItem(
+        'segment',
+        'synthetic',
+        NOW,
+        'gs://synthetic/audio',
+        1,
+        contracts.Priority.DEEP,
+        conversation_id='receipt-one',
+        capture_time_trust='untrusted',
+    )
+    # New generic jobs must never reach an old CPU constructor/projector.
+    with pytest.raises(TypeError, match='capture_time_trust'):
+        old_contract.WorkItem(**future.to_dict())
+    old_overlap = main_module('backend/utils/sync/live_overlap.py', monkeypatch)
+    first = {
+        'id': 'receipt-one',
+        'source': 'omi',
+        'client_device_id': 'pendant',
+        'sync_clock_run': 'receipt-one',
+        'capture_time_trust': 'untrusted',
+    }
+    second = {**first, 'id': 'receipt-two', 'sync_clock_run': 'receipt-two'}
+    ordinary = {key: value for key, value in first.items() if key not in {'sync_clock_run', 'capture_time_trust'}}
+    ordinary['id'] = 'ordinary'
+    assert old_overlap.compatible_capture(first, first)
+    assert not old_overlap.compatible_capture(first, second)
+    assert not old_overlap.compatible_capture(first, ordinary)
+    assert not old_overlap.compatible_capture(ordinary, first)
