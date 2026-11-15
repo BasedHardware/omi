@@ -7,8 +7,9 @@ import 'package:omi/ui/ui.dart';
 class DateListItem extends StatelessWidget {
   final bool isFirst;
   final DateTime date;
+  final String? label;
 
-  const DateListItem({super.key, required this.date, required this.isFirst});
+  const DateListItem({super.key, required this.date, required this.isFirst, this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +18,7 @@ class DateListItem extends StatelessWidget {
       child: Semantics(
         header: true,
         child: Text(
-          OmiDateFormat.of(context).dayHeader(date),
+          label ?? OmiDateFormat.of(context).dayHeader(date),
           style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
         ),
       ),

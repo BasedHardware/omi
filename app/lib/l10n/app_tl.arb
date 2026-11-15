@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Hindi gumana ang pag-sign in gamit ang Apple. Subukang muli o magpatuloy gamit ang Google.",
     "authFailedToRetrieveToken": "Nabigo ang pagkuha ng firebase token, mangyaring subukan ulit.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"

@@ -7078,6 +7078,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Η σύνδεση με Apple δεν ολοκληρώθηκε. Δοκιμάστε ξανά ή συνεχίστε με Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.';
 
   @override

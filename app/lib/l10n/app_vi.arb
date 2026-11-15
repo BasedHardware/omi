@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Không thể đăng nhập bằng Google",
     "authenticationFailed": "Xác thực thất bại",
     "authFailedToSignInWithApple": "Không thể đăng nhập bằng Apple",
+    "authAppleSignInFailedUseGoogle": "Không thể đăng nhập bằng Apple. Hãy thử lại hoặc tiếp tục với Google.",
     "authFailedToRetrieveToken": "Không thể lấy mã thông báo",
     "authUnexpectedErrorFirebase": "Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.",
     "authUnexpectedError": "Lỗi không mong muốn",

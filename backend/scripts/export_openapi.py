@@ -85,6 +85,7 @@ APP_CLIENT_PREFIXES = (
     '/v1/frame-requests',
     '/v1/folders',
     '/v1/goals',
+    '/v1/home',
     '/v1/import',
     '/v1/integrations',
     # Released JIT paths remain static 410 tombstones for client compatibility.

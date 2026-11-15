@@ -161,6 +161,61 @@ final class SignInFailed extends RegisteredEvent {
   Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
 }
 
+enum SignInFailureDetailProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailureDetailProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailureDetailErrorCode {
+  appleCanceled("apple_canceled"),
+  appleFailed("apple_failed"),
+  appleInvalidResponse("apple_invalid_response"),
+  appleNotHandled("apple_not_handled"),
+  appleNotInteractive("apple_not_interactive"),
+  appleUnknown("apple_unknown"),
+  appleCredentialExport("apple_credential_export"),
+  appleCredentialImport("apple_credential_import"),
+  appleMatchedExcludedCredential("apple_matched_excluded_credential"),
+  appleNotSupported("apple_not_supported"),
+  appleCredentialsError("apple_credentials_error"),
+  applePlatformError("apple_platform_error"),
+  appleMissingIdentityToken("apple_missing_identity_token"),
+  firebaseInvalidCredential("firebase_invalid_credential"),
+  firebaseInvalidCredentialAudience("firebase_invalid_credential_audience"),
+  firebaseInvalidCredentialStale("firebase_invalid_credential_stale"),
+  firebaseInvalidIdpResponse("firebase_invalid_idp_response"),
+  firebaseMissingOrInvalidNonce("firebase_missing_or_invalid_nonce"),
+  firebaseAccountExistsWithDifferentCredential("firebase_account_exists_with_different_credential"),
+  firebaseCredentialAlreadyInUse("firebase_credential_already_in_use"),
+  firebaseEmailAlreadyInUse("firebase_email_already_in_use"),
+  firebaseOperationNotAllowed("firebase_operation_not_allowed"),
+  firebaseAdminRestrictedOperation("firebase_admin_restricted_operation"),
+  firebaseUserDisabled("firebase_user_disabled"),
+  firebaseAppNotAuthorized("firebase_app_not_authorized"),
+  firebaseInvalidApiKey("firebase_invalid_api_key"),
+  firebaseTooManyRequests("firebase_too_many_requests"),
+  firebaseNetworkRequestFailed("firebase_network_request_failed"),
+  firebaseInternalError("firebase_internal_error"),
+  firebaseOther("firebase_other"),
+  network("network"),
+  timeout("timeout"),
+  other("other");
+  const SignInFailureDetailErrorCode(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailureDetail extends RegisteredEvent {
+  const SignInFailureDetail({required this.provider, required this.errorCode});
+  final SignInFailureDetailProvider provider;
+  final SignInFailureDetailErrorCode errorCode;
+  @override
+  String get wireName => "Sign In Failure Detail";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_code": errorCode.wireName};
+}
+
 enum OnboardingPermissionResultPermission {
   notifications("notifications"),
   location("location"),

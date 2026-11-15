@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google से साइन इन विफल, कृपया पुनः प्रयास करें।",
     "authenticationFailed": "प्रमाणीकरण विफल। कृपया पुनः प्रयास करें।",
     "authFailedToSignInWithApple": "Apple से साइन इन विफल, कृपया पुनः प्रयास करें।",
+    "authAppleSignInFailedUseGoogle": "Apple से साइन इन नहीं हो पाया। फिर से कोशिश करें या Google के साथ जारी रखें।",
     "authFailedToRetrieveToken": "Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।",
     "authUnexpectedErrorFirebase": "साइन इन करते समय अप्रत्याशित त्रुटि, Firebase त्रुटि, कृपया पुनः प्रयास करें।",
     "authUnexpectedError": "साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें",

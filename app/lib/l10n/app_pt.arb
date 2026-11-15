@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Falha ao fazer login com o Google, tente novamente.",
     "authenticationFailed": "Autenticação falhou. Por favor, tente novamente.",
     "authFailedToSignInWithApple": "Falha ao fazer login com a Apple, tente novamente.",
+    "authAppleSignInFailedUseGoogle": "Não foi possível entrar com a Apple. Tente novamente ou continue com o Google.",
     "authFailedToRetrieveToken": "Falha ao recuperar o token do Firebase, tente novamente.",
     "authUnexpectedErrorFirebase": "Erro inesperado ao fazer login, erro do Firebase, tente novamente.",
     "authUnexpectedError": "Erro inesperado ao fazer login, tente novamente",

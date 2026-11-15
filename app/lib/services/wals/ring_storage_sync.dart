@@ -1,6 +1,7 @@
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
@@ -71,7 +72,75 @@ const ringRecordGapBreakSeconds = 60;
   return (breaks: false, run: currentRun);
 }
 
+/// Records fetched per read on firmware where the phone owns reclaim: about
+/// 40 seconds of transfer and 1.2 MB in memory. Each read is stored and the
+/// pendant advanced past it before the next is requested, so a dropped link
+/// costs at most one of these and nothing is downloaded twice.
+const int ringReadWindowRecords = 2700;
+
+/// What the reads of one sync pass over the ring share.
+class _RingPass {
+  _RingPass({
+    required this.wal,
+    required this.progress,
+    required this.connection,
+    required this.epoch,
+    required this.ringInfo,
+    required this.rtcValid,
+    required this.deviceId,
+    required this.effectiveCaps,
+    required this.ringId,
+    required this.droppedDelta,
+    required this.admittedGeneration,
+  });
+
+  final Wal wal;
+  final IWalSyncProgressListener? progress;
+  final DeviceConnection connection;
+  final int epoch;
+  final RingInfo ringInfo;
+  final bool rtcValid;
+  final String deviceId;
+  final int effectiveCaps;
+  final int? ringId;
+  final int? droppedDelta;
+  final int admittedGeneration;
+
+  /// The unread range as it stood when the pass began. The pass does not chase
+  /// records written after that.
+  int get startSeq => ringInfo.readSeq;
+  int get endSeq => ringInfo.writeSeq;
+
+  int recordsCredited = 0;
+  int recordsDownloaded = 0;
+  int recordsDeduped = 0;
+
+  // Recording continuity across the reads of one pass. A recording that spans
+  // two reads is still one recording: it keeps its clock run and, when the
+  // pendant has no usable clock, one estimated start with frames counted on.
+  int? lastRecordTs;
+  String? clockRun;
+  int? firstRecordTs;
+  int elapsedFrames = 0;
+
+  /// Records were released without being read, so the next read does not
+  /// continue the recording the last one ended in.
+  void breakContinuity() {
+    lastRecordTs = null;
+    clockRun = null;
+    firstRecordTs = null;
+    elapsedFrames = 0;
+  }
+}
+
 class RingStorageSyncImpl implements RingStorageSync {
+  static const Duration _fullReadTimeout = Duration(minutes: 30);
+  static const Duration _windowReadTimeout = Duration(minutes: 5);
+
+  /// The pendant notifies the live mark for a commit just after the INFO that
+  /// reported it. How long to let it arrive before judging the live tail.
+  static const Duration liveMarkSettle = Duration(milliseconds: 400);
+
   List<Wal> _wals = [];
   BtDevice? _device;
 
@@ -108,6 +177,16 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   @visibleForTesting
   set testConnection(DeviceConnection? connection) => _testConnection = connection;
+
+  int _windowRecords = ringReadWindowRecords;
+
+  @visibleForTesting
+  set testWindowRecords(int records) => _windowRecords = records;
+
+  Duration _liveMarkSettle = liveMarkSettle;
+
+  @visibleForTesting
+  set testLiveMarkSettle(Duration settle) => _liveMarkSettle = settle;
 
   PendantRingCustody _custody = PendantRingCustody.shared;
 
@@ -181,10 +260,11 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<bool> hasFilesToSync() async {
     if (_device == null) return false;
     try {
-      final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+      final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
       if (connection == null) return false;
       final status = await connection.getRingStatus();
-      final result = status != null && status.unreadPackets > 0;
+      var result = status != null && status.unreadPackets > 0;
+      if (result && await _unreadIsLiveTail(connection)) result = false;
       Logger.debug('RingStorageSync.hasFilesToSync: status=$status result=$result');
       return result;
     } catch (e) {
@@ -218,6 +298,11 @@ class RingStorageSyncImpl implements RingStorageSync {
       final status = await connection.getRingStatus();
       Logger.debug('RingStorageSync.refreshWalsFromDevice: status=$status');
       if (status == null || status.unreadPackets <= 0) {
+        _wals = [];
+        return;
+      }
+      if (await _unreadIsLiveTail(connection)) {
+        Logger.debug('RingStorageSync.refreshWalsFromDevice: unread records are the live tail, nothing to fetch');
         _wals = [];
         return;
       }
@@ -268,6 +353,22 @@ class RingStorageSyncImpl implements RingStorageSync {
     } catch (e) {
       Logger.debug('RingStorageSync.refreshWalsFromDevice: error: $e');
     }
+  }
+
+  /// With live persist on, the ring always holds the last seconds the phone is
+  /// still proving. Downloading that tail would store a second copy of audio
+  /// that arrived live a moment ago, on every sync wake, so it is left to the
+  /// live proof to release. See [PendantRingCustody.liveRunCoversUnread].
+  Future<bool> _unreadIsLiveTail(DeviceConnection connection) async {
+    final deviceId = _device?.id;
+    if (deviceId == null) return false;
+    final epoch = connection.ringCustodyEpoch;
+    if (_custody.liveProofStartSeq(deviceId, epoch) == null) return false;
+    final info = await connection.getRingInfo();
+    if (info == null) return false;
+    await Future<void>.delayed(_liveMarkSettle);
+    if (connection.ringCustodyEpoch != epoch) return false;
+    return _custody.liveRunCoversUnread(deviceId, epoch, info);
   }
 
   /// Delete a wal. WalSyncs.deleteWal cascades to every sub-sync regardless
@@ -440,8 +541,8 @@ class RingStorageSyncImpl implements RingStorageSync {
   }
 
   /// Pull the unread ring contents from the device, parse opus frames, register
-  /// chunks with LocalWalSync, then advance the ring iff NOTIFY_DONE arrived.
-  /// Returns true if the transfer ran to completion (DONE received and acted on).
+  /// chunks with LocalWalSync, and advance the ring past what was stored.
+  /// Returns true if everything unread when the pass began was dealt with.
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
     _syncPhase = 'connection';
@@ -483,7 +584,6 @@ class RingStorageSyncImpl implements RingStorageSync {
     final custodyDeviceId = _device!.id;
     final effectiveCaps = connection.ringEffectiveCaps;
     final ringId = (effectiveCaps & RingProtocol.capRingId) != 0 ? ringInfo.ringId : null;
-    final readStart = ringInfo.readSeq;
     if (ringId != null && !_custody.hasConnection(custodyDeviceId, epoch)) {
       if (!stillEpoch()) return false;
       await _custody.beginConnection(
@@ -502,6 +602,120 @@ class RingStorageSyncImpl implements RingStorageSync {
     final droppedDelta = lastDropped == null ? null : (ringInfo.droppedPackets - lastDropped).clamp(0, 1 << 62);
     _droppedBaseline[droppedKey] = ringInfo.droppedPackets;
 
+    final pass = _RingPass(
+      wal: wal,
+      progress: progress,
+      connection: connection,
+      epoch: epoch,
+      ringInfo: ringInfo,
+      rtcValid: rtcValid,
+      deviceId: custodyDeviceId,
+      effectiveCaps: effectiveCaps,
+      ringId: ringId,
+      droppedDelta: droppedDelta,
+      admittedGeneration: admittedGeneration,
+    );
+
+    // Firmware that frees ring space by itself keeps the single read to the
+    // write head it has always had.
+    if (ringId == null || (effectiveCaps & RingProtocol.capAppAckReclaim) == 0) {
+      return await _readRingRange(pass, pass.startSeq, null) != null;
+    }
+
+    // Where the phone owns reclaim, the pass is a series of bounded reads. One
+    // read to the write head could be an hour of transfer with the phone falling
+    // behind on storing it, and whatever was still in memory when the link
+    // dropped was fetched again on the next pass.
+    if (_custody.liveProofStartSeq(custodyDeviceId, epoch) != null) {
+      // Let the mark for the commit this INFO reported arrive before judging.
+      await Future<void>.delayed(_liveMarkSettle);
+      if (!stillEpoch()) return false;
+    }
+    if (_custody.liveRunCoversUnread(custodyDeviceId, epoch, ringInfo)) {
+      Logger.debug('RingStorageSync._syncRing: unread records are the live tail, nothing to fetch');
+      return true;
+    }
+    final passStartedAt = DateTime.now();
+    var next = pass.startSeq;
+    var recordsReleasedUnread = 0;
+    var recordsLeftToLiveProof = 0;
+    var reads = 0;
+    var complete = false;
+    try {
+      while (stillEpoch()) {
+        if (next >= pass.endSeq) {
+          complete = true;
+          break;
+        }
+        // Audio the phone already holds durably (it arrived live, or an earlier
+        // read stored it) is released without being transferred again.
+        final proven = await _custody.validatedAdvanceTarget(custodyDeviceId, epoch, ringId);
+        if (!stillEpoch()) break;
+        if (proven != null &&
+            proven > next &&
+            await _custodyAdvance(connection, custodyDeviceId, epoch, proven, ringId)) {
+          recordsReleasedUnread += proven - next;
+          next = proven;
+          pass.breakContinuity();
+          continue;
+        }
+        // From where this connection's live marks begin, the live proof releases
+        // records as the phone stores them. Read only what lies before that.
+        final liveFrom = _custody.liveProofStartSeq(custodyDeviceId, epoch);
+        var readEnd = pass.endSeq;
+        if (liveFrom != null && _custody.liveMarksReach(custodyDeviceId, epoch, pass.endSeq)) {
+          if (next >= liveFrom) {
+            recordsLeftToLiveProof = pass.endSeq - next;
+            complete = true;
+            break;
+          }
+          readEnd = math.min(readEnd, liveFrom);
+        }
+        final after = await _readRingRange(pass, next, math.min(readEnd - next, _windowRecords));
+        if (after == null || after <= next) break;
+        reads++;
+        next = after;
+      }
+    } finally {
+      DebugLogManager.logEvent('pendant_custody', {
+        'action': 'sync_pass',
+        'ring_id': ringId,
+        'start_seq': pass.startSeq,
+        'end_seq': pass.endSeq,
+        'reached_seq': next,
+        'complete': complete,
+        'reads': reads,
+        'records_downloaded': pass.recordsDownloaded,
+        'records_credited': pass.recordsCredited,
+        'records_deduped': pass.recordsDeduped,
+        'records_released_unread': recordsReleasedUnread,
+        'records_left_to_live_proof': recordsLeftToLiveProof,
+        'duration_ms': DateTime.now().difference(passStartedAt).inMilliseconds,
+      });
+    }
+    return complete;
+  }
+
+  /// Reads [readStart, readStart + packetCount), or to the write head when
+  /// [packetCount] is null, stores it and advances the pendant past it.
+  /// Returns the next unread sequence, or null when the range did not complete
+  /// (the records already stored stay stored; the pendant keeps the rest).
+  Future<int?> _readRingRange(_RingPass pass, int readStart, int? packetCount) async {
+    final wal = pass.wal;
+    final progress = pass.progress;
+    final connection = pass.connection;
+    final epoch = pass.epoch;
+    bool stillEpoch() => connection.ringCustodyEpoch == epoch && !_isCancelled;
+    final ringInfo = pass.ringInfo;
+    final rtcValid = pass.rtcValid;
+    final custodyDeviceId = pass.deviceId;
+    final effectiveCaps = pass.effectiveCaps;
+    final ringId = pass.ringId;
+    final droppedDelta = pass.droppedDelta;
+    final admittedGeneration = pass.admittedGeneration;
+    // One read's worth of live-proof checks; see [CustodyProofMemo].
+    final proofMemo = CustodyProofMemo();
+
     final completer = Completer<bool>();
     final reassembler = RingRecordReassembler();
     final List<List<int>> bytesData = []; // parsed opus frames awaiting flush
@@ -512,14 +726,14 @@ class RingStorageSyncImpl implements RingStorageSync {
     // spans one), and the estimated-clock run it belongs to (null = device clock).
     final recordBreaks = <bool>[];
     final recordRuns = <String?>[];
-    int? lastRecordTs;
-    String? currentRun;
+    int? lastRecordTs = pass.lastRecordTs;
+    String? currentRun = pass.clockRun;
     int provenSeq = readStart;
     int skippedDuplicates = 0;
     int recordsConsumed = 0;
-    int? firstRecordTs;
-    int elapsedTotal = 0;
-    int bufferBaseElapsed = 0;
+    int? firstRecordTs = pass.firstRecordTs;
+    int elapsedTotal = pass.elapsedFrames;
+    int bufferBaseElapsed = pass.elapsedFrames;
     final fps = wal.codec.getFramesPerSecond();
     final chunkFrames = sdcardChunkSizeSecs * fps;
     int? doneNextSeq;
@@ -741,13 +955,15 @@ class RingStorageSyncImpl implements RingStorageSync {
           if (rtcValid && ts > 0) {
             firstRecordTs = ts;
           } else {
-            // Fallback: now - estimated duration of the unread region.
-            final estSecs = wal.totalFrames ~/ (fps == 0 ? 1 : fps);
+            // Fallback: now - estimated duration of the region still unread.
+            final passRecords = math.max(1, pass.endSeq - pass.startSeq);
+            final aheadRecords = (pass.endSeq - readStart).clamp(0, passRecords);
+            final estSecs = (wal.totalFrames * aheadRecords ~/ passRecords) ~/ (fps == 0 ? 1 : fps);
             firstRecordTs = DateTime.now().millisecondsSinceEpoch ~/ 1000 - estSecs;
           }
         }
 
-        if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq)) {
+        if (await _custody.isDurableLiveRecord(custodyDeviceId, ringId, seq, memo: proofMemo)) {
           skippedDuplicates++;
           if (seq == provenSeq) provenSeq = seq + 1;
           continue;
@@ -775,7 +991,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       if (now.difference(lastProgressUpdate) >= progressInterval) {
         lastProgressUpdate = now;
         if (wal.storageTotalBytes > 0) {
-          final consumedBytes = recordsConsumed * RingProtocol.recordSize;
+          final consumedBytes = (pass.recordsCredited + recordsConsumed) * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
           wal.deviceDownloadFraction = pct;
           wal.syncSpeedKBps = _currentSpeedKBps;
@@ -809,7 +1025,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       }
     }
 
-    if (!stillEpoch()) return false;
+    if (!stillEpoch()) return null;
     _syncPhase = 'transfer';
     _notifyStream = await connection.getBleStorageBytesListener(
       onStorageBytesReceived: (List<int> value) {
@@ -859,17 +1075,17 @@ class RingStorageSyncImpl implements RingStorageSync {
       idleTimer?.cancel();
       await _notifyStream?.cancel();
       _notifyStream = null;
-      return false;
+      return null;
     }
     bool reachedDone = false;
     bool stopSent = false;
     try {
-      final readOk = await connection.readRingFromSeq(ringInfo.readSeq);
+      final readOk = await connection.readRingFromSeq(readStart, packetCount: packetCount);
       if (!readOk) throw StateError('Failed to send CMD_RING_READ');
       Logger.debug(
-        'RingStorageSync: reading from seq=${ringInfo.readSeq} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
+        'RingStorageSync: reading from seq=$readStart count=${packetCount ?? "all"} (write=${ringInfo.writeSeq}, unread=${ringInfo.unreadPackets})',
       );
-      reachedDone = await completer.future.timeout(const Duration(minutes: 30));
+      reachedDone = await completer.future.timeout(packetCount == null ? _fullReadTimeout : _windowReadTimeout);
     } catch (e, st) {
       Logger.debug('RingStorageSync: transfer error: $e');
       DebugLogManager.logError(e, st, 'RingStorageSync failed', {
@@ -923,6 +1139,8 @@ class RingStorageSyncImpl implements RingStorageSync {
         beginConsistent;
     final fullyProven = doneNextSeq != null && provenSeq >= doneNextSeq!;
     final advancedOk = reachedDone && doneOk && !flushError && !_isCancelled && doneConsistent && fullyProven;
+    pass.recordsDownloaded += recordsConsumed;
+    pass.recordsDeduped += skippedDuplicates;
     if (advancedOk) {
       final ok = await _custodyAdvance(connection, custodyDeviceId, epoch, doneNextSeq!, ringId);
       Logger.debug('RingStorageSync: advance(seq=$doneNextSeq) -> $ok (records=$recordsConsumed)');
@@ -938,13 +1156,19 @@ class RingStorageSyncImpl implements RingStorageSync {
         'advance_ok': ok,
         'residual_legacy_risk': ringId == null,
       });
-      return ok;
+      if (!ok) return null;
+      pass.recordsCredited += recordsConsumed;
+      pass.lastRecordTs = lastRecordTs;
+      pass.clockRun = currentRun;
+      pass.firstRecordTs = firstRecordTs;
+      pass.elapsedFrames = elapsedTotal;
+      return doneNextSeq;
     } else {
       Logger.debug(
         'RingStorageSync: skipping advance (reachedDone=$reachedDone doneOk=$doneOk flushError=$flushError cancelled=$_isCancelled records=$recordsConsumed doneConsistent=$doneConsistent fullyProven=$fullyProven)',
       );
       if (!stopSent) await _stopRingTransfer(connection, epoch);
-      return false;
+      return null;
     }
   }
 
@@ -962,7 +1186,19 @@ class RingStorageSyncImpl implements RingStorageSync {
     if (connection.ringCustodyEpoch != epoch) return false;
     if (_custody.isIncarnationInvalid(deviceId, epoch)) return false;
     final ack = await connection.advanceRingCustody(seq, expectedEpoch: epoch, expectedRingId: ringId);
-    if (ack == null) return false;
+    if (ack == null) {
+      // The pendant commits an advance before acknowledging it, and the
+      // acknowledgement shares the link with audio. Losing it must not cost a
+      // second download of the range, so ask where the read pointer is. Only on
+      // firmware whose ring id makes that answer unambiguous.
+      if (ringId == null) return false;
+      final info = await connection.getRingInfo();
+      if (connection.ringCustodyEpoch != epoch || info == null || info.ringId != ringId) return false;
+      _custody.noteInfo(deviceId, epoch, info);
+      if (seq > info.readSeq) return false;
+      await _custody.markAdvanced(deviceId, epoch, seq);
+      return true;
+    }
     if (ack.isOk) {
       await _custody.markAdvanced(deviceId, epoch, seq);
       return true;

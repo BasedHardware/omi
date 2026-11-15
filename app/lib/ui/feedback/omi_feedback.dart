@@ -34,7 +34,7 @@ Color get _infoIconColor => OmiColors.textSecondary;
 ///   "not undone", so its caller commits).
 /// * The surface stays neutral (the theme's snackbar colour); colour lives on the icon only, so
 ///   text keeps its contrast.
-/// * Floating, clear of the home shell's tab bar and chat bar via [bottomClearance], and of a
+/// * Floating, clear of the root screen's bottom controls via [bottomClearance], and of a
 ///   pushed page's pinned bottom action via [OmiFeedbackClearance].
 ///
 /// ```dart
@@ -43,10 +43,21 @@ Color get _infoIconColor => OmiColors.textSecondary;
 /// if (!undone) await provider.commitDelete(id);
 /// ```
 abstract final class OmiFeedback {
-  /// Extra space the home shell needs above the safe area while it is the visible route (its tab
-  /// bar, and the chat bar on Home). The shell sets this in `initState` and clears it in `dispose`;
-  /// it is ignored whenever another route is on top.
+  /// Extra space the root screen needs above the safe area while it is the visible route: the home
+  /// shell's tab bar and chat bar, the sign-in screen's buttons. Set through [claimBottomClearance];
+  /// ignored whenever another route is on top.
   static double Function(BuildContext context)? bottomClearance;
+
+  /// Sets [bottomClearance] for a root screen, from `initState`; call the release from `dispose`.
+  /// The release clears only its own clearance, because the next root screen mounts before the old
+  /// one is disposed (Home is replaced by sign-in when a session expires).
+  static VoidCallback claimBottomClearance(double Function(BuildContext context) clearance) {
+    bottomClearance = clearance;
+    return () {
+      if (identical(bottomClearance, clearance)) bottomClearance = null;
+    };
+  }
+
   static int _infoOwners = 0;
 
   /// A guided surface renders explanatory notices itself. The release is

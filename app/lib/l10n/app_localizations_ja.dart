@@ -6927,6 +6927,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Appleでのサインインに失敗しました。もう一度お試しください。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Appleでサインインできませんでした。もう一度お試しいただくか、Googleで続行してください。';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebaseトークンの取得に失敗しました。もう一度お試しください。';
 
   @override

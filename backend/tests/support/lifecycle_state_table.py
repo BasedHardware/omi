@@ -149,12 +149,14 @@ class PatchContract:
 # been audited. AST fingerprints ignore comments/formatting, but force a new
 # source audit when this proof's callees or serialization model change.
 PATCH_CONTRACTS = {
+    # Receipt-clock provenance changes only the existing clock value; the returned
+    # keys remain recorded_start/end, arrival_at and clock, never lifecycle latches.
     'utils.conversations.recorded_time.write_span': PatchContract(
         ('recorded_start', 'recorded_end', 'arrival_at', 'clock'),
         (
             (
                 Writer('utils/conversations/recorded_time.py', 'write_span'),
-                '67652bbdd304ef4e0761e2e20594a50369cef1bc6955f3dce41bfa5d58ca553b',
+                'e99a6a16ddaafe76a22695da366d2d74a35afe08adb316ed2421fcfbc2fbad5a',
             ),
             (
                 Writer('utils/conversations/recorded_time.py', 'span_fields'),

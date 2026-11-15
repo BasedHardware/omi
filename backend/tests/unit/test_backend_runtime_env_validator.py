@@ -199,6 +199,10 @@ def with_memory_env(payload: str) -> str:
         {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED", "value": "true"},
+        {"name": "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED", "value": "true"},
+        {"name": "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED", "value": "false"},
+        {"name": "HOME_SETTLED_EMPTY_WIRE_ENABLED", "value": "true"},
         {"name": "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_PRESENTATION_GATE", "value": "true"},
         {"name": "RECORD_FRESH_MERGE_ENABLED", "value": "false"},
@@ -207,6 +211,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "RECORD_SEAL_WAKE_PRESERVED_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_DEADLINE_SECONDS", "value": "7200"},
         {"name": "HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED", "value": "true"},
+        {"name": "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED", "value": "false"},
         {"name": "RECORD_SEAL_REPAIR_FRESH_ENABLED", "value": "true"},
         {"name": "RECORD_INTAKE_AGE_PRIORITY_ENABLED", "value": "true"},
         {"name": "HOME_TRANSCRIPTION_MAX_AGE_SECONDS", "value": "86400"},
@@ -2043,75 +2048,40 @@ _MISSING_GATEWAY_CLOUD_RUN_STATE = '''
 '''
 
 
-def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
+@pytest.fixture(scope='module')
+def missing_gateway_cloud_run_state():
+    # Normalize the complete synthetic revision once; the test still mutates
+    # independent on-disk JSON snapshots and runs the full real validator.
+    return with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE)
+
+
+@pytest.mark.parametrize(
+    'missing',
+    [
+        None,
+        'BATCH_INPUT_EXPIRING_ENABLED',
+        'BATCH_HELD_DEAD_LETTER_ENABLED',
+        'SYNC_LINEAGE_LIVE_DEDUPE_ENABLED',
+        'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
+    ],
+)
+def test_cloud_run_state_reports_missing_gateway_url(tmp_path, missing_gateway_cloud_run_state, missing):
     validator = load_validator()
+    state = missing_gateway_cloud_run_state
+    expected = {('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL')}
+    if missing is not None:
+        marker = f'{{"name": "{missing}", "value": "true"}},\n        '
+        assert marker in state
+        state = state.replace(marker, '')
+        expected.update(
+            (f'cloud_run/{host}', f'missing env {missing}')
+            for host in ('backend', 'backend-sync', 'backend-integration')
+        )
     state_path = tmp_path / 'cloud_run_state.json'
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE),
-        encoding='utf-8',
-    )
-
+    state_path.write_text(state, encoding='utf-8')
     errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-
-    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
-    assert errors[0].scope == 'cloud_run/backend'
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_INPUT_EXPIRING_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_INPUT_EXPIRING_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    # A complete synthetic revision carries the new kill switch. Removing it
-    # must still fail validation; completing the fixture must not weaken the guard.
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "BATCH_HELD_DEAD_LETTER_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env BATCH_HELD_DEAD_LETTER_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_LINEAGE_LIVE_DEDUPE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
-    state_path.write_text(
-        with_cloud_run_oauth_secrets(_MISSING_GATEWAY_CLOUD_RUN_STATE).replace(
-            '{"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},\n        ', ''
-        ),
-        encoding='utf-8',
-    )
-    errors = validator.validate_runtime_env(env='dev', cloud_run_state_path=state_path)
-    assert {(error.scope, error.message) for error in errors} == {
-        ('cloud_run/backend', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-sync', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend-integration', 'missing env SYNC_WAL_AUDIO_COVERAGE_ENABLED'),
-        ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
-    }
+    assert len(errors) == len(expected)
+    assert {(error.scope, error.message) for error in errors} == expected
 
 
 def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
@@ -4088,3 +4058,21 @@ def test_cloud_run_runtime_rejects_missing_listener_close_binding(tmp_path, key,
         ('cloud_run/backend', 'missing env OMI_LLM_GATEWAY_URL'),
         *(('cloud_run/' + name, 'missing env ' + key) for name in ('backend', 'backend-sync', 'backend-integration')),
     }
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_future_capture_admissions_default_off_until_reader_rollout(environment):
+    config = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())['environments'][environment]
+    expected = {'value': 'false', 'category': 'rollout'}
+    hosts = [config['gke']['backend-listen'], *config['cloud_run']['services'].values()]
+    assert len(hosts) == 5
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='future_capture_staged_renderer')
+    for host in hosts:
+        assert host['env']['SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'] == expected
+        assert renderer['_render_env_entries']({'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED': expected}) == [
+            {'name': 'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'value': 'false'}
+        ]
+    values = yaml.safe_load((ROOT.parent / config['gke']['backend-listen']['values_file']).read_text())
+    assert {entry['name']: entry.get('value') for entry in values['env']}[
+        'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
+    ] == 'false'

@@ -2633,11 +2633,17 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
     # The durable queue loop sleeps this long between passes; at the real 1 s the
     # handler's shutdown needs several wall-clock seconds and races a loaded runner.
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.001)
+    # The proof below concerns closure while the socket stays open. Teardown
+    # may take the inline-finish fallback (20 s in production); keep that and
+    # the background drain inside this test's unchanged 5 s cleanup deadline.
+    monkeypatch.setattr(pusher, 'RECORD_INLINE_FINISH_TIMEOUT', 0.5)
+    monkeypatch.setattr(pusher, 'BG_DRAIN_TIMEOUT', 0.5)
     # No path in this test may build a real cloud client: credential discovery
     # probes the network and its duration depends on the runner.
     monkeypatch.setattr(google.auth, 'default', MagicMock(side_effect=DefaultCredentialsError('hermetic unit test')))
     entered = asyncio.Event()
     sealed = asyncio.Event()
+    disconnect = asyncio.Event()
     release = threading.Event()
     loop = asyncio.get_running_loop()
 
@@ -2684,6 +2690,7 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
                 await asyncio.wait_for(entered.wait(), 5)
             if not self.frames:
                 await asyncio.wait_for(sealed.wait(), 5)
+                await disconnect.wait()
             return await super().receive_bytes()
 
     sock = OpenStream(_audio_frames('conversation', [b'\x01\x00' * 160]) + controls)
@@ -2694,14 +2701,17 @@ async def test_slow_playback_discovery_does_not_hold_ended_record_on_open_stream
         await asyncio.wait_for(entered.wait(), 5)
         await asyncio.wait_for(sealed.wait(), 2)
         assert not release.is_set()
+        assert not handler.done() and not disconnect.is_set()
         assert projected and client.rows[path]['record_audio_closed']
         assert client.rows[path]['record_upload_sessions'] == {}
     finally:
         release.set()
+        disconnect.set()
         try:
             await asyncio.wait_for(asyncio.shield(handler), 5)
         except asyncio.TimeoutError:
             # Name the await the handler is parked on instead of a bare timeout.
             parked = _parked_at(handler)
             handler.cancel()
+            await asyncio.gather(handler, return_exceptions=True)
             pytest.fail(f'pusher handler still running 5 s after release; parked at: {parked}')

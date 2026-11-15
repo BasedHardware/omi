@@ -30,6 +30,21 @@ def dev_pusher_contract_baseline() -> tuple[dict, tuple]:
     return module.rendered_pusher_deployment("dev"), module.dev_pusher_binding_contract()
 
 
+@pytest.fixture(autouse=True)
+def fast_safe_yaml_for_contract_fixtures(monkeypatch):
+    # Identical safe schema; avoid Python tokenization of full chart/manifests.
+    monkeypatch.setattr(yaml, 'safe_load', lambda stream: yaml.load(stream, Loader=yaml.CSafeLoader))
+
+
+@pytest.fixture(scope='module')
+def intake_priority_bindings():
+    root = SCRIPT.parents[2]
+    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments']
+    classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
+    cohost = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
+    return manifest, classification, cohost['_BATCH_PIPELINE_LISTEN_ONLY']
+
+
 def deployment(refs: list[dict]) -> list[dict]:
     return [{"kind": "Deployment", "spec": {"template": {"spec": {"containers": [{"envFrom": refs}]}}}}]
 
@@ -195,6 +210,10 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "EPISODE_COMPOSER_DETAIL_ENABLED": "true",
         "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED": "true",
         "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED": "true",
+        "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED": "true",
+        "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED": "true",
+        "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": "false",
+        "HOME_SETTLED_EMPTY_WIRE_ENABLED": "true",
         "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED": "true",
         # Dev-only canary (lead2 2afa3e); prod stays "0".
         "PUSHER_STORAGE_PCM_BUDGET_MB": "512",
@@ -550,14 +569,12 @@ def test_post_seal_controls_are_listen_only_rendered_bindings(environment, prefl
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_native_record_intake_priority_binding_is_owned_by_listen(environment):
-    root = SCRIPT.parents[2]
-    manifest = yaml.safe_load((root / 'backend/deploy/runtime_env.yaml').read_text())['environments'][environment]
-    classification = json.loads(CLASSIFICATION.read_text())['kinds']['config']
+def test_native_record_intake_priority_binding_is_owned_by_listen(environment, intake_priority_bindings):
+    manifests, classification, listen_only = intake_priority_bindings
+    manifest = manifests[environment]
     key = 'RECORD_INTAKE_AGE_PRIORITY_ENABLED'
     assert key in classification
     for host in [manifest['gke']['backend-listen'], *manifest['cloud_run']['services'].values()]:
         assert host['env'][key] == {'value': 'true', 'category': 'ops_kill'}
     assert key not in manifest['gke']['pusher']['env']
-    cohost = runpy.run_path(str(root / 'backend/scripts/verify_pusher_cohost_env_diff.py'))
-    assert key in cohost['_BATCH_PIPELINE_LISTEN_ONLY']
+    assert key in listen_only
