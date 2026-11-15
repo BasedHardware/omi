@@ -370,6 +370,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
           EPISODE_COMPOSER_CONTEXT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -556,6 +559,9 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '0'
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
           EPISODE_COMPOSER_CONTEXT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -1199,6 +1205,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1555,6 +1564,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -1896,6 +1908,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2200,6 +2215,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -2914,6 +2932,9 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
           EPISODE_COMPOSER_CONTEXT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3208,6 +3229,9 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
           EPISODE_COMPOSER_CONTEXT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3873,6 +3897,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4362,6 +4389,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4844,6 +4874,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5271,6 +5304,9 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
             EPISODE_COMPOSER_CONTEXT_ENABLED:
               value: 'true'
               category: ops_kill

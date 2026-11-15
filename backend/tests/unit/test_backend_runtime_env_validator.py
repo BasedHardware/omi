@@ -194,6 +194,7 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSER_CONTEXT_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSER_DETAIL_ENABLED", "value": "true"},
         {"name": "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED", "value": "true"},

@@ -21,7 +21,6 @@ from config.episodes import (
     COMPOSER_CONTEXT_MAX_READS,
 )
 from models.knowledge_ledger_policy import LEDGER_SCHEMA_VERSION, is_prompt_memory_eligible
-from utils.episodes.composer_context_budget import bounded_gather
 
 logger = logging.getLogger(__name__)
 _STOP = frozenset(
@@ -276,4 +275,6 @@ def gather(
             budget.check()
             raise
 
-    return bounded_gather(load, fallback)
+    from utils.episodes.composer_default_context import gather_with_defaults
+
+    return gather_with_defaults(uid, members, load, fallback)

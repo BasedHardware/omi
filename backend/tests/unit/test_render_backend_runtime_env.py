@@ -1451,6 +1451,7 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_episode_switches_render_on_every_composition_host(environment):
     keys = (
+        'EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_DETAIL_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',

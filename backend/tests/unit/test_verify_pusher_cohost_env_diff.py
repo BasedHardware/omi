@@ -217,6 +217,7 @@ def test_ledger_switch_off_on_pusher_fails(gate: SimpleNamespace, chart_fixture:
 @pytest.mark.parametrize(
     'key',
     [
+        'EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_CONTEXT_ENABLED',
         'EPISODE_COMPOSER_DETAIL_ENABLED',
         'EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED',

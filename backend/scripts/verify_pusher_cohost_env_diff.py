@@ -36,6 +36,7 @@ ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
     # Episode context, completeness and notes run on both cohosts. Missing bindings refuse the roll.
+    "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED",
     "EPISODE_COMPOSER_CONTEXT_ENABLED",
     "EPISODE_COMPOSER_DETAIL_ENABLED",
     "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
