@@ -5,6 +5,11 @@ import math
 
 from config.refactor_modes import default_off, default_on
 
+_FRESH_MERGE_ENV = 'RECORD_FRESH_MERGE_ENABLED'
+_NOTES_EAGER_ENV = 'RECORD_NOTES_EAGER_ENABLED'
+_FOLLOWUP_WAKE_ENV = 'RECORD_FOLLOWUP_WAKE_ENABLED'
+_SEAL_WAKE_ENV = 'RECORD_SEAL_WAKE_PRESERVED_ENABLED'
+
 RECENT_RECORD_SECONDS = 1800
 
 
@@ -20,19 +25,19 @@ def recent_record_end(value, now: float) -> bool:
 
 
 def record_fresh_merge_enabled() -> bool:
-    return default_off('RECORD_FRESH_MERGE_ENABLED')
+    return default_off(_FRESH_MERGE_ENV)
 
 
 def record_notes_eager_enabled() -> bool:
-    return default_on('RECORD_NOTES_EAGER_ENABLED')
+    return default_on(_NOTES_EAGER_ENV)
 
 
 def record_followup_wake_enabled() -> bool:
-    return default_on('RECORD_FOLLOWUP_WAKE_ENABLED')
+    return default_on(_FOLLOWUP_WAKE_ENV)
 
 
 def record_seal_wake_preserved_enabled() -> bool:
-    return default_on('RECORD_SEAL_WAKE_PRESERVED_ENABLED')
+    return default_on(_SEAL_WAKE_ENV)
 
 
 def recent_native_record(job: dict, now: float) -> bool:
