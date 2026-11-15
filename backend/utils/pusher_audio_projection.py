@@ -320,9 +320,11 @@ class PusherAudioProjection:
         """Write debt before optional discovery; capacity overflow stays cold debt."""
         from utils.pusher_playback_coordinator import coordinator
 
-        if not closing:
+        # Completion deduplicates pathless scans, never a newly uploaded batch.
+        # A prior refresh may already have retired that batch's durable marker.
+        if paths or not closing:
             self.finished.discard(conv_id)
-        if closing and conv_id in self.finished and conv_id in self.durable_debt:
+        if closing and not paths and conv_id in self.finished and conv_id in self.durable_debt:
             return True
         if not durable_debt_enabled():
             return False

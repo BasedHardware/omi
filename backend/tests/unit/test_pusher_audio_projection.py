@@ -283,6 +283,42 @@ async def test_async_metadata_keeps_playback_and_identity_callbacks(world):
 
 
 @pytest.mark.asyncio
+async def test_new_closing_upload_rearms_debt_after_prior_refresh_retired_marker(world, monkeypatch):
+    from utils import pusher_playback_coordinator as workers
+
+    monkeypatch.setenv('AUDIO_ARCHIVE_READ_ENABLED', 'false')
+    monkeypatch.setattr(workers, '_owner', None)
+    marker = {}
+    writes = []
+
+    def mark(uid, cids):
+        version = len(writes) + 1
+        writes.append(version)
+        marker['version'] = version
+        return {'c': version}
+
+    def retire(uid, cid, *, observed_update_time):
+        assert marker['version'] == observed_update_time
+        marker.clear()
+        return True
+
+    monkeypatch.setattr(projection.record_projection_rebuild, 'mark_many', mark)
+    monkeypatch.setattr(projection.record_projection_rebuild, 'retire_observed', retire)
+    cache = projection.PusherAudioProjection('u')
+    assert await cache.defer_close_refresh('c', [world.add(100)])
+    await workers.coordinator().wait_owner('u')
+    assert not marker and world.stored[0]['chunk_timestamps'] == [100]
+    assert 'c' in cache.finished and 'c' in cache.durable_debt
+    assert await cache.defer_close_refresh('c', [world.add(101)])
+    await workers.coordinator().wait_owner('u')
+    assert writes == [1, 2]
+    assert world.stored[0]['chunk_timestamps'] == [100, 101]
+    assert not marker
+    assert await cache.defer_close_refresh('c')  # Only pathless close scans dedupe.
+    assert writes == [1, 2]
+
+
+@pytest.mark.asyncio
 async def test_fast_drain_rechecks_deleted_owner_before_projection(world, monkeypatch):
     monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED', 'true')
