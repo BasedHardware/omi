@@ -9579,6 +9579,18 @@
               }
             ]
           },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
+          },
           "capture_timezone": {
             "anyOf": [
               {
@@ -11002,6 +11014,18 @@
                 "type": "null"
               }
             ]
+          },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
           },
           "capture_timezone": {
             "anyOf": [

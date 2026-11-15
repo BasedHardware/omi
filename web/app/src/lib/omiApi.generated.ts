@@ -1516,6 +1516,7 @@ export interface Conversation {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
   capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
@@ -1730,6 +1731,7 @@ export interface ConversationSearchItem {
   call_platform?: string | null;
   capture_coverage?: "unknown" | "incomplete" | "mapped" | null;
   capture_group?: CaptureGroup | null;
+  capture_time_trust?: "untrusted" | null;
   capture_timezone?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
