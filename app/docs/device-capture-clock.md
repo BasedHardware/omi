@@ -36,12 +36,15 @@ establish capture order or a shared clock run. There is no local timestamp
 migration, synthetic Date estimated label, or migration completion marker.
 
 A plausible timestamp is not proof of record/audio integrity. The 3.0.24 raw
-batch body and DATA stream lack end-to-end checksums/offsets. A valid batch
-header with corrupt body can be read or salvaged, and balanced wire loss/extra
-bytes can satisfy DONE totals. Keep the firmware broad-rollout hold until that
-failure class is ruled out or a coordinated integrity protocol is qualified.
-The first rejected ring epoch/ordinal is retained in local warning diagnostics.
-Backend recovery cannot reconstruct corrupt/missing audio samples.
+batch body and DATA stream lack end-to-end checksums/offsets. Synthetic probes
+show that a valid header with a corrupt body can be read, and balanced wire
+loss/extra bytes can satisfy DONE totals. Those separate integrity gaps are
+not established as this owner's timestamp generator; the random-byte hypothesis
+was withdrawn after his timestamp distribution became available. Broad firmware
+rollout remains held for the unresolved generator and measured transfer/reclaim
+issues. Q12-AF owns firmware diagnosis and hardening. The first rejected ring
+epoch/ordinal is retained in local warning diagnostics. Backend recovery cannot
+reconstruct corrupt/missing audio samples.
 
 Native Limitless Transcribe Later has separate Swift/Kotlin writers, outside
 these Dart importers; their 2020-only lower bound has no upper-time check. It is
