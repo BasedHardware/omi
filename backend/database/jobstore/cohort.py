@@ -16,7 +16,7 @@ from typing import Literal
 
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_shadow_hook import shadow_mode_enabled
-from utils.staging_fence import PROD_JOBSTORE_NAMESPACE, is_staging, jobstore_shadow_admits
+from utils.staging_fence import PROD_JOBSTORE_NAMESPACE, STAGING_DATABASE, is_staging, jobstore_shadow_admits
 
 # jobs/results are keyed by segment ID; intakes by job ID; artifacts by the
 # segment/URI digest. None of those keys can establish an owner.
@@ -36,7 +36,8 @@ DocumentClassification = Literal['selected', 'excluded', 'unknown_owner', 'absen
 
 def production_policy_applies(namespace: str) -> bool:
     """Read deployment identity at the call boundary, including cached handles."""
-    return namespace == PROD_JOBSTORE_NAMESPACE and not is_staging()
+    staging_context = is_staging() and os.getenv('FIRESTORE_DATABASE_ID', '').strip() == STAGING_DATABASE
+    return namespace == PROD_JOBSTORE_NAMESPACE and not staging_context
 
 
 def resolve_owner_key(table: str, key: str, doc: dict) -> str | None:

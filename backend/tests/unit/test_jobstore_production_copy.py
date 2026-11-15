@@ -346,3 +346,19 @@ def test_absent_unresolved_rows_cannot_inflate_production_parity(production, mon
     before = metric._value.get()
     assert mirror.run(lambda tx: tx.get(table, 'absent-unknown')) == {}
     assert metric._value.get() == before
+
+
+def test_cached_production_copy_cannot_escape_kills_through_invalid_staging_context(production, monkeypatch):
+    primary, shadow, mirror = production
+    uid, key = owner()
+    primary.rows[('jobs', 'selected')] = {'owner_id': uid, 'owner_key': key}
+    primary.rows[('control', 'shared')] = {'owners': [key]}
+    monkeypatch.setenv('OMI_DEPLOYMENT', 'staging')
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'firestore')
+    monkeypatch.setenv('JOBSTORE_SHADOW_WRITES', 'off')
+    monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR', 'off')
+    assert not jobstore_mirror_factory_admits(NAMESPACE)
+    with shadow.pool.connection() as conn:
+        with conn.transaction():
+            mirror.copy_current(conn, sorted(primary.rows))
+    assert shadow.upserts == [] and shadow.rows == {}
