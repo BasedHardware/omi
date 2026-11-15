@@ -8,7 +8,7 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
 
-from database import recording_sessions
+from database import episode_empty_members, recording_sessions
 
 pytestmark = pytest.mark.integration
 
@@ -19,6 +19,15 @@ def test_empty_cleanup_atomically_detaches_only_without_audio(monkeypatch, enabl
     if urlparse(f'//{host}').hostname not in {'127.0.0.1', 'localhost', '::1'}:
         pytest.fail('requires loopback Firestore emulator')
     monkeypatch.setenv('EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED', str(enabled).lower())
+    prepared = []
+    prepare = episode_empty_members.prepare
+
+    def observe_prepare(*args):
+        writes = prepare(*args)
+        prepared.extend((ref.path, update) for ref, update in writes)
+        return writes
+
+    monkeypatch.setattr(episode_empty_members, 'prepare', observe_prepare)
     client = firestore.Client(project='demo-episode-cleanup', credentials=AnonymousCredentials())
     try:
         uid = uuid4().hex
@@ -53,6 +62,8 @@ def test_empty_cleanup_atomically_detaches_only_without_audio(monkeypatch, enabl
         assert recording_sessions.tombstone_and_delete_empty_conversation(
             uid, 'empty', 'session', firestore_client=client
         ) is (not audio)
+        if enabled and not audio:
+            assert any(path == link.path and update is None for path, update in prepared), prepared
         stored = episode.get().to_dict()
         assert stored['content'] == b'preserved opaque content'
         assert stored['status'] == 'closed'
