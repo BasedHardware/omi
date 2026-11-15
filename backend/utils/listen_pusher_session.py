@@ -218,6 +218,7 @@ class ListenPusherSession:
         self.audio_timeline_active = False
         self.audio_timeline_suspended = False
         self.record_close_supported = False
+        self.record_close_unsupported_socket: object = None
         self.pending_record_closes: dict[str, PendingClose] = {}
         self.record_close_boundaries: OrderedDict[str, bool] = OrderedDict()
 
@@ -446,6 +447,8 @@ class ListenPusherSession:
         """Order accepted audio before a close-only request; never run a finalizer."""
         if not close_notify_enabled() or not audio_outbox_enabled():
             return False
+        if self.pusher_ws is not None and self.pusher_ws is self.record_close_unsupported_socket:
+            return False  # Negative capability is terminal until a new connection.
         if conversation_id in self.record_close_boundaries:
             return self.record_close_boundaries[conversation_id]
         if conversation_id not in self.pending_record_closes:
@@ -740,6 +743,7 @@ class ListenPusherSession:
                     self.record_close_supported = (
                         close_notify_enabled()
                         and audio_outbox_enabled()
+                        and self.record_close_unsupported_socket is not sock
                         and isinstance(ack, dict)
                         and ack.get('type') == 'record_close_ack'
                         and type(ack.get('version')) is int
@@ -772,6 +776,13 @@ class ListenPusherSession:
                         if type(ack.get('watermark')) is int and ack['watermark'] == close.base + close.sent:
                             self._remember_record_boundary(cid, accepted=True)
                             self.pending_record_closes.pop(cid, None)
+                    elif ack.get('status') == 'unsupported':
+                        self.pending_record_closes.pop(cid, None)
+                        if close.frozen:
+                            self._remember_record_boundary(cid, accepted=False)
+                        self.record_close_supported = False
+                        self.record_close_unsupported_socket = sock
+                        logger.info('event=record_close_notify outcome=unsupported')
                     elif ack.get('status') == 'unknown':
                         close.prepared = False
                     # Capacity and watermark refusals retain the exact request.
@@ -1125,6 +1136,7 @@ class ListenPusherSession:
             }
             wants_timeline = self.config.audio_timeline_v2 or self.config.audio_timeline_spans
             self.record_close_supported = False
+            self.record_close_unsupported_socket = None
             if close_notify_enabled() and audio_outbox_enabled():
                 connect_kwargs['record_close_protocol'] = RECORD_CLOSE_VERSION
             if wants_timeline:

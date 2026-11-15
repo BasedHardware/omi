@@ -405,3 +405,32 @@ async def test_150_sequential_closes_share_one_socket_and_bound_terminal_state(i
         await asyncio.gather(receiver, return_exceptions=True)
         incoming.put_nowait(None)
         await asyncio.wait_for(handler, 10)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('frozen', [False, True])
+async def test_unsupported_close_is_terminal_until_reconnect(monkeypatch, frozen):
+    active = {'active': True}
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, active_ref=active)
+    await session.connect()
+    session.record_close_supported = True
+    await session.request_recording_close('conv-1')
+    close = session.pending_record_closes['conv-1']
+    close.frozen = frozen
+    ws.incoming.append(result_frame('conv-1', close.request_id, 'commit' if frozen else 'prepare', 'unsupported'))
+    ws.on_recv = lambda: active.update(active=False)
+    await session.pusher_receive()
+    assert not session.pending_record_closes
+    assert not session.record_close_supported
+    before = len(ws.sent)
+    for cid in ['conv-1', 'next', 'later']:
+        assert not await session.request_recording_close(cid)
+    assert len(ws.sent) == before and not session.pending_record_closes
+    if frozen:
+        with pytest.raises(AudioBackpressure):
+            session.audio_bytes_send(b'late', 100)
+    replacement = FakePusherWebSocket()
+    session.pusher_ws, session.pusher_connected, session.record_close_supported = replacement, True, True
+    await session.request_recording_close('next')
+    assert 'next' in session.pending_record_closes and replacement.sent
