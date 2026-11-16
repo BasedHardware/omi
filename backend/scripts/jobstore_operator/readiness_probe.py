@@ -143,8 +143,23 @@ def validate_manifest(pod, token, node):
     """Check server-dry-run mutations before any Pod is allowed to execute."""
     expected = render(token, node)
     metadata = pod.get('metadata', {})
-    if metadata.get('ownerReferences') or metadata.get('deletionTimestamp'):
+    if metadata.get('ownerReferences') or metadata.get('deletionTimestamp') or metadata.get('finalizers'):
         raise ValueError('EXACT_STANDALONE_POD_REQUIRED')
+    if not exact(metadata.get('labels'), expected['metadata']['labels']) or not exact(
+        metadata.get('annotations'), expected['metadata']['annotations']
+    ):
+        raise ValueError('REVIEWED_METADATA_REQUIRED')
+    api_metadata = {
+        'uid',
+        'resourceVersion',
+        'generation',
+        'creationTimestamp',
+        'managedFields',
+        'selfLink',
+        'finalizers',
+    }
+    if set(metadata) - set(expected['metadata']) - api_metadata:
+        raise ValueError('UNREVIEWED_METADATA_FIELD')
     spec = pod.get('spec', {})
     if spec.get('initContainers') or spec.get('ephemeralContainers'):
         raise ValueError('NO_ADDITIONAL_CONTAINERS_ALLOWED')
@@ -233,6 +248,38 @@ def validate_manifest(pod, token, node):
         raise ValueError('REVIEWED_CONTAINER_SECURITY_REQUIRED')
     if not exact(spec.get('securityContext'), expected['spec']['securityContext']):
         raise ValueError('REVIEWED_POD_SECURITY_REQUIRED')
+    # Normalize only enumerated API defaults, then compare the entire remaining
+    # spec. A newly introduced field must be reviewed, never accepted implicitly.
+    normalized = candidate['spec']
+    defaults = {
+        'serviceAccount': KSA,
+        'schedulerName': 'default-scheduler',
+        'priority': 0,
+        'preemptionPolicy': 'PreemptLowerPriority',
+    }
+    for key, value in defaults.items():
+        if key in normalized:
+            if not exact(normalized.pop(key), value):
+                raise ValueError('UNREVIEWED_API_DEFAULT')
+    if 'tolerations' in normalized:
+        tolerations = normalized.pop('tolerations')
+        standard = [
+            {'key': 'node.kubernetes.io/' + key, 'operator': 'Exists', 'effect': 'NoExecute', 'tolerationSeconds': 300}
+            for key in ('not-ready', 'unreachable')
+        ]
+        if (
+            not isinstance(tolerations, list)
+            or len(tolerations) != 2
+            or not all(sum(exact(actual, allowed) for actual in tolerations) == 1 for allowed in standard)
+        ):
+            raise ValueError('UNREVIEWED_TOLERATIONS')
+    normalized_container = normalized['containers'][0]
+    for key, value in {'stdin': False, 'stdinOnce': False, 'tty': False}.items():
+        if key in normalized_container and not exact(normalized_container.pop(key), value):
+            raise ValueError('UNREVIEWED_CONTAINER_DEFAULT')
+    normalized_container['securityContext'] = security
+    if not exact(normalized, expected['spec']):
+        raise ValueError('UNREVIEWED_SPEC_FIELD')
     return {
         'result': 'REVIEWED_PROBE_MANIFEST_ONLY',
         'pod_name': pod_name(token),
@@ -345,8 +392,12 @@ def main():
             )
         with args.output.open('x') as stream:
             stream.write(json.dumps(result, indent=2) + '\n')
-    except Exception:
-        print(json.dumps({'result': 'HOLD', 'scope': 'READINESS_PREPARATION_ONLY'}))
+    except Exception as error:
+        # Exception text may contain receipt bytes or paths. Class names expose
+        # a useful fixed category without publishing that input.
+        print(
+            json.dumps({'result': 'HOLD', 'scope': 'READINESS_PREPARATION_ONLY', 'failure_class': type(error).__name__})
+        )
         return 2
     return 0
 

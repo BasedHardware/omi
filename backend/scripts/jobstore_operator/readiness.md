@@ -47,6 +47,11 @@ Recheck those UIDs and controls at execution. A server dry-run must first pass
 `check-manifest --pod-receipt server-dry-run.json` with the same token/node and
 a new `--output` receipt: unexpected mutation
 or a collision holds the attempt. No server dry-run is implicit in these tools.
+Labels and annotations must match exactly, and nonempty finalizers refuse.
+Only enumerated API defaults are normalized: the KSA mirror, default scheduler,
+zero priority, default preemption policy, the two standard 300-second NoExecute
+tolerations, and false container stdin/tty flags. Other spec fields hold the
+attempt until reviewed; no admission annotation is implicitly trusted.
 
 Render locally with a new output file:
 

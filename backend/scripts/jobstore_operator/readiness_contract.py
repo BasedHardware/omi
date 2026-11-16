@@ -5,7 +5,6 @@ CONTRACT = {
     'source_sha': '97074e78defa1a84b9d39c021e28aa70cf4f2e4e',
     'supervisor_sha256': '1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f',
     'image': 'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:8b0bf0de13348de53700dee40b5f83f02c5edf3db184345f5c0769601efaefd0',
-    'config_digest': 'sha256:724e762154931739b8d230ba722102a488b458f55fdc33a6331b3683be72e34e',
     'qualification_run': 43851897045,
     'migrations': [
         [1, 'doc_mode_store', '4f121b4df8ffe9c8369cc5b920f94010d3ada94b11909c49318db9f49f6ba205'],

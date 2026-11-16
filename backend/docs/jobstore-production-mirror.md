@@ -226,6 +226,12 @@ obligations still apply.
    with the intended target. Do not run `migrate` as a readiness probe or
    repeat completed initialization. The frozen operator source `97074e78`
    expects `0001_doc_mode_store.sql` through `0008_allowance_holds.sql`.
+   For a fresh target, the release executor must first complete a separately
+   approved schema-initialization action using the pinned build's migration
+   command and retain its apply/status receipt; readiness cannot initialize it.
+   If initialization is already complete, verify that receipt and the current
+   catalog instead of applying it again. Never use this sequence to authorize
+   another startup, IAM change or schema application implicitly.
    This source tree additionally contains expand-only `0009_protected_share.sql`
    for a separately reviewed PostgreSQL-primary worker roll; its presence is
    not permission to apply it during operator readiness. No fence,

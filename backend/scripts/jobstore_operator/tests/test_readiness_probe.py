@@ -143,6 +143,52 @@ class ReadinessTests(unittest.TestCase):
             path = package.parents[1] / 'database/jobstore/migrations' / f'{version:04d}_{name}.sql'
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), checksum)
 
+    def test_api_defaults_are_enumerated_without_accepting_metadata_or_spec_mutations(self):
+        pod, report = completed()
+        pod['metadata'].update(resourceVersion='123', managedFields=[], creationTimestamp='2026-11-16T00:00:00Z')
+        pod['spec'].update(
+            serviceAccount=probe.KSA,
+            schedulerName='default-scheduler',
+            priority=0,
+            preemptionPolicy='PreemptLowerPriority',
+            tolerations=[
+                {
+                    'key': 'node.kubernetes.io/' + key,
+                    'operator': 'Exists',
+                    'effect': 'NoExecute',
+                    'tolerationSeconds': 300,
+                }
+                for key in ('unreachable', 'not-ready')
+            ],
+        )
+        pod['spec']['containers'][0].update(stdin=False, stdinOnce=False, tty=False)
+        self.validate(pod, report)
+        for mutate in (
+            lambda p: p['metadata'].update(finalizers=['example.com/hold']),
+            lambda p: p['metadata']['annotations'].update(
+                {'container.apparmor.security.beta.kubernetes.io/readiness': 'unconfined'}
+            ),
+            lambda p: p['metadata']['labels'].update({'injected': 'true'}),
+            lambda p: p['metadata'].update(generateName='another-'),
+            lambda p: p['spec'].update(priorityClassName='system-node-critical'),
+            lambda p: p['spec'].update(priority=1000),
+            lambda p: p['spec'].update(nodeSelector={'other': 'node'}),
+            lambda p: p['spec'].update(imagePullSecrets=[{'name': 'other'}]),
+            lambda p: p['spec'].update(schedulingGates=[{'name': 'example.com/hold'}]),
+            lambda p: p['spec']['tolerations'][0].update(tolerationSeconds=600),
+            lambda p: p['spec']['containers'][0].update(tty=True),
+            lambda p: p['spec']['containers'][0].update(
+                resizePolicy=[{'resourceName': 'cpu', 'restartPolicy': 'RestartContainer'}]
+            ),
+            lambda p: p['spec']['containers'][0]['env'][0].update(extra='unreviewed'),
+        ):
+            changed = copy.deepcopy(pod)
+            mutate(changed)
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                probe.validate_manifest(changed, TOKEN, NODE)
+            with self.assertRaises(ValueError):
+                self.validate(changed, report)
+
     def test_unique_run_and_existing_node_identifiers_reject_paths_and_shell_text(self):
         for token in ('', 'a' * 31, 'A' * 32, '../other', 'a' * 32 + ';delete', None):
             with self.subTest(token=token), self.assertRaises(ValueError):
@@ -164,7 +210,9 @@ class ReadinessTests(unittest.TestCase):
             lambda p: p['spec'].update(activeDeadlineSeconds=900),
             lambda p: p['status'].update(phase='Running'),
             lambda p: p['status']['containerStatuses'][0].update(restartCount=1),
-            lambda p: p['status']['containerStatuses'][0].update(imageID=probe.CONTRACT['config_digest']),
+            lambda p: p['status']['containerStatuses'][0].update(
+                imageID='sha256:724e762154931739b8d230ba722102a488b458f55fdc33a6331b3683be72e34e'
+            ),
             lambda p: p['status']['containerStatuses'][0]['state']['terminated'].update(exitCode=2),
         ]
         for index, mutate in enumerate(mutations):
@@ -278,6 +326,7 @@ class ReadinessTests(unittest.TestCase):
             result = subprocess.run(args, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 2)
             self.assertEqual(json.loads(result.stdout)['result'], 'HOLD')
+            self.assertEqual(json.loads(result.stdout)['failure_class'], 'FileExistsError')
             pod, report = completed()
             (root / 'completed-pod.json').write_text(json.dumps(pod))
             (root / 'log.json').write_text(json.dumps(report))
