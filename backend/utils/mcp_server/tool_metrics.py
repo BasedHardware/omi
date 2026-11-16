@@ -19,19 +19,26 @@ from utils.mcp_analytics import mcp_client_family, mcp_tool_enum
 logger = logging.getLogger(__name__)
 
 _OUTCOMES = frozenset({'success', 'error'})
-_ERROR_CATEGORIES = frozenset({'none', 'authorization_denied', 'validation', 'unknown_tool', 'internal'})
-DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0)
+# ``capped`` (daily cap or usage budget reached) is metrics-only; the rest match the PostHog event.
+_ERROR_CATEGORIES = frozenset({'none', 'authorization_denied', 'validation', 'unknown_tool', 'internal', 'capped'})
+DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 30.0, 60.0, 120.0)
 RESPONSE_CHAR_BUCKETS = (1_000, 4_000, 16_000, 32_000, 64_000, 100_000, 120_000, 250_000)
 
 
-def _registered(name: str, factory):
-    """Module-reload-safe: isolated test loads reuse the one registered collector."""
+def _registered(name: str, kind: type, labels: list, factory):
+    """Module-reload-safe: isolated test loads reuse the one registered collector of the same shape."""
     existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-    return existing if existing is not None else factory()
+    if existing is None:
+        return factory()
+    if not isinstance(existing, kind) or list(getattr(existing, '_labelnames', ())) != labels:
+        raise ValueError(f'{name} already registered with a different shape')
+    return existing
 
 
 MCP_TOOL_CALLS_TOTAL: Counter = _registered(
     'omi_mcp_tool_calls_total',
+    Counter,
+    ['tool', 'client', 'outcome', 'error_category'],
     lambda: Counter(
         'omi_mcp_tool_calls',
         'Hosted MCP tools/call requests by tool, client family, outcome and error category',
@@ -40,6 +47,8 @@ MCP_TOOL_CALLS_TOTAL: Counter = _registered(
 )
 MCP_TOOL_DURATION_SECONDS: Histogram = _registered(
     'omi_mcp_tool_duration_seconds',
+    Histogram,
+    ['tool'],
     lambda: Histogram(
         'omi_mcp_tool_duration_seconds',
         'Hosted MCP tools/call wall time from admission to result, by tool',
@@ -49,6 +58,8 @@ MCP_TOOL_DURATION_SECONDS: Histogram = _registered(
 )
 MCP_TOOL_RESPONSE_CHARS: Histogram = _registered(
     'omi_mcp_tool_response_chars',
+    Histogram,
+    ['tool'],
     lambda: Histogram(
         'omi_mcp_tool_response_chars',
         'Compact JSON characters in a successful hosted MCP tool result, by tool',
@@ -58,6 +69,8 @@ MCP_TOOL_RESPONSE_CHARS: Histogram = _registered(
 )
 MCP_TOOL_TRUNCATED_TOTAL: Counter = _registered(
     'omi_mcp_tool_truncated_results_total',
+    Counter,
+    ['tool'],
     lambda: Counter(
         'omi_mcp_tool_truncated_results',
         'Successful hosted MCP tool results that reported truncated=true (more to page), by tool',
@@ -83,7 +96,9 @@ def record_tool_call(
             outcome if outcome in _OUTCOMES else 'error',
             error_category if error_category in _ERROR_CATEGORIES else 'internal',
         ).inc()
-        MCP_TOOL_DURATION_SECONDS.labels(tool).observe(max(0.0, float(duration_ms) / 1_000))
+        if duration_ms > 0:
+            # Argument and envelope failures never reached a handler; they would drag latency toward zero.
+            MCP_TOOL_DURATION_SECONDS.labels(tool).observe(float(duration_ms) / 1_000)
     except Exception as exc:  # noqa: BLE001 - telemetry must never fail a tool call
         logger.warning('mcp tool metric failed error=%s', type(exc).__name__)
 

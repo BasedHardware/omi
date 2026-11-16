@@ -239,6 +239,15 @@ def _handle_tool_call(
         if isinstance(detail, dict) and detail.get('error') in {'mcp_daily_cap', 'usage_budget_exhausted'}:
             payload = _tool_error_payload(detail['error'], str(detail))
             payload['_meta'] = {'omi_usage': detail}
+            # Metrics only: the sampled PostHog event has never covered capped calls.
+            tool_metrics.record_tool_call(
+                tool_name,
+                auth_type=auth_context.auth_type,
+                client_id=auth_context.client_id,
+                outcome="error",
+                error_category="capped",
+                duration_ms=(time.monotonic() - started_at) * 1_000,
+            )
             return create_mcp_response(msg_id, _complete_result(payload, effective_version))
         tool_error = tool_error_from_http(exc)
     except Exception:

@@ -3,6 +3,9 @@
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
+
+import utils.mcp_analytics as mcp_analytics
 
 import utils.mcp_server.transport as mcp_transport
 from utils.mcp_scopes import MCP_SUPPORTED_SCOPES
@@ -11,19 +14,24 @@ from utils.mcp_server.auth import MCPAuthContext
 from utils.mcp_server.errors import ToolExecutionError
 
 
-def _auth(client_id='test-client'):
-    return MCPAuthContext(uid='uid-metrics', auth_type='oauth', scopes=list(MCP_SUPPORTED_SCOPES), client_id=client_id)
+def _auth(client_id='test-client', scopes=None):
+    return MCPAuthContext(
+        uid='uid-metrics',
+        auth_type='oauth',
+        scopes=list(MCP_SUPPORTED_SCOPES if scopes is None else scopes),
+        client_id=client_id,
+    )
 
 
-def _call(name, result=None, error=None, client_id='test-client'):
+def _call(name, result=None, error=None, client_id='test-client', scopes=None, cap=None):
     message = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': {}}}
     with (
-        patch.object(mcp_transport, 'enforce_daily_cap', return_value=None),
+        patch.object(mcp_transport, 'enforce_daily_cap', return_value=None, side_effect=cap),
         patch.object(mcp_transport, 'schedule_mcp_tool_call'),
         patch.object(mcp_transport, 'schedule_mcp_tool_use_succeeded'),
         patch.object(mcp_transport, 'execute_tool', return_value=result, side_effect=error),
     ):
-        return mcp_transport.handle_mcp_message(_auth(client_id), message)
+        return mcp_transport.handle_mcp_message(_auth(client_id, scopes), message)
 
 
 def calls(*labels):
@@ -79,3 +87,31 @@ def test_a_broken_metric_never_breaks_the_tool_call():
         with patch.object(tool_metrics.MCP_TOOL_RESPONSE_CHARS, 'labels', side_effect=RuntimeError('registry')):
             response = _call('get_goals', result={'goals': []})
     assert response['result']['structuredContent'] == {'goals': []}
+
+
+def test_capped_calls_are_counted_without_a_latency_sample_from_a_handler():
+    before = calls('get_memories', 'other_registered', 'error', 'capped')
+    capped = HTTPException(status_code=429, detail={'error': 'mcp_daily_cap', 'limit': 1})
+    response = _call('get_memories', result={'memories': []}, cap=capped)
+    assert response['result']['isError'] is True
+    assert calls('get_memories', 'other_registered', 'error', 'capped') == before + 1
+
+
+def test_scope_denials_are_counted_as_authorization_denied():
+    before = calls('get_memories', 'other_registered', 'error', 'authorization_denied')
+    response = _call('get_memories', result={'memories': []}, scopes=['conversations.read'])
+    assert response['error']['code'] == -32003
+    assert calls('get_memories', 'other_registered', 'error', 'authorization_denied') == before + 1
+
+
+def test_client_family_labels_are_the_bounded_analytics_families():
+    chatgpt = next(iter(mcp_analytics._CHATGPT_CLIENT_IDS))
+    assert mcp_analytics.mcp_client_family('oauth', chatgpt) == 'chatgpt'
+    assert mcp_analytics.mcp_client_family('oauth', 'some-registered-client') == 'other_registered'
+    assert mcp_analytics.mcp_client_family('legacy_mcp_key', None) == 'api_key'
+    assert mcp_analytics.mcp_client_family('firebase', None) == 'unknown'
+
+
+def test_reloading_with_a_different_shape_fails_loudly():
+    with pytest.raises(ValueError, match='different shape'):
+        tool_metrics._registered('omi_mcp_tool_calls_total', tool_metrics.Counter, ['tool'], lambda: None)

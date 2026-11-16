@@ -109,8 +109,8 @@ the registry (anything else is `unknown`), and `client` is the analytics client 
 
 | Series | Labels | Meaning |
 | --- | --- | --- |
-| `omi_mcp_tool_calls_total` | `tool`, `client`, `outcome`, `error_category` | Every tools/call that reached dispatch |
-| `omi_mcp_tool_duration_seconds` | `tool` | Wall time from admission to result |
+| `omi_mcp_tool_calls_total` | `tool`, `client`, `outcome`, `error_category` | Every tools/call; `error_category` adds `capped` (daily cap or usage budget) to the PostHog set |
+| `omi_mcp_tool_duration_seconds` | `tool` | Wall time from admission to result (buckets to 120s; calls rejected before dispatch are not observed) |
 | `omi_mcp_tool_response_chars` | `tool` | Compact JSON characters in a successful result |
 | `omi_mcp_tool_truncated_results_total` | `tool` | Successful results with `truncated=true` (more to page) |
 
