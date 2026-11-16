@@ -207,6 +207,14 @@ def test_mark_completed_commits():
     assert sets[0][1]['wipe_status'] == 'completed'
 
 
+def test_mark_completed_ignores_retired_late_cleanup_field():
+    result, sets = _run_mark_completed({'wipe_status': 'failed', 'late_agent_vm_cleanup': {'vmName': 'retired'}})
+
+    assert result is True
+    assert len(sets) == 1
+    assert sets[0][1]['wipe_status'] == 'completed'
+
+
 def test_mark_billing_failed_allows_pre_wipe_states():
     result, sets = _run_mark_billing_failed({'uid': 'uid1', 'wipe_status': 'deleting_auth'})
 

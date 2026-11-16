@@ -984,7 +984,7 @@ def enforce_chat_quota(
 def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok_exempt: bool = True) -> None:
     """Quota for the desktop serving plane: production customer data, no Free provision.
 
-    Development desktop-backend ADC stays on the compute project for ``agentVm``.
+    Development desktop-backend ADC stays on the compute project for GCE.
     Entitlements read the customer SA (``SERVICE_ACCOUNT_JSON`` or the Auth file).
     ``byok_exempt=False`` is for surfaces that hand out Omi's own credential no
     matter what key the user holds (the realtime hub); a user's Anthropic key

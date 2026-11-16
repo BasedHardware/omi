@@ -18,11 +18,6 @@ from models.users import PlanType  # noqa: E402
 import utils.billing_recovery as _billing_recovery  # noqa: E402,F401
 import utils.monthly_switch as ms  # noqa: E402
 
-# Load the switch's real parser dependency with the test module. The CPU guard
-# measures switch execution, not one-time dependency initialization; no parser
-# or Stripe behavior is stubbed by this import.
-import utils.billing_recovery  # noqa: E402,F401
-
 NOW = 1_793_000_000
 DAY = 86400
 UID = 'fixture-user'

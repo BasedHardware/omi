@@ -34,6 +34,8 @@ Safety properties:
     A failed batch is re-scanned and retried by the next run.
   * Writes are batched (Firestore caps a batch at 500 operations) and each
     target is independently resumable via `--target`.
+  * A reached scan cap is incomplete, even with zero matches. Success requires
+    exhausted scans and acknowledged commits for every selected target.
 
 Usage:
     python scripts/sweep_agent_vm_firestore.py --project based-hardware
@@ -88,17 +90,23 @@ class _Counter:
         self.committed = 0
         self.failed_ops = 0
         self.failed_batches = 0
+        self.scan_complete = False
 
     @property
     def failed(self) -> bool:
         return self.failed_batches > 0
+
+    @property
+    def complete(self) -> bool:
+        return self.scan_complete and not self.failed
 
     def report(self, target: str, *, project: str, applied: bool) -> None:
         mode = 'APPLIED' if applied else 'DRY-RUN'
         print(
             f'{mode} project={project} target={target} scanned={self.scanned} matched={self.matched} '
             f'queued={self.queued} committed={self.committed} '
-            f'failed_ops={self.failed_ops} failed_batches={self.failed_batches}'
+            f'failed_ops={self.failed_ops} failed_batches={self.failed_batches} '
+            f'scan_complete={int(self.scan_complete)} complete={int(self.complete)}'
         )
 
 
@@ -139,6 +147,7 @@ def _sweep_users(db: Any, *, project: str, applied: bool, limit: int) -> _Counte
             query = query.start_after(last_doc)
         page: list[Any] = list(query.stream())
         if not page:
+            counter.scan_complete = True
             break
 
         for snapshot in page:
@@ -186,17 +195,21 @@ def _sweep_migrations(db: Any, *, project: str, applied: bool, limit: int) -> _C
     pending = 0
 
     for snapshot in db.collection_group(MIGRATIONS).stream():
+        counter.scanned += 1
+        path = snapshot.reference.path.split('/')
+        if len(path) == 4 and all(path) and path[0] == USERS and path[2] == MIGRATIONS:
+            counter.matched += 1
+            if applied:
+                batch.delete(snapshot.reference)
+                pending += 1
+                counter.queued += 1
+                if pending >= BATCH_LIMIT:
+                    batch = _flush(db, batch, counter, pending, project=project, applied=applied)
+                    pending = 0
         if limit and counter.scanned >= limit:
             break
-        counter.scanned += 1
-        counter.matched += 1
-        if applied:
-            batch.delete(snapshot.reference)
-            pending += 1
-            counter.queued += 1
-            if pending >= BATCH_LIMIT:
-                batch = _flush(db, batch, counter, pending, project=project, applied=applied)
-                pending = 0
+    else:
+        counter.scan_complete = True
 
     if applied and pending:
         _flush(db, batch, counter, pending, project=project, applied=applied)
@@ -217,6 +230,7 @@ def _sweep_markers(db: Any, *, project: str, applied: bool, limit: int) -> _Coun
             query = query.start_after(last_doc)
         page: list[Any] = list(query.stream())
         if not page:
+            counter.scan_complete = True
             break
 
         for snapshot in page:
@@ -248,8 +262,6 @@ def _sweep_leases(db: Any, *, project: str, applied: bool, limit: int) -> _Count
     pending = 0
 
     for snapshot in db.collection(LEASES).stream():
-        if limit and counter.scanned >= limit:
-            break
         counter.scanned += 1
         counter.matched += 1
         if applied:
@@ -259,6 +271,10 @@ def _sweep_leases(db: Any, *, project: str, applied: bool, limit: int) -> _Count
             if pending >= BATCH_LIMIT:
                 batch = _flush(db, batch, counter, pending, project=project, applied=applied)
                 pending = 0
+        if limit and counter.scanned >= limit:
+            break
+    else:
+        counter.scan_complete = True
 
     if applied and pending:
         _flush(db, batch, counter, pending, project=project, applied=applied)
@@ -307,8 +323,10 @@ def main() -> int:
         choices=TARGETS,
         help='Sweep only this target (repeatable). Defaults to every target.',
     )
-    parser.add_argument('--limit', type=int, default=0, help='Max documents to scan per target (0 = all)')
+    parser.add_argument('--limit', type=int, default=0, help='Max inspected documents per target (0 = all)')
     args = parser.parse_args()
+    if args.limit < 0:
+        parser.error('--limit must be nonnegative (0 = all)')
 
     project = args.project.strip()
     if not project:
@@ -329,7 +347,9 @@ def main() -> int:
     print(f'{mode} project={project} targets={",".join(selected)} limit={args.limit or "all"}')
 
     failed_targets: list[str] = []
+    incomplete_targets: list[str] = []
     totals = _Counter()
+    totals.scan_complete = True
     for target in selected:
         counter = _SWEEPERS[target](db, project=project, applied=args.apply, limit=args.limit)
         counter.report(target, project=project, applied=args.apply)
@@ -339,19 +359,23 @@ def main() -> int:
         totals.committed += counter.committed
         totals.failed_ops += counter.failed_ops
         totals.failed_batches += counter.failed_batches
+        totals.scan_complete = totals.scan_complete and counter.scan_complete
         if counter.failed:
             failed_targets.append(target)
+        if not counter.scan_complete:
+            incomplete_targets.append(target)
 
     totals.report('TOTAL', project=project, applied=args.apply)
-    if failed_targets:
+    if failed_targets or incomplete_targets:
         print(
             f'INCOMPLETE project={project} targets_with_failed_batches={",".join(failed_targets)} '
-            'retry before treating the sweep as complete.',
+            f'targets_with_incomplete_scans={",".join(incomplete_targets)} '
+            'require an exhausted, successful verification before treating the sweep as complete.',
             file=sys.stderr,
         )
     if not args.apply:
         print(f'Dry run only. Re-run with --project {project} --apply to delete.')
-    return 1 if failed_targets else 0
+    return 0 if totals.complete else 1
 
 
 if __name__ == '__main__':

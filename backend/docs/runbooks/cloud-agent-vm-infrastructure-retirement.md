@@ -634,26 +634,40 @@ project and separates `queued` batch operations from `committed` ones, so a
 failed batch shows up as `failed_ops`/`failed_batches` and the run exits
 non-zero with `INCOMPLETE` instead of looking successful.
 
+Receipts also report `scan_complete` (the selected query was exhausted) and
+`complete` (exhaustion plus acknowledged commits). Reaching `--limit`, including
+an exact-size cap, leaves the scan incomplete and exits 1. A zero-match capped
+sample is not proof of absence. `TOTAL` covers only the selected targets.
+The cap bounds inspected snapshots, not RPC prefetch or billed reads.
+
 The script is a dry run unless `--apply` is passed, prints aggregate counts
 only (never uids or VM names), and is idempotent. Run it from the backend
-directory with the production Admin SDK credentials:
+directory with the separately admitted operator's approved ADC configuration
+(for example, `GOOGLE_APPLICATION_CREDENTIALS` or workload identity). This
+standalone script does not load the backend's `SERVICE_ACCOUNT_JSON` itself;
+verify the intended principal and project before scanning:
 
 ```bash
 cd backend
 python scripts/sweep_agent_vm_firestore.py --project based-hardware                       # dry run, all targets
-python scripts/sweep_agent_vm_firestore.py --project based-hardware --target users --limit 100
+python scripts/sweep_agent_vm_firestore.py --project based-hardware --target users --limit 100  # diagnostic; may exit 1
 python scripts/sweep_agent_vm_firestore.py --project based-hardware --apply               # execute
 ```
 
-A run whose receipts report `failed_batches>0` is incomplete; re-run it before
-treating the target as swept.
+A run with `failed_batches>0` or `scan_complete=0` is incomplete. Limited runs
+are diagnostic only. Retirement proof requires an unlimited all-four-target
+verification, exit 0, and `scan_complete=1 complete=1` for every target and TOTAL.
 
 Expected dry-run shape at hand-off (2026-11-10): `users` matched 9,366;
 `migrations`, `markers`, and `leases` matched 0. Re-run the dry run after
-`--apply`; every target must report `matched=0`.
+`--apply`, without `--limit` or a target subset; every target must report
+`matched=0 failed_batches=0 scan_complete=1 complete=1` (alongside its other counters).
 
-Blast radius: deletes only the four retired record shapes. No user content,
-conversation, memory, or account-deletion marker is touched. Rollback is not
+Blast radius: deletes only the four retired record shapes. Migration deletions
+are restricted to the exact `users/{uid}/agentVmMigrations/{document}` path;
+same-named collections under other parents or deeper paths are left untouched.
+No user content, conversation, memory, or account-deletion status/wipe field is
+touched; only its retired `late_agent_vm_cleanup` field is removed. Rollback is not
 possible — the records are not backed up — but they have no reader, so there is
 nothing to restore for.
 

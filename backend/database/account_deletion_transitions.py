@@ -1,4 +1,4 @@
-"""Account-deletion state transitions and deletion-scoped resource reads."""
+"""Account-deletion state transitions."""
 
 from datetime import datetime, timezone
 
