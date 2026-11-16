@@ -146,12 +146,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _pendantTimer;
 
   Future<void> _bufferQueue = Future.value();
+  Future<List<Wal>>? _indexLoadInFlight;
 
   Future<T> _enqueueBuffer<T>(Future<T> Function() op) {
     final prev = _bufferQueue;
     final completer = Completer<T>();
     _bufferQueue = prev.then((_) async {
       try {
+        await _indexLoadInFlight;
         completer.complete(await op());
       } catch (e, st) {
         completer.completeError(e, st);
@@ -457,6 +459,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async {
+    await _indexLoadInFlight;
     if (!_isCurrent(admittedGeneration)) return;
     // Cover all four external callers: any record admitted into this session
     // is owned by the signed-in account. Stamp only when unstamped so a
@@ -610,26 +613,18 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// Headless transcription loads custody without starting cloud-audio timers or migrations.
   Future<void> loadForOnDeviceWorker() async {
     final generation = _sessionGeneration;
-    await WalFileManager.init();
-    final loaded = await WalFileManager.loadWals();
+    await _loadAndAdmitIndex(generation, useOverride: false);
     if (!_isCurrent(generation)) return;
-    _admitLoadedWals(loaded);
     if (!_walReady.isCompleted) _walReady.complete();
   }
 
   Future<void> _initializeWals() async {
     final generation = _sessionGeneration;
-    await WalFileManager.init();
+    final loaded = await _loadAndAdmitIndex(generation);
     if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
     }
-    final loaded = _loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals();
-    if (!_isCurrent(generation)) {
-      if (!_walReady.isCompleted) _walReady.complete();
-      return;
-    }
-    _admitLoadedWals(loaded);
     Logger.debug("wal service start: ${_wals.length}");
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;

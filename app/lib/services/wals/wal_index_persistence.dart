@@ -1,6 +1,24 @@
 part of 'local_wal_sync.dart';
 
 extension _WalIndexPersistence on LocalWalSyncImpl {
+  /// Admission owns the index token namespace before any producer/save can
+  /// start a worker. A slow Documents recovery must never look like an empty
+  /// ledger to a timer or stop/codec-change flush.
+  Future<List<Wal>> _loadAndAdmitIndex(int generation, {bool useOverride = true}) {
+    final load = () async {
+      await WalFileManager.init();
+      if (!_isCurrent(generation)) return <Wal>[];
+      final override = useOverride ? _loadWalsOverride : null;
+      final loaded = override != null ? await override() : await WalFileManager.loadWals();
+      if (_isCurrent(generation)) _admitLoadedWals(loaded);
+      return loaded;
+    }();
+    _indexLoadInFlight = load;
+    return load.whenComplete(() {
+      if (identical(_indexLoadInFlight, load)) _indexLoadInFlight = null;
+    });
+  }
+
   Future<String> _uniqueStorageFileName(Wal wal) async {
     final claimable = captureEvidenceWalClaimable(wal);
     final planned = wal.filePath;
@@ -21,6 +39,7 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
   }
 
   Future<bool> _saveWalsToFile(int generation) async {
+    await _indexLoadInFlight;
     if (!_isCurrent(generation)) return false;
     // A save joins all earlier disk writes. After a failure the next caller
     // retries dirty identities; no caller can claim durable before rename.

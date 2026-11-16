@@ -359,4 +359,45 @@ void main() {
     expect(await main.readAsString(), original);
     expect(await backup.readAsString(), 'backup evidence');
   });
+  test('a flush racing startup cannot seed an empty worker and forget loaded files', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_before_startup.bin');
+    await File('${documents.path}/${old.filePath}').writeAsBytes([1, 2, 3]);
+    await WalFileManager.saveWals([old]);
+    final loaded = Completer<void>();
+    final releaseLoad = Completer<void>();
+    final sync = LocalWalSyncImpl(_Listener(),
+        deltaIndexAllowed: () async => true,
+        loadWals: () async {
+          final rows = await WalFileManager.loadWals();
+          loaded.complete();
+          await releaseLoad.future;
+          return rows;
+        });
+    sync.start();
+    await loaded.future;
+    final stopping = sync.stop();
+    // Give the real worker time to start if startup incorrectly permits a save.
+    await pumpEventQueue(times: 100);
+    releaseLoad.complete();
+    await sync.walReady;
+    await stopping;
+    final added = Wal(
+        timerStart: 2,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_after_startup.bin');
+    await File('${documents.path}/${added.filePath}').writeAsBytes([4, 5, 6]);
+    await sync.addExternalWal(added, admittedGeneration: sync.sessionGeneration);
+    addTearDown((await sync.indexWorkerForTesting)!.close);
+    expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath), [old.filePath, added.filePath],
+        reason: 'later deltas must retain files loaded at startup');
+  });
 }

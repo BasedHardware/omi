@@ -8,13 +8,23 @@ adopted by filename, or scanned by the new recovery code.
 
 ## Attribution
 
-The live and device producers write length-prefixed `audio_<device>_...bin`
-files. A failed index commit followed by process loss leaves those files with
-no restart-discoverable row. The real-ledger regressions reproduce both cases:
-file fsync succeeds, injected index persistence fails, a fresh ledger loads no
-row before the fix. Interruption before device row registration reproduces the
-same problem. Repetition can accumulate one file per failed transaction; this
-matches the reported naming family and can operate at capture cadence.
+The strongest matching mechanism is a reproduced startup race. While the first
+index load/recovery is pending, an early flush can start a delta worker seeded
+from the still-empty in-memory inventory. It overwrites the index with an empty
+snapshot. When load finally admits old rows, they receive disk tokens and are
+considered already indexed; later saves send only new deltas. Previously indexed
+files silently lose their active references without file deletion or quarantine.
+A real-ledger barrier test reproduces this ordering and leaves only the new row.
+Startup admission now fences buffer work, external registration and index saves
+before a worker can establish its token namespace.
+
+Live and device producers also have a distinct file-before-index window. Their
+length-prefixed `audio_<device>_...bin` file can be fsynced before an index failure
+or process exit loses the row. The regressions reproduce live flush, device
+registration interruption and failed commits. New write intents close that gap.
+Both mechanisms match the reported filename family; repeated startup loss can
+strand an entire interval of captures rather than requiring one write failure
+per orphan file.
 
 The summary alone does not prove which failure created the reported daily
 population. There is no per-file index-write failure history or source SHA for
@@ -32,7 +42,7 @@ Paths below are in `app/lib/` unless specified otherwise.
 | `services/wals/device_chunk_persistence.dart::persistDeviceChunk`, `persistEmptyRingRecords` | Same confirmed gap, including interruption before `addExternalWal`. Both now use the same intent transaction. Device ACK still requires a real index commit. |
 | `utils/wal_file_manager.dart::_decodeIndex`, `_loadIndex`, `_quarantineIndex` | Invalid rows are omitted from active admission and retired in the original `wals*.json.corrupt-*` archive. Previously a failed rename allowed repair and later saves to overwrite the only references. A flushed copy fallback is now mandatory; if both fail, load fails without publishing a partial repair. Unknown/missing storage on a file-backed row is quarantined rather than silently converted to an empty memory WAL whose next flush replaces the old filename. |
 | `utils/wal_file_manager.dart::_loadFromBackup` | Valid backup rows remain indexed; rejected main/backup bytes are archived before fallback. No arbitrary merge from old archives: that could resurrect user-deleted or completed rows. New write intents recover only exact complete new transactions, alongside existing index tokens. |
-| `services/wals/wal_index_inventory.dart`, `wal_index_persistence.dart` | Fresh decoded indexes seed worker tokens; repaired/token-less rows are dirty and included in the first delta. Dead-worker rebuild includes every bucket. Existing 70k-row and worker-recovery tests cover this; the new mixed indexed/replayed-row test proves recovery does not rewrite the main index from only the added delta. No general token-less wipe was reproduced. |
+| `services/wals/wal_index_inventory.dart`, `wal_index_persistence.dart` | Confirmed startup race: saves could establish an empty worker before load admission. Admission now fences producers and saves, preserving the loaded token namespace. Repaired/token-less rows remain dirty and dead-worker rebuild includes every bucket; the 70k-history, mixed-token and blocked-startup tests exercise these boundaries. |
 | `services/wals/local_wal_sync.dart::_admitLoadedWals`, `wal_account_purge.dart::_reconcileCurrentOwnerSync`, `clearUserData` | Owner partition/reconciliation/logout move rows across active, foreign and retired buckets, all included by the index owner. Replayed intents retain their captured owner and foreign records stay parked. Deduped restoration keeps a matching file reference. |
 | `services/wals/local_wal_sync.dart::_removeExpiredSyncedCopies`, `_deleteWal`; `wal_discard.dart`; `wal_account_purge.dart` | Indexed retention, explicit user discard and account purge use `_deleteWal`: delete file before row, preserve rows on failure, protect shared references. The last file reference now retires any intent before deletion so replay cannot undo a user delete. |
 | `utils/wal_file_manager.dart::clearAll`; `utils/auth/finish_account_deletion.dart` | Confirmed gap: after an owner purge, unconditional index deletion loses rows for other owners or failed file deletions. Cleanup now removes indexes only when no indexed rows remain, under the same writer lock. This is an occasional path, not evidence of daily capture-cadence loss. |
@@ -40,7 +50,7 @@ Paths below are in `app/lib/` unless specified otherwise.
 | `services/wals/pendant_ring_custody.dart` | Prunes ring/live proof references and checkpoints, not the WAL ledger. Ring/SD/flash audio producers use `persistDeviceChunk`; proof acceptance still checks flushed file plus committed index. |
 | `services/wals/mobile_batch_buffer.dart` | Existing `.batch-journal` precedes audio creation; replay preserves a torn original in `.torn`. Journal retirement follows indexed publication. This path already has a separate recovery owner; no new writer or generic cleanup was added. |
 | `services/wals/native_recording_intake.dart` | Native finalized-file discovery retries admission/save failures. Legacy jobs/owners references retire only after durable row confirmation. Watch deletion requires owner-scoped coverage. Deferred owner files remain with native receipts/owners; these names differ from the sample's ordinary device prefix. |
-| `ios/Runner/Batch/BaseBatchAudioWriter.swift`, `ios/Runner/WatchRecordingStore.swift` | `.bin.part` has a native producer until finalization/recovery. Watch recovery preserves `.bin.part.torn` on a torn suffix; mobile batch preserves `.bin.torn`. These are intentional recovery evidence, not permission to delete. Native `.wav` and unknown filename classes cannot be assigned safe deletion authority from this summary. |
+| `ios/Runner/Batch/BaseBatchAudioWriter.swift`, `ios/Runner/WatchRecordingStore.swift` | `.bin.part` has a native producer until finalization/recovery. Watch recovery preserves `.bin.part.torn` on a torn suffix; mobile batch preserves `.bin.torn`. These are intentional recovery evidence, not permission to delete. Current Dart WAV playback/export uses `getTemporaryDirectory` (`utils/audio_player_utils.dart`, `utils/audio/wav_bytes.dart`); historical Documents WAVs and unknown filename classes cannot be assigned safe deletion authority from this summary. |
 | `utils/wal_file_manager.dart::migrateLegacyLimitlessFiles` | Saves the merged rows before clearing legacy preferences. A throwing save leaves preferences intact. A false return is theoretically ignored, but `saveWals` cannot ordinarily return false after successful `init`; no supported false-return loss was reproduced. Legacy recovery is distinct from the sample device prefix. |
 
 ## New transaction and retirement
