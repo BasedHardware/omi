@@ -15,9 +15,11 @@ test_folder_delete_concurrency_emulator.py; all of its reads obey the same
 read-before-write rule. BatchGet does not promise request-order results.
 Transaction deletes are proven by test_recurring_voice_privacy_firestore.py:
 removed profiles must disappear rather than leave documents outside TTL.
-It deliberately does not model other queries, standalone deletes, commit/rollback visibility,
-or retry and contention semantics. Extend it only when an incident proves that
-one of those boundaries needs a hermetic guard.
+It also models the app-review config document's top-level merge write, which
+backs the lifecycle persistence boundary. It deliberately does not model other
+queries, standalone deletes, commit/rollback visibility, or retry and
+contention semantics. Extend it only when an incident proves that one of those
+boundaries needs a hermetic guard.
 
 As fixture-integrity policy, a transaction accepts references created by its
 own ``StrictFirestore`` instance only. This prevents accidental mixing of
@@ -63,7 +65,7 @@ def _assert_storable(value: Any, *, in_array: bool = False) -> None:
 
 _SUPPORTED_OPERATIONS = (
     'document get/create, transaction-bound document get, transaction create/set/update/delete, bounded equality id queries, '
-    'projected client folder-membership BatchGet'
+    'app-review config merge writes, projected client folder-membership BatchGet'
 )
 
 
@@ -168,6 +170,13 @@ class StrictFirestoreDocument:
                     'record_projection_revision',
                     'record_upload_failed',
                     'record_audio_partial',
+                    'record_transcription_empty',
+                    'episode_transcription_pending_at',
+                    'server_batch_audio_closed',
+                    'server_batch_audio_start',
+                    'server_batch_audio_end',
+                    'record_audio_closed',
+                    'record_upload_sessions',
                     'status',
                     'started_at',
                     'finished_at',
@@ -340,16 +349,23 @@ class StrictFirestoreTransaction:
         payload = deepcopy(data)
         self.sets.append((ref.path, payload))
         if merge:
-            # Proven by fsr_people_generation_emulator_test.py: set+Increment
-            # without merge replaces the counter and repeatedly stores 1.
-            # Keep this fixture narrow: only the People generation transform
-            # has an emulator proof; do not approximate arbitrary merge masks.
-            if set(data) != {'generation'} or not isinstance(data['generation'], Increment):
-                raise UnsupportedFirestoreOperationError('only the People generation merge transform is supported')
-            prior = dict(self._database.rows.get(ref.path) or {})
-            value = prior.get('generation', 0)
-            prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
-            self._database.rows[ref.path] = prior
+            if ref.path[0] == 'app_review_config' and len(ref.path) == 2:
+                # App-review persists a complete top-level config snapshot with
+                # merge=True, preserving fields owned by other writers.
+                prior = deepcopy(self._database.rows.get(ref.path) or {})
+                prior.update(payload)
+                self._database.rows[ref.path] = prior
+            elif set(data) == {'generation'} and isinstance(data['generation'], Increment):
+                # Proven by fsr_people_generation_emulator_test.py: set+Increment
+                # without merge replaces the counter and repeatedly stores 1.
+                prior = dict(self._database.rows.get(ref.path) or {})
+                value = prior.get('generation', 0)
+                prior['generation'] = (value if type(value) in (int, float) else 0) + data['generation'].value
+                self._database.rows[ref.path] = prior
+            else:
+                raise UnsupportedFirestoreOperationError(
+                    'merge set is supported only for app-review config and People generation'
+                )
         else:
             self._database.rows[ref.path] = payload
 
@@ -435,7 +451,7 @@ class StrictFirestore:
         references: list[StrictFirestoreDocument],
         *,
         field_paths: list[str] | None = None,
-        transaction: StrictFirestoreTransaction,
+        transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
         # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
         if field_paths is not None and field_paths != ['folder_id']:

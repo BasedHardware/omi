@@ -593,9 +593,108 @@ def test_hosted_checkout_preserves_conflicting_existing_order(lane, monkeypatch)
     lane.stripe_obj['metadata'] = {'uid': 'fixture-user', **original}
     assert run_lifecycle(lane) == {'status': 'success'}
     metadata = writes[0][1]['metadata']
-    assert metadata['shopify_order_id'] == original['shopify_order_id']
-    assert metadata['bundle_promotion_code_id'] == 'promo_original'
+    assert {key: metadata[key] for key in original} == original
+    assert metadata['uid'] == 'fixture-user'
     assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
+
+
+@pytest.mark.parametrize('line', [None, '67890', 'invalid'])
+def test_hosted_checkout_optional_line_propagation(lane, monkeypatch, line):
+    issuance = {k: v for k, v in _HOSTED_ISSUANCE.items() if k != 'bundle_order_line_item_id'}
+    if line is not None:
+        issuance['bundle_order_line_item_id'] = line
+    db, writes = _arm_hosted_checkout(lane, monkeypatch, metadata=issuance)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    metadata = writes[0][1]['metadata']
+    expected = {} if line == 'invalid' else {**issuance, 'bundle_promotion_code_id': 'promo_hosted'}
+    assert {
+        k: v for k, v in metadata.items() if k in payment.stripe_utils.PROMOTION_ATTRIBUTION_METADATA_KEYS
+    } == expected
+    assert metadata['uid'] == 'fixture-user'
+    assert receipt(db)['outcome'] == 'acknowledged'
+
+
+@pytest.mark.parametrize('failure_source', [None, 'promotion_read', 'metadata_write'])
+def test_code_bearing_duplicate_checkout_finishes_unlock_and_ack_despite_optional_failure(
+    lane, monkeypatch, failure_source
+):
+    db, writes = _arm_hosted_checkout(
+        lane,
+        monkeypatch,
+        metadata=_HOSTED_ISSUANCE,
+        metadata_failures=1 if failure_source == 'metadata_write' else 0,
+    )
+    lane.event.update(id='evt-code-bearing-duplicate')
+    lane.event['data']['object']['metadata']['uid'] = 'untrusted-session-metadata'
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        stripe_subscription_id='sub-current',
+        current_period_end=STORED_NOW + 100,
+    )
+    original_state = lane.current.model_dump()
+    original_provenance = {
+        **_HOSTED_ISSUANCE,
+        'shopify_order_id': 'gid://shopify/Order/99999',
+        'bundle_promotion_code_id': 'promo_original',
+    }
+    lane.stripe_obj['metadata'] = {'uid': 'fixture-user', **original_provenance}
+    promotion_reads = []
+    retrieve = payment.stripe.PromotionCode.retrieve
+
+    def retrieve_promotion(*args, **kwargs):
+        promotion_reads.append((args, kwargs))
+        if failure_source == 'promotion_read':
+            raise RuntimeError('synthetic promotion read failure')
+        return retrieve(*args, **kwargs)
+
+    monkeypatch.setattr(payment.stripe.PromotionCode, 'retrieve', retrieve_promotion)
+    result = run_lifecycle(lane)
+    assert result == {'status': 'success', 'message': 'Subscription already processed.'}
+    assert lane.current.model_dump() == original_state
+    assert promotion_reads == [(('promo_hosted',), {'expand': ['coupon']})]
+    effects = [name for name, _ in lane.calls]
+    assert effects == ([] if failure_source else ['stripe_metadata']) + [
+        'conversations',
+        'memories',
+        'actions',
+        'fair_use',
+    ]
+    for name, args in lane.calls:
+        if name != 'stripe_metadata':
+            assert args == ('fixture-user',)
+    if failure_source:
+        assert writes == []
+    else:
+        metadata = writes[0][1]['metadata']
+        assert {key: metadata[key] for key in original_provenance} == original_provenance
+        assert metadata['uid'] == 'fixture-user'
+        assert metadata['redeemed_promotion_code_id'] == 'promo_hosted'
+    assert receipt(db)['outcome'] == 'acknowledged'
+    completed_calls = list(lane.calls)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert lane.calls == completed_calls
+    assert len(promotion_reads) == 1
+
+
+@pytest.mark.parametrize('failure_effect', ['conversations', 'fair_use'])
+def test_code_bearing_duplicate_checkout_entitlement_failure_is_not_acknowledged(lane, monkeypatch, failure_effect):
+    db, _ = _arm_hosted_checkout(lane, monkeypatch, metadata=_HOSTED_ISSUANCE)
+    lane.current = Subscription(
+        plan=PlanType.plus,
+        stripe_subscription_id='sub-current',
+        current_period_end=STORED_NOW + 100,
+    )
+
+    def fail(*args):
+        raise RuntimeError('synthetic entitlement failure')
+
+    if failure_effect == 'conversations':
+        monkeypatch.setattr(payment.conversations_db, 'unlock_all_conversations', fail)
+    else:
+        monkeypatch.setattr(payment, 'clear_fair_use_on_upgrade', fail)
+    with pytest.raises(RuntimeError, match='synthetic entitlement failure'):
+        run_lifecycle(lane)
+    assert receipt(db)['outcome'] == 'failed'
 
 
 @pytest.mark.parametrize('created_first', [False, True])

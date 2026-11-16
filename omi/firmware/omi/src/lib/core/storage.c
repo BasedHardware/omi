@@ -42,8 +42,14 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define NOTIFY_READ_BEGIN 0x05
 #define NOTIFY_LIVE_MARK 0x06
 
-#define STORAGE_IDLE_POLL_MS_OFFLINE 2000
-#define STORAGE_IDLE_POLL_MS_CONNECTED 1
+/* With nothing to do the worker sleeps until a command, a stop request or a
+ * live mark wakes it. The timeouts only bound how stale the status
+ * characteristic may get. It used to poll every millisecond while a phone was
+ * connected, a thousand wakeups a second for the whole connection. */
+#define STORAGE_IDLE_WAIT_MS_OFFLINE 2000
+#define STORAGE_IDLE_WAIT_MS_CONNECTED 250
+/* A request waiting on the card or on a notify buffer is retried at this pace. */
+#define STORAGE_PENDING_POLL_MS 1
 #define STORAGE_WRITE_NOTIFY_ATTR_IDX 2
 #define STORAGE_STATUS_REFRESH_MS 250
 
@@ -130,6 +136,10 @@ K_MSGQ_DEFINE(live_mark_msgq, sizeof(struct live_mark), STORAGE_MARK_QUEUE_MSGS,
 static uint8_t info_requested;
 static uint8_t read_request_pending;
 static atomic_t stop_requested = ATOMIC_INIT(0);
+
+/* Given whenever there is new work for the storage worker. Never give it while
+ * holding a spinlock. */
+static K_SEM_DEFINE(storage_wake_sem, 0, 1);
 
 static atomic_t custody_epoch = ATOMIC_INIT(0);
 static atomic_t custody_granted_caps = ATOMIC_INIT(0);
@@ -236,7 +246,9 @@ static void storage_status_cache_refresh(void)
 {
     sd_ring_info_t info;
 
-    if (sd_ring_get_info(&info) == 0) {
+    /* Peek: a status poll must never write the card. sd_ring_get_info() flushes
+     * the buffered batch, and this runs four times a second while connected. */
+    if (sd_ring_peek_info(&info) == 0) {
         storage_status_cache_set(&info);
     }
 }
@@ -456,7 +468,9 @@ void storage_queue_live_mark(uint64_t ring_id, uint64_t ring_seq, uint16_t live_
         .live_index = live_index,
     };
 
-    (void) k_msgq_put(&live_mark_msgq, &mark, K_NO_WAIT);
+    if (k_msgq_put(&live_mark_msgq, &mark, K_NO_WAIT) == 0) {
+        k_sem_give(&storage_wake_sem);
+    }
 }
 
 void storage_stop_transfer(void)
@@ -809,6 +823,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, uint32_t epoch)
         break;
     case CMD_STOP_SYNC:
         atomic_set(&stop_requested, 1);
+        k_sem_give(&storage_wake_sem);
         return 0;
     default:
         return INVALID_COMMAND;
@@ -826,6 +841,7 @@ static uint8_t parse_storage_command(void *buf, uint16_t len, uint32_t epoch)
     if (k_msgq_put(&storage_cmd_msgq, &cmd, K_NO_WAIT) != 0) {
         return STORAGE_NOT_READY;
     }
+    k_sem_give(&storage_wake_sem);
 
     return STORAGE_DEFERRED;
 }
@@ -962,14 +978,18 @@ static void storage_iteration(void)
             }
         }
 
-        if (!transfer_active) {
+        if (transfer_active) {
+            k_yield();
+        } else {
             if (conn) {
                 storage_status_cache_maybe_refresh(false);
             }
-            uint32_t idle_sleep_ms = conn ? STORAGE_IDLE_POLL_MS_CONNECTED : STORAGE_IDLE_POLL_MS_OFFLINE;
-            k_msleep(idle_sleep_ms);
-        } else {
-            k_yield();
+            if (info_requested || read_request_pending) {
+                k_msleep(STORAGE_PENDING_POLL_MS);
+            } else {
+                uint32_t idle_wait_ms = conn ? STORAGE_IDLE_WAIT_MS_CONNECTED : STORAGE_IDLE_WAIT_MS_OFFLINE;
+                (void) k_sem_take(&storage_wake_sem, K_MSEC(idle_wait_ms));
+            }
         }
 
         if (conn) {

@@ -725,6 +725,16 @@ def owner_drain_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_DRAIN_ENABLED')
 
 
+def owner_drain_admission_diagnostics_enabled() -> bool:
+    """Process-local diagnostics only; 0/off/false disable without changing drains."""
+    return os.getenv('BATCH_PIPELINE_OWNER_DRAIN_ADMISSION_DIAGNOSTICS', '1').strip().lower() not in {
+        '0',
+        'off',
+        'false',
+        'no',
+    }
+
+
 def serving_projection_sweep_enabled() -> bool:
     """Only ``off`` disables serving-instance discovery; owner wakes still run."""
     from config.policy import kill_switch
@@ -1100,3 +1110,20 @@ def recovery_wake_lease_seconds() -> int:
     if value == 0:
         return 0
     return value if 120 <= value <= RECOVERY_WAKE_LEASE_MAX else RECOVERY_WAKE_LEASE_DEFAULT
+
+
+def projection_finish_async_skip_enabled() -> bool:
+    """Ship-on: async receipts belong only to the independent follow-up drain."""
+    return kill_switch('BATCH_PROJECTION_FINISH_ASYNC_SKIP_ENABLED')
+
+
+PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT = 8
+
+
+def projection_finish_classify_page_limit() -> int:
+    """Bound legacy clock updates per page/process; zero pauses classification."""
+    try:
+        value = int(os.getenv('BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT', '8'))
+    except ValueError:
+        return PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT
+    return value if 0 <= value <= 16 else PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT_DEFAULT

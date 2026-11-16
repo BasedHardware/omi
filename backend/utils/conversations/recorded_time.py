@@ -190,7 +190,9 @@ def write_span(row: Mapping[str, Any], *, arrival_at: datetime | None = None) ->
     if not fields:
         # Unknown origins stay unknown, but every create still has arrival and provenance.
         fields.update(recorded_start=None, recorded_end=None)
-    if row.get('audio_timeline'):
+    if row.get('capture_time_trust') == 'untrusted':
+        clock = RecordedClock.imported  # Receipt placement is not a recovered device clock.
+    elif row.get('audio_timeline'):
         clock = RecordedClock.frame
     elif row.get('sync_content_revision') or row.get('sync_recorded_end_at'):
         clock = RecordedClock.device if not row.get('sync_clock_run') else RecordedClock.estimated_device

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Kunne ikke logge inn med Google, vennligst prøv igjen.",
     "authenticationFailed": "Autentisering mislyktes. Vennligst prøv igjen.",
     "authFailedToSignInWithApple": "Kunne ikke logge inn med Apple, vennligst prøv igjen.",
+    "authAppleSignInFailedUseGoogle": "Pålogging med Apple fungerte ikke. Prøv igjen, eller fortsett med Google.",
     "authFailedToRetrieveToken": "Kunne ikke hente Firebase-token, vennligst prøv igjen.",
     "authUnexpectedErrorFirebase": "Uventet feil under pålogging, Firebase-feil, vennligst prøv igjen.",
     "authUnexpectedError": "Uventet feil under pålogging, vennligst prøv igjen",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Faktureres årlig",
     "paywallTrialSaveAmount": "Spar {amount}",
     "paywallTrialCta": "Start for {price}",
+    "paywallTrialCodeHint": "Har du en Omi Pro-kode? Skriv den inn på neste skjerm.",
     "paywallTrialCancelNote": "Avbryt når som helst. Ingen gebyrer, ingen straff.",
     "paywallMonthlyFallbackTitle": "Ikke klar for et helt år?",
     "paywallMonthlyFallbackTrialBody": "Start med månedlig i stedet. De samme {days} dagene gratis, deretter {price} i måneden. Avbryt når som helst.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Betalingen ble avvist. Abonnementet ditt er ikke endret.",
     "monthlySwitchUnavailable": "Bytte er ikke tilgjengelig akkurat nå. Oppdater kortet i stedet.",
     "monthlySwitchDoneTitle": "Du betaler nå månedlig",
-    "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig."
+    "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig.",
+    "processingDeleteScopeChanged": "Behandlingslisten er endret. Se gjennom listen og prøv igjen."
 }

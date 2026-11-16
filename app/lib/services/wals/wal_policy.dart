@@ -1,5 +1,21 @@
 part of 'local_wal_sync.dart';
 
+/// Only server acceptance can discharge the end marker's pending evidence.
+/// A transport-only synced copy (syncedAt == 0) is still unproven.
+bool captureEndAccepted(Wal wal) =>
+    wal.status == WalStatus.uploaded || (wal.status == WalStatus.synced && wal.syncedAt > 0);
+
+extension CaptureEndAcceptance on LocalWalSyncImpl {
+  Map<String, int> captureEndAcceptedFileBytes(String recordingSessionId) => {
+        for (final wal in _wals)
+          if (wal.recordingSessionId == recordingSessionId &&
+              captureEndAccepted(wal) &&
+              wal.filePath != null &&
+              wal.storageTotalBytes > 0)
+            wal.filePath!.split('/').last: wal.storageTotalBytes,
+      };
+}
+
 /// Error string the backend's stale guard sets when a job sits queued past
 /// STALE_THRESHOLD_SECONDS without ever reaching a worker. See backend issue
 /// #7469 — if this string changes, update here and keep the structural check
@@ -132,8 +148,8 @@ typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields)
 String uploadRejectionTokenForStatus(int statusCode) =>
     statusCode == 413 ? WalUploadRejection.tooLarge : WalUploadRejection.serverRefused;
 
-/// Capture-time refusals share the daily, bounded recovery policy. Dates and
-/// bytes stay intact so a server correction can recover the original audio.
+/// Capture-time refusals keep their original bytes and clocks for a later
+/// server correction. Recovery needs no install migration or receipt.
 extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
   /// A request-level refusal proves nothing about every member: isolate the
   /// batch so the next attempt names the actual file, exactly like a
@@ -205,6 +221,37 @@ extension InvalidCaptureTimeRepair on LocalWalSyncImpl {
     });
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
+  }
+
+  Future<bool> reserveClockRecoveryBudget(List<Wal> batch, int generation, int nowSeconds) async {
+    if (walCaptureTimeClass(batch.first, nowSeconds) == WalCaptureTimeClass.unknown) return _isCurrent(generation);
+    final waiting = _wals
+        .where((wal) =>
+            wal.storage == WalStorage.disk &&
+            !wal.onDeviceOnly &&
+            (!wal.holdForUser || wal.status == WalStatus.uploadRejected) &&
+            (wal.status == WalStatus.miss || wal.status == WalStatus.uploadRejected) &&
+            walCaptureTimeClass(wal, nowSeconds) == WalCaptureTimeClass.unknown)
+        .toList();
+    if (waiting.isEmpty) return _isCurrent(generation);
+    final spent = waiting.fold<int>(0, (count, wal) => max(count, wal.clockRecoveryValidBatches));
+    final next = min(spent + 1, maxValidBatchesBeforeClockRecovery);
+    for (final wal in waiting) {
+      wal.clockRecoveryValidBatches = next;
+    }
+    // The budget lives in the owner-fenced audio index, not process memory or
+    // a separate receipt. Persist before the gate and recheck cancellation there.
+    return await _saveWalsToFile(generation) && _isCurrent(generation);
+  }
+
+  Future<void> completeClockRecoveryTurn(int generation) async {
+    if (!_isCurrent(generation)) return;
+    // One clock-class turn serves one batch, not every row that earned it:
+    // reset the shared budget so a large unknown backlog cannot starve valid audio.
+    for (final wal in _wals) {
+      wal.clockRecoveryValidBatches = 0;
+    }
+    await _saveWalsToFile(generation);
   }
 
   Future<bool> reserveRefusalRetries(List<Wal> wals, int generation, int nowSeconds) async {

@@ -86,6 +86,30 @@ inputs are the default everywhere and deploy exactly what ships today.
      comma-separated pair); the promotion keeps the repository name, so a
      role-image pusher lands as `gcr.io/based-hardware/backend-pusher@<digest>`
      and the final receipt is checked against that.
+   - For an exact production source, dispatch on `-r main` with
+     `-f branch=<full lowercase main SHA>` plus the qualified digest and
+     run ID. The qualification source must equal that pin, and a successful
+     first-attempt main Release Eligibility run must prove it. `branch=main`
+     retains the immutable main dispatch source and the existing closure check.
+     Other production branch names and blank values are refused. Development
+     retains its existing branch behavior.
+   - Workflow controls come from `github.workflow_sha`; the runtime checkout,
+     image qualification, index gate and deployment receipts use the admitted
+     source. Canary run API `head_sha` is checked against trusted `GITHUB_SHA`,
+     independently of the runtime pin. No workflow SHA is accepted as a dispatch
+     input. Qualification, isolated canary, config, alerts, capacity, locking,
+     digest promotion and final receipt verification still run.
+   - Before runtime checkout, source admission refuses changed deployment
+     controls between the pin and dispatch, or dispatch and freshly fetched main.
+     The guard includes both Pusher workflows, the admission/proof helpers,
+     relevant local actions, release fixtures, Pusher charts and alert policies,
+     imported validator policies and all of
+     `backend/scripts` to cover shared helpers and subprocesses conservatively.
+     An unrelated backend script edit can therefore require a fresh pin and
+     qualification; unrelated runtime or documentation movement does not.
+     Admission also compares the Pusher/shared ConfigMap runtime projection
+     across pin, dispatch and fresh main; changes require a fresh pin and
+     qualification. Unrelated services' runtime configuration is excluded.
    - **Still needed before the production pusher cutover:** qualification
      evidence is produced only by `gcp_backend_pusher_auto_deploy.yml`, which
      builds the fat `pusher` image. That workflow has to deploy `backend-pusher`

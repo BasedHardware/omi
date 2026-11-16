@@ -7037,6 +7037,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Gagal masuk dengan Apple. Silakan coba lagi.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Masuk dengan Apple tidak berhasil. Coba lagi atau lanjutkan dengan Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Gagal mengambil token. Silakan coba lagi.';
 
   @override
@@ -13412,6 +13416,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Punya kode Omi Pro? Masukkan di layar berikutnya.';
+
+  @override
   String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
 
   @override
@@ -15468,4 +15475,7 @@ class AppLocalizationsId extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price dibayar hari ini. Diperpanjang tiap bulan.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
 }

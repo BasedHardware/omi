@@ -178,7 +178,7 @@ def test_missing_or_malformed_promotion_attribution_fails_open(checkout_stripe_u
     )
 
 
-@pytest.mark.parametrize('max_redemptions', [None, 0, 2, True, '1'])
+@pytest.mark.parametrize('max_redemptions', [None, 0, 2, True, '1', 1.0])
 def test_only_single_use_promotion_codes_can_carry_order_provenance(checkout_stripe_utils, max_redemptions):
     promo = {'id': 'promo_fixture', 'max_redemptions': max_redemptions, 'metadata': _issuance()}
     assert checkout_stripe_utils.promotion_code_attribution(promo) == {}
@@ -215,6 +215,80 @@ def test_coupon_never_supplies_or_conflicts_with_unique_code_attribution(checkou
     )
 
 
+@pytest.mark.parametrize('nested', [False, True])
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize(
+    'coupon_metadata,accepted,legacy_accepted',
+    [
+        ({}, True, True),
+        ({'unrelated': 'ignored'}, True, True),
+        ({'attribution_schema': '1'}, True, False),
+        ({'shopify_order_id': _issuance()['shopify_order_id'], 'bundle_redemption_role': 'unknown'}, True, False),
+        ({'shopify_order_id': '99999'}, False, False),
+        ({'attribution_schema': None}, False, False),
+        ({'shopify_order_id': 12345}, False, False),
+        ({'attribution_schema': ''}, False, False),
+        (_issuance(), True, True),
+        (_issuance(shopify_order_id='99999'), False, False),
+        (_issuance(bundle_order_line_item_id=None), False, False),
+        ({k: v for k, v in _issuance().items() if k != 'bundle_order_line_item_id'}, False, False),
+    ],
+)
+def test_coupon_contract_only_vetoes_code_provenance(
+    checkout_stripe_utils, monkeypatch, nested, enabled, coupon_metadata, accepted, legacy_accepted
+):
+    monkeypatch.setenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', 'on' if enabled else 'off')
+    coupon = {'metadata': coupon_metadata}
+    promo = {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': _issuance()}
+    promo.update({'promotion': {'coupon': coupon}} if nested else {'coupon': coupon})
+    expected = {**_issuance(), 'bundle_promotion_code_id': 'promo_fixture'}
+    result = checkout_stripe_utils.promotion_code_attribution(promo)
+    assert result == (expected if (accepted if enabled else legacy_accepted) else {})
+    promo['metadata'] = {}
+    assert checkout_stripe_utils.promotion_code_attribution(promo) == {}
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('line', [None, '', 123, 'invalid', '67890', 'gid://shopify/LineItem/67890', _MISSING])
+def test_optional_line_is_an_order_level_contract(checkout_stripe_utils, monkeypatch, enabled, line):
+    monkeypatch.setenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', 'on' if enabled else 'off')
+    metadata = _issuance()
+    metadata.pop('bundle_order_line_item_id')
+    if line is not _MISSING:
+        metadata['bundle_order_line_item_id'] = line
+    promo = {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': metadata}
+    result = checkout_stripe_utils.promotion_code_attribution(promo)
+    accepted = line is _MISSING or line in ('67890', 'gid://shopify/LineItem/67890') or (line is None and not enabled)
+    if not accepted:
+        assert result == {}
+        return
+    expected = {k: v for k, v in metadata.items() if v is not None}
+    assert result == {**expected, 'bundle_promotion_code_id': 'promo_fixture'}
+
+
+@pytest.mark.parametrize('nested', [False, True])
+def test_coupon_cannot_add_a_line_to_an_order_level_code(checkout_stripe_utils, nested):
+    metadata = _issuance()
+    metadata.pop('bundle_order_line_item_id')
+    promo = {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': metadata}
+    for coupon_metadata in (metadata, {'bundle_order_line_item_id': '67890'}, _issuance()):
+        coupon = {'metadata': coupon_metadata}
+        promo.update({'promotion': {'coupon': coupon}} if nested else {'coupon': coupon})
+        result = checkout_stripe_utils.promotion_code_attribution(promo)
+        assert bool(result) is (coupon_metadata == metadata)
+
+
+@pytest.mark.parametrize('flag', [None, 'on', 'OFF', ' false ', '0', 'no'])
+def test_bundle_flag_defaults_on_and_restores_legacy_numeric_equality(checkout_stripe_utils, monkeypatch, flag):
+    if flag is None:
+        monkeypatch.delenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('CONVERSION_BUNDLE_ATTRIBUTION_ENABLED', flag)
+    promo = {'id': 'promo_fixture', 'max_redemptions': 1.0, 'metadata': _issuance()}
+    result = checkout_stripe_utils.promotion_code_attribution(promo)
+    assert bool(result) is (flag not in (None, 'on'))
+
+
 def test_multiple_codes_may_share_one_verified_order(checkout_stripe_utils):
     first = checkout_stripe_utils.promotion_code_attribution(
         {'id': 'promo_one', 'max_redemptions': 1, 'metadata': _issuance()}
@@ -226,10 +300,15 @@ def test_multiple_codes_may_share_one_verified_order(checkout_stripe_utils):
     assert first['bundle_promotion_code_id'] != second['bundle_promotion_code_id']
 
 
-def test_session_and_subscription_receive_identical_provenance_without_overriding_auth(checkout_stripe_utils):
+@pytest.mark.parametrize('line', [None, '67890', 'invalid'])
+def test_session_and_subscription_receive_identical_provenance_without_overriding_auth(checkout_stripe_utils, line):
+    issuance = {k: v for k, v in _issuance().items() if k != 'bundle_order_line_item_id'}
+    if line is not None:
+        issuance['bundle_order_line_item_id'] = line
     attribution = checkout_stripe_utils.promotion_code_attribution(
-        {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': _issuance()}
+        {'id': 'promo_fixture', 'max_redemptions': 1, 'metadata': issuance}
     )
+    assert attribution == ({} if line == 'invalid' else {**issuance, 'bundle_promotion_code_id': 'promo_fixture'})
     captured = {}
     checkout_stripe_utils.base_url = 'https://api.example/'
     with (
@@ -419,6 +498,7 @@ def _setup_payment_module(include_client: bool = True) -> Any:
 
     redis_mod = sys.modules["database.redis_db"]
     redis_mod.claim_payment_recovery_notification = MagicMock()
+    redis_mod.claim_trial_ending_notification = MagicMock()
     redis_mod.set_credits_invalidation_signal = MagicMock()
 
     locked_content_mod = sys.modules["database.locked_content"]

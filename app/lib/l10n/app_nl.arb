@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Aanmelden met Google mislukt, probeer het opnieuw.",
     "authenticationFailed": "Authenticatie mislukt. Probeer het opnieuw.",
     "authFailedToSignInWithApple": "Aanmelden met Apple mislukt, probeer het opnieuw.",
+    "authAppleSignInFailedUseGoogle": "Inloggen met Apple is niet gelukt. Probeer het opnieuw of ga verder met Google.",
     "authFailedToRetrieveToken": "Kon Firebase-token niet ophalen, probeer het opnieuw.",
     "authUnexpectedErrorFirebase": "Onverwachte fout bij aanmelden, Firebase-fout, probeer het opnieuw.",
     "authUnexpectedError": "Onverwachte fout bij aanmelden, probeer het opnieuw",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Jaarlijks gefactureerd",
     "paywallTrialSaveAmount": "Bespaar {amount}",
     "paywallTrialCta": "Start voor {price}",
+    "paywallTrialCodeHint": "Heb je een Omi Pro-code? Voer die in op het volgende scherm.",
     "paywallTrialCancelNote": "Annuleer op elk moment. Geen kosten, geen boetes.",
     "paywallMonthlyFallbackTitle": "Nog niet klaar voor een heel jaar?",
     "paywallMonthlyFallbackTrialBody": "Begin dan maandelijks. Dezelfde {days} dagen gratis, daarna {price} per maand. Altijd opzegbaar.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Betaling geweigerd. Je abonnement is niet gewijzigd.",
     "monthlySwitchUnavailable": "Overstappen kan nu niet. Werk in plaats daarvan je kaart bij.",
     "monthlySwitchDoneTitle": "Je betaalt nu maandelijks",
-    "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks."
+    "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks.",
+    "processingDeleteScopeChanged": "De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw."
 }

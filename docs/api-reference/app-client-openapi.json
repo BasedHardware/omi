@@ -9579,6 +9579,18 @@
               }
             ]
           },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
+          },
           "capture_timezone": {
             "anyOf": [
               {
@@ -11002,6 +11014,18 @@
                 "type": "null"
               }
             ]
+          },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
           },
           "capture_timezone": {
             "anyOf": [
@@ -20377,6 +20401,200 @@
           "count"
         ],
         "title": "HiddenNoiseDayCount",
+        "type": "object"
+      },
+      "HomeFeedCard": {
+        "properties": {
+          "detail_id": {
+            "title": "Detail Id",
+            "type": "string"
+          },
+          "emoji": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Emoji",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "has_tasks": {
+            "default": false,
+            "title": "Has Tasks",
+            "type": "boolean"
+          },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "episode",
+              "conversation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "member_count": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "preview": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Preview",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "sort_at": {
+            "format": "date-time",
+            "title": "Sort At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Sources",
+            "type": "array"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary_available": {
+            "default": false,
+            "title": "Summary Available",
+            "type": "boolean"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "detail_id",
+          "sort_at",
+          "status",
+          "revision"
+        ],
+        "title": "HomeFeedCard",
+        "type": "object"
+      },
+      "HomeFeedPreparationResponse": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready",
+          "processed",
+          "has_more"
+        ],
+        "title": "HomeFeedPreparationResponse",
+        "type": "object"
+      },
+      "HomeFeedResponse": {
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "string"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeFeedCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generation"
+        ],
+        "title": "HomeFeedResponse",
         "type": "object"
       },
       "IgnoredVoice": {
@@ -35164,6 +35382,81 @@
           "items"
         ],
         "title": "SyncBatchRequest",
+        "type": "object"
+      },
+      "SyncCaptureEndRequest": {
+        "description": "The phone's statement that a recording ended. Times are device-clock epoch seconds.",
+        "properties": {
+          "end_decided_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Decided At",
+            "type": "number"
+          },
+          "end_type": {
+            "enum": [
+              "user_initiated",
+              "silence_backstop",
+              "disconnect"
+            ],
+            "title": "End Type",
+            "type": "string"
+          },
+          "last_speech_at": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Speech At"
+          },
+          "pending_wals": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Pending Wals",
+            "type": "integer"
+          },
+          "recording_session_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Recording Session Id",
+            "type": "string"
+          },
+          "sent_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sent At",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recording_session_id",
+          "end_type",
+          "end_decided_at",
+          "sent_at",
+          "pending_wals"
+        ],
+        "title": "SyncCaptureEndRequest",
+        "type": "object"
+      },
+      "SyncCaptureEndResponse": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "retry": {
+            "default": false,
+            "title": "Retry",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SyncCaptureEndResponse",
         "type": "object"
       },
       "SyncCaptureManifestFile": {
@@ -63158,6 +63451,207 @@
         ]
       }
     },
+    "/v1/home/feed": {
+      "get": {
+        "operationId": "get_home_feed_v1_home_feed_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Home Feed",
+        "tags": [
+          "episodes",
+          "home"
+        ]
+      }
+    },
+    "/v1/home/feed/prepare": {
+      "post": {
+        "operationId": "prepare_home_feed_v1_home_feed_prepare_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeedPreparationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Prepare Home Feed",
+        "tags": [
+          "episodes",
+          "home"
+        ]
+      }
+    },
     "/v1/import/jobs": {
       "get": {
         "description": "Get all import jobs for the current user.\n\nReturns:\n    List of import jobs ordered by creation date (newest first)",
@@ -87339,6 +87833,91 @@
         "tags": [
           "review"
         ]
+      }
+    },
+    "/v2/sync-capture-end": {
+      "post": {
+        "description": "The phone states that a recording ended and how much of it is uploaded.\n\nStored on the recording's own session document. It lets notes start once\nthe recording's speech has landed, without the arrival-quiet wait. It never\nchanges custody and never deletes or finalizes anything itself.",
+        "operationId": "record_sync_capture_end_v2_sync_capture_end_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureEndRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCaptureEndResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Sync Capture End"
       }
     },
     "/v2/sync-capture-manifest": {

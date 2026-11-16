@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Autentificarea cu Google a eșuat, vă rugăm încercați din nou.",
     "authenticationFailed": "Autentificarea a eșuat. Vă rugăm încercați din nou.",
     "authFailedToSignInWithApple": "Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.",
+    "authAppleSignInFailedUseGoogle": "Conectarea cu Apple nu a reușit. Încearcă din nou sau continuă cu Google.",
     "authFailedToRetrieveToken": "Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.",
     "authUnexpectedErrorFirebase": "Eroare neașteptată la autentificare, eroare Firebase, vă rugăm încercați din nou.",
     "authUnexpectedError": "Eroare neașteptată la autentificare, vă rugăm încercați din nou",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Facturat anual",
     "paywallTrialSaveAmount": "Economisește {amount}",
     "paywallTrialCta": "Începe pentru {price}",
+    "paywallTrialCodeHint": "Ai un cod Omi Pro? Introdu-l pe ecranul următor.",
     "paywallTrialCancelNote": "Anulează oricând. Fără taxe, fără penalități.",
     "paywallMonthlyFallbackTitle": "Încă nu ești gata pentru un an întreg?",
     "paywallMonthlyFallbackTrialBody": "Începe cu planul lunar. Aceleași {days} zile gratuite, apoi {price} pe lună. Anulezi oricând.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Plată refuzată. Planul tău nu s-a schimbat.",
     "monthlySwitchUnavailable": "Trecerea nu este disponibilă acum. Actualizează cardul în schimb.",
     "monthlySwitchDoneTitle": "Acum plătești lunar",
-    "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar."
+    "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar.",
+    "processingDeleteScopeChanged": "Lista de procesare s-a schimbat. Verifică lista și încearcă din nou."
 }

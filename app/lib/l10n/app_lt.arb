@@ -252,6 +252,7 @@
     "authAccessMessage": "Jums reikės autorizuoti Omi prieigą prie jūsų {appName} duomenų. Bus atidaryta naršyklė autentifikacijai.",
     "authFailedToLinkApple": "Nepavyko susieti su Apple, bandykite dar kartą.",
     "authFailedToLinkGoogle": "Nepavyko susieti su Google, bandykite dar kartą.",
+    "authAppleSignInFailedUseGoogle": "Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.",
     "authFailedToRetrieveToken": "Nepavyko gauti Firebase žetono, bandykite dar kartą.",
     "authFailedToSignInWithApple": "Nepavyko prisijungti su Apple, bandykite dar kartą.",
     "authFailedToSignInWithGoogle": "Nepavyko prisijungti su Google, bandykite dar kartą.",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Apmokestinama kasmet",
     "paywallTrialSaveAmount": "Sutaupykite {amount}",
     "paywallTrialCta": "Pradėti už {price}",
+    "paywallTrialCodeHint": "Turite Omi Pro kodą? Įveskite jį kitame ekrane.",
     "paywallTrialCancelNote": "Atšaukti bet kada. Jokių mokesčių, jokių baudų.",
     "paywallMonthlyFallbackTitle": "Dar nesiryžtate visiems metams?",
     "paywallMonthlyFallbackTrialBody": "Pradėkite nuo mėnesio plano. Tos pačios {days} dienos nemokamai, tada {price} per mėnesį. Atšaukite bet kada.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Mokėjimas atmestas. Jūsų planas nepasikeitė.",
     "monthlySwitchUnavailable": "Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.",
     "monthlySwitchDoneTitle": "Dabar mokate kas mėnesį",
-    "monthlySwitchDoneBody": "Šiandien sumokėta {price}. Atnaujinama kas mėnesį."
+    "monthlySwitchDoneBody": "Šiandien sumokėta {price}. Atnaujinama kas mėnesį.",
+    "processingDeleteScopeChanged": "Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą."
 }

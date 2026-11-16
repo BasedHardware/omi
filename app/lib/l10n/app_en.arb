@@ -8775,6 +8775,10 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Sign in with Apple didn't work. Try again or continue with Google.",
+    "@authAppleSignInFailedUseGoogle": {
+        "description": "Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen"
+    },
     "authFailedToRetrieveToken": "Failed to retrieve firebase token, please try again.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -16117,6 +16121,10 @@
             }
         }
     },
+    "paywallTrialCodeHint": "Have an Omi Pro code? Add it on the next screen.",
+    "@paywallTrialCodeHint": {
+        "description": "Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next"
+    },
     "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
     "@paywallTrialCancelNote": {
         "description": "Paywall footnote"
@@ -18861,5 +18869,9 @@
                 "type": "String"
             }
         }
+    },
+    "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
+    "@processingDeleteScopeChanged": {
+        "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
     }
 }
