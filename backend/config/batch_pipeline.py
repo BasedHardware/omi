@@ -162,6 +162,12 @@ def known_unsupported_batch_language(language: str | None) -> bool:
     return code in MODULATE_SUPPORTED_LANGUAGES and code not in parakeet
 
 
+def unit_capture_priority_enabled() -> bool:
+    from config.refactor_modes import default_off
+
+    return default_off('BATCH_PIPELINE_UNIT_CAPTURE_PRIORITY_ENABLED')
+
+
 def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
     if lane == 'fresh':
         if (

@@ -122,6 +122,7 @@ def test_existing_retained_families_still_survive():
         'omi_enrichment_supersede_streak_bucket',
         'omi_enrichment_obligation_total',
         'omi_batch_pipeline_events_total',
+        'omi_batch_pipeline_priority_demotions_total',
         'omi_parakeet_request_seconds_bucket',
         'omi_firestore_billed_reads_by_caller_total',
         'omi_accept_to_summary_seconds_bucket',

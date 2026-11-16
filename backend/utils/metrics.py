@@ -28,6 +28,12 @@ if TYPE_CHECKING:
 # series for every Counter and Histogram child, including idle zero children.
 disable_created_metrics()
 
+OMI_BATCH_PIPELINE_PRIORITY_DEMOTIONS_TOTAL = Counter(
+    'omi_batch_pipeline_priority_demotions_total',
+    'Sync unit seed/effective priority divergence and fresh capture retained below FRESH',
+    ['lane', 'reason'],
+)
+
 OMI_MCP_OAUTH_TOKEN_TOTAL = Counter(
     'omi_mcp_oauth_token_total',
     'MCP OAuth token requests by bounded grant type and terminal outcome',

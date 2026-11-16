@@ -39,6 +39,7 @@ from database.sync_ledger import (
     is_valid_completed_sync_content_result,
     is_valid_partial_sync_content_result,
 )
+from utils.batch_pipeline.admission_priority import unit_priority
 from utils.batch_pipeline.artifact_policy import artifacts_for
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units, is_deterministic_decode_failure
@@ -899,9 +900,12 @@ async def accept_upload(
         items = []
         source_aliases = {}
 
+        priority_now = time.time()
+
         def unit_item(unit, index):
             return replace(
                 seed,
+                priority=unit_priority(seed.priority, lane, unit, now=priority_now),
                 segment_id=hashlib.sha256(f'{content_id}:{index}'.encode()).hexdigest(),
                 capture_at=(
                     unit.stored_capture_at if getattr(unit, 'stored_capture_at', None) is not None else unit.capture_at
