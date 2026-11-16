@@ -2223,7 +2223,7 @@ export interface DeleteLimitlessConversationsResponse {
 }
 
 export interface DeletedConversation {
-  deleted_at?: string | null;
+  deleted_at: string;
   id: string;
 }
 

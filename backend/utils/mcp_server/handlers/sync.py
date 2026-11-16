@@ -5,6 +5,13 @@ document metadata, not a stored revision), but deletions do: each one leaves a
 durable, content-free tombstone with ``deleted_at``. Agents that keep a copy of
 the user's conversations page this feed from their last watermark and remove
 every listed id.
+
+Two limits, stated in the tool description and ``docs/mcp-rest-sync.md``:
+``deleted_at`` is stamped when the delete is requested, so a tombstone can commit
+a moment after a later one was already served (resume from the watermark minus a
+minute and dedupe by id); and conversations absorbed by a merge leave no
+tombstone (the merged conversation is new; reconcile held ids with
+``get_conversations_by_ids``, whose ``not_found`` lists ids that are gone).
 """
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -38,9 +45,10 @@ DELETED_CONVERSATIONS_OUTPUT: Dict[str, Any] = {
         'type': 'array',
         'items': {
             'type': 'object',
+            'required': ['id', 'deleted_at'],
             'properties': {
                 'id': {'type': 'string'},
-                'deleted_at': {'type': ['string', 'null'], 'format': 'date-time'},
+                'deleted_at': {'type': 'string', 'format': 'date-time'},
             },
         },
     },

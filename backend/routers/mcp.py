@@ -6,7 +6,7 @@ from utils.external_list_reads import ExternalListCacheRoute, cached_external_li
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.users as users_db
@@ -626,7 +626,7 @@ def get_conversations(
 
 class DeletedConversation(BaseModel):
     id: str
-    deleted_at: Optional[datetime] = None
+    deleted_at: datetime
 
 
 # Declared before /v1/mcp/conversations/{conversation_id} so "deleted" is never read as an id.
@@ -634,7 +634,7 @@ class DeletedConversation(BaseModel):
 def get_deleted_conversations(
     response: Response,
     deleted_since: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, ge=1, le=500),
     cursor: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
@@ -647,7 +647,7 @@ def get_deleted_conversations(
         rows, next_cursor = mcp_sync_handlers.deleted_conversations_page_core(
             uid,
             deleted_since=since,
-            limit=max(1, min(limit, mcp_sync_handlers.DELETIONS_MAX_LIMIT)),
+            limit=limit,
             cursor_token=cursor,
             cursor_kind="rest_get_deleted_conversations",
         )

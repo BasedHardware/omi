@@ -14331,16 +14331,9 @@
       "DeletedConversation": {
         "properties": {
           "deleted_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deleted At"
+            "format": "date-time",
+            "title": "Deleted At",
+            "type": "string"
           },
           "id": {
             "title": "Id",
@@ -14348,7 +14341,8 @@
           }
         },
         "required": [
-          "id"
+          "id",
+          "deleted_at"
         ],
         "title": "DeletedConversation",
         "type": "object"
@@ -66739,6 +66733,8 @@
             "required": false,
             "schema": {
               "default": 100,
+              "maximum": 500,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }

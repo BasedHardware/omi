@@ -574,8 +574,10 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         title="Get deleted conversations",
         description=(
             "List conversations the user deleted, oldest deletion first, as id and deleted_at only. For agents that "
-            "keep a copy of the user's conversations: pass the last deleted_at you processed as deleted_since, "
-            "remove every listed id from your copy, and page with next_cursor while has_more is true."
+            "keep a copy of the user's conversations: pass the last deleted_at you processed minus one minute as "
+            "deleted_since, remove every listed id from your copy (repeats are harmless), and page with next_cursor "
+            "while has_more is true. Conversations absorbed by a merge are not listed; re-check held ids with "
+            "get_conversations_by_ids, whose not_found lists ids that are gone."
         ),
         annotations=_read_annotations("Get deleted conversations"),
         input_schema=sync.DELETED_CONVERSATIONS_INPUT,

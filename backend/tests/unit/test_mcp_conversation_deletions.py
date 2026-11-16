@@ -64,11 +64,13 @@ class _Query:
         return _Ref(doc_id)
 
     def stream(self):
-        rows = [(d['deleted_at'], i, d) for i, d in self.store['docs'].items() if d.get('deleted_at') is not None]
-        rows.sort(key=lambda r: (r[0], r[1]))
+        # order_by drops absent fields but keeps explicit nulls (sorted first); a range
+        # filter matches only values of its own type, so it drops nulls.
+        rows = [(d['deleted_at'], i, d) for i, d in self.store['docs'].items() if 'deleted_at' in d]
+        rows.sort(key=lambda r: (r[0] is not None, r[0] or T0, r[1]))
         for op in self.ops:
             if op[0] == 'where':
-                rows = [r for r in rows if r[0] >= op[3]]
+                rows = [r for r in rows if r[0] is not None and r[0] >= op[3]]
             elif op[0] == 'start_after':
                 rows = [r for r in rows if (r[0], r[1]) > (op[1], op[2])]
             elif op[0] == 'limit':
@@ -141,6 +143,17 @@ def test_deleted_since_is_inclusive_and_untimed_tombstones_never_appear(tombston
     add(tombstones, 'after', 6)
     tombstones['docs']['legacy'] = {'deleted': True}
     assert walk(deleted_since=(T0 + timedelta(minutes=5)).isoformat()) == ['at', 'after']
+
+
+def test_null_timestamps_never_appear_even_without_a_watermark(tombstones):
+    add(tombstones, 'timed', 2)
+    tombstones['docs']['null'] = {'conversation_id': 'null', 'deleted_at': None}
+    assert walk(limit=1) == ['timed']
+
+
+def test_rest_limit_is_bounded_like_the_tool(tombstones, client):
+    for bad in (0, 501):
+        assert client.get('/v1/mcp/conversations/deleted', params={'limit': bad}).status_code == 422
 
 
 def test_rows_carry_only_the_id_and_the_watermark(tombstones):
