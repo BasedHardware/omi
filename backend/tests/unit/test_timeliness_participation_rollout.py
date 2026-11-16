@@ -232,9 +232,16 @@ def test_emulator_mode_requires_a_test_namespace(helper):
         helper.resolve_store('batch_pipeline_prod', emulator_host='127.0.0.1:8085')
 
 
-def test_test_namespace_requires_emulator_mode(helper):
+def test_test_namespace_requires_emulator_mode(helper, monkeypatch):
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     with pytest.raises(helper.Refused, match='--dry-run=emulator'):
         helper.resolve_store('batch_pipeline_test_x')
+
+
+def test_production_namespace_refuses_an_inherited_emulator_endpoint(helper, monkeypatch):
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8085')
+    with pytest.raises(helper.Refused, match='ambient FIRESTORE_EMULATOR_HOST'):
+        helper.resolve_store('batch_pipeline_prod')
 
 
 def test_production_apply_requires_a_receipt(helper, store, tmp_path, monkeypatch):
@@ -374,6 +381,35 @@ def test_restore_refuses_an_absent_document(helper, store):
     store._doc.data = None
     with pytest.raises(helper.Refused, match='absent'):
         helper.restore_prior(store, prior, applied, mode='emulator')
+
+
+def test_restore_refuses_a_receipt_paired_with_a_different_capture(helper, store):
+    store.seed({'kept': 1})
+    original_prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, original_prior), mode='emulator')
+    mismatched_prior = _prior(helper, store)
+    state_after_apply = dict(store._doc.data)
+
+    with pytest.raises(helper.Refused, match='does not match the supplied prior capture'):
+        helper.restore_prior(store, mismatched_prior, applied, mode='emulator')
+
+    assert store._doc.data == state_after_apply
+
+
+def test_restore_refuses_a_receipt_for_a_different_target_or_mode(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    state_after_apply = dict(store._doc.data)
+
+    wrong_target = dict(applied, namespace='batch_pipeline_dev')
+    with pytest.raises(helper.Refused, match='target does not match'):
+        helper.restore_prior(store, prior, wrong_target, mode='emulator')
+
+    with pytest.raises(helper.Refused, match='mode does not match'):
+        helper.restore_prior(store, prior, applied, mode='production')
+
+    assert store._doc.data == state_after_apply
 
 
 def test_verify_restored_reports_exact_differences(helper, store):

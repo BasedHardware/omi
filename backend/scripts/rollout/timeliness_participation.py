@@ -146,6 +146,11 @@ def _is_loopback(host):
 
 def resolve_store(namespace, *, emulator_host=None):
     """Build the data-plane store, refusing every unsafe transport combination."""
+    inherited_emulator = os.environ.get('FIRESTORE_EMULATOR_HOST', '').strip()
+    if inherited_emulator and not emulator_host:
+        raise Refused(
+            'ambient FIRESTORE_EMULATOR_HOST is unsafe; pass an explicit loopback host for test namespace use'
+        )
     if emulator_host:
         host = emulator_host.strip()
         if not _is_loopback(host):
@@ -260,12 +265,42 @@ def apply_plan(store, plan, *, mode):
 
 def restore_prior(store, prior, applied, *, mode):
     """One read plus one CAS write that restores existence and every typed field."""
+    if not isinstance(prior, dict) or prior.get('namespace') != store.namespace:
+        raise Refused('prior capture namespace does not match the target store')
+    if prior.get('document') != participation.DOCUMENT_ID:
+        raise Refused('prior capture document does not match the control document')
+    if type(prior.get('exists')) is not bool:
+        raise Refused('prior capture existence flag is invalid')
+    prior_fields = prior.get('fields')
+    prior_digest = prior.get('fields_sha256')
+    if not isinstance(prior_fields, dict) or fields_digest(prior_fields) != prior_digest:
+        raise Refused('prior capture fields do not match its digest')
+    if not isinstance(applied, dict):
+        raise Refused('apply receipt is invalid')
+    if applied.get('namespace') != store.namespace or applied.get('document') != participation.DOCUMENT_ID:
+        raise Refused('apply receipt target does not match the prior capture')
+    if applied.get('mode') != mode:
+        raise Refused('apply receipt mode does not match the restore transport')
+    if applied.get('prior_fields_sha256') != prior_digest:
+        raise Refused('apply receipt does not match the supplied prior capture')
+    operation_id = applied.get('operation_id')
+    if not isinstance(operation_id, str) or not operation_id:
+        raise Refused('apply receipt has no operation id')
+    if not isinstance(applied.get('applied_update_time'), dict) or not isinstance(
+        applied.get('applied_fields_sha256'), str
+    ):
+        raise Refused('apply receipt is missing its post-apply version or fields digest')
+
     snapshot = _read(store)
     current = _snapshot_state(snapshot)
     if not current['exists']:
         raise Refused('control document is absent; refusing to guess a restoration')
     if current['update_time'] != applied['applied_update_time']:
         raise Refused('control document changed since apply (update_time mismatch)')
+    if fields_digest(current['fields']) != applied.get('applied_fields_sha256'):
+        raise Refused('control document fields do not match the apply receipt')
+    if current['fields'].get('operation_id') != tag(operation_id):
+        raise Refused('control document operation does not match the apply receipt')
     reference = participation.control_document(store)
     if prior['exists']:
         prior_fields = untag_fields(prior['fields'], client=store.client)
