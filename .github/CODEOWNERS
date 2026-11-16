@@ -30,3 +30,8 @@
 /backend/database/jobstore/** @Git-on-my-level
 /backend/config/batch_pipeline.py @Git-on-my-level
 /backend/charts/batch-pipeline-worker/** @Git-on-my-level
+
+# Firestore read budgets. A raise is a cost decision: its PR must state $/day and
+# be reviewed by the margin owner, not only the lane that wants the raise.
+/backend/tests/fixtures/firestore_read_budgets.toml @Git-on-my-level
+/backend/testing/firestore_read_budget.py @Git-on-my-level

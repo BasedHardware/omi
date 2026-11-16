@@ -16,7 +16,8 @@
 // blank the whole block. The name is opportunistic — decoded from the relayed
 // session token's claims — because Windows keeps no synchronous main-side profile.
 
-import { recentMemories, getLocalActionItems, latestAiUserProfile } from './db'
+import { recentMemories, getLocalActionItems } from './db'
+import { getLatestProfileText } from '../assistants/aiUserProfile/service'
 import { getPiMonoSession } from '../codingAgent/piMonoSession'
 import { decodeJwtClaims } from '../auth/omiAuth'
 import {
@@ -72,10 +73,11 @@ function readTasks(): DesktopChatPersonalizationTask[] {
   }
 }
 
-/** The latest AI-generated profile text, or undefined. Fails open. */
+/** The backend-owned AI profile text (in-memory cache of the last GET), or
+ *  undefined. Never blocks on the network; fails open. */
 function readAiProfileText(): string | undefined {
   try {
-    return latestAiUserProfile()?.profileText || undefined
+    return getLatestProfileText() || undefined
   } catch {
     return undefined
   }

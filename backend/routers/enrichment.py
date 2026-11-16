@@ -171,6 +171,14 @@ def maintain(now: float) -> dict[str, int]:
         final_pass_retry.sweep(now=now)
     except Exception as error:
         logger.error('event=batch_final_pass_retry outcome=sweep_failed exception_type=%s', type(error).__name__)
+    from database.owner_identity_availability import refresh
+
+    try:
+        refresh(now)
+    except Exception as error:
+        logger.warning(
+            'event=owner_identity_availability outcome=refresh_unavailable exception_type=%s', type(error).__name__
+        )
     swept = ENRICHMENT_OUTBOX.sweep(now=now)
     counts = {
         'rewoken': swept.rewoken,

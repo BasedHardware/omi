@@ -3,6 +3,37 @@
   "adopted_files": [],
   "events": [
     {
+      "id": "onDeviceTranscriptionUsed",
+      "wire_name": "On Device Transcription Used",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "route": {
+          "type": "enum",
+          "wire_name": "route",
+          "values": [
+            "allowance",
+            "custom",
+            "offline_batch"
+          ]
+        },
+        "audioMs": {
+          "type": "int",
+          "wire_name": "audio_ms"
+        },
+        "segmentCount": {
+          "type": "int",
+          "wire_name": "segment_count"
+        }
+      },
+      "consumers": [
+        "on-device-transcription-usage"
+      ],
+      "correlation": null
+    },
+    {
       "id": "savedPendantReconnectObserved",
       "wire_name": "Saved Pendant Reconnect",
       "status": "active",
@@ -181,6 +212,67 @@
             "credential",
             "configuration",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "signInFailureDetail",
+      "wire_name": "Sign In Failure Detail",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": [
+            "apple",
+            "google"
+          ]
+        },
+        "errorCode": {
+          "type": "enum",
+          "wire_name": "error_code",
+          "values": [
+            "apple_canceled",
+            "apple_failed",
+            "apple_invalid_response",
+            "apple_not_handled",
+            "apple_not_interactive",
+            "apple_unknown",
+            "apple_credential_export",
+            "apple_credential_import",
+            "apple_matched_excluded_credential",
+            "apple_not_supported",
+            "apple_credentials_error",
+            "apple_platform_error",
+            "apple_missing_identity_token",
+            "firebase_invalid_credential",
+            "firebase_invalid_credential_audience",
+            "firebase_invalid_credential_stale",
+            "firebase_invalid_idp_response",
+            "firebase_missing_or_invalid_nonce",
+            "firebase_account_exists_with_different_credential",
+            "firebase_credential_already_in_use",
+            "firebase_email_already_in_use",
+            "firebase_operation_not_allowed",
+            "firebase_admin_restricted_operation",
+            "firebase_user_disabled",
+            "firebase_app_not_authorized",
+            "firebase_invalid_api_key",
+            "firebase_too_many_requests",
+            "firebase_network_request_failed",
+            "firebase_internal_error",
+            "firebase_other",
+            "network",
+            "timeout",
+            "other"
           ]
         }
       },
@@ -5063,6 +5155,68 @@
       "phase": "point",
       "intent": null,
       "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyShown",
+      "wire_name": "Subscription Payment Issue Monthly Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyTapped",
+      "wire_name": "Subscription Payment Issue Monthly Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlySwitched",
+      "wire_name": "Subscription Payment Issue Monthly Switched",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "subscription-payment-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPaymentIssueMonthlyFailed",
+      "wire_name": "Subscription Payment Issue Monthly Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "declined",
+            "refused",
+            "error"
+          ]
+        }
+      },
       "consumers": [
         "subscription-payment-recovery"
       ],

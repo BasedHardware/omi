@@ -485,6 +485,9 @@ def _main_loop_functions():
         '_drain_stale_processing_conversations',
         '_drain_stale_in_progress_conversations',
         '_drain_abandoned_byok_finalization_jobs',
+        '_drain_conversation_batch_purges',
+        '_conversation_batch_purge_reconcile_interval_seconds',
+        '_periodic_conversation_batch_purge_reconcile',
     }
     module = ast.Module(
         body=[
@@ -544,6 +547,7 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
             for function in (
                 '_periodic_deletion_wipe_reconcile',
                 '_periodic_listen_finalization_reconcile',
+                '_periodic_conversation_batch_purge_reconcile',
                 '_periodic_durable_queue_age_publish',
             ):
                 sleep_calls[0] = int(function == '_periodic_durable_queue_age_publish')
@@ -556,6 +560,7 @@ def test_real_startup_and_periodic_bodies_are_leased_and_attributed(fleet, monke
                 '_drain_stale_processing_conversations',
                 '_drain_stale_in_progress_conversations',
                 '_drain_abandoned_byok_finalization_jobs',
+                '_drain_conversation_batch_purges',
             ):
                 namespace[function]()
     expected = set(loops if periodic else loops[:-1])

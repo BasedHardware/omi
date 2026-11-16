@@ -7023,6 +7023,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Přihlášení přes Apple se nezdařilo, zkuste to prosím znovu.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Přihlášení přes Apple se nezdařilo. Zkuste to znovu nebo pokračujte přes Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodařilo se získat Firebase token, zkuste to prosím znovu.';
 
   @override
@@ -13403,6 +13407,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Máte kód Omi Pro? Zadejte ho na další obrazovce.';
+
+  @override
   String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
 
   @override
@@ -15397,6 +15404,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaše karta byla zamítnuta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Aktualizujte kartu, nebo obnovte $plan za $price měsíčně';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Aktualizujte kartu a obnovte $plan';
   }
@@ -15421,4 +15433,34 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Přejít na měsíční';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price měsíčně';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nahrazuje nezaplacenou roční platbu $yearly. Obnovuje se měsíčně. Zrušit můžete kdykoli.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Platba byla zamítnuta. Váš plán se nezměnil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Přechod teď není dostupný. Aktualizujte místo toho kartu.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Teď platíte měsíčně';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Dnes zaplaceno $price. Obnovuje se měsíčně.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
 }

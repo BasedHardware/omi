@@ -21,6 +21,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -32,9 +35,17 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_WAIT_MEMO_FIRST:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_DECODE_FAILURE_MEMO:
             value: 'true'
             category: ops_kill
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
@@ -130,6 +141,9 @@ environments:
             category: ops_kill
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -365,11 +379,72 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -411,6 +486,9 @@ environments:
             category: ops_kill
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
+            category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
             category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
@@ -455,6 +533,12 @@ environments:
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_WAIT_MEMO_FIRST:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_DECODE_FAILURE_MEMO:
             value: 'true'
             category: ops_kill
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
@@ -527,11 +611,59 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '0'
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -872,12 +1004,17 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -899,6 +1036,12 @@ environments:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
@@ -1011,6 +1154,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -1141,11 +1287,72 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -1208,15 +1415,26 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -1332,6 +1550,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1468,11 +1689,72 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -1534,12 +1816,17 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -1552,6 +1839,12 @@ environments:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
@@ -1661,6 +1954,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -1780,11 +2076,72 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -1850,15 +2207,26 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
@@ -1968,6 +2336,9 @@ environments:
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
               category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
+              category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
@@ -2055,11 +2426,72 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'false', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -2396,6 +2828,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2407,9 +2842,17 @@ environments:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+          UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_WAIT_MEMO_FIRST:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_DECODE_FAILURE_MEMO:
             value: 'true'
             category: ops_kill
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
@@ -2419,7 +2862,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
-          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2505,6 +2948,9 @@ environments:
             category: ops_kill
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
+            category: ops_kill
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+            value: 'off'
             category: ops_kill
           CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
           TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -2740,12 +3186,77 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_FRESH_MERGE_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_NOTES_EAGER_ENABLED:
+            value: 'false'
+            category: ops_kill
+          RECORD_FOLLOWUP_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODES_ENABLED:
+            value: 'off'
+            category: ops_kill
+          OCCASION_CONVERSATIONS_ENABLED: {value: 'off', category: rollout}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -2828,6 +3339,9 @@ environments:
           ACCOUNT_DELETION_TASKS_QUEUE:
             value: account-deletion
             category: reliability
+          CONVERSATION_ERASURE_TASKS_QUEUE:
+            value: conversation-erasure
+            category: reliability
           ACCOUNT_DELETION_HANDLER_URL:
             config_map:
               name: prod-omi-backend-config
@@ -2892,6 +3406,9 @@ environments:
           CONVERSATION_TERMINAL_FAMILY_MODE:
             value: 'on'
             category: ops_kill
+          HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+            value: 'true'
+            category: ops_kill
           PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
             value: 'true'
             category: ops_kill
@@ -2937,6 +3454,12 @@ environments:
           SYNC_RECORD_COVERAGE_WAIT_MEMO:
             value: 'true'
             category: ops_kill
+          SYNC_RECORD_WAIT_MEMO_FIRST:
+            value: 'true'
+            category: ops_kill
+          SYNC_RECORD_DECODE_FAILURE_MEMO:
+            value: 'true'
+            category: ops_kill
           FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0}',
             category: rollout}
           FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
@@ -2944,7 +3467,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
-          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '55', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -3007,12 +3530,63 @@ environments:
           CONVERSATION_RELEVANCE_JEV_PERCENT:
             category: ops_kill
             value: '100'
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_WAKE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_CONTEXT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSER_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_SETTLED_EMPTY_WIRE_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+            value: 'false'
+            category: ops_kill
+          EPISODES_ENABLED:
+            value: 'off'
+            category: ops_kill
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+            value: 'true'
+            category: ops_kill
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+            value: 'true'
+            category: ops_kill
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+            value: 'true'
+            category: ops_kill
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE:
             value: 'true'
             category: ops_kill
           HOME_TRANSCRIPTION_DEADLINE_SECONDS:
             value: '7200'
+            category: config
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+            value: 'true'
+            category: ops_kill
+          PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED:
+            value: 'true'
+            category: ops_kill
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+            value: '86400'
             category: config
           HOME_PROCESSING_MAX_AGE_SECONDS:
             value: '21600'
@@ -3308,6 +3882,7 @@ environments:
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -3373,12 +3948,17 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             LADDER_V1_PLUS_MONTH_PRICE_ID:
               env_var: LADDER_V1_PLUS_MONTH_PRICE_ID
               provisional: true
@@ -3400,6 +3980,12 @@ environments:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             OMI_EXTERNAL_LIST_POLLING_CACHE_ENABLED: {value: 'true', category: rollout}
@@ -3482,7 +4068,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3512,6 +4098,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             TRANSLATION_DEMAND_GATE_ENABLED: {value: 'true', category: rollout}
@@ -3642,12 +4231,85 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS:
+              value: '1200'
+              category: config
+            FIRST_SUMMARY_DEADLINE_SECONDS:
+              value: '60'
+              category: config
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -3756,6 +4418,9 @@ environments:
             ACCOUNT_DELETION_TASKS_QUEUE:
               value: account-deletion
               category: reliability
+            CONVERSATION_ERASURE_TASKS_QUEUE:
+              value: conversation-erasure
+              category: reliability
             ACCOUNT_DELETION_HANDLER_URL:
               env_var: ACCOUNT_DELETION_HANDLER_URL
               category: reliability
@@ -3836,15 +4501,26 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
@@ -3931,7 +4607,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -3960,6 +4636,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4096,12 +4775,83 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             HOME_TRANSCRIPTION_PRESENTATION_GATE:
               value: 'true'
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -4172,7 +4922,6 @@ environments:
               category: reliability
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
-            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             DREAM_AGENT_HUNT_INTERVAL_HOURS: {value: '2', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '20', category: rollout}
@@ -4208,6 +4957,9 @@ environments:
               category: reliability
             ACCOUNT_DELETION_TASKS_QUEUE:
               value: account-deletion
+              category: reliability
+            CONVERSATION_ERASURE_TASKS_QUEUE:
+              value: conversation-erasure
               category: reliability
             ACCOUNT_DELETION_HANDLER_URL:
               env_var: ACCOUNT_DELETION_HANDLER_URL
@@ -4293,12 +5045,17 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED:
               value: 'on'
               category: ops_kill
@@ -4311,6 +5068,12 @@ environments:
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             VAD_CACHE_TTL_SECONDS: {value: '7200', category: rollout}
@@ -4391,7 +5154,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4420,6 +5183,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4539,6 +5305,60 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -4552,6 +5372,19 @@ environments:
               category: ops_kill
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
+              category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
               category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
@@ -4604,7 +5437,6 @@ environments:
               value: '8'
               category: reliability
             DREAM_AGENT_PASSES_PER_DAY: {value: '48', category: rollout}
-            DREAM_STATE_PASS_MODE: {value: shadow, category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -4633,6 +5465,9 @@ environments:
               category: reliability
             ACCOUNT_DELETION_TASKS_QUEUE:
               value: account-deletion
+              category: reliability
+            CONVERSATION_ERASURE_TASKS_QUEUE:
+              value: conversation-erasure
               category: reliability
             ACCOUNT_DELETION_HANDLER_URL:
               env_var: ACCOUNT_DELETION_HANDLER_URL
@@ -4698,6 +5533,7 @@ environments:
           - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
           - SYNC_REPROCESS_COALESCE_ENABLED
           - REPEAT_WORK_REVISION_ENABLED
+          - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-integration:
           flags:
@@ -4725,15 +5561,26 @@ environments:
             CONVERSATION_TERMINAL_FAMILY_MODE:
               value: 'on'
               category: ops_kill
+            HOME_LIVE_MEMBER_NOTES_BOUNDED_ENABLED:
+              value: 'true'
+              category: ops_kill
             PROCESSING_ATTENTION_NON_RETRYABLE_EXPIRY_ENABLED:
               value: 'true'
               category: ops_kill
             STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
             STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
             STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED: {value: 'false', category: rollout}
+            UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS: {value: '24', category: rollout}
             PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
             SYNC_RECORD_COVERAGE_WAIT_MEMO:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_WAIT_MEMO_FIRST:
+              value: 'true'
+              category: ops_kill
+            SYNC_RECORD_DECODE_FAILURE_MEMO:
               value: 'true'
               category: ops_kill
             BATCH_PIPELINE_SHADOW_PERCENT: {value: '25', category: rollout}
@@ -4813,7 +5660,7 @@ environments:
               category: service_discovery
             FIRESTORE_READ_LEDGER:
               value: '1'
-            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":0,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}',
+            FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}',
               category: rollout}
             FSR_QUEUE_AGE_PUBLISHER: {value: '0', category: rollout}
             FSR_QUEUE_AGE_LEASE_SECONDS: {value: '120', category: rollout}
@@ -4842,6 +5689,9 @@ environments:
             CAPTURE_GROUP_CONTAINMENT_MODE: {value: shadow, category: rollout}
             SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
               value: 'true'
+              category: ops_kill
+            SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED:
+              value: 'off'
               category: ops_kill
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
@@ -4930,6 +5780,64 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+            PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+            PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_CONTEXT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSER_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_SETTLED_EMPTY_WIRE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
+              value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
+            EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
+              value: 'true'
+              category: ops_kill
+            EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            CONVERSATION_NOTES_SCALED_DETAIL_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_FRESH_MERGE_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_NOTES_EAGER_ENABLED:
+              value: 'false'
+              category: ops_kill
+            RECORD_FOLLOWUP_WAKE_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_SEAL_WAKE_PRESERVED_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_HELD_POLL_SKIP_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED:
+              value: 'true'
+              category: ops_kill
+            BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
             QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
             OMI_FLAGS_FIRESTORE_PROJECT:
               value: based-hardware
@@ -4944,6 +5852,19 @@ environments:
             HOME_TRANSCRIPTION_DEADLINE_SECONDS:
               value: '7200'
               category: config
+            HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED:
+              value: 'true'
+              category: ops_kill
+            SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+            RECORD_SEAL_REPAIR_FRESH_ENABLED:
+              value: 'true'
+              category: ops_kill
+            RECORD_INTAKE_AGE_PRIORITY_ENABLED:
+              value: 'true'
+              category: ops_kill
+            HOME_TRANSCRIPTION_MAX_AGE_SECONDS:
+              value: '86400'
+              category: config
             HOME_PROCESSING_MAX_AGE_SECONDS:
               value: '21600'
               category: config
@@ -4953,7 +5874,7 @@ environments:
             BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}',
               category: rollout}
             BATCH_ALLOWANCE_HOLD_RETRY_SECONDS:
-              value: '7200'
+              value: '86400'
               category: ops_kill
             STT_GPU_FLEET_OFF:
               value: 'true'
@@ -5024,6 +5945,9 @@ environments:
               category: reliability
             ACCOUNT_DELETION_TASKS_QUEUE:
               value: account-deletion
+              category: reliability
+            CONVERSATION_ERASURE_TASKS_QUEUE:
+              value: conversation-erasure
               category: reliability
             ACCOUNT_DELETION_HANDLER_URL:
               env_var: ACCOUNT_DELETION_HANDLER_URL

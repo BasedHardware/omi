@@ -3,13 +3,16 @@
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+import time
 
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline import require_record_protocol_ready
 from config.record_audio import record_identity, require_record_audio_barrier, restore_pending
 from config.record_seal_rules import token_lease_mode
+from config.record_latency import recent_record_end, record_fresh_merge_enabled, record_notes_eager_enabled
 from database.batch_pipeline_store import Store
 from database.batch_pipeline_staging import artifact_id
+from database import batch_pipeline_coalescing_completion as coalescing_completion
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
@@ -35,6 +38,8 @@ def admit(
     enqueue: Callable[..., bool] | None = None,
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
+    coalescing_group: dict | None = None,
+    source_aliases: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -61,6 +66,13 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        if coalescing_group is not None:
+            from database.batch_pipeline_coalescing import guard
+
+            guard(tx, coalescing_group, now)
+        sources = {getattr(item, 'capture_source_conversation_id', None) for item in items} - {None}
+        if sources:
+            tx.check_privacy(binding.owner_id, sources, binding.privacy_generation)
         row = {}
         partial_parent = (intake or {}).get('record_partial_parent')
         if binding.record_origin:
@@ -83,6 +95,14 @@ def admit(
                 if restore_pending(row, *(tx.get('jobs', key) for key in obligation_ids)):
                     raise ValueError('registered record target unavailable')
         existing = tx.get('content', content_key)
+        if (
+            coalescing_group is not None
+            and coalescing_group['mode'] == 'individual'
+            and existing.get('job_id') == binding.job_id
+        ):
+            held = tx.get('intakes', binding.job_id)
+            if held.get('coalesce_group') == coalescing_group['id'] and not held.get('coalesce_target'):
+                existing = {}  # Fenced conversion of this exact original receipt.
         if existing.get('dispatch_protocol') == PROTOCOL:
             return {'outcome': 'batch', 'job_id': existing['job_id']}
         if existing.get('status') == 'completed' and is_valid_completed_sync_content_result(existing.get('result')):
@@ -162,7 +182,18 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = enqueue_item(tx, item, now, policy=admission)
+            proposal = (source_aliases or {}).get(item.segment_id)
+            if proposal is not None:
+                from database.batch_pipeline_source_reuse import enqueue_alias, attach_alias_artifacts
+
+                created = enqueue_alias(tx, item, now, policy=admission, proposal=proposal)
+                attach_alias_artifacts(tx, item, proposal)
+            else:
+                created = enqueue_item(tx, item, now, policy=admission)
+                if getattr(item, 'source_reuse_key', None):
+                    marked = tx.get('jobs', item.segment_id)
+                    marked.update(protocol_version=2, source_reuse_version=1)
+                    tx.put('jobs', item.segment_id, marked)
             job = tx.get('jobs', item.segment_id)
             previous_binding = dict(job.get('projection_binding') or {})
             if previous_binding.get('partial_record') is False:
@@ -170,6 +201,26 @@ def admit(
             if not created and previous_binding != serialized_binding:
                 raise ValueError('existing segment cannot change its immutable intake binding')
             job['projection_binding'] = serialized_binding
+            if created and binding.native_record:
+                # Admission commits after staging. Reuse the pending-job and
+                # conversation snapshots already read in this transaction.
+                job['record_intake_claimed_at'] = pending.get('record_intake_claimed_at')
+                job['record_sealed_at'] = row.get('record_sealed_at')
+                job['record_ready_at'] = time.time()
+                finished = row.get('finished_at')
+                if isinstance(finished, datetime):
+                    finished = finished.timestamp()
+                if recent_record_end(finished, now):
+                    job['record_finished_at'] = finished
+                    # All siblings retain this dispatch owner even if the
+                    # recording ages out or the urgency switch changes later.
+                    if not binding.partial_record and record_notes_eager_enabled():
+                        job['record_notes_after_complete'] = True
+                    if record_fresh_merge_enabled():
+                        # Seal/staging latency must not demote a new recording
+                        # behind this owner's unresolved historical captures.
+                        # All siblings use the recording end, not unit ends.
+                        job['fresh_capture'] = True
             if binding.native_record and record_barrier is not None and token_lease_mode() != 'off':
                 job['record_input_upload_revision'] = record_barrier.get('record_upload_revision')
             if partial_metadata.get('release'):
@@ -183,6 +234,7 @@ def admit(
             'content',
             content_key,
             {
+                **coalescing_completion.manifest(coalescing_group),
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',
@@ -204,10 +256,16 @@ def admit(
             'job_id': binding.job_id,
             '_policy_id': admission.policy_id,
             '_admitted_seconds': sum(i.duration_seconds for i in items),
+            '_reused_seconds': sum(i.duration_seconds for i in items if i.segment_id in (source_aliases or {})),
         }
 
     outcome = store.run(commit)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
+    reused_seconds = outcome.pop('_reused_seconds', 0.0)
+    if reused_seconds:
+        from utils.batch_pipeline.source_reuse import observe
+
+        observe('avoided_asr_input', float(reused_seconds))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:
         from config.policy.telemetry import record_policy_source

@@ -6,6 +6,25 @@ sealed class RegisteredEvent {
   Map<String, Object> get properties;
 }
 
+enum OnDeviceTranscriptionUsedRoute {
+  allowance("allowance"),
+  custom("custom"),
+  offlineBatch("offline_batch");
+  const OnDeviceTranscriptionUsedRoute(this.wireName);
+  final String wireName;
+}
+
+final class OnDeviceTranscriptionUsed extends RegisteredEvent {
+  const OnDeviceTranscriptionUsed({required this.route, required this.audioMs, required this.segmentCount});
+  final OnDeviceTranscriptionUsedRoute route;
+  final int audioMs;
+  final int segmentCount;
+  @override
+  String get wireName => "On Device Transcription Used";
+  @override
+  Map<String, Object> get properties => {"route": route.wireName, "audio_ms": audioMs, "segment_count": segmentCount};
+}
+
 enum SavedPendantReconnectObservedTrigger {
   launch("launch"),
   resume("resume"),
@@ -140,6 +159,61 @@ final class SignInFailed extends RegisteredEvent {
   String get wireName => "Sign In Failed";
   @override
   Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
+}
+
+enum SignInFailureDetailProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailureDetailProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailureDetailErrorCode {
+  appleCanceled("apple_canceled"),
+  appleFailed("apple_failed"),
+  appleInvalidResponse("apple_invalid_response"),
+  appleNotHandled("apple_not_handled"),
+  appleNotInteractive("apple_not_interactive"),
+  appleUnknown("apple_unknown"),
+  appleCredentialExport("apple_credential_export"),
+  appleCredentialImport("apple_credential_import"),
+  appleMatchedExcludedCredential("apple_matched_excluded_credential"),
+  appleNotSupported("apple_not_supported"),
+  appleCredentialsError("apple_credentials_error"),
+  applePlatformError("apple_platform_error"),
+  appleMissingIdentityToken("apple_missing_identity_token"),
+  firebaseInvalidCredential("firebase_invalid_credential"),
+  firebaseInvalidCredentialAudience("firebase_invalid_credential_audience"),
+  firebaseInvalidCredentialStale("firebase_invalid_credential_stale"),
+  firebaseInvalidIdpResponse("firebase_invalid_idp_response"),
+  firebaseMissingOrInvalidNonce("firebase_missing_or_invalid_nonce"),
+  firebaseAccountExistsWithDifferentCredential("firebase_account_exists_with_different_credential"),
+  firebaseCredentialAlreadyInUse("firebase_credential_already_in_use"),
+  firebaseEmailAlreadyInUse("firebase_email_already_in_use"),
+  firebaseOperationNotAllowed("firebase_operation_not_allowed"),
+  firebaseAdminRestrictedOperation("firebase_admin_restricted_operation"),
+  firebaseUserDisabled("firebase_user_disabled"),
+  firebaseAppNotAuthorized("firebase_app_not_authorized"),
+  firebaseInvalidApiKey("firebase_invalid_api_key"),
+  firebaseTooManyRequests("firebase_too_many_requests"),
+  firebaseNetworkRequestFailed("firebase_network_request_failed"),
+  firebaseInternalError("firebase_internal_error"),
+  firebaseOther("firebase_other"),
+  network("network"),
+  timeout("timeout"),
+  other("other");
+  const SignInFailureDetailErrorCode(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailureDetail extends RegisteredEvent {
+  const SignInFailureDetail({required this.provider, required this.errorCode});
+  final SignInFailureDetailProvider provider;
+  final SignInFailureDetailErrorCode errorCode;
+  @override
+  String get wireName => "Sign In Failure Detail";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_code": errorCode.wireName};
 }
 
 enum OnboardingPermissionResultPermission {
@@ -3393,4 +3467,45 @@ final class SubscriptionPaymentIssuePortalOpened extends RegisteredEvent {
   String get wireName => "Subscription Payment Issue Portal Opened";
   @override
   Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyShown extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyShown();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlyTapped extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyTapped();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class SubscriptionPaymentIssueMonthlySwitched extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlySwitched();
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Switched";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SubscriptionPaymentIssueMonthlyFailedReason {
+  declined("declined"),
+  refused("refused"),
+  error("error");
+  const SubscriptionPaymentIssueMonthlyFailedReason(this.wireName);
+  final String wireName;
+}
+
+final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
+  const SubscriptionPaymentIssueMonthlyFailed({required this.reason});
+  final SubscriptionPaymentIssueMonthlyFailedReason reason;
+  @override
+  String get wireName => "Subscription Payment Issue Monthly Failed";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
 }

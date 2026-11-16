@@ -31,10 +31,17 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from database.batch_pipeline_store import PROJECTION_FINISH_STATES
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
-from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
+from utils.batch_pipeline.projection import (
+    error_site_field,
+    error_type,
+    fence_reason_field,
+    projection_block_reason,
+    projection_phase,
+)
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_followup_clock import FollowupClock
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
@@ -88,6 +95,8 @@ class ProjectionFollowups:
         self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
+        self.due_clock = FollowupClock(projector)
+        self.due_pass_before: float | None = None
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
@@ -155,6 +164,19 @@ class ProjectionFollowups:
                 self.backoff.pop(next(iter(self.backoff)))
 
     def discovered(self):
+        due = self.due_clock.before(self.desync and projection_followup_page_enabled())
+        if due is not None:
+            # Durable due selection replaces local sleeping. A row due elsewhere
+            # (or reset by a state move) must not wait on this process's old cache.
+            # Freeze eligibility for this pass. A stream of new due rows must
+            # not extend the tail forever and starve rows behind the cursor.
+            if self.discovery.clock_mode != 'followup' or self.due_pass_before is None:
+                self.due_pass_before = due
+            page = self.discovery.next(limit=100, followup_due_before=self.due_pass_before)
+            if self.discovery.after is None:
+                self.due_pass_before = None
+            return page
+        self.due_pass_before = None
         page = None
         if not self.seeded:
             held = self.discovery.after
@@ -365,10 +387,25 @@ class ProjectionFollowups:
             # after a side effect committed. Receipt transactions fence retries.
             async with asyncio.timeout(FOLLOWUP_TIMEOUT_SECONDS):
                 outcome = await self._run(segment)
+                # Hint persistence shares the attempt's original deadline. A
+                # slow DB must not pin a follow-up slot after useful work ended.
+                if outcome == 'incomplete' and segment in self.due_clock.entries:
+                    deferred = await run_blocking(
+                        db_executor, self.due_clock.settle, segment, outcome, projection_followup_backoff_seconds()
+                    )
+                    if deferred:
+                        OUTCOMES.labels('durable_deferred').inc()
         except TimeoutError:
-            logger.warning('event=batch_projection_followup outcome=timeout')
+            logger.warning('event=batch_projection_followup outcome=timeout unit=%s', self.unit_key(segment))
             outcome = 'timeout'
+        finally:
+            self.due_clock.entries.pop(segment, None)
         self.note(segment, outcome)
+
+    @staticmethod
+    def unit_key(segment: str) -> str:
+        """Correlate attempts without emitting arbitrary source IDs or content."""
+        return hashlib.sha256(segment.encode()).hexdigest()[:16]
 
     async def _run(self, segment):
         # This is a segment claim, never the owner's assignment claim. Redis
@@ -388,6 +425,7 @@ class ProjectionFollowups:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 if not policy.async_projection:
                     return 'sync_owned'  # The synchronous sweep owns these receipts.
+            self.due_clock.observe(segment, entry)
             was_ready = entry['projection']['state'] == 'ready' and all(
                 part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
             )
@@ -419,12 +457,19 @@ class ProjectionFollowups:
             if result is not None and result.get('reason_code') == 'source_deleted':
                 return 'source_deleted'
             return 'completed' if result is not None else 'incomplete'
-        except (ProjectionBlocked, BatchPrivacyBlocked):
-            logger.info('event=batch_projection_followup outcome=blocked')
+        except (ProjectionBlocked, BatchPrivacyBlocked) as error:
+            logger.info(
+                'event=batch_projection_followup outcome=blocked unit=%s block_reason=%s%s%s',
+                self.unit_key(segment),
+                projection_block_reason(error),
+                fence_reason_field(error),
+                error_site_field(error),
+            )
             return 'blocked'
         except Exception as error:
             logger.error(
-                'event=batch_projection_followup outcome=retry exception_type=%s%s',
+                'event=batch_projection_followup outcome=retry unit=%s exception_type=%s%s',
+                self.unit_key(segment),
                 error_type(error),
                 error_site_field(error),
             )
@@ -437,16 +482,18 @@ class ProjectionFollowups:
                     async with asyncio.timeout(CLAIM_RELEASE_TIMEOUT_SECONDS):
                         await run_blocking(db_executor, claim.__exit__, None, None, None)
                 except TimeoutError:
-                    logger.warning('event=batch_projection_followup action=release outcome=timeout')
+                    logger.warning(
+                        'event=batch_projection_followup action=release outcome=timeout unit=%s', self.unit_key(segment)
+                    )
 
     async def step(self, policy, phase, executor, function, *args, **kwargs):
         with projection_phase(phase, policy):
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
-        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt['state'] in {'ready', 'quarantined'}:
             return
+        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 

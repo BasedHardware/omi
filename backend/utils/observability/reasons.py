@@ -20,6 +20,7 @@ and the batch-pipeline constants modules.
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
 
 from prometheus_client import Counter
@@ -50,8 +51,16 @@ class MemoryL1Reason(StrEnum):
     UNKNOWN = 'unknown'
 
 
+class NotesQualityRepairReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CAPTURE_AVAILABILITY = 'capture_availability'
+    EMPTY_HEADING = 'empty_heading'
+
+
 class ReasonFamily(StrEnum):
+    AUDIO_RAW = 'audio_raw'
     MEMORY_L1 = 'memory_l1'
+    OWNER_RECOGNITION = 'owner_recognition'
     PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
@@ -71,9 +80,12 @@ class ReasonFamily(StrEnum):
     SPEAKER_EVIDENCE = 'speaker_evidence'
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
+    SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
     SYNC_PROCESSING_HOLD = 'sync_processing_hold'
+    APP_REVIEW_CONFIG = 'app_review_config'
     ADMISSION_HOLD = 'admission_hold'
     LISTEN_SESSION_TRANSCRIPT = 'listen_session_transcript'
     RECORD_PARTIAL_RERUN = 'record_partial_rerun'
@@ -84,6 +96,89 @@ class ReasonFamily(StrEnum):
     RECORD_GAP_FILL = 'record_gap_fill'
     RECORD_RETAINED_ACK = 'record_retained_ack'
     PIPELINE_LEDGER = 'pipeline_ledger'
+    CAPTURE_END = 'capture_end'
+    JOURNEY_FAILURE = 'journey_failure'
+    LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
+    DUE_MARKER_SWEEP = 'due_marker_sweep'
+    RECORD_SEAL_REPAIR = 'record_seal_repair'
+
+
+class OwnerRecognitionProofReason(StrEnum):
+    """Original-unit proof refusals; never identifiers or exception text."""
+
+    UNKNOWN = 'unknown'
+    NO_JOB = 'no_job'
+    NO_RESULT = 'no_result'
+    JOB_OWNER_MISMATCH = 'job_owner_mismatch'
+    JOB_UNIT_MISMATCH = 'job_unit_mismatch'
+    BINDING_OWNER_MISMATCH = 'binding_owner_mismatch'
+    RECEIPT_MISSING = 'receipt_missing'
+    ARTIFACT_ROW_MISSING = 'artifact_row_missing'
+    ARTIFACT_CLEANED = 'artifact_cleaned'
+    ARTIFACT_KIND_MISMATCH = 'artifact_kind_mismatch'
+    ARTIFACT_OWNER_MISMATCH = 'artifact_owner_mismatch'
+    ARTIFACT_UNIT_MISMATCH = 'artifact_unit_mismatch'
+    GENERATION_MISMATCH = 'generation_mismatch'
+    ERASURE = 'erasure'
+    URI_MISMATCH = 'uri_mismatch'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SKIPPED_SHARED_UNIT = 'skipped_shared_unit'
+    PROJECTION_SEGMENT_MISSING = 'projection_segment_missing'
+    PROJECTION_TEXT_MISMATCH = 'projection_text_mismatch'
+    PROJECTION_POINT_WORDS = 'projection_point_words'
+    PROJECTION_UNASSIGNED_WORDS = 'projection_unassigned_words'
+    UNIT_PCM_FORMAT = 'unit_pcm_format'
+    UNIT_DURATION = 'unit_duration'
+    ENDPOINT_UNCONFIGURED = 'endpoint_unconfigured'
+    PRIVATE_CLOUD_DISABLED = 'private_cloud_disabled'
+    INVENTORY_PAIR_MISMATCH = 'inventory_pair_mismatch'
+    INVENTORY_COUNT_MISMATCH = 'inventory_count_mismatch'
+    DECODED_COVERAGE_HOLE = 'decoded_coverage_hole'
+    DECODED_OVERLAP = 'decoded_overlap'
+    DECODED_DURATION_MISMATCH = 'decoded_duration_mismatch'
+    MANIFEST_UNVALIDATED = 'manifest_unvalidated'
+    NO_PROVEN_WINDOW = 'no_proven_window'
+    UNCOVERED_WINDOW = 'uncovered_window'
+    GLOBAL_MANIFEST_AMBIGUITY = 'global_manifest_ambiguity'
+    STALE_GENERATION = 'stale_generation'
+    READ_BUDGET = 'read_budget'
+    OTHER = 'other'
+
+
+class OwnerRecognitionFinalPassOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DISABLED = 'disabled'
+    INELIGIBLE = 'ineligible'
+    ADMITTED = 'admitted'
+    DEPENDENCY_UNAVAILABLE = 'dependency_unavailable'
+
+
+class OwnerRecognitionBatchEmbeddingOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPTED = 'attempted'
+    SUCCESSFUL = 'successful'
+    CACHED = 'cached'
+
+
+class RecordSealRepairRunOutcome(StrEnum):
+    """Terminal coordinator outcome, independent of individual row proof refusals."""
+
+    UNKNOWN = 'unknown'
+    COMPLETE = 'complete'
+    INCOMPLETE = 'incomplete'
+
+
+class RecordSealRepairRunStage(StrEnum):
+    """Primary unfinished repair phase; overall also identifies a completed run."""
+
+    UNKNOWN = 'unknown'
+    PREPASS = 'prepass'
+    SETUP = 'setup'
+    DISCOVERY = 'discovery'
+    ROWS = 'rows'
+    CHECKPOINT = 'checkpoint'
+    OVERALL = 'overall'
 
 
 class PusherPcmStage(StrEnum):
@@ -92,11 +187,41 @@ class PusherPcmStage(StrEnum):
     TAIL = 'tail'
 
 
+class RawPackExclusionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ARRIVAL_CLOCK = 'arrival_clock'
+    DISABLED = 'disabled'
+    BOUNDS = 'bounds'
+    CHANNELS = 'channels'
+    CODEC = 'codec'
+    LAYOUT = 'layout'
+    MISSING_MANIFEST = 'missing_manifest'
+    AMBIGUOUS_MANIFEST = 'ambiguous_manifest'
+    INVALID = 'invalid'
+
+
 class PusherPcmErrorReason(StrEnum):
     UNKNOWN = 'unknown'
     ACQUIRE = 'acquire'
     RELEASE = 'release'
     LATE_STORAGE = 'late_storage'
+
+
+class AppReviewConfigReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CREDENTIALS_UNAVAILABLE = 'credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
+    RECONCILIATION_REPAIR = 'reconciliation_repair'
+    LIVE_HIDE_CLEARED = 'live_hide_cleared'
+    SUBMISSION_TOKEN_UNAVAILABLE = 'submission_token_unavailable'
+    SUBMISSION_TOKEN_REJECTED = 'submission_token_rejected'
+
+
+class AppReviewConfigOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    OK = 'ok'
+    PARTIAL = 'partial'
+    ERROR = 'error'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -158,11 +283,52 @@ class DeliveryOutcome(StrEnum):
     FAILED = 'failed'
 
 
+class CaptureEndOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    STORED = 'stored'
+    DUPLICATE = 'duplicate'
+    STALE = 'stale'
+    UNBOUND = 'unbound'
+    DISABLED = 'disabled'
+    INVALID = 'invalid'
+
+
+class CaptureEndTypeReason(StrEnum):
+    UNKNOWN = 'unknown'
+    USER_INITIATED = 'user_initiated'
+    SILENCE_BACKSTOP = 'silence_backstop'
+
+
+class CaptureEndProofOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    PROVEN = 'proven'
+    ABSENT = 'absent'
+    PENDING = 'pending'
+    CONTENT_BEHIND = 'content_behind'
+    NO_SPEECH_CLOCK = 'no_speech_clock'
+    RESUMED = 'resumed'
+    CLOCK_UNKNOWN = 'clock_unknown'
+
+
+class UploadTraceGateReason(StrEnum):
+    UNKNOWN = 'unknown'
+    NONE = 'none'
+    RATE_LIMITED = 'rate_limited'
+    AUTO_UPLOAD_OFF = 'auto_upload_off'
+    BACKGROUND = 'background'
+    RETRIES_EXHAUSTED = 'retries_exhausted'
+    IN_FLIGHT = 'in_flight'
+    OFFLINE = 'offline'
+    SERVER_HOLD = 'server_hold'
+    OTHER = 'other'
+
+
 class SyncProcessingHoldOutcome(StrEnum):
     UNKNOWN = 'unknown'
     QUIET_WAIT = 'quiet_wait'
     WATERMARK_WAIT = 'watermark_wait'
     READY = 'ready'
+    END_PROOF = 'end_proof'
     MAX_HOLD = 'max_hold'
     UNCHANGED = 'unchanged'
     IMMATERIAL = 'immaterial'
@@ -195,6 +361,15 @@ class StaleRecoveryOutcome(StrEnum):
     OVERSIZED_CLOSE_ATTEMPTED = 'oversized_close_attempted'
     CURRENT_SESSION = 'current_session'
     CANCELLED = 'cancelled'
+
+
+class DueMarkerSweepOutcome(StrEnum):
+    """Result of re-marking one finalization job that had no due marker."""
+
+    UNKNOWN = 'unknown'
+    REMARKED = 'remarked'
+    SKIPPED = 'skipped'
+    ERROR = 'error'
 
 
 class RetryReason(StrEnum):
@@ -301,6 +476,25 @@ class SyncCaptureTimeReason(StrEnum):
     REJECTED_FUTURE = 'rejected_future'
     REJECTED_EARLY = 'rejected_early'
     REJECTED_MALFORMED = 'rejected_malformed'
+
+
+class ContainedDonorShadowOutcome(StrEnum):
+    """`omi_sync_bridge_contained_donor_shadow_total{outcome}` for a processed sync donor.
+
+    Owner: `utils/sync/bridge.py::_shadow_contained_donor`. The shadow count gates
+    the shadow-to-on ramp, so the label is a closed enum rather than free text.
+    `error` is a bounded read/compare failure: the shadow path still refuses.
+    """
+
+    UNKNOWN = 'unknown'
+    WOULD_ABSORB = 'would_absorb'
+    PARTIAL_OVERLAP = 'partial_overlap'
+    OPEN_TARGET = 'open_target'
+    NO_OVERLAP = 'no_overlap'
+    NO_SEGMENT_SPAN = 'no_segment_span'
+    UNPLACED_DONOR = 'unplaced_donor'
+    DONOR_INELIGIBLE = 'donor_ineligible'
+    ERROR = 'error'
 
 
 class BatchIntakeOutcome(StrEnum):
@@ -665,6 +859,7 @@ class FallbackReason(StrEnum):
     """Every reason `record_fallback` may emit (superset of LiveSttReason)."""
 
     UNKNOWN = 'unknown'
+    INPUT_MISSING = 'input_missing'
     INITIALIZATION_FAILED = 'initialization_failed'
     CONNECTION_LOST = 'connection_lost'
     SEND_FAILED = 'send_failed'
@@ -739,6 +934,8 @@ class FallbackReason(StrEnum):
     ACQUIRE_UNSETTLED = 'acquire_unsettled'
     MARKER_TIMEOUT = 'marker_timeout'
     PREAMBLE_TIMEOUT = 'preamble_timeout'
+    STORE_CREDENTIALS_UNAVAILABLE = 'store_credentials_unavailable'
+    STORE_API_ERROR = 'store_api_error'
 
 
 class NotesAgentForceReason(StrEnum):
@@ -833,6 +1030,8 @@ class PipelineLedgerOutcome(StrEnum):
     STALE = 'stale'
     ILLEGAL = 'illegal'
     TERMINAL = 'terminal'
+    DELETED = 'deleted'
+    MISSING = 'missing'
 
 
 class PipelineLedgerFailureReason(StrEnum):
@@ -842,3 +1041,79 @@ class PipelineLedgerFailureReason(StrEnum):
     PERMISSION = 'permission'
     INVALID = 'invalid'
     OTHER = 'other'
+
+
+class ChatResponseFailureReason(StrEnum):
+    """Why a ``chat_response`` journey ended in ``failure`` (``omi_journey_failure_reason_total``).
+
+    Mapped from the values the chat path stages in ``callback_data['error']`` by
+    ``chat_response_failure_reason``. Exception class names are folded to a member
+    there, so no raw class name or message text reaches a label.
+    """
+
+    UNKNOWN = 'unknown'
+    IDLE_TIMEOUT = 'idle_timeout'
+    SETUP_TIMEOUT = 'setup_timeout'
+    TIMEOUT = 'timeout'
+    PROVIDER_ERROR = 'provider_error'
+    PROVIDER_REFUSAL = 'provider_refusal'
+    EMPTY_ANSWER = 'empty_answer'
+    STREAM_FAILURE = 'stream_failure'
+    PERSISTENCE_FAILURE = 'persistence_failure'
+
+
+class ListenNoAudioCloseReason(StrEnum):
+    """How an accepted /v4/listen session that never sent audio was closed, as the server observed it."""
+
+    UNKNOWN = 'unknown'
+    CLIENT_CLOSE_NORMAL = 'client_close_normal'
+    CLIENT_CLOSE_ABNORMAL = 'client_close_abnormal'
+    SERVER_CLOSE = 'server_close'
+    NO_CLOSE_FRAME = 'no_close_frame'
+
+
+# Values staged on callback_data['error'] by utils.retrieval (agentic, graph) and utils.chat_turn.
+_CHAT_STAGED_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'idle_timeout': ChatResponseFailureReason.IDLE_TIMEOUT,
+    'setup_timeout': ChatResponseFailureReason.SETUP_TIMEOUT,
+    'empty_answer': ChatResponseFailureReason.EMPTY_ANSWER,
+    'provider_refusal': ChatResponseFailureReason.PROVIDER_REFUSAL,
+    'stream_failure': ChatResponseFailureReason.STREAM_FAILURE,
+}
+# Exception class names that reach callback_data['error'] as type(error).__name__.
+_CHAT_EXCEPTION_FAILURE_REASONS: dict[str, ChatResponseFailureReason] = {
+    'TimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'APITimeoutError': ChatResponseFailureReason.TIMEOUT,
+    'ConnectTimeout': ChatResponseFailureReason.TIMEOUT,
+    'ReadTimeout': ChatResponseFailureReason.TIMEOUT,
+    'WriteTimeout': ChatResponseFailureReason.TIMEOUT,
+    'PoolTimeout': ChatResponseFailureReason.TIMEOUT,
+    'APIError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIStatusError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'APIConnectionError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'AuthenticationError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'BadRequestError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'InternalServerError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RateLimitError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ConnectError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'ReadError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'RemoteProtocolError': ChatResponseFailureReason.PROVIDER_ERROR,
+    'WriteError': ChatResponseFailureReason.PROVIDER_ERROR,
+}
+_EXCEPTION_CLASS_NAME = re.compile(r'[A-Z][A-Za-z0-9_]{0,79}')
+
+
+def chat_response_failure_reason(staged: object) -> ChatResponseFailureReason:
+    """Fold a staged chat error value (sentinel or exception class name) to a member; never raises."""
+    if not isinstance(staged, str):
+        return ChatResponseFailureReason.UNKNOWN
+    if staged in _CHAT_STAGED_FAILURE_REASONS:
+        return _CHAT_STAGED_FAILURE_REASONS[staged]
+    return _CHAT_EXCEPTION_FAILURE_REASONS.get(staged, ChatResponseFailureReason.UNKNOWN)
+
+
+def exception_class_name(value: object) -> str | None:
+    """The value when it is shaped like an exception class name, else None (no message text ever passes)."""
+    if isinstance(value, str) and _EXCEPTION_CLASS_NAME.fullmatch(value):
+        return value
+    return None

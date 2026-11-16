@@ -10,6 +10,7 @@ import pytest
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
 from database.batch_pipeline_shadow import pool_busy
 from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
+from testing.pipeline_sim.store import protected_page
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
@@ -23,11 +24,17 @@ class MemoryTransaction:
     def get(self, table, key):
         return deepcopy(self.rows.get((table, key), {}))
 
+    def get_existing(self, table, key):
+        return deepcopy(self.rows.get((table, key)))
+
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
     def patch(self, table, key, fields):
         self.rows[(table, key)].update(deepcopy(fields))
+
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        return protected_page(self.rows, 'ready', now, 8, owner_key=owner_key, priority=priority, after=after)
 
     def service_frontier(self, priority):
         return max(
@@ -53,6 +60,24 @@ class MemoryTransaction:
             if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v['state'] == 'result_ready'
         ]
         return min(jobs, key=lambda v: (v['capture_at'], v['segment_id'])) if jobs else None
+
+    def fresh_first_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key):
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key, *, ready):
+        rows = [
+            row
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('owner_key') == owner_key
+            and row.get('merge_pending')
+            and row.get('fresh_capture') is True
+            and (not ready or row.get('state') == 'result_ready')
+        ]
+        return deepcopy(min(rows, key=lambda row: (row['capture_at'], row['segment_id']))) if rows else None
 
     def ready_predecessor(self, owner_key, priority, segment_id):
         jobs = [
@@ -84,6 +109,28 @@ class MemoryStore:
         return [
             key for (table, key), v in self.rows.items() if table == 'jobs' and v['state'] == state and v[field] <= now
         ][:limit]
+
+    def protected_retries(self, now, limit, *, after=None):
+        return protected_page(self.rows, 'retry', now, min(100, limit), after=after)
+
+    def allowance_owners(self, now, limit):
+        rows = sorted(
+            (v['check_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'allowance_holds' and v.get('active') and v['check_at'] <= now
+        )
+        return [key for _, key in rows[:limit]]
+
+    def allowance_page(self, owner_key, after, limit):
+        rows = sorted(
+            (v['capture_at'], key)
+            for (table, key), v in self.rows.items()
+            if table == 'jobs'
+            and v['state'] == 'allowance_held'
+            and (owner_key is None or v['owner_key'] == owner_key)
+            and (after is None or (v['capture_at'], key) > tuple(after))
+        )
+        return [key for _, key in rows[:limit]]
 
     def oldest(self, priority, *, ready_only):
         from database.batch_pipeline_store import is_allowance_policy_hold
@@ -140,6 +187,9 @@ class MemoryStore:
     def quarantine_fenced(self, segment_id, now):
         raise AssertionError('privacy isolation must use real emulator transactions')
 
+    def cancel_fenced_recovery(self, segment_id):
+        raise AssertionError('privacy isolation must use real emulator transactions')
+
     # Unit-test model of the privacy defer: rows marked privacy_fenced read as blocked.
     def defer_privacy_blocked_record(self, segment_id, until, now):
         with self.lock:
@@ -173,6 +223,32 @@ class MemoryStore:
             if table == 'jobs' and v['owner_key'] == owner_key and v['merge_pending'] and v.get('fresh_capture') is True
         ]
         return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
+    def ready_pending(self, owner_key, limit, *, after=None):
+        jobs = [
+            v
+            for (table, _), v in self.rows.items()
+            if table == 'jobs'
+            and v['owner_key'] == owner_key
+            and v['merge_pending']
+            and v['state'] == 'result_ready'
+            and (after is None or (v['capture_at'], v['segment_id']) > tuple(after))
+        ]
+        return deepcopy(sorted(jobs, key=lambda v: (v['capture_at'], v['segment_id']))[:limit])
+
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        owners = {
+            row['owner_key']: row.get('owner_id')
+            for (table, _), row in self.rows.items()
+            if table == 'jobs'
+            and row.get('state') == 'result_ready'
+            and row.get('merge_pending')
+            and (after_owner_key is None or row['owner_key'] > after_owner_key)
+            and (ceiling_owner_key is None or row['owner_key'] <= ceiling_owner_key)
+        }
+        return sorted(owners.items(), reverse=descending)[: max(1, min(limit, 100))]
 
     def held_merge_owners(self, limit, *, after=None):
         owners = []
@@ -306,7 +382,8 @@ def test_result_receipt_persists_and_optional_receipt_is_rolling_idempotent():
     assert queue.complete(replay_with_receipt, legacy_lease.token, 6)
 
 
-def test_admission_deferred_re_lease_records_relet_true_first_lease_false():
+def test_admission_deferred_re_lease_records_relet_true_first_lease_false(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     from prometheus_client import CollectorRegistry
     from utils.batch_pipeline.metrics import QueueMetrics
 
@@ -398,7 +475,8 @@ def test_enforced_cap_quarantines_at_cap_lease_expiry(mode, monkeypatch):
     assert held['audio_uri']
 
 
-def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease():
+def test_allowance_repark_is_idle_until_scheduler_takes_a_live_lease(monkeypatch):
+    monkeypatch.setenv("BATCH_ALLOWANCE_PARK_ENABLED", "off")
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('held-shadow-probe'), 0)

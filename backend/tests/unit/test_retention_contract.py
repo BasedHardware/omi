@@ -180,3 +180,68 @@ def test_ceilings_report_soft_delete_noncurrent_and_cache_age():
     assert rc.ceiling_findings(CONTRACT, canonical, {'soft_delete_seconds': '0', 'versioning': True}) == [
         'ceiling_versioning'
     ]
+
+
+@pytest.mark.parametrize('prefix', ['chunks/', 'chunks/unit/', 'raw-live/', 'raw-live/unit/', ''])
+def test_live_voice_is_kept_until_user_deletion_on_ceiling_side(prefix):
+    metadata = {
+        'lifecycle': {'rule': [delete(3650, matchesPrefix=[prefix])]},
+        'soft_delete_seconds': '0',
+        'versioning': False,
+    }
+    assert 'ceiling_user_content_expiry' in rc.ceiling_findings(CONTRACT, SYNC, metadata)
+
+
+def test_voice_ceiling_allows_noncurrent_cleanup_and_cache_expiry():
+    metadata = {
+        'lifecycle': {
+            'rule': [
+                delete(3, matchesPrefix=['merged/']),
+                delete(30, matchesPrefix=['playback/']),
+                delete(1, matchesPrefix=['chunks/'], isLive=False),
+            ]
+        },
+        'soft_delete_seconds': '0',
+        'versioning': False,
+    }
+    assert 'ceiling_user_content_expiry' not in rc.ceiling_findings(CONTRACT, SYNC, metadata)
+
+
+def test_canonical_voice_ceiling_forbids_automatic_live_expiry():
+    bucket = 'canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)'
+    metadata = {'lifecycle': {'rule': [delete(365)]}, 'soft_delete_seconds': '0', 'versioning': False}
+    assert rc.ceiling_findings(CONTRACT, bucket, metadata) == ['ceiling_user_content_expiry']
+
+
+def test_runtime_lifecycle_matches_the_declared_production_contract():
+    from utils.batch_pipeline.input_retention import LIFECYCLE_DAYS, TERMINAL_SECONDS, WARNING_SECONDS
+
+    from config import batch_pipeline_retention as runtime
+
+    assert runtime.LIFECYCLE_SECONDS == LIFECYCLE_DAYS * 86400
+    assert LIFECYCLE_DAYS == runtime.LIFECYCLE_DAYS == CONTRACT['batch_staging_delete_age_days'] == 60
+    assert WARNING_SECONDS == (LIFECYCLE_DAYS - 9) * 86400 == 51 * 86400
+    assert TERMINAL_SECONDS == (LIFECYCLE_DAYS - 1) * 86400 == 59 * 86400
+    assert 0 < WARNING_SECONDS < TERMINAL_SECONDS < LIFECYCLE_DAYS * 86400
+    assert CONTRACT['buckets'][BATCH]['ceiling']['max_age_days'][''] == LIFECYCLE_DAYS
+
+
+@pytest.mark.parametrize('age', [0, 30, 58, 59, 59.0, True, None, float('nan'), float('inf')])
+def test_runtime_input_terminal_floor_is_strict_even_with_short_verified_holds(age):
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
+
+    verified = copy.deepcopy(CONTRACT)
+    verified['holds']['batch_finalization_alarm']['control_verified'] = True
+    assert rc.required_days(verified, BATCH) == 8
+    violations = rc.floor_violations(verified, BATCH, {'rule': [delete(age)]}, input_terminal_seconds=TERMINAL_SECONDS)
+    assert len(violations) == 1 and violations[0]['strict'] is True
+    assert violations[0]['required'] == TERMINAL_SECONDS / 86400
+
+
+def test_runtime_input_floor_allows_day60_and_leaves_other_hold_fences_intact():
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
+
+    verified = copy.deepcopy(CONTRACT)
+    verified['holds']['batch_finalization_alarm']['control_verified'] = True
+    assert rc.floor_violations(verified, BATCH, {'rule': [delete(60)]}, input_terminal_seconds=TERMINAL_SECONDS) == []
+    assert rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(60)]}, input_terminal_seconds=TERMINAL_SECONDS)

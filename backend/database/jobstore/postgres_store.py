@@ -37,6 +37,11 @@ from copy import deepcopy
 from typing import Any, Callable, Iterator, TypeVar
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
+from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
 from database.batch_pipeline_store import (
     ADMISSIBLE_READY_SCAN_LIMIT,
     OLDEST_POLICY_HOLD_SCAN_LIMIT,
@@ -106,6 +111,7 @@ class PostgresTransaction:
         self.store = store
         self.conn = conn
         self.cache: dict[tuple[str, str], dict] = {}
+        self.exists: dict[tuple[str, str], bool] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents this transaction holds a lock on (row lock or, when missing, the key's advisory lock).
@@ -114,13 +120,14 @@ class PostgresTransaction:
     # -- locking --------------------------------------------------------------------------
     def _lock_read(self, table: str, key: str) -> dict:
         """The newest committed document, locked until this transaction ends ({} if missing, key locked)."""
-        found = self.store.read_doc(self.conn, table, key, lock=True)
-        if not found:
+        found = self.store.read_existing_doc(self.conn, table, key, lock=True)
+        if found is None:
             self.store.lock_name(self.conn, table, key)
             # Re-read under the key lock: an insert that committed before we took it is visible now.
-            found = self.store.read_doc(self.conn, table, key, lock=True)
+            found = self.store.read_existing_doc(self.conn, table, key, lock=True)
         self.locked.add((table, key))
-        return found
+        self.exists[(table, key)] = found is not None
+        return found if found is not None else {}
 
     def _locked_query_row(self, key: str, doc: dict) -> dict:
         """Lock a job row a transactional query returned; restart if it changed before the lock."""
@@ -140,6 +147,11 @@ class PostgresTransaction:
         if address not in self.cache:
             self.cache[address] = self._lock_read(table, key)
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
+
+    def get_existing(self, table: str, key: str) -> dict | None:
+        row = self.get(table, key)
+        address = (table, key)
+        return row if address in self.writes or address in self.patches or self.exists[address] else None
 
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'conversations':
@@ -167,6 +179,21 @@ class PostgresTransaction:
         row = self.store.first_pending_in(self.conn, owner_key, result_ready=True)
         return self._locked_query_row(*row) if row else None
 
+    def fresh_first_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=False)
+
+    def fresh_first_ready_pending(self, owner_key: str) -> dict | None:
+        return self._fresh_first(owner_key, ready=True)
+
+    def _fresh_first(self, owner_key: str, *, ready: bool) -> dict | None:
+        state = "AND state = 'result_ready' " if ready else ''
+        row = self.conn.execute(
+            "SELECT key, doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+            f"AND doc->'fresh_capture' = 'true'::jsonb {state}ORDER BY capture_at, key COLLATE \"C\" LIMIT 1",
+            (self.store.namespace, owner_key),
+        ).fetchone()
+        return self._locked_query_row(*row) if row else None
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         # Two matches fail closed, exactly like the Firestore query.
         rows = self.conn.execute(
@@ -175,6 +202,12 @@ class PostgresTransaction:
             (self.store.namespace, owner_key, priority, segment_id),
         ).fetchall()
         return self._locked_query_row(*rows[0]) if len(rows) == 1 else None
+
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        rows = self.store.protected_page_in(
+            self.conn, 'ready', now, 8, owner_key=owner_key, priority=priority, after=after
+        )
+        return [self._locked_query_row(*row) for row in rows]
 
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier_in(self.conn, priority)
@@ -217,6 +250,35 @@ class PostgresTransaction:
 
 
 class PostgresStore:
+    def allowance_owners(self, now: float, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM docs WHERE namespace=%s AND tbl='allowance_holds' "
+                "AND doc->'active'='true'::jsonb AND (doc->>'check_at')::float8 <= %s "
+                "ORDER BY (doc->>'check_at')::float8, key COLLATE \"C\" LIMIT %s",
+                (self.namespace, now, max(1, min(limit, 100))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def allowance_page(self, owner_key: str | None, after, limit: int) -> list[str]:
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT key FROM jobs WHERE namespace=%s AND state='allowance_held' "
+                "AND (%s::text IS NULL OR owner_key=%s) "
+                "AND (%s::float8 IS NULL OR (capture_at, key COLLATE \"C\") > (%s, %s)) "
+                'ORDER BY capture_at, key COLLATE "C" LIMIT %s',
+                (
+                    self.namespace,
+                    owner_key,
+                    owner_key,
+                    after[0] if after else None,
+                    after[0] if after else None,
+                    after[1] if after else None,
+                    max(1, min(limit, 100)),
+                ),
+            ).fetchall()
+        return [row[0] for row in rows]
+
     def __init__(
         self,
         namespace: str,
@@ -269,6 +331,33 @@ class PostgresStore:
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
+
+    def protected_retries(self, now, limit, *, after=None):
+        with self._read_conn() as conn:
+            return [row[1] for row in self.protected_page_in(conn, 'retry', now, min(100, limit), after=after)]
+
+    def protected_page_in(self, conn, state, now, limit, *, owner_key=None, priority=None, after=None):
+        predicates = [
+            "namespace = %s",
+            "state = %s",
+            "capture_at >= %s",
+            "capture_at <= %s",
+            "doc->'compute_decision'->>'outcome' IN ('unattempted', 'allowed')",
+        ]
+        params = [self.namespace, state, now - 14400, now]
+        if owner_key is not None:
+            predicates.extend(["owner_key = %s", "priority = %s"])
+            params.extend([owner_key, priority])
+        if after is not None:
+            predicates.append('(capture_at, key COLLATE "C") < (%s, %s)')
+            params.extend(after)
+        params.append(max(1, min(limit, 8 if state == 'ready' else 100)))
+        return conn.execute(
+            'SELECT key, doc FROM jobs WHERE '
+            + ' AND '.join(predicates)
+            + ' ORDER BY capture_at DESC, key COLLATE "C" DESC LIMIT %s',
+            params,
+        ).fetchall()
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         if ready_only:
@@ -334,6 +423,40 @@ class PostgresStore:
                 (*params, max(1, min(limit, 32))),
             ).fetchall()
         return [row[0] for row in rows]
+
+    def ready_pending(self, owner_key: str, limit: int, *, after=None) -> list[dict]:
+        cursor = 'AND (capture_at, key COLLATE "C") > (%s, %s) ' if after is not None else ''
+        params = (self.namespace, owner_key, *after) if after is not None else (self.namespace, owner_key)
+        with self._read_conn() as conn:
+            rows = conn.execute(
+                "SELECT doc FROM jobs WHERE namespace = %s AND owner_key = %s AND merge_pending "
+                f"AND state = 'result_ready' {cursor}ORDER BY capture_at, key COLLATE \"C\" LIMIT %s",
+                (*params, max(1, min(limit, 160))),
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    def ready_owners(
+        self, after_owner_key: str | None, limit: int, *, ceiling_owner_key: str | None = None, descending: bool = False
+    ) -> list[tuple[str, str | None]]:
+        owners = []
+        with self._read_conn() as conn:
+            for _ in range(max(1, min(limit, 100))):
+                bound = 'AND owner_key COLLATE "C" > %s ' if after_owner_key is not None else ''
+                params = (self.namespace, after_owner_key) if bound else (self.namespace,)
+                if ceiling_owner_key is not None:
+                    bound += 'AND owner_key COLLATE "C" <= %s '
+                    params += (ceiling_owner_key,)
+                row = conn.execute(
+                    "SELECT owner_key, doc->>'owner_id' FROM jobs "
+                    "WHERE namespace = %s AND state = 'result_ready' AND merge_pending "
+                    f'{bound}ORDER BY owner_key COLLATE "C" {"DESC" if descending else "ASC"} LIMIT 1',
+                    params,
+                ).fetchone()
+                if row is None:
+                    break
+                owners.append(tuple(row))
+                after_owner_key = row[0]
+        return owners
 
     def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
         """Owners whose catch-up commits are held: (owner key, owner id from the earliest pending job, or None)."""
@@ -420,7 +543,7 @@ class PostgresStore:
 
         def revoke(tx: PostgresTransaction) -> bool:
             job = tx.get('jobs', segment_id)
-            if job.get('state') not in {'leased', 'retry'} | PROVIDER_STATES:
+            if job.get('state') not in {'leased', 'retry', 'allowance_held'} | PROVIDER_STATES:
                 return False
             try:
                 tx.check_privacy(
@@ -444,6 +567,32 @@ class PostgresStore:
             return False
 
         return self.run(revoke)
+
+    def cancel_fenced_recovery(self, segment_id: str) -> bool:
+        """Revoke a prepared/running recovery when privacy blocks; same fence recheck and revoke-only write as Firestore."""
+        from database.batch_pipeline_privacy import BatchPrivacyBlocked
+        from database.batch_pipeline_projection_protocol import normalized_binding
+
+        def cancel(tx: PostgresTransaction) -> bool:
+            job = tx.get('jobs', segment_id)
+            if not job or not job.get('recovery'):
+                return False
+            binding = normalized_binding(job['projection_binding'])
+            ids = [value for value in (job.get('conversation_id'), binding.target_conversation_id) if value]
+            ids.extend(job.get('conversation_ids') or [])
+            try:
+                tx.check_privacy(
+                    binding.owner_id,
+                    conversation_ids=ids,
+                    expected_generation=binding.privacy_generation,
+                )
+            except BatchPrivacyBlocked:
+                cancelled = {**job, 'recovery_state': 'cancelled'}
+                tx.store.write_doc(tx.conn, 'jobs', segment_id, cancelled)
+                return True
+            return False
+
+        return self.run(cancel)
 
     def defer_privacy_blocked_record(self, segment_id: str, until: float, now: float) -> bool:
         """Same fence recheck and available_at-only change as the Firestore privacy defer."""
@@ -470,6 +619,15 @@ class PostgresStore:
     def projection_pending(self, limit: int = 100) -> list[str]:
         return self.projection_page(limit)[0]
 
+    def projection_finish_backfill_complete(self) -> bool:
+        # A Firestore marker cannot certify this store's population. Missing
+        # native maintenance evidence keeps the legacy page active.
+        return backfill_marker_complete(self.run(lambda tx: tx.get('control', BACKFILL_KEY)))
+
+    def projection_followup_backfill_complete(self) -> bool:
+        # Only this backend's native control marker can certify its population.
+        return followup_backfill_marker_complete(self.run(lambda tx: tx.get('control', FOLLOWUP_BACKFILL_KEY)))
+
     def projection_page(
         self,
         limit: int = 100,
@@ -477,21 +635,29 @@ class PostgresStore:
         after: tuple | None = None,
         states: tuple[str, ...] = PROJECTION_DISCOVERY_STATES,
         due_before: float | None = None,
+        exclude_async: bool = False,
+        followup_due_before: float | None = None,
     ) -> tuple[list[str], Any]:
         if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
             raise ValueError('projection discovery states must be drain states')
+        if due_before is not None and followup_due_before is not None:
+            raise ValueError('finish and follow-up discovery clocks cannot be combined')
+        cutoff = followup_due_before if followup_due_before is not None else due_before
+        clock_field = 'projection_followup_due_at' if followup_due_before is not None else 'projection_finish_due_at'
         size = max(1, min(limit, 200))
         columns = ['committed_at', 'key COLLATE "C"']
         fields, clauses = 'key, committed_at', ['committed_at IS NOT NULL']
         params: list[Any] = [self.namespace, list(states)]
-        if due_before is not None:
-            due = "(doc->>'projection_finish_due_at')::float8"
+        if cutoff is not None:
+            due = f"(doc->>'{clock_field}')::float8"
             columns.insert(0, due)
             fields += f', {due}'
             clauses.append(f'{due} <= %s')
-            params.append(float(due_before))
+            params.append(float(cutoff))
+            if exclude_async and due_before is not None:
+                clauses.append(f'{due} >= 0')
         if after is not None:
-            if due_before is not None and len(after) != 3 or due_before is None and after[1] == '':
+            if cutoff is not None and len(after) != 3 or cutoff is None and after[1] == '':
                 clauses.append(f'{columns[0]} >= %s')
                 params.append(after[0])
             else:
@@ -517,6 +683,10 @@ class PostgresStore:
             raise RuntimeError(f'{table} documents live in Firestore; Postgres holds them only in harness mode (A4)')
 
     def read_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict:
+        found = self.read_existing_doc(conn, table, key, lock=lock)
+        return found if found is not None else {}
+
+    def read_existing_doc(self, conn: Any, table: str, key: str, *, lock: bool = False) -> dict | None:
         suffix = ' FOR UPDATE' if lock else ''
         if table in _TYPED:
             psycopg_sql = sql()
@@ -530,7 +700,7 @@ class PostgresStore:
                 (self.namespace, table, key),
             )
         found = row.fetchone()
-        return found[0] if found else {}
+        return found[0] if found else None
 
     def lock_name(self, conn: Any, table: str, key: str) -> None:
         """Hold one document's advisory lock until the transaction ends (the key may not exist yet)."""

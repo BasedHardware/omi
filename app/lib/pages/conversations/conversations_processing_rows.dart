@@ -1,5 +1,25 @@
 part of 'conversations_page.dart';
 
+/// Recording blocks sort by time too; pin the already-folded processing row
+/// before them. Live capture is inserted immediately before it afterwards.
+List<_ConversationListRow> _processingFirst(List<_ConversationListRow> rows, Set<String> processingIds,
+    {bool enabled = true}) {
+  if (!enabled) return rows;
+  final pending = <DateTime, List<_ConversationListRow>>{};
+  for (final row in rows) {
+    if (row.kind == _ConversationListRowKind.conversation && processingIds.contains(row.conversation?.id)) {
+      (pending[row.date] ??= []).add(row);
+    }
+  }
+  return [
+    for (final row in rows)
+      if (row.kind != _ConversationListRowKind.conversation || !processingIds.contains(row.conversation?.id)) ...[
+        row,
+        if (row.kind == _ConversationListRowKind.dateHeader) ...?pending[row.date],
+      ],
+  ];
+}
+
 List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTime now, _ConversationListRowKind kind) {
   if (rows.isEmpty) return rows;
   final today = DateTime(now.year, now.month, now.day);

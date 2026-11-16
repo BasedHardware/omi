@@ -46,7 +46,10 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
+from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
+from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
@@ -154,6 +157,16 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
+    'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
+    'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
+    'database.batch_census_export._scope': '239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
+    'database.batch_pipeline_allowance_migration.candidates': '04c9beae56ec6091544a2ec69a8ba170032dbe3670697b704db2f88d513bc5cb',
+    'database.conversation_batch_purge_jobs.RunProgress.pending_segments': '86b3d882fe3c575b3a540bb00d1845c941c5256d99848c4dc89917eb707ff3cc',
+    'database.conversation_batch_purge_jobs.RunProgress.segments': '8abb8d7ed330ab91cc91af8b792809121c06605ff0180e0c90da4b66d6e3ef45',
+    'database.conversation_batch_purge_jobs._drop_segment_records': '53f3a9444e2caee3f79c05d68d1dd3876c42e6445f6ba42037140276558ae39a',
+    'database.conversation_batch_purge_jobs._owes_segments': '5945da3db3e539efafe6dbc95560280683ea863b77a8e7e720ee3c2902b59c68',
+    'database.conversation_batch_purge_jobs.run_job': 'b53f24db0b73ea39f9f0fcdfa18971a0c256cdf5ac30115723c461601ea5f829',
     'database.batch_pipeline_store.promote_record_recoveries': 'ce853ebe262f00a49241f670f28e23dfa0951d37cda42e1da34a966899c1ecd1',
     'database.record_custody_receipts.prune': 'a01ec56fc4132450ccd96a0eb11f59bfbdfdb8e7760e8c8d565f11ccd3af8e23',
     'database.user_usage._s4_month_cache': '14a6b7d82ee83ec56f552ab798b0021e2342ffd920dcdbe2a8e851ec32029f28',
@@ -187,7 +200,7 @@ BODY_DIGEST = {
     'database.conversations._collect_cursor_conversation_page': 'bd16ecd16fae8402a6abd848e94163c38f1272e64bdbbb3131df863cddc79018',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
-    'database.batch_pipeline_store.FirestoreStore.projection_page': '93b2b60f115fd6139a36a571d40468e76d7962b5ffa8ca861e9572cfc0790785',
+    'database.batch_pipeline_store.FirestoreStore.projection_page': '96f024578c9d338e4fb3a528f1c59801c928167da8ddf0d2747d686700b46ff5',
     'database.batch_pipeline_store.FirestoreStore.projection_successor': '96adabf372104327c5a8065ef2ff06621648ee242b3415d04b047d50ded9e6b1',
     'database.batch_pipeline_store.FirestoreTransaction.service_frontier': '56b1e013fd6925c981be2186d76458211b724187b771ddc5ebb0eaa47820c44b',
     'database.batch_pipeline_store.reseed_hinted_activation': 'b962f088769367e4902876ef9dd91de299238b945f13610829e5f1f1acd8d449',
@@ -200,9 +213,13 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.oldest': 'ce672d79f4c8c453f5096d0ff9a6a074277caff55c0ae5cb80900698125f0327',
     'database.batch_pipeline_store.FirestoreStore.due': '6082abc15cee6736e23fa3554fbaa74ce65f751082a884e67416eda0757bc5ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_pending': '3eda52b96735afad17b1471efc6e912998c1d9720a02fff4ce80260099bd7f59',
+    'database.batch_pipeline_store.FirestoreTransaction.fresh_first_ready_pending': 'bd2a5ddf5a4c4b1d0bbc6145621622530adb9b1a158c13f8f1691fa2786725ec',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
+    'database.batch_pipeline_store.FirestoreStore.ready_pending': '48c1a206ba4e768ab07b48cd7c79df4e759cbe32c576c5723abba4d9b874d18a',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
+    'database.batch_pipeline_store.FirestoreStore.ready_owners': 'b5d53e56900da07d2069cd1068218cb1515895a8dfd35f91dab9d06390cd02cf',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
     # Re-reviewed 2026-10-30: due_time now takes the owner id for hunt backoff; query shape is unchanged.
     'database.dream_scheduler.discover': 'e882fde2014b8f3246665cf86f29046022bc7bdf190c521351fecf872eb379b0',
@@ -216,7 +233,7 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '9ead08b44085a755f8f1669059d955658b0cc6cf3c2172a12737a056bf562bef',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'aa91a14822a421ef8f0e8b11961ae5cda837676259c25665f9d14edcdfe0750a',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -246,7 +263,12 @@ BODY_DIGEST = {
     # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
-    'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
+    'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
+    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
+    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
+    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
+    'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
+    'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
 
 # Retained application entry-point recipes. Their query bodies now belong to
@@ -374,6 +396,68 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+# Conversation batch-purge reconciler: one single-field ``due_at`` range, oldest first, over the
+# purge obligations or the accepted-delete erasure obligations.
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs.due_jobs',
+        neutrals={'now': _NOW, 'limit': _LIMIT},
+        domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
+    )
+)
+# Its durable per-segment erasure work: one equality filter inside a single obligation.
+_add(
+    DriverEntry(
+        'database.conversation_batch_purge_jobs.segment_records',
+        base={'job': 'shape-job', 'namespace': 'batch_pipeline_prod'},
+        domains={'limit': [None, 20]},
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.RunProgress.pending_segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.RunProgress.pending_segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.RunProgress.segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.RunProgress.segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs._drop_segment_records',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs._drop_segment_records'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs._owes_segments',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs._owes_segments'],
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.conversation_batch_purge_jobs.run_job',
+        covered_by=('database.conversation_batch_purge_jobs.segment_records',),
+        reason='delegates its only stream to segment_records, which owns the recorded caller',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.conversation_batch_purge_jobs.run_job'],
+    )
+)
 _add(
     DriverEntry(
         'database.hidden_noise_counts.count_hidden_noise_by_day',
@@ -981,7 +1065,8 @@ _add(
         'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn',
         covered_by=('database.conversation_finalization_jobs._conversation_has_finalization_content',),
         reason='orchestrator whose only collection query is the directly driven content probe; '
-        'silent-backfill row/session/owner/privacy/job fences add transaction-bound direct document reads only',
+        'silent-backfill row/session/owner/privacy/job fences add transaction-bound direct document reads only; '
+        'reconnect expiry changes pure deadline arithmetic without adding any query',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversation_finalization_jobs._create_or_get_finalization_intent_txn'],
     )
@@ -1066,6 +1151,31 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
+
+
+def _due_marker_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/due-marker-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/due_marker_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.finalization_due_marker_sweep.remark_missing_due_markers',
+        domains={'now': [T0]},
+        neutrals={
+            'limit': _LIMIT,
+            'stale_after': (timedelta(hours=24), 'age bound; with the pinned now the cutoff is fixed, shape unchanged'),
+        },
+        setup=_due_marker_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
@@ -1257,6 +1367,9 @@ _add(
         neutrals={
             'attach_row': (None, 'optional semantic memo; no candidate query effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
+            'admission': (False, 'member document refusal guard; no query filter or ordering effect'),
         },
         base={
             'uid': UID,
@@ -1288,6 +1401,8 @@ _add(
             'candidates': (None, 'attempt-local reuse of the registered recorded_candidates builder'),
             'fence_row': (None, 'preloaded timeline fence document; no query shape effect'),
             'pending_at': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'deadline_floor': (T0, 'membership deadline metadata only; no query filter or ordering effect'),
+            'detach_from': (None, 'document gets for the old provisional membership; no query shape effect'),
         },
         patchers=(_stub('database.episodes.seal', {'id': 'recorded-1'}),),
     )
@@ -1877,6 +1992,18 @@ _add(
 )
 _add(DriverEntry('database.goals.get_goal_history', base={'uid': UID, 'goal_id': 'goal-1'}, neutrals={'days': _DAYS}))
 _add(DriverEntry('database.goals.get_user_goal', base={'uid': UID}))
+_add(
+    DriverEntry(
+        'utils.episodes.composer_context_io.goals',
+        base={'uid': UID},
+        neutrals={
+            'budget': (
+                ListReadBudget(deadline_monotonic=8.0, max_documents=160, clock=lambda: 0.0, strict_documents=True),
+                'composer context deadline/read allowance; caps RPC/window, not the active-goal filter',
+            ),
+        },
+    )
+)
 _add(
     DriverEntry(
         'database.goals.get_user_goals',
@@ -3152,6 +3279,17 @@ _add(
     )
 )
 _add(
+    DriverEntry(
+        'database.monthly_usage_totals.establish_verified_month',
+        base={'uid': UID, 'date': T0},
+        setup=_monthly_total_user,
+        patchers=(
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
     CoveredByEntry(
         'database.monthly_usage_totals._month_rows',
         covered_by=('database.monthly_usage_totals.read_monthly_totals',),
@@ -3176,6 +3314,12 @@ _add(
     )
 )
 _add(DriverEntry('database.user_usage.get_daily_history_for_month', base={'uid': UID, 'date': T0}))
+_add(
+    DriverEntry(
+        'utils.backfill_hours_cap.transcribed_seconds_for_day',
+        base={'uid': UID, 'day': FROZEN_TODAY},
+    )
+)
 _add(DriverEntry('database.user_usage.get_hourly_history_for_today', base={'uid': UID, 'start': T0, 'end': T1}))
 _add(
     DriverEntry(
@@ -3438,8 +3582,10 @@ _add(
 
 for entry in (
     *batch_pipeline_entries(),
+    *allowance_hold_entries(),
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
+    *home_feed_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
@@ -3450,6 +3596,25 @@ for entry in (
 ):
     _add(entry)
 
+
+# Account-purge verification: bounded single-field read of one route's operation journal.
+_add(
+    DriverEntry(
+        'database.pinecone_partition_state._uncertain_operation_refs',
+        base={'ref': ref_document('pinecone_partition_routes/route-1'), 'transaction': ref_transaction()},
+        neutrals={'limit': (2, 'uncertain_count + 1 overflow bound; not filter-affecting')},
+    )
+)
+for _name in ('_uncertain_mutations_are_deletes', 'uncertain_mutations_are_deletes'):
+    _add(
+        CoveredByEntry(
+            f'database.pinecone_partition_state.{_name}',
+            covered_by=('database.pinecone_partition_state._uncertain_operation_refs',),
+            reason='transactional wrapper; its only query is _uncertain_operation_refs',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[f'database.pinecone_partition_state.{_name}'],
+        )
+    )
 
 _add(
     DriverEntry(
@@ -4049,6 +4214,43 @@ _add(
 )
 
 
+# W3 stuck-state census (SCA-2119): the exporter samples every registered stock.
+# Every entry is a domain member, so one driver iteration per stock proves its
+# count and oldest-age query shape is served by the generated manifest.
+from config.batch_census import ENTRIES as _CENSUS_ENTRIES
+
+_add(
+    DriverEntry(
+        'database.batch_census_export.sample_entry',
+        domains={'entry': list(_CENSUS_ENTRIES)},
+        neutrals={
+            'now': (1_700_000_000.0, 'sample moment; resolves relative age cutoffs only'),
+            'timeout': (60.0, 'per-RPC budget; does not change the query shape'),
+        },
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._scope',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Collection scope builder consumed by the registered exporter driver; the recorded shape '
+        'is attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='239ed05dc6fef88f4ed8a88b870867f37623329cb96d8b1131278a52a3652dc8',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.batch_census_export._filtered',
+        covered_by=('database.batch_census_export.sample_entry',),
+        reason='Filter builder consumed by the registered exporter driver; the recorded shape is '
+        'attributed to sample_entry, so the pin is reviewed rather than observed',
+        expect_observed=False,
+        body_digest='6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
+    )
+)
+
+
 _add(
     DriverEntry(
         'database.cap_hold_redrive.page',
@@ -4147,6 +4349,19 @@ for _key, _reason in (
     (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
+    ),
+    (
+        'database.jobstore.reconcile._primary_keys',
+        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
+        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
+        'No filters or composite index; built-in document-id ordering only.',
+    ),
+    (
+        'database.jobstore.reconcile.process_page',
+        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
+        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
+        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
+        'tests/unit/test_jobstore_reconcile.py.',
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
@@ -4418,3 +4633,6 @@ _add(
         domains={'limit': [1, 5000], 'now': [None, 10**12]},
     )
 )
+
+for _composer_default_context_entry in composer_default_context_entries():
+    _add(_composer_default_context_entry)

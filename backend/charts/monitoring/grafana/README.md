@@ -15,7 +15,9 @@ Grafana provisioning workflow reads it directly with a one-file allowlist.
 It creates the team/folder, replaces folder permissions with Admin + team View,
 removes old explicit dashboard grants, and verifies folder/read-back placement.
 Never add Viewer/Editor org grants or publish/anonymous access. The workflow's
-prod-only step needs `BUSINESS_GRAFANA_TOKEN` in `monitoring-prod`.
+gated prod-dispatch step reads `BUSINESS_GRAFANA_TOKEN` from the `prod` environment. The
+automatic push-to-main apply reads it from `grafana-dashboards-prod` and skips with a
+warning while that environment does not hold it.
 
 ## Keyless datasource
 

@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava putem Applea nije uspjela. Pokušajte ponovo ili nastavite s Googleom.",
     "authFailedToRetrieveToken": "Greška pri preuzimanju firebase token, molimo pokušajte ponovo.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "Naplaćuje se godišnje",
     "paywallTrialSaveAmount": "Uštedite {amount}",
     "paywallTrialCta": "Započnite za {price}",
+    "paywallTrialCodeHint": "Imate Omi Pro kod? Unesite ga na sljedećem ekranu.",
     "paywallTrialCancelNote": "Otkažite bilo kada. Bez naknada, bez kazni.",
     "paywallMonthlyFallbackTitle": "Još niste spremni za cijelu godinu?",
     "paywallMonthlyFallbackTrialBody": "Počnite s mjesečnim planom. Istih {days} dana besplatno, zatim {price} mjesečno. Otkažite bilo kada.",
@@ -12196,11 +12198,20 @@
     "referralRewardSecondDetail": "Kad još 3 prijatelja kupe",
     "referralClaimShort": "Preuzmi",
     "paymentDeclinedTitle": "Tvoja kartica je odbijena",
+    "paymentDeclinedMonthlyMessage": "Ažuriraj karticu ili vrati {plan} za {price} mjesečno",
     "paymentDeclinedMessage": "Ažuriraj karticu da vratiš {plan}",
     "hasLinkedTasksLabel": "Ima povezane zadatke",
     "hasTasksFilter": "Sa zadacima",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Pređi na mjesečno",
+    "monthlySwitchPlanValue": "{plan}, {price} mjesečno",
+    "monthlySwitchNote": "Zamjenjuje neplaćenu godišnju naplatu od {yearly}. Obnavlja se mjesečno. Otkaži bilo kada.",
+    "monthlySwitchDeclined": "Plaćanje je odbijeno. Vaš plan se nije promijenio.",
+    "monthlySwitchUnavailable": "Prelazak trenutno nije dostupan. Umjesto toga ažuriraj karticu.",
+    "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
+    "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
+    "processingDeleteScopeChanged": "Lista obrade se promijenila. Pregledajte je i pokušajte ponovo."
 }

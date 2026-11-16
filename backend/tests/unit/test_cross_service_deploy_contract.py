@@ -417,8 +417,39 @@ def test_constant_named_env_reads_are_resolved(results: Results) -> None:
     )
 
 
-@pytest.mark.parametrize('helper', ['_default_on', 'default_on', 'modes_default_on', 'rollout_default_on'])
-def test_default_on_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
+@pytest.mark.parametrize(
+    'key',
+    [
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    ],
+)
+def test_post_seal_kill_switches_have_readers_on_every_bound_host(results: Results, key: str) -> None:
+    for model in results.baseline.models.values():
+        for deployment in model.deployments.values():
+            if key not in deployment.env:
+                continue
+            assert deployment.entrypoint is not None, (model.env, deployment.id, key)
+            readers = results.baseline.readers.by_entrypoint[deployment.entrypoint]
+            assert key in readers, (model.env, deployment.id, key)
+            assert 'backend/config/record_latency.py' in readers[key].modules, (model.env, deployment.id, key)
+
+
+@pytest.mark.parametrize(
+    'helper',
+    [
+        '_default_on',
+        'default_on',
+        'modes_default_on',
+        'rollout_default_on',
+        '_default_off',
+        'default_off',
+        'modes_default_off',
+        'rollout_default_off',
+    ],
+)
+def test_boolean_wrapper_resolves_constant_env_key(tmp_path: Path, helper: str) -> None:
     rel = 'backend/config/synthetic_wrapped_switch.py'
     source = OverlaySource(
         tmp_path,

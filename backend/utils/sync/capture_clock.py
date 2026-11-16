@@ -5,7 +5,10 @@ Phone live-capture files are named after the START of the audio they hold
 filename timestamp ahead of the server clock is phone-clock skew, not a
 naming-semantics mismatch. Every admission check tolerates that skew through
 the one bound owned here; stored/derived capture times clamp to server now so
-skew can never break ordering or windows.
+skew can never break ordering or windows. Clearly broken early/future clocks
+use receipt-clock placement with raw identity and explicit untrusted time.
+Only the future batch extension uses ``receipt_clock``. Existing early-clock
+placement and persisted documents remain unchanged.
 
 Keep this module import-light: ``utils.request_validation`` imports it.
 """
@@ -24,11 +27,12 @@ from utils.observability.reasons import SyncCaptureTimeReason
 # Prod (24h to 2026-10-26): real phone live-capture uploads ran a median 171 s
 # and max 349 s ahead of the server clock. The default doubles a bit past that
 # max — uncalibrated phone clocks drift minutes, so one outlier phone must keep
-# syncing — while bogus device stamps (2030+) stay ~years outside and accepted
-# times are clamped to now anyway, so the wider bound costs nothing downstream.
+# syncing. Broken device stamps stay outside that trusted skew window and use
+# the separately gated receipt-clock recovery policy below.
 from config.recorded_time_tolerances import CLOCK_SKEW_SECONDS as DEFAULT_MAX_FUTURE_SKEW_SECONDS
 
 EARLIEST_CAPTURE_TIME = datetime(2024, 1, 1, tzinfo=timezone.utc)
+CAPTURE_TIME_TRUST_FIELD = 'capture_time_trust'
 
 INVALID_CAPTURE_TIME_CODE = 'invalid_capture_time'
 INVALID_CAPTURE_TIME_DETAIL = 'Invalid sync file format: invalid timestamp'
@@ -45,6 +49,24 @@ def early_capture_clamp_enabled() -> bool:
 
 def is_early_capture_time(capture_time: float) -> bool:
     return capture_time < EARLIEST_CAPTURE_TIME.timestamp()
+
+
+def future_capture_clamp_enabled() -> bool:
+    return os.getenv('SYNC_FUTURE_CAPTURE_CLAMP_ENABLED', 'false').strip().lower() in ('true', '1', 'on', 'yes')
+
+
+def is_implausible_future_capture_time(capture_time: float, *, now: float | None = None) -> bool:
+    effective_now = time.time() if now is None else now
+    return capture_time > effective_now + 24 * 60 * 60
+
+
+def is_receipt_clock_capture_time(capture_time: float, *, now: float | None = None) -> bool:
+    """Clock policy for admitted work, independent of admission kill switches.
+
+    Pass the frozen receive time, never worker time: a queued future stamp must
+    stay untrusted even if the wall clock catches up before it is processed.
+    """
+    return is_early_capture_time(capture_time) or is_implausible_future_capture_time(capture_time, now=now)
 
 
 def early_capture_clock_offsets(
@@ -77,10 +99,10 @@ def capture_time_rejection(
 ) -> Optional[SyncCaptureTimeReason]:
     """The closed rejection reason for an implausible capture time, else ``None``.
 
-    Pre-2024 stamps are admitted for receipt-clock normalization unless the
-    early-clamp kill switch is off (then ``rejected_early``); times
-    further ahead of server now than the shared skew tolerance are
-    ``rejected_future``. Within-tolerance future times are admissible skew.
+    Pre-2024 and beyond-tolerance future stamps use receipt-clock recovery under
+    their respective admission switches. Within-tolerance times retain skew
+    normalization. Explicit ``future_skew_seconds`` callers never recover a
+    future clock: their downstream paths cannot consume a receipt anchor.
     ``future_skew_seconds`` overrides the shared tolerance for callers that
     keep a stricter pre-skew-admission contract (v1 staging rejects any
     future time because nothing downstream of it normalizes skew).
@@ -90,6 +112,12 @@ def capture_time_rejection(
     if capture_time < EARLIEST_CAPTURE_TIME and not (allow_early_clamp and early_capture_clamp_enabled()):
         return SyncCaptureTimeReason.REJECTED_EARLY
     if capture_time > effective_now + timedelta(seconds=tolerance):
+        if (
+            future_skew_seconds is None
+            and future_capture_clamp_enabled()
+            and is_implausible_future_capture_time(capture_time.timestamp(), now=effective_now.timestamp())
+        ):
+            return None
         return SyncCaptureTimeReason.REJECTED_FUTURE
     return None
 
@@ -123,7 +151,7 @@ def capture_clock_offset(max_file_end: float, *, now: Optional[float] = None) ->
 
 
 class CaptureTimeWindowError(ValueError):
-    """``parse_sync_filename_timestamp`` window violation, carrying the closed reason."""
+    """Filename capture-window violation, carrying the closed reason."""
 
     def __init__(self, reason: SyncCaptureTimeReason):
         super().__init__('invalid timestamp')

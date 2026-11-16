@@ -57,6 +57,8 @@ FIELDS = frozenset(
         'terminal_family_at',
         'wrap_up_requested_at',
         'composed_fingerprint',
+        'compose_transcript_wait_observations',
+        'record_transcription_empty',
         'recorded_merged_into',
         'sync_bridge_pending',
         'home_transcription_pending_at',

@@ -7034,6 +7034,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава са Apple, молим покушајте поново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Пријава преко Apple-а није успела. Покушајте поново или наставите са Google-ом.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преузимање firebase токена, молим покушајте поново.';
 
   @override
@@ -13411,6 +13415,9 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате Omi Pro код? Унесите га на следећем екрану.';
+
+  @override
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez penala.';
 
   @override
@@ -15405,6 +15412,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша картица је одбијена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте картицу или вратите $plan за $price месечно';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте картицу да бисте вратили $plan';
   }
@@ -15429,4 +15441,34 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Пређите на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замењује неплаћену годишњу наплату од $yearly. Обнавља се месечно. Откажите било када.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаћање је одбијено. Ваш план се није променио.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сада плаћате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Данас плаћено $price. Обнавља се месечно.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
 }

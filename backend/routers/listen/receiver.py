@@ -16,6 +16,7 @@ from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejec
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
 from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
+from contextlib import nullcontext
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -69,6 +70,7 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
+from utils.sync.capture_end import silence_seconds as capture_end_silence_seconds
 from models.message_event import (
     PhotoDescribedEvent,
     PhotoProcessingEvent,
@@ -453,10 +455,12 @@ class ListenReceiver(ReplayFilterMixin):
                 return owner
         return None
 
-    def _note_accepted_frame(self, start_sample: int, end_sample: int) -> None:
+    def _note_accepted_frame(
+        self, start_sample: int, end_sample: int, *, conversation_id: str | None = None, binding_pinned: bool = False
+    ) -> None:
         """Record ownership and pin the conversation's first-audio origin."""
         state = self.host.state
-        conversation_id = state.current_conversation_id
+        conversation_id = conversation_id if binding_pinned else state.current_conversation_id
         if state.conversation_sample_ranges is not None:
             ranges = state.conversation_sample_ranges
             # Coalesce into the previous run while the audio is contiguous and
@@ -2459,6 +2463,7 @@ class ListenReceiver(ReplayFilterMixin):
                         status='mobile_batch_admission',
                         mobile_standard_batch=self.host.mobile_standard_batch,
                         local_preview=True if getattr(self.host, 'local_preview_batch', False) else None,
+                        end_silence_seconds=capture_end_silence_seconds(),
                     )
                 )
             if not self.host.state.realtime_demand.observe(payload):
@@ -2589,6 +2594,19 @@ class ListenReceiver(ReplayFilterMixin):
                 name='speaker_sample_request',
             )
 
+    async def finish_recording_audio(self, conversation_id: str) -> bool:
+        """Join dequeued frames and the original archive before relay close.
+
+        Retirement and reservation checks never yield. Later frames use explicit
+        unlinked custody while successor persistence is delayed or fails.
+        """
+        session = getattr(self.host, 'pusher_audio_session', None)
+        boundary = getattr(session, 'record_boundary', None)
+        if boundary is None or not boundary.ready(conversation_id):
+            return False
+        await self.raw_archive.finish_recording(conversation_id)
+        return boundary.ready(conversation_id)
+
     async def receive_data(self) -> None:
         request = self.host.request
         buffer = bytearray()
@@ -2623,114 +2641,182 @@ class ListenReceiver(ReplayFilterMixin):
                     break
                 data = message.get('bytes')
                 if data is not None:
-                    source_claim = self._pending_source_frame
-                    self._pending_source_frame = None
-                    if len(data) <= 2:
-                        if data:
+                    session = getattr(self.host, 'pusher_audio_session', None)
+                    reservation = (
+                        session.audio_frame(self.host.state.current_conversation_id)
+                        if session is not None
+                        else nullcontext(None)
+                    )
+                    with reservation as frame:
+                        source_claim = self._pending_source_frame
+                        self._pending_source_frame = None
+                        if len(data) <= 2:
+                            if data:
+                                await self.raw_archive.append(
+                                    bytes(data),
+                                    (
+                                        frame.conversation_id
+                                        if frame is not None
+                                        else self.host.state.current_conversation_id
+                                    ),
+                                    time.time(),
+                                    0,
+                                )
+                            continue
+                        frame_timer.start()
+                        now = time.time()
+                        prev_audio_received = self.host.state.last_audio_received_time
+                        self.host.state.last_audio_received_time = now
+                        # A usage flush that fired while no audio was arriving moved the billing
+                        # window start past the last byte; without a floor the next flush bills
+                        # that silent gap. This byte is a resume exactly when the window start
+                        # outran the previous audio timestamp.
+                        usage_record_ts = self.host.state.last_usage_record_timestamp
+                        if usage_record_ts is not None and prev_audio_received < usage_record_ts:
+                            self.host.state.last_audio_resume_time = now
+                        if self.host.is_multi_channel:
+                            # `_handle_multi_channel_audio` marks first audio only
+                            # after the channel prefix is known-good (and an opus
+                            # frame decoded), so unknown-prefix frames leave the
+                            # session eligible for a no_audio teardown.
+                            decoded_audio_bytes += await self._handle_multi_channel_audio(data, now, source_claim)
+                            continue
+                        try:
+                            decoded: bytes = data
+                            if request.codec == 'opus':
+                                decoded = self.opus_decoder.decode(
+                                    bytes(data), frame_size=opus_decode_capacity(request.sample_rate)
+                                )
+                            elif request.codec == 'aac':
+                                decoded = self.aac_decoder.decode(bytes(data))
+                            elif request.codec == 'lc3':
+                                decoded = self.lc3_decoder.decode(bytes(data), bit_depth=16)
+                            elif request.codec == 'pcm8':
+                                decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
+                        except Exception as error:
                             await self.raw_archive.append(
-                                bytes(data), self.host.state.current_conversation_id, time.time(), 0
+                                bytes(data),
+                                (
+                                    frame.conversation_id
+                                    if frame is not None
+                                    else self.host.state.current_conversation_id
+                                ),
+                                now,
+                                0,
                             )
-                        continue
-                    frame_timer.start()
-                    now = time.time()
-                    prev_audio_received = self.host.state.last_audio_received_time
-                    self.host.state.last_audio_received_time = now
-                    # A usage flush that fired while no audio was arriving moved the billing
-                    # window start past the last byte; without a floor the next flush bills
-                    # that silent gap. This byte is a resume exactly when the window start
-                    # outran the previous audio timestamp.
-                    usage_record_ts = self.host.state.last_usage_record_timestamp
-                    if usage_record_ts is not None and prev_audio_received < usage_record_ts:
-                        self.host.state.last_audio_resume_time = now
-                    if self.host.is_multi_channel:
-                        # `_handle_multi_channel_audio` marks first audio only
-                        # after the channel prefix is known-good (and an opus
-                        # frame decoded), so unknown-prefix frames leave the
-                        # session eligible for a no_audio teardown.
-                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now, source_claim)
-                        continue
-                    try:
-                        decoded: bytes = data
-                        if request.codec == 'opus':
-                            decoded = self.opus_decoder.decode(
-                                bytes(data), frame_size=opus_decode_capacity(request.sample_rate)
+                            self._record_decode_failure(request.codec, error, len(data))
+                            continue
+                        self.decode_failure_streak = 0
+                        if not decoded:
+                            await self.raw_archive.append(
+                                bytes(data),
+                                (
+                                    frame.conversation_id
+                                    if frame is not None
+                                    else self.host.state.current_conversation_id
+                                ),
+                                now,
+                                0,
                             )
-                        elif request.codec == 'aac':
-                            decoded = self.aac_decoder.decode(bytes(data))
-                        elif request.codec == 'lc3':
-                            decoded = self.lc3_decoder.decode(bytes(data), bit_depth=16)
-                        elif request.codec == 'pcm8':
-                            decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
-                    except Exception as error:
-                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
-                        self._record_decode_failure(request.codec, error, len(data))
-                        continue
-                    self.decode_failure_streak = 0
-                    if not decoded:
-                        await self.raw_archive.append(bytes(data), self.host.state.current_conversation_id, now, 0)
-                        continue
-                    self._note_audio_activity()
-                    self._mark_first_audio(now)
-                    decoded_audio_bytes += len(decoded)
-                    telemetry_call(self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate))
-                    self._capture('capture_client_audio', decoded)
-                    if self.capture_timeline is not None:
-                        # Ring, STT and pusher share exact capture samples. The
-                        # opcode-101 projection is v2-only; flag-off wire stays unchanged.
-                        start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
-                        if shadow is not None:  # D2 edge shadow copy, fire-and-forget
-                            shadow.frame(start_sample, end_sample - start_sample, data)
-                        if not self.host.use_custom_stt and self.recovery_enabled:
-                            self._live_birth.note(start_sample, end_sample)
-                        source_map = self.host.state.source_position_map
-                        if source_map is not None:
-                            source_map.accept(
-                                parse_live_frame(source_claim, len(data)) if source_claim else None,
-                                sample_start=start_sample,
-                                sample_count=end_sample - start_sample,
-                                rate_hz=request.sample_rate,
-                                payload=bytes(data),
-                                receipt_wall_time=now,
+                            continue
+                        self._note_audio_activity()
+                        self._mark_first_audio(now)
+                        decoded_audio_bytes += len(decoded)
+                        telemetry_call(
+                            self.host, 'demand_telemetry', 'capture', len(decoded) / (2 * request.sample_rate)
+                        )
+                        self._capture('capture_client_audio', decoded)
+                        if self.capture_timeline is not None:
+                            # Ring, STT and pusher share exact capture samples. The
+                            # opcode-101 projection is v2-only; flag-off wire stays unchanged.
+                            start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                            if shadow is not None:  # D2 edge shadow copy, fire-and-forget
+                                shadow.frame(start_sample, end_sample - start_sample, data)
+                            if not self.host.use_custom_stt and self.recovery_enabled:
+                                self._live_birth.note(start_sample, end_sample)
+                            source_map = self.host.state.source_position_map
+                            if source_map is not None:
+                                source_map.accept(
+                                    parse_live_frame(source_claim, len(data)) if source_claim else None,
+                                    sample_start=start_sample,
+                                    sample_count=end_sample - start_sample,
+                                    rate_hz=request.sample_rate,
+                                    payload=bytes(data),
+                                    receipt_wall_time=now,
+                                )
+                            cancelled = await archive_preview_frame(
+                                self,
+                                bytes(data),
+                                (
+                                    frame.conversation_id
+                                    if frame is not None
+                                    else self.host.state.current_conversation_id
+                                ),
+                                self.capture_timeline.wall(start_sample),
+                                len(decoded) // 2,
+                                decoded=decoded,
+                                source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
                             )
-                        cancelled = await archive_preview_frame(
-                            self,
+                            self._note_accepted_frame(
+                                start_sample,
+                                end_sample,
+                                conversation_id=frame.conversation_id if frame is not None else None,
+                                binding_pinned=frame is not None,
+                            )
+                            self._write_ring_buffer_frame(decoded, now, start_sample)
+                            if not self.host.use_custom_stt:
+                                if not buffer:
+                                    self._stt_buffer_start_sample = start_sample
+                                buffer.extend(decoded)
+                                if cancelled:
+                                    raise asyncio.CancelledError
+                                await self._flush_stt_buffer(buffer)
+                            if self.host.audio_bytes_send is not None:
+                                if self.capture_timeline_v2 or self.capture_timeline_spans:
+                                    self.host.audio_bytes_send(
+                                        decoded,
+                                        now,
+                                        conversation_id=(
+                                            frame.conversation_id
+                                            if frame is not None
+                                            else self.host.state.current_conversation_id
+                                        ),
+                                        start_wall=self.capture_timeline.wall(start_sample),
+                                        **({'binding_pinned': True} if frame is not None else {}),
+                                    )
+                                else:
+                                    self.host.audio_bytes_send(
+                                        decoded,
+                                        now,
+                                        **(
+                                            {'conversation_id': frame.conversation_id, 'binding_pinned': True}
+                                            if frame is not None
+                                            else {}
+                                        ),
+                                    )
+                            continue
+                        await self.raw_archive.append(
                             bytes(data),
-                            self.host.state.current_conversation_id,
-                            self.capture_timeline.wall(start_sample),
+                            (frame.conversation_id if frame is not None else self.host.state.current_conversation_id),
+                            now,
                             len(decoded) // 2,
                             decoded=decoded,
-                            source_frame=parse_live_frame(source_claim, len(data)) if source_claim else None,
                         )
-                        self._note_accepted_frame(start_sample, end_sample)
-                        self._write_ring_buffer_frame(decoded, now, start_sample)
+                        if self.host.state.audio_ring_buffer is not None:
+                            self.host.state.audio_ring_buffer.write(decoded, now)
                         if not self.host.use_custom_stt:
-                            if not buffer:
-                                self._stt_buffer_start_sample = start_sample
                             buffer.extend(decoded)
-                            if cancelled:
-                                raise asyncio.CancelledError
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
-                            if self.capture_timeline_v2 or self.capture_timeline_spans:
-                                self.host.audio_bytes_send(
-                                    decoded,
-                                    now,
-                                    conversation_id=self.host.state.current_conversation_id,
-                                    start_wall=self.capture_timeline.wall(start_sample),
-                                )
-                            else:
-                                self.host.audio_bytes_send(decoded, now)
-                        continue
-                    await self.raw_archive.append(
-                        bytes(data), self.host.state.current_conversation_id, now, len(decoded) // 2, decoded=decoded
-                    )
-                    if self.host.state.audio_ring_buffer is not None:
-                        self.host.state.audio_ring_buffer.write(decoded, now)
-                    if not self.host.use_custom_stt:
-                        buffer.extend(decoded)
-                        await self._flush_stt_buffer(buffer)
-                    if self.host.audio_bytes_send is not None:
-                        self.host.audio_bytes_send(decoded, now)
+                            self.host.audio_bytes_send(
+                                decoded,
+                                now,
+                                **(
+                                    {'conversation_id': frame.conversation_id, 'binding_pinned': True}
+                                    if frame is not None
+                                    else {}
+                                ),
+                            )
                 elif message.get('text') is not None:
                     await self._handle_text(message['text'])
         except WebSocketDisconnect as error:

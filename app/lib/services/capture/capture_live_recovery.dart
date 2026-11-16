@@ -278,4 +278,32 @@ extension _CaptureLiveRecovery on CaptureController {
       }
     }
   }
+
+  /// A mute that outlived the app process: the audio start correctly refused
+  /// to subscribe, so it never reached its own pause mark. Commit the session
+  /// as paused instead of failing it closed to idle, which hid Resume, dropped
+  /// the button subscription and left double-press nothing to resume.
+  void _commitMutedStartAsPaused() {
+    if (!isPaused || _recordingDevice == null) return;
+    if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) return;
+    final phase = _capture.stagedReadModel.phase;
+    if (phase != CapturePhase.pendantPaused && phase != CapturePhase.pendantBatchPaused) return;
+    updateRecordingState(RecordingState.pause);
+    unawaited(BatteryWidgetService().updateMuteState(true));
+    _publishCaptureChange();
+  }
+
+  /// Resume (app, quick action or pendant double-press). Muted with no paused
+  /// session, Resume only clears the mute, so also start the idle pendant.
+  Future<void> _resumeStartingIdlePendant(CaptureEvent event) async {
+    final idleMuted = isPaused && _recordingDevice != null && _capture.readModel.phase == CapturePhase.idle;
+    final outcome = await _dispatchWithResumeFence(event);
+    outcome.throwIfFailed();
+    final device = _recordingDevice;
+    if (!idleMuted || _captureControllerDisposed || device == null || isPaused) return;
+    if (_liveRecovery.deviceStoppedByCaller || _pendantSuspension != null) return;
+    final staged = _capture.stagedReadModel;
+    if (staged.phase != CapturePhase.idle || staged.phoneOwnsCapture || staged.callActive) return;
+    await streamDeviceRecording(device: device);
+  }
 }

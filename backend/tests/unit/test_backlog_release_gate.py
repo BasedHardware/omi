@@ -9,6 +9,8 @@ from config.batch_pipeline import Priority
 from config.rate_card import recording_units_per_hour
 from database import backlog_release_budget as budget
 from utils import backlog_release as release
+from utils.batch_pipeline import cap_hold_admission as admission, intake
+from utils.sync import cap_hold
 
 RATE = float(recording_units_per_hour('batch'))
 NOW = 1_793_664_000.0  # a fixed UTC moment; only the day string is derived from it
@@ -192,8 +194,6 @@ def test_budget_rejects_a_bad_cost_without_calling_redis():
 async def test_held_audio_takes_normal_priority_only_when_granted_and_never_the_vendor_table(monkeypatch, tmp_path):
     from pathlib import Path
     from types import SimpleNamespace
-    from utils.batch_pipeline import cap_hold_admission as admission, intake
-    from utils.sync import cap_hold
 
     seen = []
 
