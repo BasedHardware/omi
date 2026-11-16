@@ -252,27 +252,43 @@ def test_busy_shard_is_read_only_and_falls_back_to_another_shard(lane):
     assert stores[0].run(lambda tx: tx.get('jobs', owners[0]))['state'] == 'ready'
 
 
-def test_expired_pull_holder_cannot_write_after_takeover(lane, monkeypatch):
+@pytest.mark.parametrize('invalidation', ['takeover', 'expiry'])
+def test_invalidated_pull_holder_cannot_write(lane, monkeypatch, invalidation):
     stores, owners = lane
     queue = Scheduler(stores[0])
     queue.enqueue(item('head', owners[0]), 0)
     shard = scheduler_control_key(owner_key(owners[0]))
     original_run = stores[0].run
     calls = 0
+    invalidated_claim = None
 
     def run(body):
-        nonlocal calls
+        nonlocal calls, invalidated_claim
         calls += 1
         if calls == 1:
-            stores[1].run(lambda tx: tx.put('pull_claims', shard, {'token': 'replacement', 'expires_at': 100}))
+
+            def invalidate(tx):
+                nonlocal invalidated_claim
+                claim = tx.get('pull_claims', shard)
+                assert claim['token'] and claim['expires_at'] > 1
+                # Expire the acquired claim without changing its token, or replace its holder.
+                invalidated_claim = dict(claim)
+                if invalidation == 'expiry':
+                    invalidated_claim['expires_at'] = 0
+                else:
+                    invalidated_claim['token'] = 'replacement'
+                tx.put('pull_claims', shard, invalidated_claim)
+
+            stores[1].run(invalidate)
         return original_run(body)
 
     monkeypatch.setattr(stores[0], 'run', run)
     before = original_run(lambda tx: tx.get('control', shard))
+    job_before = original_run(lambda tx: tx.get('jobs', 'head'))
     assert queue._pull_shard(1, shard, Priority.FRESH, 7200, None) == (None, 'busy')
     assert original_run(lambda tx: tx.get('control', shard)) == before
-    assert original_run(lambda tx: tx.get('jobs', 'head'))['state'] == 'ready'
-    assert original_run(lambda tx: tx.get('pull_claims', shard))['token'] == 'replacement'
+    assert original_run(lambda tx: tx.get('jobs', 'head')) == job_before
+    assert original_run(lambda tx: tx.get('pull_claims', shard)) == invalidated_claim
 
 
 def test_expired_claim_is_recoverable_and_kill_switch_uses_legacy_path(lane, monkeypatch):
