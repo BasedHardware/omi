@@ -93,6 +93,9 @@ class ProjectionSession:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, receipt)
             transaction.update(
                 self.result_ref,
                 {
@@ -124,6 +127,9 @@ class ProjectionSession:
                 transaction.update(self.result_ref, changes)
                 return sibling_hold_changed
             summary['state'] = 'ready'
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, summary)
             changes.update(
                 projection=summary,
                 projection_state='ready',
@@ -183,6 +189,7 @@ class ProjectionSession:
             ids.append(self.job['conversation_id'])
         if self.job.get('capture_source_conversation_id'):
             ids.append(self.job['capture_source_conversation_id'])
+        ids.extend(self.job.get('source_conversation_ids') or [])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
@@ -290,6 +297,9 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
+                and (self.entry.get('source_reuse_version') == 1 or self.entry.get('source_alias_version') == 1)
+                and bool(self.job.get('source_reuse_key'))
+                or self.entry.get('protocol_version') == 2
                 and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2
                 and checkpoint(self.entry)
@@ -332,6 +342,9 @@ class ProjectionSession:
             or self.ledger.get('job_id') != self.binding.job_id
         ):
             raise ProjectionBlocked('durable intake ledger binding required')
+        from database.batch_pipeline_source_reuse import prepare as prepare_source
+
+        prepare_source(self, transaction)
         receipt = self.receipt()
         if not (receipt and self.ledger.get('status') == 'completed') and not batch_projection_ledger_owner_matches(
             self.ledger,
@@ -424,6 +437,16 @@ class ProjectionSession:
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        from database.batch_pipeline_source_reuse import claim
+
+        claim(
+            self,
+            transaction,
+            {
+                **receipt,
+                'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
+            },
+        )
         if len(outputs) > 1:
             receipt['size_rollover_outputs'] = [
                 {'conversation_id': row['id'], 'created': row_created} for row, row_created in outputs

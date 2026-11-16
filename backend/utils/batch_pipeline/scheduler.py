@@ -324,6 +324,8 @@ class Scheduler:
 
     @staticmethod
     def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
+        if item.source_alias_of:
+            raise ValueError('source aliases cannot enter paid queues')
         if item.shadow:
             raise ValueError('shadow jobs may only use idle offers')
         previous = tx.get('jobs', item.segment_id)
@@ -1198,6 +1200,8 @@ class Scheduler:
         The artifact-missing store owns the content/privacy/staging checks. No
         paid recovery intent or sibling receipt is reset by this queue mutation.
         """
+        if job.get('source_alias_of') or job.get('source_alias'):
+            raise ValueError('source aliases cannot enter paid queues')
         marker = job.get('artifact_disposition') or {}
         if (
             job.get('state') != 'quarantined'

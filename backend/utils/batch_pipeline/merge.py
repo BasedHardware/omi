@@ -477,6 +477,9 @@ class OrderedMerge:
                 'projection_state': 'pending',
                 'fresh_capture': job.get('fresh_capture') is True,
             }
+            for field in ('source_reuse_version', 'source_alias_version'):
+                if field in job:
+                    entry[field] = job[field]
             if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             if bypass:
