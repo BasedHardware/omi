@@ -99,15 +99,21 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
           PlatformManager.instance.analytics.subscriptionCancelAbandoned(step: 1, reason: _flow.reason);
         }
       },
-      body: ListView.separated(
+      body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-        itemCount: _reasons.length,
-        separatorBuilder: (_, __) => const SizedBox(height: OmiSpacing.xs),
-        itemBuilder: (_, i) => LeaveFlowReasonTile(
-          icon: _reasons[i].icon,
-          label: _label(_reasons[i].key),
-          selected: reason == _reasons[i].key,
-          onTap: () => setState(() => _flow.reason = _reasons[i].key),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, r) in _reasons.indexed) ...[
+              if (i > 0) const SizedBox(height: OmiSpacing.xs),
+              LeaveFlowReasonTile(
+                icon: r.icon,
+                label: _label(r.key),
+                selected: reason == r.key,
+                onTap: () => setState(() => _flow.reason = r.key),
+              ),
+            ],
+          ],
         ),
       ),
       actions: OmiButton(
@@ -157,10 +163,7 @@ class _CancelFeedbackStep extends StatelessWidget {
       stepCount: _stepCount,
       title: title,
       subtitle: subtitle,
-      body: Align(
-        alignment: Alignment.topCenter,
-        child: SingleChildScrollView(child: LeaveFlowTextField(controller: flow.details, maxLength: 300)),
-      ),
+      body: LeaveFlowTextField(controller: flow.details, maxLength: 300),
       actions: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -293,9 +296,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
             color: OmiColors.warning,
           ),
           const SizedBox(height: OmiSpacing.md),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.infinity, text: context.l10n.cancelConsequenceNoAccess),
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.bolt, text: context.l10n.cancelConsequenceBattery),
