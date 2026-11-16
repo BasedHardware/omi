@@ -741,10 +741,11 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
+    # Apply the durable v3 lock after generated-title cleanup and salience projection.
     if getattr(conversation, 'title_locked', False):
         structured.title = conversation.structured.title
         structured.emoji = conversation.structured.emoji
-    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(

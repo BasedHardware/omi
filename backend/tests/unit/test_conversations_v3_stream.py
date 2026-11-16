@@ -200,3 +200,26 @@ async def test_on_open_reconcile_timeout_streams_stored_row(monkeypatch):
     monkeypatch.setattr(summary, 'prepare', prepare)
     response = await routes.conversation_summary_stream('c', 'u')
     assert response.status_code == 200 and response.media_type == 'text/event-stream'
+
+
+@pytest.mark.parametrize('locked', [True, False])
+def test_persisted_title_lock_wins_after_generated_title_cleanup(monkeypatch, locked):
+    from models.conversation import Conversation
+
+    row = Conversation(
+        id='c',
+        created_at=AT,
+        started_at=AT,
+        finished_at=AT,
+        title_locked=locked,
+        v3_derived=True,
+        structured=Structured(title='Original', emoji='🌳'),
+    )
+
+    def cleaned(*args, **kwargs):
+        return Structured(title='Cleaned generated title', emoji='🔧')
+
+    monkeypatch.setattr(process, 'finish_home_salience', cleaned)
+    result = process._get_conversation_obj('synthetic', Structured(title='Draft'), row)
+    assert result.structured.title == ('Original' if locked else 'Cleaned generated title')
+    assert result.structured.emoji == ('🌳' if locked else '🔧')

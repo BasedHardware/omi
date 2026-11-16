@@ -6,7 +6,10 @@ configuration change. No app pages, providers or widgets changed.
 
 ## Item disposition and discriminatory regressions
 
-Audio fixes: b79fb522f80, 03367f2a2ab. Other fixes: 1a70d245e29.
+Audio fixes: b79fb522f80, 03367f2a2ab. Other fixes: 1a70d245e29. Verification: 47e0450a547.
+The follow-on compatibility commit relocates additive declarations and applies
+the durable title lock after cleanup; it also updates the outside-query witness
+for the per-request admission argument.
 
 | Item | Result | Regression / evidence |
 | --- | --- | --- |
@@ -104,3 +107,38 @@ fixtures and Python fallback tests are not released-device acceptance.
 Audio now has a backend-only exact-window path; no alternative audio design is
 pending David. The first v3 mobile release build still requires the lead's value.
 Backfill remains off and cannot qualify the 30-day deletion criterion yet.
+
+
+## Advanced-main scope and integration
+
+Target observed during metadata validation: 1ed16cae960589255dfc70f63db31e95cc587a4c.
+No Git merge or history rewrite was performed. Candidate field declarations and
+flag records were relocated away from same-line upstream insertions. The v3
+locked-title guard now runs after salience/cleanup, so the upstream title block
+can apply unchanged before it. A parameterized regression checks both locked
+and unlocked titles when cleanup returns a replacement structured value.
+
+Scope panel: scope-20261116t105125-2ca9, candidate 47e0450a547. The primary agent
+supplied an invalid duration (`--timeout 240`, rather than `4m`); the collector
+marked errors and deleted its isolated checkout while members were still active.
+Existing Luna and DeepSeek runs were collected with `agentctl await ... --timeout
+4m --content`. Both reported their reduced inspection coverage. The third member
+was cancelled via agentctl after its deadline; no member remains running.
+This is a limited scope, not an independent full-feature approval. No PR exists,
+so `omi-panel review --pr` was not run. Scope dossiers have risks, no F-numbered
+findings; the tool's finding-triage command does not accept scope risks.
+
+Disposition of the returned scope risks: accept preservation of the upstream
+membership serializer, title-quality state, identity observation, word units and
+profile scheduling by avoiding wholesale file replacement; accept title-lock
+ordering and its regression; retain short/media/minimum guards and existing
+model routing; preserve all flag values/dates and validate the registry. A
+suggestion to create an integration branch/merge was rejected because the user
+requires new commits on this branch and prohibits merging. Suggestions that a
+missing Section type or content-word write allowlist might fail were questions,
+not verified defects, and no speculative production changes were made.
+
+Synthetic integration and branch execution are separate evidence: metadata
+preflight tests whether the candidate combines with current origin/main; the
+component tests execute this branch. The lead still owns combined Q12/mobile
+runtime qualification and exact-head PR CI.
