@@ -918,6 +918,22 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     write_data['data_protection_level'] = level
 
 
+def _batch_identity_membership_current(uid, incoming, existing):
+    from utils.conversations.speaker_resolution_inputs import transcript_membership
+
+    resolution = incoming.get('speaker_resolution') or {}
+    expected = resolution.get('input_membership_sha256')
+    if not expected:
+        return True
+    current = _decode_transcript_segments_strict(
+        uid,
+        existing.get('transcript_segments', []),
+        bool(existing.get('transcript_segments_compressed')),
+        require_decryption=True,
+    )
+    return expected == transcript_membership(current)
+
+
 def _stage_notes_identity(transaction, user_ref, write_data, existing):
     return stage_notes_identity(
         transaction,
@@ -1501,6 +1517,10 @@ def persist_processing_result_with_lifecycle(
         if existing.get('sync_content_revision') is not None and (
             write_data.get('sync_content_revision') != existing['sync_content_revision']
         ):
+            stale_sync_revision = True
+            return False
+
+        if not _batch_identity_membership_current(uid, write_data, existing):
             stale_sync_revision = True
             return False
 

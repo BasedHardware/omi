@@ -1203,6 +1203,11 @@
     "VAD_GATE_MODE": {
       "seeded": "2026-10-25"
     },
+    "BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED": {
+      "owner": "q12-speaker-evidence",
+      "review_by": "2026-11-30",
+      "registry": "config/feature-flags.yaml"
+    },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
       "review_by": "2026-11-20"

@@ -104,6 +104,7 @@ class FakeDiarizer:
 
 @pytest.fixture
 def env(monkeypatch):
+    monkeypatch.setenv('BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED', 'false')
     from utils.stt.owner_profile import recovery_db
 
     # This fixture supplies no enrolled owner audio. Keep the repair-state

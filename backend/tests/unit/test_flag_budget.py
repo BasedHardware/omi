@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED',
     'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED',
     'HOME_SETTLED_EMPTY_WIRE_ENABLED',
     'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',
@@ -290,6 +291,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         elif name == 'BATCH_PIPELINE_FRESH_GUARD_ENABLED':
             assert entry['owner'] == 'Goal: Pipeline'
             assert entry['review_by'] == '2026-12-13'
+        elif name == 'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED':
+            assert entry['owner'] == flag['owner'] == 'q12-speaker-evidence'
+            assert entry['review_by'] == '2026-11-30'
         elif name == 'PROJECTION_PRIVACY_REFUSAL_RESUME':
             assert entry['owner'] == 'omi-pipeline / refusal-resume'
             assert entry['review_by'] == '2026-12-06'

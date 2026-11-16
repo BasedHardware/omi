@@ -2674,6 +2674,14 @@ def process_conversation(
         )
 
     def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # Keep current-revision observation inside the telemetry boundary:
+        # importing or emitting optional metrics must not interrupt persistence.
+        try:
+            from database.owner_identity_availability import observe_safely
+
+            observe_safely(uid, completed.id)
+        except Exception:
+            logger.warning('event=owner_identity_availability outcome=observation_unavailable')
         # One observation per conversation, on every successful persist. The
         # completed stores return through report_persistence, so a new
         # early return that reports a
