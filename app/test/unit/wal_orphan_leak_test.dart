@@ -32,6 +32,8 @@ class _UndeletableAudio implements File {
   @override
   Future<bool> exists() => real.exists();
   @override
+  Future<String> readAsString({Encoding encoding = utf8}) => real.readAsString(encoding: encoding);
+  @override
   Future<File> delete({bool recursive = false}) => throw const FileSystemException('audio delete denied');
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -533,6 +535,28 @@ void main() {
     await WalWriteIntent.retire(documents, old);
     expect(await WalWriteIntent.exists(documents, replacement.filePath!), isTrue);
     expect((await WalFileManager.loadWals()).single.filePath, replacement.filePath);
+  });
+
+  test('deleting an obsolete row preserves a newer unregistered file transaction', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_new_transaction.bin');
+    await WalWriteIntent.write(documents, old, [1, 2]);
+    await WalFileManager.saveWals([old]);
+    await File('${documents.path}/${old.filePath}').delete();
+    await WalWriteIntent.retireFile(documents, old.filePath!);
+    final replacement = Wal.fromJson(old.toJson())..totalFrames = 2;
+    await WalWriteIntent.write(documents, replacement, [3, 4]);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: WalFileManager.saveWals);
+    sync.testWals = [old];
+    await sync.deleteWal(old);
+    expect(await File('${documents.path}/${old.filePath}').readAsBytes(), [3, 4]);
+    expect(await WalWriteIntent.exists(documents, old.filePath!), isTrue);
+    expect((await WalFileManager.loadWals()).single.fileWriteId, replacement.fileWriteId);
   });
 
   test('a stale main row cannot retire the intent of replacement bytes at the same filename', () async {

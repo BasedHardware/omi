@@ -94,22 +94,34 @@ abstract final class WalWriteIntent {
         final audio = File('${documents.path}/$name');
         final type = await FileSystemEntity.type(audio.path, followLinks: false);
         if (!stillOwned()) return false;
+        final intent = File('${_directory(documents).path}/$name.json');
+        Map<String, dynamic>? record;
+        if (await intent.exists()) {
+          final decoded = jsonDecode(await intent.readAsString());
+          if (decoded is! Map<String, dynamic> ||
+              decoded['transaction_id'] is! String ||
+              (decoded['transaction_id'] as String).isEmpty ||
+              decoded['wal'] is! Map ||
+              decoded['wal']['file_path'] != name) {
+            return false;
+          }
+          record = decoded;
+          // The old row owns neither these newer bytes nor their recovery
+          // reference. Retire only that obsolete row, leaving the new writer.
+          if (record['transaction_id'] != transactionId) return stillOwned();
+        }
         final survivor = sharedWith();
         if (survivor != null) {
-          final intent = File('${_directory(documents).path}/$name.json');
-          if (await intent.exists()) {
-            final record = jsonDecode(await intent.readAsString());
-            if (record is Map<String, dynamic> && transactionId != null && record['transaction_id'] == transactionId) {
-              // Transfer the recovery reference, never resurrect the deleted
-              // row. A new identity protects it from that row's delayed save.
-              survivor.fileWriteId = const Uuid().v4();
-              record['transaction_id'] = survivor.fileWriteId;
-              record['wal'] = survivor.toJson();
-              final tmp = File('${intent.path}.tmp');
-              await tmp.writeAsString(jsonEncode(record), flush: true);
-              await tmp.rename(intent.path);
-              markPending(survivor);
-            }
+          if (record != null) {
+            // Transfer the recovery reference, never resurrect the deleted
+            // row. A new identity protects it from that row's delayed save.
+            survivor.fileWriteId = const Uuid().v4();
+            record['transaction_id'] = survivor.fileWriteId;
+            record['wal'] = survivor.toJson();
+            final tmp = File('${intent.path}.tmp');
+            await tmp.writeAsString(jsonEncode(record), flush: true);
+            await tmp.rename(intent.path);
+            markPending(survivor);
           }
           return stillOwned();
         }
@@ -120,7 +132,6 @@ abstract final class WalWriteIntent {
         }
         final sidecar = File(sidecarPath);
         if (await sidecar.exists()) await sidecar.delete();
-        final intent = File('${_directory(documents).path}/$name.json');
         if (await intent.exists()) await intent.delete();
         return stillOwned();
       });

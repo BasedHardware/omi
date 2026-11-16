@@ -67,7 +67,7 @@ Paths below are in `app/lib/` unless specified otherwise.
 
 `.wal-pending/<exact-audio-name>.json` is fsynced and atomically renamed before
 creating audio. It stores the normal WAL row plus expected byte count, hash and a unique transaction ID. The same ID is persisted as optional `file_write_id` in the index.
-Name reservations include interrupted metadata temporaries. Audio creation and deletion share a file-mutation lock; delayed cleanup captures the filename and transaction ID before awaiting disk persistence and cannot retire a newer reuse of the name. A stale index row cannot confirm replacement bytes; replay replaces its old disk token and marks it dirty for a fresh commit. Recovery visits
+Name reservations include interrupted metadata temporaries. Audio creation and deletion share a file-mutation lock; delayed cleanup captures the filename and transaction ID before awaiting disk persistence and cannot retire or delete a newer reuse of the name, even before its row registers. A stale index row cannot confirm replacement bytes; replay replaces its old disk token and marks it dirty for a fresh commit. Recovery visits
 only `.wal-pending`, verifies the complete bytes and preserves row metadata;
 it does not infer owner, capture time or proof from an audio filename.
 
