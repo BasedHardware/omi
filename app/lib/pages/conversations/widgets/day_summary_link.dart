@@ -1,3 +1,6 @@
+// The v3 Home day header: a finished day's label with a chevron that opens (or first creates) that day's
+// summary; Today has none. Failure copy matches the recap recovery action.
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/daily_summary_creation.dart';

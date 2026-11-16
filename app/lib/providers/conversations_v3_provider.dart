@@ -1,3 +1,6 @@
+// The per-user recordings-and-conversations (v3) switch and the live conversation, read from
+// GET /v1/conversations/live; it decides between the v3 Home and today's episode Home.
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

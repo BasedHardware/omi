@@ -1,3 +1,6 @@
+// The summary of a live or unsummarised v3 conversation: the pen and "Writing your summary…" over a
+// skeleton while it is written, then the sections streamed in; polls on a 409 and offers Try Again on failure.
+
 import 'dart:async';
 
 import 'package:clock/clock.dart';
