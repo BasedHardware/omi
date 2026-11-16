@@ -3,7 +3,7 @@
 import math
 import os
 
-from config.refactor_modes import default_on
+from config.refactor_modes import default_off
 
 DEADLINE_SECONDS = 7200.0
 MAX_DURATION_SECONDS = 7200.0
@@ -13,7 +13,7 @@ RETRY_PAGE_SIZE = 100
 
 
 def enabled() -> bool:
-    return default_on('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED')
+    return default_off('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED')
 
 
 def share_percent() -> int:

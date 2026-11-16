@@ -2,9 +2,10 @@
 
 Source contract: Pipeline accepted Quality's source change in the workspace
 quality record `data/run-2026-11-15-quality-12h/pipeline-protected-share-spec.md`.
-This is source qualification only; Pipeline review and Release's GPU worker
-roll remain required. It does not qualify allowance parking or activate the
-provider backlog. R7 and `BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED=false`
+The source lands default-off under the lead's 22:17Z ruling, item 7. Pipeline
+review and a separate lead activation ruling with synthetic-load evidence
+remain required; activation does not ride the allowance-parking roll. It does
+not qualify allowance parking or activate the provider backlog. R7 and `BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED=false`
 remain in force.
 
 See the [scheduler contract](../../listen_pusher_pipeline.mdx#protected-capture-share).
@@ -62,8 +63,12 @@ unchanged.
 
 Four additive Firestore composites (ready/retry, dev/prod) are declared through
 `database/batch_pipeline_indexes.py`, included by the index registry and
-regenerated into `firestore.indexes.json`. Release must establish READY before
-the worker roll. The PostgreSQL Store adapter has matching query/lock semantics
+regenerated into `firestore.indexes.json`. Release must establish all four
+composites READY before enabling on ANY scheduler/recovery role: backend
+Serving maintenance/recover, CPU serving and GPU workers. The backend
+maintenance reconcile tick also calls Scheduler.recover, so a backend deploy
+must retain the default-off switch until these preconditions are met. The
+PostgreSQL Store adapter has matching query/lock semantics
 and additive migration `0009_protected_share.sql`; no PostgreSQL primary
 cutover or migration execution is included.
 
@@ -82,12 +87,16 @@ Fixed-vocabulary telemetry:
   billing's separate index-entry charges; includes transaction retries. The single range and
   LIMIT bound each query's traversal independently of old stock.
 
-Rollback: set `BATCH_PIPELINE_PROTECTED_SHARE_ENABLED=off` (also false/0/no).
-The default is ON; `BATCH_PIPELINE_PROTECTED_SHARE_PERCENT` defaults to 25,
-accepts integers 1–50, and uses 25 for malformed/out-of-range input. Off restores
+Opt-in: `BATCH_PIPELINE_PROTECTED_SHARE_ENABLED` defaults OFF; only explicit
+true/1/on/yes enables (case/whitespace normalized). Unset, empty, invalid and
+false/0/off/no retain legacy selection, retry discovery without any protected
+queries, and the original per-call Serving factory.
+`BATCH_PIPELINE_PROTECTED_SHARE_PERCENT` defaults to 25,
+accepts integers 1–50, and uses 25 for malformed/out-of-range input. Rollback
+unsets the opt-in or sets it off on every enabled role, restoring
 the old FRESH/RECENT/DEEP selection and original due-retry page, without new
 queries, restamps, queue moves or a drain migration. It does not undo leases
-already issued. Release owns runtime rollout and readback; this change changes
+already issued. Release owns runtime activation and readback; this change changes
 no serving configuration, capacity, entitlements, held-audio lifetime or provider
 backlog controls.
 
@@ -95,3 +104,27 @@ No end-to-end two-hour guarantee is claimed: seal, commit, projection,
 composition, policy holds and actual worker capacity require separate outcome
 evidence. Validate a new-capture cohort and residual service/read budgets after
 one full new-state lookback before attributing any latency improvement.
+
+Activation plan (review_by **2026-11-23**, also registered in the flag budget):
+
+1. Ship source with the switch unset/off on backend Serving maintenance/recover,
+   CPU serving and GPU workers. Qualify isolated synthetic mixed load, clock
+   boundaries, retry discovery and read/claim budgets. No production activation
+   follows from merging source or the allowance-parking roll.
+2. Release may opt in only after a separate lead ruling accepting synthetic-load
+   evidence and READY readback for all four composites (and the additive
+   migration before any PostgreSQL adapter is enabled). Canary one GPU worker
+   plus one CPU serving/maintenance process; these are process cohorts, with no
+   account routing implied. Other processes remain legacy and mixed-version safe.
+3. After one full clean one-hour new-state window, Release may enable backend
+   Serving maintenance/recover, then remaining CPU serving and GPU workers in
+   bounded process groups, with the same clean window per expansion. Keep FRESH
+   service/age free of regression, both runnable residual RECENT/DEEP classes
+   progressing and residual service >=50% of non-FRESH opportunities, no
+   held/privacy protected grants, and discovery reads/extra claims within the
+   declared bounds. Underfill is investigated before expansion.
+4. Release records role values, index readiness and aggregate readback; Pipeline
+   reviews share tuning and the clean metrics. No automatic expansion occurs
+   at the review date: if the separate ruling or qualification is absent, retain
+   OFF and review/extend with the lead. Roll back by unsetting/turning off the
+   opt-in everywhere enabled; already-issued leases retain their authority.

@@ -246,12 +246,12 @@
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_ENABLED": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-12-15",
+      "review_by": "2026-11-23",
       "registry": "config/feature-flags.yaml"
     },
     "BATCH_PIPELINE_PROTECTED_SHARE_PERCENT": {
       "owner": "Pipeline / SCA-1894",
-      "review_by": "2026-12-15"
+      "review_by": "2026-11-23"
     },
     "BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED": {
       "owner": "provider-stt drain",

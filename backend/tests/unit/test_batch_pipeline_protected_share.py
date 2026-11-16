@@ -84,12 +84,15 @@ def test_missing_invalid_and_receipt_clocks_never_qualify(field, value):
         assert not protected.eligible(row, NOW)
 
 
-@pytest.mark.parametrize('value', ['off', 'false', '0', 'no'])
-def test_kill_switch_and_share_setting_are_read_at_call_time(monkeypatch, value):
-    monkeypatch.delenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', raising=False)
-    assert protected.enabled()
-    monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', value)
-    assert not protected.enabled()
+@pytest.mark.parametrize(
+    'value', [None, '', 'invalid', 'tru', '2', 'off', 'false', '0', 'no', 'true', '1', 'on', 'yes', ' YES ']
+)
+def test_opt_in_and_share_setting_are_read_at_call_time(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', value)
+    assert protected.enabled() is (value is not None and value.strip().lower() in {'true', '1', 'on', 'yes'})
     for raw, expected in [('1', 1), ('50', 50), ('0', 25), ('51', 25), ('bad', 25)]:
         monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_PERCENT', raw)
         assert protected.share_percent() == expected
@@ -268,14 +271,41 @@ def populate_legacy(queue):
     add(queue, 'fresh', owner='fresh', capture=NOW - 30, priority=Priority.FRESH)
 
 
-def test_off_restores_exact_legacy_priority_fifo_and_retry_page(monkeypatch):
-    monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', 'off')
+@pytest.mark.parametrize('value', [None, '', 'invalid', 'off', 'false', '0', 'no'])
+def test_unset_invalid_and_off_preserve_legacy_selection_recovery_and_serving_factory(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', value)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail('legacy mode issued a protected query before index readiness')
+
+    monkeypatch.setattr(MemoryTransaction, 'protected_ready', forbidden)
     store = OrderedDueStore()
-    queue = Scheduler(store)
-    populate_legacy(queue)
-    assert [lease.item.segment_id for lease in queue.pull(NOW, 4)] == ['fresh', 'recent-old', 'recent-new', 'deep']
-    queue.recover(NOW + 10, limit=7)
-    assert store.pages == [('leased', 7), ('retry', 7)]
+    monkeypatch.setattr(store, 'protected_retries', forbidden)
+    service = Serving(store)
+    first, second = service.queue(), service.queue()
+    assert first is not second
+    assert first.store is second.store is store
+    assert first.pool == second.pool == 'batch'
+    assert service.queue('live') is not service.queue('live')
+    populate_legacy(first)
+    leases = first.pull(NOW, 4)
+    assert [lease.item.segment_id for lease in leases] == ['fresh', 'recent-old', 'recent-new', 'deep']
+    assert first.fail('recent-new', leases[2].token, NOW)
+    # Keep the real maintenance/reconcile -> queue -> recover path. Only the
+    # unrelated expiry/allowance/merge sweeps are stubbed, not Scheduler IO.
+    monkeypatch.setattr('utils.batch_pipeline.serving.time.time', lambda: NOW + 100)
+    monkeypatch.setattr(service.held_dead_letter, 'tick', lambda now: None)
+    monkeypatch.setattr(service.projection_held_dead_letter, 'tick', lambda now: None)
+    monkeypatch.setattr(service.ready_discovery, 'page', lambda: None)
+    monkeypatch.setattr(service, '_drain_ready_page', lambda: None)
+    monkeypatch.setattr(service.merge, 'reoffer_marked', lambda drain: None)
+    service.allowance_hold_due = float('inf')
+    service.reconcile(periodic=True)
+    assert store.pages == [('leased', 100), ('retry', 100)]
+    assert store.rows['jobs', 'recent-new']['state'] == 'ready'
     assert not any('protected_after' in row for (table, _), row in store.rows.items() if table == 'queues')
 
 

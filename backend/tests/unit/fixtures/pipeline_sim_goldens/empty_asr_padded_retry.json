@@ -13,64 +13,6 @@
     },
     "conversation_id": "conv-1",
     "duration_seconds": 4.86,
-    "fresh_capture": false,
-    "late_capture": false,
-    "merge_pending": false,
-    "owner_id": "owner-1",
-    "priority": 1,
-    "privacy_generation": 0,
-    "protocol_version": 1,
-    "requires_compute_admission": true,
-    "result": {
-     "outcome": "success"
-    },
-    "state": "committed",
-    "unit_kind": "capture_span"
-   },
-   "final_result": {
-    "conversation_id": "conv-1",
-    "fresh_capture": false,
-    "late_capture": false,
-    "log_sequence": 1,
-    "owner_id": "owner-1",
-    "previous_segment_id": null,
-    "privacy_generation": 0,
-    "projection_state": "pending",
-    "protocol_version": 1,
-    "result": {
-     "outcome": "success"
-    }
-   },
-   "job_transitions": [
-    "<1s ready",
-    "<1s leased",
-    "<5s result_ready",
-    "<5s committed"
-   ],
-   "owner": "owner-1",
-   "paid_calls": 0,
-   "recover_task_responses": [],
-   "result_artifact": {
-    "audio_seconds": 4.86,
-    "speech_seconds": 1.0,
-    "words": 1,
-    "words_digest": 11844727155393,
-    "words_provider": "parakeet"
-   },
-   "result_transitions": [
-    "<5s pending outcome:success"
-   ]
-  },
-  "seg-2": {
-   "content_kind": "near_silence",
-   "duration_seconds": 6.33,
-   "final_job": {
-    "attempt": 1,
-    "compute_decision": {
-     "outcome": "unattempted"
-    },
-    "conversation_id": "conv-2",
-    "duration_seconds": 6.33,
     "failure": "worker_failed",
     "fresh_capture": false,
     "late_capture": false,
@@ -115,7 +57,7 @@
      "stage": "assemble_words"
     },
     "worker_vad_receipt": {
-     "captured_samples": 101280,
+     "captured_samples": 77760,
      "sample_rate_hz": 16000,
      "speech_samples": 16000,
      "state": "measured",
@@ -138,6 +80,64 @@
    ],
    "result_artifact": null,
    "result_transitions": []
+  },
+  "seg-2": {
+   "content_kind": "near_silence",
+   "duration_seconds": 6.33,
+   "final_job": {
+    "attempt": 1,
+    "compute_decision": {
+     "outcome": "unattempted"
+    },
+    "conversation_id": "conv-2",
+    "duration_seconds": 6.33,
+    "fresh_capture": false,
+    "late_capture": false,
+    "merge_pending": false,
+    "owner_id": "owner-1",
+    "priority": 1,
+    "privacy_generation": 0,
+    "protocol_version": 1,
+    "requires_compute_admission": true,
+    "result": {
+     "outcome": "success"
+    },
+    "state": "committed",
+    "unit_kind": "capture_span"
+   },
+   "final_result": {
+    "conversation_id": "conv-2",
+    "fresh_capture": false,
+    "late_capture": false,
+    "log_sequence": 1,
+    "owner_id": "owner-1",
+    "previous_segment_id": null,
+    "privacy_generation": 0,
+    "projection_state": "pending",
+    "protocol_version": 1,
+    "result": {
+     "outcome": "success"
+    }
+   },
+   "job_transitions": [
+    "<1s ready",
+    "<1s leased",
+    "<5s result_ready",
+    "<5s committed"
+   ],
+   "owner": "owner-1",
+   "paid_calls": 0,
+   "recover_task_responses": [],
+   "result_artifact": {
+    "audio_seconds": 6.33,
+    "speech_seconds": 1.0,
+    "words": 1,
+    "words_digest": 11844727155393,
+    "words_provider": "parakeet"
+   },
+   "result_transitions": [
+    "<5s pending outcome:success"
+   ]
   },
   "seg-3": {
    "content_kind": "near_silence",
@@ -378,7 +378,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<30s leased",
+    "<1s leased",
     "<30s quarantined recovery:held",
     "<30s quarantined recovery:prepared",
     "<30s quarantined recovery:running",
@@ -449,7 +449,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<30s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
@@ -514,7 +514,7 @@
    },
    "job_transitions": [
     "<1s ready",
-    "<30s leased",
+    "<1s leased",
     "<30s result_ready",
     "<30s committed",
     "<30s committed client:completed"
