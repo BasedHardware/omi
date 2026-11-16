@@ -691,7 +691,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) {
           final v3 = context.read<ConversationsV3Provider>();
           return HomeFeedProvider()
-            ..suppressed = (() => v3.v3)
+            ..suppressed = (() => v3.suppressesLegacy)
             ..observeConversations(context.read<ConversationProvider>());
         }),
         ListenableProvider(create: (context) => AppProvider()),
@@ -703,7 +703,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(
           create: (context) {
             final v3 = context.read<ConversationsV3Provider>();
-            return EpisodeProvider()..suppressed = (() => v3.v3);
+            return EpisodeProvider()..suppressed = (() => v3.suppressesLegacy);
           },
         ),
         ChangeNotifierProvider(create: (context) => UsageProvider()),

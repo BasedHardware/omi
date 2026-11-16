@@ -53,7 +53,7 @@ class LiveSummarySection extends StatefulWidget {
   State<LiveSummarySection> createState() => _LiveSummarySectionState();
 }
 
-enum _Phase { writing, polling, failed, finished }
+enum _Phase { writing, polling, written, failed, finished }
 
 class _LiveSummarySectionState extends State<LiveSummarySection> {
   _Phase _phase = _Phase.writing;
@@ -108,7 +108,10 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
         if (markdown.trim().isEmpty) return;
         setState(() => _sections.add(markdown));
       case SummaryDone():
-        unawaited(widget.refresh().whenComplete(_finish));
+        // The page shows the stored summary once it re-reads the conversation. If that read fails,
+        // keep the streamed sections up rather than dropping a summary that was written.
+        unawaited(widget.refresh().then((ok) => ok || _sections.isEmpty ? _finish() : _written(),
+            onError: (Object _) => _sections.isEmpty ? _finish() : _written()));
       case SummaryInProgress():
         _startPolling();
       case SummaryFailed():
@@ -119,18 +122,30 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   void _startPolling() {
     if (_phase == _Phase.polling) return;
     setState(() => _phase = _Phase.polling);
-    // Counted, not timed: a re-read that hangs must not stretch the window.
+    // Counted, one read at a time: the next read is scheduled only after the previous one returns.
     final polls = widget.pollFor.inMilliseconds ~/ widget.pollInterval.inMilliseconds;
     var done = 0;
-    _poll = Timer.periodic(widget.pollInterval, (_) async {
-      if (!mounted) return;
-      if (done >= polls) {
-        _finish();
-        return;
-      }
-      done++;
-      await widget.refresh();
-    });
+    void next() {
+      _poll = Timer(widget.pollInterval, () async {
+        if (!mounted || _phase != _Phase.polling) return;
+        if (done >= polls) {
+          _finish();
+          return;
+        }
+        done++;
+        try {
+          await widget.refresh();
+        } catch (_) {}
+        if (mounted && _phase == _Phase.polling) next();
+      });
+    }
+
+    next();
+  }
+
+  void _written() {
+    _stop();
+    if (mounted) setState(() => _phase = _Phase.written);
   }
 
   /// No summary could be written now. With an older summary stored the page shows it; with none,
@@ -200,6 +215,9 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
           ),
         ),
       );
+    }
+    if (_phase == _Phase.written) {
+      return ConversationMarkdownSliver(key: const Key('live_summary_sections'), content: _sections.join('\n\n'));
     }
     return SliverMainAxisGroup(slivers: [
       SliverToBoxAdapter(

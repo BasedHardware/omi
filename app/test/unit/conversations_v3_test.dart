@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -105,23 +106,71 @@ void main() {
     ApiResult<ConversationsLiveRead> live(bool v3, {Map<String, dynamic>? conversation}) =>
         ApiSuccess(ConversationsLiveRead.fromJson({'v3': v3, 'conversation': conversation}));
 
-    test('off until the server says otherwise', () {
-      final provider = ConversationsV3Provider(fetchLive: () async => live(false), uid: () => 'u1', cachedUid: '');
+    test('unknown until the server answers, and legacy reads wait for the answer', () async {
+      final provider = ConversationsV3Provider(fetchLive: () async => live(false), uid: () => 'u1', cached: '');
       expect(provider.v3, isFalse);
-      expect(provider.live, isNull);
+      expect(provider.resolved, isFalse);
+      expect(provider.suppressesLegacy, isTrue);
+      await provider.refresh();
+      expect(provider.resolved, isTrue);
+      expect(provider.suppressesLegacy, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), 'u1:0');
+      final next = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => 'u1');
+      expect(next.resolved, isTrue, reason: 'a remembered "no" is an answer too');
+      expect(next.suppressesLegacy, isFalse);
+    });
+
+    test('a server error as the first answer runs today\'s Home; offline stays unknown', () async {
+      ApiResult<ConversationsLiveRead> result = const ApiFailure(ApiProblem(ApiProblemKind.transport));
+      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1', cached: '');
+      await provider.refresh();
+      expect(provider.resolved, isFalse);
+      result = const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 503));
+      await provider.refresh();
+      expect(provider.resolved, isTrue);
+      expect(provider.v3, isFalse);
+      await Future<void>.delayed(Duration.zero);
+      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), isEmpty, reason: 'not remembered');
+    });
+
+    test('an account switch mid-read leaves one read in flight', () async {
+      var uid = 'u1';
+      var calls = 0;
+      final gates = <Completer<ApiResult<ConversationsLiveRead>>>[];
+      final provider = ConversationsV3Provider(
+        fetchLive: () {
+          calls++;
+          final gate = Completer<ApiResult<ConversationsLiveRead>>();
+          gates.add(gate);
+          return gate.future;
+        },
+        uid: () => uid,
+        cached: '',
+      );
+      final first = provider.refresh();
+      uid = 'u2';
+      final second = provider.refresh();
+      gates[0].complete(live(true));
+      await first;
+      final third = provider.refresh();
+      expect(calls, 2, reason: 'the old read must not clear the new read\'s slot');
+      gates[1].complete(live(true));
+      await Future.wait([second, third]);
+      expect(provider.v3, isTrue);
     });
 
     test('on with a live conversation, and remembered for this account only', () async {
       final provider = ConversationsV3Provider(
         fetchLive: () async => live(true, conversation: _conversationJson(extra: {'tile_state': 'live'})),
         uid: () => 'u1',
-        cachedUid: '',
+        cached: '',
       );
       await provider.refresh();
       expect(provider.v3, isTrue);
       expect(provider.live?.v3?.tileState, ConversationTileState.live);
       await Future<void>.delayed(Duration.zero);
-      expect(SharedPreferencesUtil().getString('conversationsV3Uid'), 'u1');
+      expect(SharedPreferencesUtil().getString('conversationsV3Answer'), 'u1:1');
 
       final sameAccount = ConversationsV3Provider(fetchLive: () async => live(true), uid: () => 'u1');
       expect(sameAccount.v3, isTrue, reason: 'a cold start opens on the remembered Home');
@@ -131,7 +180,7 @@ void main() {
 
     test('a 404 is an older server; other failures keep the last answer', () async {
       var result = live(true);
-      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1', cachedUid: '');
+      final provider = ConversationsV3Provider(fetchLive: () async => result, uid: () => 'u1', cached: '');
       await provider.refresh();
       expect(provider.v3, isTrue);
       result = const ApiFailure(ApiProblem(ApiProblemKind.transport));
@@ -150,7 +199,7 @@ void main() {
           return live(true);
         },
         uid: () => uid,
-        cachedUid: '',
+        cached: '',
       );
       await provider.refresh();
       expect(provider.v3, isFalse);
@@ -164,7 +213,7 @@ void main() {
           return live(true);
         },
         uid: () => 'u1',
-        cachedUid: '',
+        cached: '',
       );
       provider.watch();
       await Future<void>.delayed(Duration.zero);

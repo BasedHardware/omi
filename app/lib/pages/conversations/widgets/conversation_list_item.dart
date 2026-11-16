@@ -440,6 +440,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           isMerging: provider.mergingConversationIds.contains(widget.conversation.id) ||
               widget.conversation.status == ConversationStatus.merging,
           isEligible: !widget.conversation.isLocked &&
+              !_isLive &&
               widget.homeCard?.kind != 'episode' &&
               !provider.mergingConversationIds.contains(widget.conversation.id),
         ),
@@ -589,7 +590,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   key: const Key('conversation_row_live_length'),
                   clock: clock.now,
                   builder: (context, now) {
-                    final seconds = now.difference(widget.conversation.startedAt!).inSeconds;
+                    final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
+                    final seconds = now.difference(start).inSeconds;
                     return seconds <= 0
                         ? const SizedBox.shrink()
                         : Text('• ${OmiDuration.compact(seconds, context.l10n)}', style: _metaStyle, maxLines: 1);
@@ -746,8 +748,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
-  bool get _isLive =>
-      widget.conversation.v3?.tileState == ConversationTileState.live && widget.conversation.startedAt != null;
+  bool get _isLive => widget.conversation.v3?.tileState == ConversationTileState.live;
 
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';

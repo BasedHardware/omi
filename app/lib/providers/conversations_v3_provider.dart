@@ -13,38 +13,54 @@ typedef ConversationsLiveFetcher = Future<ApiResult<api.ConversationsLiveRead>> 
 /// progress.
 ///
 /// [v3] true means the new Home: a flat list of conversations with the live one on top, and no episode
-/// calls. False, a 404 or no answer yet means today's Home runs untouched. The last answer is kept per
-/// account so a cold start opens on the right Home; a different account never inherits it.
+/// calls. False or a 404 means today's Home runs untouched. Until the first answer ([resolved] false)
+/// the app makes neither episode nor feed calls, so a v3 account never makes one. The last answer is
+/// kept per account, so after the first launch a cold start knows at once; a different account never
+/// inherits it.
 class ConversationsV3Provider extends ChangeNotifier {
-  ConversationsV3Provider({ConversationsLiveFetcher? fetchLive, String Function()? uid, String? cachedUid})
+  /// [cached] is the remembered answer, `<uid>:1` or `<uid>:0`; tests pass it, the app reads it.
+  ConversationsV3Provider({ConversationsLiveFetcher? fetchLive, String Function()? uid, String? cached})
       : _fetchLive = fetchLive ?? api.getConversationsLive,
         _uid = uid ?? (() => SharedPreferencesUtil().uid) {
-    final cached = cachedUid ?? _readCachedUid();
+    final remembered = cached ?? _readCached();
     _owner = _uid();
-    _v3 = cached.isNotEmpty && cached == _owner;
+    if (_owner.isNotEmpty && remembered == '$_owner:1') {
+      _v3 = true;
+      _resolved = true;
+    } else if (_owner.isNotEmpty && remembered == '$_owner:0') {
+      _resolved = true;
+    }
   }
 
   /// Home re-reads the live conversation this often while it is on screen.
   static const pollInterval = Duration(seconds: 15);
 
-  static const _prefKey = 'conversationsV3Uid';
+  static const _prefKey = 'conversationsV3Answer';
 
   final ConversationsLiveFetcher _fetchLive;
   final String Function() _uid;
 
   String _owner = '';
   bool _v3 = false;
+  bool _resolved = false;
   ServerConversation? _live;
   Future<void>? _reading;
   Timer? _poll;
+  bool Function()? _pollWhen;
   int _watchers = 0;
   bool _disposed = false;
 
   bool get v3 => _v3 && _owner == _uid();
 
+  /// The server has answered for this account (now or on an earlier launch).
+  bool get resolved => _resolved && _owner == _uid();
+
+  /// Episode and Home-feed reads wait for this: off for a v3 account, and until the first answer.
+  bool get suppressesLegacy => !resolved || v3;
+
   ServerConversation? get live => v3 ? _live : null;
 
-  static String _readCachedUid() {
+  static String _readCached() {
     try {
       return SharedPreferencesUtil().getString(_prefKey);
     } catch (_) {
@@ -55,7 +71,7 @@ class ConversationsV3Provider extends ChangeNotifier {
   void _remember(bool on) {
     // The cache only shortens a cold start; the live read stays authoritative.
     try {
-      unawaited(SharedPreferencesUtil().saveString(_prefKey, on ? _owner : '').catchError((_) => false));
+      unawaited(SharedPreferencesUtil().saveString(_prefKey, '$_owner:${on ? 1 : 0}').catchError((_) => false));
     } catch (_) {}
   }
 
@@ -64,6 +80,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     if (uid == _owner) return;
     _owner = uid;
     _v3 = false;
+    _resolved = false;
     _live = null;
     _reading = null;
   }
@@ -71,7 +88,14 @@ class ConversationsV3Provider extends ChangeNotifier {
   /// One read of the switch and the live conversation; concurrent callers share it.
   Future<void> refresh() {
     _ensureOwner();
-    return _reading ??= _read().whenComplete(() => _reading = null);
+    final pending = _reading;
+    if (pending != null) return pending;
+    final read = _read();
+    _reading = read;
+    // Only this read clears its slot: an account switch may already have started the next one.
+    return read.whenComplete(() {
+      if (identical(_reading, read)) _reading = null;
+    });
   }
 
   Future<void> _read() async {
@@ -79,6 +103,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     final result = await _fetchLive();
     if (_disposed || owner != _uid()) return;
     final wasV3 = _v3;
+    final wasResolved = _resolved;
     final wasLive = _live;
     switch (result) {
       case ApiSuccess(:final data):
@@ -88,12 +113,21 @@ class ConversationsV3Provider extends ChangeNotifier {
         // An older server: today's Home.
         _v3 = false;
         _live = null;
+      case ApiFailure(:final problem) when !_resolved && (problem.statusCode ?? 0) >= 500:
+        // The first answer is a server error: run today's Home rather than holding episodes and the
+        // feed back for every account. Not remembered, so the next read decides again.
+        _v3 = false;
+        _live = null;
+        _resolved = true;
+        notifyListeners();
+        return;
       case ApiFailure():
-        // Offline or a server error: keep the last answer.
+        // Offline, or a later failure: keep the last answer.
         return;
     }
-    if (wasV3 != _v3) _remember(_v3);
-    if (wasV3 != _v3 || !_sameLive(wasLive, _live)) notifyListeners();
+    _resolved = true;
+    if (wasV3 != _v3 || !wasResolved) _remember(_v3);
+    if (wasV3 != _v3 || !wasResolved || !_sameLive(wasLive, _live)) notifyListeners();
   }
 
   static bool _sameLive(ServerConversation? a, ServerConversation? b) {
@@ -105,12 +139,17 @@ class ConversationsV3Provider extends ChangeNotifier {
         a.transcriptSegments.length == b.transcriptSegments.length;
   }
 
-  /// Home calls this while it is on screen; pair each call with [unwatch].
-  void watch() {
+  /// Home calls this while it is on screen; pair each call with [unwatch]. A tick is skipped while
+  /// [when] says Home is covered (a pushed page).
+  void watch({bool Function()? when}) {
     _watchers++;
+    if (when != null) _pollWhen = when;
     if (_poll != null) return;
     unawaited(refresh());
-    _poll = Timer.periodic(pollInterval, (_) => unawaited(refresh()));
+    _poll = Timer.periodic(pollInterval, (_) {
+      if (_pollWhen?.call() == false) return;
+      unawaited(refresh());
+    });
   }
 
   void unwatch() {
@@ -118,6 +157,7 @@ class ConversationsV3Provider extends ChangeNotifier {
     if (_watchers > 0) return;
     _poll?.cancel();
     _poll = null;
+    _pollWhen = null;
   }
 
   @override

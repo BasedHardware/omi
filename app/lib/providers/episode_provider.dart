@@ -292,7 +292,7 @@ class EpisodeProvider extends ChangeNotifier {
   final EpisodeLookupFetcher _lookup;
   final EpisodeDetailFetcher _detail;
   final Map<String, Episode> _openedEpisodes = {};
-  Episode? openedEpisode(String id) => _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
+  Episode? openedEpisode(String id) => !_off && _ownerUid == SharedPreferencesUtil().uid ? _openedEpisodes[id] : null;
   final EpisodeWrapUpCall _wrapUp;
   final EpisodeDismissCall _dismiss;
   final DateTime Function() _clock;
@@ -525,9 +525,13 @@ class EpisodeProvider extends ChangeNotifier {
   Future<void> refreshLive() async {
     _ensureOwner();
     if (_off) {
-      if (_enabled || _live != null) {
+      // Episodes are retired for this account (or the switch has not answered yet): drop anything an
+      // earlier read cached, so no episode UI or write follows from it.
+      if (_enabled || _live != null || _previous != null || _byConversation.isNotEmpty) {
         _enabled = false;
         _live = null;
+        _previous = null;
+        invalidateHome();
         notifyListeners();
       }
       return;
@@ -604,7 +608,7 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   Episode? cachedEpisodeFor(String conversationId) =>
-      _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
+      !_off && _ownerUid == SharedPreferencesUtil().uid ? _byConversation[conversationId] : null;
 
   static const openComposePolls = 8;
   static const openComposePollInterval = Duration(seconds: 5);
@@ -618,7 +622,7 @@ class EpisodeProvider extends ChangeNotifier {
   /// notes are deferred. Concurrent opens coalesce; leaving the page cancels polling.
   Future<Episode?> openEpisode(String episodeId) {
     _ensureOwner();
-    if (_disposed || episodeId.isEmpty) return Future.value(null);
+    if (_off || _disposed || episodeId.isEmpty) return Future.value(null);
     final existing = _opening[episodeId];
     if (existing != null) return existing;
     final token = Object();
@@ -724,7 +728,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final uid = _ownerUid;
     final episode = _live;
-    if (episode == null || _wrappingUp) return false;
+    if (_off || episode == null || _wrappingUp) return false;
     _wrappingUp = true;
     notifyListeners();
     try {
@@ -749,7 +753,7 @@ class EpisodeProvider extends ChangeNotifier {
     _ensureOwner();
     final now = _clock();
     liveAnchor.restart(now);
-    final episode = _live;
+    final episode = _off ? null : _live;
     if (episode != null) {
       _remember(episode);
       _ended.add(episode.id);
@@ -767,7 +771,7 @@ class EpisodeProvider extends ChangeNotifier {
   /// Undo on a captured item: hidden at once, dismissed on the server; restored if that fails.
   Future<bool> dismissItem(String itemId) async {
     final episode = _live;
-    if (episode == null) return false;
+    if (_off || episode == null) return false;
     _live = episode.copyWith(
       items: [
         for (final item in episode.items) item.id == itemId ? item.withStatus(EpisodeItemStatus.dismissed) : item,

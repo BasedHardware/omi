@@ -254,9 +254,12 @@ const _done = ConversationV3Fields(kind: 'conversation', tileState: Conversation
 /// Home for a v3 account: two finished conversations today (one still being written), one hidden
 /// from Home, one yesterday, and the conversation in progress from the live read.
 class _Home {
-  _Home({required this.v3});
+  _Home({required this.v3, this.remembered = true});
 
   final bool v3;
+
+  /// False: the first launch after this build, before the switch has ever answered.
+  final bool remembered;
   int episodeCalls = 0;
   int liveReads = 0;
   final sync = _StubSyncProvider();
@@ -297,7 +300,7 @@ class _Home {
     uid: () => SharedPreferencesUtil().uid,
     // Steady state: the last answer is remembered for this account. (The very first launch after the
     // switch turns on makes one episode read before the first live answer lands.)
-    cachedUid: v3 ? 'owner-1' : '',
+    cached: remembered ? 'owner-1:${v3 ? 1 : 0}' : '',
     fetchLive: () async {
       liveReads++;
       return ApiSuccess(ConversationsLiveRead(
@@ -311,6 +314,11 @@ class _Home {
   );
   late final _Conversations conversations = _Conversations()
     ..conversations = [
+      // A phone call that started after the conversation in progress: still sorts below it.
+      _conversation('c-call', DateTime(2026, 11, 16, 12, 20), 'Call from the printer', v3: null),
+      // The capture socket delivered a recording: never a row.
+      _conversation('rec-1', DateTime(2026, 11, 16, 12, 15), 'Recording',
+          v3: const ConversationV3Fields(recording: true)),
       _conversation('c-transcribing', DateTime(2026, 11, 16, 11, 20), 'Call with the venue',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
       _conversation('c-writing', DateTime(2026, 11, 16, 10, 30), 'Hiring plan',
@@ -385,12 +393,13 @@ Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
       ));
 }
 
-Future<_Home> _pumpHome(WidgetTester tester, {required bool v3, Key? boundary, ThemeData? theme, Size? size}) async {
+Future<_Home> _pumpHome(WidgetTester tester,
+    {required bool v3, bool remembered = true, Key? boundary, ThemeData? theme, Size? size}) async {
   tester.view.physicalSize = size ?? const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final home = _Home(v3: v3);
+  final home = _Home(v3: v3, remembered: remembered);
   await tester.pumpWidget(_app(home, boundary: boundary, theme: theme));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -439,7 +448,8 @@ void main() {
       expect(home.conversationsV3.v3, isTrue);
       expect(home.liveReads, greaterThanOrEqualTo(1));
 
-      expect(_rowIds(tester), ['live-1', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
+      expect(_rowIds(tester),
+          ['live-1', 'c-call', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
           reason: 'the live conversation leads Today; the hidden one is only off Home');
       expect(find.byType(LiveEpisodeRow), findsNothing);
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
@@ -454,6 +464,26 @@ void main() {
       expect(find.byKey(const ValueKey('day_summary_header_2026-11-16')), findsNothing);
 
       expect(home.episodeCalls, 0, reason: 'a v3 account makes no episode calls');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('first launch: a v3 account makes no episode call before the switch answers', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true, remembered: false);
+      expect(home.conversationsV3.v3, isTrue);
+      expect(_rowIds(tester).first, 'live-1');
+      expect(home.episodeCalls, 0);
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('first launch, not v3: episodes start once the switch says so', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: false, remembered: false);
+      expect(home.conversationsV3.resolved, isTrue);
+      expect(home.episodeCalls, greaterThan(0));
+      expect(find.byType(DaySummaryHeader), findsNothing);
       await _dispose(tester, home);
     });
   });

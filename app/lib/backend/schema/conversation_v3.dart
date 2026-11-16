@@ -61,6 +61,7 @@ class ConversationV3Fields {
     this.titleLocked = false,
     this.recordingPieces = const [],
     this.summaryCoversThrough,
+    this.recording = false,
   });
 
   /// `conversation`, `voice_work`, `media` or `background`.
@@ -75,13 +76,18 @@ class ConversationV3Fields {
   /// Last speech the stored summary covers; null when no summary is stored.
   final DateTime? summaryCoversThrough;
 
+  /// A pendant capture's storage document. The server never lists one, but the capture socket still
+  /// delivers them by recording id for released builds; a v3 Home never shows one as a row.
+  final bool recording;
+
   static const _keys = [
     'kind',
     'home_hidden',
     'tile_state',
     'title_locked',
     'recording_pieces',
-    'summary_covers_through'
+    'summary_covers_through',
+    'recording',
   ];
 
   /// Null when the JSON carries none of the v3 fields.
@@ -97,6 +103,7 @@ class ConversationV3Fields {
       recordingPieces:
           pieces is List ? pieces.map(RecordingPiece.fromJson).whereType<RecordingPiece>().toList() : const [],
       summaryCoversThrough: covers is String ? DateTime.tryParse(covers) : null,
+      recording: json['recording'] == true,
     );
   }
 
@@ -107,5 +114,6 @@ class ConversationV3Fields {
         'title_locked': titleLocked,
         'recording_pieces': recordingPieces.map((p) => p.toJson()).toList(),
         if (summaryCoversThrough != null) 'summary_covers_through': summaryCoversThrough!.toUtc().toIso8601String(),
+        if (recording) 'recording': true,
       };
 }
