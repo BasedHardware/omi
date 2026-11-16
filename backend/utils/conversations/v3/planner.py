@@ -1,7 +1,7 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
 from utils.conversations.v3 import visibility
-from utils.conversations.v3.outline import playback_origin
+from utils.conversations.v3.outline import SILENCE, playback_origin
 
 from copy import deepcopy
 from datetime import timedelta
@@ -10,7 +10,6 @@ from difflib import SequenceMatcher
 from typing import Any
 
 CAP = timedelta(hours=2)
-RESUME = timedelta(minutes=20)
 
 
 def word_count(lines):
@@ -27,9 +26,10 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
 
 
 def _capped(lines, sections):
-    if lines[-1]['end'] - lines[0]['start'] <= CAP:
+    end = max(line['end'] for line in lines)
+    if end - lines[0]['start'] <= CAP:
         return [lines]
-    middle = lines[0]['start'] + (lines[-1]['end'] - lines[0]['start']) / 2
+    middle = lines[0]['start'] + (end - lines[0]['start']) / 2
     candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
     if not candidates:
         raise ValueError('single_transcript_segment_exceeds_two_hours')
@@ -55,7 +55,7 @@ def windows(groups, outlines):
                     'manual_end': group.get('manual_end', False),
                     'finished': group['finished'] or end < len(group['lines']) or part_index < len(capped) - 1,
                 }
-                # Resume requires explicit model evidence, same kind and people, and a bounded gap/span.
+                # A model can undo a topic split, never a recorded silence boundary.
                 prior = result[-1] if result else None
                 if (
                     prior
@@ -63,8 +63,10 @@ def windows(groups, outlines):
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
-                    and timedelta(0) <= part[0]['start'] - prior['lines'][-1]['end'] <= RESUME
-                    and part[-1]['end'] - prior['lines'][0]['start'] <= CAP
+                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
+                    and max(max(line['end'] for line in prior['lines']), max(line['end'] for line in part))
+                    - prior['lines'][0]['start']
+                    <= CAP
                 ):
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']
