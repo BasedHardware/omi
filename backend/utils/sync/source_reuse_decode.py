@@ -1,19 +1,22 @@
 """CPU-only exact-file proof packing; never imported by source receipt readers."""
 
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from dataclasses import replace
+from typing import Any
 import hashlib
 import hmac
 import json
 import os
 
 from utils.batch_pipeline import source_reuse
+from utils.batch_pipeline.audio import AudioUnit
 from utils.sync.capture_clock import is_early_capture_time, is_implausible_future_capture_time
 from utils.sync.clock_run import capture_clock_run_from_path
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.files import get_timestamp_from_path
 
 
-def eligible(paths, context):
+def eligible(paths: Sequence[str], context: Mapping[str, Any] | None) -> bool:
     if not source_reuse.enabled() or not context or not context.get('client_device_id') or not 1 <= len(paths) <= 64:
         return False
     if (
@@ -30,7 +33,15 @@ def eligible(paths, context):
     )
 
 
-def decode_sources(paths, *, uid, context, decoder, max_seconds, received_at=None):
+def decode_sources(
+    paths: Sequence[str],
+    *,
+    uid: str,
+    context: Mapping[str, Any],
+    decoder: Callable[..., Iterable[AudioUnit]],
+    max_seconds: float,
+    received_at: float | None = None,
+) -> Generator[AudioUnit, None, None]:
     """Hash original bytes before the destructive WAL decoder; never dedupe PCM alone."""
     # Include source semantics, device and explicit epoch metadata, where present.
     scope = json.dumps(
