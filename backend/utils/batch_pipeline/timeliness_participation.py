@@ -37,6 +37,7 @@ MAX_LIFETIME_SECONDS = 1800.0
 MAX_FUTURE_SKEW_SECONDS = 60.0
 MAX_OPERATION_ID_BYTES = 128
 READ_INTERVAL_SECONDS = 60.0
+READ_TIMEOUT_SECONDS = 10.0
 # Cloud Run injects these; GKE does not. The split matches omi_logging.
 CLOUD_RUN_MARKERS = process_identity.CLOUD_RUN_MARKERS
 IN_CLUSTER_MARKER = process_identity.IN_CLUSTER_MARKER
@@ -63,7 +64,7 @@ def control_document(store):
 
 def read_control(store):
     """One point-document read. Absent documents are still billable reads."""
-    return control_document(store).get()
+    return control_document(store).get(retry=None, timeout=READ_TIMEOUT_SECONDS)
 
 
 def timeliness_plane(namespace: str) -> str | None:
@@ -193,7 +194,7 @@ class ParticipationCache:
                 expires_monotonic=min(validated.expires_monotonic, self._validated.expires_monotonic),
             )
         self._validated = validated
-        return True
+        return self._active(now_monotonic)
 
 
 def monotonic() -> float:

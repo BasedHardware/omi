@@ -226,6 +226,27 @@ def test_same_operation_reread_does_not_extend_the_deadline(monkeypatch):
     assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 601, now_monotonic=MONO + 601)
 
 
+def test_same_operation_reread_after_monotonic_expiry_resumes_participation(monkeypatch):
+    responses = [_Snapshot(_doc()), _Snapshot(_doc())]
+    monkeypatch.setattr(participation, 'read_control', lambda store: responses.pop(0))
+    cache = participation.ParticipationCache()
+    store = _store()
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    # The small wall-clock rollback keeps the document valid, but its clamped
+    # deadline is already past on the monotonic clock.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW - 30, now_monotonic=MONO + 601)
+
+
+def test_control_read_disables_retries_and_has_a_bounded_timeout(monkeypatch):
+    reference = Mock()
+    snapshot = _Snapshot(_doc())
+    reference.get.return_value = snapshot
+    monkeypatch.setattr(participation, 'control_document', lambda store: reference)
+
+    assert participation.read_control(_store()) is snapshot
+    reference.get.assert_called_once_with(retry=None, timeout=participation.READ_TIMEOUT_SECONDS)
+
+
 def test_wall_clock_rollback_does_not_extend_the_deadline(monkeypatch):
     responses = [_Snapshot(_doc()), _Snapshot(_doc())]
     monkeypatch.setattr(participation, 'read_control', lambda store: responses.pop(0))

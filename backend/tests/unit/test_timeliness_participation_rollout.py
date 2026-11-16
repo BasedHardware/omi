@@ -11,9 +11,12 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
+from google.cloud.firestore_v1.field_path import FieldPath
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'rollout' / 'timeliness_participation.py'
@@ -69,7 +72,7 @@ class _Ref:
     def __init__(self, doc):
         self._doc = doc
 
-    def get(self):
+    def get(self, *, retry=None, timeout=None):
         return _Snapshot(self._doc)
 
     def _check(self, option):
@@ -82,18 +85,25 @@ class _Ref:
 
     def update(self, values, option=None, retry=None):
         self._check(option)
-        for name, value in values.items():
+        for field_path, value in values.items():
+            parts = FieldPath.from_string(field_path).parts
+            target = self._doc.data
+            for part in parts[:-1]:
+                target = target.setdefault(part, {})
+            name = parts[-1]
             if value is firestore.DELETE_FIELD:
-                self._doc.data.pop(name, None)
+                target.pop(name, None)
             else:
-                self._doc.data[name] = value
+                target[name] = value
         self._doc._touch()
+        return SimpleNamespace(update_time=self._doc.update_time)
 
     def create(self, values, retry=None):
         if self._doc.data is not None:
             raise RuntimeError('AlreadyExists')
         self._doc.data = dict(values)
         self._doc._touch()
+        return SimpleNamespace(update_time=self._doc.update_time)
 
     def delete(self, option=None, retry=None):
         self._check(option)
@@ -184,6 +194,20 @@ def test_tag_distinguishes_int_from_bool(helper):
     assert helper.tag(True)['t'] == 'bool'
 
 
+def test_reference_values_round_trip_at_top_level_and_nested_in_collections(helper):
+    client = firestore.Client(project='demo-sca1649-unit', credentials=AnonymousCredentials())
+    reference = client.document('related/one')
+    value = {'top': reference, 'nested': [{'reference': reference}]}
+
+    encoded = helper.tag(value)
+    decoded = helper.untag(encoded, client=client)
+
+    assert decoded['top'].path == reference.path
+    assert decoded['nested'][0]['reference'].path == reference.path
+    assert helper.tag(decoded) == encoded
+    client.close()
+
+
 def test_unsupported_value_is_refused(helper):
     with pytest.raises(TypeError):
         helper.tag(object())
@@ -264,6 +288,9 @@ def test_present_prior_apply_and_restore_are_exact(helper, store):
         'stamp': DatetimeWithNanoseconds(2026, 1, 1, tzinfo=dt.timezone.utc, nanosecond=42),
         'blob': b'\x01',
         'nested': {'a': [1, None]},
+        'a.b': 'literal dotted field',
+        'tick`key': 'literal backtick field',
+        r'back\\slash': 'literal backslash field',
     }
     store.seed(extra)
     prior = _prior(helper, store)
@@ -308,6 +335,28 @@ def test_apply_refuses_a_concurrent_writer_before_the_write(helper, store):
     with pytest.raises(helper.Refused, match='update_time mismatch'):
         helper.apply_plan(store, plan, mode='production')
     assert store._doc.data == {'kept': 2}
+
+
+def test_apply_refuses_to_issue_receipt_if_another_write_follows_its_write(helper, store, monkeypatch):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    plan = _plan(helper, prior)
+    real_read = helper._read
+    reads = 0
+
+    def read_then_concurrent_write(current_store):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            current_store._doc.data['concurrent'] = 'writer'
+            current_store._doc._touch()
+        return real_read(current_store)
+
+    monkeypatch.setattr(helper, '_read', read_then_concurrent_write)
+    with pytest.raises(helper.Refused, match='changed after apply'):
+        helper.apply_plan(store, plan, mode='emulator')
+    assert store._doc.data['concurrent'] == 'writer'
+    assert store._doc.data['operation_id'] == 'sca1649-op-1'
 
 
 def test_apply_refuses_a_create_when_the_document_appeared(helper, store):

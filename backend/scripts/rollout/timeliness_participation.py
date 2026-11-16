@@ -31,6 +31,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds  # noqa: E402
 from google.cloud import firestore  # noqa: E402
+from google.cloud.firestore_v1.field_path import FieldPath  # noqa: E402
 
 from database.batch_pipeline_store import FirestoreStore  # noqa: E402
 from utils.batch_pipeline import timeliness_participation as participation  # noqa: E402
@@ -79,7 +80,7 @@ def tag(value):
     raise TypeError(f'unsupported Firestore value type: {type(value).__name__}')
 
 
-def untag(encoded):
+def untag(encoded, *, client=None):
     """Decode one tagged value back to its exact Firestore type."""
     kind = encoded['t']
     if kind == 'null':
@@ -112,11 +113,13 @@ def untag(encoded):
     if kind == 'geopoint':
         return firestore.GeoPoint(encoded['lat'], encoded['lon'])
     if kind == 'reference':
-        raise TypeError('document references are not restorable by this helper')
+        if client is None:
+            raise TypeError('a Firestore client is required to restore document references')
+        return client.document(encoded['v'])
     if kind == 'list':
-        return [untag(item) for item in encoded['v']]
+        return [untag(item, client=client) for item in encoded['v']]
     if kind == 'map':
-        return {key: untag(item) for key, item in encoded['v'].items()}
+        return {key: untag(item, client=client) for key, item in encoded['v'].items()}
     raise TypeError(f'unknown tagged type: {kind}')
 
 
@@ -124,8 +127,8 @@ def tag_fields(fields):
     return {name: tag(value) for name, value in fields.items()}
 
 
-def untag_fields(encoded):
-    return {name: untag(value) for name, value in encoded.items()}
+def untag_fields(encoded, *, client=None):
+    return {name: untag(value, client=client) for name, value in encoded.items()}
 
 
 def fields_digest(encoded_fields):
@@ -234,19 +237,22 @@ def apply_plan(store, plan, *, mode):
         raise Refused('control document changed since capture (update_time mismatch)')
     if current['exists'] and fields_digest(current['fields']) != prior['fields_sha256']:
         raise Refused('control document fields changed since capture')
-    fields = untag_fields(plan['fields'])
+    fields = untag_fields(plan['fields'], client=store.client)
     reference = participation.control_document(store)
     if current['exists']:
-        reference.update(fields, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
+        write_result = reference.update(fields, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
     else:
-        reference.create(fields, retry=None)
+        write_result = reference.create(fields, retry=None)
+    applied_update_time = tag(write_result.update_time)
     applied = _snapshot_state(_read(store))
+    if applied['update_time'] != applied_update_time:
+        raise Refused('control document changed after apply; refusing to issue a restoration receipt')
     return {
         'namespace': store.namespace,
         'document': participation.DOCUMENT_ID,
         'operation_id': plan['operation_id'],
         'mode': mode,
-        'applied_update_time': applied['update_time'],
+        'applied_update_time': applied_update_time,
         'applied_fields_sha256': fields_digest(applied['fields']),
         'prior_fields_sha256': prior['fields_sha256'],
     }
@@ -262,10 +268,15 @@ def restore_prior(store, prior, applied, *, mode):
         raise Refused('control document changed since apply (update_time mismatch)')
     reference = participation.control_document(store)
     if prior['exists']:
-        prior_fields = untag_fields(prior['fields'])
-        removals = {name: firestore.DELETE_FIELD for name in current['fields'] if name not in prior_fields}
+        prior_fields = untag_fields(prior['fields'], client=store.client)
+        updates = {FieldPath(name).to_api_repr(): value for name, value in prior_fields.items()}
+        removals = {
+            FieldPath(name).to_api_repr(): firestore.DELETE_FIELD
+            for name in current['fields']
+            if name not in prior_fields
+        }
         reference.update(
-            {**prior_fields, **removals},
+            {**updates, **removals},
             option=firestore.LastUpdateOption(snapshot.update_time),
             retry=None,
         )

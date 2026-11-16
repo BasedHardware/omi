@@ -97,7 +97,13 @@ def test_present_prior_apply_and_restore_are_exact(helper, store):
         'blob': b'\x00\x01',
         'nested': {'a': [1, None, 'x']},
         'empty': None,
+        'a.b': 'literal dotted field',
+        'tick`key': 'literal backtick field',
+        r'back\\slash': 'literal backslash field',
     }
+    reference = store.client.document('related/one')
+    prior_fields['reference'] = reference
+    prior_fields['nested_references'] = {'items': [reference]}
     _seed(store, prior_fields)
     prior = _prior(helper, store)
     assert prior['exists'] is True
