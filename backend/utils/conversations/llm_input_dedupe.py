@@ -271,8 +271,9 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
     repair_inputs = deepcopy(inputs)
-    if 'scaled_detail' in repair_inputs:
-        repair_inputs['scaled_detail'].pop('version', None)
+    scaled_repair = repair_inputs.get('scaled_detail')
+    if isinstance(scaled_repair, dict):
+        scaled_repair.pop('version', None)
     repair_key = _fingerprint('notes', repair_inputs, 'quality-repair-v1')
     matched_input = _matches(row.get(NOTES_HASH), 'notes', inputs, digest) and not row.get('discarded')
     if matched_input and row.get(NOTES_OUTPUT_HASH):

@@ -121,11 +121,13 @@ Skip noise, background chatter, mumbling and filler entirely. Never write meta-c
 
 # The repair retry sees only the malformed reply, never the transcripts: the facts are
 # already in the reply, and re-sending the episode would pay for the same input twice.
-REPAIR_SYSTEM_PROMPT = """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
+REPAIR_SYSTEM_PROMPT = (
+    """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
 {{"title": "<= 7 words", "emoji": "one emoji", "lede": "one or two sentences", "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words", "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}], "follow_ups": ["a concrete next step"], "people": ["names of people who mattered"]}}
 Keep every fact, name, number and clock label that is already in the reply. Do not invent anything. Use an empty list for a field the reply does not have. Return only the JSON object, with no prose and no code fence."""
-
-REPAIR_SYSTEM_PROMPT += "\n" + NOTE_QUALITY_RULES
+    + "\n"
+    + NOTE_QUALITY_RULES
+)
 
 SYSTEM_PROMPT = (
     """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".

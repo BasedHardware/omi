@@ -84,13 +84,18 @@ def filter_output(data: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(path, str) or len(path) > 120 or not _QUALITY_PATH.fullmatch(path):
             continue
         parts = path.split('.')
-        node = out
+        node: Any = out
         try:
             for part in parts[:-1]:
                 node = node[int(part)] if isinstance(node, list) else node[part]
-            key = int(parts[-1]) if isinstance(node, list) else parts[-1]
-            if isinstance(node[key], str):
-                node[key] = ''
+            if isinstance(node, list):
+                index = int(parts[-1])
+                if isinstance(node[index], str):
+                    node[index] = ''
+            elif isinstance(node, dict):
+                name = parts[-1]
+                if isinstance(node.get(name), str):
+                    node[name] = ''
         except (KeyError, IndexError, TypeError, ValueError):
             continue
     return out
