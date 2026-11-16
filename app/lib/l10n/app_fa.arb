@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "در حال ضبط با تلفن شما",
+    "wrapUp": "جمع‌بندی",
+    "recordingDiscarded": "ضبط حذف شد",
     "undo": "بازگشت",
     "@undo": {
         "description": "Undo button text"
@@ -12214,7 +12217,27 @@
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
     "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
     "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.",
-    "recordingWithYourPhone": "در حال ضبط با تلفن شما",
-    "wrapUp": "جمع‌بندی",
-    "recordingDiscarded": "ضبط حذف شد"
+    "freeCapTitle": "{minutes} دقیقهٔ این ماه را استفاده کرده‌اید",
+    "freeCapBody": "Omi همچنان در حال ضبط است. انتخاب کنید رونویسی چگونه ادامه پیدا کند.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "رونویسی ابری نامحدود",
+    "freeCapProAccuracy": "بهترین دقت",
+    "freeCapProWaiting": "ضبط‌های در انتظار شما را رونویسی می‌کند",
+    "freeCapPhoneSubtitle": "رایگان. تا وقتی برنگردید روشن می‌ماند.",
+    "transcribingOnThisPhone": "در حال رونویسی روی این تلفن",
+    "getPro": "دریافت Pro",
+    "unlock": "باز کردن",
+    "transcribeWith": "رونویسی با",
+    "omiCloud": "ابر Omi",
+    "thisPhone": "این تلفن",
+    "onDeviceReady": "آماده",
+    "cloudMinutesLeft": "{left} از {limit} دقیقه باقی‌مانده · تمدید در {date}",
+    "cloudMinutesAvailable": "{minutes} دقیقهٔ ابری در دسترس است",
+    "switchBack": "بازگشت",
+    "setUpThisPhone": "راه‌اندازی این تلفن",
+    "speechRecognition": "تشخیص گفتار",
+    "audioStaysOnPhone": "صدا روی تلفن شما می‌ماند",
+    "onDeviceModelDownloadSize": "دانلود {size} مگابایت",
+    "downloadNow": "اکنون دانلود کن",
+    "onWifiLater": "بعداً با Wi-Fi"
 }

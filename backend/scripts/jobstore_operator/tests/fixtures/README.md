@@ -11,3 +11,8 @@ have `omitempty` JSON tags and default false in the
 Their absence differs from the explicit false fields in the create manifest.
 The fixture includes the standard KSA projected volume and API defaults. Tests
 must load this file directly, never regenerate it from the renderer under test.
+
+Its explicit `us-central1` region and `us-central1-a` zone labels model the
+two topology labels observed in the 2026-11-16 admission dry-run. Only those
+reviewed string values are accepted; this synthetic fixture proves no current
+node placement. Release must independently refresh node UID and topology.

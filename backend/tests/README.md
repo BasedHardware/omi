@@ -9,6 +9,12 @@
 - `tests/services/**/test_*.py`
 - `tests/routers/**/test_*.py`
 - top-level `tests/test_*.py` files that are still part of the unit suite
+- `scripts/jobstore_operator/tests/test_*.py` (portable offline controls)
+
+Any source, test or fixture change under `scripts/jobstore_operator/` selects
+the portable operator files through the existing CI runner, one pytest process
+per file. These fake-based tests do not execute Docker, Kubernetes or SQL and
+do not establish native-image qualification, production readiness or serving.
 
 For changed-file runs, use:
 

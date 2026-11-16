@@ -26,6 +26,7 @@ FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
     BACKEND_DIR / 'tests' / 'services',
     BACKEND_DIR / 'tests' / 'routers',
+    BACKEND_DIR / 'scripts' / 'jobstore_operator' / 'tests',
 )
 FULL_TEST_GLOBS = (BACKEND_DIR / 'tests',)
 
@@ -287,6 +288,11 @@ LIFECYCLE_SOURCE_REGRESSION_TESTS = {
 }
 
 AREA_TESTS = (
+    (
+        ('backend/scripts/jobstore_operator/',),
+        (),
+        ('scripts/jobstore_operator/tests/test_*.py',),
+    ),
     # Source-effective lever declarations and expiry metadata share the existing unit lane.
     (
         (

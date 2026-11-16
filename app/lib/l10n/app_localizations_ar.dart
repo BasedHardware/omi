@@ -1972,6 +1972,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
+  String get recordingWithYourPhone => 'يسجّل بهاتفك';
+
+  @override
+  String get wrapUp => 'إنهاء';
+
+  @override
+  String get recordingDiscarded => 'تم تجاهل التسجيل';
+
+  @override
   String get undo => 'تراجع';
 
   @override
@@ -15377,11 +15386,79 @@ class AppLocalizationsAr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
 
   @override
-  String get recordingWithYourPhone => 'يسجّل بهاتفك';
+  String freeCapTitle(int minutes) {
+    return 'لقد استخدمت $minutes دقيقة هذا الشهر';
+  }
 
   @override
-  String get wrapUp => 'إنهاء';
+  String get freeCapBody => 'لا يزال Omi يسجّل. اختر كيف تواصل التفريغ.';
 
   @override
-  String get recordingDiscarded => 'تم تجاهل التسجيل';
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'تفريغ سحابي غير محدود';
+
+  @override
+  String get freeCapProAccuracy => 'أفضل دقة';
+
+  @override
+  String get freeCapProWaiting => 'يفرّغ تسجيلاتك المنتظرة';
+
+  @override
+  String get freeCapPhoneSubtitle => 'مجاني. يبقى مفعّلًا حتى تعود.';
+
+  @override
+  String get transcribingOnThisPhone => 'يتم التفريغ على هذا الهاتف';
+
+  @override
+  String get getPro => 'احصل على Pro';
+
+  @override
+  String get unlock => 'فتح';
+
+  @override
+  String get transcribeWith => 'التفريغ باستخدام';
+
+  @override
+  String get omiCloud => 'سحابة Omi';
+
+  @override
+  String get thisPhone => 'هذا الهاتف';
+
+  @override
+  String get onDeviceReady => 'جاهز';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'متبقٍ $left من $limit دقيقة · تتجدد في $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes دقيقة سحابية متاحة';
+  }
+
+  @override
+  String get switchBack => 'العودة';
+
+  @override
+  String get setUpThisPhone => 'إعداد هذا الهاتف';
+
+  @override
+  String get speechRecognition => 'التعرف على الكلام';
+
+  @override
+  String get audioStaysOnPhone => 'يبقى الصوت على هاتفك';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'تنزيل $size ميغابايت';
+  }
+
+  @override
+  String get downloadNow => 'التنزيل الآن';
+
+  @override
+  String get onWifiLater => 'لاحقًا عبر Wi-Fi';
 }

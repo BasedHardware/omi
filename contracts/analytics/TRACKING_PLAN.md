@@ -173,6 +173,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | chatAppDisconnected | Chat App Disconnected | channel | active | chat-apps-funnel |
 | chatAppWaitlistJoined | Chat App Waitlist Joined | none | active | chat-apps-funnel |
 | paywallOpened | Paywall Opened | source, current_plan | active | subscription-funnel |
+| freeCapSheetChoice | Free Cap Sheet Choice | choice | active | subscription-funnel |
 | upgradePlanSelected | Upgrade Plan Selected | plan, billing_interval, source | active | subscription-funnel |
 | upgradeSucceededAttributed | Upgrade Succeeded Attributed | plan, billing_interval | active | subscription-funnel |
 | subscriptionPlanChanged | Subscription Plan Changed | previous_plan, new_plan, billing_interval, change_source | active | subscription-funnel |

@@ -1996,6 +1996,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
+  String get recordingWithYourPhone => 'Nahráva sa telefónom';
+
+  @override
+  String get wrapUp => 'Uzavrieť';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahodená';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override
@@ -15461,11 +15470,79 @@ class AppLocalizationsSk extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
 
   @override
-  String get recordingWithYourPhone => 'Nahráva sa telefónom';
+  String freeCapTitle(int minutes) {
+    return 'Využili ste tohtomesačných $minutes minút';
+  }
 
   @override
-  String get wrapUp => 'Uzavrieť';
+  String get freeCapBody => 'Omi stále nahráva. Vyberte, ako pokračovať v prepise.';
 
   @override
-  String get recordingDiscarded => 'Nahrávka zahodená';
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neobmedzený prepis v cloude';
+
+  @override
+  String get freeCapProAccuracy => 'Najvyššia presnosť';
+
+  @override
+  String get freeCapProWaiting => 'Prepíše vaše čakajúce nahrávky';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Zadarmo. Zostane zapnuté, kým sa neprepnete späť.';
+
+  @override
+  String get transcribingOnThisPhone => 'Prepis v tomto telefóne';
+
+  @override
+  String get getPro => 'Získať Pro';
+
+  @override
+  String get unlock => 'Odomknúť';
+
+  @override
+  String get transcribeWith => 'Prepisovať pomocou';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Tento telefón';
+
+  @override
+  String get onDeviceReady => 'Pripravené';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Zostáva $left z $limit min · obnoví sa $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'K dispozícii $minutes cloudových minút';
+  }
+
+  @override
+  String get switchBack => 'Prepnúť späť';
+
+  @override
+  String get setUpThisPhone => 'Nastaviť tento telefón';
+
+  @override
+  String get speechRecognition => 'Rozpoznávanie reči';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk zostáva v telefóne';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Stiahnutie $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Stiahnuť teraz';
+
+  @override
+  String get onWifiLater => 'Neskôr cez Wi-Fi';
 }

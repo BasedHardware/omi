@@ -1,10 +1,12 @@
 """Shared bounds for hosted MCP tool inputs, schemas, and the POST transport."""
 
+import os
+
 MCP_MEMORY_LIST_DEFAULT_LIMIT = 20
 MCP_MEMORY_LIST_MAX_LIMIT = 100
 MCP_MEMORY_LIST_MAX_SCAN = 5000
 MCP_CONVERSATION_LIST_MAX_LIMIT = 100
-MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS = 120
+MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS = 500
 MCP_CONVERSATION_FETCH_MAX_SEGMENTS = 500
 MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS = 24_000
 MCP_CONVERSATION_FETCH_MAX_CHARS = 100_000
@@ -26,3 +28,12 @@ MCP_REST_CONVERSATION_MAX_CHARS = 500_000
 # JSON-RPC batch (array) requests are a pre-2025-06-18 transport feature. The
 # cap keeps a single POST from fanning out into unbounded per-message work.
 MCP_MAX_BATCH_MESSAGES = 20
+
+
+def conversation_fetch_default_max_segments() -> int:
+    """Request-time default; set the env to 120 to roll back the default raise."""
+    try:
+        value = int(os.getenv('MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS', '500'))
+    except ValueError:
+        value = MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS
+    return max(1, min(value, MCP_CONVERSATION_FETCH_MAX_SEGMENTS))
