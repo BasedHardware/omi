@@ -830,6 +830,7 @@ NON_JOB_STATE_SITES: dict[str, tuple[tuple[str, str], ...]] = {
 # classified. Collection-scoped result and request-lane documents stay out of
 # the job census entirely.
 NON_JOB_STATE_MODULES = {
+    'utils/batch_pipeline/backlog_heartbeat.py': 'fenced backlog release control gate; never a jobs document',
     'database/batch_pipeline_coalescing.py': 'request-lane intake coalescing, not a pipeline stock',
     'database/batch_pipeline_shadow.py': 'shadow-lane documents',
     'database/batch_pipeline_projection.py': 'result documents',

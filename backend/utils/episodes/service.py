@@ -94,6 +94,7 @@ from utils.episodes.recorded_recovery import (
     unconsumed_moments,
 )
 from utils.observability.fallback import record_fallback
+from utils.summary_quality import episode_quality, title_or_fallback, content_units
 
 logger = logging.getLogger(__name__)
 
@@ -1092,7 +1093,12 @@ def _record_moment_once(
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
     start_offset = min((_segment_start(s) for s in segments), default=0.0)
     changes = (composer.no_changes if compose_owns else apply_update)(
-        base, result.update, conversation_id=moment.conversation_id, segment_offset=end_offset, now=now
+        base,
+        result.update,
+        conversation_id=moment.conversation_id,
+        segment_offset=end_offset,
+        now=now,
+        content_word_units=int(base.get("content_word_units") or 0) + content_units([*carried_segments, *segments]),
     )
     detected_output_language = (
         episode_language.detected_state_language({**base, **changes}, hint_language=output_language)
@@ -2174,13 +2180,14 @@ def episode_by_id(
 
 def _wire_heading(heading: Any) -> str:
     text = clean_text(heading, 240)
-    return '' if is_placeholder_heading(text) else text
+    return text if text.startswith('Discussion ') else title_or_fallback(text)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
         return None
+    episode = episode_quality({}, episode)
     return {
         'id': episode['id'],
         'status': episode.get('status') or 'closed',

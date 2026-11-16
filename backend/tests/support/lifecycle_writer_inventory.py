@@ -1,6 +1,26 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Fenced control gate only, never a batch job state. Validated open/closed
+    # config governs spending; absent/stale heartbeat closes within 180s.
+    'utils/batch_pipeline/backlog_heartbeat.py': [
+        (
+            'HeartbeatAuthority._tick.body',
+            'state',
+            "state; literal aliases=[('state', ('closed',))]",
+            (
+                'mode',
+                'owner_keys',
+                'rate_per_hour',
+                'reach_seconds',
+                'schema_version',
+                'state',
+                'tokens_used',
+                'updated_at',
+                'window',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (

@@ -97,7 +97,7 @@ def test_apply_update_drops_edits_dedupes_and_keeps_ids_stable():
     # "email nik" duplicates the dropped p2 by text and is not re-added.
     assert [item['text'] for item in new] == ['Draft pricing']
     assert new[0]['conversation_id'] == 'c1' and new[0]['segment_offset'] == 42.0
-    assert changed['title'] == 'Lunch and pricing' and changed['bullets'] == ['B']
+    assert changed['title'] == 'Old topic' and changed['bullets'] == ['B']
     assert changed['people'] == ['Minh', 'Huong']
 
 

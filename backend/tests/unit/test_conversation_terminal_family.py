@@ -213,7 +213,15 @@ def test_flag_off_persist_write_golden(store, monkeypatch, existing):
     monkeypatch.setattr(tx, 'set', lambda ref, data, **kwargs: captured.append((ref.path, data, kwargs)))
     store.rows[PATH].update(existing)
     assert persist({'status': 'completed', 'structured': {'title': 'legacy'}})
-    golden = {'id': 'capture', 'status': 'completed', 'structured': {'title': 'legacy'}}
+    changed_at = captured[0][1]['title_changed_at']
+    assert isinstance(changed_at, datetime) and changed_at.tzinfo is not None
+    golden = {
+        'id': 'capture',
+        'status': 'completed',
+        'structured': {'title': 'legacy'},
+        'title_change_reason': 'initial_title',
+        'title_changed_at': changed_at,
+    }
     if existing.get('sync_relevance_user_kept'):
         golden.update(sync_relevance_user_kept=True, discarded=False, sync_relevance='keep')
     assert captured == [(PATH, golden, {'merge': True})]
