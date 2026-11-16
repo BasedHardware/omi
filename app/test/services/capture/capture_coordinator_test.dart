@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
@@ -27,6 +28,21 @@ class _OneShotAudioSetupFailure extends ScriptedDeviceConnection {
     }
     return super.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
+}
+
+class _ButtonTrackingConnection extends ScriptedDeviceConnection {
+  late final StreamController<List<int>> _buttons = StreamController<List<int>>.broadcast(
+    sync: true,
+    onListen: () => openButtonSubscriptions++,
+    onCancel: () => openButtonSubscriptions--,
+  );
+  int openButtonSubscriptions = 0;
+
+  @override
+  Future<StreamSubscription?> getBleButtonListener({required void Function(List<int>) onButtonReceived}) async =>
+      _buttons.stream.listen(onButtonReceived);
+
+  void doubleTap() => _buttons.add(const [2, 0, 0, 0]);
 }
 
 CaptureEnvironment environment(
@@ -1208,6 +1224,60 @@ void main() {
     expect(resumed.effects.whereType<BleStreamStart>(), isEmpty);
   });
 
+  test('device resume from muted idle clears policy without claiming pendant capture', () {
+    final idle = transitionCapture(
+      CaptureCoordinatorState.idle(),
+      DeviceUpdated(pendant),
+      environment(CaptureCoordinatorState.idle()),
+    ).state;
+    final resumed = transitionCapture(idle, const DeviceResumeRequested(), environment(idle, muted: true));
+
+    expect(resumed.state.phase, CapturePhase.idle);
+    expect(resumed.effects.whereType<PolicyWrite>().single.muted, isFalse);
+    // Only the pendant's own mute is cleared; no capture stage starts.
+    expect(resumed.effects.whereType<RunStage>().map((e) => e.stage).single,
+        isA<PersistDeviceMuteStage>().having((s) => s.muted, 'muted', isFalse));
+  });
+
+  test('device resume from muted idle is inert without a device or while a call holds', () {
+    final idle = CaptureCoordinatorState.idle();
+    expect(transitionCapture(idle, const DeviceResumeRequested(), environment(idle, muted: true)).effects, isEmpty);
+
+    final duringCall = idle.copyWith(
+      callActive: true,
+      connectedDevice: () => ConnectedDevice(id: pendant.id, type: pendant.type),
+    );
+    expect(
+      transitionCapture(duringCall, const DeviceResumeRequested(), environment(duringCall, muted: true, call: true))
+          .effects,
+      isEmpty,
+    );
+  });
+
+  test('device resume cannot change suspended pendant intent while phone owns capture', () {
+    final phone = CaptureCoordinatorState.idle().copyWith(
+      phase: CapturePhase.phoneLive,
+      active: () => const ActiveCaptureSession(
+        source: CaptureSource.phone,
+        mode: CaptureTransport.live,
+        sessionKey: 'phone-1',
+      ),
+      connectedDevice: () => ConnectedDevice(id: pendant.id, type: pendant.type),
+      suspended: const [
+        SuspendedCapture(
+          source: CaptureSource.pendant,
+          reason: SuspendReason.phone,
+          wasPaused: true,
+          mode: CaptureTransport.live,
+        ),
+      ],
+    );
+    final resumed = transitionCapture(phone, const DeviceResumeRequested(), environment(phone, muted: true));
+
+    expect(resumed.effects, isEmpty);
+    expect(resumed.state.pendantSuspension?.wasPaused, isTrue);
+  });
+
   test('interrupted phone user pause emits mute and mic stop and survives interruption end', () {
     final model = SequenceModel();
     model.step(const ScriptStep(2));
@@ -2007,6 +2077,117 @@ void main() {
       await world.settle();
       expect(world.controller.activeRecordingId, pausedId);
       expect(world.controller.liveCaptureSource, 'omi');
+    });
+  });
+
+  test('muted policy after relaunch admits a paused pendant and keeps its button listener', () async {
+    await withReviewWorld((world) async {
+      await SharedPreferencesUtil().saveInt('doubleTapAction', 1);
+      final connection = _ButtonTrackingConnection();
+      world.deviceConnection = connection;
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      await world.controller.stopStreamDeviceRecording();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      expect(connection.openButtonSubscriptions, 0);
+      world.killProcess();
+      await world.reconstructProcess();
+
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.isPaused, isTrue);
+      expect(world.controller.recordingState, RecordingState.pause);
+      expect(connection.openButtonSubscriptions, 1);
+      expect(connection.openAudioSubscriptions, 0);
+
+      connection.doubleTap();
+      await world.settle();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      expect(connection.openAudioSubscriptions, 1);
+      expect(connection.openButtonSubscriptions, 1);
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.isPaused, isFalse);
+      expect(world.controller.recordingState, RecordingState.deviceRecord);
+    });
+  });
+
+  test('foreground restores a muted pendant left idle as paused with a working double-tap', () async {
+    await withReviewWorld((world) async {
+      await SharedPreferencesUtil().saveInt('doubleTapAction', 1);
+      world.deviceConnection = _ButtonTrackingConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      world.killProcess();
+      await world.reconstructProcess();
+
+      // Connected, but no capture session: a skipped or failed start.
+      final connection = _ButtonTrackingConnection();
+      world.deviceConnection = connection;
+      world.controller.updateRecordingDevice(pendant);
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(connection.openButtonSubscriptions, 0);
+
+      world.controller.onAppResumed();
+      // The recovery start is unawaited and does real WAL/device I/O, so a
+      // loaded runner can need more turns than one settle; wait for it, bounded.
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (world.controller.recordingState != RecordingState.pause && DateTime.now().isBefore(deadline)) {
+        await world.settle();
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.isPaused, isTrue);
+      expect(world.controller.recordingState, RecordingState.pause);
+      expect(connection.openButtonSubscriptions, 1);
+      expect(connection.openAudioSubscriptions, 0);
+
+      connection.doubleTap();
+      await world.settle();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      expect(world.controller.recordingState, RecordingState.deviceRecord);
+      expect(connection.openAudioSubscriptions, 1);
+    });
+  });
+
+  test('foreground does not restart a muted pendant the user stopped', () async {
+    await withReviewWorld((world) async {
+      final connection = _ButtonTrackingConnection();
+      world.deviceConnection = connection;
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      await world.controller.stopStreamDeviceRecording();
+      await world.settle();
+
+      world.controller.onAppResumed();
+      await world.settle();
+      await world.elapse(const Duration(seconds: 1));
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(connection.openButtonSubscriptions, 0);
+      expect(connection.openAudioSubscriptions, 0);
+    });
+  });
+
+  test('device unmute after a muted pendant session ended clears policy for the next start', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.controller.pauseDeviceRecording();
+      await world.controller.stopStreamDeviceRecording();
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+
+      await world.controller.resumeDeviceRecording();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
     });
   });
 

@@ -145,6 +145,54 @@ void main() {
   });
 
   group('capture start during an upload pass', () {
+    test('muted idle foreground recovery waits for the fence and stays paused without an uplink', () async {
+      await world.controller.pauseDeviceRecording();
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      world.killProcess();
+      await world.reconstructProcess();
+      final connection = ScriptedDeviceConnection();
+      world.deviceConnection = connection;
+      world.controller.updateRecordingDevice(pendant);
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      final socketsBefore = world.sockets.length;
+      final pass = await holdFencedPass();
+      try {
+        world.controller.onAppResumed();
+        world.controller.onAppResumed();
+        await world.settle();
+        expect(SyncWakeScope.syncOnly, isTrue);
+        expect(world.controller.liveCaptureSource, isNull);
+        expect(connection.openAudioSubscriptions, 0);
+        expect(world.sockets.length, socketsBefore);
+
+        pass.release.complete();
+        await pass.wake;
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (world.controller.recordingState != RecordingState.pause && DateTime.now().isBefore(deadline)) {
+          await world.settle();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        await world.settle();
+        expect(world.controller.liveCaptureSource, 'omi');
+        expect(world.controller.recordingState, RecordingState.pause);
+        expect(world.controller.isPaused, isTrue);
+        expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+        expect(connection.openAudioSubscriptions, 0);
+        expect(world.sockets.length, socketsBefore);
+
+        world.controller.onAppResumed();
+        await world.settle();
+        expect(world.controller.recordingState, RecordingState.pause);
+        expect(connection.openAudioSubscriptions, 0);
+        expect(world.sockets.length, socketsBefore);
+      } finally {
+        if (!pass.release.isCompleted) pass.release.complete();
+        await pass.wake;
+        pass.coordinator.dispose();
+      }
+    });
+
     test('a pendant reconnect during a fenced pass still yields capture when the pass ends', () async {
       await disconnect();
       final pass = await holdFencedPass();
