@@ -31,9 +31,18 @@ from models.structured_extraction import (
 __all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 
 
+class QualityFlag(BaseModel):
+    field: str = Field(max_length=120, description='Zero-based dot path of an output prose field')
+    kind: Literal['capture_availability']
+
+
 class NotesOutput(BaseModel):
     """One schema, independent of the legacy parser's subtype-coercing validators."""
 
+    quality_flags: list[QualityFlag] = Field(
+        default_factory=list,
+        description='Current-capture availability narration in any language; empty for clean output',
+    )
     title: str = ''
     overview: str = ''
     gist: str = Field(default='', description='One line of at most 12 words saying what this conversation was about')

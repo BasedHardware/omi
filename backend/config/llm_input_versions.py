@@ -19,9 +19,10 @@ construction): those must not re-buy anything.
 from __future__ import annotations
 
 NOTES_PROMPT_VERSION = 'notes-5'
-# All notes paths now carry the quality contract. Earlier unscaled checkpoints
-# are incompatible too; retain the compatibility interface at the current version.
-NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-5'
+# New content uses notes-5. Unchanged notes-4 checkpoints are filtered locally,
+# not invalidated by the quality prompt. Retain the earlier unscaled notes-3 alias.
+NOTES_REUSABLE_PREVIOUS_VERSIONS = ('notes-4',)
+NOTES_UNSCALED_PREVIOUS_VERSION = 'notes-3'
 L1_PROMPT_VERSION = 'l1-1'
 
 PROMPT_VERSIONS: dict[str, str] = {

@@ -286,3 +286,118 @@ def test_episode_prompt_renderers_reuse_owner_authority_and_keep_unknown_speech(
     assert ('Riley:' in live) is trusted
     assert 'I prefer a smaller pilot.' in live
     assert segments[0]['is_user'] is True  # prompt-only copy; persisted labels untouched
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        'There is insufficient evidence to approve the claim.',
+        'The review found a lack of evidence for the proposed treatment.',
+        'Our pipeline has failures; Riley will fix it by Friday.',
+        'The team discussed missing transcripts in the transcription product.',
+        'No transcript editor was approved.',
+        'The audio product processes recordings for $8 per month.',
+        '証拠が不十分なため、承認は見送った。',
+        '文字起こし製品の音声処理を改善する。',
+    ],
+)
+def test_subject_matter_evidence_and_audio_products_are_preserved(text):
+    assert safe_body(text) == text
+
+
+def test_japanese_availability_backstop_and_generic_same_call_signal():
+    from utils.llm.notes_output import NotesOutput
+    from utils.episodes.state import parse_update
+
+    japanese = '文字起こしがないため、会議の内容を要約できません。'
+    assert safe_body(japanese) == ''
+    assert safe_body('予算は8万円。' + japanese) == '予算は8万円。'
+    for text in [japanese, '녹취 자료를 사용할 수 없어 요약할 수 없습니다.', 'No se puede resumir esta grabación.']:
+        output = NotesOutput.model_validate(
+            {
+                'title': text,
+                'overview': '予算は8万円。',
+                'sections': [{'heading': '予算', 'body_markdown': text}],
+                'quality_flags': [
+                    {'field': 'title', 'kind': 'capture_availability'},
+                    {'field': 'sections.0.body_markdown', 'kind': 'capture_availability'},
+                ],
+            }
+        )
+        assert output.title and output.title != text
+        assert output.overview == '予算は8万円。' and not output.sections
+        assert 'quality_flags' not in output.to_structured().model_dump()
+        update = parse_update(
+            json.dumps(
+                {
+                    'title': '予算',
+                    'moment_heading': text,
+                    'bullets': [text, '予算は8万円。'],
+                    'quality_flags': [
+                        {'field': 'moment_heading', 'kind': 'capture_availability'},
+                        {'field': 'bullets.0', 'kind': 'capture_availability'},
+                    ],
+                }
+            ),
+            known_item_ids=[],
+        )
+        assert update.moment_heading and update.bullets == ['予算は8万円。']
+
+
+def test_same_call_signal_cannot_remove_tasks_or_whole_chapters():
+    from utils.summary_quality import filter_output
+
+    payload = {'title': 'Launch', 'action_items': [{'description': 'Review Friday'}], 'chapters': [{'title': 'Budget'}]}
+    flags = [
+        {'field': path, 'kind': 'capture_availability'}
+        for path in ['action_items.0.description', 'chapters.0', '__class__']
+    ]
+    assert filter_output({**payload, 'quality_flags': flags}) == payload
+
+
+def test_material_growth_replaces_titles_but_minor_changes_do_not():
+    assert stable_title('Budget planning', 'Launch decision', previous_units=100, current_units=120) == (
+        'Budget planning',
+        None,
+    )
+    assert stable_title('Budget planning', 'Launch decision', previous_units=100, current_units=200) == (
+        'Launch decision',
+        'material_content_growth',
+    )
+    assert stable_title('Budget planning', 'Launch decision', previous_units=0, current_units=200) == (
+        'Budget planning',
+        None,
+    )
+    old = {'title': 'Budget planning', 'content_word_units': 100, 'title_content_units': 100}
+    minor = episode_quality(old, {'title': 'New headline', 'content_word_units': 120})
+    assert minor['title'] == old['title'] and minor['title_content_units'] == 100
+    changed = episode_quality(minor, {'title': 'Launch decision', 'content_word_units': 200})
+    assert changed['title'] == 'Launch decision' and changed['title_change_reason'] == 'material_content_growth'
+    assert changed['title_content_units'] == 200
+    edited = episode_quality(
+        {**old, 'user_title': 'My headline'}, {'title': 'Launch decision', 'content_word_units': 200}
+    )
+    assert edited['title'] == 'My headline'
+
+
+def test_growth_threshold_is_forty_percent_of_current_content_and_has_a_small_edit_floor():
+    assert stable_title('Old', 'New', previous_units=60, current_units=100) == ('New', 'material_content_growth')
+    assert stable_title('Old', 'New', previous_units=61, current_units=100) == ('Old', None)
+    assert stable_title('Old', 'New', previous_units=1, current_units=2) == ('Old', None)
+
+
+def test_matched_chapter_growth_allows_a_new_heading_with_an_audit_reason():
+    old = {
+        'title': 'Session',
+        'moments': [{'id': 'm', 'conversation_id': 'c', 'start_offset': 0, 'end_offset': 60, 'heading': 'Budget'}],
+    }
+    proposed = {
+        'title': 'Session',
+        'moments': [
+            {'id': 'm', 'conversation_id': 'c', 'start_offset': 0, 'end_offset': 100, 'heading': 'Launch decision'}
+        ],
+    }
+    result = episode_quality(old, proposed)
+    assert result['moments'][0]['heading'] == 'Launch decision'
+    assert result['moments'][0]['title_change_reason'] == 'material_content_growth'
+    assert result['moments'][0]['id'] == 'm'

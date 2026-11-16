@@ -261,3 +261,27 @@ def test_actual_summary_matching_preview_prefix_still_keeps_its_title(writer):
     )
     assert db.persist_processing_result_with_lifecycle('u', payload('Updated supported notes'))
     assert writer.commits[0]['structured']['title'] == title
+
+
+@pytest.mark.parametrize('units,expected', [(120, 'Pilot budget'), (200, 'Launch decision')])
+def test_title_material_boundary_and_reason_use_saved_basis(writer, units, expected):
+    writer.document.update(structured={'title': 'Pilot budget', 'overview': 'Earlier notes'}, title_content_units=100)
+    notes = payload('The launch was approved.')
+    notes.update(content_word_units=units)
+    notes['structured']['title'] = 'Launch decision'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    written = writer.commits[0]
+    assert written['structured']['title'] == expected
+    assert written['title_content_units'] == (100 if units == 120 else 200)
+    if units == 200:
+        assert written['title_change_reason'] == 'material_content_growth'
+        assert written['title_changed_at']
+
+
+def test_manual_title_wins_even_after_material_growth(writer):
+    writer.document.update(user_title='My title', structured={'title': 'My title'}, title_content_units=100)
+    notes = payload('The launch was approved.')
+    notes.update(content_word_units=200)
+    notes['structured']['title'] = 'Launch decision'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    assert writer.commits[0]['structured']['title'] == 'My title'

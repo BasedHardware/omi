@@ -86,7 +86,14 @@ from utils.conversations.transcript_for_llm import owner_safe_transcript_segment
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
-from utils.summary_quality import NOTE_QUALITY_RULES, safe_body, title_or_fallback, episode_quality
+from utils.summary_quality import (
+    NOTE_QUALITY_RULES,
+    safe_body,
+    title_or_fallback,
+    episode_quality,
+    filter_output,
+    content_units,
+)
 from utils.episodes.visibility import hidden_member
 from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
@@ -117,6 +124,8 @@ Skip noise, background chatter, mumbling and filler entirely. Never write meta-c
 REPAIR_SYSTEM_PROMPT = """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
 {{"title": "<= 7 words", "emoji": "one emoji", "lede": "one or two sentences", "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words", "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}], "follow_ups": ["a concrete next step"], "people": ["names of people who mattered"]}}
 Keep every fact, name, number and clock label that is already in the reply. Do not invent anything. Use an empty list for a field the reply does not have. Return only the JSON object, with no prose and no code fence."""
+
+REPAIR_SYSTEM_PROMPT += "\n" + NOTE_QUALITY_RULES
 
 SYSTEM_PROMPT = (
     """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".
@@ -404,6 +413,7 @@ def parse(content: str) -> dict[str, Any]:
         raise ComposeFailed('parse_error') from error
     if not isinstance(data, dict):
         raise ComposeFailed('parse_error')
+    data = filter_output(data)
     for key in ('lede', 'overview'):
         if isinstance(data.get(key), list):
             data[key] = ' '.join(str(part) for part in data[key] if str(part).strip())
@@ -1141,7 +1151,9 @@ def _write_single_member(
     composed = single_member_updates(members[0])
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
-        final = episode_quality(current, composed)
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         return {
             **final,
             'composed_fingerprint': print_,
@@ -1473,7 +1485,9 @@ def _compose(
     kept_pending = {'value': superseded}
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
-        final = episode_quality(current, composed)
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         usage = dict(current.get('usage') or {})
         usage['composer_calls'] = int(usage.get('composer_calls') or 0) + paid_calls
         usage['composer_input_tokens'] = int(usage.get('composer_input_tokens') or 0) + input_tokens

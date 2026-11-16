@@ -27,7 +27,7 @@ from config.episodes import (
 )
 
 from utils.speakers.display import sanitize_speaker_text
-from utils.summary_quality import safe_body, title_or_fallback, stable_title
+from utils.summary_quality import safe_body, title_or_fallback, stable_title, filter_output, title_basis
 
 ITEM_KINDS = frozenset({'task', 'reminder'})
 _SPACE = re.compile(r'\s+')
@@ -119,6 +119,7 @@ def parse_update(raw: str, *, known_item_ids: Sequence[str]) -> IncrementalUpdat
         raise InvalidUpdate('not a JSON object') from error
     if not isinstance(data, dict):
         raise InvalidUpdate('not a JSON object')
+    data = filter_output(data)
     known = set(known_item_ids)
     update = IncrementalUpdate(
         title=title_or_fallback(clean_text(data.get('title'), MAX_TOPIC_CHARS)),
@@ -197,6 +198,7 @@ def apply_update(
     conversation_id: str,
     segment_offset: Optional[float],
     now: datetime,
+    content_word_units: int | None = None,
 ) -> dict[str, Any]:
     """Fold one moment's answer into the stored state. Returns only the changed fields."""
     items = provisional_items(episode)
@@ -241,7 +243,16 @@ def apply_update(
         'state_updated_at': now,
     }
     if update.title:
-        changed['title'], reason = stable_title(episode.get('title'), update.title)
+        units = content_word_units if content_word_units is not None else episode.get('content_word_units', 0)
+        changed['title'], reason = stable_title(
+            episode.get('title'),
+            update.title,
+            previous_units=episode.get('title_content_units') or 0,
+            current_units=units,
+        )
+        if units or episode.get('title_content_units'):
+            changed['content_word_units'] = units
+            changed['title_content_units'] = title_basis(episode.get('title_content_units'), units, reason)
         if reason:
             changed['title_change_reason'] = reason
     return changed

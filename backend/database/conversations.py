@@ -39,7 +39,7 @@ from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
 from models.structured import Structured
-from utils.summary_quality import clean_structured, stable_title
+from utils.summary_quality import clean_structured, stable_title, content_units, title_basis
 from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
@@ -397,6 +397,8 @@ def _prepare_conversation_for_write(
     if level not in {'standard', 'enhanced'}:
         data.pop('record_lane_owner', None)
     segments = data.get('transcript_segments')
+    if not data.get('discarded') and isinstance(data.get('structured'), dict) and isinstance(segments, list):
+        data['content_word_units'] = content_units(segments)
     if isinstance(segments, list) and any('original_text' in segment for segment in segments):
         from utils.agent_capabilities.transcripts import originals
 
@@ -1350,7 +1352,17 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
         cleaned['title'] = user_title
     else:
         prior = title_for_stability(existing)
-        cleaned['title'], reason = stable_title(prior, cleaned['title'])
+        units = data.get('content_word_units')
+        if units is None:
+            units = content_units(data.get('transcript_segments', []))
+        cleaned['title'], reason = stable_title(
+            prior,
+            cleaned['title'],
+            previous_units=existing.get('title_content_units') or 0,
+            current_units=units,
+        )
+        if units or existing.get('title_content_units'):
+            data['title_content_units'] = title_basis(existing.get('title_content_units'), units, reason)
         if reason:
             data['title_change_reason'] = reason
             data['title_changed_at'] = datetime.now(timezone.utc)

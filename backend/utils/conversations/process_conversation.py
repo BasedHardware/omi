@@ -98,7 +98,14 @@ from utils.conversations.deterministic_minimum import (
 )
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.home_titles import title_for_stability
-from utils.summary_quality import clean_structured, stable_title, valid_title, title_or_fallback
+from utils.summary_quality import (
+    clean_structured,
+    stable_title,
+    valid_title,
+    title_or_fallback,
+    content_units,
+    title_basis,
+)
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
@@ -736,7 +743,18 @@ def _get_conversation_obj(
                 )
             )
         old_title = title_for_stability(conversation)
-        cleaned['title'], _ = stable_title(old_title, cleaned['title'])
+        cleaned['title'], title_reason = stable_title(
+            old_title,
+            cleaned['title'],
+            previous_units=getattr(conversation, 'title_content_units', 0),
+            current_units=content_units(getattr(conversation, 'transcript_segments', [])),
+        )
+        if isinstance(conversation, Conversation):
+            conversation.title_content_units = title_basis(
+                conversation.title_content_units, content_units(conversation.transcript_segments), title_reason
+            )
+        if str(getattr(conversation, 'user_title', '') or '').strip():
+            cleaned['title'] = conversation.user_title
         # Preserve private notes identity carried on the model instance.
         for key in ('title', 'overview', 'gist'):
             if key in cleaned:
@@ -2942,6 +2960,8 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if not conversation.discarded:
+        payload['content_word_units'] = content_units(conversation.transcript_segments)
     if 'extractions' in open_loop_sink:
         # Server-only derived field, deliberately outside the client wire
         # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
