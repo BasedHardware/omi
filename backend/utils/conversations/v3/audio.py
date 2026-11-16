@@ -79,10 +79,14 @@ def manifest(uid, conversation):
         origin = utc(original.get('started_at')) or (
             datetime.fromtimestamp(min(stamps), timezone.utc) if stamps else utc(recording.get('started_at'))
         )
-        deleted = [
-            ((utc(s['start']) - origin).total_seconds(), (utc(s['end']) - origin).total_seconds())
-            for s in recording.get('deleted_spans') or []
-        ]
+        if origin is None:
+            raise HTTPException(503, 'Audio clock metadata is being prepared')
+        deleted = []
+        for span in recording.get('deleted_spans') or []:
+            start, end = utc(span['start']), utc(span['end'])
+            if start is None or end is None:
+                raise HTTPException(503, 'Audio deletion metadata is being prepared')
+            deleted.append(((start - origin).total_seconds(), (end - origin).total_seconds()))
         for a, b in subtract_spans(piece['start'], piece['end'], deleted):
             result.append(
                 {

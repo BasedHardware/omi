@@ -2143,7 +2143,7 @@ def test_output_language_firestore_and_preference_reads_are_cached_per_session(m
         conversations_db,
         'get_conversation_raw_snapshot',
         lambda *args, **kwargs: (
-            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language'] else None,
+            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language', 'recording'] else None,
             raw_snapshot(*args, **kwargs),
         )[1],
     )

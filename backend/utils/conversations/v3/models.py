@@ -3,6 +3,7 @@
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 
@@ -12,7 +13,9 @@ from utils.llm.usage_tracker import track_usage
 from utils.generated_compute import require_current_generated_compute
 from utils.conversations.v3 import metrics
 
-_notes_mode = ContextVar('v3_notes_mode', default=None)
+_notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None] | None] = ContextVar(
+    'v3_notes_mode', default=None
+)
 
 
 class CallEvents(BaseCallbackHandler):
@@ -68,7 +71,9 @@ def notes_client():
     model = get_or_create_omi_gateway_llm(
         feature_auto_lane_id(feature), streaming=bool(emit), options=options, feature=feature
     )
-    callbacks = [*(model.callbacks or []), CallEvents('summary_open' if foreground else 'summary_background')]
+    inherited = model.callbacks
+    callbacks = list(inherited if isinstance(inherited, list) else inherited.handlers if inherited else [])
+    callbacks.append(CallEvents('summary_open' if foreground else 'summary_background'))
     if emit:
         callbacks.append(SectionEvents(emit))
     return model.model_copy(update={'callbacks': callbacks})
@@ -90,7 +95,8 @@ def outline(uid, messages):
 
 
 def foreground():
-    return bool(_notes_mode.get() and _notes_mode.get()[1])
+    mode = _notes_mode.get()
+    return bool(mode and mode[1])
 
 
 def short_tasks(uid, conversation):
@@ -101,8 +107,11 @@ def short_tasks(uid, conversation):
     if foreground():
         return conversation.structured
     require_current_generated_compute('conv_action_items', uid=uid, provider='openai', allow_byok=False)
+    from utils.speakers.display import display_participants
+
+    participants = display_participants(conversation.transcript_segments)
     transcript = '\n'.join(
-        f'{s.start:.1f} {"ME" if s.is_user else s.speaker}: {s.text}' for s in conversation.transcript_segments
+        f'{s.start:.1f} {participants.for_segment(s).label}: {s.text}' for s in conversation.transcript_segments
     )
     messages = [
         (
@@ -121,6 +130,8 @@ def short_tasks(uid, conversation):
         )
         metrics.MODEL_CALLS.labels('short_tasks').inc()
         response = model.bind(reasoning_effort='low', response_format={'type': 'json_object'}).invoke(messages)
+    if not isinstance(response.content, str):
+        raise ValueError('short_tasks_non_text_response')
     structured = conversation.structured.model_copy(deep=True)
     structured.action_items = [
         ExtractedActionItem.model_validate(item).to_action_item()

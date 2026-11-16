@@ -7,11 +7,12 @@ result is stored; cancellation releases the same lease as background notes.
 import asyncio
 import base64
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
+from typing import Any
 
 from database import conversations_v3 as store
 from models.conversation import Conversation
-from utils.conversations.v3 import models, metrics
+from utils.conversations.v3 import models
 from utils.executors import run_blocking, db_executor, llm_executor
 
 
@@ -26,7 +27,9 @@ def done(row):
 
 
 def write(uid, row, emit):
-    from utils.conversations.process_conversation import _get_structured
+    from utils.conversations.process_conversation import (
+        _get_structured,
+    )  # pyright: ignore[reportPrivateUsage] -- preserve the Q12-owned notes pipeline
     from utils.generated_compute import generated_compute_scope
 
     with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):
@@ -39,7 +42,7 @@ def write(uid, row, emit):
     return structured.model_dump()
 
 
-async def stream(uid, row):
+async def stream(uid: str, row: dict[str, Any]):
     if fresh(row):
         yield done(row)
         return
@@ -47,6 +50,7 @@ async def stream(uid, row):
     if token is None:
         yield 'error: {"detail":"Summary is being written; poll conversation detail"}\n\n'
         return
+    cid = row['id']
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=128)
     sent = set()
@@ -62,12 +66,16 @@ async def stream(uid, row):
     worker = None
     try:
         snapshot = await run_blocking(
-            db_executor, lambda: store.collection(store.get_firestore_client(), uid).document(row['id']).get()
+            db_executor, lambda: store.user_conversations(store.get_firestore_client(), uid).document(cid).get()
         )
         if not snapshot.exists or (snapshot.to_dict() or {}).get('deleted'):
             yield 'error: {"detail":"Conversation not found"}\n\n'
             return
-        row = await run_blocking(db_executor, store._decode, uid, snapshot)
+        decoded = await run_blocking(db_executor, store.decode_row, uid, snapshot)
+        if decoded is None:
+            yield 'error: {"detail":"Conversation not found"}\n\n'
+            return
+        row = decoded
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return

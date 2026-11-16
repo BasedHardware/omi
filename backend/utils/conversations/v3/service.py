@@ -4,24 +4,20 @@ Markers are durable obligations. Dispatch failure never clears one; the sweeper
 retries it. Switching admission off does not stop existing obligations.
 """
 
-import hashlib
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations.v3.triggers import mark_new, enqueue, changed, conversations_v3_enabled
+from utils.conversations.v3.triggers import enqueue, changed
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from utils.conversations.v3.errors import Conflict
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.cloud_tasks import enqueue_named_task
 from utils.conversations.v3 import outline, planner, models, metrics
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
-from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +146,8 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
             ended = window['finished']
             was_ended = prior and prior.get('status') != 'in_progress'
             rewrite = bool(
-                was_ended
+                prior is not None
+                and was_ended
                 and planner.late_rewrite(
                     previous_words=before,
                     new_words=new_words,
@@ -159,7 +156,7 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
                     rewrites=prior.get('v3_rewrites', 0),
                 )
             )
-            if was_ended and not rewrite:
+            if prior is not None and was_ended and not rewrite:
                 row['status'] = prior['status']
                 row['tile_state'] = prior.get('tile_state', 'done')
             waiting = any(recordings[l['conversation_id']].get('record_audio_partial') for l in window['lines'])
@@ -224,8 +221,8 @@ async def drain_processing(uid):
 def pending_processing(uid):
     client = store.get_firestore_client()
     return [
-        store._decode(uid, doc)
-        for doc in store.collection(client, uid)
+        store.decode_row(uid, doc)
+        for doc in store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
         .limit(store.LIMIT)
         .stream()
@@ -249,7 +246,7 @@ def _process(uid, row, token):
                 row.get('language') or 'en',
                 Conversation(**row),
                 persistence_observer=persisted.append,
-                **({'trigger': ProcessingTrigger.SILENT_BACKFILL} if row.get('backfilled') else {})
+                trigger=(ProcessingTrigger.SILENT_BACKFILL if row.get('backfilled') else ProcessingTrigger.CAPTURE_END),
             )
         if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
             raise RuntimeError('v3_processing_not_completed')
@@ -361,7 +358,7 @@ def has_pending(uid):
     return (
         next(
             iter(
-                store.collection(store.get_firestore_client(), uid)
+                store.user_conversations(store.get_firestore_client(), uid)
                 .where(filter=FieldFilter('v3_pending', '==', True))
                 .limit(1)
                 .stream()

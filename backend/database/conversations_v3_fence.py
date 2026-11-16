@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 
-_current = ContextVar('conversation_v3_writer', default=None)
+_current: ContextVar[tuple[str, str, str] | None] = ContextVar('conversation_v3_writer', default=None)
 
 
 def current():

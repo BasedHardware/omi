@@ -53,6 +53,7 @@ from tests.support.firestore_composer_default_context_drivers import entries as 
 from tests.support.firestore_memory_ledger_drivers import registry_extension as memory_ledger_drivers
 from tests.support.firestore_lifecycle_metrics_drivers import entries as lifecycle_metrics_entries
 from tests.support.firestore_task_filter_drivers import entries as task_filter_entries
+from tests.support.firestore_conversations_v3_drivers import entries as conversations_v3_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -1466,6 +1467,10 @@ _add(
         'database.conversations.get_conversations_count',
         base={'uid': UID},
         profiles=COUNT_PROFILES,
+        domains={
+            'hide_home': [False, True],
+            'include_recordings': [False, True],
+        },
     )
 )
 _add(
@@ -1488,6 +1493,9 @@ _add(
         ),
         profiles=WITHOUT_PHOTOS_PROFILES,
         neutrals={
+            'include_recordings': (False, 'post-read visibility only; same query'),
+            'hide_home': (False, 'post-read visibility only; same query'),
+            'capture_only': (False, 'post-read visibility only; same query'),
             'limit': _LIMIT,
             'offset': _OFFSET,
             'budget': _BUDGET,
@@ -1520,7 +1528,7 @@ _add(
         'database.conversations.iter_all_conversations',
         base={'uid': UID},
         domains={'include_discarded': [True, False]},
-        neutrals={'batch_size': _PAGE},
+        neutrals={'batch_size': _PAGE, 'include_recordings': (False, 'post-read visibility only')},
     )
 )
 _add(
@@ -3585,6 +3593,7 @@ for entry in (
     *lifecycle_metrics_entries(),
     *batch_privacy_entries(),
     *home_feed_entries(),
+    *conversations_v3_entries(),
     *memory_ledger_drivers(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),

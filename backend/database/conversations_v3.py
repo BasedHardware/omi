@@ -4,10 +4,10 @@ Only lifecycle calls commit_projection. Speech uses the existing conversation
 codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
-import copy
 import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -23,7 +23,7 @@ LIMIT = 128
 LEASE_SECONDS = 240
 
 
-def collection(client, uid):
+def user_conversations(client, uid):
     return client.collection('users').document(uid).collection('conversations')
 
 
@@ -62,7 +62,7 @@ def release(uid, key, token, *, firestore_client=None):
     finish(client.transaction())
 
 
-def _decode(uid, snapshot):
+def decode_row(uid, snapshot) -> dict[str, Any] | None:
     data = snapshot.to_dict() or {}
     if not snapshot.exists:
         return None
@@ -83,11 +83,11 @@ def load(uid, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
-    coll = collection(client, uid)
+    coll = user_conversations(client, uid)
     pending = list(coll.where(filter=FieldFilter('v3_pending', '==', True)).limit(LIMIT + 1).stream())
     if len(pending) > LIMIT:
         raise Conflict('v3_pending_budget')
-    recordings = {doc.id: _decode(uid, doc) for doc in pending}
+    recordings = {doc.id: decode_row(uid, doc) for doc in pending}
     if recordings:
         eligible = [r for r in recordings.values() if r and r.get('started_at')]
         active = [r for r in eligible if r.get('status') == 'in_progress']
@@ -109,7 +109,7 @@ def load(uid, *, firestore_client=None):
         return {}, {}, cache
     existing = {}
     if state.get('open_id'):
-        opened = _decode(uid, coll.document(state['open_id']).get())
+        opened = decode_row(uid, coll.document(state['open_id']).get())
         if opened:
             existing[opened['id']] = opened
     queried = set()
@@ -124,7 +124,7 @@ def load(uid, *, firestore_client=None):
         if len(ids | recordings.keys()) > LIMIT:
             raise Conflict('v3_recording_budget')
         for rid in ids - recordings.keys():
-            row = _decode(uid, coll.document(rid).get())
+            row = decode_row(uid, coll.document(rid).get())
             if row:
                 recordings[rid] = row
         fresh = [r for rid, r in recordings.items() if rid not in queried and r and r.get('started_at')]
@@ -149,7 +149,7 @@ def load(uid, *, firestore_client=None):
                 .stream()
             )
             for doc in snapshots:
-                row = _decode(uid, doc)
+                row = decode_row(uid, doc)
                 if row:
                     existing[row['id']] = row
             if len(snapshots) > LIMIT or len(existing) > LIMIT:
@@ -162,7 +162,7 @@ def load(uid, *, firestore_client=None):
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref = collection(client, uid).document(cid)
+    ref = user_conversations(client, uid).document(cid)
 
     @firestore.transactional
     def mark(tx):
@@ -180,13 +180,13 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
 
 def commit_projection(uid, token, recordings, existing, rows, cache, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    coll = collection(client, uid)
+    coll = user_conversations(client, uid)
     held = lease_ref(client, uid, 'builder')
     prepared = []
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
         prepared.append(
-            conversations._prepare_conversation_for_write(
+            conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
                 clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=False
             )
         )
@@ -274,8 +274,8 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref, held = collection(client, uid).document(cid), lease_ref(client, uid, 'summary-' + cid)
-    patch = conversations._prepare_conversation_for_write(
+    ref, held = user_conversations(client, uid).document(cid), lease_ref(client, uid, 'summary-' + cid)
+    patch = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
         {'structured': structured}, uid, 'enhanced', allow_offload=False
     )
 
@@ -330,7 +330,7 @@ def release_claims(uid, row, *, firestore_client=None):
     if not row.get('v3_derived') and not row.get('recording_pieces'):
         return
     client = firestore_client or get_firestore_client()
-    coll = collection(client, uid)
+    coll = user_conversations(client, uid)
     ids = set(row.get('v3_recording_ids') or []) | {p['recording_id'] for p in row.get('recording_pieces') or []}
 
     @firestore.transactional
@@ -395,13 +395,13 @@ def load_derive(uid, *, firestore_client=None):
     # Query by time alone, then classify sources. Overflow is a blocked backfill,
     # never a claim that a partial 30-day history was converted.
     snapshots = list(
-        collection(client, uid).where(filter=FieldFilter('started_at', '>=', start)).limit(LIMIT + 1).stream()
+        user_conversations(client, uid).where(filter=FieldFilter('started_at', '>=', start)).limit(LIMIT + 1).stream()
     )
     if len(snapshots) > LIMIT:
         raise Conflict('backfill_window_budget; partition the operator job before enabling')
     rows = {}
     for snapshot in snapshots:
-        row = _decode(uid, snapshot)
+        row = decode_row(uid, snapshot)
         if (
             row
             and row.get('source') in {'omi', 'phone'}
@@ -415,7 +415,7 @@ def load_derive(uid, *, firestore_client=None):
 def claim_audio_purge(uid, rid, *, firestore_client=None):
     """Close the owner before prefix deletion so late sync cannot reuse it."""
     client = firestore_client or get_firestore_client()
-    ref = collection(client, uid).document(rid)
+    ref = user_conversations(client, uid).document(rid)
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(rid)
 
     @firestore.transactional
@@ -444,7 +444,7 @@ def claim_audio_purge(uid, rid, *, firestore_client=None):
 def transfer_claims(uid, sources, target, *, firestore_client=None):
     """Replace source claims with the durable merged window before source erase."""
     client = firestore_client or get_firestore_client()
-    coll = collection(client, uid)
+    coll = user_conversations(client, uid)
     ids = {rid for row in sources for rid in row.get('v3_recording_ids') or []}
     source_ids = {r['id'] for r in sources}
 
@@ -478,7 +478,7 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
 
 def settle_processing(uid, cid, token, revision, covers, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref = collection(client, uid).document(cid)
+    ref = user_conversations(client, uid).document(cid)
     held = lease_ref(client, uid, 'summary-' + cid)
 
     @firestore.transactional

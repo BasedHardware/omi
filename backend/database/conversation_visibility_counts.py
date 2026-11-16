@@ -79,7 +79,7 @@ def count_hidden(
     if hide_home:
         queries += (collection.where(filter=FieldFilter('home_hidden', '==', True)),)
     seen = set()
-    for index, query in enumerate(queries):
+    for query in queries:
         for doc in query.stream():
             data = doc.to_dict() or {}
             identity = doc.id

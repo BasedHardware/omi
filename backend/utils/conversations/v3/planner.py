@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
+from typing import Any
 
 from utils.conversations.v3.outline import utc
 
@@ -111,7 +112,6 @@ def build(uid, window, recordings, existing=None):
         # new recorded lines rather than rebuilding away those edits/windows.
         old_segments = deepcopy(existing.get('transcript_segments') or [])
         keys = {(s.get('id'), s.get('start'), s.get('end')) for s in old_segments}
-        text_keys = {(' '.join(s.get('text', '').casefold().split()), s.get('start')) for s in old_segments}
 
         def already_present(segment):
             if (segment.get('id'), segment.get('start'), segment.get('end')) in keys:
@@ -141,7 +141,7 @@ def build(uid, window, recordings, existing=None):
         (existing or {}).get('structured', {}).get('title') if (existing or {}).get('title_locked') else window['title']
     )
     hidden = window['kind'] in {'media', 'background'} or sum(len(s.get('text', '').split()) for s in segments) < 300
-    row = {
+    row: dict[str, Any] = {
         **(existing or {}),
         'id': cid,
         'v3_derived': True,
