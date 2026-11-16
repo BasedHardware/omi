@@ -47,7 +47,7 @@ from database import conversations as conversations_db
 from utils.batch_pipeline.projection_walk_stop import walk_block_stop, walk_head_stop
 from utils.batch_pipeline import projection_drain_diagnostics as drain_diagnostics
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
-from utils.batch_pipeline import artifact_missing
+from utils.batch_pipeline import artifact_missing, empty_transcription
 from utils.batch_pipeline.errors import error_site_field
 from utils.batch_pipeline.correctness_metrics import record_labels
 from utils.batch_pipeline.metrics import PROJECTION_FINISH_COMPLETED, PROJECTION_FINISH_READS
@@ -628,7 +628,7 @@ class Projector:
                 if binding.record_origin:
                     self.assign_record_silence(item, binding, session, hint=hint)
                 else:
-                    session.persist_empty()
+                    empty_transcription.persist_result(session, binding, item, entry['result']['outcome'])
             except ProjectionReplay:
                 if prechecked and not policy.projection_contention:
                     raise

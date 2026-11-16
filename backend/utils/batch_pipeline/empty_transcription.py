@@ -10,6 +10,24 @@ FIELD = 'record_transcription_empty'
 EMPTY_OUTCOMES = frozenset({'silence', 'no_recoverable_speech'})
 
 
+def persist_result(session, binding, item, outcome):
+    """Add record-only evidence without replacing non-desktop transcript content.
+
+    Either existing presentation switch restores result-only persistence.
+    The session reads and stamps the current row in the result transaction.
+    """
+    if binding.target_conversation_id and settled_terminal_enabled() and legacy_empty_wire_enabled():
+        session.persist_empty(
+            terminal_empty_span={
+                'start': item.capture_at,
+                'end': item.capture_at + item.duration_seconds,
+                'terminal_empty_outcome': outcome,
+            }
+        )
+    else:
+        session.persist_empty()
+
+
 def pending_generation(row):
     return [row.get('home_transcription_pending_at'), row.get('episode_transcription_pending_at')]
 

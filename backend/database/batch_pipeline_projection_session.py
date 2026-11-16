@@ -30,6 +30,7 @@ from database.batch_pipeline_projection_finish import projection_finish_state_fi
 
 from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
 from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
+from utils.batch_pipeline import empty_transcription
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
@@ -616,13 +617,42 @@ class ProjectionSession:
         )
         return receipt
 
-    def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False):
+    def persist_empty(self, *, superseded=False, quarantined=False, privacy_deleted=False, terminal_empty_span=None):
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction, privacy_deleted=privacy_deleted)
+            empty_ref, empty_patch = None, {}
+            if (
+                terminal_empty_span is not None
+                and not (superseded or quarantined or privacy_deleted)
+                and terminal_empty_span.get('terminal_empty_outcome') == (self.entry.get('result') or {}).get('outcome')
+            ):
+                empty_ref = (
+                    self.client.collection('users')
+                    .document(self.binding.owner_id)
+                    .collection('conversations')
+                    .document(self.binding.target_conversation_id)
+                )
+                current = empty_ref.get(transaction=transaction).to_dict() or {}
+                if (
+                    current.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}
+                    and current.get('status') == 'completed'
+                    and not current.get('deleted')
+                    and not current.get('sync_merged_into')
+                    and not current.get('uses_custom_stt')
+                    and not current.get('transcript_segments')
+                ):
+                    empty_patch = {
+                        'record_projection_revision': int(current.get('record_projection_revision') or 0) + 1
+                    }
+                    empty_transcription.stamp(current, empty_patch, terminal_empty_span)
+                    if empty_transcription.FIELD not in empty_patch:
+                        empty_patch = {}
             receipt = self.persist(
                 transaction, superseded=superseded, quarantined=quarantined, privacy_deleted=privacy_deleted
             )
+            if empty_patch:
+                transaction.update(empty_ref, empty_patch)
             return receipt
 
         try:
