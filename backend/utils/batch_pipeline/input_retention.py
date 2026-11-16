@@ -2,7 +2,11 @@
 
 import math
 
-from config.batch_pipeline_retention import LIFECYCLE_DAYS, TERMINAL_SECONDS, WARNING_SECONDS
+from config.batch_pipeline_retention import (
+    LIFECYCLE_DAYS as LIFECYCLE_DAYS,
+    TERMINAL_SECONDS as TERMINAL_SECONDS,
+    WARNING_SECONDS as WARNING_SECONDS,
+)
 
 STAGING_BUCKET = 'based-hardware-batch-pipeline-staging'
 REASON = 'input_expiring'
