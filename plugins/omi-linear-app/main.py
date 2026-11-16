@@ -8,6 +8,7 @@ import os
 import base64
 import hashlib
 import hmac
+import logging
 import re
 import secrets
 import urllib.parse
@@ -41,6 +42,8 @@ from models import (
 )
 
 REQUEST_TIMEOUT = (5, 30)
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -522,7 +525,14 @@ def _fetch_linear_identity(access_token: Optional[str]) -> Optional[Dict[str, st
         if response.status_code != 200:
             return None
         payload = response.json() or {}
+    except requests.RequestException as e:
+        logger.warning("Linear identity fetch failed: %s", e)
+        return None
+    except (ValueError, TypeError) as e:
+        logger.warning("Linear identity response parse failed: %s", e)
+        return None
     except Exception:
+        logger.exception("Unexpected error fetching Linear identity")
         return None
     if not isinstance(payload, dict) or payload.get("errors"):
         return None
@@ -675,10 +685,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "authenticated": False,
             "error": "Invalid or expired OAuth state"
         })
-        try:
-            resp.status_code = 400
-        except Exception:
-            pass
+        resp.status_code = 400
         return resp
 
     already_connected = get_linear_tokens(uid) is not None
@@ -713,10 +720,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
             "authenticated": False,
             "error": "Forbidden: sign in with the Linear account that is already connected, or reconnect from an active settings session"
         })
-        try:
-            resp.status_code = 403
-        except Exception:
-            pass
+        resp.status_code = 403
         return resp
 
     # Linear tokens are long-lived (10 years), but we set a reasonable expiry

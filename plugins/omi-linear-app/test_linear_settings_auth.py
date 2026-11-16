@@ -78,6 +78,7 @@ def load_linear_app():
     requests = ModuleType("requests")
     requests.get = Mock()
     requests.post = Mock()
+    requests.RequestException = type("RequestException", (OSError,), {})
 
     dotenv = ModuleType("dotenv")
     dotenv.load_dotenv = lambda *args, **kwargs: None
@@ -421,6 +422,26 @@ class LinearSettingsSessionAuthTests(unittest.TestCase):
         with patch.object(linear_main.requests, "post", return_value=bad):
             self.assertIsNone(linear_main._fetch_linear_identity("tok"))
         self.assertIsNone(linear_main._fetch_linear_identity(None))
+
+    def test_fetch_linear_identity_fails_closed_and_logs_on_errors(self):
+        """Request/parse/unexpected failures must return None (fail closed) and log."""
+        with patch.object(
+            linear_main.requests, "post", side_effect=linear_main.requests.RequestException("network down")
+        ):
+            with self.assertLogs(linear_main.logger, level="WARNING") as cm:
+                self.assertIsNone(linear_main._fetch_linear_identity("tok"))
+            self.assertTrue(any("identity fetch failed" in line.lower() for line in cm.output))
+
+        bad_json = SimpleNamespace(status_code=200, json=Mock(side_effect=ValueError("No JSON object")))
+        with patch.object(linear_main.requests, "post", return_value=bad_json):
+            with self.assertLogs(linear_main.logger, level="WARNING") as cm:
+                self.assertIsNone(linear_main._fetch_linear_identity("tok"))
+            self.assertTrue(any("parse failed" in line.lower() for line in cm.output))
+
+        with patch.object(linear_main.requests, "post", side_effect=RuntimeError("unexpected")):
+            with self.assertLogs(linear_main.logger, level="ERROR") as cm:
+                self.assertIsNone(linear_main._fetch_linear_identity("tok"))
+            self.assertTrue(any("unexpected error fetching linear identity" in line.lower() for line in cm.output))
 
 
 if __name__ == "__main__":
