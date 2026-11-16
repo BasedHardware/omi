@@ -136,7 +136,7 @@ def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foregr
 @pytest.mark.asyncio
 async def test_summary_renews_lease_until_model_finishes(monkeypatch):
     import asyncio
-    from utils.conversations.v3 import service
+    from utils.conversations.v3 import service, renewal
 
     calls = []
 
@@ -144,6 +144,7 @@ async def test_summary_renews_lease_until_model_finishes(monkeypatch):
         return fn(*args, **kwargs)
 
     monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(renewal, 'run_blocking', blocking)
     monkeypatch.setattr(leases, 'LEASE_SECONDS', 0.003)
     monkeypatch.setattr(service.leases, 'renew', lambda *a: calls.append(a))
     worker = asyncio.create_task(asyncio.sleep(0.015))
@@ -183,13 +184,19 @@ async def test_on_open_reconcile_timeout_streams_stored_row(monkeypatch):
     monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
     monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
 
+    released, finished = asyncio.Event(), asyncio.Event()
+
     async def reconcile(*a, **kw):
-        pytest.fail('reconcile was awaited without the time bound')
+        try:
+            await released.wait()
+        finally:
+            finished.set()
+
+    original_wait = asyncio.wait_for
 
     async def bounded(awaitable, timeout):
         assert timeout == 8
-        awaitable.close()
-        raise asyncio.TimeoutError
+        return await original_wait(awaitable, 0.001)
 
     async def prepare(uid, stored):
         assert stored is row
@@ -198,8 +205,13 @@ async def test_on_open_reconcile_timeout_streams_stored_row(monkeypatch):
     monkeypatch.setattr(service, 'reconcile', reconcile)
     monkeypatch.setattr(routes.asyncio, 'wait_for', bounded)
     monkeypatch.setattr(summary, 'prepare', prepare)
-    response = await routes.conversation_summary_stream('c', 'u')
-    assert response.status_code == 200 and response.media_type == 'text/event-stream'
+    try:
+        response = await routes.conversation_summary_stream('c', 'u')
+        assert response.status_code == 200 and response.media_type == 'text/event-stream'
+        assert not finished.is_set(), 'timeout cancelled the lease holder'
+    finally:
+        released.set()
+        await original_wait(finished.wait(), 1)
 
 
 @pytest.mark.parametrize('locked', [True, False])
@@ -367,3 +379,143 @@ def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
     assert client.rows[path]['tile_state'] == ('done' if outcome == 'done' else 'failed')
     assert client.rows[path]['status'] == 'completed'
     assert client.rows[path]['summary_retryable'] is (outcome != 'done')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('error', ['source_changed', 'lease_lost', 'storage_unavailable'])
+async def test_on_open_reconcile_errors_stream_stored_row(monkeypatch, error):
+    from utils.conversations.v3 import service
+
+    async def blocking(pool, fn, *a, **kw):
+        return fn(*a, **kw)
+
+    async def reconcile(*a, **kw):
+        raise RuntimeError(error)
+
+    row = {'id': 'c', 'v3_derived': True, 'status': 'in_progress'}
+    monkeypatch.setattr(routes, 'run_blocking', blocking)
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *a: row)
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a: None)
+    monkeypatch.setattr(service, 'reconcile', reconcile)
+
+    async def prepare(uid, stored):
+        assert stored is row
+
+    monkeypatch.setattr(summary, 'prepare', prepare)
+    assert (await routes.conversation_summary_stream('c', 'u')).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('reason', ['fresh', 'ineligible'])
+async def test_early_stream_exit_releases_preacquired_summary_token(monkeypatch, reason):
+    async def blocking(pool, fn, *a, **kw):
+        return fn(*a, **kw)
+
+    released = []
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    monkeypatch.setattr(leases, 'release', lambda *a: released.append(a))
+    row = {'id': 'c', 'finished_at': AT}
+    token = await summary.prepare('u', row)
+    if reason == 'fresh':
+        row['summary_covers_through'] = AT
+    else:
+        row.update(v3_derived=True, kind='media')
+    assert [f async for f in summary.stream('u', row, token=token)][0].startswith('done:')
+    assert released == [('u', 'summary-c', 'token')]
+
+
+@pytest.mark.asyncio
+async def test_lease_renewal_retries_transient_failure_and_has_lifetime_cap(monkeypatch):
+    import asyncio
+    from utils.conversations.v3 import renewal
+    from unittest.mock import AsyncMock
+
+    attempts = []
+
+    async def blocking(pool, fn, *a, **kw):
+        return fn(*a, **kw)
+
+    finish = asyncio.Event()
+    worker = asyncio.create_task(finish.wait())
+
+    def renew(*a):
+        attempts.append(a)
+        if len(attempts) == 1:
+            raise OSError('synthetic transient')
+        finish.set()
+
+    monkeypatch.setattr(renewal, 'run_blocking', blocking)
+    monkeypatch.setattr(renewal.asyncio, 'sleep', AsyncMock())
+    monkeypatch.setattr(leases, 'renew', renew)
+    monkeypatch.setattr(leases, 'LEASE_SECONDS', 0.003)
+    await renewal.renew_until_done('u', 'builder', 'token', worker)
+    await worker
+    assert len(attempts) == 2
+    monkeypatch.setattr(renewal, 'MAX_RENEWAL_SECONDS', 0)
+    worker = asyncio.create_task(asyncio.Event().wait())
+    try:
+        with pytest.raises(RuntimeError, match='lifetime_exhausted'):
+            await renewal.renew_until_done('u', 'builder', 'token', worker)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_builder_keeps_lease_until_paid_outline_exits(monkeypatch):
+    import asyncio
+    import threading
+    from utils.conversations.v3 import service, renewal
+
+    entered, release = threading.Event(), threading.Event()
+    held = []
+
+    async def blocking(pool, fn, *a, **kw):
+        if fn is service.models.outline:
+            return await asyncio.to_thread(fn, *a, **kw)
+        return fn(*a, **kw)
+
+    def model(*a):
+        entered.set()
+        assert release.wait(3)
+        return '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan","kind":"conversation"}]}'
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(renewal, 'run_blocking', blocking)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: held.append('token') or 'token')
+    monkeypatch.setattr(leases, 'renew', lambda *a: None)
+    monkeypatch.setattr(leases, 'release', lambda *a: held.clear())
+    monkeypatch.setattr(
+        service.store,
+        'load',
+        lambda *a, **kw: (
+            {
+                'r': {
+                    'id': 'r',
+                    'recording': True,
+                    'started_at': AT,
+                    'finished_at': AT + timedelta(seconds=10),
+                    'transcript_segments': [{'text': 'synthetic speech', 'start': 0, 'end': 10}],
+                }
+            },
+            {},
+            [],
+        ),
+    )
+    monkeypatch.setattr(service.store, 'outline_attempt', lambda *a: True)
+    monkeypatch.setattr(service.models, 'outline', model)
+    task = asyncio.create_task(service.reconcile('u'))
+    try:
+        for _ in range(100):
+            if entered.is_set():
+                break
+            await asyncio.sleep(0.001)
+        assert entered.is_set()
+        task.cancel()
+        await asyncio.sleep(0.005)
+        assert held and not task.done()
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+    assert not held

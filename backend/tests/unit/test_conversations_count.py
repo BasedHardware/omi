@@ -465,6 +465,9 @@ class _CountQuery:
         name = getattr(direction, 'name', None) or str(direction)
         return self._copy(orders=(*self._orders, (field_path, name)))
 
+    def select(self, fields):
+        return self
+
     def limit(self, value):
         return self._copy(limit_count=value)
 
@@ -800,4 +803,45 @@ def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggrega
     monkeypatch.setattr(_CountQuery, 'stream', stream)
     assert count_hidden(query, include_discarded=False, hide_home=True) == 5
     assert len(aggregate_calls) == 3
+    monkeypatch.setattr(_CountQuery, 'stream', original_stream)
     assert count_hidden(query, include_discarded=False, hide_home=True, starred=True) == 0
+
+
+def test_filtered_hidden_layers_use_bounded_metadata_scan_without_predicate_indexes(monkeypatch):
+    from database.conversation_visibility_counts import count_hidden
+
+    calls = []
+    original = _CountQuery.stream
+
+    def stream(self):
+        if any(f.field_path in {'recording', 'home_hidden'} for f in self._filters):
+            assert self._limit_count == 10001
+            assert all(f.field_path in {'recording', 'home_hidden', 'discarded'} for f in self._filters)
+            calls.append(self._limit_count)
+        return original(self)
+
+    monkeypatch.setattr(_CountQuery, 'stream', stream)
+    docs = [{'id': 'r', 'recording': True, 'discarded': False, 'source': 'omi', 'created_at': _T0}]
+    aggregates = []
+    assert count_hidden(_CountQuery(docs, aggregates), include_discarded=False, sources=['omi'], start_date=_T0) == 1
+    assert calls == [10001] and not aggregates
+
+
+def test_filtered_hidden_layer_false_star_filter_requires_stored_false():
+    from database.conversation_visibility_counts import count_hidden
+
+    docs = [
+        {'id': 'missing', 'recording': True, 'discarded': False},
+        {'id': 'false', 'recording': True, 'discarded': False, 'starred': False},
+    ]
+    assert count_hidden(_CountQuery(docs, []), include_discarded=False, starred=False) == 1
+
+
+def test_filtered_hidden_layer_over_budget_fails_explicitly():
+    from database.conversation_visibility_counts import count_hidden
+    from fastapi import HTTPException
+
+    docs = [{'id': str(i), 'recording': True, 'discarded': False} for i in range(10001)]
+    with pytest.raises(HTTPException) as error:
+        count_hidden(_CountQuery(docs, []), include_discarded=False, sources=['omi'])
+    assert error.value.status_code == 503

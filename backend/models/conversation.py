@@ -1109,6 +1109,7 @@ class LiveConversation(BaseModel):
     id: str
     structured: Structured
     started_at: datetime
+    finished_at: Optional[datetime]
     created_at: datetime
     status: ConversationStatus
     tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None

@@ -243,3 +243,20 @@ def test_media_stays_hidden_without_recognition():
     group = outline.stretches([row], NOW + timedelta(hours=1))[0]
     result = planner.build('u', planner.windows([group], [[entry(kind='media')]])[0], {'r': row})
     assert result['home_hidden'] and result['kind'] == 'media' and result['home_hidden_reason'] == 'media'
+
+
+def test_piece_trim_uses_playback_clock_for_171_second_capture_skew():
+    row = recording(
+        audio_files=[
+            {
+                'id': 'f',
+                'started_at': NOW + timedelta(seconds=171),
+                'chunk_timestamps': [(NOW + timedelta(seconds=171)).timestamp()],
+                'playback_start': NOW.timestamp(),
+                'duration': 10,
+            }
+        ]
+    )
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    built = planner.build('u', planner.windows([group], [[entry()]])[0], {'r': row})
+    assert built['recording_pieces'] == [{'recording_id': 'r', 'audio_file_id': 'f', 'start': 0, 'end': 10}]

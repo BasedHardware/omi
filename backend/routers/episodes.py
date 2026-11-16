@@ -94,7 +94,8 @@ def _admitted(uid: str, channel: Optional[str], *, v3_enabled=None) -> bool:
     if not client_channel_admitted(channel):
         metrics.record_client_request(label, 'channel_closed')
         return False
-    client_gate.note_client_seen(uid)
+    if label == 'beta':
+        client_gate.note_client_seen(uid)
     metrics.record_client_request(label, 'admitted')
     return True
 

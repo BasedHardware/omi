@@ -3,6 +3,7 @@
 from typing import Any, Mapping, Optional, List
 from datetime import datetime
 from google.cloud.firestore_v1 import FieldFilter
+from fastapi import HTTPException
 
 from utils.sync import bridge_pending
 
@@ -72,15 +73,36 @@ def count_hidden(
             query = query.where(filter=FieldFilter(field, '==', True))
         if not include_discarded:
             query = query.where(filter=FieldFilter('discarded', '==', False))
-        for field, values in (('status', statuses), ('source', sources), ('structured.category', categories)):
-            if values:
-                query = query.where(filter=FieldFilter(field, 'in', values))
-        for field, value in (('folder_id', folder_id), ('starred', starred)):
-            if value is not None:
-                query = query.where(filter=FieldFilter(field, '==', value))
-        for op, value in (('>=', start_date), ('<=', end_date)):
-            if value is not None:
-                query = query.where(filter=FieldFilter('created_at', op, value))
+        filtered = bool(
+            statuses or sources or categories or start_date or end_date or folder_id is not None or starred is not None
+        )
+        if filtered:
+            # Rare filtered counts inspect at most 10k matching-layer metadata rows.
+            # No optional-predicate composite indexes, no transcript decoding.
+            snapshots = list(
+                query.select(
+                    ['discarded', 'status', 'source', 'structured.category', 'folder_id', 'starred', 'created_at']
+                )
+                .limit(10001)
+                .stream()
+            )
+            if len(snapshots) > 10000:
+                raise HTTPException(503, 'Filtered conversation count exceeds scan budget')
+            return sum(
+                (starred is None or (doc.to_dict() or {}).get('starred') is starred)
+                and matches_list_predicates(
+                    doc.to_dict() or {},
+                    include_discarded=include_discarded,
+                    statuses=statuses,
+                    sources=sources,
+                    start_date=start_date,
+                    end_date=end_date,
+                    categories=categories,
+                    folder_id=folder_id,
+                    starred=starred,
+                )
+                for doc in snapshots
+            )
         return int(query.count().get()[0][0].value)
 
     if not include_recordings:

@@ -286,6 +286,15 @@ def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
         wire = ConversationsLiveResponse(**result).model_dump(exclude_unset=True)
         assert 'transcript_segments' not in wire['conversation']
         assert wire['conversation']['structured'] == {'title': 'Plan', 'emoji': '🌳'}
+        import json
+        from pathlib import Path
+
+        schema = json.loads(
+            (Path(__file__).resolve().parents[3] / 'docs/api-reference/app-client-openapi.json').read_text()
+        )
+        required = schema['components']['schemas']['Conversation']['required']
+        assert set(required) <= wire['conversation'].keys()
+        assert wire['conversation']['finished_at'] is None
 
 
 def test_merge_rejects_recording_before_admission(monkeypatch):

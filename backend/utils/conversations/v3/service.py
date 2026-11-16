@@ -16,6 +16,7 @@ from functools import wraps
 from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.v3.triggers import enqueue, changed
+from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
@@ -100,6 +101,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
             and not r.get('sync_merged_into')
             and r.get('data_protection_level') != 'private'
             and r.get('started_at')
+            and not r.get('_v3_unreadable')
         ]
         groups = outline.stretches(eligible, now)
         if on_open and conversation_id:
@@ -131,7 +133,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
                 if await run_blocking(db_executor, store.outline_attempt, uid, token, group['fingerprint']):
                     metrics.MODEL_CALLS.labels('outline').inc()
-                    content = await run_blocking(llm_executor, models.outline, uid, messages)
+                    content = await leased_work(uid, 'builder', token, llm_executor, models.outline, uid, messages)
                     try:
                         entries = outline.parse(content, group)
                     except (ValueError, KeyError, TypeError):
@@ -297,14 +299,6 @@ async def drain_processing(uid):
             await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
 
 
-async def renew_until_done(uid, key, token, worker):
-    while not worker.done():
-        done, _ = await asyncio.wait({worker}, timeout=leases.LEASE_SECONDS / 3)
-        if done:
-            return
-        await run_blocking(db_executor, leases.renew, uid, key, token)
-
-
 def pending_processing(uid):
     client = store.get_firestore_client()
     return [
@@ -400,33 +394,71 @@ async def sweep():
         cursor = rows[-1]
     for uid in users:
         await run_blocking(db_executor, enqueue, uid)
-    processing = await run_blocking(
-        db_executor,
-        lambda: list(
+    cursor = None
+    while True:
+        query = (
             client.collection_group('conversations')
             .where(filter=FieldFilter('v3_process_pending', '==', True))
+            .order_by('__name__')
             .limit(1000)
-            .stream()
-        ),
-    )
-    for doc in processing:
-        parts = doc.reference.path.split('/')
-        if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
-            users.add(parts[1])
-            await run_blocking(db_executor, enqueue, parts[1])
-    purges = await run_blocking(
-        db_executor,
-        lambda: list(
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        processing = await run_blocking(db_executor, lambda: list(query.stream()))
+        for doc in processing:
+            parts = doc.reference.path.split('/')
+            if len(parts) == 4 and parts[0] == 'users' and parts[1] not in users:
+                users.add(parts[1])
+                try:
+                    await run_blocking(db_executor, enqueue, parts[1])
+                except Exception as exc:
+                    logger.warning('event=v3_process_dispatch outcome=retry exception_type=%s', type(exc).__name__)
+        if len(processing) < 1000:
+            break
+        cursor = processing[-1]
+    cursor = None
+    while True:
+        query = (
             client.collection_group('conversations')
             .where(filter=FieldFilter('v3_audio_purge_pending', '==', True))
+            .order_by('__name__')
             .limit(1000)
-            .stream()
-        ),
-    )
-    for doc in purges:
-        parts = doc.reference.path.split('/')
-        if len(parts) == 4 and parts[0] == 'users':
-            await run_blocking(storage_executor, purge_audio, parts[1], parts[3])
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        purges = await run_blocking(db_executor, lambda: list(query.stream()))
+        for doc in purges:
+            parts = doc.reference.path.split('/')
+            retry_at = (doc.to_dict() or {}).get('v3_audio_purge_retry_after')
+            if len(parts) == 4 and parts[0] == 'users' and (not retry_at or retry_at <= now):
+                try:
+                    await run_blocking(storage_executor, purge_audio, parts[1], parts[3])
+                except Exception as exc:
+                    logger.warning('event=v3_audio_purge outcome=retry exception_type=%s', type(exc).__name__)
+                    try:
+                        await run_blocking(
+                            db_executor,
+                            conversations_db.update_conversation,
+                            parts[1],
+                            parts[3],
+                            {
+                                'v3_audio_purge_pending': True,
+                                'v3_audio_purge_retry_after': now + timedelta(minutes=5),
+                                'v3_audio_purge_attempts': int(
+                                    (doc.to_dict() or {}).get('v3_audio_purge_attempts') or 0
+                                )
+                                + 1,
+                            },
+                        )
+                    except Exception as state_error:
+                        # The original pending obligation still survives a failed retry-state write.
+                        logger.warning(
+                            'event=v3_audio_purge_retry_state outcome=pending exception_type=%s',
+                            type(state_error).__name__,
+                        )
+        if len(purges) < 1000:
+            break
+        cursor = purges[-1]
     return len(users)
 
 

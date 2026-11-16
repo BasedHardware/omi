@@ -15,6 +15,16 @@ def utc(value):
     return value.replace(tzinfo=timezone.utc) if value and value.tzinfo is None else value
 
 
+def playback_origin(audio_file, recording):
+    value = audio_file.get('playback_start')
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return datetime.fromtimestamp(value, timezone.utc)
+    stamps = audio_file.get('chunk_timestamps') or []
+    return utc(audio_file.get('started_at')) or (
+        datetime.fromtimestamp(min(stamps), timezone.utc) if stamps else utc(recording.get('started_at'))
+    )
+
+
 SYSTEM_PROMPT = """You outline one stretch of a person's day. The person wears an audio recorder.
 
 The transcript comes from a small microphone worn all day. It has recognition errors. Speaker labels are unreliable: ME is the wearer when the system recognised their voice, and one other person is often split across many S-numbers. The microphone also picks up television, films, music, podcasts and strangers.

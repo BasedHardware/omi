@@ -3442,6 +3442,7 @@ export interface LinkCalendarEventRequest {
 
 export interface LiveConversation {
   created_at: string;
+  finished_at: string | null;
   id: string;
   started_at: string;
   status: ConversationStatus;

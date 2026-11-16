@@ -12,6 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
+from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
@@ -42,6 +43,18 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     return data
 
 
+def recording_input(uid, snapshot):
+    if not snapshot.exists:
+        return None
+    raw = snapshot.to_dict() or {}
+    if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
+        try:
+            return decode_row(uid, snapshot)
+        except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
+            pass
+    return {**raw, 'id': snapshot.id, '_v3_revision': snapshot.update_time, '_v3_unreadable': True}
+
+
 def load(uid, *, conversation_id=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
@@ -55,40 +68,33 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         pending = list(
             coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(33).stream()
         )
-    continued_id = None
-    if not conversation_id and len(pending) > 32:
-        last, following = pending[31].to_dict() or {}, pending[32].to_dict() or {}
-        if (
-            last.get('finished_at')
-            and following.get('started_at')
-            and following['started_at'] - last['finished_at'] < timedelta(minutes=5)
-        ):
-            continued_id = pending[31].id
-        pending = pending[:32]
-    recordings = {}
-    unreadable = {}
+    pending = pending[:32] if not conversation_id else pending
+    recordings, unreadable = {}, {}
     for doc in pending:
-        raw = doc.to_dict() or {}
-        if raw.get('data_protection_level') == 'private' or not raw.get('started_at'):
-            unreadable[doc.id] = {**raw, 'id': doc.id, '_v3_revision': doc.update_time}
-        else:
-            recordings[doc.id] = decode_row(uid, doc)
-            if doc.id == continued_id:
-                recordings[doc.id]['_v3_page_continues'] = True
-    if recordings:
-        eligible = [r for r in recordings.values() if r and r.get('started_at')]
-        anchor = min(eligible, key=lambda r: r['started_at']) if eligible else None
-        if anchor:
-            start = anchor['started_at'] - timedelta(minutes=20)
-            end = (anchor.get('finished_at') or anchor['started_at']) + timedelta(minutes=20)
-            recordings = {
-                cid: r
-                for cid, r in recordings.items()
-                if r
-                and r.get('started_at')
-                and r['started_at'] <= end
-                and (r.get('finished_at') or r['started_at']) >= start
-            }
+        row = recording_input(uid, doc)
+        if row and row.get('_v3_unreadable'):
+            unreadable[doc.id] = row
+        elif row:
+            recordings[doc.id] = row
+    if recordings and not conversation_id:
+        # Pending obligation order is not capture order (late sync can be older).
+        latest = max(recordings.values(), key=lambda r: r['started_at'])
+        following = next(
+            (
+                doc
+                for doc in coll.where(filter=FieldFilter('v3_pending', '==', True))
+                .where(filter=FieldFilter('started_at', '>=', latest['started_at']))
+                .order_by('started_at')
+                .limit(33)
+                .stream()
+                if doc.id not in recordings
+            ),
+            None,
+        )
+        if following and latest.get('finished_at'):
+            next_start = (following.to_dict() or {}).get('started_at')
+            if next_start and next_start - latest['finished_at'] < timedelta(minutes=5):
+                latest['_v3_page_continues'] = True
     state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
     if not recordings and not state.get('open_id') and not opened:
@@ -110,9 +116,12 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             if p['recording_id'] != row['id']
         )
         for rid in ids - recordings.keys():
-            row = decode_row(uid, coll.document(rid).get())
+            row = recording_input(uid, coll.document(rid).get())
             if row:
-                recordings[rid] = row
+                if row.get('_v3_unreadable'):
+                    unreadable[rid] = row
+                else:
+                    recordings[rid] = row
         fresh = [r for rid, r in recordings.items() if rid not in queried and r and r.get('started_at')]
         if not fresh:
             break
@@ -168,6 +177,12 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, 'builder')
+    open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
+    if len(open_ids) > 1:
+        raise Conflict('multiple_open_conversations')
+    failure_transitions = {
+        r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
+    }
     prepared = []
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
@@ -248,9 +263,6 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                     ),
                 },
             )
-        open_ids = [r['id'] for r in rows if r['status'] == 'in_progress' and not r.get('deleted')]
-        if len(open_ids) > 1:
-            raise Conflict('multiple_open_conversations')
         tx.update(
             held,
             {
@@ -276,6 +288,11 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         batches.append(current)
     for index, batch in enumerate(batches):
         observed = commit(client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1)
+        from utils.conversations.v3 import metrics
+
+        for row, _encoded in batch:
+            if failure_transitions[row['id']]:
+                metrics.terminal_failure(row.get('v3_process_failure_reason'))
         if index != len(batches) - 1:
             # Read back only after our commit; any external race is checked
             # again by the next transaction's revision fence. Pending stays
