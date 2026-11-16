@@ -1341,6 +1341,7 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
     from utils.summary_quality import clean_structured, stable_title
     from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
     from models.structured import Structured
+    from database.read_boundary import parse_payload_strict
 
     generated = data.get('structured')
     if not isinstance(generated, dict) or data.get('discarded'):
@@ -1360,7 +1361,10 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
         cleaned['overview'] = existing['user_overview']
     data['structured'] = cleaned
     if data.get(NOTES_OUTPUT_HASH):
-        data[NOTES_OUTPUT_HASH] = output_fingerprint(Structured.model_validate(cleaned))
+        parsed = parse_payload_strict(
+            Structured, cleaned, document_path=f'users/{uid}/conversations/{data.get("id", "unknown")}'
+        )
+        data[NOTES_OUTPUT_HASH] = output_fingerprint(parsed)
     data.update(stamp_home_display(uid, {**existing, **data}, 'conversation'))
 
 
