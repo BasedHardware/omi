@@ -3841,7 +3841,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         },
         "currentPlan": {
@@ -3921,7 +3922,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },
@@ -4560,7 +4562,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },

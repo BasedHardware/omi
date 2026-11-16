@@ -359,6 +359,10 @@ class CaptureController extends ChangeNotifier
   /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
   bool _transcribingOnPhoneAtCap = false;
   bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
+
+  /// This session's socket transcribes on the phone: the cap switch or a persisted on-device choice.
+  bool _transcribingOnPhone = false;
+  bool get transcribingOnPhone => _transcribingOnPhone;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -1840,6 +1844,7 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2549,6 +2554,7 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',

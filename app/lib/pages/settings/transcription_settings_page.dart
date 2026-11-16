@@ -1,4 +1,5 @@
 import 'package:permission_handler/permission_handler.dart';
+import 'package:omi/services/sockets/apple_speech_readiness.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/ui/components/local_stt_recovery_notice.dart';
@@ -29,22 +30,25 @@ import 'package:omi/pages/settings/transcription/stt_language.dart';
 import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
 import 'package:omi/pages/settings/transcription/transcription_fields.dart';
 import 'package:omi/pages/settings/transcription/transcription_sections.dart';
-import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/other/temp.dart';
 
-/// Top-level transcription source the user picks from the single dropdown.
+/// Top-level transcription source: Omi cloud or this phone, with Omi Parakeet and a cloud provider
+/// under Advanced.
 enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
 
 class TranscriptionSettingsPage extends StatefulWidget {
-  const TranscriptionSettingsPage({super.key});
+  const TranscriptionSettingsPage({super.key, this.choosePhone = false});
+
+  /// Opened from the at-cap sheet's "Transcribe on this phone": selects This phone on arrival.
+  final bool choosePhone;
 
   @override
   State<TranscriptionSettingsPage> createState() => _TranscriptionSettingsPageState();
@@ -67,6 +71,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _isModelFilePresent = false;
   double _downloadProgress = 0.0;
   String? _modelDownloadStatus;
+
+  // This phone's readiness for on-device transcription (iOS: Apple's recognizer).
+  AppleSpeechReadiness? _iosReadiness;
+  bool get _phoneReady => Platform.isIOS ? _iosReadiness?.ready == true : _isModelFilePresent;
 
   // Device codec compatibility
   BleAudioCodec? _connectedDeviceCodec;
@@ -119,7 +127,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     _loadConfig();
     _checkConnectedDevice();
     // Initial check
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateModelPresence());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateModelPresence();
+      if (widget.choosePhone && mounted && _currentMode != TranscriptionMode.onDevice) {
+        unawaited(_selectMode(TranscriptionMode.onDevice));
+      } else if (_currentMode == TranscriptionMode.onDevice) {
+        unawaited(_refreshPhoneReadiness());
+      }
+    });
   }
 
   @override
@@ -285,8 +300,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
           await _saveCurrentProviderConfig();
           if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
-            final config = _buildCurrentConfig();
-            await SharedPreferencesUtil().saveCustomSttConfig(config);
+            await _persistOnDevice(_buildCurrentConfig());
 
             if (mounted) {
               await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
@@ -519,6 +533,46 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
   }
 
+  bool get _isPaidPlan => context.read<UsageProvider>().subscription?.subscription.plan.isPaid ?? false;
+
+  /// Persists an on-device config with raw audio kept on the phone. A free plan's choice is pinned
+  /// ([PhoneTranscriptionChoice]) so a later paid plan returns capture to Omi on its own; a paid
+  /// reader's choice is theirs to keep.
+  Future<void> _persistOnDevice(CustomSttConfig config) async {
+    final onPhone = config.copyWith(sendRawAudioToOmi: false);
+    if (_isPaidPlan) {
+      await SharedPreferencesUtil().saveCustomSttConfig(onPhone);
+      SharedPreferencesUtil().paywallOnDeviceSttConfigId = '';
+    } else {
+      await PhoneTranscriptionChoice.adopt(onPhone);
+    }
+  }
+
+  /// Omi cloud, this phone and Omi Parakeet apply as soon as they are picked; a cloud provider
+  /// needs its settings first, so it keeps the Save bar.
+  Future<void> _applySource() async {
+    final prefs = SharedPreferencesUtil();
+    final previousConfigId = prefs.customSttConfig.sttConfigId;
+    final previousModel = prefs.transcriptionModel;
+    // Keep edits to the provider being left, as Save always did.
+    await _saveCurrentProviderConfig();
+    if (_currentMode == TranscriptionMode.onDevice) {
+      // Android needs its Whisper model first; the download persists the choice when it lands.
+      if (!Platform.isIOS && !(_urlController.text.isNotEmpty && await File(_urlController.text).exists())) return;
+      await _persistOnDevice(_buildCurrentConfig());
+    } else {
+      await PhoneTranscriptionChoice.release(prefs);
+      prefs.phoneModelOnWifiPending = '';
+      await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
+      prefs.transcriptionModel = _omiParakeet ? 'parakeet' : 'soniox';
+    }
+    if (!mounted) return;
+    if (prefs.customSttConfig.sttConfigId != previousConfigId || prefs.transcriptionModel != previousModel) {
+      await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _saveConfig() async {
     _validateAndSetError();
     if (_validationError != null) {
@@ -684,7 +738,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         leading: const OmiBackButton(),
         title: Text(context.l10n.transcription),
         actions: [
-          if (_useCustomStt) ...[
+          if (_currentMode == TranscriptionMode.cloudProvider) ...[
             OmiIconButton(
               icon: const Icon(Icons.file_download_outlined, size: 20),
               label: context.l10n.importConfiguration,
@@ -710,7 +764,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   const OnDeviceSettingsEntry(),
                   _buildSourceSelector(),
                   const SizedBox(height: OmiSpacing.xl),
-                  if (_useCustomStt) ...[
+                  if (_currentMode == TranscriptionMode.cloudProvider) ...[
                     _buildProviderSection(),
                     const SizedBox(height: OmiSpacing.lg),
                     _buildConfigSection(),
@@ -732,7 +786,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                     const SizedBox(height: OmiSpacing.xs),
                     _buildAdvancedSection(),
                     const CustomSttLogsSection(),
-                  ] else
+                  ] else if (_currentMode == TranscriptionMode.omi)
                     Text(
                       context.l10n.omiTranscriptionOptimized,
                       style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5),
@@ -742,7 +796,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               ),
             ),
           ),
-          TranscriptionSaveBar(onPressed: _isSaving ? null : _saveConfig, isLoading: _isSaving),
+          if (_currentMode == TranscriptionMode.cloudProvider)
+            TranscriptionSaveBar(onPressed: _isSaving ? null : _saveConfig, isLoading: _isSaving),
         ],
       ),
     );
@@ -795,12 +850,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
 
     if (!mounted) return;
-    final proceed = await confirmOnDeviceTranscription(
-      context,
-      lowSpec: isLowSpec,
-      isIOS: isIOS,
-      specDetails: specDetails,
-    );
+    // Only an older phone gets a warning; the plain choice needs no confirmation.
+    final proceed = !isLowSpec ||
+        await confirmOnDeviceTranscription(
+          context,
+          lowSpec: isLowSpec,
+          isIOS: isIOS,
+          specDetails: specDetails,
+        );
     if (!proceed) return;
 
     await _saveCurrentProviderConfig();
@@ -844,9 +901,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           _omiParakeet = false;
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi');
+        await _applySource();
         break;
       case TranscriptionMode.onDevice:
         await _switchToOnDevice();
+        if (mounted && _currentMode == TranscriptionMode.onDevice) {
+          await _applySource();
+          await _refreshPhoneReadiness();
+        }
         break;
       case TranscriptionMode.cloudProvider:
         if (_selectedProvider == SttProvider.onDeviceWhisper) {
@@ -872,77 +934,95 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           _omiParakeet = true;
         });
         PlatformManager.instance.analytics.transcriptionSourceSelected(source: 'omi_parakeet');
+        await _applySource();
         break;
     }
   }
 
+  /// "Omi cloud" and "This phone", then a cloud provider and Omi Parakeet under Advanced.
   Widget _buildSourceSelector() {
     final mode = _currentMode;
     final l10n = context.l10n;
-    final secondary = OmiType.footnote.copyWith(color: OmiColors.textTertiary);
-
-    Widget? description;
-    if (mode == TranscriptionMode.omi && context.watch<UsageProvider>().showSubscriptionUI) {
-      description = Semantics(
-        link: true,
-        child: InkWell(
-          onTap: () {
-            final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
-            PlatformManager.instance.analytics.paywallOpened('transcription_settings', currentPlan: plan);
-            routeToPage(
-              context,
-              const UsagePage(showUpgradeDialog: true, paywallSource: 'transcription_settings'),
-            );
-          },
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 44),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(text: l10n.premiumMinutesMonth, style: secondary),
-                    TextSpan(
-                      text: l10n.viewUsage,
-                      style: secondary.copyWith(
-                        color: OmiColors.textSecondary,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                    TextSpan(text: '.', style: secondary),
-                  ],
+    final usage = context.watch<UsageProvider>();
+    Widget row(TranscriptionMode m, String title, {String? subtitle, Key? key}) => OmiSettingsRow(
+          key: key,
+          title: title,
+          subtitle: subtitle,
+          trailing: m == mode ? Icon(Icons.check, color: OmiColors.textPrimary, size: 22) : null,
+          showChevron: false,
+          onTap: m == mode ? null : () => unawaited(_selectMode(m)),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: OmiSpacing.sm),
+        if (_switchBackMinutes(usage) case final minutes?) ...[
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                key: const Key('transcription_switch_back'),
+                title: l10n.cloudMinutesAvailable(minutes),
+                trailing: OmiButton(
+                  label: l10n.switchBack,
+                  size: OmiButtonSize.compact,
+                  onPressed: () => _selectMode(TranscriptionMode.omi),
                 ),
               ),
-            ),
+            ],
           ),
-        ),
-      );
-    } else if (mode == TranscriptionMode.onDevice) {
-      description = TranscriptionHelpText(l10n.audioProcessedLocally);
-    } else if (mode == TranscriptionMode.omiParakeet) {
-      description = TranscriptionHelpText(SttProviderConfig.get(SttProvider.omiParakeet).description);
-    } else if (mode == TranscriptionMode.cloudProvider) {
-      description = TranscriptionHelpText(l10n.payYourSttProvider);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 10),
-        TranscriptionDropdown<TranscriptionMode>(
-          value: mode,
-          items: [
-            for (final m in TranscriptionMode.values)
-              DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))),
+          const SizedBox(height: OmiSpacing.lg),
+        ],
+        OmiSettingsGroup(
+          header: l10n.transcribeWith,
+          children: [
+            row(TranscriptionMode.omi, l10n.omiCloud,
+                subtitle: _cloudUsageLine(usage), key: const Key('transcription_source_omi')),
+            row(TranscriptionMode.onDevice, l10n.thisPhone,
+                subtitle: mode == TranscriptionMode.onDevice && _phoneReady ? l10n.onDeviceReady : null,
+                key: const Key('transcription_source_phone')),
           ],
-          onChanged: (m) async {
-            if (m != null && m != mode) await _selectMode(m);
-          },
         ),
-        const SizedBox(height: OmiSpacing.sm),
-        if (description != null) description,
+        if (mode == TranscriptionMode.onDevice) ...[
+          const SizedBox(height: OmiSpacing.lg),
+          _buildCodecWarning(),
+          _buildConfigSection(),
+        ],
+        const SizedBox(height: OmiSpacing.lg),
+        OmiSettingsGroup(
+          header: l10n.advanced,
+          children: [
+            row(TranscriptionMode.omiParakeet, _modeLabel(TranscriptionMode.omiParakeet),
+                key: const Key('transcription_source_parakeet')),
+            row(TranscriptionMode.cloudProvider, _modeLabel(TranscriptionMode.cloudProvider),
+                key: const Key('transcription_source_cloud_provider')),
+          ],
+        ),
       ],
     );
+  }
+
+  /// "258 of 300 min left · resets Dec 1" for a plan with a monthly cloud allowance.
+  String? _cloudUsageLine(UsageProvider usage) {
+    if (!usage.showSubscriptionUI) return null;
+    final subscription = usage.subscription;
+    if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return null;
+    final limit = subscription.transcriptionSecondsLimit;
+    if (limit <= 0) return null;
+    final left = ((limit - subscription.transcriptionSecondsUsed).clamp(0, limit) / 60).floor();
+    return context.l10n.cloudMinutesLeft(
+      left,
+      (limit / 60).round(),
+      OmiDateFormat.of(context).date(onDeviceUsageResetsOn(DateTime.now())),
+    );
+  }
+
+  /// Cloud minutes the pinned phone choice could use again after the monthly reset, or null.
+  int? _switchBackMinutes(UsageProvider usage) {
+    if (_currentMode != TranscriptionMode.onDevice || !PhoneTranscriptionChoice.isPinned()) return null;
+    final allowance = usage.subscription?.transcriptionAllowance;
+    final remaining = allowance?.remainingSeconds;
+    if (allowance == null || !allowance.isManaged || remaining == null || remaining < 60) return null;
+    return (remaining / 60).floor();
   }
 
   Widget _buildCodecWarning() {
@@ -1200,63 +1280,128 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   /// UI for On-Device Whisper Configuration
+  /// Reads whether this phone can transcribe now. iOS asks Apple's recognizer without prompting.
+  Future<void> _refreshPhoneReadiness() async {
+    if (!Platform.isIOS) return _updateModelPresence();
+    final readiness = await OnDeviceAppleProvider.readiness(_currentLanguage);
+    if (mounted) setState(() => _iosReadiness = readiness);
+  }
+
+  /// iOS speech-recognition permission, asked only here, where the reader chose the phone.
+  Future<void> _allowSpeechRecognition() async {
+    final status = _iosReadiness?.status;
+    if (status == 'permission_required') {
+      final readiness = await OnDeviceAppleProvider.readiness(_currentLanguage, prepare: true);
+      if (!mounted) return;
+      setState(() => _iosReadiness = readiness);
+      if (readiness.ready) await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
+      return;
+    }
+    await openAppSettings();
+  }
+
+  /// "Set up this phone": what is still missing before the phone can transcribe, then its language.
   Widget _buildOnDeviceWhisperConfig() {
-    // If iOS, show simplified Apple Speech UI
+    final l10n = context.l10n;
     if (Theme.of(context).platform == TargetPlatform.iOS) {
+      final readiness = _iosReadiness;
+      final needsPermission =
+          readiness != null && (readiness.status.startsWith('permission') || readiness.status == 'unauthorized');
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.all(OmiSpacing.sm),
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              borderRadius: OmiRadius.smAll,
-              border: Border.all(color: OmiColors.border),
-            ),
-            child: Row(
+          if (needsPermission) ...[
+            OmiSettingsGroup(
+              header: l10n.setUpThisPhone,
               children: [
-                Icon(Icons.apple, color: OmiColors.textPrimary, size: 24),
-                const SizedBox(width: OmiSpacing.sm),
-                Expanded(
-                  child: Text(context.l10n.usingNativeIosSpeech,
-                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+                OmiSettingsRow(
+                  key: const Key('transcription_phone_permission'),
+                  title: l10n.speechRecognition,
+                  subtitle: l10n.audioStaysOnPhone,
+                  trailing: OmiButton(
+                    label: readiness.status == 'permission_required' ? l10n.allow : l10n.openSettings,
+                    size: OmiButtonSize.compact,
+                    onPressed: _allowSpeechRecognition,
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
-          FutureBuilder(
-            future: OnDeviceAppleProvider.readiness(_currentLanguage),
-            builder: (context, snapshot) {
-              final readiness = snapshot.data;
-              if (readiness == null || readiness.ready) return const SizedBox.shrink();
-              return LocalSttRecoveryNotice(
-                  language: _currentLanguage,
-                  failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
-                  onRetry: () async {
-                    setState(() {});
-                  },
-                  onSetup: openAppSettings);
-            },
-          ),
-          const SizedBox(height: OmiSpacing.lg),
+            const SizedBox(height: OmiSpacing.lg),
+          ] else if (readiness != null && !readiness.ready) ...[
+            LocalSttRecoveryNotice(
+                language: _currentLanguage,
+                failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
+                onRetry: _refreshPhoneReadiness,
+                onSetup: openAppSettings),
+            const SizedBox(height: OmiSpacing.lg),
+          ],
           _buildLanguageSelector(),
         ],
       );
     }
 
+    final waiting = !_isModelFilePresent && !_isDownloadingModel;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        WhisperModelStatus(
-          modelFile: 'ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin',
-          hasModel: _isModelFilePresent,
-          isDownloading: _isDownloadingModel,
-          progress: _downloadProgress,
-          status: _modelDownloadStatus,
-          onDownload: _downloadModel,
-          onCancel: _cancelDownload,
-        ),
+        if (waiting && SharedPreferencesUtil().phoneModelOnWifiPending.isEmpty)
+          OmiSettingsGroup(
+            header: l10n.setUpThisPhone,
+            children: [
+              OmiSettingsRow(
+                key: const Key('transcription_phone_model'),
+                title: l10n.onDeviceSpeechModel,
+                subtitle: l10n.onDeviceModelDownloadSize(_estimatedModelMegabytes(_currentModel).round()),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OmiButton(
+                        key: const Key('transcription_phone_download_now'),
+                        label: l10n.downloadNow,
+                        onPressed: () => _downloadModel(confirm: false),
+                      ),
+                    ),
+                    const SizedBox(width: OmiSpacing.sm),
+                    Expanded(
+                      child: OmiButton.secondary(
+                        key: const Key('transcription_phone_download_wifi'),
+                        label: l10n.onWifiLater,
+                        onPressed: _downloadOnWifiLater,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          )
+        else if (waiting)
+          OmiSettingsGroup(
+            header: l10n.setUpThisPhone,
+            children: [
+              OmiSettingsRow(
+                title: l10n.onDeviceSpeechModel,
+                value: l10n.onDeviceWaitingForWifi,
+                trailing: OmiButton.tertiary(
+                  label: l10n.downloadNow,
+                  size: OmiButtonSize.compact,
+                  onPressed: () => _downloadModel(confirm: false),
+                ),
+              ),
+            ],
+          )
+        else
+          WhisperModelStatus(
+            modelFile: 'ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin',
+            hasModel: _isModelFilePresent,
+            isDownloading: _isDownloadingModel,
+            progress: _downloadProgress,
+            status: _modelDownloadStatus,
+            onDownload: _downloadModel,
+            onCancel: _cancelDownload,
+          ),
         const SizedBox(height: OmiSpacing.lg),
         _buildModelSelector(),
         const SizedBox(height: OmiSpacing.lg),
@@ -1265,31 +1410,30 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
+  /// Android "On Wi-Fi later": the background preparer downloads the model on the next Wi-Fi and
+  /// then persists this choice ([UsageProvider] runs it on every subscription refresh).
+  Future<void> _downloadOnWifiLater() async {
+    SharedPreferencesUtil().phoneModelOnWifiPending = _isPaidPlan ? 'plain' : 'pin';
+    setState(() {});
+    unawaited(context.read<UsageProvider>().fetchSubscription());
+  }
+
+  static double _estimatedModelMegabytes(String model) => switch (model.isEmpty ? 'tiny' : model) {
+        'tiny' => 75,
+        'base' => 142,
+        'small' => 466,
+        'medium' => 1500,
+        'large-v1' || 'large-v2' => 2900,
+        _ => 1500,
+      };
+
   // Add this field to the State class
   http.Client? _downloadClient;
 
-  Future<void> _downloadModel() async {
+  /// [confirm] false skips the size dialog when the size was already shown and there is room.
+  Future<void> _downloadModel({bool confirm = true}) async {
     final modelName = _currentModel.isEmpty ? 'tiny' : _currentModel;
-
-    double estimatedSizeMB = 1500;
-    switch (modelName) {
-      case 'tiny':
-        estimatedSizeMB = 75;
-        break;
-      case 'base':
-        estimatedSizeMB = 142;
-        break;
-      case 'small':
-        estimatedSizeMB = 466;
-        break;
-      case 'medium':
-        estimatedSizeMB = 1500;
-        break;
-      case 'large-v1':
-      case 'large-v2':
-        estimatedSizeMB = 2900;
-        break;
-    }
+    final estimatedSizeMB = _estimatedModelMegabytes(modelName);
 
     final appDir = await getApplicationSupportDirectory();
     final modelDir = Directory('${appDir.path}/models');
@@ -1297,14 +1441,17 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     double? freeSpaceMB = await DiskSpace.getFreeDiskSpaceForPath(appDir.path);
 
     if (!mounted) return;
-    final confirmed = await confirmModelDownload(
-      context,
-      modelName: modelName,
-      estimatedSizeMB: estimatedSizeMB,
-      freeSpaceMB: freeSpaceMB,
-    );
+    final roomy = freeSpaceMB == null || freeSpaceMB > estimatedSizeMB * 1.2;
+    final confirmed = (!confirm && roomy) ||
+        await confirmModelDownload(
+          context,
+          modelName: modelName,
+          estimatedSizeMB: estimatedSizeMB,
+          freeSpaceMB: freeSpaceMB,
+        );
 
     if (!confirmed || !mounted) return;
+    SharedPreferencesUtil().phoneModelOnWifiPending = '';
 
     setState(() {
       _isDownloadingModel = true;
@@ -1367,8 +1514,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       await _saveCurrentProviderConfig();
       if (!mounted) return;
       if (_useCustomStt && _selectedProvider == SttProvider.onDeviceWhisper) {
-        final config = _buildCurrentConfig();
-        await SharedPreferencesUtil().saveCustomSttConfig(config);
+        await _persistOnDevice(_buildCurrentConfig());
         if (!mounted) return;
         await Provider.of<CaptureProvider>(context, listen: false).onTranscriptionSettingsChanged();
       }

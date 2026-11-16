@@ -15508,4 +15508,81 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Wykorzystano $minutes minut w tym miesiącu';
+  }
+
+  @override
+  String get freeCapBody => 'Omi wciąż nagrywa. Wybierz, jak kontynuować transkrypcję.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Nielimitowana transkrypcja w chmurze';
+
+  @override
+  String get freeCapProAccuracy => 'Najlepsza dokładność';
+
+  @override
+  String get freeCapProWaiting => 'Transkrybuje oczekujące nagrania';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Bezpłatnie. Działa, dopóki nie przełączysz z powrotem.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkrypcja na tym telefonie';
+
+  @override
+  String get getPro => 'Kup Pro';
+
+  @override
+  String get unlock => 'Odblokuj';
+
+  @override
+  String get transcribeWith => 'Transkrybuj za pomocą';
+
+  @override
+  String get omiCloud => 'Chmura Omi';
+
+  @override
+  String get thisPhone => 'Ten telefon';
+
+  @override
+  String get onDeviceReady => 'Gotowe';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Pozostało $left z $limit min · odnowienie $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Dostępne $minutes min w chmurze';
+  }
+
+  @override
+  String get switchBack => 'Przełącz z powrotem';
+
+  @override
+  String get setUpThisPhone => 'Skonfiguruj ten telefon';
+
+  @override
+  String get speechRecognition => 'Rozpoznawanie mowy';
+
+  @override
+  String get audioStaysOnPhone => 'Dźwięk zostaje na telefonie';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Pobieranie $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Pobierz teraz';
+
+  @override
+  String get onWifiLater => 'Później przez Wi-Fi';
 }

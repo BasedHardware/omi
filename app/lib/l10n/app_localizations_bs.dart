@@ -15492,4 +15492,81 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista obrade se promijenila. Pregledajte je i pokušajte ponovo.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Iskoristili ste $minutes minuta za ovaj mjesec';
+  }
+
+  @override
+  String get freeCapBody => 'Omi i dalje snima. Odaberite kako nastaviti s transkripcijom.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neograničena transkripcija u oblaku';
+
+  @override
+  String get freeCapProAccuracy => 'Najbolja tačnost';
+
+  @override
+  String get freeCapProWaiting => 'Transkribuje vaše snimke na čekanju';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Besplatno. Ostaje uključeno dok se ne vratite.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkripcija na ovom telefonu';
+
+  @override
+  String get getPro => 'Uzmite Pro';
+
+  @override
+  String get unlock => 'Otključaj';
+
+  @override
+  String get transcribeWith => 'Transkribuj pomoću';
+
+  @override
+  String get omiCloud => 'Omi oblak';
+
+  @override
+  String get thisPhone => 'Ovaj telefon';
+
+  @override
+  String get onDeviceReady => 'Spremno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Preostalo $left od $limit min · obnavlja se $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Dostupno $minutes minuta u oblaku';
+  }
+
+  @override
+  String get switchBack => 'Vrati se';
+
+  @override
+  String get setUpThisPhone => 'Postavite ovaj telefon';
+
+  @override
+  String get speechRecognition => 'Prepoznavanje govora';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk ostaje na vašem telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Preuzimanje $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Preuzmi sada';
+
+  @override
+  String get onWifiLater => 'Kasnije na Wi-Fi';
 }

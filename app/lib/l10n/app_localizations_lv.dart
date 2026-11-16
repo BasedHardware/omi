@@ -15498,4 +15498,81 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Esat izmantojis šī mēneša $minutes minūtes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi joprojām ieraksta. Izvēlieties, kā turpināt transkribēšanu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neierobežota mākoņa transkripcija';
+
+  @override
+  String get freeCapProAccuracy => 'Vislabākā precizitāte';
+
+  @override
+  String get freeCapProWaiting => 'Transkribē jūsu gaidošos ierakstus';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Bez maksas. Paliek ieslēgts, līdz pārslēdzat atpakaļ.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkribē šajā tālrunī';
+
+  @override
+  String get getPro => 'Iegūt Pro';
+
+  @override
+  String get unlock => 'Atbloķēt';
+
+  @override
+  String get transcribeWith => 'Transkribēt ar';
+
+  @override
+  String get omiCloud => 'Omi mākonis';
+
+  @override
+  String get thisPhone => 'Šis tālrunis';
+
+  @override
+  String get onDeviceReady => 'Gatavs';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Atlikušas $left no $limit min · atjaunojas $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Pieejamas $minutes mākoņa minūtes';
+  }
+
+  @override
+  String get switchBack => 'Pārslēgt atpakaļ';
+
+  @override
+  String get setUpThisPhone => 'Iestatīt šo tālruni';
+
+  @override
+  String get speechRecognition => 'Runas atpazīšana';
+
+  @override
+  String get audioStaysOnPhone => 'Audio paliek jūsu tālrunī';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB lejupielāde';
+  }
+
+  @override
+  String get downloadNow => 'Lejupielādēt tagad';
+
+  @override
+  String get onWifiLater => 'Vēlāk ar Wi-Fi';
 }

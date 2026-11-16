@@ -8,13 +8,14 @@ import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/on_device_stt_preparer.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef SubscriptionCodeRequest = Future<ApiResult<bool>> Function(String code, {bool Function()? canSend});
@@ -167,6 +168,11 @@ class UsageProvider with ChangeNotifier {
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
+  /// Called after a paid plan or a sign-out released the phone choice, so capture can reconnect
+  /// to Omi's cloud transcription. Wired by the home page to the capture provider.
+  VoidCallback? _onPhoneChoiceReleased;
+  set onPhoneChoiceReleased(VoidCallback? callback) => _onPhoneChoiceReleased = callback;
+
   bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
   bool get shouldShowPhoneCallsEntry {
@@ -202,11 +208,28 @@ class UsageProvider with ChangeNotifier {
     return true;
   }
 
-  /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only).
+  /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only),
+  /// and finishes an Android "On Wi-Fi later" choice once its model lands.
   static Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
+    final prefs = SharedPreferencesUtil();
+    final pending = prefs.phoneModelOnWifiPending;
+    if (pending.isNotEmpty) {
+      await OnDeviceSttPreparer.prepareAndWait();
+      final freemium = FreemiumTranscriptionService();
+      final config = freemium.readiness == FreemiumReadiness.ready ? freemium.getFreemiumConfig() : null;
+      if (config == null || prefs.phoneModelOnWifiPending != pending) return;
+      prefs.phoneModelOnWifiPending = '';
+      final onPhone = config.copyWith(sendRawAudioToOmi: false);
+      if (pending == 'pin') {
+        await PhoneTranscriptionChoice.adopt(onPhone, prefs);
+      } else {
+        await prefs.saveCustomSttConfig(onPhone);
+      }
+      return;
+    }
     if (!OnDeviceSttPreparer.shouldPrepareFor(allowance)) return;
     if (!FreeTierOnDeviceSttFlag.isEnabled() || await FreeTierOnDeviceSttFlag.killed()) return;
-    if (SharedPreferencesUtil().customSttConfig.isEnabled) return;
+    if (prefs.customSttConfig.isEnabled) return;
     OnDeviceSttPreparer.prepare();
   }
 
@@ -248,6 +271,9 @@ class UsageProvider with ChangeNotifier {
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
+    // The phone choice belongs to the account that made it; the next account starts on Omi.
+    unawaited(PhoneTranscriptionChoice.release());
+    SharedPreferencesUtil().phoneModelOnWifiPending = '';
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();
     _backlogRefreshTimer = null;
@@ -344,20 +370,17 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  /// The paywall's "switch to free" persists on-device STT with raw audio off, and a persisted
-  /// Custom STT outranks the allowance. Once the server grants managed STT, release the pin so capture returns to Omi
-  /// (and audio reaches Omi again, e.g. for audio-bytes webhooks) instead of staying on-device.
-  /// Older servers omit the allowance, so retain their paid-plan release rule.
+  /// The free plan's phone choice ([PhoneTranscriptionChoice]: the cap switch, the at-cap sheet,
+  /// Settings, or the paywall's "switch to free") is permanent: the monthly reset keeps it, and the
+  /// reader switches back in Settings. Only a paid plan releases it, so capture returns to Omi (and
+  /// audio reaches Omi again, e.g. for audio-bytes webhooks) without the reader asking.
   Future<void> _releasePaywallOnDevicePin() async {
     final prefs = SharedPreferencesUtil();
-    final pinned = prefs.paywallOnDeviceSttConfigId;
-    final allowance = _subscription?.transcriptionAllowance ?? TranscriptionAllowanceCache.current;
-    final canUseManaged = allowance?.isManaged ?? _isPaidPlan;
-    if (!canUseManaged || pinned.isEmpty) return;
-    if (prefs.customSttConfig.sttConfigId == pinned) {
-      await prefs.saveCustomSttConfig(CustomSttConfig.defaultConfig);
-    }
-    prefs.paywallOnDeviceSttConfigId = '';
+    // A paid plan that is itself out of cloud minutes (a finite plan at its cap) stays on the phone.
+    final allowance = _subscription?.transcriptionAllowance;
+    final canUseManaged = _isPaidPlan && (allowance == null || allowance.isManaged);
+    if (!canUseManaged || prefs.paywallOnDeviceSttConfigId.isEmpty) return;
+    if (await PhoneTranscriptionChoice.release(prefs)) _onPhoneChoiceReleased?.call();
   }
 
   /// Alias for fetchSubscription - refreshes subscription data from backend

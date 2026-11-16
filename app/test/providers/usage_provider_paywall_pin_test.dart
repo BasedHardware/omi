@@ -153,17 +153,17 @@ void main() {
     expect(after.sttConfigId, ownChoice.sttConfigId);
   });
   for (final throws in [false, true]) {
-    test('failed refresh releases a pin from the last managed server answer (throws=$throws)', () async {
+    test('failed refresh with no known plan keeps the phone choice (throws=$throws)', () async {
       TranscriptionAllowanceCache.replace(
           const TranscriptionAllowanceSnapshot(mode: 'managed', reason: 'plan_unlimited'));
-      await _switchToFreeFromPaywall();
+      final pinned = await _switchToFreeFromPaywall();
       final provider = UsageProvider(subscriptionRequest: () async {
         if (throws) throw StateError('offline');
         return null;
       });
       await provider.fetchSubscription();
-      expect(SharedPreferencesUtil().customSttConfig.isEnabled, false);
-      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+      expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+      expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
       expect(provider.isLoading, false);
     });
   }
@@ -188,10 +188,33 @@ void main() {
     provider.dispose();
   });
 
-  test('managed allowance releases the pin even on the Free plan', () async {
-    await _switchToFreeFromPaywall();
+  test('the monthly reset keeps a Free plan on the phone: the choice is permanent', () async {
+    final pinned = await _switchToFreeFromPaywall();
     await UsageProvider(subscriptionRequest: () async => _subscription(PlanType.basic)).fetchSubscription();
-    expect(SharedPreferencesUtil().customSttConfig.isEnabled, false);
+    expect(SharedPreferencesUtil().customSttConfig.sttConfigId, pinned.sttConfigId);
+    expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, pinned.sttConfigId);
+  });
+
+  test('a paid plan releases the phone choice and tells capture to reconnect', () async {
+    await _switchToFreeFromPaywall();
+    var released = 0;
+    final provider = UsageProvider(subscriptionRequest: () async => _subscription(PlanType.unlimitedV2));
+    addTearDown(provider.dispose);
+    provider.onPhoneChoiceReleased = () => released++;
+    await provider.fetchSubscription();
+    expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
+    expect(released, 1);
+  });
+
+  test('sign-out releases the phone choice so the next account starts on Omi', () async {
+    await _switchToFreeFromPaywall();
+    SharedPreferencesUtil().phoneModelOnWifiPending = 'pin';
+    final provider = UsageProvider(subscriptionRequest: () async => null);
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpEventQueue();
+    expect(SharedPreferencesUtil().customSttConfig.isEnabled, isFalse);
     expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
+    expect(SharedPreferencesUtil().phoneModelOnWifiPending, isEmpty);
   });
 }

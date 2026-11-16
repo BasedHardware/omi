@@ -11,12 +11,13 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('source changes restore each provider raw audio setting', (tester) async {
+  testWidgets('this phone keeps audio local; the cloud provider restores its raw audio setting', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
 
@@ -28,6 +29,8 @@ void main() {
 
     final captureProvider = CaptureProvider();
     addTearDown(captureProvider.dispose);
+    final usage = UsageProvider(subscriptionRequest: () async => null);
+    addTearDown(usage.dispose);
     tester.view.physicalSize = const Size(1179, 2556);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.resetPhysicalSize);
@@ -40,6 +43,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<CaptureProvider>.value(value: captureProvider),
           ChangeNotifierProvider<HomeProvider>.value(value: homeProvider),
+          ChangeNotifierProvider<UsageProvider>.value(value: usage),
         ],
         child: const MaterialApp(
           localizationsDelegates: [
@@ -55,30 +59,25 @@ void main() {
     );
     await tester.pump();
 
-    OmiSwitch forwardingTile() => tester.widget<OmiSwitch>(
-          find.descendant(
-              of: find.widgetWithText(OmiSettingsRow, 'Send raw audio to Omi'), matching: find.byType(OmiSwitch)),
-        );
+    final forwardingRow = find.widgetWithText(OmiSettingsRow, 'Send raw audio to Omi');
+    OmiSwitch forwardingTile() =>
+        tester.widget<OmiSwitch>(find.descendant(of: forwardingRow, matching: find.byType(OmiSwitch)));
 
-    expect(forwardingTile().value, isFalse);
+    // On this phone audio never leaves it, so there is no forwarding switch to show.
+    expect(forwardingRow, findsNothing);
 
-    final sourceDropdown = tester.widget<DropdownButton<TranscriptionMode>>(
-      find.byType(DropdownButton<TranscriptionMode>),
-    );
-    sourceDropdown.onChanged!(TranscriptionMode.cloudProvider);
+    await tester.ensureVisible(find.byKey(const Key('transcription_source_cloud_provider')));
+    await tester.tap(find.byKey(const Key('transcription_source_cloud_provider')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
     expect(forwardingTile().value, isTrue);
 
-    final cloudSourceDropdown = tester.widget<DropdownButton<TranscriptionMode>>(
-      find.byType(DropdownButton<TranscriptionMode>),
-    );
-    cloudSourceDropdown.onChanged!(TranscriptionMode.onDevice);
-    await tester.pumpAndSettle(const Duration(milliseconds: 100));
-    await tester.tap(find.text('I Understand'));
+    await tester.ensureVisible(find.byKey(const Key('transcription_source_phone')));
+    await tester.tap(find.byKey(const Key('transcription_source_phone')));
     await tester.pumpAndSettle(const Duration(milliseconds: 100));
 
-    expect(forwardingTile().value, isFalse);
+    expect(find.text('I Understand'), findsNothing, reason: 'choosing the phone needs no warning on a capable phone');
+    expect(forwardingRow, findsNothing);
     expect(SharedPreferencesUtil().getConfigForProvider(SttProvider.onDeviceWhisper)?.sendRawAudioToOmi, isFalse);
   });
 }

@@ -15528,4 +15528,81 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списокот за обработка се промени. Прегледајте го и обидете се повторно.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Ги искористивте $minutes минути за овој месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi сè уште снима. Изберете како да продолжи транскрипцијата.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена транскрипција во облак';
+
+  @override
+  String get freeCapProAccuracy => 'Најдобра точност';
+
+  @override
+  String get freeCapProWaiting => 'Ги транскрибира вашите снимки што чекаат';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бесплатно. Останува вклучено додека не се вратите.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрипција на овој телефон';
+
+  @override
+  String get getPro => 'Земете Pro';
+
+  @override
+  String get unlock => 'Отклучи';
+
+  @override
+  String get transcribeWith => 'Транскрибирај со';
+
+  @override
+  String get omiCloud => 'Omi облак';
+
+  @override
+  String get thisPhone => 'Овој телефон';
+
+  @override
+  String get onDeviceReady => 'Подготвено';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Преостануваат $left од $limit мин · се обновува на $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Достапни се $minutes минути во облак';
+  }
+
+  @override
+  String get switchBack => 'Врати се';
+
+  @override
+  String get setUpThisPhone => 'Поставете го овој телефон';
+
+  @override
+  String get speechRecognition => 'Препознавање говор';
+
+  @override
+  String get audioStaysOnPhone => 'Аудиото останува на вашиот телефон';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Преземање $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Преземи сега';
+
+  @override
+  String get onWifiLater => 'Подоцна на Wi-Fi';
 }
