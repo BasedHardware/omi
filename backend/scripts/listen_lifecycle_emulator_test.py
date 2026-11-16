@@ -613,7 +613,8 @@ def main() -> int:
 
     client: Any = firestore.Client(project=PROJECT_ID)
     uid = f'listen-lifecycle-emulator-{uuid.uuid4().hex}'
-    _assert_batch_reconnect_contention(client, uid)
+    with patch.dict(os.environ, {'LISTEN_BATCH_RECONNECT_ENABLED': 'true'}):
+        _assert_batch_reconnect_contention(client, uid)
     _assert_segment_content_contract(client, uid)
     _assert_photo_content_contract(client, uid)
     _assert_photo_only_finalization_is_admitted(client, uid)

@@ -38,7 +38,6 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
-from config import listen_reconnect
 from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
@@ -1499,10 +1498,8 @@ class ListenSessionRuntime:
                         )
                     if batch_disconnect == 'held':
                         await self.transcripts.flush_speaker_assignments(conversation_id)
-                    elif (
-                        batch_disconnect == 'legacy'
-                        and listen_reconnect.enabled()
-                        and await resumable_after_drop(self, conversation_id, conversation, quiet_owned=quiet_armed)
+                    elif batch_disconnect == 'legacy' and await resumable_after_drop(
+                        self, conversation_id, conversation, quiet_owned=quiet_armed
                     ):
                         # Preserve main's drop recovery for older/identity-less sessions.
                         await self.transcripts.flush_speaker_assignments(conversation_id)

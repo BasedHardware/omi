@@ -1181,7 +1181,7 @@
     },
     "LISTEN_BATCH_RECONNECT_ENABLED": {
       "owner": "capture-quality / Release",
-      "review_by": "2026-11-30"
+      "review_by": "2026-11-20"
     },
     "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
       "owner": "capture-quality / Release",

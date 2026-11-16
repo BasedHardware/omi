@@ -383,7 +383,7 @@ def recovery_admission_refusal(
         return 'source'
     if structured_has_protected_content(
         conversation.get('structured'), conversation.get('user_title')
-    ) and not listen_reconnect.grace_expired(conversation, recovery_cutoff):
+    ) and not listen_reconnect.end_due(conversation, recovery_cutoff):
         # A drained explicit capture end still owes normal processing when the
         # user edited its title during the grace. This is not orphan inference.
         return 'protected_content'
@@ -627,7 +627,7 @@ def _create_or_get_finalization_intent_txn(
                 assert finished_at is not None  # recovery_admission_refusal checked it above
                 if (
                     listen_reconnect.deadline(
-                        loaded, finished_at + timedelta(seconds=continuation_timeout(loaded, timeout))
+                        loaded, finished_at + timedelta(seconds=continuation_timeout(loaded, timeout)), now=now
                     )
                     > now
                 ):

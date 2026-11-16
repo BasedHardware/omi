@@ -284,8 +284,13 @@ async def test_kill_switch_restores_immediate_finalization_choice(batch, monkeyp
     assert batch.rows[ROW][config.FIELD]['deadline_at'] == NOW
 
 
-def test_ship_on_switch_and_bounded_configuration(monkeypatch):
+def test_dark_rollout_switch_and_bounded_configuration(monkeypatch):
     monkeypatch.delenv('LISTEN_BATCH_RECONNECT_ENABLED', raising=False)
+    assert not config.enabled()
+    for value in ('false', 'off', '0', '', 'typo', 'yes'):
+        monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', value)
+        assert not config.enabled()
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', ' TRUE ')
     assert config.enabled()
     for value, expected in [('75', 75), ('9999', 120), ('-1', 1), ('bad', 120)]:
         monkeypatch.setenv('LISTEN_BATCH_RECONNECT_GRACE_SECONDS', value)
@@ -403,3 +408,93 @@ async def test_non_mobile_session_keeps_its_existing_close_protocol(batch, platf
     controller.host.client_device_context.platform = platform
     assert await controller._claim_batch_producer('old', deepcopy(batch.rows[ROW])) is True
     assert config.FIELD not in batch.rows[ROW]
+
+
+@pytest.mark.asyncio
+async def test_disable_between_disconnect_and_reconnect_ends_without_resuming(batch, monkeypatch):
+    assert claim(batch, 'original') == 'claimed'
+    assert disconnect(batch, 'original') == 'held'
+    quiet.arm('synthetic', 'old', 1800, firestore_client=batch)
+    assert _job(batch)['due_at'] == NOW + timedelta(seconds=120)
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'false')
+    _advance(monkeypatch, 1)
+    controller = controller_for(batch, 'replacement')
+    controller.clock = lambda: NOW + timedelta(seconds=1)
+    from routers.listen import conversations as controller_module
+
+    persist = controller.host.persistence.call
+
+    async def reconnect_call(fn, *args, **kwargs):
+        if fn is controller_module.lifecycle_service.open_live_recording_session:
+            return {
+                'requires_rollover': False,
+                'conversation_id': 'old',
+                'conversation_snapshot': deepcopy(batch.rows[ROW]),
+            }
+        return await persist(fn, *args, **kwargs)
+
+    controller.host.persistence.call = reconnect_call
+    monkeypatch.setattr(controller_module, 'server_batch_capture_compatible', lambda *_: True)
+    monkeypatch.setattr(controller_module, 'server_batch_continuation_language', lambda *_: None)
+    # Exercise the real resume path, including its pre-claim continuity filter.
+    assert not await controller._resume_continuation(
+        {'conversation_id': 'old', 'recording_session_id': 'recording-old'}
+    )
+    state = batch.rows[ROW][config.FIELD]
+    assert state['token'] == 'original'
+    assert state['phase'] == 'ended'
+    assert state['deadline_at'] == NOW + timedelta(seconds=1)
+    assert _job(batch)['due_at'] == NOW + timedelta(seconds=1)
+    assert (
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), _job(batch)['dispatch_generation'], firestore_client=batch)
+        == 'queued'
+    )
+    assert batch.rows[ROW]['status'] == 'processing'
+    assert batch.rows[ROW]['server_batch_audio_closed'] is True
+    assert batch.rows[ROW]['finalization_revision'] == 1
+    terminal = deepcopy(batch.rows[ROW])
+    assert not await controller._claim_batch_producer('old', terminal)
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true')
+    assert claim(batch, 'replacement', NOW + timedelta(seconds=2)) == 'refused'
+    assert batch.rows[ROW] == terminal
+
+
+def test_disabled_reader_expires_hold_without_waiting_for_stored_grace(batch, monkeypatch):
+    assert claim(batch, 'original') == 'claimed'
+    assert disconnect(batch, 'original') == 'held'
+    quiet.arm('synthetic', 'old', 1800, firestore_client=batch)
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'false')
+    _advance(monkeypatch, 1)
+    # A wake can arrive early or be replayed; switch-off beats the stored deadline.
+    assert (
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), _job(batch)['dispatch_generation'], firestore_client=batch)
+        == 'queued'
+    )
+    assert batch.rows[ROW][config.FIELD]['phase'] == 'ended'
+    assert batch.rows[ROW][config.FIELD]['deadline_at'] == NOW + timedelta(seconds=1)
+    assert batch.rows[ROW]['finalization_revision'] == 1
+
+
+@pytest.mark.asyncio
+async def test_dark_deploy_is_legacy_until_enable_and_rollback_does_not_steal_live_owner(batch, monkeypatch):
+    monkeypatch.delenv('LISTEN_BATCH_RECONNECT_ENABLED')
+    controller = controller_for(batch, 'unused')
+    controller._batch_producer_tokens.clear()
+    before = deepcopy(batch.rows)
+    # Default-off code accepts the unmarked legacy path, without installing a token.
+    assert await controller._claim_batch_producer('old', deepcopy(batch.rows[ROW]))
+    assert claim(batch, 'unused') == 'disabled'
+    assert batch.rows == before
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true')
+    assert claim(batch, 'current') == 'claimed'
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'false')
+    active = deepcopy(batch.rows)
+    assert not await controller._claim_batch_producer('old', deepcopy(batch.rows[ROW]))
+    assert batch.rows == active  # Rollback must drain the live owner on the new revision.
+    assert disconnect(batch, 'current', terminal=True) == 'ended'
+    quiet.arm('synthetic', 'old', 1800, firestore_client=batch)
+    assert (
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), _job(batch)['dispatch_generation'], firestore_client=batch)
+        == 'queued'
+    )
+    assert batch.rows[ROW]['status'] == 'processing'

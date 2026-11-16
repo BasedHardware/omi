@@ -13,7 +13,7 @@ TERMINAL_REASONS = frozenset(
 
 
 def enabled() -> bool:
-    return os.getenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
+    return os.getenv('LISTEN_BATCH_RECONNECT_ENABLED', 'false').strip().lower() == 'true'
 
 
 def grace_seconds() -> int:
@@ -35,15 +35,27 @@ def producer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) and value.get('version') == 1 else {}
 
 
-def deadline(row: Mapping[str, Any], quiet_deadline: datetime) -> datetime:
+def deadline(row: Mapping[str, Any], quiet_deadline: datetime, *, now: datetime) -> datetime:
     state = producer(row)
     end = utc(state.get('deadline_at'))
     if state.get('phase') in {'disconnected', 'ended'} and state.get('drained') is True and end is not None:
-        return min(quiet_deadline, end)
+        return min(quiet_deadline, end) if enabled() else min(quiet_deadline, end, now)
     return quiet_deadline
 
 
+def end_due(row: Mapping[str, Any], now: datetime) -> bool:
+    state = producer(row)
+    end = utc(state.get('deadline_at'))
+    return bool(
+        state.get('phase') in {'disconnected', 'ended'}
+        and state.get('drained') is True
+        and end
+        and (not enabled() or end <= now)
+    )
+
+
 def grace_expired(row: Mapping[str, Any], now: datetime) -> bool:
+    # Resume eligibility must still reach the listener's durable switch-off exit.
     state = producer(row)
     end = utc(state.get('deadline_at'))
     return bool(state.get('phase') in {'disconnected', 'ended'} and state.get('drained') is True and end and end <= now)

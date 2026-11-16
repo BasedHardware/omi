@@ -63,7 +63,7 @@ def quiet_deadline(conversation: dict[str, Any], timeout: Any = 120, *, uid: str
         return None
     finish = finish if finish.tzinfo else finish.replace(tzinfo=timezone.utc)
     return listen_reconnect.deadline(
-        conversation, finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout)))
+        conversation, finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout))), now=_now()
     )
 
 
@@ -275,8 +275,11 @@ def _evaluate_quiet_check(
             'reconcile_after_at': due,
             'updated_at': now,
         }
-        if ready and owned(row) and listen_reconnect.grace_expired(row, now):
-            transaction.update(row_ref, {'server_batch_audio_closed': True})
+        if ready and owned(row) and listen_reconnect.end_due(row, now):
+            patch: dict[str, Any] = {'server_batch_audio_closed': True}
+            if not listen_reconnect.enabled():
+                patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
+            transaction.update(row_ref, patch)
         transaction.set(job_ref, updated)
         return updated | {
             'job_id': job_id,
@@ -285,7 +288,7 @@ def _evaluate_quiet_check(
             'recording_session_id': (row.get('external_data') or {}).get('recording_session_id'),
             'recovery_cutoff': (
                 now
-                if listen_reconnect.grace_expired(row, now)
+                if listen_reconnect.end_due(row, now)
                 else now - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds'))))
             ),
         }

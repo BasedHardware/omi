@@ -63,6 +63,8 @@ def claim(
     timeout: int,
     firestore_client: Any = None,
 ) -> str:
+    if not config.enabled():
+        return 'disabled'
     client = firestore_client if firestore_client is not None else get_firestore_client()
     row_ref, session_ref = _refs(client, uid, conversation_id, recording_session_id)
 
@@ -181,5 +183,30 @@ def disconnect(
         tx.update(row_ref, {config.FIELD: {**state, 'phase': phase, 'deadline_at': end, 'drained': True}})
         tx.update(session_ref, {'lease_expires_at': now, 'updated_at': now})
         return 'held' if phase == 'disconnected' else 'ended'
+
+    return run_transactional(client, commit)
+
+
+def end_disabled_hold(uid, conversation_id, *, now, firestore_client=None) -> bool:
+    """Retire an already drained hold without taking over its producer or terminal data.
+
+    The caller rearms the existing quiet outbox due now. A crash before rearming
+    still has the previously indexed wake (at most 120 seconds after drain).
+    """
+    if config.enabled():
+        return False
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    row_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+
+    @firestore.transactional
+    def commit(tx):
+        snapshots = {}
+        assert_batch_write_allowed(client, tx, uid, conversation_ids=(conversation_id,), snapshots=snapshots)
+        row = snapshots.get('conversations', {}).get(conversation_id) or {}
+        state = config.producer(row)
+        if not _open(row) or state.get('phase') != 'disconnected' or state.get('drained') is not True:
+            return False
+        tx.update(row_ref, {config.FIELD: {**state, 'phase': 'ended', 'deadline_at': now}})
+        return True
 
     return run_transactional(client, commit)

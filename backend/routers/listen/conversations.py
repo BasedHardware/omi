@@ -105,6 +105,23 @@ class LiveConversationController:
 
     async def _claim_batch_producer(self, conversation_id: str, row: dict[str, Any]) -> bool:
         existing_protocol = bool(listen_reconnect.producer(row))
+        if existing_protocol and not listen_reconnect.enabled():
+            ended = await self.host.persistence.call(
+                listen_batch_reconnect.end_disabled_hold,
+                self.host.request.uid,
+                conversation_id,
+                now=self.clock(),
+            )
+            if ended:
+                # No new token or archive binding: the drained owner remains
+                # fenced. The old indexed wake survives a failed rearm.
+                await self.host.persistence.call(
+                    quiet_finalization.arm,
+                    self.host.request.uid,
+                    conversation_id,
+                    self.host.conversation_creation_timeout,
+                )
+            return False
         mobile = getattr(self.host.client_device_context, 'platform', None) in {'ios', 'android'}
         if existing_protocol and not mobile:
             return False
