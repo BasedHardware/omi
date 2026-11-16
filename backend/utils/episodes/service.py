@@ -1714,6 +1714,8 @@ def attach_recorded(
         if placed is not None:
             if isinstance(placed, str):
                 raise AdmissionClosed()
+            if refusal := placed.pop('_live_member_clock_refusal', None):
+                metrics.record_live_member_clock_refusal(refusal)
             if placed.pop('_live_member_rehomed', False):
                 metrics.record_live_member('rehomed')
             return placed
@@ -1746,9 +1748,9 @@ def repair_closed_live_members(uid: str, episode: Mapping[str, Any], c: Collabor
     changed = False
     for cid in episode.get('conversation_ids') or []:
         row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
-        start = live_members.capture_start(row or {})
-        if not row or not live_members.capturing(row) or not boundary or not start or start < boundary:
+        if not row or not live_members.capturing(row) or not boundary:
             continue
+        start = policy.utc(row.get('started_at')) or boundary
         try:
             placed = attach_recorded(uid, cid, row, start, start + timedelta(seconds=1), c)
             changed |= placed.get('id') != episode.get('id')

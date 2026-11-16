@@ -584,3 +584,20 @@ def record_live_member(outcome: str) -> None:
         LIVE_MEMBER.labels(outcome=_label(outcome, frozenset({'rehomed', 'excluded_readiness'}))).inc()
     except Exception:
         pass
+
+
+LIVE_MEMBER_CLOCK_REFUSAL = reuse_or_create(
+    Counter,
+    'omi_episode_live_member_clock_refusal_total',
+    'Live member ownership retained because capture clocks cannot prove a safe move',
+    ['reason'],
+)
+
+
+def record_live_member_clock_refusal(reason: str) -> None:
+    try:
+        LIVE_MEMBER_CLOCK_REFUSAL.labels(
+            reason=_label(reason, frozenset({'missing', 'untrusted', 'future', 'disagreement'}))
+        ).inc()
+    except Exception:
+        pass

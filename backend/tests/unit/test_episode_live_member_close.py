@@ -1,7 +1,7 @@
 """Synthetic capture clocks; no account data or external clients."""
 
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -20,6 +20,8 @@ def active(start=T0, **changes):
         'record_audio_closed': False,
         'private_cloud_sync_enabled': True,
         'started_at': start,
+        'recorded_start': start,
+        'clock': 'live_capture',
         'server_batch_audio_start': start.timestamp(),
         'source': 'desktop',
         **changes,
@@ -286,3 +288,82 @@ def test_rehome_carries_live_provisional_state_and_consumption_offsets(timeline_
     saved = db.rows[('users', 'owner', 'episodes', 'old')]
     assert saved['provisional_items'] == saved['moments'] == []
     assert saved['applied'] == {'finished': 20}
+
+
+@pytest.mark.parametrize(
+    'changes,reason',
+    [
+        ({'server_batch_audio_start': (datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp()}, 'future'),
+        ({'server_batch_audio_start': (T0 + timedelta(minutes=59, seconds=50)).timestamp()}, 'disagreement'),
+        ({'server_batch_audio_start': (T0 + timedelta(hours=1, seconds=20)).timestamp()}, 'disagreement'),
+        ({'started_at': None}, 'missing'),
+        ({'recorded_start': None}, 'missing'),
+        ({'recorded_start': T0 + timedelta(minutes=59, seconds=50)}, 'disagreement'),
+        ({'capture_time_trust': 'untrusted'}, 'untrusted'),
+        ({'clock': 'estimated_device'}, 'untrusted'),
+        ({'clock': None}, 'untrusted'),
+        ({'server_batch_audio_start': float('nan')}, 'missing'),
+        ({'server_batch_audio_start': None}, 'missing'),
+        ({'server_batch_audio_start': True}, 'missing'),
+        # Within the five-second tolerance, but opposite sides of the boundary.
+        ({'started_at': T0 + timedelta(minutes=59, seconds=59)}, 'disagreement'),
+    ],
+)
+def test_uncertain_capture_clocks_keep_membership_without_any_writes(timeline_store, changes, reason):
+    db = timeline_store
+    seed(db, linked=True, start=T0 + timedelta(hours=1, seconds=1))
+    db.rows[('users', 'owner', 'conversations', 'live')].update(changes)
+    before = deepcopy(db.rows)
+    result = place(db)
+    assert result['id'] == 'old'
+    assert not result['_live_member_rehomed']
+    assert result['_live_member_clock_refusal'] == reason
+    assert db.rows == before
+
+
+def test_agreeing_interval_just_after_boundary_rehomes_using_earliest_source(timeline_store):
+    db = timeline_store
+    seed(db, linked=True, start=T0 + timedelta(hours=1, seconds=2))
+    db.rows[('users', 'owner', 'conversations', 'live')].update(
+        server_batch_audio_start=(T0 + timedelta(hours=1, seconds=3)).timestamp(),
+        recorded_start=T0 + timedelta(hours=1, seconds=1),
+    )
+    result = place(db)
+    assert result['_live_member_rehomed']
+    assert result['started_at'] == T0 + timedelta(hours=1, seconds=1)
+
+
+def test_refused_repair_counts_reason_and_keeps_finished_subset_composable(store, monkeypatch):
+    store.episode['close_reason'] = 'gap'
+    row = _row('live', T0, 1, status='in_progress') | active(started_at=None)
+    store.rows['live'] = row
+    store.episode['conversation_ids'].append('live')
+    placed = Mock(return_value={**store.episode, '_live_member_clock_refusal': 'missing'})
+    monkeypatch.setattr(service.live_members_db, 'place', placed)
+    counted = Mock()
+    monkeypatch.setattr(service.metrics, 'record_live_member_clock_refusal', counted)
+    c = _c()
+    c.firestore_client = object()
+    assert composer.compose(UID, 'ep1', collaborators=c) == 'composed'
+    placed.assert_called_once()
+    counted.assert_called_once_with('missing')
+    assert store.episode['conversation_ids'] == ['c1', 'c2', 'live']
+    assert 'live' not in store.episode['composed_member_ids']
+
+
+def test_clock_refusal_metric_has_closed_labels(monkeypatch):
+    counter = Mock()
+    monkeypatch.setattr(service.metrics, 'LIVE_MEMBER_CLOCK_REFUSAL', counter)
+    service.metrics.record_live_member_clock_refusal('disagreement')
+    service.metrics.record_live_member_clock_refusal('arbitrary-value')
+    assert counter.labels.call_args_list[0].kwargs == {'reason': 'disagreement'}
+    assert counter.labels.call_args_list[1].kwargs == {'reason': 'other'}
+
+
+def test_agreeing_but_future_clocks_cannot_move_membership(timeline_store):
+    db = timeline_store
+    future = datetime.now(timezone.utc) + timedelta(minutes=1)
+    seed(db, linked=True, start=future)
+    before = deepcopy(db.rows)
+    assert place(db)['_live_member_clock_refusal'] == 'future'
+    assert db.rows == before

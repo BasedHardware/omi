@@ -97,9 +97,6 @@ def place(
             or is_relevance_discarded(row)
         ):
             raise episodes.EpisodeConflict('live_member_capture_changed')
-        start = live.capture_start(row)
-        if start is None:
-            raise episodes.EpisodeConflict('live_member_capture_clock_missing')
         members = episodes.read_memberships(transaction, client, uid, [cid], admit_conversation_id=cid)
         linked = members[cid][1].get('episode_id') or row.get('episode_id')
         owner = (
@@ -107,8 +104,26 @@ def place(
         )
         if linked and (not owner or cid not in (owner.get('conversation_ids') or [])):
             raise episodes.EpisodeConflict('live_member_owner_changed')
+        # Re-read all clocks in the ownership transaction, including every retry.
+        capture = live.capture_start(row, now=datetime.now(timezone.utc))
+        boundary = owner.get('closed_at') if owner else None
+        refusal = capture.refusal
+        if (
+            not refusal
+            and isinstance(boundary, datetime)
+            and capture.lower is not None
+            and capture.upper is not None
+            and capture.lower < boundary <= capture.upper
+        ):
+            refusal = 'disagreement'
+        if refusal:
+            if owner:
+                return {**owner, '_live_member_rehomed': False, '_live_member_clock_refusal': refusal}
+            raise episodes.EpisodeConflict('live_member_capture_clock_' + refusal)
+        start = capture.lower
+        if start is None:
+            raise episodes.EpisodeConflict('live_member_capture_clock_missing')
         if owner:
-            boundary = owner.get('closed_at')
             if (
                 owner.get('status') == 'live'
                 or owner.get('close_reason') not in {'gap', 'idle'}

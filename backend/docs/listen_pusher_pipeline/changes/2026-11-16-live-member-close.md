@@ -4,7 +4,14 @@
 their stored capture start, rather than their arrival clock, to open or join the
 live episode. A silence boundary is half-open: a start at or after the boundary
 belongs to the successor. Membership, reverse links, navigation and the recorded
-timeline fence commit together. A stale gap close cannot erase a newer activity
+timeline fence commit together. Rehoming requires corroborating finite
+`server_batch_audio_start`, stored `started_at` and canonical `recorded_start`
+with trusted provenance (`live_capture`, `frame` or `device`). Their interval
+must be at most five seconds wide, no source may exceed transaction server time
+by more than five seconds, and every source must be at or after the boundary.
+Missing/untrusted clocks, wider disagreements, and even a small disagreement
+across the boundary retain existing ownership. Finished-subset readiness still
+unblocks that episode. A stale gap close cannot erase a newer activity
 receipt.
 
 The normal composer lazily repairs legacy post-gap active members into a live
@@ -32,7 +39,11 @@ without counting `composed_at` as proof of Home paint.
 
 `omi_episode_live_member_total{outcome="rehomed"}` counts successful repair
 commits; `outcome="excluded_readiness"` counts readiness observations, including
-repeat reads. Neither is a unique affected-user count. Observe these alongside
+repeat reads. `omi_episode_live_member_clock_refusal_total{reason}` counts
+retained memberships with closed reasons `missing`, `untrusted`, `future`, or
+`disagreement` (including boundary-straddling intervals). Counters are emitted
+after the ownership transaction returns, so transaction retries do not duplicate
+a refusal observation. Neither counter is a unique affected-user count. Observe these alongside
 `omi_episode_compose_total{outcome="waiting"}` and compose errors/conflicts;
 legacy waiting outcomes have no blocker label and cannot establish historical
 attribution. No metric contains account or recording identifiers.

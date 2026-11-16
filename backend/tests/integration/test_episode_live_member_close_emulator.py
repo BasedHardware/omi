@@ -64,6 +64,8 @@ def seed(client, uid):
             'status': 'in_progress',
             'source': 'desktop',
             'started_at': start,
+            'recorded_start': start,
+            'clock': 'live_capture',
             'server_batch_audio_start': start.timestamp(),
             'record_audio_closed': False,
         }
@@ -193,6 +195,7 @@ def test_true_member_finished_subset_remains_readable_after_audio_append(db, mon
         {
             'episode_id': 'old',
             'started_at': T0 + timedelta(minutes=59),
+            'recorded_start': T0 + timedelta(minutes=59),
             'server_batch_audio_start': (T0 + timedelta(minutes=59)).timestamp(),
         }
     )
@@ -210,3 +213,53 @@ def test_true_member_finished_subset_remains_readable_after_audio_append(db, mon
     display = home_feed.reveal_display(uid, saved['home_display'])
     assert display['preview'] == 'Synthetic readable detail'
     assert saved['home_visible']
+
+
+@pytest.mark.parametrize(
+    'changes,reason',
+    [
+        ({'server_batch_audio_start': (datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp()}, 'future'),
+        ({'server_batch_audio_start': (T0 + timedelta(minutes=59, seconds=59)).timestamp()}, 'disagreement'),
+        ({'server_batch_audio_start': (T0 + timedelta(hours=1, seconds=20)).timestamp()}, 'disagreement'),
+        ({'started_at': None}, 'missing'),
+        (
+            {
+                'started_at': T0 + timedelta(minutes=59, seconds=59),
+                'recorded_start': T0 + timedelta(hours=1, seconds=1),
+                'server_batch_audio_start': (T0 + timedelta(hours=1, seconds=1)).timestamp(),
+            },
+            'disagreement',
+        ),
+        ({'clock': 'estimated_device'}, 'untrusted'),
+    ],
+)
+def test_uncertain_clocks_retain_membership_but_real_compose_tick_self_heals(db, monkeypatch, changes, reason):
+    client, uid = db
+    root, old, _ = seed(client, uid)
+    old.update(
+        status='closed',
+        close_reason='gap',
+        closed_at=T0 + timedelta(hours=1),
+        conversation_ids=['finished', 'live'],
+        compose_pending_since=T0,
+    )
+    root.collection('episodes').document('old').set(episodes.seal(uid, old))
+    root.collection('episode_links').document('current').set({'episode_id': None})
+    root.collection('episode_links').document('live').set({'episode_id': 'old'})
+    member = root.collection('conversations').document('live')
+    member.update({'episode_id': 'old', **changes})
+    before = member.get().to_dict()
+    counted = []
+    monkeypatch.setattr(service.metrics, 'record_live_member_clock_refusal', counted.append)
+    monkeypatch.setattr(composer, 'episode_late_compose_enabled', lambda: False)
+    c = service.Collaborators(firestore_client=client, people_names=lambda *a: {}, tz_name='UTC')
+    assert composer.compose(uid, 'old', collaborators=c) == 'composed_single'
+    saved = episodes.get_episode(uid, 'old', firestore_client=client)
+    assert saved['conversation_ids'] == ['finished', 'live']
+    assert saved['composed_member_ids'] == ['finished']
+    assert saved['compose_excluded_live_member_ids'] == ['live']
+    assert saved['compose_pending_since'] is None
+    assert saved['lede'] == 'Synthetic readable detail'
+    assert member.get().to_dict() == before
+    assert root.collection('episode_links').document('current').get().to_dict() == {'episode_id': None}
+    assert counted == [reason]
