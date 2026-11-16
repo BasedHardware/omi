@@ -11,12 +11,3 @@ def read_product(reader, *args, **kwargs):
         kwargs['field_paths'] = fields if 'recording' in fields else [*fields, 'recording']
     row = reader(*args, **kwargs)
     return None if row and row.get('recording') else row
-
-
-def has_recording_pieces(conversation) -> bool:
-    """A v3 window plays from its recording pieces (even an empty list while they are pending).
-
-    The Conversation model defaults recording_pieces to None, so ordinary rows written through
-    it carry the key with a null value and must stay on the legacy playback path.
-    """
-    return bool(conversation) and conversation.get('recording_pieces') is not None

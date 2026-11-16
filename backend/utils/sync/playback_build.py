@@ -7,9 +7,14 @@ from database import conversations as conversations_db
 from utils.other.storage import get_conversation_playback_manifest, upload_conversation_playback_artifact
 from utils.sync.playback import build_conversation_playback_artifact, conversation_merge_fingerprint
 from utils.sync.repeat_work_metrics import PLAYBACK_LOCK_CONTENTION, PLAYBACK_WRITES
-from utils.conversations.layer import has_recording_pieces
 
 logger = logging.getLogger(__name__)
+
+
+def _has_recording_pieces(conversation: dict[str, Any] | None) -> bool:
+    # v3 rows carry a recording_pieces list (even empty); ordinary rows written through the
+    # Conversation model carry recording_pieces: None and stay on the legacy path.
+    return bool(conversation) and conversation.get('recording_pieces') is not None
 
 
 def superseded_while_locked(payload: dict) -> bool:
@@ -24,7 +29,7 @@ def superseded_while_locked(payload: dict) -> bool:
             field_paths=['audio_files', 'started_at', 'created_at', 'deleted', 'recording_pieces'],
             timeout=1.0,
         )
-        if conversation and has_recording_pieces(conversation):
+        if conversation and _has_recording_pieces(conversation):
             from utils.conversations.v3.audio import playback_snapshot
 
             conversation = playback_snapshot(payload['uid'], {**conversation, 'id': payload['conversation_id']})
@@ -58,7 +63,7 @@ def ensure_conversation_artifact(
     existing = get_conversation_playback_manifest(uid, conversation_id, fingerprint)
     if existing is not None:
         return existing
-    if has_recording_pieces(conversation):
+    if _has_recording_pieces(conversation):
         from utils.conversations.v3.audio import build_artifact
 
         data, spans = build_artifact(uid, conversation)
