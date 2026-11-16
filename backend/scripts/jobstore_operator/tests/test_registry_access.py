@@ -45,6 +45,16 @@ class AccessTests(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 access.validate_evidence(c)
 
+    def test_non_string_receipt_digests_use_deliberate_refusal(self):
+        for key in ('allow_policy_receipt_sha256', 'wif_metadata_receipt_sha256', 'sa_trust_receipt_sha256'):
+            for value in (None, False, 0, [], {}):
+                c, _, _ = controls.ControlTests().prepared()
+                c['registry_access_evidence'][key] = value
+                with self.subTest(key=key, value=value), self.assertRaisesRegex(
+                    ValueError, '^REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT_REQUIRED$'
+                ):
+                    access.validate_evidence(c)
+
     def test_legacy_affirmative_assertion_and_closed_contract_refused(self):
         for key, value in (
             ('registry_write_authorization', {'existing_authorization_verified': True}),
@@ -104,7 +114,7 @@ class AccessTests(unittest.TestCase):
 
 
 class PublicationOutcomeTests(unittest.TestCase):
-    def run_case(self, mode):
+    def run_case(self, mode, expected_error=None):
         c, _, receipt = controls.ControlTests().prepared()
         _, release, parts = inputs()
         raw = b'{"reviewed":"manifest"}'
@@ -138,11 +148,21 @@ class PublicationOutcomeTests(unittest.TestCase):
                 raise ValueError('REGISTRY_PERMISSION_HINT_INCOMPLETE_NO_WRITE_ATTEMPT')
             return {'authorization_proof': False, 'result': 'CALLER_PERMISSION_HINT_COMPLETE'}
 
-        before = (
-            subprocess.CompletedProcess([], 0, stdout=raw, stderr=b'')
-            if mode == 'existing'
-            else subprocess.CompletedProcess([], 1, stdout=b'', stderr=b'manifest unknown')
-        )
+        before = subprocess.CompletedProcess([], 1, stdout=b'', stderr=b'manifest unknown')
+        if mode == 'existing':
+            before = subprocess.CompletedProcess([], 0, stdout=raw, stderr=b'')
+        elif mode == 'conflicting-existing':
+            before = subprocess.CompletedProcess([], 0, stdout=b'{"different":"manifest"}', stderr=b'')
+        elif mode == 'unknown-destination':
+            before = subprocess.CompletedProcess([], 1, stdout=b'', stderr=b'permission denied')
+
+        def inspect_command(argv, **_kwargs):
+            self.assertEqual(argv[:3], ['skopeo', 'inspect', '--raw'])
+            auth_path = Path(argv[argv.index('--authfile') + 1])
+            self.assertEqual(auth_path.stat().st_mode & 0o777, 0o600)
+            auth_paths.append(auth_path)
+            return before
+
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             directory = root / 'input'
@@ -154,11 +174,14 @@ class PublicationOutcomeTests(unittest.TestCase):
             ), patch.object(publisher, 'command', side_effect=command), patch.object(
                 publisher, 'permission_hint', side_effect=hint
             ), patch.object(
-                publisher.subprocess, 'run', return_value=before
+                publisher.subprocess, 'run', side_effect=inspect_command
             ) as inspect, patch.dict(
                 os.environ, {'GITHUB_WORKFLOW_SHA': 'w', 'GITHUB_RUN_ID': '1'}
             ):
-                if mode in ('push-fails', 'hint-fails'):
+                if expected_error:
+                    with self.assertRaisesRegex(ValueError, '^' + expected_error + '$'):
+                        publisher.publish(c, directory, receipt, output)
+                elif mode in ('push-fails', 'hint-fails'):
                     with self.assertRaises((ValueError, RuntimeError)):
                         publisher.publish(c, directory, receipt, output)
                 else:
@@ -172,6 +195,16 @@ class PublicationOutcomeTests(unittest.TestCase):
 
     def test_hint_failure_prevents_every_registry_operation(self):
         result, commands = self.run_case('hint-fails')
+        self.assertFalse(result['write_attempted'])
+        self.assertFalse(any(c[:2] == ['skopeo', 'copy'] for c in commands))
+
+    def test_conflicting_existing_digest_prevents_copy_and_cleans_auth(self):
+        result, commands = self.run_case('conflicting-existing', 'CONFLICTING_EXISTING_PUBLICATION')
+        self.assertFalse(result['write_attempted'])
+        self.assertFalse(any(c[:2] == ['skopeo', 'copy'] for c in commands))
+
+    def test_unknown_destination_prevents_copy_and_cleans_auth(self):
+        result, commands = self.run_case('unknown-destination', 'DESTINATION_STATE_UNKNOWN')
         self.assertFalse(result['write_attempted'])
         self.assertFalse(any(c[:2] == ['skopeo', 'copy'] for c in commands))
 
