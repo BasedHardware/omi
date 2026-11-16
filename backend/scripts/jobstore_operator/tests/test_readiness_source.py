@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Discriminators for real cleanliness checks and fixed failure-stage evidence."""
 
 import io
