@@ -58,7 +58,13 @@ def test_created_revision_source_stamp_is_checked_only_for_selected_services(tmp
 import json, os, sys
 n = sys.argv[4]
 with open(os.environ['CALLS'], 'a') as out: out.write(n + '\\n')
-print(json.dumps({'metadata': {'name': n, 'labels': {'serving.knative.dev/service': n.removesuffix('-aabbccd-17-1')}}, 'spec': {'containers': [{'env': [{'name': 'OMI_BACKEND_RELEASE_SHA', 'value': os.environ['STAMP']}]}]}}))
+# Real gcloud drops `spec` entirely for `spec.containers.env` on multi-container revisions.
+fmt = next(a for a in sys.argv if a.startswith('--format='))
+if 'spec.containers[].env' not in fmt:
+    print(json.dumps({'metadata': {'name': n}}))
+    sys.exit(0)
+# Prod revisions run the backend container plus the telemetry collector sidecar.
+print(json.dumps({'metadata': {'name': n, 'labels': {'serving.knative.dev/service': n.removesuffix('-aabbccd-17-1')}}, 'spec': {'containers': [{'env': [{'name': 'OMI_BACKEND_RELEASE_SHA', 'value': os.environ['STAMP']}]}, {}]}}))
 ''')
     fake.chmod(0o700)
     log = tmp_path / 'calls'
