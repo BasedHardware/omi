@@ -141,6 +141,7 @@ FIELD_SITES = {
                 'data_protection_level',
                 'discarded',
                 'finished_at',
+                'geolocation',
                 'home_hidden',
                 'home_hidden_reason',
                 'id',

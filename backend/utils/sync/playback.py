@@ -32,12 +32,17 @@ from utils.other.storage import (
     is_playback_unavailable,
     list_audio_chunks,
 )
-from utils.conversations.layer import has_recording_pieces
 
 logger = logging.getLogger(__name__)
 
 AUDIO_SAMPLE_RATE = 16000
 AUDIO_URLS_POLL_AFTER_MS = 3000
+
+
+def _has_recording_pieces(conversation: dict[str, Any] | None) -> bool:
+    # v3 rows carry a recording_pieces list (even empty); ordinary rows written through the
+    # Conversation model carry recording_pieces: None and stay on the legacy path.
+    return bool(conversation) and conversation.get('recording_pieces') is not None
 
 
 def conversation_merge_fingerprint(conversation: dict[str, Any], *, demand: bool) -> str:
@@ -216,7 +221,7 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    v3 = has_recording_pieces(conversation)
+    v3 = _has_recording_pieces(conversation)
     if v3:
         fingerprint = conversation_merge_fingerprint(conversation or {}, demand=True)
     elif playback_on_demand():
@@ -444,7 +449,7 @@ def get_audio_signed_urls(
     audio_files: list[dict[str, Any]],
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if has_recording_pieces(conversation) or any(af.get('recording_id') for af in audio_files):
+    if _has_recording_pieces(conversation) or any(af.get('recording_id') for af in audio_files):
         from utils.conversations.v3.audio import playback_snapshot
         from database import conversations as conversations_db
 

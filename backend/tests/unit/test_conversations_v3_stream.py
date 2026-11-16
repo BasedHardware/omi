@@ -55,6 +55,21 @@ async def test_competing_writer_returns_pollable_error(monkeypatch):
     assert error.value.detail == 'summary_in_progress'
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exhausted', [True, False])
+async def test_on_open_respects_the_custom_stt_paid_notes_allowance(monkeypatch, exhausted):
+    from utils import subscription
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(subscription, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: exhausted)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    row = {'id': 'c', 'uses_custom_stt': True, 'source': 'omi', 'transcript_segments': [{'text': 'word ' * 400}]}
+    assert await summary.prepare('u', row) == (None if exhausted else 'token')
+
+
 def test_on_open_done_uses_the_locked_row_title(monkeypatch):
     monkeypatch.setattr(
         process, '_get_structured', lambda *a, **kw: (Structured(title='Model replacement', emoji='🔧'), False)

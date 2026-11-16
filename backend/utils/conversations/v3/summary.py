@@ -61,8 +61,23 @@ def section_frame(markdown: str) -> str:
     return 'data: ' + markdown.replace('\n', '__CRLF__') + '\n\n'
 
 
+def paid_notes_refused(uid, row):
+    """The custom-STT allowance that process_conversation applies before Omi-paid notes."""
+    if row.get('uses_custom_stt') is not True:
+        return False
+    from utils.subscription import should_skip_omi_paid_postprocessing
+
+    source = row.get('source')
+    return should_skip_omi_paid_postprocessing(
+        uid, uses_custom_stt=True, source=getattr(source, 'value', source) if source is not None else None
+    )
+
+
 async def prepare(uid, row):
     if fresh(row) or not summary_eligible(row):
+        return None
+    if await run_blocking(db_executor, paid_notes_refused, uid, row):
+        # No foreground model work: the stream serves the stored row, as processing would.
         return None
     token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
     if token is None:

@@ -198,7 +198,6 @@ from utils.sync.input_limits import (
     validate_backfill_uploads,
     validate_backfill_paths,
 )
-from utils.conversations.layer import has_recording_pieces
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
@@ -3981,7 +3980,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
-        if has_recording_pieces(conversation):
+        if conversation.get('recording_pieces') is not None:
             from utils.conversations.v3.audio import playback_snapshot
 
             conversation = await run_blocking(db_executor, playback_snapshot, uid, conversation)
@@ -3992,7 +3991,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         artifact_fingerprint = (
             conversation['_v3_playback_fingerprint']
-            if has_recording_pieces(conversation)
+            if conversation.get('recording_pieces') is not None
             else compute_audio_files_fingerprint(
                 audio_files,
                 origin=conversation.get('started_at') or conversation.get('created_at'),
@@ -4046,7 +4045,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     started_at_ts,
                     artifact_fingerprint,
                     strict_sources=demand,
-                    **({'conversation': conversation} if has_recording_pieces(conversation) else {}),
+                    **({'conversation': conversation} if conversation.get('recording_pieces') is not None else {}),
                 )
         except PlaybackSourceChanged:
             return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)
