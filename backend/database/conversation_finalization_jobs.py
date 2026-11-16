@@ -24,7 +24,7 @@ from config.firestore_read_levers import lever_enabled
 from config.account_cutover import cutover_enforcement_enabled
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
-from config.refactor_modes import cohort_configured
+from config.refactor_modes import cohort_configured, batch_finalize_orphaned_live_captures_enabled
 from database import conversations as conversations_db
 from database import account_cutover as account_cutover_db
 from database.read_boundary import MalformedDocError
@@ -641,7 +641,20 @@ def _create_or_get_finalization_intent_txn(
                 loaded,
                 now,
             )
-            if require_expired_recording_lease and lease_expiry is None:
+            external_data = loaded.get('external_data', {})
+            closed_unleased_batch_live = (
+                batch_finalize_orphaned_live_captures_enabled()
+                and loaded.get('record_lane_owner') == 'batch_live_v1'
+                and loaded.get('record_audio_closed') is True
+                and 'has_content' not in loaded
+                and isinstance(loaded.get('finished_at'), datetime)
+                and isinstance(external_data, Mapping)
+                and 'recording_session_id' not in external_data
+            )
+            # Old batch-live rows can have no session identity at all. Only a
+            # closed capture may use that absence; a referenced but unreadable,
+            # malformed or active session keeps the original fail-closed fence.
+            if require_expired_recording_lease and lease_expiry is None and not closed_unleased_batch_live:
                 intent = _no_finalization_intent('refused_recording_lease_unknown')
                 return intent
             if lease_expiry is not None and lease_expiry > now:
@@ -2848,7 +2861,9 @@ def scan_in_progress_conversations(
     the status-only scan instead pushes ``finished_at <= finished_before`` into
     the query. The content-bearing fast recovery scan retains its own cutoff,
     predicates and cursor behavior regardless of the candidate-query lever.
-    Lease and admission guards remain transactional.
+    The default-off orphaned-live switch additionally reaches missing-marker
+    batch-live rows through the indexed status/finished_at window, sharing the
+    same cursor and bounds. Lease and admission guards remain transactional.
 
     The pushdown is admission-equivalent only while no uid can serve lifecycle
     v2: ``recovery_admission_refusal`` clocks v2-serving uids by
@@ -2864,6 +2879,7 @@ def scan_in_progress_conversations(
     row is ``{'uid', 'conversation_id', 'path', 'data'}``.
     """
     client = _client(firestore_client)
+    orphaned_live_scan = content_due_before is not None and batch_finalize_orphaned_live_captures_enabled()
     candidate_queries = (
         content_due_before is None
         and _candidate_queries_enabled()
@@ -2905,10 +2921,13 @@ def scan_in_progress_conversations(
                 .limit(page_size)
             )
             if content_due_before is not None:
-                query = (
-                    query.where(filter=firestore.FieldFilter('has_content', '==', True))
-                    .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
-                    .order_by('finished_at')
+                if not orphaned_live_scan:
+                    query = query.where(filter=firestore.FieldFilter('has_content', '==', True))
+                # The existing status/finished_at index reaches missing markers.
+                # Share the existing cursor and max_scan (2,000 rows/tick); the
+                # self-heal caller retains its 25 candidates / 10 admissions cap.
+                query = query.where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before)).order_by(
+                    'finished_at'
                 )
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
@@ -2924,12 +2943,24 @@ def scan_in_progress_conversations(
             uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
+            data = snapshot.to_dict() or {}
+            if orphaned_live_scan and data.get('has_content') is not True:
+                # Only missing-marker batch-live rows join the original query's
+                # population. Content and the authoritative lease are rechecked
+                # by normal SERVER_RECOVERY admission before any enqueue.
+                finished_at = data.get('finished_at')
+                if (
+                    'has_content' in data
+                    or data.get('record_lane_owner') != 'batch_live_v1'
+                    or not isinstance(finished_at, datetime)
+                ):
+                    continue
             rows.append(
                 {
                     'uid': uid,
                     'conversation_id': snapshot.id,
                     'path': snapshot.reference.path,
-                    'data': snapshot.to_dict() or {},
+                    'data': data,
                 }
             )
         if scanned > max_scan:

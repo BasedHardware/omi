@@ -137,6 +137,11 @@ def quiet_empty_exit_enabled() -> bool:
     return default_off('QUIET_EMPTY_EXIT_ENABLED')
 
 
+def batch_finalize_orphaned_live_captures_enabled() -> bool:
+    """Dark bounded self-heal reachability fix; independent of operator orphan repair."""
+    return default_off('BATCH_FINALIZE_ORPHANED_LIVE_CAPTURES_ENABLED')
+
+
 def batch_live_orphan_repair_enabled() -> bool:
     """Dark operator repair; retained audio exits via batch, empty rows via fenced cleanup."""
     return default_off('BATCH_LIVE_ORPHAN_REPAIR_ENABLED')

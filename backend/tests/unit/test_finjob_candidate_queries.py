@@ -398,3 +398,141 @@ def test_processing_keeps_missing_legacy_fence_and_parseable_timestamps(monkeypa
         ('stale-iso', False),
     ]
     assert client.queries[0].filters == (('status', '==', 'processing'),)
+
+
+@pytest.mark.parametrize('flag', [None, 'false', 'invalid', 'true'])
+def test_orphaned_batch_live_content_due_reaches_real_admission(monkeypatch, flag):
+    from services import conversation_selfheal as sweep
+    from tests.unit.test_selfheal_recovery import _Collection, _Ref, _Transaction, _admit_finalization
+    from utils.conversations.processing_trigger import ProcessingTrigger
+
+    if flag is None:
+        monkeypatch.delenv('BATCH_FINALIZE_ORPHANED_LIVE_CAPTURES_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('BATCH_FINALIZE_ORPHANED_LIVE_CAPTURES_ENABLED', flag)
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _: False)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW)
+    base = {
+        'source': 'omi',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'finished_at': OLD,
+        'transcript_segments': [{'text': 'synthetic'}],
+    }
+    snapshots = [
+        conversation('closed', **base),
+        conversation('live-no-finish', **{k: v for k, v in base.items() if k != 'finished_at'}),
+        conversation('active', **base, external_data={'recording_session_id': 'active'}),
+        conversation('unknown', **base, external_data={'recording_session_id': 'unknown'}),
+        conversation('malformed', **base, external_data=[]),
+        conversation('open-no-session', **{**base, 'record_audio_closed': False}),
+        conversation('other-lane', **{**base, 'record_lane_owner': 'other'}),
+        conversation('explicit-false', **base, has_content=False),
+    ]
+    client = Client(snapshots)
+    admitted = []
+    sessions = _Collection(
+        {
+            'active': _Ref(
+                'active',
+                {
+                    'uid': 'u',
+                    'conversation_id': 'active',
+                    'recording_session_id': 'active',
+                    'lifecycle_phase': 'in_progress',
+                    'lease_expires_at': NOW + timedelta(minutes=5),
+                },
+            )
+        }
+    )
+
+    def request(uid, cid, **options):
+        assert options['require_expired_recording_lease'] is True
+        data = next(s.data for s in snapshots if s.id == cid)
+        txn = _Transaction()
+        intent = jobs._create_or_get_finalization_intent_txn(
+            txn,
+            _Ref(cid, data),
+            _Collection(),
+            uid,
+            cid,
+            False,
+            _admit_finalization,
+            NOW,
+            trigger=ProcessingTrigger.SERVER_RECOVERY,
+            recovery_cutoff=CUTOFF,
+            recording_sessions_collection=sessions,
+            require_expired_recording_lease=True,
+        )
+        if intent['created']:
+            admitted.append(cid)
+            return {**intent, 'route': 'cloud_tasks'}
+        assert txn.sets == [] and txn.updates == []
+        return {**intent, 'route': 'noop'}
+
+    result = sweep.run_selfheal_tick(
+        firestore_client=client,
+        now=NOW,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        content_due_scan=True,
+        scan_fn=jobs.scan_in_progress_conversations,
+        cursor_getter=lambda **_: {},
+        cursor_advancer=lambda *a, **kw: True,
+        request_finalization_fn=request,
+        wedge_runner=lambda **_: {},
+    )
+    assert result['errors'] == 0
+    assert admitted == (['closed'] if flag == 'true' else [])
+    assert result['enqueued'] == (1 if flag == 'true' else 0)
+
+
+def test_orphaned_batch_live_scan_and_admission_bounds(monkeypatch):
+    from services import conversation_selfheal as sweep
+
+    monkeypatch.setenv('BATCH_FINALIZE_ORPHANED_LIVE_CAPTURES_ENABLED', 'true')
+    monkeypatch.setattr(sweep, 'account_deletion_blocks_user_work', lambda _: False)
+    rows = [
+        conversation(
+            str(i).zfill(4),
+            source='omi',
+            record_lane_owner='batch_live_v1',
+            record_audio_closed=True,
+            finished_at=OLD,
+            transcript_segments=[{'text': 'synthetic'}],
+        )
+        for i in range(2100)
+    ]
+    client = Client(rows)
+    scan = jobs.scan_in_progress_conversations(content_due_before=CUTOFF, firestore_client=client)
+    assert scan['scanned'] == len(scan['rows']) == client.reads == 2000
+    assert scan['exhausted'] is False
+    tail = jobs.scan_in_progress_conversations(
+        content_due_before=CUTOFF, firestore_client=client, resume_after_path=scan['resume_after_path']
+    )
+    assert len(tail['rows']) == 100
+    calls = []
+    cursors = []
+
+    def request(*args, **kwargs):
+        calls.append(kwargs)
+        return {'created': True, 'job_id': f'synthetic-{len(calls)}', 'route': 'cloud_tasks'}
+
+    result = sweep.run_selfheal_tick(
+        firestore_client=Client(rows),
+        now=NOW,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        content_due_scan=True,
+        scan_fn=jobs.scan_in_progress_conversations,
+        cursor_getter=lambda **_: {},
+        cursor_advancer=lambda gen, path, **kw: cursors.append(path) or True,
+        request_finalization_fn=request,
+        wedge_runner=lambda **_: {},
+    )
+    assert result['errors'] == 0
+    assert result['scanned'] == 2000
+    assert result['enqueued'] == len(calls) == sweep.MAX_HEAL_ADMISSIONS_PER_TICK == 10
+    assert cursors == [rows[sweep.MAX_ELIGIBLE_PER_TICK - 1].path]
