@@ -159,6 +159,16 @@ def build(uid, window, recordings, existing=None):
         'started_at': start,
         'finished_at': end,
         'source': first.get('source', 'omi'),
+        # Places and detail read the conversation, not the hidden recording: carry its location.
+        'geolocation': (existing or {}).get('geolocation')
+        or next(
+            (
+                recordings[rid]['geolocation']
+                for rid in dict.fromkeys(l['conversation_id'] for l in lines)
+                if recordings[rid].get('geolocation')
+            ),
+            None,
+        ),
         'language': first.get('language'),
         # The copy keeps the strongest protection of any contributing recording (as sync merges do),
         # and never drops below what the conversation already has.
