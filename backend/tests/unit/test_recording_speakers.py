@@ -199,6 +199,40 @@ def test_recording_transcript_response_models_and_preserves_voice_proof(recordin
     assert (line['speaker_id_scope'], line['stream_speaker']) == ('stream:1', 'SPEAKER_0')
 
 
+def test_v3_transcript_and_speaker_picker_never_expand_into_source_siblings(recording, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import recording_speakers as routes
+
+    recording.rows[('users', 'u', 'conversations', 'c1')]['v3_derived'] = True
+    for target, name in [
+        (service.episodes_db, 'get_episode_for_conversation'),
+        (service, 'scope_conversation_ids'),
+        (service, 'legacy_recording_conversation_ids'),
+    ]:
+        monkeypatch.setattr(target, name, lambda *a: pytest.fail('canonical window must not discover siblings'))
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    with TestClient(app) as client:
+        response = client.get('/v1/conversations/c1/recording-speakers')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['episode_id'] is None and data['coverage'] == 'complete'
+    assert [row['id'] for row in data['conversations']] == ['c1']
+    assert data['conversations'][0]['recording_offset_seconds'] == 0
+    result = edit('u', 'c1', request(), None)
+    assert result['applied_count'] == 1
+    assert decode(recording, 'c0')['transcript_segments'][0]['person_id'] == 'old'
+    assert decode(recording, 'c2')['transcript_segments'][0]['person_id'] == 'old'
+
+
+def test_locked_v3_window_remains_unavailable(recording):
+    recording.rows[('users', 'u', 'conversations', 'c1')].update(v3_derived=True, is_locked=True)
+    with pytest.raises(PermissionError):
+        service.transcript('u', 'c1')
+
+
 def test_voice_request_and_latest_decision_win_on_next_rollover(recording):
     from models.recording_speakers import RecordingVoice
 

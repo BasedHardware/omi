@@ -38,10 +38,14 @@ def _mark_resolved(uid, row):
         )
 
 
-def enqueue(uid, *, at=None):
+def enqueue(uid, *, at=None, manual_end_id=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
+    if manual_end_id:
+        # A live task may already have completed in this minute. Its retained
+        # Cloud Tasks name must not swallow the user's later explicit close.
+        task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
     base = os.getenv('CONVERSATIONS_V3_TASKS_URL', '').rstrip('/')
     if not base:
         from urllib.parse import urlsplit
@@ -62,7 +66,7 @@ def enqueue(uid, *, at=None):
 def changed(uid, cid, *, manual_end=False):
     if store.mark_pending(uid, cid, manual_end=manual_end):
         try:
-            enqueue(uid)
+            enqueue(uid, **({'manual_end_id': cid} if manual_end else {}))
         except Exception as error:
             metrics.RECONCILES.labels('dispatch_error').inc()
             logger.warning('v3 dispatch deferred exception_type=%s', type(error).__name__)

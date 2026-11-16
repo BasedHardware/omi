@@ -117,6 +117,7 @@ _RESULT_LIST_KEY_BY_TOOL = {
     "get_deleted_conversations": "deleted",
     "get_conversations_by_ids": "conversations",
     "search_conversations": "conversations",
+    "search_transcripts": "matches",
     "search_x_posts": "posts",
     "get_x_posts": "posts",
     "get_action_items": "action_items",

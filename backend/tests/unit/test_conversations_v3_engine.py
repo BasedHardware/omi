@@ -95,15 +95,99 @@ def test_two_hour_cap_at_nearest_middle_section():
     windows = planner.windows(groups, [[entry(sections=[{'first_line': 91, 'title': 'Next subject'}])]])
     assert len(windows) == 2
     assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=90)
-    assert all(w['lines'][-1]['end'] - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
+    assert all(max(line['end'] for line in w['lines']) - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
 
 
-@pytest.mark.parametrize('gap,expected', [(20, 1), (20.001, 2)])
-def test_resume_twenty_minute_limit(gap, expected):
+@pytest.mark.parametrize('gap', [5, 15.056, 20])
+def test_model_resume_cannot_cross_recorded_silence(gap):
     a = recording('a')
     b = recording('b', NOW + timedelta(seconds=10, minutes=gap))
     groups = outline.stretches([a, b], NOW + timedelta(hours=4))
-    assert len(planner.windows(groups, [[entry()], [entry(resumes_previous=True)]])) == expected
+    assert len(groups) == 2
+    assert len(planner.windows(groups, [[entry()], [entry(resumes_previous=True)]])) == 2
+
+
+def test_model_resume_can_undo_a_topic_split_inside_continuous_speech():
+    row = recording(segments=[{'text': 'one', 'start': 0, 'end': 10}, {'text': 'two', 'start': 309, 'end': 320}])
+    groups = outline.stretches([row], NOW + timedelta(hours=4))
+    windows = planner.windows(groups, [[entry(), entry(2, resumes_previous=True)]])
+    assert len(windows) == 1
+    assert len(windows[0]['lines']) == 2
+
+
+def test_model_resume_keeps_overlapping_speech_in_one_window():
+    row = recording(
+        segments=[
+            {'text': 'long opening turn', 'start': 0, 'end': 30},
+            {'text': 'overlapping short turn', 'start': 10, 'end': 15},
+            {'text': 'continuing overlapping turn', 'start': 20, 'end': 40},
+        ]
+    )
+    groups = outline.stretches([row], NOW + timedelta(hours=1))
+    assert len(groups) == 1
+    windows = planner.windows(groups, [[entry(), entry(3, resumes_previous=True)]])
+    assert len(windows) == 1
+    assert [(line['segment']['start'], line['segment']['end']) for line in windows[0]['lines']] == [
+        (0, 30),
+        (10, 15),
+        (20, 40),
+    ]
+
+
+@pytest.mark.parametrize('resume', [False, True])
+def test_overlapping_turns_cannot_hide_a_window_end_beyond_the_cap(resume):
+    segments = [{'text': f'turn {i}', 'start': i * 60, 'end': i * 60 + 55} for i in range(120)]
+    segments.extend(
+        {'text': f'overlapping turn {i}', 'start': start, 'end': end}
+        for i, (start, end) in enumerate([(7188, 7198), (7190, 7195), (7192, 7204), (7193, 7199)])
+    )
+    row = recording(segments=segments)
+    groups = outline.stretches([row], NOW + timedelta(hours=4))
+    entries = [entry(), entry(123, resumes_previous=True)] if resume else [entry()]
+    windows = planner.windows(groups, [entries])
+    built = [planner.build('synthetic', window, {'r': row}) for window in windows]
+    assert len(built) == 2
+    assert all(window['finished_at'] - window['started_at'] <= timedelta(hours=2) for window in built)
+    assert sum(len(window['transcript_segments']) for window in built) == len(segments)
+
+
+@pytest.mark.parametrize('order', ['in_order', 'reversed', 'reconnect_first'])
+def test_two_hour_exchange_stays_one_window_across_reconnects_and_arrival_order(order):
+    # Same recorded shape as the incident: an unrelated family chat, a 15m pause,
+    # then many short socket captures during an uninterrupted exchange. Text is synthetic.
+    family = recording(
+        'family', NOW - timedelta(minutes=45, seconds=3.345), segments=[{'text': 'family', 'start': 0, 'end': 1800}]
+    )
+    chunks = [
+        recording(
+            f'reconnect-{i}',
+            NOW + timedelta(seconds=i * 60),
+            segments=[{'id': f'line-{i}', 'text': f'fundraising turn {i}', 'start': 0, 'end': 60 if i == 119 else 55}],
+        )
+        for i in range(120)
+    ]
+    arrivals = [family, *chunks]
+    if order == 'reversed':
+        arrivals.reverse()
+    elif order == 'reconnect_first':
+        arrivals = [*chunks[::2], family, *chunks[1::2]]
+    groups = outline.stretches(arrivals, NOW + timedelta(hours=3))
+    windows = planner.windows(groups, [[entry()], [entry(resumes_previous=True)]])
+    assert len(windows) == 2
+    assert {line['conversation_id'] for line in windows[0]['lines']} == {'family'}
+    built = planner.build('synthetic', windows[1], {r['id']: r for r in arrivals})
+    assert built['finished_at'] - built['started_at'] == timedelta(hours=2)
+    assert len(built['transcript_segments']) == 120
+    assert len(built['v3_recording_ids']) == 120
+    assert all(s['text'].startswith('fundraising') for s in built['transcript_segments'])
+
+
+def test_explicit_end_finishes_at_once_without_shortening_automatic_boundary():
+    end = NOW + timedelta(seconds=10)
+    automatic = recording(finished_at=end)
+    assert not outline.stretches([automatic], end + timedelta(seconds=30))[0]['finished']
+    manual = dict(automatic, v3_manual_end=True)
+    assert outline.stretches([manual], end)[0]['finished']
 
 
 def test_new_people_prevent_resume():

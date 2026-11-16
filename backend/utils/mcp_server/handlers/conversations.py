@@ -1,6 +1,7 @@
 """Conversation tool handlers for the hosted MCP server."""
 
 import logging
+from dataclasses import dataclass
 
 from utils.other.list_budget import ListReadBudget
 
@@ -43,6 +44,7 @@ from utils.mcp_server.cursors import (
     offset_position,
     serialize_timestamp,
 )
+from utils.mcp_server import search_views
 from utils.mcp_server.errors import ToolExecutionError, raise_conversation_index_error
 from utils.mcp_server.detail_cursors import decode_detail_cursor, encode_detail_cursor
 from utils.mcp_server.helpers import (
@@ -554,53 +556,81 @@ def search_conversations_core(
     extra_field_paths: Optional[List[str]] = None,
     include_transcript: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Shared vector-search + batch-read for MCP ``search_conversations`` and REST search.
+    """Shared hybrid search + batch-read for MCP ``search_conversations`` and REST search.
 
     Dates arrive already parsed; the caller applies its own input convention
     (date-only end-of-day for the tool, exact instants for REST).
+    """
+    return search_conversation_hits(
+        uid,
+        query,
+        limit=limit,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        extra_field_paths=extra_field_paths,
+        include_transcript=include_transcript,
+    ).conversations
+
+
+@dataclass(frozen=True)
+class ConversationSearchHits:
+    conversations: List[Dict[str, Any]]
+    vector_ids: List[str]
+    keyword_ids: List[str]
+    vectors_ok: bool
+    keyword_ok: bool
+
+
+class _VectorIndexUnconfigured(RuntimeError):
+    pass
+
+
+def _query_configured_vectors(*args: Any, **kwargs: Any) -> List[str]:
+    # An unconfigured index makes query_vectors return [] instead of raising: that is no semantic
+    # search at all, so report the index as unavailable rather than as an empty semantic result.
+    if getattr(vector_db, 'index', None) is None:
+        raise _VectorIndexUnconfigured()
+    return vector_db.query_vectors(*args, **kwargs)
+
+
+def search_conversation_hits(
+    uid: str,
+    query: Any,
+    *,
+    limit: int,
+    start_dt: Optional[Any],
+    end_dt: Optional[Any],
+    extra_field_paths: Optional[List[str]] = None,
+    include_transcript: bool = True,
+) -> ConversationSearchHits:
+    """Ask summary vectors and the keyword index, merge, and hydrate once.
+
+    Keyword hits are no longer only a zero-result fallback: one semantic hit
+    used to hide every exact title or overview match.
     """
     start_dt, end_dt = _utc_search_window(start_dt, end_dt)
     starts_at = int(start_dt.timestamp()) if start_dt is not None else None
     ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
-    # Date filters must be checked against hydrated storage as well as indexes:
-    # stale index metadata must never widen the authorized result window.
+    vectors_ok = keyword_ok = True
+    index_error: Optional[FailedPrecondition] = None
     try:
-        conversation_ids = resolve_mcp_conversation_search_ids(
+        vector_ids = resolve_mcp_conversation_search_ids(
             uid,
             query,
             limit=limit,
             starts_at=starts_at,
             ends_at=ends_at,
-            query_vectors=vector_db.query_vectors,
+            query_vectors=_query_configured_vectors,
             embed_query=vector_db.embeddings.embed_query,
         )
     except FailedPrecondition as exc:
-        raise_conversation_index_error(exc)
+        # An index still building is one index down: the keyword index may still answer.
+        logger.warning("MCP summary vector index not ready")
+        vector_ids, vectors_ok, index_error = [], False, exc
     except Exception:
         logger.warning("MCP summary vector search unavailable")
-        conversation_ids = []
-    conversations = (
-        conversations_db.get_mcp_conversations_by_id(
-            uid,
-            conversation_ids,
-            include_transcript=include_transcript,
-            extra_field_paths=extra_field_paths,
-        )
-        if conversation_ids
-        else []
-    )
-    conversations = [
-        c
-        for c in conversations
-        if conversation_matches_date_range(
-            c, start_dt.timestamp() if start_dt else None, end_dt.timestamp() if end_dt else None
-        )
-    ]
-    if conversations:
-        return conversations[:limit]
-
-    record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger)
+        vector_ids, vectors_ok = [], False
     try:
         keyword_ids = keyword_search_conversation_ids(
             uid,
@@ -610,28 +640,49 @@ def search_conversations_core(
             end_date=ends_at,
             raise_on_error=True,
         )
-    except Exception as exc:
+    except Exception:
+        logger.warning("MCP keyword conversation search unavailable")
+        keyword_ids, keyword_ok = [], False
+    vector_ids = [str(cid) for cid in vector_ids or []]
+    keyword_ids = [str(cid) for cid in keyword_ids or []]
+
+    # Date filters must be checked against hydrated storage as well as indexes:
+    # stale index metadata must never widen the authorized result window.
+    def hydrate(ids: List[str]) -> List[Dict[str, Any]]:
+        if not ids:
+            return []
+        rows = conversations_db.get_mcp_conversations_by_id(
+            uid, ids, include_transcript=include_transcript, extra_field_paths=extra_field_paths
+        )
+        return [
+            c
+            for c in rows
+            if conversation_matches_date_range(
+                c, start_dt.timestamp() if start_dt else None, end_dt.timestamp() if end_dt else None
+            )
+        ]
+
+    ranked = search_views.merge_search_ids(vector_ids, keyword_ids, len(vector_ids) + len(keyword_ids))
+    conversations = hydrate(ranked[:limit])
+    if len(conversations) < limit and len(ranked) > limit:
+        # Stale index ids (deleted or moved records) leave room for the next hits.
+        # ranked holds at most 2*limit ids, so this second read stays bounded.
+        conversations += hydrate(ranked[limit:])
+    # Degraded when either index could not be asked, or no semantic hit survived hydration.
+    if not (vectors_ok and keyword_ok) or not any(str(c.get('id')) in set(vector_ids) for c in conversations):
+        record_fallback(
+            component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
+        )
+    if not conversations and not keyword_ok and index_error is not None:
+        raise_conversation_index_error(index_error)
+    if not conversations and not keyword_ok:
         raise ToolExecutionError(
             "No hydrated semantic matches and keyword search is unavailable. "
             "Use get_conversations with a date window; this does not establish that the topic is absent.",
             code=-32009,
             http_status=503,
-        ) from exc
-    if not keyword_ids:
-        return []
-    rows = conversations_db.get_mcp_conversations_by_id(
-        uid,
-        keyword_ids,
-        include_transcript=include_transcript,
-        extra_field_paths=extra_field_paths,
-    )
-    return [
-        c
-        for c in rows
-        if conversation_matches_date_range(
-            c, start_dt.timestamp() if start_dt else None, end_dt.timestamp() if end_dt else None
         )
-    ][:limit]
+    return ConversationSearchHits(conversations[:limit], vector_ids, keyword_ids, vectors_ok, keyword_ok)
 
 
 def search_conversations(
@@ -652,22 +703,19 @@ def search_conversations(
 
     start_dt, end_dt, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
 
-    conversations = search_conversations_core(
-        uid,
-        query,
-        limit=limit,
-        start_dt=start_dt,
-        end_dt=end_dt,
-    )
-    if not conversations:
+    hits = search_conversation_hits(uid, query, limit=limit, start_dt=start_dt, end_dt=end_dt)
+    coverage, unavailable = search_views.search_coverage(vectors_ok=hits.vectors_ok, keyword_ok=hits.keyword_ok)
+    envelope: Dict[str, Any] = {"search_coverage": coverage, "unavailable_indexes": unavailable}
+    if not hits.conversations:
         return {
             "conversations": [],
-            "search_coverage": "summary_vectors_and_keyword_recovery",
-            "message": "No indexed matches. Unindexed content may still match; browse a date window.",
+            **envelope,
+            "message": "No indexed matches. Details said only in a transcript may still match: try "
+            "search_transcripts with the words as spoken, or browse a date window.",
         }
 
     results: List[Dict[str, Any]] = []
-    for conv in conversations:
+    for conv in hits.conversations:
         conv = transcribing_hold.project(conv)
         redact_conversation_for_list(conv)
         snippets: List[Dict[str, Any]] = []
@@ -677,16 +725,16 @@ def search_conversations(
                     [conv],
                     query,
                     max_chars=MCP_CONVERSATION_SEARCH_SNIPPET_CHARS,
-                )[
-                    0
-                ].get("match_snippets")
+                    with_position=True,
+                )[0].get("match_snippets")
                 or []
             )
+        search_views.add_segment_indexes(snippets, conv.get("transcript_segments"))
         card = conversation_card(conv)
         card["match_snippets"] = [public_transcript_timing(snippet) for snippet in snippets]
-        results.append(select_card_fields(card, arguments.get("fields")))
+        card["match_basis"] = search_views.match_basis(
+            str(conv.get("id")), hits.vector_ids, hits.keyword_ids, bool(snippets)
+        )
+        results.append(select_card_fields(card, arguments.get("fields")) | {"match_basis": card["match_basis"]})
 
-    return localize_timestamps(
-        {"conversations": results, "search_coverage": "summary_vectors_with_keyword_recovery", "timezone": str(zone)},
-        zone,
-    )
+    return localize_timestamps({"conversations": results, **envelope, "timezone": str(zone)}, zone)

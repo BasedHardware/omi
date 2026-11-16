@@ -49,4 +49,9 @@ void omi_diagnostics_snapshot(struct omi_diagnostics_snapshot *snapshot)
     snapshot->mic_overrun_count = (uint32_t) atomic_get(&mic_overrun_count);
     snapshot->ble_tx_drop_count = (uint32_t) atomic_get(&ble_tx_drop_count);
     snapshot->storage_error_count = (uint32_t) atomic_get(&storage_error_count);
+    snapshot->conn_interval = UINT16_MAX;
+    snapshot->conn_latency = UINT16_MAX;
+    snapshot->conn_timeout = UINT16_MAX;
+    snapshot->tx_phy = UINT8_MAX;
+    snapshot->rx_phy = UINT8_MAX;
 }
