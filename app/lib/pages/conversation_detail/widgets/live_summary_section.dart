@@ -5,6 +5,7 @@ import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/conversations_v3.dart';
+import 'package:omi/services/conversation_summary_stream.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
