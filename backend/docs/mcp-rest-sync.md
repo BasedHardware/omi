@@ -81,11 +81,20 @@ sent and clients must not retry:
   item leaves no row and is **not** emitted by the sync feed. Rows that
   persist with `deleted: true` (soft tombstones written by retirement
   flows) are emitted with `deleted: true` so clients can reconcile them.
-- **Conversations / memories**: both models persist soft-delete tombstone
-  rows (discarded/deleted markers), so deletes **are** recorded — but
-  their `updated_since` feeds are unsupported (400) and the plain list
-  cursors already skip tombstones. Clients must re-fetch or reconcile on
-  their own cadence; no deletes are silently claimed covered today.
+- **Conversations**: every user deletion writes a content-free tombstone
+  to `users/{uid}/deleted_conversations` with a real `deleted_at`. The
+  deletion feed serves them in `(deleted_at ASC, id ASC)` order, the same
+  keyset contract as the action-item feed:
+  `GET /v1/mcp/conversations/deleted?deleted_since=<ISO 8601 with offset>`
+  (body: array of `{id, deleted_at}`, paging in `X-Next-Cursor`) and the MCP
+  tool `get_deleted_conversations`. `deleted_since` is inclusive, so passing
+  back the last `deleted_at` you processed may repeat rows at that instant;
+  removal is idempotent. Only `deleted_at` is read; tombstones without it
+  predate the feed and are not listed. Edits are still not feedable (see
+  above).
+- **Memories**: historical memory deletes are hard deletes and deletion
+  receipts are deliberately non-enumerable, so there is no memory deletion
+  feed; clients must reconcile on their own cadence.
 
 ## Conversation detail bounds
 

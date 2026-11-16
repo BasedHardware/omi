@@ -516,6 +516,14 @@ _add(DriverEntry('database.account_deletion_transitions.read_agent_vm_migration_
 
 _add(
     DriverEntry(
+        'database.conversation_deletion_feed.get_deleted_conversations_page',
+        base={'uid': UID},
+        domains={'deleted_since': [None, T0], 'after': [None, (T0, 'doc-1')]},
+        neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    DriverEntry(
         'database.action_item_sync.get_action_items_sync_page',
         base={'uid': UID},
         domains={'updated_since': [None, T0], 'after': [None, (T0, 'doc-1')]},

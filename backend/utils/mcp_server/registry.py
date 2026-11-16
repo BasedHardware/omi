@@ -26,7 +26,7 @@ from utils.mcp_server.constants import (
     MCP_MEMORY_LIST_MAX_LIMIT,
 )
 from utils.mcp_server.errors import ToolExecutionError
-from utils.mcp_server.handlers import action_items, conversations, memories, other, profile
+from utils.mcp_server.handlers import action_items, conversations, memories, other, profile, sync
 
 ToolHandler = Callable[[str, Dict[str, Any], Optional[ProductAuthorizationContext]], Dict[str, Any]]
 
@@ -568,6 +568,23 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=conversations.get_conversations,
+    ),
+    ToolSpec(
+        name="get_deleted_conversations",
+        title="Get deleted conversations",
+        description=(
+            "List conversations the user deleted, oldest deletion first, as id and deleted_at only. For agents that "
+            "keep a copy of the user's conversations: pass the last deleted_at you processed as deleted_since, "
+            "remove every listed id from your copy, and page with next_cursor while has_more is true."
+        ),
+        annotations=_read_annotations("Get deleted conversations"),
+        input_schema=sync.DELETED_CONVERSATIONS_INPUT,
+        output_schema=_output_schema(_object_schema(["deleted", "has_more"], **sync.DELETED_CONVERSATIONS_OUTPUT)),
+        scope="conversations.read",
+        operation="conversation_deletion_list",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=sync.get_deleted_conversations,
     ),
     ToolSpec(
         name="get_conversation_by_id",
