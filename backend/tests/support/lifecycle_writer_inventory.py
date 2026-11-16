@@ -1,6 +1,84 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # R40: own retained-audio fallback preserves its committed owner-log slot.
+    'database/batch_pipeline_source_fallback.py': [
+        (
+            'enqueue',
+            'state',
+            "'provider_pending'",
+            (
+                'attempt',
+                'available_at',
+                'lease_until',
+                'merge_pending',
+                'policy',
+                'protocol_version',
+                'requires_compute_admission',
+                'source_alias_fallback',
+                'source_conversation_ids',
+                'source_reuse_version',
+                'state',
+                'stt_route',
+                'token',
+            ),
+        ),
+        (
+            'merge_ready',
+            'projection_state',
+            "'pending'",
+            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result', 'source_reuse_version'),
+        ),
+        ('merge_ready', 'state', "'committed'", ('merge_pending', 'state')),
+    ],
+    # Source aliases bypass paid work and enter the existing ordered result log.
+    'database/batch_pipeline_source_reuse.py': [
+        (
+            'enqueue_alias',
+            'state',
+            "'result_ready'",
+            (
+                'attempt',
+                'available_at',
+                'enqueued_at',
+                'fresh_capture',
+                'lease_until',
+                'merge_pending',
+                'owner_key',
+                'policy',
+                'policy_source',
+                'priority',
+                'protocol_version',
+                'ready_at',
+                'result',
+                'source_alias',
+                'source_alias_version',
+                'source_conversation_ids',
+                'state',
+                'token',
+            ),
+        ),
+    ],
+    # Fenced control gate only, never a batch job state. Validated open/closed
+    # config governs spending; absent/stale heartbeat closes within 180s.
+    'utils/batch_pipeline/backlog_heartbeat.py': [
+        (
+            'HeartbeatAuthority._tick.body',
+            'state',
+            "state; literal aliases=[('state', ('closed',))]",
+            (
+                'mode',
+                'owner_keys',
+                'rate_per_hour',
+                'reach_seconds',
+                'schema_version',
+                'state',
+                'tokens_used',
+                'updated_at',
+                'window',
+            ),
+        ),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (
@@ -1523,6 +1601,43 @@ FIELD_SITES = {
                 'updated_at',
             ),
         )
+    ],
+    # Live membership repair uses the existing episode states, under the
+    # recorded-timeline fence; it never changes conversation/audio status.
+    'database/episode_live_members.py': [
+        (
+            'place.commit',
+            'status',
+            "'closed'",
+            (
+                'close_reason',
+                'closed_at',
+                'home_needs_prepare',
+                'pending_boundary',
+                'provisional_items',
+                'recorded_end',
+                'state_version',
+                'status',
+                'summary_needs_regeneration',
+            ),
+        ),
+        ('place.commit', 'status', "'dropped'", ('status',)),
+        (
+            'place.commit',
+            'status',
+            "'live'",
+            (
+                'close_reason',
+                'closed_at',
+                'conversation_ids',
+                'id',
+                'last_activity_at',
+                'member_activity',
+                'started_at',
+                'state_version',
+                'status',
+            ),
+        ),
     ],
     'database/episode_recorded_components.py': [
         ('_state', 'status', "'closed'", ('closed_at', 'member_activity', 'recorded_end', 'state_version', 'status')),
@@ -3178,27 +3293,6 @@ FIELD_SITES = {
             "status; literal aliases=[('status', ('invalid_evidence',))]",
             ('key', 'kind', 'status'),
         ),
-        (
-            'run_session._state_pass',
-            'status',
-            "summary.get('status')",
-            (
-                'agree',
-                'arm',
-                'disagree',
-                'failure',
-                'judged',
-                'judged_harmful',
-                'profile_added',
-                'profile_rejected',
-                'profile_unsupported',
-                'rejected',
-                'rejected_top',
-                'status',
-                'unverified',
-                'would_serve',
-            ),
-        ),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
     ],
@@ -3257,25 +3351,6 @@ FIELD_SITES = {
             "'completed_duplicate'",
             ('processing_status', 'rationale', 'route', 'status', 'target_memory_id'),
         )
-    ],
-    'utils/dream_state_pass.py': [
-        (
-            '_run',
-            'status',
-            "'ready'",
-            ('profile_lines', 'profile_ops', 'render_chars', 'stale_refs', 'status', 'total_tokens'),
-        ),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'skipped_deadline'", ('status',)),
-        ('run', 'status', "'timeout'", ('status',)),
-        (
-            'run',
-            'status',
-            "{'written': 'complete', 'superseded': 'complete', 'expired': "
-            "'timeout'}.get(outcome, 'failed'); literal aliases=[('outcome', ('failed',))]",
-            ('status',),
-        ),
     ],
     'utils/dream_telemetry.py': [
         (

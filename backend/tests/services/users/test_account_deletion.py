@@ -1823,12 +1823,18 @@ def test_billing_failure_on_retry_after_auth_deletion_stays_fenced(monkeypatch):
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
 
 
+@pytest.fixture(scope='module')
+def real_stripe_utils():
+    """Load shared billing dependencies in setup, outside the per-call CPU budget."""
+    from utils import stripe as stripe_utils
+
+    return stripe_utils
+
+
 @pytest.mark.parametrize(
     'outcome', ['resource_missing', 'no such subscription', 'canceled', 'incomplete_expired', 'active']
 )
-def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypatch, outcome):
-    from utils import stripe as real_stripe_utils
-
+def test_background_wipe_uses_immediate_idempotent_stripe_cancellation(monkeypatch, outcome, real_stripe_utils):
     _stub_wipe_steps_after_billing(monkeypatch)
     monkeypatch.setattr(
         account_deletion.users_db,

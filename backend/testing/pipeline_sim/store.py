@@ -150,6 +150,12 @@ class SimTransaction:
             base = self.store.rows.get(address, {})
         return deepcopy({**base, **self.patches.get(address, {})})
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        address = (table, key)
+        if address in self.writes or address in self.patches or address in self.store.rows:
+            return self.get(table, key)
+        return None
+
     def put(self, table: str, key: str, value: dict) -> None:
         # Same refusals as FirestoreTransaction.put/patch (conformance: tests/integration/test_store_conformance.py).
         if table == 'conversations':

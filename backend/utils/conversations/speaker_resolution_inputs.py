@@ -134,3 +134,21 @@ def batch_provider_keys(segments: list[TranscriptSegment]) -> dict[str, tuple[st
         elif segment.id and key is not None:
             keys[segment.id] = key
     return keys
+
+
+def transcript_membership(segments) -> str:
+    """Identity-independent completion key: appends, merges and text edits revoke it."""
+    import hashlib
+    import json
+
+    def field(segment, name):
+        return segment.get(name) if isinstance(segment, Mapping) else getattr(segment, name, None)
+
+    rows = [
+        {
+            name: field(segment, name)
+            for name in ('id', 'text', 'start', 'end', 'audio_capture_start', 'audio_capture_end', 'audio_capture_run')
+        }
+        for segment in segments
+    ]
+    return hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(',', ':'), default=str).encode()).hexdigest()

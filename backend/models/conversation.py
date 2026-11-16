@@ -432,6 +432,21 @@ class ConversationSpeakers(BaseModel):
     status: Literal['resolved', 'capture', 'unavailable']
     version: int = 1
     participant_speaker_ids: List[int] = []
+    input_membership_sha256: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+
+    @model_serializer(mode='wrap')
+    def _serialize_membership(self, handler, info):
+        data = handler(self)
+        excluded = info.exclude if isinstance(info.exclude, (dict, set, frozenset)) else ()
+        included = info.include
+        if (
+            info.mode != 'json'
+            and self.input_membership_sha256 is not None
+            and 'input_membership_sha256' not in excluded
+            and (included is None or 'input_membership_sha256' in included)
+        ):
+            data['input_membership_sha256'] = self.input_membership_sha256
+        return data
 
 
 class CaptureEvidenceMetadata(BaseModel):
@@ -464,6 +479,8 @@ class RecordAudioPartial(BaseModel):
 
 
 class Conversation(BaseModel):
+    title_content_units: float = Field(default=0, exclude=True)
+    notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
     l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)

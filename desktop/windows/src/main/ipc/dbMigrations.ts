@@ -89,6 +89,19 @@ export const MIGRATIONS: Migration[] = [
       if (!hasFts) return
       d.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
     }
+  },
+  {
+    version: 3,
+    name: 'reserved_ai_user_profiles_noop',
+    up: () => {
+      // Intentionally empty. An unreleased build dropped the old local AI-profile
+      // history table here, but that table can hold the only copy of the newest
+      // profile text or a user edit (the old mirror PATCH was fire-and-forget).
+      // The AI profile service now uploads anything unsynced and drops the table
+      // itself (assistants/aiUserProfile/service.ts + ipc/legacyProfileTable.ts).
+      // The version stays reserved so a database that ran that build (user_version
+      // 3) and one that did not converge on the same numbering.
+    }
   }
 ]
 

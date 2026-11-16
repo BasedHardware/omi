@@ -38,6 +38,9 @@ from prometheus_client import Counter, REGISTRY
 from threading import Lock
 import utils.other.hume as hume
 from models.audio_file import AudioFile
+from models.structured import Structured
+from utils.summary_quality import clean_structured, stable_title, content_units, title_basis
+from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
 from database.audio_file_projection import finalize_audio_file_group as _finalize_audio_file_group
 from models.note_claims import claim_references_segment
 from models.client_processing import PROJECTION_FAMILY_FIELDS
@@ -71,7 +74,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, apply_user_title, project_home
+from utils.conversations.home_titles import SUMMARY_DEBT_FIELDS, apply_user_title, project_home, title_for_stability
 from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
@@ -394,6 +397,8 @@ def _prepare_conversation_for_write(
     if level not in {'standard', 'enhanced'}:
         data.pop('record_lane_owner', None)
     segments = data.get('transcript_segments')
+    if not data.get('discarded') and isinstance(data.get('structured'), dict) and isinstance(segments, list):
+        data['content_word_units'] = content_units(segments)
     if isinstance(segments, list) and any('original_text' in segment for segment in segments):
         from utils.agent_capabilities.transcripts import originals
 
@@ -913,6 +918,22 @@ def _reapply_current_manual_assignments(uid: str, write_data: dict, existing: di
     write_data['data_protection_level'] = level
 
 
+def _batch_identity_membership_current(uid, incoming, existing):
+    from utils.conversations.speaker_resolution_inputs import transcript_membership
+
+    resolution = incoming.get('speaker_resolution') or {}
+    expected = resolution.get('input_membership_sha256')
+    if not expected:
+        return True
+    current = _decode_transcript_segments_strict(
+        uid,
+        existing.get('transcript_segments', []),
+        bool(existing.get('transcript_segments_compressed')),
+        require_decryption=True,
+    )
+    return expected == transcript_membership(current)
+
+
 def _stage_notes_identity(transaction, user_ref, write_data, existing):
     return stage_notes_identity(
         transaction,
@@ -1288,6 +1309,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('user_overview'):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
+            _quality_processing_notes(uid, write_data, existing)
             _reapply_current_manual_assignments(uid, write_data, existing)
             _stage_notes_identity(transaction, user_ref, write_data, existing)
             filter_processing_write(transaction, user_ref, write_data)
@@ -1305,6 +1327,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        _quality_processing_notes(uid, write_data, {})
         _stage_notes_identity(transaction, user_ref, write_data, {})
         filter_processing_write(transaction, user_ref, write_data)
         _offload_processing_transcript(uid, write_data)
@@ -1333,6 +1356,40 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
+
+
+def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any]) -> None:
+    generated = data.get('structured')
+    if not isinstance(generated, dict) or data.get('discarded'):
+        return
+    cleaned = clean_structured(generated)
+    user_title = effective_user_title(existing.get('user_title'))
+    if user_title is not None:
+        cleaned['title'] = user_title
+    else:
+        prior = title_for_stability(existing)
+        units = data.get('content_word_units')
+        if units is None:
+            units = content_units(data.get('transcript_segments', []))
+        cleaned['title'], reason = stable_title(
+            prior,
+            cleaned['title'],
+            previous_units=existing.get('title_content_units') or 0,
+            current_units=units,
+        )
+        if units or existing.get('title_content_units'):
+            data['title_content_units'] = title_basis(existing.get('title_content_units'), units, reason)
+        if reason:
+            data['title_change_reason'] = reason
+            data['title_changed_at'] = datetime.now(timezone.utc)
+    if existing.get('user_overview'):
+        cleaned['overview'] = existing['user_overview']
+    data['structured'] = cleaned
+    if data.get(NOTES_OUTPUT_HASH):
+        document_path = '/'.join(('users', uid, 'conversations', str(data['id'])))
+        parsed = parse_payload_strict(Structured, cleaned, document_path=document_path)
+        data[NOTES_OUTPUT_HASH] = output_fingerprint(parsed)
+    data.update(stamp_home_display(uid, {**existing, **data}, 'conversation'))
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -1463,6 +1520,10 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
+        if not _batch_identity_membership_current(uid, write_data, existing):
+            stale_sync_revision = True
+            return False
+
         if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
                 RecoveryStructureUnavailableError,
@@ -1545,6 +1606,8 @@ def persist_processing_result_with_lifecycle(
 
         if existing.get('user_overview'):
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
+
+        _quality_processing_notes(uid, write_data, existing)
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)

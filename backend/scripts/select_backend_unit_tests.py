@@ -211,6 +211,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
     'backend/config/batch_language_recovery.py',
+    'backend/config/listen_reconnect.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',

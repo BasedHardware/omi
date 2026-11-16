@@ -70,16 +70,19 @@ def test_step_samples_seven_matching_full_hours_without_daily_subquery_alignment
     nodes = RULES[STEP]["data"]
     metric = "firestore_googleapis_com:document_read_count"
     coverage = (
-        "(min(count_over_time(" + metric + "[1h] offset 1ms)) >= 58) and "
-        "(count(count by (type) (count_over_time(" + metric + "[1h] offset 1ms))) == 3)"
+        "(min(count_over_time(" + metric + "[1h])) >= 58) and "
+        "(count(count by (type) (count_over_time(" + metric + "[1h]))) == 3)"
     )
-    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h] offset 1ms)) and " + coverage + ")[1h:1h])"
+    hourly = "last_over_time((sum(sum_over_time(" + metric + "[1h])) and " + coverage + ")[1h:1h] offset 1ms)"
     assert nodes[0]["model"]["expr"] == hourly
     historical = nodes[1]["model"]["expr"]
+    # Real GMP returned NoData for raw-selector offsets nested in a subquery.
+    assert all("[1h] offset" not in node["model"]["expr"] for node in nodes[:2])
     expected = (
         "quantile(0.5, "
         + " or ".join(
-            'label_replace(' + hourly[:-1] + f' offset {day}d), "day", "{day}", "", "")' for day in range(1, 8)
+            'label_replace(' + hourly.removesuffix(' offset 1ms)') + f' offset {day}d1ms), "day", "{day}", "", "")'
+            for day in range(1, 8)
         )
         + ")"
     )

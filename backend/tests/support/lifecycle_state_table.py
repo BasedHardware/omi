@@ -92,7 +92,12 @@ FIELD_BUILDERS = {module: builders(sites) for module, sites in FIELD_SITES.items
 def writers(machine, *fields):
     status_modules = {
         'finalization': {'database/conversation_finalization_jobs.py', 'database/conversation_terminal_title.py'},
-        'episode': {'database/episodes.py', 'database/episode_timeline.py', 'utils/episodes/service.py'},
+        'episode': {
+            'database/episodes.py',
+            'database/episode_timeline.py',
+            'database/episode_live_members.py',
+            'utils/episodes/service.py',
+        },
     }.get(
         machine,
         {

@@ -39,6 +39,7 @@ def admit(
     adopt: Callable[[dict], bool] | None = None,
     record_barrier: dict | None = None,
     coalescing_group: dict | None = None,
+    source_aliases: dict | None = None,
 ) -> dict:
     """Admit one content upload atomically.
 
@@ -181,7 +182,18 @@ def admit(
                     raise ValueError('audio staging reservation missing or reclaimed')
                 artifact.pop('write_pending_until', None)
                 tx.put('artifacts', key, artifact)
-            created = enqueue_item(tx, item, now, policy=admission)
+            proposal = (source_aliases or {}).get(item.segment_id)
+            if proposal is not None:
+                from database.batch_pipeline_source_reuse import enqueue_alias, attach_alias_artifacts
+
+                created = enqueue_alias(tx, item, now, policy=admission, proposal=proposal)
+                attach_alias_artifacts(tx, item, proposal)
+            else:
+                created = enqueue_item(tx, item, now, policy=admission)
+                if getattr(item, 'source_reuse_key', None):
+                    marked = tx.get('jobs', item.segment_id)
+                    marked.update(protocol_version=2, source_reuse_version=1)
+                    tx.put('jobs', item.segment_id, marked)
             job = tx.get('jobs', item.segment_id)
             previous_binding = dict(job.get('projection_binding') or {})
             if previous_binding.get('partial_record') is False:
@@ -244,10 +256,16 @@ def admit(
             'job_id': binding.job_id,
             '_policy_id': admission.policy_id,
             '_admitted_seconds': sum(i.duration_seconds for i in items),
+            '_reused_seconds': sum(i.duration_seconds for i in items if i.segment_id in (source_aliases or {})),
         }
 
     outcome = store.run(commit)
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
+    reused_seconds = outcome.pop('_reused_seconds', 0.0)
+    if reused_seconds:
+        from utils.batch_pipeline.source_reuse import observe
+
+        observe('avoided_asr_input', float(reused_seconds))
     seconds = outcome.pop('_admitted_seconds', None)
     if seconds is not None:
         from config.policy.telemetry import record_policy_source

@@ -1,20 +1,24 @@
 // Settings → Advanced → "AI profile" subsection. Mac parity with
-// aiUserProfileSubsection (SettingsContentView): shows the once-daily synthesized
-// "about you" profile with its last-updated date + data-source count, and lets
-// the user Regenerate, inline-Edit (Save), or Delete it. The profile is
-// generated + stored + backend-synced entirely in the main process; this UI is a
-// thin driver over the aiProfile:* IPCs.
+// aiUserProfileSubsection (SettingsContentView): shows the synthesized "about you"
+// profile with its last-updated date + data-source count, and lets the user
+// Regenerate, inline-Edit (Save), or Delete it. The backend owns the profile
+// (generation, daily cadence, storage); this UI is a thin driver over the
+// aiProfile:* IPCs, which proxy GET / POST refresh / PATCH / DELETE on
+// /v1/users/ai-profile.
 //
-// There is deliberately NO enable toggle here — Mac generates unconditionally, so
-// matching Mac means preview/CRUD only (the aiProfileEnabled setting is owned
-// elsewhere).
+// There is deliberately NO enable toggle here — the backend generates for every
+// user, so this is preview/CRUD only.
 import { useEffect, useState } from 'react'
 import { UserRound } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
-import type { AiUserProfileRecord } from '../../../../../shared/types'
+import type { AiUserProfile } from '../../../../../shared/types'
+import {
+  AI_PROFILE_FALLBACK as FALLBACK,
+  aiProfileErrorMessage
+} from '../../../lib/aiProfileMessages'
 
 export function AiProfileCard(): React.JSX.Element {
-  const [record, setRecord] = useState<AiUserProfileRecord | null>(null)
+  const [record, setRecord] = useState<AiUserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -28,8 +32,15 @@ export function AiProfileCard(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi
-      .aiProfileGetLatest()
-      .then(setRecord)
+      .aiProfileGet()
+      .then((r) => {
+        if (r.ok) {
+          setRecord(r.value)
+        } else {
+          setRecord(null)
+          setError(aiProfileErrorMessage(r.code, 'load'))
+        }
+      })
       .catch(() => setRecord(null))
       .finally(() => setLoading(false))
   }, [])
@@ -39,14 +50,16 @@ export function AiProfileCard(): React.JSX.Element {
     setGenerating(true)
     setError(null)
     try {
-      // Bare call — main falls back to the session cached by aiProfileHost.
-      const next = await window.omi.aiProfileGenerateNow()
-      setRecord(next)
-      setEditing(false)
+      // The backend synthesizes synchronously (~10-40 s).
+      const r = await window.omi.aiProfileRefresh()
+      if (r.ok) {
+        setRecord(r.value)
+        setEditing(false)
+      } else {
+        setError(aiProfileErrorMessage(r.code, 'generate'))
+      }
     } catch {
-      // Never surface a raw Error string (it can echo a backend body / no-data
-      // reason). Plain-English line instead.
-      setError("Couldn't generate a profile right now. Make sure you're signed in and try again.")
+      setError(FALLBACK.generate)
     } finally {
       setGenerating(false)
     }
@@ -64,13 +77,16 @@ export function AiProfileCard(): React.JSX.Element {
     setSaving(true)
     setError(null)
     try {
-      await window.omi.aiProfileEdit(record.id, draft)
-      // Re-read so we reflect the stored text (source of truth) after the write.
-      const next = await window.omi.aiProfileGetLatest()
-      setRecord(next)
-      setEditing(false)
+      const r = await window.omi.aiProfileEdit(draft)
+      if (r.ok) {
+        // The backend's copy is the source of truth after the write.
+        setRecord(r.value)
+        setEditing(false)
+      } else {
+        setError(aiProfileErrorMessage(r.code, 'save'))
+      }
     } catch {
-      setError("Couldn't save your changes. Try again.")
+      setError(FALLBACK.save)
     } finally {
       setSaving(false)
     }
@@ -80,15 +96,17 @@ export function AiProfileCard(): React.JSX.Element {
     if (!record) return
     setError(null)
     try {
-      await window.omi.aiProfileDelete(record.id)
-      const next = await window.omi.aiProfileGetLatest()
-      setRecord(next)
+      const r = await window.omi.aiProfileDelete()
+      if (r.ok) setRecord(null)
+      else setError(aiProfileErrorMessage(r.code, 'delete'))
     } catch {
-      setError("Couldn't delete the profile. Try again.")
+      setError(FALLBACK.delete)
     } finally {
       setConfirmingDelete(false)
     }
   }
+
+  const updatedAt = record ? (record.generatedAt ?? record.refreshedAt) : null
 
   return (
     <SettingRow
@@ -148,9 +166,11 @@ export function AiProfileCard(): React.JSX.Element {
               {record.profileText}
             </div>
             <p className="text-xs text-text-tertiary">
-              Last updated: {new Date(record.generatedAt).toLocaleDateString()} · Data sources:{' '}
-              {record.dataSourcesUsed.length}{' '}
-              {record.dataSourcesUsed.length === 1 ? 'item' : 'items'}
+              {updatedAt !== null && (
+                <>Last updated: {new Date(updatedAt).toLocaleDateString()} · </>
+              )}
+              Data sources: {record.dataSourcesUsed}{' '}
+              {record.dataSourcesUsed === 1 ? 'item' : 'items'}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <button
