@@ -54,6 +54,72 @@ until full activation.
 | `APP_REVIEW_ASC_API_KEY_JSON` | JSON object with `issuer_id`, `key_id`, and `private_key` from a dedicated App Store Connect API key | Read-only version-state polling for app `6502156163`. Before activation, perform a read-only JWT probe of the app's versions endpoint using the intended app-scoped role. Confirm the narrowest role that can read versions; do not wait for a first-tick credential alert to discover a role problem. |
 | `APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON` | JSON key for a dedicated Google service account | Read-only production-track polling for package `com.friend.ios`. Verify the role against a staging app by opening a temporary edit, reading its production track, and deleting the edit without committing it. |
 
+### Store-credential setup for a human GCP operator
+
+Enabling `androidpublisher.googleapis.com` in Cloud Console only permits API
+traffic from the project. It does not give a caller access to a Play app. GCP
+IAM ownership and Play Console app permissions are separate: a human with GCP
+Owner can perform the setup below but is not thereby a supported runtime
+credential. This service loads a service-account JSON with
+`Credentials.from_service_account_info`; it has no human-OAuth/ADC flow. Follow
+[Google's API setup guide](https://developers.google.com/android-publisher/getting_started),
+which no longer requires linking the Play developer account to this GCP project.
+
+For the Play reader, a human GCP operator must:
+
+1. Open
+   [Service accounts in `based-hardware`](https://console.cloud.google.com/iam-admin/serviceaccounts?project=based-hardware)
+   and create a dedicated account such as `app-review-play-reader`. Give it no
+   GCP project role; it only needs Play Console app permission. Create a JSON
+   key and transfer it directly into the secret payload. Delete the downloaded
+   key after the verified upload; never print, commit, or paste it into chat.
+2. Open
+   [Play Console → Users and permissions](https://play.google.com/console/users-and-permissions).
+   Invite the service-account email as a user. Limit its app access to Omi
+   (`com.friend.ios`), with **View app information and download reports
+   (read-only)**. Do not grant release-writing, signing, financial, or account
+   administration permissions. Existing release-writer credentials are not a
+   substitute for this dedicated reader.
+3. Validate on the designated staging app, not production: open a temporary
+   edit, read only the `production` track, and delete the edit without
+   committing. Do this before the first production sweep. If the minimal
+   permission is insufficient, stop and obtain a reviewed permission change;
+   do not silently broaden it to a release role.
+
+The App Store Connect credential uses issuer ID, key ID, and private key from a
+dedicated API key with the narrowest app-scoped role that can read app versions.
+Keep iOS and Android credentials in their separate Secret Manager payloads.
+The submission token is a new high-entropy random value, not a store credential.
+
+A GCP operator with secret-administration access can create the payload and its
+single accessor binding with commands of this form. Replace the JSON filename
+with the protected one-time input path, and use `versions add` if the named
+secret already exists. `ro-prod` and `prod-operator` do not have the secret/IAM
+or service-account-key grants needed for this bootstrap; use the authorized
+human GCP session rather than broadening either agent tier.
+
+```bash
+PROJECT=based-hardware
+RUNTIME=backend-runtime@based-hardware.iam.gserviceaccount.com
+
+openssl rand -hex 32 | gcloud secrets create APP_REVIEW_CONFIG_SUBMISSION_TOKEN \
+  --project=$PROJECT --replication-policy=automatic --data-file=-
+gcloud secrets create APP_REVIEW_ASC_API_KEY_JSON \
+  --project=$PROJECT --replication-policy=automatic --data-file=/protected/asc-key.json
+gcloud secrets create APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON \
+  --project=$PROJECT --replication-policy=automatic --data-file=/protected/play-reader-key.json
+
+for SECRET in \
+  APP_REVIEW_CONFIG_SUBMISSION_TOKEN \
+  APP_REVIEW_ASC_API_KEY_JSON \
+  APP_REVIEW_PLAY_SERVICE_ACCOUNT_JSON
+do
+  gcloud secrets add-iam-policy-binding "$SECRET" --project=$PROJECT \
+    --member="serviceAccount:$RUNTIME" \
+    --role=roles/secretmanager.secretAccessor --condition=None --format=none
+done
+```
+
 Do not put the ASC or Play credentials in Codemagic. The submission and
 sweep routes run on `backend-sync` under `backend-runtime`; do not grant the
 `backend-listen` identity access for them. Deploy the backend after the secrets
