@@ -15503,4 +15503,11 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

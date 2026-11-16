@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "இப்போது மாற்ற இயலாது. அதற்குப் பதிலாக கார்டைப் புதுப்பிக்கவும்.",
     "monthlySwitchDoneTitle": "நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்",
     "monthlySwitchDoneBody": "இன்று {price} செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.",
-    "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்."
+    "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

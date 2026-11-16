@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.",
     "monthlySwitchDoneTitle": "Dabar mokate kas mėnesį",
     "monthlySwitchDoneBody": "Šiandien sumokėta {price}. Atnaujinama kas mėnesį.",
-    "processingDeleteScopeChanged": "Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą."
+    "processingDeleteScopeChanged": "Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

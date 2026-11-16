@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "Пераход зараз недаступны. Замест гэтага абнавіце картку.",
     "monthlySwitchDoneTitle": "Цяпер у вас штомесячная аплата",
     "monthlySwitchDoneBody": "Сёння аплачана {price}. Падаўжаецца штомесяц.",
-    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў."
+    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

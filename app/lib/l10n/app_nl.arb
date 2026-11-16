@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "Overstappen kan nu niet. Werk in plaats daarvan je kaart bij.",
     "monthlySwitchDoneTitle": "Je betaalt nu maandelijks",
     "monthlySwitchDoneBody": "{price} vandaag betaald. Verlengt maandelijks.",
-    "processingDeleteScopeChanged": "De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw."
+    "processingDeleteScopeChanged": "De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

@@ -15528,4 +15528,11 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

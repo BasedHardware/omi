@@ -15454,4 +15454,11 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

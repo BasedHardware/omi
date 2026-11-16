@@ -4691,5 +4691,7 @@
     "monthlySwitchUnavailable": "Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.",
     "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan.",
-    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi."
+    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

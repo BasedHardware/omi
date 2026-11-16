@@ -15591,4 +15591,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La liste en cours de traitement a changé. Vérifiez-la et réessayez.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

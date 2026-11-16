@@ -15464,4 +15464,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

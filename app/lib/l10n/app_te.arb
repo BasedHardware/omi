@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.",
     "monthlySwitchDoneTitle": "మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు",
     "monthlySwitchDoneBody": "ఈరోజు {price} చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.",
-    "processingDeleteScopeChanged": "ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి."
+    "processingDeleteScopeChanged": "ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

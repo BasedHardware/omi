@@ -1109,7 +1109,7 @@ OMI_SYNC_RECORDING_AGE_SECONDS = Histogram(
     'omi_sync_recording_age_seconds',
     'Oldest recording age at sync admission by lane',
     ['lane'],
-    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000),
+    buckets=(300, 1800, 3600, 21600, 86400, 259200, 604800, 1209600, 2592000, 5184000),
 )
 
 OMI_SYNC_QUEUE_WAIT_SECONDS = Histogram(

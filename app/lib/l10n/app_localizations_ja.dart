@@ -15235,4 +15235,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

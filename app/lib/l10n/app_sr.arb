@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.",
     "monthlySwitchDoneTitle": "Сада плаћате месечно",
     "monthlySwitchDoneBody": "Данас плаћено {price}. Обнавља се месечно.",
-    "processingDeleteScopeChanged": "Листа обраде се променила. Прегледајте је и покушајте поново."
+    "processingDeleteScopeChanged": "Листа обраде се променила. Прегледајте је и покушајте поново.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

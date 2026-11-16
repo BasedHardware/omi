@@ -896,6 +896,13 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
+    try:
+        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
+            lane_decision.maximum_age_seconds or 0
+        )
+    except Exception:
+        pass
+
     if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
@@ -905,12 +912,6 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    try:
-        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
-            lane_decision.maximum_age_seconds or 0
-        )
-    except Exception:
-        pass
 
     if fresh_refused:
         return await _fair_use_restriction_response(

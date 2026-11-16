@@ -4752,5 +4752,7 @@
     "monthlySwitchUnavailable": "A váltás most nem érhető el. Inkább frissítse a kártyát.",
     "monthlySwitchDoneTitle": "Mostantól havonta fizet",
     "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul.",
-    "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra."
+    "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

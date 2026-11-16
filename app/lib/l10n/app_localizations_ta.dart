@@ -15567,4 +15567,11 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

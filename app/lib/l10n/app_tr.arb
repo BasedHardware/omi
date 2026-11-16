@@ -4691,5 +4691,7 @@
     "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
-    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin."
+    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

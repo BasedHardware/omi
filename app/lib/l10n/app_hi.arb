@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "अभी स्विच उपलब्ध नहीं है। इसके बजाय कार्ड अपडेट करें।",
     "monthlySwitchDoneTitle": "अब आप मासिक प्लान पर हैं",
     "monthlySwitchDoneBody": "आज {price} का भुगतान हुआ। हर महीने रिन्यू होता है।",
-    "processingDeleteScopeChanged": "प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।"
+    "processingDeleteScopeChanged": "प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

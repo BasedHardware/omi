@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।",
     "monthlySwitchDoneTitle": "আপনি এখন মাসিক প্ল্যানে",
     "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।",
-    "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।"
+    "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

@@ -15456,4 +15456,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

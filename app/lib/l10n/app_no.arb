@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "Bytte er ikke tilgjengelig akkurat nå. Oppdater kortet i stedet.",
     "monthlySwitchDoneTitle": "Du betaler nå månedlig",
     "monthlySwitchDoneBody": "{price} betalt i dag. Fornyes månedlig.",
-    "processingDeleteScopeChanged": "Behandlingslisten er endret. Se gjennom listen og prøv igjen."
+    "processingDeleteScopeChanged": "Behandlingslisten er endret. Se gjennom listen og prøv igjen.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

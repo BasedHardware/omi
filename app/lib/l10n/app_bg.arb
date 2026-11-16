@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "Преминаването в момента не е достъпно. Вместо това обновете картата.",
     "monthlySwitchDoneTitle": "Вече плащате месечно",
     "monthlySwitchDoneBody": "Днес са платени {price}. Подновява се всеки месец.",
-    "processingDeleteScopeChanged": "Списъкът за обработка се промени. Прегледайте го и опитайте отново."
+    "processingDeleteScopeChanged": "Списъкът за обработка се промени. Прегледайте го и опитайте отново.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

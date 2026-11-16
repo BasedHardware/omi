@@ -15471,4 +15471,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

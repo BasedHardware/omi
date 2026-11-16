@@ -27128,6 +27128,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
+
+  /// No description provided for @syncTooOldExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is older than the 30-day automatic sync window. The audio is still on this phone.'**
+  String get syncTooOldExplanation;
+
+  /// No description provided for @syncGetHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Get help'**
+  String get syncGetHelp;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

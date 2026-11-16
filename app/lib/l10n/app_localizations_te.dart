@@ -15526,4 +15526,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "現在は切り替えできません。カードを更新してください。",
     "monthlySwitchDoneTitle": "月払いに切り替わりました",
     "monthlySwitchDoneBody": "本日{price}をお支払いいただきました。毎月更新されます。",
-    "processingDeleteScopeChanged": "処理中の一覧が変更されました。一覧を確認してもう一度お試しください。"
+    "processingDeleteScopeChanged": "処理中の一覧が変更されました。一覧を確認してもう一度お試しください。",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

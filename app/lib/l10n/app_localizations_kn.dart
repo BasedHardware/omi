@@ -15514,4 +15514,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

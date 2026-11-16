@@ -18873,5 +18873,7 @@
     "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
-    }
+    },
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

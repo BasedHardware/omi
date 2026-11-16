@@ -15491,4 +15491,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A lista de processamento mudou. Revise-a e tente novamente.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

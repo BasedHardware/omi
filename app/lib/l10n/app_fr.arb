@@ -4691,5 +4691,7 @@
     "monthlySwitchUnavailable": "Le changement n'est pas disponible pour le moment. Mettez plutôt votre carte à jour.",
     "monthlySwitchDoneTitle": "Vous êtes passé au mensuel",
     "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel.",
-    "processingDeleteScopeChanged": "La liste en cours de traitement a changé. Vérifiez-la et réessayez."
+    "processingDeleteScopeChanged": "La liste en cours de traitement a changé. Vérifiez-la et réessayez.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

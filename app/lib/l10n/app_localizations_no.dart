@@ -15467,4 +15467,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

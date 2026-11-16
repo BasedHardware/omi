@@ -15242,4 +15242,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

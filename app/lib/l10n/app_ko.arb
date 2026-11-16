@@ -4656,5 +4656,7 @@
     "monthlySwitchUnavailable": "지금은 전환할 수 없습니다. 대신 카드를 업데이트하세요.",
     "monthlySwitchDoneTitle": "월간 결제로 전환되었습니다",
     "monthlySwitchDoneBody": "오늘 {price}이 결제되었습니다. 매월 갱신됩니다.",
-    "processingDeleteScopeChanged": "처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요."
+    "processingDeleteScopeChanged": "처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

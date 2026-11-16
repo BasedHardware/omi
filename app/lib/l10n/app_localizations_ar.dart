@@ -15375,4 +15375,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

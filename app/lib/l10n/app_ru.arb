@@ -4691,5 +4691,7 @@
     "monthlySwitchUnavailable": "Переход сейчас недоступен. Вместо этого обновите карту.",
     "monthlySwitchDoneTitle": "Теперь вы платите ежемесячно",
     "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно.",
-    "processingDeleteScopeChanged": "Список обработки изменился. Проверьте его и попробуйте снова."
+    "processingDeleteScopeChanged": "Список обработки изменился. Проверьте его и попробуйте снова.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

@@ -15487,4 +15487,11 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }

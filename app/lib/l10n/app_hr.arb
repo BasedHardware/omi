@@ -12213,5 +12213,7 @@
     "monthlySwitchUnavailable": "Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.",
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
     "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
-    "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno."
+    "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.",
+    "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
+    "syncGetHelp": "Get help"
 }

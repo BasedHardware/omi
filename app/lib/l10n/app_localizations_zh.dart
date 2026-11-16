@@ -15212,4 +15212,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
+
+  @override
+  String get syncGetHelp => 'Get help';
 }
