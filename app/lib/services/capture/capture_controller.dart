@@ -163,6 +163,8 @@ class CaptureController extends ChangeNotifier
   /// device service's own answer in the production reconnect path.
   final bool Function(String deviceId)? _pendantReconnectBlocked;
   final ValueListenable<PhoneCallState>? _omiCallState;
+  // Installed BLE callbacks must stay retired even if a call ends before queued teardown.
+  int _callCaptureRevision = 0;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
   void Function(String deviceId, int byteCount)? _ingressByteObserver;
@@ -1311,7 +1313,8 @@ class CaptureController extends ChangeNotifier
   Future<void> _setIngressAuthorized(bool authorized) async {
     final port = _ingressPort;
     if (port == null) return;
-    final target = authorized && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
+    final target =
+        authorized && !_omiCallActive && _recordingDevice?.type == DeviceType.omi ? _recordingDevice!.id : null;
     final previous = _ingressDeviceId;
     if (previous != null && previous != target) {
       if (port.supportsIngressHealth) await port.setCaptureAuthorized(previous, false);
@@ -1321,6 +1324,11 @@ class CaptureController extends ChangeNotifier
     _ingressDeviceId = target;
     if (target != null && port.supportsIngressHealth) {
       await port.setCaptureAuthorized(target, true);
+      if (_omiCallActive || _ingressDeviceId != target) {
+        await port.setCaptureAuthorized(target, false);
+        _wedgeMonitor.setNativeIngressOwner(target, false);
+        return;
+      }
       _wedgeMonitor.setNativeIngressOwner(target, true);
     }
     if (target != null && !port.supportsIngressHealth) _onIngressHealthChanged();
@@ -2306,14 +2314,21 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec, {int? deviceRevision}) async {
+    final callRevision = _callCaptureRevision;
     final revision = _preferences.capturePolicy.revision;
-    if (!_admitsCapture(revision)) return false;
+    if (!_admitsCapture(revision) || _omiCallActive || _deviceIdentityStale(deviceRevision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
     _localPreview.pendantCodec = codec;
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
-        if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
+        if (_captureControllerDisposed ||
+            !_admitsCapture(revision) ||
+            _omiCallActive ||
+            callRevision != _callCaptureRevision ||
+            _recordingDevice?.id != deviceId) {
+          return;
+        }
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
         _deviceAudioListeners.emit(snapshot, deviceAudioTap);
@@ -2415,7 +2430,7 @@ class CaptureController extends ChangeNotifier
         }
       },
     );
-    if (!_admitsCapture(revision) || _deviceIdentityStale(deviceRevision)) {
+    if (!_admitsCapture(revision) || _omiCallActive || _deviceIdentityStale(deviceRevision)) {
       await subscription?.cancel();
       return false;
     }
@@ -3339,6 +3354,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOmiCallStateChanged() {
+    if (_omiCallActive) _callCaptureRevision++;
     final debt = _captureInstance?.readModel.pendantSuspension;
     final reconnecting = debt?.reason == SuspendReason.reconnect || debt?.reconnectResumePending == true;
     if (!_captureControllerDisposed &&
@@ -3349,6 +3365,7 @@ class CaptureController extends ChangeNotifier
       // operation. Retire its physical tokens before that operation resumes.
       _deviceIdentityRevision++;
       _rollCaptureSession(_recordingDevice?.id ?? 'device');
+      unawaited(_setIngressAuthorized(false));
     }
     // Conditions are re-read when the queued step runs: a phone handoff may have run first.
     unawaited(_dispatchLogged(const CallStateChanged()));

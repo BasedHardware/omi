@@ -30,6 +30,23 @@ class _OneShotAudioSetupFailure extends ScriptedDeviceConnection {
   }
 }
 
+class _HeldAudioRegistration extends ScriptedDeviceConnection {
+  Completer<void>? holdRegistration;
+  Completer<void>? registrationEntered;
+
+  @override
+  Future<StreamSubscription?> getBleAudioBytesListener({required void Function(List<int>) onAudioBytesReceived}) async {
+    final subscription = await super.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    final hold = holdRegistration;
+    if (hold != null) {
+      holdRegistration = null;
+      registrationEntered!.complete();
+      await hold.future;
+    }
+    return subscription;
+  }
+}
+
 class _ButtonTrackingConnection extends ScriptedDeviceConnection {
   late final StreamController<List<int>> _buttons = StreamController<List<int>>.broadcast(
     sync: true,
@@ -2453,6 +2470,38 @@ void main() {
       expect(world.controller.activeRecordingId, original);
       expect(world.socketRecordingIds, everyElement(original));
       expect(world.deviceConnection!.openAudioSubscriptions, 1);
+    }, pendantCodec: BleAudioCodec.opus);
+  });
+
+  test('a call immediately fences an installed reconnect listener while registration awaits', () async {
+    await withReviewWorld((world) async {
+      final connection = _HeldAudioRegistration();
+      world.deviceConnection = connection;
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final original = world.controller.activeRecordingId;
+      world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
+      await world.controller.pendingSourceSwitch;
+      final held = Completer<void>();
+      connection.holdRegistration = held;
+      connection.registrationEntered = Completer<void>();
+      final resume = world.controller.streamDeviceRecording(device: pendant);
+      await connection.registrationEntered!.future;
+      final framesBeforeCall = world.wal.syncs.phone.testFrameSynced.length;
+      world.omiCall.value = PhoneCallState.active;
+      connection.emitAudio(value: 12);
+      final framesDuringCall = world.wal.syncs.phone.testFrameSynced.length;
+      held.complete();
+      await resume;
+      await world.controller.pendingSourceSwitch;
+      expect(world.controller.pendantPausedForCall, isTrue);
+      expect(connection.openAudioSubscriptions, 0);
+      world.omiCall.value = PhoneCallState.idle;
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.controller.activeRecordingId, original);
+      expect(connection.openAudioSubscriptions, 1);
+      expect(framesDuringCall, framesBeforeCall);
     }, pendantCodec: BleAudioCodec.opus);
   });
 
