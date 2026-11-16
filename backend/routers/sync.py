@@ -912,7 +912,6 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-
     if fresh_refused:
         return await _fair_use_restriction_response(
             uid=uid,

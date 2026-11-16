@@ -1,3 +1,5 @@
+// Explain a retained recording outside automatic sync and open existing support.
+// This presentation never retries, retires, or sends the recording.
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/settings/settings_destinations.dart';
