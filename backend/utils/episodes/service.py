@@ -1701,7 +1701,7 @@ def attach_recorded(
     )
     template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
     template |= f_join.arm_fields(uid)
-    if live_members.enabled() and live_members.capturing(row):
+    if recorded_episodes_enabled() and live_members.enabled() and live_members.capturing(row):
         placed = live_members_db.place(
             uid,
             conversation_id,
@@ -1714,6 +1714,8 @@ def attach_recorded(
         if placed is not None:
             if isinstance(placed, str):
                 raise AdmissionClosed()
+            if closed := placed.pop('_live_member_closed_episode', None):
+                composer.schedule_after_close(uid, str(closed['id']), episode=closed, collaborators=c, trigger='close')
             if refusal := placed.pop('_live_member_clock_refusal', None):
                 metrics.record_live_member_clock_refusal(refusal)
             if placed.pop('_live_member_rehomed', False):
@@ -1742,7 +1744,12 @@ def attach_recorded(
 
 def repair_closed_live_members(uid: str, episode: Mapping[str, Any], c: Collaborators) -> bool:
     """Lazy repair; uncertainty retains membership, while composition excludes active captures."""
-    if not live_members.enabled() or policy.is_live(episode) or episode.get('close_reason') not in {'gap', 'idle'}:
+    if (
+        not recorded_episodes_enabled()
+        or not live_members.enabled()
+        or policy.is_live(episode)
+        or episode.get('close_reason') not in {'gap', 'idle'}
+    ):
         return False
     boundary = policy.utc(episode.get('closed_at'))
     changed = False

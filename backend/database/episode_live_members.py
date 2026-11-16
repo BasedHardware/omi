@@ -105,7 +105,7 @@ def place(
         if linked and (not owner or cid not in (owner.get('conversation_ids') or [])):
             raise episodes.EpisodeConflict('live_member_owner_changed')
         # Re-read all clocks in the ownership transaction, including every retry.
-        capture = live.capture_start(row, now=datetime.now(timezone.utc))
+        capture = live.capture_start(row, now=datetime.now(timezone.utc), require_batch=owner is not None)
         boundary = owner.get('closed_at') if owner else None
         refusal = capture.refusal
         if (
@@ -176,6 +176,12 @@ def place(
                     'recorded_end': target['last_activity_at'],
                     'state_version': int(target.get('state_version') or 0) + 1,
                     'home_needs_prepare': True,
+                    'summary_needs_regeneration': True,
+                    'pending_boundary': {},
+                    'provisional_items': [
+                        {**item, 'status': 'dropped'} if item.get('status') == 'provisional' else item
+                        for item in target.get('provisional_items') or []
+                    ],
                 }
                 rows = [previous if candidate['id'] == previous['id'] else candidate for candidate in rows]
                 target = None
@@ -222,6 +228,10 @@ def place(
             'home_needs_prepare': True,
         }
         if removed and owner is not None:
+            if cid in (owner.get('recovered_conversation_ids') or []):
+                result['recovered_conversation_ids'] = list(
+                    dict.fromkeys([*(target.get('recovered_conversation_ids') or []), cid])
+                )
             for key in ('moments', 'provisional_items'):
                 carried = [item for item in owner.get(key) or [] if item.get('conversation_id') == cid]
                 if carried:
@@ -258,6 +268,6 @@ def place(
             links.document('current'), {'episode_id': result['id'], 'updated_at': datetime.now(timezone.utc)}
         )
         transaction.set(fence, {'version': int(fence_row.get('version') or 0) + 1})
-        return {**result, '_live_member_rehomed': removed is not None}
+        return {**result, '_live_member_rehomed': removed is not None, '_live_member_closed_episode': previous}
 
     return run_preloaded_transactional(client, commit, transient=True)

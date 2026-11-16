@@ -263,3 +263,16 @@ def test_uncertain_clocks_retain_membership_but_real_compose_tick_self_heals(db,
     assert member.get().to_dict() == before
     assert root.collection('episode_links').document('current').get().to_dict() == {'episode_id': None}
     assert counted == [reason]
+
+
+def test_admission_before_first_frame_opens_live_successor_without_rehoming(db):
+    client, uid = db
+    root, old, template = seed(client, uid)
+    root.collection('conversations').document('live').update({'server_batch_audio_start': firestore.DELETE_FIELD})
+    result = placement.place(uid, 'live', template=template, firestore_client=client, admission=True)
+    assert result['id'] != 'old' and result['status'] == 'live'
+    assert not result['_live_member_rehomed']
+    closed = episodes.get_episode(uid, 'old', firestore_client=client)
+    assert closed['status'] == 'closed'
+    assert closed['summary_needs_regeneration']
+    assert root.collection('episode_links').document('current').get().to_dict()['episode_id'] == result['id']

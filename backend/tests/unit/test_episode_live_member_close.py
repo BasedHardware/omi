@@ -367,3 +367,86 @@ def test_agreeing_but_future_clocks_cannot_move_membership(timeline_store):
     before = deepcopy(db.rows)
     assert place(db)['_live_member_clock_refusal'] == 'future'
     assert db.rows == before
+
+
+def test_initial_admission_before_first_frame_uses_two_corroborated_stored_clocks(timeline_store):
+    db = timeline_store
+    seed(db, start=T0 + timedelta(hours=1, seconds=1))
+    db.rows[('users', 'owner', 'conversations', 'live')].pop('server_batch_audio_start')
+    result = place(db)
+    assert result['status'] == 'live' and result['id'] != 'old'
+    assert not result['_live_member_rehomed']
+    assert result['started_at'] == T0 + timedelta(hours=1, seconds=1)
+
+
+@pytest.mark.parametrize('field', ['started_at', 'recorded_start'])
+def test_initial_admission_still_refuses_missing_corroborating_source(timeline_store, field):
+    db = timeline_store
+    seed(db)
+    row = db.rows[('users', 'owner', 'conversations', 'live')]
+    row.pop('server_batch_audio_start')
+    row[field] = None
+    before = deepcopy(db.rows)
+    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_missing'):
+        place(db)
+    assert db.rows == before
+
+
+def test_rehome_carries_recovered_classification(timeline_store):
+    db = timeline_store
+    old = seed(db, linked=True)
+    old['recovered_conversation_ids'] = ['finished', 'live']
+    result = place(db)
+    assert result['recovered_conversation_ids'] == ['live']
+    assert db.rows[('users', 'owner', 'episodes', 'old')]['recovered_conversation_ids'] == ['finished']
+
+
+def test_rotation_cleans_pending_state_and_schedules_closed_summary(timeline_store, monkeypatch):
+    db = timeline_store
+    old = seed(db, status='live', start=T0 + timedelta(hours=1, seconds=1))
+    old.update(
+        pending_boundary={'finished': {'pending': True}},
+        provisional_items=[{'id': 'draft', 'status': 'provisional'}, {'id': 'kept', 'status': 'confirmed'}],
+    )
+    scheduled = Mock()
+    monkeypatch.setattr(service.composer, 'schedule_after_close', scheduled)
+    c = service.Collaborators(firestore_client=db, now=lambda: T0 + timedelta(hours=2))
+    start = T0 + timedelta(hours=1, seconds=1)
+    result = service.attach_recorded('owner', 'live', active(start), start, start, c, admission=True)
+    assert result['id'] != 'old'
+    assert '_live_member_closed_episode' not in result
+    closed = db.rows[('users', 'owner', 'episodes', 'old')]
+    assert closed['pending_boundary'] == {}
+    assert [item['status'] for item in closed['provisional_items']] == ['dropped', 'confirmed']
+    assert closed['summary_needs_regeneration']
+    scheduled.assert_called_once_with('owner', 'old', episode=closed, collaborators=c, trigger='close')
+
+
+def test_recorded_time_rollback_stops_repair_but_keeps_finished_subset_readiness(store, monkeypatch):
+    monkeypatch.setenv('EPISODE_RECORDED_TIME_ENABLED', 'false')
+    store.episode['close_reason'] = 'gap'
+    store.rows['live'] = _row('live', T0, 1, status='in_progress') | active()
+    store.episode['conversation_ids'].append('live')
+    placed = Mock(side_effect=AssertionError('recorded placement disabled'))
+    monkeypatch.setattr(service.live_members_db, 'place', placed)
+    assert composer.compose(UID, 'ep1', collaborators=_c()) == 'composed'
+    placed.assert_not_called()
+    assert 'live' not in store.episode['composed_member_ids']
+
+
+@pytest.mark.parametrize('failure', ['future', 'disagreement', 'untrusted'])
+def test_initial_admission_without_batch_stamp_still_rejects_bad_stored_clocks(timeline_store, failure):
+    db = timeline_store
+    seed(db)
+    row = db.rows[('users', 'owner', 'conversations', 'live')]
+    row.pop('server_batch_audio_start')
+    if failure == 'future':
+        row['started_at'] = row['recorded_start'] = datetime.now(timezone.utc) + timedelta(minutes=1)
+    elif failure == 'disagreement':
+        row['recorded_start'] += timedelta(seconds=6)
+    else:
+        row['clock'] = 'estimated_device'
+    before = deepcopy(db.rows)
+    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_' + failure):
+        place(db)
+    assert db.rows == before

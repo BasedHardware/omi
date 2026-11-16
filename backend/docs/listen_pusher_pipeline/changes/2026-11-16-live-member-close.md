@@ -9,10 +9,16 @@ timeline fence commit together. Rehoming requires corroborating finite
 with trusted provenance (`live_capture`, `frame` or `device`). Their interval
 must be at most five seconds wide, no source may exceed transaction server time
 by more than five seconds, and every source must be at or after the boundary.
+A first admission has no owner to change and can precede the first frame's
+batch stamp: it may use the trusted, corroborated stored `started_at` and
+canonical `recorded_start` pair under the same skew/tolerance bounds. An
+existing member still requires all three clocks, including the batch stamp.
 Missing/untrusted clocks, wider disagreements, and even a small disagreement
 across the boundary retain existing ownership. Finished-subset readiness still
 unblocks that episode. A stale gap close cannot erase a newer activity
-receipt.
+receipt. Rotation drops unresolved provisional items, clears pending boundaries,
+and schedules the closed summary after commit. Rehoming preserves the member's
+recovered classification as well as its provisional state and consumption offsets.
 
 The normal composer lazily repairs legacy post-gap active members into a live
 successor. It keeps the old membership when placement is uncertain (including a
@@ -34,7 +40,12 @@ Roll the same image across `backend`, `backend-listen`, `pusher`, `backend-sync`
 lead owns the rollout: validate a no-traffic candidate, then a small serving
 slice, then all of those services in the same release window after clean
 compose-error/timeline-conflict signals. Do not leave composer hosts on an old
-image. Compare end-to-summary timing on synthetic/consenting-owner captures,
+image. `EPISODE_RECORDED_TIME_ENABLED=false` also stops the placement/repair
+writer; finished-subset readiness remains independently protected by the live-member
+switch. Repair re-reads member metadata and validates prospective moves inside
+a transaction; retained pre-boundary members return before the candidate query.
+Watch Firestore read rates alongside compose/errors during the serving ramp.
+Compare end-to-summary timing on synthetic/consenting-owner captures,
 without counting `composed_at` as proof of Home paint.
 
 `omi_episode_live_member_total{outcome="rehomed"}` counts successful repair

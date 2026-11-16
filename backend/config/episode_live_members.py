@@ -49,7 +49,7 @@ def _utc(value: Any) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def capture_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
+def capture_start(row: Mapping[str, Any], *, now: datetime, require_batch: bool = True) -> CaptureStart:
     """Bounded corroboration only; never prefer one clock over conflicting evidence."""
     value = row.get('server_batch_audio_start')
     batch = None
@@ -59,11 +59,14 @@ def capture_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
         except (OverflowError, OSError, ValueError):
             pass
     started, recorded = _utc(row.get('started_at')), _utc(row.get('recorded_start'))
-    if batch is None or started is None or recorded is None:
+    if started is None or recorded is None or (batch is None and (require_batch or value is not None)):
         return CaptureStart(refusal='missing')
     if row.get('capture_time_trust') == 'untrusted' or row.get('clock') not in {'live_capture', 'frame', 'device'}:
         return CaptureStart(refusal='untrusted')
-    lower, upper = min(batch, started, recorded), max(batch, started, recorded)
+    # Initial admission precedes the first frame's batch stamp. It may use the
+    # two corroborated stored clocks; changing an existing owner requires all three.
+    clocks = [started, recorded] + ([batch] if batch is not None else [])
+    lower, upper = min(clocks), max(clocks)
     if upper > now + timedelta(seconds=CAPTURE_FUTURE_SKEW_SECONDS):
         return CaptureStart(refusal='future')
     if (upper - lower).total_seconds() > CAPTURE_CLOCK_TOLERANCE_SECONDS:
