@@ -1361,9 +1361,8 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
         cleaned['overview'] = existing['user_overview']
     data['structured'] = cleaned
     if data.get(NOTES_OUTPUT_HASH):
-        parsed = parse_payload_strict(
-            Structured, cleaned, document_path=f'users/{uid}/conversations/{data.get("id", "unknown")}'
-        )
+        document_path = '/'.join(('users', uid, 'conversations', str(data['id'])))
+        parsed = parse_payload_strict(Structured, cleaned, document_path=document_path)
         data[NOTES_OUTPUT_HASH] = output_fingerprint(parsed)
     data.update(stamp_home_display(uid, {**existing, **data}, 'conversation'))
 
