@@ -15503,6 +15503,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Porabili ste $minutes minut tega meseca';
   }

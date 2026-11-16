@@ -26,6 +26,7 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
 /// The Manage Storage clear actions, each paired with the storage re-read.
@@ -599,28 +600,38 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () => _showBlockFiles(block),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _blockTitle(block, showDay: false),
-                    style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _rowSubtitleStyle(color),
-                  ),
-                ],
+            Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _blockTitle(block, showDay: false),
+                      style: _rowTitleStyle(synced: state == WalSyncDisplayState.synced),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _rowSubtitleStyle(color),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _blockTrailing(block, state),
+              const SizedBox(width: 10),
+              if (state != WalSyncDisplayState.outsideRecoveryWindow) _blockTrailing(block, state),
+            ]),
+            if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
+              const SizedBox(height: 8),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), block.wals),
+                onDelete: () => _confirmDeleteWals(block.wals),
+              ),
+            ],
           ],
         ),
       ),
@@ -768,36 +779,46 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${showDay ? '$dateStr \u00b7 ' : ''}$timeStr${duration != null ? ' \u00b7 $duration' : ''}',
-                    style: _rowTitleStyle(synced: isSynced),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: _rowSubtitleStyle(color),
-                  ),
-                  if (_rowDownloadFraction(wal) != null) ...[
-                    const SizedBox(height: 8),
-                    DeviceDownloadMeter(
-                      fraction: _rowDownloadFraction(wal)!,
-                      showReadout: false,
-                      barHeight: 4,
+            Row(children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${showDay ? '$dateStr \u00b7 ' : ''}$timeStr${duration != null ? ' \u00b7 $duration' : ''}',
+                      style: _rowTitleStyle(synced: isSynced),
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: _rowSubtitleStyle(color),
+                    ),
+                    if (_rowDownloadFraction(wal) != null) ...[
+                      const SizedBox(height: 8),
+                      DeviceDownloadMeter(
+                        fraction: _rowDownloadFraction(wal)!,
+                        showReadout: false,
+                        barHeight: 4,
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            _rowTrailing(wal, state),
+              const SizedBox(width: 10),
+              if (state != WalSyncDisplayState.outsideRecoveryWindow) _rowTrailing(wal, state),
+            ]),
+            if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
+              const SizedBox(height: 8),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), [wal]),
+                onDelete: () => _confirmDeleteWal(wal),
+              ),
+            ],
           ],
         ),
       ),

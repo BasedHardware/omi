@@ -15253,6 +15253,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return '이번 달 $minutes분을 모두 사용했습니다';
   }

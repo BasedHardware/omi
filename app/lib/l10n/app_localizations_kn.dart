@@ -15525,6 +15525,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get processingDeleteScopeChanged => 'ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'ಈ ತಿಂಗಳ $minutes ನಿಮಿಷಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ';
   }

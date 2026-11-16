@@ -15467,6 +15467,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Oled selle kuu $minutes minutit ära kasutanud';
   }
