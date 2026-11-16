@@ -163,6 +163,7 @@ class CaptureController extends ChangeNotifier
   /// device service's own answer in the production reconnect path.
   final bool Function(String deviceId)? _pendantReconnectBlocked;
   final ValueListenable<PhoneCallState>? _omiCallState;
+  int _callCaptureEpoch = 0;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
   void Function(String deviceId, int byteCount)? _ingressByteObserver;
@@ -3350,6 +3351,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOmiCallStateChanged() {
+    if (!_captureControllerDisposed && _omiCallActive) _callCaptureEpoch++;
     final debt = _captureInstance?.readModel.pendantSuspension;
     final reconnecting = debt?.reason == SuspendReason.reconnect || debt?.reconnectResumePending == true;
     if (!_captureControllerDisposed &&
@@ -3489,6 +3491,7 @@ class CaptureController extends ChangeNotifier
 
   Future<Object?> _startDeviceSessionBody(
       {required bool deviceRequested, required bool promptLocation, bool deferForCall = false}) async {
+    final callEpoch = _callCaptureEpoch;
     if (deviceOnboardingProvider == null && _preferences.batchModeSuspendedForOnboarding) {
       await _restoreBatchAfterOnboardingBody();
     }
@@ -3512,7 +3515,7 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
-    if (deferForCall && _omiCallActive) return null;
+    if (deferForCall && (_omiCallActive || callEpoch != _callCaptureEpoch)) return null;
     if (deviceRequested) _commitMutedStartAsPaused();
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
@@ -4908,6 +4911,7 @@ class CaptureController extends ChangeNotifier
         socketConnected: _socket?.state == SocketServiceState.connected,
         deviceServiceReady: recordingDeviceServiceReady,
         callActive: _omiCallActive,
+        callEpoch: _callCaptureEpoch,
         deviceRecording: recordingState == RecordingState.deviceRecord,
         systemAudioRecording: recordingState == RecordingState.systemAudioRecord,
         micCapturing: recordingState == RecordingState.record ||

@@ -554,6 +554,7 @@ class CaptureEnvironment {
     required this.socketConnected,
     required this.deviceServiceReady,
     required this.callActive,
+    this.callEpoch = 0,
     required this.deviceRecording,
     required this.micCapturing,
     this.silencePaused = false,
@@ -598,6 +599,9 @@ class CaptureEnvironment {
   /// `recordingDeviceServiceReady` — device present or a mic lane active.
   final bool deviceServiceReady;
   final bool callActive;
+
+  /// Synchronous call activation evidence, including calls ending during an await.
+  final int callEpoch;
 
   /// `recordingState == deviceRecord`.
   final bool deviceRecording;
@@ -1562,7 +1566,10 @@ class CaptureCoordinator {
         working.active?.source == CaptureSource.pendant &&
         working.active?.sessionKey == priorDebt.sessionKey;
     Future<bool> deferReconnectForCall() async {
-      if (!restoringReconnect || working.callActive || !_readEnvironment().callActive) return false;
+      final current = _readEnvironment();
+      if (!restoringReconnect || working.callActive || (!current.callActive && current.callEpoch == env.callEpoch)) {
+        return false;
+      }
       final debt = priorDebt.withReason(SuspendReason.call);
       working = working.copyWith(
         phase: CapturePhase.callActive,
