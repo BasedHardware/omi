@@ -126,7 +126,10 @@ abstract final class WalWriteIntent {
           record = decoded;
           // The old row owns neither these newer bytes nor their recovery
           // reference. Retire only that obsolete row, leaving the new writer.
-          if (record['transaction_id'] != transactionId) return stillOwned();
+          if (record['transaction_id'] != transactionId) {
+            await _persistRetirement(intent, record, deletedWal);
+            return stillOwned();
+          }
         }
         final survivor = sharedWith();
         if (survivor != null) {
@@ -139,18 +142,10 @@ abstract final class WalWriteIntent {
               'sha256': await _hashAudio(audio),
             };
           }
-          // The old index may still contain this row after a failed save.
-          // Keep its exact identity until replay has durably repaired it.
-          final retired = List<dynamic>.of(record['retired_rows'] as List? ?? const []);
-          retired.add(deletedWal.toJson());
-          record['retired_rows'] = retired;
           survivor.fileWriteId = const Uuid().v4();
           record['transaction_id'] = survivor.fileWriteId;
           record['wal'] = survivor.toJson();
-          await intent.parent.create(recursive: true);
-          final tmp = File('${intent.path}.tmp');
-          await tmp.writeAsString(jsonEncode(record), flush: true);
-          await tmp.rename(intent.path);
+          await _persistRetirement(intent, record, deletedWal);
           markPending(survivor);
           return stillOwned();
         }
@@ -164,6 +159,18 @@ abstract final class WalWriteIntent {
         if (await intent.exists()) await intent.delete();
         return stillOwned();
       });
+
+  static Future<void> _persistRetirement(File intent, Map<String, dynamic> record, Wal deleted) async {
+    // Failed index commits must never restore this exact obsolete reference,
+    // whether the shared bytes belong to a registered or pending survivor.
+    final retired = List<dynamic>.of(record['retired_rows'] as List? ?? const []);
+    retired.add(deleted.toJson());
+    record['retired_rows'] = retired;
+    await intent.parent.create(recursive: true);
+    final tmp = File('${intent.path}.tmp');
+    await tmp.writeAsString(jsonEncode(record), flush: true);
+    await tmp.rename(intent.path);
+  }
 
   static Future<String> _hashAudio(File audio) async {
     final bytes = await audio.readAsBytes();
