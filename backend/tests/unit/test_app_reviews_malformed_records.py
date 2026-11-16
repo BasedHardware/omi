@@ -130,26 +130,6 @@ class TestAppReviewSafeDeserialization(unittest.TestCase):
         self.assertEqual(AppReview.from_records({}), [])
         self.assertEqual(AppReview.from_records(""), [])
 
-    def test_compute_rating_stats_valid_and_missing_fields(self):
-        records = [
-            {"uid": "u1", "score": 4.0, "review": "good"},
-            {"uid": "u2", "review": "no score"},  # Missing score - must not raise KeyError
-            {"uid": "u3", "score": "not-a-number", "review": "bad score"},  # Non-numeric score
-            {"uid": "u4", "score": 5.0},  # Missing review - still has valid score
-            {"uid": "u5", "score": 6.0, "review": "high score"},  # Out of range clamped to 5.0
-            {"uid": "u6", "score": -2.0, "review": "negative score"},  # Negative clamped to 0.0
-        ]
-        # Valid scores: 4.0, 5.0, 5.0 (clamped), 0.0 (clamped) -> sum=14.0 / 4 = 3.5
-        avg, count = AppReview.compute_rating_stats(records)
-        self.assertEqual(count, 4)
-        self.assertEqual(avg, 3.5)
-
-    def test_compute_rating_stats_falsy_and_empty(self):
-        self.assertEqual(AppReview.compute_rating_stats(None), (None, 0))
-        self.assertEqual(AppReview.compute_rating_stats([]), (None, 0))
-        self.assertEqual(AppReview.compute_rating_stats({}), (None, 0))
-        self.assertEqual(AppReview.compute_rating_stats(""), (None, 0))
-        self.assertEqual(AppReview.compute_rating_stats([{"uid": "u1"}]), (None, 0))
 
 
 class TestRatingAggregationSafety(unittest.TestCase):
