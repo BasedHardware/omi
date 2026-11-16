@@ -31,14 +31,11 @@ def unit_priority(seed_priority, lane, unit, *, now):
         # Lower enum values are fresher: min can only PROMOTE, never demote a seed.
         # Preserve the request lane, including the unbound_capture_time trust gate.
         effective = min(seed_priority, priority_for(lane, age))
-    reasons = []
-    if effective != seed_priority:
-        reasons.append('seed_effective_divergence')
-    if age <= FRESH_CAPTURE_LAG_SECONDS and effective != Priority.FRESH:
-        reasons.append('fresh_capture_not_fresh')
-    for reason in reasons:
-        try:
-            OMI_BATCH_PIPELINE_PRIORITY_DEMOTIONS_TOTAL.labels(lane=lane, reason=reason).inc()
-        except Exception:
-            pass  # Telemetry must never refuse admission.
+    try:
+        if effective != seed_priority:
+            OMI_BATCH_PIPELINE_PRIORITY_DEMOTIONS_TOTAL.labels(lane=lane, reason='seed_effective_divergence').inc()
+        if age <= FRESH_CAPTURE_LAG_SECONDS and effective != Priority.FRESH:
+            OMI_BATCH_PIPELINE_PRIORITY_DEMOTIONS_TOTAL.labels(lane=lane, reason='fresh_capture_not_fresh').inc()
+    except Exception:
+        pass  # Telemetry must never refuse admission.
     return effective
