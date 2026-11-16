@@ -301,8 +301,15 @@ def build_plan(prior, *, operation_id, created_at, until):
     }
 
 
-def apply_plan(store, plan, *, mode):
-    """One read plus one CAS write. A concurrent writer is refused, never overwritten."""
+def apply_plan(store, plan, *, mode, persist=None):
+    """One read plus one CAS write. A concurrent writer is refused, never overwritten.
+
+    ``persist`` is called with the receipt as soon as the write returns, before
+    the confirming read. A failed confirming read must not lose the only record
+    of the version this helper created: the persisted recovery receipt keeps
+    ``confirmed`` false, and restoration CASes against the same
+    ``applied_update_time`` either way.
+    """
     snapshot = _read(store)
     current = _snapshot_state(snapshot)
     prior = plan['prior']
@@ -326,23 +333,42 @@ def apply_plan(store, plan, *, mode):
     reference = participation.control_document(store)
     if current['exists']:
         write_result = reference.update(fields, option=firestore.LastUpdateOption(snapshot.update_time), retry=None)
+        # `update` merges, so the document this write produces is the captured
+        # prior fields plus the planned control fields. Computed locally so the
+        # receipt is complete before the confirming read.
+        expected_fields = {**current['fields'], **plan['fields']}
     else:
         write_result = reference.create(fields, retry=None)
-    applied_update_time = tag(write_result.update_time)
-    applied = _snapshot_state(_read(store))
-    if applied['update_time'] != applied_update_time:
-        raise Refused('control document changed after apply; refusing to issue a restoration receipt')
-    return {
+        expected_fields = dict(plan['fields'])
+    receipt = {
         'namespace': store.namespace,
         'document': participation.DOCUMENT_ID,
         'operation_id': plan['operation_id'],
         'mode': mode,
-        'applied_update_time': applied_update_time,
-        'applied_fields_sha256': fields_digest(applied['fields']),
+        # The write result's own update_time, not a later read: a concurrent
+        # writer between the write and the read can never donate its version.
+        'applied_update_time': tag(write_result.update_time),
+        'applied_fields_sha256': fields_digest(expected_fields),
         # The complete prior capture identity this apply was authorized by. A
         # restoration may only target a capture that matches every one of these.
         'prior': dict(prior),
+        'confirmed': False,
     }
+    if persist is not None:
+        persist(dict(receipt))
+    kept = ' (recovery receipt persisted)' if persist is not None else ''
+    try:
+        applied = _snapshot_state(_read(store))
+    except Exception as error:
+        raise Refused(f'confirming read failed ({type(error).__name__}){kept}') from error
+    if applied['update_time'] != receipt['applied_update_time']:
+        raise Refused(f'control document changed after apply; refusing to confirm the receipt{kept}')
+    if fields_digest(applied['fields']) != receipt['applied_fields_sha256']:
+        raise Refused(f'control document fields do not match the values this apply wrote{kept}')
+    receipt['confirmed'] = True
+    if persist is not None:
+        persist(dict(receipt))
+    return receipt
 
 
 def restore_prior(store, prior, applied, *, mode):
@@ -375,6 +401,8 @@ def restore_prior(store, prior, applied, *, mode):
         applied.get('applied_fields_sha256'), str
     ):
         raise Refused('apply receipt is missing its post-apply version or fields digest')
+    if type(applied.get('confirmed')) is not bool:
+        raise Refused('apply receipt has no confirmation state; refusing to guess a restoration')
 
     snapshot = _read(store)
     current = _snapshot_state(snapshot)
@@ -555,10 +583,26 @@ def main(argv=None):
             if args.dry_run != 'emulator' and not args.receipt:
                 raise Refused('a production apply requires --receipt')
             store = resolve_store(namespace, emulator_host=args.emulator_host)
-            receipt = apply_plan(store, plan, mode='emulator' if args.dry_run == 'emulator' else 'production')
             receipt_path = args.receipt or _default_applied_path(args.plan)
+            # Persist the recovery receipt as soon as the write returns, so a
+            # failed confirming read cannot lose the only record of this version.
+            receipt = apply_plan(
+                store,
+                plan,
+                mode='emulator' if args.dry_run == 'emulator' else 'production',
+                persist=lambda payload: _write(receipt_path, payload),
+            )
             _write(receipt_path, receipt)
-            print(json.dumps({'applied': True, 'receipt': receipt_path, 'mode': receipt['mode']}))
+            print(
+                json.dumps(
+                    {
+                        'applied': True,
+                        'receipt': receipt_path,
+                        'mode': receipt['mode'],
+                        'confirmed': receipt['confirmed'],
+                    }
+                )
+            )
             return EXIT_OK
 
         if args.command == 'restore':

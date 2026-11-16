@@ -606,9 +606,10 @@ class QueueMetrics:
                 now_monotonic=participation.monotonic(),
             )
         except Exception as error:  # A control failure never fails the sampler.
-            logging.getLogger(__name__).warning(
-                'event=batch_timeliness_participation outcome=unavailable exception_type=%s',
-                type(error).__name__,
+            participation.record_fallback(
+                to_mode='participate',
+                detail=f'unavailable exception_type={type(error).__name__}',
+                error=error,
             )
             return
         if suppressed != self._participation_suppressed:

@@ -570,3 +570,110 @@ def test_verify_restored_refuses_a_tampered_capture(helper, store):
         helper.verify_restored(store, dict(prior, exists=False, update_time=None))
 
     assert _state(store) == before
+
+
+# --- write-result recovery receipt ------------------------------------------------
+
+
+def _fail_confirming_read(helper, monkeypatch):
+    """Let the pre-write read through and fail the confirming read."""
+    real_read = helper._read
+    reads = 0
+
+    def read(current_store):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            raise RuntimeError('synthetic confirming-read failure')
+        return real_read(current_store)
+
+    monkeypatch.setattr(helper, '_read', read)
+
+
+def test_apply_persists_the_recovery_receipt_before_the_confirming_read(helper, store, monkeypatch):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    # Exactly one persist happened, before the failing read, and it is complete.
+    assert len(persisted) == 1
+    recovery = persisted[0]
+    assert recovery['confirmed'] is False
+    assert recovery['applied_update_time'] == helper.tag(store._doc.update_time)
+    assert recovery['prior']['identity_sha256'] == prior['identity_sha256']
+    assert recovery['applied_fields_sha256'] == helper.fields_digest(
+        {**prior['fields'], **_plan(helper, prior)['fields']}
+    )
+
+
+def test_apply_marks_a_confirmed_receipt_after_a_successful_read(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    persisted = []
+    receipt = helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+    assert [entry['confirmed'] for entry in persisted] == [False, True]
+    assert receipt['confirmed'] is True
+
+
+def test_recovery_receipt_restores_a_present_prior_after_a_failed_confirming_read(helper, store, monkeypatch):
+    store.seed({'kept': 1, 'nested': {'a': True}})
+    prior = _prior(helper, store)
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    # The write happened and the recovery receipt is the only record of it.
+    assert store._doc.data['operation_id'] == 'sca1649-op-1'
+    restored = helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    assert restored['exact'] is True
+    assert store._doc.data == {'kept': 1, 'nested': {'a': True}}
+
+
+def test_recovery_receipt_restores_an_absent_prior_after_a_failed_confirming_read(helper, store, monkeypatch):
+    prior = _prior(helper, store)
+    assert prior['exists'] is False
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    assert store._doc.data['operation_id'] == 'sca1649-op-1'
+    restored = helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    assert restored['exact'] is True
+    assert store._doc.data is None
+
+
+def test_recovery_receipt_still_refuses_a_concurrent_writer(helper, store, monkeypatch):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    store._doc.data['concurrent'] = 'writer'
+    store._doc._touch()
+    before = _state(store)
+    with pytest.raises(helper.Refused, match='update_time mismatch'):
+        helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    assert _state(store) == before
+
+
+def test_restore_refuses_a_receipt_without_a_confirmation_state(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    stripped = {k: v for k, v in applied.items() if k != 'confirmed'}
+    with pytest.raises(helper.Refused, match='no confirmation state'):
+        helper.restore_prior(store, prior, stripped, mode='emulator')
+    assert _state(store) == before

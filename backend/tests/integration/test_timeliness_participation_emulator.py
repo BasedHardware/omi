@@ -215,23 +215,97 @@ def test_restore_refuses_tampered_captures_without_mutating(helper, store):
     assert _read(store) == {'kept': 1, 'nested': {'a': True}}
 
 
-def test_emulator_transport_refusals(helper, monkeypatch):
+def test_emulator_refuses_a_non_loopback_host(helper):
     with pytest.raises(helper.Refused, match='loopback'):
         helper.resolve_store('batch_pipeline_test_x', emulator_host='10.0.0.5:8085')
+
+
+def test_emulator_refuses_a_production_namespace(helper):
     with pytest.raises(helper.Refused, match='batch_pipeline_test_'):
         helper.resolve_store('batch_pipeline_prod', emulator_host='127.0.0.1:8085')
-    # A test namespace with no explicit host is refused either by the ambient
-    # emulator guard or by the missing --dry-run=emulator; both fail closed.
+
+
+def test_missing_emulator_host_is_refused(helper, monkeypatch):
+    """Isolated from an inherited endpoint so only the missing host is tested."""
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     with pytest.raises(helper.Refused, match='--dry-run=emulator'):
         helper.resolve_store('batch_pipeline_test_x')
+
+
+def test_ambient_emulator_endpoint_is_refused_on_its_own(helper, monkeypatch):
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8085')
     with pytest.raises(helper.Refused, match='ambient FIRESTORE_EMULATOR_HOST'):
         helper.resolve_store('batch_pipeline_test_x')
+    with pytest.raises(helper.Refused, match='ambient FIRESTORE_EMULATOR_HOST'):
+        helper.resolve_store('batch_pipeline_prod')
+
+
+def _fail_confirming_read(helper, monkeypatch):
+    """Let the pre-write read through and fail the confirming read."""
+    real_read = helper._read
+    reads = 0
+
+    def read(current_store):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            raise RuntimeError('synthetic confirming-read failure')
+        return real_read(current_store)
+
+    monkeypatch.setattr(helper, '_read', read)
+
+
+def test_recovery_receipt_restores_a_present_prior_after_a_failed_confirming_read(helper, store, monkeypatch):
+    _seed(store, {'kept': 1, 'nested': {'a': True}})
+    prior = _prior(helper, store)
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    assert len(persisted) == 1 and persisted[0]['confirmed'] is False
+    assert _read(store)['operation_id'] == 'sca1649-emulator-op'
+    restored = helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    assert restored['exact'] is True
+    assert _read(store) == {'kept': 1, 'nested': {'a': True}}
+
+
+def test_recovery_receipt_restores_an_absent_prior_after_a_failed_confirming_read(helper, store, monkeypatch):
+    prior = _prior(helper, store)
+    assert prior['exists'] is False
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    assert len(persisted) == 1 and persisted[0]['confirmed'] is False
+    assert _read(store)['operation_id'] == 'sca1649-emulator-op'
+    restored = helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    assert restored['exact'] is True
+    assert _read(store) is None
+
+
+def test_recovery_receipt_still_refuses_a_concurrent_writer(helper, store, monkeypatch):
+    _seed(store, {'kept': 1})
+    prior = _prior(helper, store)
+    persisted = []
+    _fail_confirming_read(helper, monkeypatch)
+
+    with pytest.raises(helper.Refused, match='confirming read failed'):
+        helper.apply_plan(store, _plan(helper, prior), mode='emulator', persist=persisted.append)
+
+    _reference(store).update({'concurrent': 'writer'})
+    before = _reference(store).get()
+    with pytest.raises(helper.Refused, match='update_time mismatch'):
+        helper.restore_prior(store, prior, persisted[0], mode='emulator')
+    after = _reference(store).get()
+    assert (after.to_dict(), after.update_time) == (before.to_dict(), before.update_time)
+    assert after.to_dict()['concurrent'] == 'writer'
 
 
 def test_cli_emulator_apply_and_restore_round_trip(helper, store, tmp_path, monkeypatch):
-    """The literal contract commands, with the emulator transport and namespace."""
     _seed(store, {'kept': 1, 'nested': {'a': True}})
     monkeypatch.setattr(helper, 'resolve_store', lambda namespace, emulator_host=None: store)
     prior_path = tmp_path / 'timeliness-prior.json'

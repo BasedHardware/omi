@@ -13,6 +13,7 @@ import pytest
 from prometheus_client import CollectorRegistry
 
 from database.batch_pipeline_store import FirestoreStore
+from utils.batch_pipeline import metrics as metrics_module
 from utils.batch_pipeline import timeliness_participation as participation
 from utils.batch_pipeline.metrics import QueueMetrics
 
@@ -281,6 +282,151 @@ def test_forward_clock_movement_expires_early(monkeypatch):
     assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 700, now_monotonic=MONO + 60)
 
 
+# --- observed expiry is monotonic history, not a discarded fact -------------------
+
+
+def test_expiry_then_wall_clock_rollback_does_not_revive_the_operation(monkeypatch):
+    """An operation observed expired must not come back under a rolled-back clock."""
+    responses = [_Snapshot(_doc()), _Snapshot(_doc()), _Snapshot(_doc())]
+    monkeypatch.setattr(participation, 'read_control', lambda store: responses.pop(0))
+    cache = participation.ParticipationCache()
+    store = _store()
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    # The reread sees the wall clock past suppressed_until: the operation ended.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 700, now_monotonic=MONO + 60)
+    assert cache.operation_id is None
+    assert cache.ended_operations == ('sca1649-op-1',)
+    # The clock rolls back inside the same window and the document parses as
+    # active again. The operation already ended here, so it stays ended.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO + 120)
+    assert cache.operation_id is None
+
+
+def test_expiry_on_the_monotonic_clock_wins_over_a_live_wall_clock(monkeypatch):
+    """The monotonic deadline is authoritative even when the document looks live."""
+    monkeypatch.setattr(participation, 'read_control', lambda store: _Snapshot(_doc()))
+    cache = participation.ParticipationCache()
+    store = _store()
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    # No read reservation is due, but the monotonic window has passed.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO + 700)
+    assert cache.ended_operations == ('sca1649-op-1',)
+    # A fresh read of the same still-live document cannot reopen it.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO + 760)
+
+
+def test_a_displaced_operation_cannot_return(monkeypatch):
+    responses = [_Snapshot(_doc()), _Snapshot(_doc(operation_id='sca1649-op-2')), _Snapshot(_doc())]
+    monkeypatch.setattr(participation, 'read_control', lambda store: responses.pop(0))
+    cache = participation.ParticipationCache()
+    store = _store()
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO + 60)
+    assert cache.operation_id == 'sca1649-op-2'
+    assert cache.ended_operations == ('sca1649-op-1',)
+    # op-1 reappears; it ended when op-2 displaced it.
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO + 120)
+
+
+def test_a_new_operation_after_expiry_still_suppresses(monkeypatch):
+    later = _doc(
+        operation_id='sca1649-op-2',
+        created_at=dt.datetime.fromtimestamp(NOW + 690, dt.timezone.utc),
+        suppressed_until=dt.datetime.fromtimestamp(NOW + 1290, dt.timezone.utc),
+    )
+    responses = [_Snapshot(_doc()), _Snapshot(_doc()), _Snapshot(later)]
+    monkeypatch.setattr(participation, 'read_control', lambda store: responses.pop(0))
+    cache = participation.ParticipationCache()
+    store = _store()
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    assert not cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 700, now_monotonic=MONO + 60)
+    assert cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 700, now_monotonic=MONO + 120)
+    assert cache.operation_id == 'sca1649-op-2'
+
+
+def test_ended_operation_history_is_bounded():
+    cache = participation.ParticipationCache()
+    for index in range(participation.MAX_ENDED_OPERATIONS + 5):
+        cache._remember_ended(f'op-{index}')
+    assert len(cache.ended_operations) == participation.MAX_ENDED_OPERATIONS
+    assert cache.ended_operations[0] == 'op-5'
+
+
+# --- shared fallback telemetry ----------------------------------------------------
+
+
+def test_read_failure_records_the_shared_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(participation, 'emit_fallback', lambda **kwargs: calls.append(kwargs))
+
+    def boom(store):
+        raise TimeoutError('synthetic')
+
+    monkeypatch.setattr(participation, 'read_control', boom)
+    cache = participation.ParticipationCache()
+    assert not cache.suppressed(_store(), plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    assert len(calls) == 1
+    assert calls[0]['component'] == 'firestore_read'
+    assert calls[0]['from_mode'] == 'control'
+    assert calls[0]['to_mode'] == 'last_validated'
+    assert calls[0]['reason'] == 'timeout'
+    assert calls[0]['outcome'] == 'degraded'
+
+
+def test_malformed_document_records_the_shared_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(participation, 'emit_fallback', lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(participation, 'read_control', lambda store: _Snapshot(_doc(version=True)))
+    cache = participation.ParticipationCache()
+    assert not cache.suppressed(_store(), plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    assert [(call['to_mode'], call['outcome']) for call in calls] == [('participate', 'degraded')]
+
+
+def test_healthy_reads_record_no_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(participation, 'emit_fallback', lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(participation, 'read_control', lambda store: _Snapshot(_doc()))
+    cache = participation.ParticipationCache()
+    assert cache.suppressed(_store(), plane='prod-omi-backend', now_wall=NOW, now_monotonic=MONO)
+    assert calls == []
+
+
+def test_fallback_telemetry_is_bounded_by_the_read_interval(monkeypatch):
+    calls = []
+    monkeypatch.setattr(participation, 'emit_fallback', lambda **kwargs: calls.append(kwargs))
+
+    def boom(store):
+        raise RuntimeError('synthetic')
+
+    monkeypatch.setattr(participation, 'read_control', boom)
+    cache = participation.ParticipationCache()
+    store = _store()
+    for offset in (0, 15, 30, 45, 59):
+        cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + offset, now_monotonic=MONO + offset)
+    assert len(calls) == 1
+    cache.suppressed(store, plane='prod-omi-backend', now_wall=NOW + 60, now_monotonic=MONO + 60)
+    assert len(calls) == 2
+
+
+def test_outer_control_error_records_the_shared_fallback(monkeypatch):
+    calls = []
+    monkeypatch.setattr(participation, 'emit_fallback', lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        participation,
+        'timeliness_plane',
+        Mock(side_effect=RuntimeError('synthetic identity failure')),
+    )
+    sampler = QueueMetrics(CollectorRegistry())
+    store = Mock(spec=FirestoreStore)
+    store.namespace = 'batch_pipeline_prod'
+    sampler.refresh_timeliness(store, NOW)
+    assert len(calls) == 1
+    assert calls[0]['component'] == 'firestore_read'
+    assert calls[0]['to_mode'] == 'participate'
+    assert calls[0]['outcome'] == 'degraded'
+    assert sampler._participation_suppressed is False
+
+
 # --- elected sampler gate ---------------------------------------------------------
 
 
@@ -328,8 +474,6 @@ def test_suppression_withdraws_without_acquire_sample_or_companion_counts(gke, m
     leader.acquire.assert_not_called()
     assert sampler._timeliness_visible is False
     assert sampler._timeliness_due == NOW + min(600.0, 60.0)
-    import utils.batch_pipeline.metrics as metrics_module
-
     metrics_module.timeliness_sample.assert_not_called()
     metrics_module.allowance_held_count.assert_not_called()
     metrics_module.record_wal_metrics.deactivate.assert_called()
@@ -342,8 +486,6 @@ def test_participation_samples_normally(gke, monkeypatch):
     sampler.timeliness_leader = leader
     sampler.refresh_timeliness(store, NOW)
     leader.acquire.assert_called_once()
-    import utils.batch_pipeline.metrics as metrics_module
-
     metrics_module.timeliness_sample.assert_called_once()
     assert sampler._timeliness_visible is True
 
