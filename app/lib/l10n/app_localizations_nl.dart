@@ -1994,6 +1994,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get memoryHistory => 'Geschiedenis';
 
   @override
+  String get recordingWithYourPhone => 'Opnemen met je telefoon';
+
+  @override
+  String get wrapUp => 'Afronden';
+
+  @override
+  String get recordingDiscarded => 'Opname verwijderd';
+
+  @override
   String get undo => 'Ongedaan maken';
 
   @override

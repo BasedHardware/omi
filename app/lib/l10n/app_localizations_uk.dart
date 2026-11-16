@@ -1994,6 +1994,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get memoryHistory => 'Історія';
 
   @override
+  String get recordingWithYourPhone => 'Запис на телефон';
+
+  @override
+  String get wrapUp => 'Завершити';
+
+  @override
+  String get recordingDiscarded => 'Запис скасовано';
+
+  @override
   String get undo => 'Скасувати';
 
   @override

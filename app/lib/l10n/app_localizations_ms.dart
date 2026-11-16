@@ -1995,6 +1995,15 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryHistory => 'Sejarah';
 
   @override
+  String get recordingWithYourPhone => 'Merakam dengan telefon anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rakaman dibuang';
+
+  @override
   String get undo => 'Buat Asal';
 
   @override

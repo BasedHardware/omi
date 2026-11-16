@@ -2003,6 +2003,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'S\'està gravant amb el telèfon';
+
+  @override
+  String get wrapUp => 'Tanca';
+
+  @override
+  String get recordingDiscarded => 'S\'ha descartat l\'enregistrament';
+
+  @override
   String get undo => 'Desfer';
 
   @override

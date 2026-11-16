@@ -2005,6 +2005,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryHistory => 'வரலாறு';
 
   @override
+  String get recordingWithYourPhone => 'உங்கள் ஃபோனில் பதிவாகிறது';
+
+  @override
+  String get wrapUp => 'முடி';
+
+  @override
+  String get recordingDiscarded => 'பதிவு நிராகரிக்கப்பட்டது';
+
+  @override
   String get undo => 'மறுசெய்க';
 
   @override

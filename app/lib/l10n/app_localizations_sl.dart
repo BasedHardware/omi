@@ -1989,6 +1989,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryHistory => 'Zgodovina';
 
   @override
+  String get recordingWithYourPhone => 'Snemanje s telefonom';
+
+  @override
+  String get wrapUp => 'Zaključi';
+
+  @override
+  String get recordingDiscarded => 'Posnetek zavržen';
+
+  @override
   String get undo => 'Razveljavi';
 
   @override

@@ -1995,6 +1995,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryHistory => 'Geçmiş';
 
   @override
+  String get recordingWithYourPhone => 'Telefonunla kaydediliyor';
+
+  @override
+  String get wrapUp => 'Bitir';
+
+  @override
+  String get recordingDiscarded => 'Kayıt silindi';
+
+  @override
   String get undo => 'Geri Al';
 
   @override

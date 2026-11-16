@@ -2010,6 +2010,15 @@ class AppLocalizationsFr extends AppLocalizations {
   String get memoryHistory => 'Historique';
 
   @override
+  String get recordingWithYourPhone => 'Enregistrement avec votre téléphone';
+
+  @override
+  String get wrapUp => 'Terminer';
+
+  @override
+  String get recordingDiscarded => 'Enregistrement supprimé';
+
+  @override
   String get undo => 'Annuler';
 
   @override

@@ -1996,6 +1996,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get memoryHistory => 'История';
 
   @override
+  String get recordingWithYourPhone => 'Запись на телефон';
+
+  @override
+  String get wrapUp => 'Завершить';
+
+  @override
+  String get recordingDiscarded => 'Запись удалена';
+
+  @override
   String get undo => 'Отменить';
 
   @override

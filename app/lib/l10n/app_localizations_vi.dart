@@ -1998,6 +1998,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get memoryHistory => 'Lịch sử';
 
   @override
+  String get recordingWithYourPhone => 'Đang ghi âm bằng điện thoại';
+
+  @override
+  String get wrapUp => 'Kết thúc';
+
+  @override
+  String get recordingDiscarded => 'Đã hủy bản ghi';
+
+  @override
   String get undo => 'Hoàn tác';
 
   @override

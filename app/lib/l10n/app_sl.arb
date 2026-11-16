@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Snemanje s telefonom",
+    "wrapUp": "Zaključi",
+    "recordingDiscarded": "Posnetek zavržen",
     "undo": "Razveljavi",
     "@undo": {
         "description": "Undo button text"

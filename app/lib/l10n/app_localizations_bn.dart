@@ -1987,6 +1987,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryHistory => 'ইতিহাস';
 
   @override
+  String get recordingWithYourPhone => 'আপনার ফোনে রেকর্ড হচ্ছে';
+
+  @override
+  String get wrapUp => 'শেষ করুন';
+
+  @override
+  String get recordingDiscarded => 'রেকর্ডিং বাতিল হয়েছে';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override

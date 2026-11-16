@@ -1991,6 +1991,15 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryHistory => 'Historie';
 
   @override
+  String get recordingWithYourPhone => 'Nahrává se telefonem';
+
+  @override
+  String get wrapUp => 'Uzavřít';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahozena';
+
+  @override
   String get undo => 'Vrátit zpět';
 
   @override

@@ -1977,6 +1977,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get memoryHistory => 'ประวัติ';
 
   @override
+  String get recordingWithYourPhone => 'กำลังบันทึกด้วยโทรศัพท์ของคุณ';
+
+  @override
+  String get wrapUp => 'สรุป';
+
+  @override
+  String get recordingDiscarded => 'ทิ้งการบันทึกแล้ว';
+
+  @override
   String get undo => 'เลิกทำ';
 
   @override

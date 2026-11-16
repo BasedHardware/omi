@@ -50,7 +50,10 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    `fetchSyncJobStatus`, and the custody endpoint path outside the ledger and HTTP-client namespace.
 2. **Delete only on confirmation.** A custody file is deleted only when its upload job completes,
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
-   or when a Watch copy is proven redundant (invariant 5).
+   or when a Watch copy is proven redundant (invariant 5). Undo on Home's recording bar is a user
+   delete: `LocalWalSyncImpl.discardRecording` (`wal_discard.dart`) drops the live tail and the
+   WALs of that one recording session, never another recording's. A WAL of it that is uploading
+   is not interrupted; it is never picked for upload again and is deleted once that upload settles.
    With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
    source-frame receipts replace the live transcript heuristic for Omi audio sessions. Live Custom STT
    uses HTTP transcript submission instead of frame receipts: only a confirmation carrying the
@@ -130,7 +133,7 @@ the legacy coverage trim is deleted (plan C, C11).
 | Invariant | Behavioral guard under `app/test/` |
 |---|---|
 | 1 | `unit/local_recordings_auto_upload_test.dart` (lib source scan) |
-| 2 | `unit/l5_capture_committed_test.dart`, `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
+| 2 | `unit/l5_capture_committed_test.dart`, `unit/local_wal_sync_test.dart` (discardRecording), `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
 | 3 | `unit/local_recordings_owner_test.dart` |
 | 4 | `unit/local_recordings_auto_upload_test.dart`, `unit/sync_poll_storm_test.dart` |
 | 5 | `unit/watch_custody_dedupe_test.dart` |

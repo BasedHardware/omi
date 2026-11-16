@@ -2028,6 +2028,18 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
+    "recordingWithYourPhone": "Recording with your phone",
+    "@recordingWithYourPhone": {
+        "description": "Home's recording bar, line 1: this phone is recording a live conversation"
+    },
+    "wrapUp": "Wrap Up",
+    "@wrapUp": {
+        "description": "Button on Home's recording bar: end the phone recording and process it"
+    },
+    "recordingDiscarded": "Recording discarded",
+    "@recordingDiscarded": {
+        "description": "Confirmation after Undo on Home's recording bar: the accidental recording was thrown away"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"

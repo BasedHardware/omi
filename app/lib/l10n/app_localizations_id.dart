@@ -1991,6 +1991,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get memoryHistory => 'Riwayat';
 
   @override
+  String get recordingWithYourPhone => 'Merekam dengan ponsel Anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rekaman dibuang';
+
+  @override
   String get undo => 'Batalkan';
 
   @override

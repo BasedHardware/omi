@@ -1993,6 +1993,15 @@ class AppLocalizationsBe extends AppLocalizations {
   String get memoryHistory => 'Гісторыя';
 
   @override
+  String get recordingWithYourPhone => 'Запіс на тэлефон';
+
+  @override
+  String get wrapUp => 'Завяршыць';
+
+  @override
+  String get recordingDiscarded => 'Запіс адменены';
+
+  @override
   String get undo => 'Адмяніць';
 
   @override

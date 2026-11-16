@@ -1952,6 +1952,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
+  String get recordingWithYourPhone => '正在用手机录音';
+
+  @override
+  String get wrapUp => '结束';
+
+  @override
+  String get recordingDiscarded => '已舍弃录音';
+
+  @override
   String get undo => '撤销';
 
   @override

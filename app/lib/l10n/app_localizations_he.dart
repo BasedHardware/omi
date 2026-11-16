@@ -1971,6 +1971,15 @@ class AppLocalizationsHe extends AppLocalizations {
   String get memoryHistory => 'היסטוריה';
 
   @override
+  String get recordingWithYourPhone => 'מקליט בטלפון שלך';
+
+  @override
+  String get wrapUp => 'סכם';
+
+  @override
+  String get recordingDiscarded => 'ההקלטה בוטלה';
+
+  @override
   String get undo => 'בטל';
 
   @override

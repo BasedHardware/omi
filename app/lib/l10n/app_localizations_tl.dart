@@ -2004,6 +2004,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get memoryHistory => 'Kasaysayan';
 
   @override
+  String get recordingWithYourPhone => 'Nagre-record gamit ang iyong phone';
+
+  @override
+  String get wrapUp => 'Tapusin';
+
+  @override
+  String get recordingDiscarded => 'Itinapon ang recording';
+
+  @override
   String get undo => 'Undo';
 
   @override

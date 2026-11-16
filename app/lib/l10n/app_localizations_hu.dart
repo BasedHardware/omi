@@ -2006,6 +2006,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryHistory => 'Előzmények';
 
   @override
+  String get recordingWithYourPhone => 'Felvétel a telefonnal';
+
+  @override
+  String get wrapUp => 'Lezárás';
+
+  @override
+  String get recordingDiscarded => 'Felvétel elvetve';
+
+  @override
   String get undo => 'Visszavonás';
 
   @override

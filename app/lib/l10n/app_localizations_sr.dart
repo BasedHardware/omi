@@ -1988,6 +1988,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get recordingWithYourPhone => 'Снима се телефоном';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимак одбачен';
+
+  @override
   String get undo => 'Врати';
 
   @override
