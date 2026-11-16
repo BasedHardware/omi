@@ -147,7 +147,8 @@ def test_contending_deliveries_on_open_and_replay_reserve_one_paid_snapshot(seed
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(compete, range(3)))
     assert sum(result is not None for result in results) == 1
-    assert attempts.reserve(uid, cid, token, revision, firestore_client=client) is None
+    assert leases.acquire(uid, 'summary-' + cid, firestore_client=client) is None
+    assert attempts.reserve(uid, cid, token, revision, quiet=True, firestore_client=client) is None
     persist(seeded, token, next(result for result in results if result))
     result = store.decode_row(uid, coll.document(cid).get())
     assert result['structured']['title'] == 'My title'
@@ -156,6 +157,101 @@ def test_contending_deliveries_on_open_and_replay_reserve_one_paid_snapshot(seed
     assert not result.get('v3_process_pending') and not result.get('v3_process_attempts')
     assert summary.fresh(result)
     assert len(leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict()['snapshot_inputs']) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first_owner', ['quiet', 'foreground'])
+@pytest.mark.parametrize('full_ledger', [False, True])
+async def test_foreground_stream_retries_failed_same_input_without_rearming_quiet(
+    seeded, monkeypatch, first_owner, full_ledger
+):
+    from fastapi import HTTPException
+    from routers import conversations as routes
+
+    client, uid, cid, _, coll = seeded
+    read = lambda *a: store.decode_row(uid, coll.document(cid).get())
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', read)
+    monkeypatch.setattr(service, 'reconcile', _noop_reconcile)
+    admitted, paid = [], []
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a, **kw: admitted.append(a))
+    monkeypatch.setattr(quiet, 'require_generated_compute', lambda *a, **kw: admitted.append(a))
+
+    def write(owner, row, emit):
+        paid.append(summary_input.fingerprint(row))
+        if len(paid) == 1:
+            raise RuntimeError('first paid writer failed')
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'Foreground retry worked.'}]}
+
+    async def stream():
+        response = await routes.conversation_summary_stream(cid, uid)
+        return [frame async for frame in response.body_iterator]
+
+    monkeypatch.setattr(summary, 'write', write)
+    if first_owner == 'quiet':
+        with pytest.raises(RuntimeError, match='first paid writer failed'):
+            await quiet.snapshot(uid, read())
+    else:
+        assert any(frame.startswith('error: ') for frame in await stream())
+    lease = leases.lease_ref(client, uid, 'summary-' + cid)
+    spent = lease.get().to_dict()['snapshot_inputs']
+    if full_ledger:
+        spent += [f'other-input-{i}' for i in range(store.LIMIT - len(spent))]
+        lease.update({'snapshot_inputs': spent})
+    assert await quiet.snapshot(uid, read()) == 'skipped'
+    assert len(paid) == 1 and not summary.fresh(read())
+
+    def denied(*a, **kw):
+        raise HTTPException(402, 'usage_budget_exhausted')
+
+    monkeypatch.setattr(routes, 'require_generated_compute', denied)
+    with pytest.raises(HTTPException) as error:
+        await stream()
+    assert error.value.status_code == 402 and len(paid) == 1
+    monkeypatch.setattr(routes, 'require_generated_compute', lambda *a, **kw: admitted.append(a))
+    frames = await stream()
+    assert any(frame.startswith('data: ') for frame in frames)
+    assert frames[-1].startswith('done: ') and len(paid) == 2 and paid[0] == paid[1]
+    assert summary.fresh(read()) and read()['status'] == 'in_progress'
+    assert lease.get().to_dict()['snapshot_inputs'] == spent
+    assert len(await stream()) == 1 and len(paid) == 2
+    assert len(admitted) == 4
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('new_source', [False, True])
+async def test_foreground_stream_keeps_shared_lease_and_new_recording_commit_fence(seeded, monkeypatch, new_source):
+    from fastapi import HTTPException
+
+    client, uid, cid, _, coll = seeded
+    read = lambda: store.decode_row(uid, coll.document(cid).get())
+    entered, resume = Event(), Event()
+    paid = []
+
+    def write(*a):
+        paid.append(cid)
+        entered.set()
+        assert resume.wait(15)
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'One foreground writer.'}]}
+
+    async def collect():
+        return [frame async for frame in summary.stream(uid, read())]
+
+    monkeypatch.setattr(summary, 'write', write)
+    request = asyncio.create_task(collect())
+    try:
+        assert await asyncio.to_thread(entered.wait, 10)
+        with pytest.raises(HTTPException) as error:
+            await summary.prepare(uid, read())
+        assert error.value.status_code == 409
+        assert await quiet.snapshot(uid, read()) == 'busy'
+        if new_source:
+            coll.document('resumed-recording').set({'recording': True, 'v3_pending': True})
+    finally:
+        resume.set()
+        frames = await request
+    assert paid == [cid]
+    assert summary.fresh(read()) is (not new_source)
+    assert any(frame.startswith('error: ') for frame in frames) is new_source
 
 
 @pytest.mark.parametrize('gap_seconds', [300, 900])

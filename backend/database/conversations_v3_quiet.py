@@ -1,8 +1,8 @@
-"""Durable quiet obligations and a paid-once permit shared with on-open notes.
+"""Durable quiet obligations and automatic paid-once permits on the summary lease.
 
 The permit lives on the existing summary lease, separate from full-processing
-attempts. A failed/cancelled paid call is not automatically bought again; final
-processing retains its own budget. Dispatch and lease contention can retry.
+attempts. A failed/cancelled paid call is not automatically bought again;
+foreground requests and final processing retain their existing admission.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -153,7 +153,7 @@ def reserve(uid, cid, token, revision, *, quiet=False, firestore_client=None):
             return None
         key = summary_input.fingerprint(row)
         spent = list(lease.get('snapshot_inputs') or [])
-        if key in spent or len(spent) >= store.LIMIT:
+        if quiet and (key in spent or len(spent) >= store.LIMIT):
             return None
         if snapshot.update_time != revision:
             if quiet:
@@ -166,9 +166,10 @@ def reserve(uid, cid, token, revision, *, quiet=False, firestore_client=None):
         sources = sources_current(tx, client, uid, row, quiet=quiet) if row.get('v3_derived') else {}
         if sources is None:
             return None
-        # Do not evict spent permits: even a correction back to old text cannot
-        # buy it again. Refuse further speculation if the bounded ledger is full.
-        tx.update(held, {'snapshot_inputs': [*spent, key]})
+        # Any paid request suppresses automatic rebuy. Explicit foreground retry
+        # keeps its normal admission even when the automatic ledger is full.
+        if key not in spent and len(spent) < store.LIMIT:
+            tx.update(held, {'snapshot_inputs': [*spent, key]})
         return {'row': row, 'revision': snapshot.update_time, 'sources': sources, 'input_hash': key}
 
     return begin(client.transaction())

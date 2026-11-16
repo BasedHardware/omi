@@ -48,10 +48,11 @@ webhooks or lifecycle completion run for this snapshot. Source revisions and pen
 transcript tails fence late writes even before the builder catches up resumed speech.
 The existing OIDC task endpoint/queue carries purpose/content-specific quiet jobs;
 durable source markers survive dispatch failure for the ordinary sweeper.
-There is one speculative paid attempt per exact content/window, shared with on-open
-requests, with a bounded 128-entry spent-permit ledger on the summary lease. Failed
-paid calls await normal final processing; only dispatch/ownership/read retries are
-automatic. Seals and duplicate deliveries do not buy another call for unchanged input.
+There is one automatic speculative paid attempt per exact content/window, tracked
+in a bounded 128-entry spent-permit ledger on the summary lease. Any paid foreground
+attempt also suppresses automatic rebuy; explicit on-open and Try Again requests
+retain normal compute admission and may retry failed notes. Only dispatch/ownership/read
+retries are automatic. Seals and duplicate deliveries do not buy another call for unchanged input.
 Final processing recomputes notes and performs normal derived effects; provisional
 notes do not authorize final reuse. This costs one additional final notes call when
 an early snapshot succeeded. Thirty seconds is the quiet dispatch target, not a
