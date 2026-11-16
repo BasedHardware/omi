@@ -221,7 +221,13 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                 row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
             if ended and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing'):
                 if not row.get('is_locked') and (transcription_failed or window.get('_outline_failed')):
-                    row.update(writers.failure_patch(reason='transcription' if transcription_failed else 'outline'))
+                    row.update(
+                        await run_blocking(
+                            db_executor,
+                            writers.failure_patch,
+                            reason='transcription' if transcription_failed else 'outline',
+                        )
+                    )
             rows.append(row)
         await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         await run_blocking(

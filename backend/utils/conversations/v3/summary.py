@@ -152,7 +152,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
                     cid,
                     token,
                     row.get('sync_content_revision'),
-                    content_hash=writers.processing_hash(row),
+                    content_hash=await run_blocking(db_executor, writers.processing_hash, row),
                 )
             except store.Conflict:
                 pass  # A newer owner/content revision keeps its own presentation.
