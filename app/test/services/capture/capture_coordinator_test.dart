@@ -157,7 +157,7 @@ class HarnessPorts {
           socket = true;
           opens++;
         },
-        closeSocket: (reason) async {
+        closeSocket: (reason, {bool userStop = false}) async {
           await _record('socket:close');
           socket = false;
         },

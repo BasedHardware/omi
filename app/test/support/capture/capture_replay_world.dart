@@ -98,6 +98,9 @@ class ScriptedPureSocket implements IPureSocket {
   final List<List<int>> sentBinary = <List<int>>[];
   final List<String> sentText = <String>[];
 
+  /// Every send and local close in order: the text itself, `<binary>` or `<close>`.
+  final List<String> wire = <String>[];
+
   @override
   PureSocketStatus get status => _status;
 
@@ -128,6 +131,7 @@ class ScriptedPureSocket implements IPureSocket {
   @override
   Future stop() async {
     closeCalls++;
+    wire.add('<close>');
     _status = PureSocketStatus.notConnected;
     return;
   }
@@ -136,8 +140,10 @@ class ScriptedPureSocket implements IPureSocket {
   void send(dynamic message) {
     if (message is List<int>) {
       sentBinary.add(message);
+      wire.add('<binary>');
     } else {
       sentText.add(message.toString());
+      wire.add(message.toString());
     }
   }
 
