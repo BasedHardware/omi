@@ -20,6 +20,19 @@ No audio, URL, user or job identity enters the metric. The two routine STT
 `*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
 outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
 
+## Recording-derived conversations v3
+
+`CONVERSATIONS_V3_STAGE` defaults to `beta` (`cohort`, `beta`, `all`);
+`CONVERSATIONS_V3=off` stops marking new pendant captures. Beta admission uses
+the existing 14-day `episodes:client_seen:{uid}` marker, refreshed by beta calls
+to episode routes and `/v1/conversations/live`. Admission is per owner.
+Recording documents (`recording: true`) retain capture IDs, socket payload shape,
+WAL/finalization semantics and audio custody. Their `v3_pending` obligation drives
+one named task per owner-minute. Derived conversations own copied transcript
+windows, stable titles and recording-file pieces. See the
+[v3 runbook](./runbooks/conversations-v3.md) for query budgets, queue identity,
+summary leases, counters, rollout, rollback and deletion criteria.
+
 ## Pre-recorded Modulate credit-refusal failover
 
 `PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared
@@ -10178,3 +10191,15 @@ opens or joins the successor under the existing recorded-timeline fence. Closed
 episodes compose finished members while an open live capture remains excluded;
 finish/read recovery includes it again. No custody or billing contract changes.
 See [the change note](./listen_pusher_pipeline/changes/2026-11-16-live-member-close.md).
+
+### Batch vendor overflow priorities
+
+`BATCH_VENDOR_OVERFLOW_PRIORITIES` is a comma-separated list of `fresh`, `recent`, and `deep`,
+read at each admission. Unset, empty, or malformed lists allow only `fresh`; FRESH is always
+included. `fresh,recent` also permits RECENT units to overflow from GPU to the route table's
+next healthy primary vendor, inside the existing vendor-routing cohort with legacy sync draining
+or dark. Each priority must independently pass the backlog age and admissible-ready count gates.
+`BATCH_VENDOR_OVERFLOW_ENABLED` remains the kill switch. The legacy-sync capacity fallback remains
+FRESH-only. Saturation gauges retain their names and add the bounded `priority=fresh|recent|deep`
+label. No production setting is changed; expanding the list requires a separate spend decision.
+See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-when-the-gpu-floor-is-full).

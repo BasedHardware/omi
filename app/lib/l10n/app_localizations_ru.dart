@@ -15524,6 +15524,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Список обработки изменился. Проверьте его и попробуйте снова.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Вы использовали $minutes минут этого месяца';
   }
@@ -15599,4 +15603,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Позже по Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишем ваше резюме…';
 }

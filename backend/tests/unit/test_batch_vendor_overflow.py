@@ -1,4 +1,4 @@
-"""GPU-capacity overflow: fresh units start on a vendor while the GPU ring is past its SLO."""
+"""GPU-capacity overflow: configured priorities start on a vendor while the GPU ring is past its SLO."""
 
 import copy
 import json
@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import Priority
-from config.batch_pipeline_vendor_overflow import thresholds
+from config.batch_pipeline_vendor_overflow import overflow_priorities, thresholds
 from config.policy.batch import cohort_bucket
 from database import batch_pipeline_store as bps
 from tests.unit.test_batch_language_eligibility import admitted, upload
@@ -79,7 +79,7 @@ def _clean(monkeypatch):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(rs, '_tables', rs._TableCache())
     monkeypatch.setattr(rs, '_health', c.AlwaysHealthy())
-    monkeypatch.setattr(gpu_overflow, '_overflow', None)
+    monkeypatch.setattr(gpu_overflow, '_overflows', {})
 
 
 def _cohort(monkeypatch, table=TABLE):
@@ -198,6 +198,35 @@ def test_thresholds(monkeypatch, enter, expected):
     assert thresholds() == expected
 
 
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        (None, {Priority.FRESH}),
+        ('', {Priority.FRESH}),
+        ('   ', {Priority.FRESH}),
+        ('fresh', {Priority.FRESH}),
+        ('fresh,recent', {Priority.FRESH, Priority.RECENT}),
+        ('recent', {Priority.FRESH, Priority.RECENT}),
+        ('deep', {Priority.FRESH, Priority.DEEP}),
+        (' FRESH , recent,DEEP ', set(Priority)),
+        ('fresh,recent,recent', {Priority.FRESH, Priority.RECENT}),
+        ('fresh,recent,unknown', {Priority.FRESH}),
+        ('fresh,,recent', {Priority.FRESH}),
+        ('recent,', {Priority.FRESH}),
+        (',', {Priority.FRESH}),
+        ('1', {Priority.FRESH}),
+        ('fresh recent', {Priority.FRESH}),
+    ],
+)
+def test_overflow_priorities_fail_closed_to_fresh_and_read_env_per_call(monkeypatch, raw, expected):
+    assert overflow_priorities() == frozenset({int(Priority.FRESH)})
+    if raw is not None:
+        monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_PRIORITIES', raw)
+    actual = overflow_priorities()
+    assert isinstance(actual, frozenset)
+    assert actual == frozenset(int(priority) for priority in expected)
+
+
 # --- the backlog signal ----------------------------------------------------------------------------
 
 BUSY = 1000  # admissible fresh units waiting: above the default 300 gate
@@ -242,7 +271,7 @@ def test_hysteresis_enters_at_enter_and_leaves_below_exit():
     ages = [1199.0, 1200.0, 700.0, 600.0, 599.0, None]
     overflow, _ = _overflow([(age, BUSY) for age in ages], clock)
     assert _answers(overflow, clock, 6) == [False, True, True, True, False, False]
-    assert m.GPU_OVERFLOW_ACTIVE._value.get() == 0
+    assert m.GPU_OVERFLOW_ACTIVE.labels(priority='fresh')._value.get() == 0
 
 
 def test_stuck_heads_are_not_a_backlog():
@@ -270,7 +299,7 @@ def test_one_read_per_refresh_window():
     overflow, samples = _overflow([(1500.0, BUSY), (0.0, 0)], clock)
     assert [overflow.saturated() for _ in range(50)] == [True] * 50
     assert len(samples) == 1
-    assert m.GPU_BACKLOG_AGE._value.get() == 1500.0
+    assert m.GPU_BACKLOG_AGE.labels(priority='fresh')._value.get() == 1500.0
 
 
 def test_a_failed_read_answers_not_saturated():
@@ -312,15 +341,80 @@ def test_store_binding_reads_the_fresh_priority_once_per_process(monkeypatch):
 
     monkeypatch.setattr(gpu_overflow, '_submit', lambda fn: fn())
     assert gpu_overflow.saturated(Store()) is True
-    bound = gpu_overflow._overflow
-    assert gpu_overflow.saturated(Store()) is True and gpu_overflow._overflow is bound
+    bound = gpu_overflow._overflows[Priority.FRESH]
+    assert gpu_overflow.saturated(Store()) is True and gpu_overflow._overflows[Priority.FRESH] is bound
     fresh = int(Priority.FRESH)
     assert asked == [('oldest', fresh), ('count', fresh)]
 
 
 def test_store_without_the_reads_never_saturates():
     assert gpu_overflow.saturated(SimpleNamespace(ready_for_capacity=lambda p, n: BUSY)) is False
-    assert gpu_overflow._overflow is None
+    assert gpu_overflow._overflows == {}
+
+
+def test_priority_samplers_have_independent_refresh_hysteresis_and_failures(monkeypatch):
+    clock = Clock()
+    reads = []
+    readings = {Priority.FRESH: (1500.0, BUSY), Priority.RECENT: (700.0, BUSY)}
+    pending = []
+
+    class Store:
+        def oldest_admissible_ready(self, priority, now):
+            reads.append(('oldest', priority, now))
+            reading = readings[priority]
+            if isinstance(reading, Exception):
+                raise reading
+            return now - reading[0]
+
+        def ready_for_capacity(self, priority, now):
+            reads.append(('count', priority, now))
+            return readings[priority][1]
+
+    monkeypatch.setattr(gpu_overflow, '_submit', pending.append)
+    store = Store()
+    assert gpu_overflow.saturated(store) is False
+    fresh = gpu_overflow._overflows[Priority.FRESH]
+    fresh._clock = fresh._monotonic = clock
+    pending.pop()()
+    assert gpu_overflow.saturated(store) is True
+    assert gpu_overflow.saturated(store, Priority.RECENT) is False
+    recent = gpu_overflow._overflows[Priority.RECENT]
+    recent._clock = recent._monotonic = clock
+    pending.pop()()
+    assert fresh is not recent
+    assert gpu_overflow.saturated(store, Priority.RECENT) is False  # cannot inherit FRESH's hysteresis
+    assert len(reads) == 4 and not pending
+    clock.now += gpu_overflow.REFRESH_SECONDS
+    readings[Priority.FRESH] = RuntimeError('unavailable')
+    readings[Priority.RECENT] = (1500.0, BUSY)
+    assert gpu_overflow.saturated(store) is True  # serves its own cache during refresh
+    assert gpu_overflow.saturated(store, Priority.RECENT) is False
+    assert len(pending) == 2  # one in-flight sample per priority
+    for refresh in pending[:]:
+        refresh()
+    pending.clear()
+    assert gpu_overflow.saturated(store) is False
+    assert gpu_overflow.saturated(store, Priority.RECENT) is True
+    assert m.GPU_OVERFLOW_ACTIVE.labels(priority='fresh')._value.get() == 0
+    assert m.GPU_OVERFLOW_ACTIVE.labels(priority='recent')._value.get() == 1
+    assert m.GPU_BACKLOG_AGE.labels(priority='recent')._value.get() == 1500.0
+    assert [priority for kind, priority, _ in reads if kind == 'oldest'] == [
+        Priority.FRESH,
+        Priority.RECENT,
+        Priority.FRESH,
+        Priority.RECENT,
+    ]
+
+
+@pytest.mark.parametrize('priority', [-1, 3, 'unknown', None])
+def test_invalid_priority_never_samples_or_creates_metrics(monkeypatch, priority):
+    monkeypatch.setattr(gpu_overflow, '_submit', lambda fn: pytest.fail('invalid priority sampled'))
+    assert gpu_overflow.saturated(SimpleNamespace(), priority) is False
+    assert gpu_overflow._overflows == {}
+    before = set(m.GPU_OVERFLOW_ACTIVE._metrics)
+    m.gpu_overflow(True, 1500.0, priority)
+    assert set(m.GPU_OVERFLOW_ACTIVE._metrics) == before
+    assert before <= {('fresh',), ('recent',), ('deep',)}
 
 
 # --- the store read --------------------------------------------------------------------------------
@@ -427,15 +521,83 @@ async def test_intake_offers_overflow_to_fresh_units_only(monkeypatch, priority,
     reads = []
     monkeypatch.setattr(intake, 'select_route', spy)
     monkeypatch.setattr(intake, 'priority_for', lambda lane, age: priority)
-    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda store: reads.append(store) or True)
+    monkeypatch.setattr(
+        intake.gpu_overflow,
+        'saturated',
+        lambda store, sampled_priority: reads.append((store, sampled_priority)) or True,
+    )
     response, staged, _ = await upload(monkeypatch, user_language='en', single=True, mode='draining')
     assert admitted(response, staged)  # draining: no legacy to fall back to
     if offered:
         assert seen['gpu_saturated']() is True and len(reads) == 1
+        assert reads[0][1] == int(priority)
         monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_ENABLED', 'false')
         assert seen['gpu_saturated']() is False and len(reads) == 1  # the switch is checked first
     else:
         assert seen['gpu_saturated'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'raw,priority,saturated,kill,expected',
+    [
+        (None, Priority.RECENT, True, False, 'gpu'),
+        ('fresh,recent', Priority.RECENT, True, False, 'modulate'),
+        ('fresh,recent', Priority.RECENT, False, False, 'gpu'),
+        ('fresh,recent', Priority.RECENT, True, True, 'gpu'),
+        ('fresh,recent', Priority.DEEP, True, False, 'gpu'),
+        ('fresh,recent,broken', Priority.RECENT, True, False, 'gpu'),
+        ('fresh,,recent', Priority.RECENT, True, False, 'gpu'),
+        ('fresh,recent,deep', Priority.DEEP, True, False, 'modulate'),
+        (None, Priority.FRESH, True, False, 'modulate'),
+    ],
+)
+async def test_intake_routes_only_configured_priorities_using_their_own_saturation(
+    monkeypatch, raw, priority, saturated, kill, expected
+):
+    _cohort(monkeypatch)
+    if raw is not None:
+        monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_PRIORITIES', raw)
+    if kill:
+        monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_ENABLED', 'false')
+    monkeypatch.setattr(intake, 'priority_for', lambda lane, age: priority)
+    asked = []
+
+    def sample(store, sampled_priority):
+        asked.append(sampled_priority)
+        # Other priorities are saturated even when this unit's priority is not.
+        return saturated if sampled_priority == int(priority) else True
+
+    monkeypatch.setattr(intake.gpu_overflow, 'saturated', sample)
+    decisions = []
+    select = intake.select_route
+
+    def spy(*args, **kwargs):
+        decision = select(*args, **kwargs)
+        decisions.append(decision)
+        return decision
+
+    monkeypatch.setattr(intake, 'select_route', spy)
+    response, staged, _ = await upload(
+        monkeypatch, user_language='en', single=True, mode='draining', batch_percent=100.0
+    )
+    assert admitted(response, staged)
+    assert len(decisions) == 1
+    assert decisions[0].selected == expected
+    assert decisions[0].route.stt_route == ('parakeet' if expected == 'gpu' else 'provider')
+    assert asked == ([int(priority)] if priority in overflow_priorities() and not kill else [])
+
+
+@pytest.mark.asyncio
+async def test_enabled_recent_overflow_does_not_expand_legacy_capacity_fallback(monkeypatch):
+    _cohort(monkeypatch)
+    monkeypatch.setenv('BATCH_VENDOR_OVERFLOW_PRIORITIES', 'fresh,recent')
+    monkeypatch.setattr(intake, 'priority_for', lambda lane, age: Priority.RECENT)
+    monkeypatch.setattr(intake.gpu_overflow, 'saturated', lambda *args: pytest.fail('legacy RECENT sampled'))
+    recorded = _fallbacks(monkeypatch)
+    response, staged, _ = await upload(monkeypatch, user_language='en', single=True, mode='on')
+    assert admitted(response, staged)
+    assert all(labels['reason'] != 'capacity_full' for labels in recorded)
 
 
 def test_the_overflow_audio_counter_keeps_its_contract_name():

@@ -15482,6 +15482,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'या महिन्याची $minutes मिनिटे वापरली गेली आहेत';
   }
@@ -15557,4 +15561,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'नंतर Wi-Fi वर';
+
+  @override
+  String get conversationWritingSummary => 'तुमचा सारांश लिहित आहे…';
 }

@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "Maksat nyt kuukausittain",
     "monthlySwitchDoneBody": "{price} maksettu tänään. Uusiutuu kuukausittain.",
     "processingDeleteScopeChanged": "Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Olet käyttänyt tämän kuun {minutes} minuuttia",
     "freeCapBody": "Omi tallentaa yhä. Valitse, miten litterointi jatkuu.",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "Ääni pysyy puhelimessasi",
     "onDeviceModelDownloadSize": "{size} Mt:n lataus",
     "downloadNow": "Lataa nyt",
-    "onWifiLater": "Myöhemmin Wi-Fillä"
+    "onWifiLater": "Myöhemmin Wi-Fillä",
+    "conversationWritingSummary": "Kirjoitetaan yhteenvetoasi…"
 }

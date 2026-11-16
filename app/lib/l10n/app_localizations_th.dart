@@ -15400,6 +15400,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'คุณใช้ $minutes นาทีของเดือนนี้ครบแล้ว';
   }
@@ -15475,4 +15479,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
 }

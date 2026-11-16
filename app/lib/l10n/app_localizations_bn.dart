@@ -15469,6 +15469,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'এই মাসের $minutes মিনিট ব্যবহার হয়ে গেছে';
   }
@@ -15544,4 +15548,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onWifiLater => 'পরে Wi-Fi-তে';
+
+  @override
+  String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
 }

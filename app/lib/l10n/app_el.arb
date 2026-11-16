@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "Είστε πλέον σε μηνιαία χρέωση",
     "monthlySwitchDoneBody": "Πληρώθηκαν {price} σήμερα. Ανανεώνεται κάθε μήνα.",
     "processingDeleteScopeChanged": "Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Χρησιμοποιήσατε τα {minutes} λεπτά αυτού του μήνα",
     "freeCapBody": "Το Omi συνεχίζει την εγγραφή. Επιλέξτε πώς θα συνεχιστεί η μεταγραφή.",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "Ο ήχος μένει στο τηλέφωνό σας",
     "onDeviceModelDownloadSize": "Λήψη {size} MB",
     "downloadNow": "Λήψη τώρα",
-    "onWifiLater": "Αργότερα μέσω Wi-Fi"
+    "onWifiLater": "Αργότερα μέσω Wi-Fi",
+    "conversationWritingSummary": "Γράφεται η σύνοψή σας…"
 }

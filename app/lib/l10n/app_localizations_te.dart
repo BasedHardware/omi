@@ -15537,6 +15537,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'ఈ నెల $minutes నిమిషాలు వాడేశారు';
   }
@@ -15612,4 +15616,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onWifiLater => 'తర్వాత Wi-Fiలో';
+
+  @override
+  String get conversationWritingSummary => 'మీ సారాంశం రాస్తున్నాం…';
 }

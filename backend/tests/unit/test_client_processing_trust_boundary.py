@@ -766,6 +766,25 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # projection-family — it must survive the integration redactor so
         # clients receive it; the model serializer omits it when unset.
         'home_step',
+        # Recordings and conversations (v3): written only by the server-side builder,
+        # planner and processing settle (utils/conversations/v3/), never client-authored.
+        # NOT projection-family: clients need them (Home visibility and tile state).
+        'backfilled',
+        'home_hidden',
+        'home_hidden_reason',
+        'kind',
+        'manual_end',
+        'outline_kind',
+        'recording',
+        'recording_pieces',
+        'summary_covers_through',
+        'tile_state',
+        'title_locked',
+        'v3_derived',
+        'v3_pending',
+        'v3_process_pending',
+        'v3_recording_ids',
+        'v3_rewrites',
     }
 )
 

@@ -27147,6 +27147,12 @@ abstract class AppLocalizations {
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
 
+  /// No description provided for @syncTooOldExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
+  String get syncTooOldExplanation;
+
   /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
   ///
   /// In en, this message translates to:
@@ -27284,6 +27290,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On Wi-Fi Later'**
   String get onWifiLater;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

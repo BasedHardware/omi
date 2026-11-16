@@ -15578,6 +15578,10 @@ class AppLocalizationsTa extends AppLocalizations {
       'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'இந்த மாதத்தின் $minutes நிமிடங்களைப் பயன்படுத்திவிட்டீர்கள்';
   }
@@ -15653,4 +15657,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onWifiLater => 'பின்னர் Wi-Fi இல்';
+
+  @override
+  String get conversationWritingSummary => 'உங்கள் சுருக்கம் எழுதப்படுகிறது…';
 }

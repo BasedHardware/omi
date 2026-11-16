@@ -4695,6 +4695,7 @@
     "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan.",
     "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Anda sudah memakai {minutes} menit bulan ini",
     "freeCapBody": "Omi masih merekam. Pilih cara melanjutkan transkripsi.",
     "omiProPlanName": "Omi Pro",
@@ -4717,5 +4718,6 @@
     "audioStaysOnPhone": "Audio tetap di ponsel Anda",
     "onDeviceModelDownloadSize": "Unduhan {size} MB",
     "downloadNow": "Unduh Sekarang",
-    "onWifiLater": "Nanti via Wi-Fi"
+    "onWifiLater": "Nanti via Wi-Fi",
+    "conversationWritingSummary": "Menulis ringkasan Anda…"
 }

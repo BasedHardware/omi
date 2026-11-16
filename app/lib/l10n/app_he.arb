@@ -12217,6 +12217,7 @@
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
     "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
     "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "ניצלת את {minutes} הדקות של החודש",
     "freeCapBody": "Omi ממשיך להקליט. בחרו איך להמשיך בתמלול.",
     "omiProPlanName": "Omi Pro",
@@ -12239,5 +12240,6 @@
     "audioStaysOnPhone": "השמע נשאר בטלפון שלך",
     "onDeviceModelDownloadSize": "הורדה של {size} MB",
     "downloadNow": "הורדה עכשיו",
-    "onWifiLater": "מאוחר יותר ב-Wi-Fi"
+    "onWifiLater": "מאוחר יותר ב-Wi-Fi",
+    "conversationWritingSummary": "כותבים את הסיכום שלך…"
 }

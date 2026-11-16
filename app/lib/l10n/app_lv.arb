@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
     "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi.",
     "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Esat izmantojis šī mēneša {minutes} minūtes",
     "freeCapBody": "Omi joprojām ieraksta. Izvēlieties, kā turpināt transkribēšanu.",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "Audio paliek jūsu tālrunī",
     "onDeviceModelDownloadSize": "{size} MB lejupielāde",
     "downloadNow": "Lejupielādēt tagad",
-    "onWifiLater": "Vēlāk ar Wi-Fi"
+    "onWifiLater": "Vēlāk ar Wi-Fi",
+    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…"
 }

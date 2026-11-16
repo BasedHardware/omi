@@ -15589,6 +15589,10 @@ class AppLocalizationsDe extends AppLocalizations {
       'Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Du hast die $minutes Minuten dieses Monats verbraucht';
   }
@@ -15664,4 +15668,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Später über WLAN';
+
+  @override
+  String get conversationWritingSummary => 'Deine Zusammenfassung wird geschrieben…';
 }

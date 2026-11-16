@@ -15479,6 +15479,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Olet käyttänyt tämän kuun $minutes minuuttia';
   }
@@ -15554,4 +15558,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
 }

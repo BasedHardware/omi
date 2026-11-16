@@ -15533,6 +15533,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Felhasználtad a havi $minutes percet';
   }
@@ -15608,4 +15612,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Később Wi-Fin';
+
+  @override
+  String get conversationWritingSummary => 'Összefoglaló írása…';
 }

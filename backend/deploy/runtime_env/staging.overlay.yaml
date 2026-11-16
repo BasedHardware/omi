@@ -129,6 +129,7 @@ cloud_run:
     enrichment: staging-enrichment
     enrichment-fresh: staging-enrichment-fresh
     provider-stt: staging-provider-stt
+    conversations-v3: staging-conversations-v3
     conversation-finalization: staging-conversation-finalization
     audio-merge: staging-audio-merge
     account-deletion: staging-account-deletion

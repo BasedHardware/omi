@@ -15576,6 +15576,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Χρησιμοποιήσατε τα $minutes λεπτά αυτού του μήνα';
   }
@@ -15651,4 +15655,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Αργότερα μέσω Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Γράφεται η σύνοψή σας…';
 }

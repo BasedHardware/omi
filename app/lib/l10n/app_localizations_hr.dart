@@ -15511,6 +15511,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Iskoristili ste $minutes minuta za ovaj mjesec';
   }
@@ -15586,4 +15590,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Kasnije na Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš sažetak…';
 }

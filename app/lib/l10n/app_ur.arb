@@ -12217,6 +12217,7 @@
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
     "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "آپ نے اس مہینے کے {minutes} منٹ استعمال کر لیے ہیں",
     "freeCapBody": "Omi اب بھی ریکارڈ کر رہا ہے۔ منتخب کریں کہ ٹرانسکرپشن کیسے جاری رکھیں۔",
     "omiProPlanName": "Omi Pro",
@@ -12239,5 +12240,6 @@
     "audioStaysOnPhone": "آڈیو آپ کے فون پر ہی رہتا ہے",
     "onDeviceModelDownloadSize": "{size} MB ڈاؤن لوڈ",
     "downloadNow": "ابھی ڈاؤن لوڈ کریں",
-    "onWifiLater": "بعد میں Wi-Fi پر"
+    "onWifiLater": "بعد میں Wi-Fi پر",
+    "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…"
 }

@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
     "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
     "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bạn đã dùng hết {minutes} phút của tháng này",
     "freeCapBody": "Omi vẫn đang ghi âm. Chọn cách tiếp tục chép lời.",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "Âm thanh ở lại trên điện thoại",
     "onDeviceModelDownloadSize": "Tải xuống {size} MB",
     "downloadNow": "Tải ngay",
-    "onWifiLater": "Sau, qua Wi-Fi"
+    "onWifiLater": "Sau, qua Wi-Fi",
+    "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…"
 }

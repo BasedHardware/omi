@@ -15246,6 +15246,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return '今月の$minutes分を使い切りました';
   }
@@ -15321,4 +15325,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onWifiLater => '後で Wi-Fi で';
+
+  @override
+  String get conversationWritingSummary => '要約を作成しています…';
 }

@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "ตอนนี้คุณจ่ายแบบรายเดือนแล้ว",
     "monthlySwitchDoneBody": "ชำระ {price} แล้ววันนี้ ต่ออายุทุกเดือน",
     "processingDeleteScopeChanged": "รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "คุณใช้ {minutes} นาทีของเดือนนี้ครบแล้ว",
     "freeCapBody": "Omi ยังบันทึกอยู่ เลือกวิธีถอดเสียงต่อ",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "เสียงอยู่ในโทรศัพท์ของคุณ",
     "onDeviceModelDownloadSize": "ดาวน์โหลด {size} MB",
     "downloadNow": "ดาวน์โหลดเลย",
-    "onWifiLater": "ภายหลังผ่าน Wi-Fi"
+    "onWifiLater": "ภายหลังผ่าน Wi-Fi",
+    "conversationWritingSummary": "กำลังเขียนสรุปของคุณ…"
 }

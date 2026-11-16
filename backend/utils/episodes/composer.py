@@ -25,6 +25,7 @@ deferred: it keeps the first member's title and composes when its page is first 
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import asyncio
 import hashlib
@@ -840,7 +841,9 @@ def _members(
     members = []
     awaiting_transcript = False
     for cid in _retained_ids(episode):
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         if revisions is not None:
             # get_conversation carries the snapshot's canonical update_time in
             # updated_at, including after decoding and Home projection.
@@ -1025,7 +1028,9 @@ def _deferred_within_grace(episode: Mapping[str, Any], *, now: Optional[datetime
 def _first_member_title(uid: str, episode: Mapping[str, Any], c: Any) -> str:
     """The first retained, visible member's own summary title: the row's title until composed."""
     for cid in _retained_ids(episode):
-        row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=getattr(c, 'firestore_client', None)
+        )
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
             continue
         title = str((row.get('structured') or {}).get('title') or '').strip()
@@ -1197,6 +1202,10 @@ def _write_single_member(
 def _compose(
     uid: str, episode_id: str, c: Any, *, force: bool, background: bool, service: Any, trigger: str = 'close'
 ) -> str:
+    from utils.conversations.v3.metrics import EPISODE_COMPOSES
+    from config.conversations_v3 import conversations_v3_enabled
+
+    EPISODE_COMPOSES.labels(str(conversations_v3_enabled(uid)).lower()).inc()
     episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
     if not episode:
         return 'no_episode'
@@ -1478,7 +1487,9 @@ def _compose(
     # Waiting members collapse _members to []; check visibility of the original
     # paid set separately so an actual removal/hidden member still cannot leak.
     for cid in member_ids:
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         # Preserve the fingerprint snapshot's revisions; never adopt later reads.
         if (
             not row
@@ -1974,7 +1985,9 @@ def schedule_for_conversation(
                 member = (
                     dict(row)
                     if row is not None
-                    else conversations_db.get_conversation(uid, conversation_id, firestore_client=client)
+                    else read_product_conversation(
+                        conversations_db.get_conversation, uid, conversation_id, firestore_client=client
+                    )
                 )
                 baseline = episode.get('compose_pending_evidence') or episode.get('composed_evidence')
                 # A legacy full hash cannot distinguish new speech from regenerated labels.
@@ -2039,7 +2052,7 @@ def _receive_transcript_receipts(receipts: Sequence[tuple[str, str, Any]]) -> No
         ):
             continue
         try:
-            row = conversations_db.get_conversation(uid, cid, firestore_client=client)
+            row = read_product_conversation(conversations_db.get_conversation, uid, cid, firestore_client=client)
             if row:
                 transcript_projected(uid, row, firestore_client=client)
         except Exception as error:
@@ -2086,7 +2099,9 @@ def owns_closed_notes(uid: str, episode: Mapping[str, Any], conversation_id: str
         for cid in _retained_ids(episode):
             if cid == conversation_id:
                 continue
-            row = conversations_db.get_conversation(uid, cid, firestore_client=getattr(c, 'firestore_client', None))
+            row = read_product_conversation(
+                conversations_db.get_conversation, uid, cid, firestore_client=getattr(c, 'firestore_client', None)
+            )
             if row and not hidden_member(row):
                 due = _transcript_wait_until(row)
                 if str(row.get('status') or '') not in _DONE or (due and due > datetime.now(timezone.utc)):

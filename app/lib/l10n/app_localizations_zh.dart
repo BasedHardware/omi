@@ -15223,6 +15223,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return '本月的 $minutes 分钟已用完';
   }
@@ -15298,4 +15302,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onWifiLater => '稍后通过 Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
 }

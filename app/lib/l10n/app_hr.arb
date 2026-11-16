@@ -12217,6 +12217,7 @@
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
     "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
     "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Iskoristili ste {minutes} minuta za ovaj mjesec",
     "freeCapBody": "Omi i dalje snima. Odaberite kako nastaviti s transkripcijom.",
     "omiProPlanName": "Omi Pro",
@@ -12239,5 +12240,6 @@
     "audioStaysOnPhone": "Zvuk ostaje na vašem telefonu",
     "onDeviceModelDownloadSize": "Preuzimanje {size} MB",
     "downloadNow": "Preuzmi sada",
-    "onWifiLater": "Kasnije na Wi-Fi"
+    "onWifiLater": "Kasnije na Wi-Fi",
+    "conversationWritingSummary": "Pišemo vaš sažetak…"
 }

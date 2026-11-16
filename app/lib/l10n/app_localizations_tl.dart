@@ -15597,6 +15597,10 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Nagamit mo na ang $minutes minuto ngayong buwan';
   }
@@ -15672,4 +15676,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Mamaya sa Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
 }

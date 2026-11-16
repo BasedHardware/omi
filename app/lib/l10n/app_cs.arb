@@ -4660,6 +4660,7 @@
     "monthlySwitchDoneTitle": "Teď platíte měsíčně",
     "monthlySwitchDoneBody": "Dnes zaplaceno {price}. Obnovuje se měsíčně.",
     "processingDeleteScopeChanged": "Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Využili jste letošních měsíčních {minutes} minut",
     "freeCapBody": "Omi stále nahrává. Vyberte, jak pokračovat v přepisu.",
     "omiProPlanName": "Omi Pro",
@@ -4682,5 +4683,6 @@
     "audioStaysOnPhone": "Zvuk zůstává v telefonu",
     "onDeviceModelDownloadSize": "Stažení {size} MB",
     "downloadNow": "Stáhnout nyní",
-    "onWifiLater": "Později přes Wi-Fi"
+    "onWifiLater": "Později přes Wi-Fi",
+    "conversationWritingSummary": "Píšeme vaše shrnutí…"
 }

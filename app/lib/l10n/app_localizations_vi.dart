@@ -15475,6 +15475,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Bạn đã dùng hết $minutes phút của tháng này';
   }
@@ -15550,4 +15554,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sau, qua Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
 }

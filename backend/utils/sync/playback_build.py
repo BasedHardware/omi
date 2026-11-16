@@ -7,6 +7,7 @@ from database import conversations as conversations_db
 from utils.other.storage import get_conversation_playback_manifest, upload_conversation_playback_artifact
 from utils.sync.playback import build_conversation_playback_artifact, conversation_merge_fingerprint
 from utils.sync.repeat_work_metrics import PLAYBACK_LOCK_CONTENTION, PLAYBACK_WRITES
+from utils.conversations.layer import has_recording_pieces
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +21,13 @@ def superseded_while_locked(payload: dict) -> bool:
         conversation = conversations_db.get_conversation_raw_snapshot(
             payload['uid'],
             payload['conversation_id'],
-            field_paths=['audio_files', 'started_at', 'created_at', 'deleted'],
+            field_paths=['audio_files', 'started_at', 'created_at', 'deleted', 'recording_pieces'],
             timeout=1.0,
         )
+        if conversation and has_recording_pieces(conversation):
+            from utils.conversations.v3.audio import playback_snapshot
+
+            conversation = playback_snapshot(payload['uid'], {**conversation, 'id': payload['conversation_id']})
         superseded = bool(
             conversation
             and not conversation.get('deleted')
@@ -48,16 +53,22 @@ def ensure_conversation_artifact(
     fingerprint: str,
     *,
     strict_sources: bool = False,
+    conversation: dict[str, Any] | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
     existing = get_conversation_playback_manifest(uid, conversation_id, fingerprint)
     if existing is not None:
         return existing
-    data, spans = build_conversation_playback_artifact(
-        uid,
-        conversation_id,
-        audio_files,
-        started_at,
-        strict_sources=strict_sources or any(af.get('source_fingerprint') for af in audio_files),
-    )
+    if has_recording_pieces(conversation):
+        from utils.conversations.v3.audio import build_artifact
+
+        data, spans = build_artifact(uid, conversation)
+    else:
+        data, spans = build_conversation_playback_artifact(
+            uid,
+            conversation_id,
+            audio_files,
+            started_at,
+            strict_sources=strict_sources or any(af.get('source_fingerprint') for af in audio_files),
+        )
     upload_conversation_playback_artifact(uid, conversation_id, data, fingerprint, spans=spans)
     return len(data), spans
