@@ -15501,5 +15501,82 @@ class AppLocalizationsBe extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
 
   @override
+  String freeCapTitle(int minutes) {
+    return 'Вы выкарысталі $minutes хвілін гэтага месяца';
+  }
+
+  @override
+  String get freeCapBody => 'Omi працягвае запіс. Выберыце, як працягнуць транскрыпцыю.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неабмежаваная воблачная транскрыпцыя';
+
+  @override
+  String get freeCapProAccuracy => 'Найлепшая дакладнасць';
+
+  @override
+  String get freeCapProWaiting => 'Транскрыбуе вашы запісы, якія чакаюць';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бясплатна. Застаецца ўключаным, пакуль не пераключыце назад.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрыпцыя на гэтым тэлефоне';
+
+  @override
+  String get getPro => 'Атрымаць Pro';
+
+  @override
+  String get unlock => 'Разблакаваць';
+
+  @override
+  String get transcribeWith => 'Транскрыбаваць праз';
+
+  @override
+  String get omiCloud => 'Воблака Omi';
+
+  @override
+  String get thisPhone => 'Гэты тэлефон';
+
+  @override
+  String get onDeviceReady => 'Гатова';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Засталося $left з $limit хв · абнаўленне $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Даступна $minutes хв у воблаку';
+  }
+
+  @override
+  String get switchBack => 'Вярнуцца';
+
+  @override
+  String get setUpThisPhone => 'Наладзіць гэты тэлефон';
+
+  @override
+  String get speechRecognition => 'Распазнаванне маўлення';
+
+  @override
+  String get audioStaysOnPhone => 'Аўдыя застаецца на вашым тэлефоне';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Спампоўка $size МБ';
+  }
+
+  @override
+  String get downloadNow => 'Спампаваць зараз';
+
+  @override
+  String get onWifiLater => 'Пазней праз Wi-Fi';
+
+  @override
   String get conversationWritingSummary => 'Пішам ваша рэзюмэ…';
 }

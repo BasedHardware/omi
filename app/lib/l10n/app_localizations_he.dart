@@ -15353,5 +15353,82 @@ class AppLocalizationsHe extends AppLocalizations {
   String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
 
   @override
+  String freeCapTitle(int minutes) {
+    return 'ניצלת את $minutes הדקות של החודש';
+  }
+
+  @override
+  String get freeCapBody => 'Omi ממשיך להקליט. בחרו איך להמשיך בתמלול.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'תמלול בענן ללא הגבלה';
+
+  @override
+  String get freeCapProAccuracy => 'הדיוק הטוב ביותר';
+
+  @override
+  String get freeCapProWaiting => 'מתמלל את ההקלטות הממתינות שלך';
+
+  @override
+  String get freeCapPhoneSubtitle => 'חינם. נשאר פעיל עד שתחזרו.';
+
+  @override
+  String get transcribingOnThisPhone => 'מתמלל בטלפון הזה';
+
+  @override
+  String get getPro => 'קבלו Pro';
+
+  @override
+  String get unlock => 'ביטול נעילה';
+
+  @override
+  String get transcribeWith => 'תמלול באמצעות';
+
+  @override
+  String get omiCloud => 'הענן של Omi';
+
+  @override
+  String get thisPhone => 'הטלפון הזה';
+
+  @override
+  String get onDeviceReady => 'מוכן';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'נותרו $left מתוך $limit דק׳ · מתאפס ב-$date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes דקות ענן זמינות';
+  }
+
+  @override
+  String get switchBack => 'חזרה';
+
+  @override
+  String get setUpThisPhone => 'הגדרת הטלפון הזה';
+
+  @override
+  String get speechRecognition => 'זיהוי דיבור';
+
+  @override
+  String get audioStaysOnPhone => 'השמע נשאר בטלפון שלך';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'הורדה של $size MB';
+  }
+
+  @override
+  String get downloadNow => 'הורדה עכשיו';
+
+  @override
+  String get onWifiLater => 'מאוחר יותר ב-Wi-Fi';
+
+  @override
   String get conversationWritingSummary => 'כותבים את הסיכום שלך…';
 }

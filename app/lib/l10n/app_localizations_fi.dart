@@ -15470,5 +15470,82 @@ class AppLocalizationsFi extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
 
   @override
+  String freeCapTitle(int minutes) {
+    return 'Olet käyttänyt tämän kuun $minutes minuuttia';
+  }
+
+  @override
+  String get freeCapBody => 'Omi tallentaa yhä. Valitse, miten litterointi jatkuu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Rajaton pilvilitterointi';
+
+  @override
+  String get freeCapProAccuracy => 'Paras tarkkuus';
+
+  @override
+  String get freeCapProWaiting => 'Litteroi odottavat tallenteesi';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ilmainen. Pysyy päällä, kunnes vaihdat takaisin.';
+
+  @override
+  String get transcribingOnThisPhone => 'Litteroidaan tällä puhelimella';
+
+  @override
+  String get getPro => 'Hanki Pro';
+
+  @override
+  String get unlock => 'Avaa';
+
+  @override
+  String get transcribeWith => 'Litteroi käyttäen';
+
+  @override
+  String get omiCloud => 'Omi-pilvi';
+
+  @override
+  String get thisPhone => 'Tämä puhelin';
+
+  @override
+  String get onDeviceReady => 'Valmis';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit min jäljellä · nollautuu $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes pilviminuuttia käytettävissä';
+  }
+
+  @override
+  String get switchBack => 'Vaihda takaisin';
+
+  @override
+  String get setUpThisPhone => 'Määritä tämä puhelin';
+
+  @override
+  String get speechRecognition => 'Puheentunnistus';
+
+  @override
+  String get audioStaysOnPhone => 'Ääni pysyy puhelimessasi';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size Mt:n lataus';
+  }
+
+  @override
+  String get downloadNow => 'Lataa nyt';
+
+  @override
+  String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
   String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
 }

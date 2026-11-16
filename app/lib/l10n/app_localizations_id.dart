@@ -15480,5 +15480,82 @@ class AppLocalizationsId extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
 
   @override
+  String freeCapTitle(int minutes) {
+    return 'Anda sudah memakai $minutes menit bulan ini';
+  }
+
+  @override
+  String get freeCapBody => 'Omi masih merekam. Pilih cara melanjutkan transkripsi.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transkripsi cloud tanpa batas';
+
+  @override
+  String get freeCapProAccuracy => 'Akurasi terbaik';
+
+  @override
+  String get freeCapProWaiting => 'Mentranskripsi rekaman Anda yang menunggu';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Tetap aktif sampai Anda beralih kembali.';
+
+  @override
+  String get transcribingOnThisPhone => 'Mentranskripsi di ponsel ini';
+
+  @override
+  String get getPro => 'Dapatkan Pro';
+
+  @override
+  String get unlock => 'Buka';
+
+  @override
+  String get transcribeWith => 'Transkripsi dengan';
+
+  @override
+  String get omiCloud => 'Cloud Omi';
+
+  @override
+  String get thisPhone => 'Ponsel ini';
+
+  @override
+  String get onDeviceReady => 'Siap';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Sisa $left dari $limit mnt · diatur ulang $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes menit cloud tersedia';
+  }
+
+  @override
+  String get switchBack => 'Beralih Kembali';
+
+  @override
+  String get setUpThisPhone => 'Siapkan ponsel ini';
+
+  @override
+  String get speechRecognition => 'Pengenalan ucapan';
+
+  @override
+  String get audioStaysOnPhone => 'Audio tetap di ponsel Anda';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Unduhan $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Unduh Sekarang';
+
+  @override
+  String get onWifiLater => 'Nanti via Wi-Fi';
+
+  @override
   String get conversationWritingSummary => 'Menulis ringkasan Anda…';
 }
