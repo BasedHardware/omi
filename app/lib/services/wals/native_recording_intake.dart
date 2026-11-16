@@ -197,6 +197,7 @@ class NativeRecordingIntake {
           totalFrames: frames,
           storage: WalStorage.disk,
           status: job == null ? WalStatus.miss : WalStatus.uploaded,
+          uploadedAt: job == null ? 0 : DateTime.now().millisecondsSinceEpoch ~/ 1000,
           filePath: name,
           device: info.marker,
           ownerUid: owner,
