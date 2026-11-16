@@ -28,6 +28,10 @@ final class BleHostApiImpl: BleHostApi {
         bleManager.disconnectPeripheral(uuid: uuid)
     }
 
+    func recoverSilentAudio(uuid: String) throws {
+        // Dart advertises this recovery capability only on Android.
+    }
+
     func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void) {
         // iOS handles bonding automatically at the OS level
         completion(.success(true))

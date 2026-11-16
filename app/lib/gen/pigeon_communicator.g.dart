@@ -1165,6 +1165,26 @@ class BleHostApi {
     ;
   }
 
+  /// Android-only: replace one connected-but-silent GATT link without changing
+  /// the managed-device, saved-reconnect, pairing, or user-disconnect state.
+  Future<void> recoverSilentAudio(String uuid) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.recoverSilentAudio$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uuid]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<bool> requestBond(String uuid) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

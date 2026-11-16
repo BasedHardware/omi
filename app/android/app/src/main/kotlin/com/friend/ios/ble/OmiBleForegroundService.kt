@@ -561,6 +561,19 @@ class OmiBleForegroundService : Service() {
     }
 
     /**
+     * Replace a GATT object that still reports connected but no longer carries
+     * realtime audio. Managed-device persistence, saved reconnect, bonding,
+     * and the user-disconnected flag deliberately remain untouched.
+     */
+    fun recoverSilentAudio(address: String) {
+        val addr = address.uppercase()
+        val managed = managedDevices[addr]
+            ?: throw IllegalStateException("Device is not managed: $addr")
+        Log.w(TAG, "recoverSilentAudio: replacing connected-but-silent GATT for $addr")
+        forceReconnect(addr, managed.requiresBond, "DartSilentAudio")
+    }
+
+    /**
      * Take ownership of a link that is already up and re-emit device-ready so Dart
      * adopts it. Deliberately does not touch the managed-device or user-disconnected
      * prefs — only manageDevice() owns those, so a CompanionDeviceManager appear

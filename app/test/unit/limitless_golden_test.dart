@@ -8,10 +8,15 @@ import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 
-class FakeDeviceTransport extends DeviceTransport {
+class FakeDeviceTransport extends DeviceTransport implements SilentAudioRecovery {
+  FakeDeviceTransport({this.supportsSilentAudioRecovery = false});
+
   final Map<String, StreamController<List<int>>> _rxControllers = {};
   final StreamController<DeviceTransportState> _stateController = StreamController<DeviceTransportState>.broadcast();
   final List<List<int>> writes = [];
+  @override
+  final bool supportsSilentAudioRecovery;
+  int silentAudioRecoveries = 0;
 
   StreamController<List<int>> _controllerFor(String characteristicUuid) {
     return _rxControllers.putIfAbsent(characteristicUuid, () => StreamController<List<int>>.broadcast());
@@ -58,6 +63,11 @@ class FakeDeviceTransport extends DeviceTransport {
 
   @override
   Future<void> dispose() async {}
+
+  @override
+  Future<void> recoverSilentAudio() async {
+    silentAudioRecoveries++;
+  }
 }
 
 List<int> varint(int value) {
@@ -913,6 +923,58 @@ void main() {
       reason: 'the health watchdog may reactivate realtime once but must not loop',
     );
 
+    await connection.disconnect();
+  }, timeout: const Timeout(Duration(seconds: 10)));
+
+  test('Limitless recovers once when realtime audio starts and then stalls', () async {
+    final transport = FakeDeviceTransport(supportsSilentAudioRecovery: true);
+    final device = BtDevice(name: 'Limitless Pendant', id: 'fake-limitless', type: DeviceType.limitless, rssi: -50);
+    final connection = LimitlessDeviceConnection(
+      device,
+      transport,
+      streamHealthWindow: const Duration(milliseconds: 20),
+      setupSettleDelay: const Duration(milliseconds: 10),
+      reconnectSettleDelay: const Duration(milliseconds: 10),
+      storageStatusTimeout: const Duration(milliseconds: 10),
+    );
+    final receivedFrames = <List<int>>[];
+
+    await connection.connect();
+    final audioSubscription = await connection.getBleAudioBytesListener(onAudioBytesReceived: receivedFrames.add);
+    transport.emit(
+      limitlessRxCharUuid,
+      bleWrapper(
+        42,
+        0,
+        1,
+        flashPageBytes(
+          DateTime.now().millisecondsSinceEpoch,
+          [
+            audioWrapper(audioBlobOfFrames([opusFrame(0xb8, 1, 40)]))
+          ],
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    expect(receivedFrames, hasLength(1), reason: 'the regression must begin with real decoded audio');
+
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+
+    final messageNumbers = transport.writes.map((write) => decodeWrapperCommand(write)['messageNumber']).toList();
+    expect(messageNumbers, [6, 8, 21, 8, 21, 21]);
+    expect(
+      messageNumbers.where((messageNumber) => messageNumber == 8).length,
+      2,
+      reason: 'a stalled burst may trigger only one firmware stream reactivation',
+    );
+    expect(transport.silentAudioRecoveries, 1, reason: 'a stalled burst may replace the BLE link only once');
+
+    final writesAfterRecoveryBudget = transport.writes.length;
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    expect(transport.writes, hasLength(writesAfterRecoveryBudget));
+    expect(transport.silentAudioRecoveries, 1, reason: 'an unrecovered link must not enter a reconnect loop');
+
+    await audioSubscription?.cancel();
     await connection.disconnect();
   }, timeout: const Timeout(Duration(seconds: 10)));
 

@@ -1006,6 +1006,9 @@ protocol BleHostApi {
   /// Saved pairing authorizes cold-start retries; false restores legacy policy.
   func configureSavedReconnect(uuid: String, enabled: Bool) throws
   func unmanageDevice(uuid: String) throws
+  /// Android-only: replace one connected-but-silent GATT link without changing
+  /// the managed-device, saved-reconnect, pairing, or user-disconnect state.
+  func recoverSilentAudio(uuid: String) throws
   func requestBond(uuid: String, completion: @escaping (Result<Bool, Error>) -> Void)
   func readCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, completion: @escaping (Result<FlutterStandardTypedData, Error>) -> Void)
   func writeCharacteristic(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, data: FlutterStandardTypedData, completion: @escaping (Result<Void, Error>) -> Void)
@@ -1112,6 +1115,23 @@ class BleHostApiSetup {
       }
     } else {
       unmanageDeviceChannel.setMessageHandler(nil)
+    }
+    /// Android-only: replace one connected-but-silent GATT link without changing
+    /// the managed-device, saved-reconnect, pairing, or user-disconnect state.
+    let recoverSilentAudioChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.recoverSilentAudio\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      recoverSilentAudioChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uuidArg = args[0] as! String
+        do {
+          try api.recoverSilentAudio(uuid: uuidArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      recoverSilentAudioChannel.setMessageHandler(nil)
     }
     let requestBondChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.BleHostApi.requestBond\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

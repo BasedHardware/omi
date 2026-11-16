@@ -184,6 +184,11 @@ abstract class BleHostApi {
   @SwiftFunction('unmanageDevice(uuid:)')
   void unmanageDevice(String uuid);
 
+  /// Android-only: replace one connected-but-silent GATT link without changing
+  /// the managed-device, saved-reconnect, pairing, or user-disconnect state.
+  @SwiftFunction('recoverSilentAudio(uuid:)')
+  void recoverSilentAudio(String uuid);
+
   @async
   @SwiftFunction('requestBond(uuid:)')
   bool requestBond(String uuid);
