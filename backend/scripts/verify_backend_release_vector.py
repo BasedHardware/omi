@@ -24,6 +24,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+if str(Path(__file__).resolve().parents[1]) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.cloud_run_scope import selected
+
 CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 LISTENER_SERVICE = 'backend-listen'
 MIN_CLOUD_RUN_TIMEOUT_SECONDS = 300
@@ -68,6 +72,7 @@ def build_expectation(
     expected_image: str | None = None,
     service_images: Mapping[str, str] | None = None,
     integration_only: bool = False,
+    cloud_run_service: str = 'all',
 ) -> DeploymentExpectation:
     """Derive an immutable desired release vector from deploy-run metadata.
 
@@ -81,6 +86,9 @@ def build_expectation(
     actually deployed; when omitted it falls back to the seven-character prefix
     for local/manual invocations.
     """
+    scope = selected(cloud_run_service)
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        raise ValueError('integration-only selector mismatch')
     normalized_sha = commit_sha.strip().lower()
     if len(normalized_sha) < 7 or any(char not in '0123456789abcdef' for char in normalized_sha):
         raise ValueError('commit SHA must be a hexadecimal value with at least seven characters')
@@ -131,8 +139,7 @@ def build_expectation(
             expected_image.strip() if expected_image is not None else f'gcr.io/{project}/backend:{resolved_short_sha}'
         ),
         revisions={
-            service: f'{service}-{suffix}'
-            for service in (('backend-integration',) if integration_only else CLOUD_RUN_SERVICES)
+            service: f'{service}-{suffix}' for service in (('backend-integration',) if integration_only else scope)
         },
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
@@ -694,8 +701,11 @@ def main() -> int:
     )
     parser.add_argument('--evidence-path', type=Path)
     parser.add_argument('--integration-only', action='store_true')
+    parser.add_argument('--cloud-run-service', choices=('all', *CLOUD_RUN_SERVICES), default='all')
     args = parser.parse_args()
     try:
+        if args.cloud_run_service != 'all' and not args.cloud_run_only:
+            raise ValueError('selected-service vector requires Cloud Run-only mode')
         if args.integration_only and (not args.cloud_run_only or args.environment != 'prod'):
             raise ValueError('integration-only vector requires production Cloud Run-only mode')
         if args.integration_only and any(not item.startswith('backend-integration=') for item in args.service_image):
@@ -715,6 +725,7 @@ def main() -> int:
             expected_image=args.expected_image,
             service_images=dict(item.split('=', 1) for item in args.service_image),
             integration_only=args.integration_only,
+            cloud_run_service=args.cloud_run_service,
         )
         commands = build_read_only_commands(
             expectation,

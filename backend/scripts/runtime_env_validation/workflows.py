@@ -393,7 +393,9 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         '${{ steps.backfill-runtime.outputs.secrets }}',
         rendered_outputs.get('backend_sync_backfill_secrets', ''),
     )
-    # The lifecycle emits the manifest's backfill queue, defaulting to sync-backfill when undeclared.
+    # Static shape only: routing reads the control-source ops queue at runtime.
+    # Execution/selection and differing application/control values are covered
+    # by the real lifecycle-shell regression, not this manifest placeholder.
     backfill_queue = 'sync-backfill'
     for line in rendered_outputs.get('backend_sync_backfill_env_vars', '').splitlines():
         if line.startswith('SYNC_BACKFILL_TASKS_QUEUE=') and line.split('=', 1)[1]:
@@ -404,7 +406,7 @@ def _resolve_step_output_reference(raw_value: object, rendered_outputs: StringMa
         'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backend-sync-backfill.example.invalid/v2/sync-jobs/run'
     )
     resolved = resolved.replace(
-        '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}',
+        '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}',
         sync_backfill_overlay,
     )
     return resolved

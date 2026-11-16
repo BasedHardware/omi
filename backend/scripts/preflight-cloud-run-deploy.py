@@ -72,6 +72,7 @@ def main() -> int:
             env=args.env,
             manifest_path=args.manifest,
             project=args.project,
+            services=services,
         )
         if missing:
             for item in missing:
@@ -407,7 +408,9 @@ def _observed_binding(entry: dict[str, Any]) -> str:
     return 'unsupported value source'
 
 
-def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> list[SecretBinding]:
+def check_rendered_secrets(
+    *, env: str, manifest_path: Path, project: str, services: tuple[str, ...] | None = None
+) -> list[SecretBinding]:
     manifest = render_backend_runtime_env._load_yaml(manifest_path)
     environments = render_backend_runtime_env._as_config_dict(manifest['environments']) or {}
     env_config = render_backend_runtime_env._as_config_dict(environments[env]) or {}
@@ -416,7 +419,9 @@ def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> li
 
     missing: list[SecretBinding] = []
     seen: set[tuple[str, str]] = set()
-    for raw_service_config in service_configs.values():
+    for service_name, raw_service_config in service_configs.items():
+        if services is not None and service_name not in services:
+            continue
         service_config = render_backend_runtime_env._as_config_dict(raw_service_config) or {}
         secret_entries = render_backend_runtime_env._as_config_dict(service_config.get('secrets')) or {}
         for env_name, raw_entry in secret_entries.items():
