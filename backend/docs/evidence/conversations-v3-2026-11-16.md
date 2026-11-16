@@ -24,17 +24,19 @@ contracts: 464 passed across 11 files. Its stream file had four passing assertio
 but failed the CPU guard due to a heavy import inside the test; moving that
 import to collection fixed it: the third run passed all 4 with the timing guard.
 
-Combined latest results for the 384-file inventory above: **9,712 passed,
+Combined latest results for the 384-file inventory above: **9,715 passed,
 13 skipped, 6 deselected, no remaining failed file**. This is a composite of
 file-isolated runs, not a single clean run of all files on the final commit.
-The 74 v3-specific tests include transaction leases, concurrent reconcile,
+The 77 v3-specific tests include transaction leases, concurrent reconcile,
 source revisions, ownership/claims, overlap-preserving deletion, merge retries,
 placement/dedup/cuts/resume/cap, switch behavior, reader guards, short paths,
 summary streaming and title stability. Two completed-recording finalizer replay
 regressions also pass in the 222-test finalization file.
 
 Logs are in the user-requested brief directory under TEST-FINAL-V3.log,
-TEST-FINAL-RETRY-V3.log and TEST-STREAM-FINAL2-V3.log. The inventory is copied
+TEST-FINAL-RETRY-V3.log and TEST-STREAM-FINAL2-V3.log. A final 56-test run of the contract/stream/transaction files also passes,
+including three new released-capture poll binding tests (TEST-LAST-V3.log).
+The inventory is copied
 here so the file selection remains reviewable after scratch cleanup.
 
 ## Contracts and readers
@@ -72,3 +74,27 @@ released builds or web/desktop device acceptance was run. Backfill remains OFF
 and refuses histories over 128 source documents until operator partitioning is
 implemented. Newer shared origin/main commits were not rebased into this lane;
 the lead must integrate Q12-AU/Q12-AV and rerun exact-head CI before rollout.
+
+## Additional verification
+
+The Firestore serving/index profiles, caller witnesses, field-index declarations
+and outside-query contract pass **719 tests** (606 + 41 + 41 + 31; 1 deselected):
+
+```sh
+omi-heavy run -- env BACKEND_PYTEST_WORKERS=2 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/TESTS-FIRESTORE-V3.txt bash backend/test.sh
+```
+
+The focused v3/gateway/finalization rerun passes **315 tests**; the subsequent
+56-test contract/stream/transaction run adds three capture-poll assertions, all
+passing. Exact final typecheck and preflight receipts are in PR-BODY-V3.md:
+
+```sh
+cd backend
+omi-heavy run -- env PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 .venv/bin/python -m pyright -p pyrightconfig.json --pythonpath .venv/bin/python --level error
+cd ..
+omi-heavy run -- env OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/episode-dayparts-brief/PR-BODY-V3.md make preflight
+```
+
+Pinned Dart formatting was not run: the available Flutter is 3.47.9 while this
+repo pins 3.44.5. The commit uses the hook's documented OMI_SKIP_DART_FORMAT=1
+escape only for the new synthetic test. Generated outputs are generator-owned.

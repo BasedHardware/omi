@@ -185,3 +185,47 @@ def test_recordings_never_embed_even_on_completed_replay(monkeypatch, update_onl
     monkeypatch.setattr(process, 'generate_embedding', forbidden)
     assert process.save_structured_vector('synthetic', SimpleNamespace(recording=True), update_only=update_only)
     forbidden.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'statuses,capture', [('in_progress', True), ('completed', False), ('processing,completed', False)]
+)
+def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, capture):
+    from types import SimpleNamespace
+    from utils.episodes import home_membership
+
+    class CapturedRead(BaseException):
+        pass
+
+    bound = {}
+
+    def read(*args, **kwargs):
+        bound.update(kwargs)
+        raise CapturedRead()
+
+    monkeypatch.setattr(routes, 'home_transcription_presentation_gate_enabled', lambda: False)
+    monkeypatch.setattr(routes, 'home_step_projection_enabled', lambda: False)
+    monkeypatch.setattr(home_membership, 'held_for', lambda request: False)
+    monkeypatch.setattr(home_membership, 'live_suppression_for', lambda *a: False)
+    monkeypatch.setattr(routes.ListVersionCheck, 'start', lambda *a: SimpleNamespace(not_modified=None))
+    monkeypatch.setattr(routes, 'list_read_budget_for_request', lambda *a, **kw: None)
+    monkeypatch.setattr(db, 'get_conversations_without_photos', read)
+    with pytest.raises(CapturedRead):
+        routes.get_conversations(
+            uid='synthetic',
+            statuses=statuses,
+            sources=None,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+        )
+    assert bound['include_recordings'] is capture
+    assert bound['capture_only'] is capture
+    if capture:
+        assert db.is_visible_conversation(
+            {'id': 'recording', 'recording': True, 'status': 'in_progress'}, include_recordings=True, capture_only=True
+        )
+        assert not db.is_visible_conversation(
+            {'id': 'derived', 'v3_derived': True, 'status': 'in_progress'}, include_recordings=True, capture_only=True
+        )

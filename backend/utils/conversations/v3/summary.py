@@ -27,9 +27,8 @@ def done(row):
 
 
 def write(uid, row, emit):
-    from utils.conversations.process_conversation import (
-        _get_structured,
-    )  # pyright: ignore[reportPrivateUsage] -- preserve the Q12-owned notes pipeline
+    # Preserve the Q12-owned notes pipeline rather than duplicating its prompt.
+    from utils.conversations.process_conversation import _get_structured  # pyright: ignore[reportPrivateUsage]
     from utils.generated_compute import generated_compute_scope
 
     with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):

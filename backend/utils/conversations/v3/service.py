@@ -208,6 +208,8 @@ def _commit(uid, token, recordings, existing, rows, cache):
 async def drain_processing(uid):
     rows = await run_blocking(db_executor, pending_processing, uid)
     for row in rows:
+        if row is None:
+            continue
         token = await run_blocking(db_executor, store.acquire, uid, 'summary-' + row['id'])
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
