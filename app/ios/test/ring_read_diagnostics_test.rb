@@ -15,11 +15,17 @@ class RingReadDiagnosticsTest < Minitest::Test
             static func main() throws {
                 let state = OmiRingReadDiagnostics()
                 let characteristic = OmiRingReadDiagnostics.characteristic
+                let read = Data([0x11] + Array(repeating: 0, count: 8))
                 let begin = Data([0x05] + Array(repeating: 0, count: 12))
                 let done = Data([0x04] + Array(repeating: 0, count: 9))
                 precondition(state.disconnected("restored", now: 0).isEmpty)
                 state.connected("a")
-                state.received("a", characteristic: characteristic, data: Data([0x11]), now: 1)
+                state.requested("a", characteristic: characteristic, data: read)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: Data([0x11] + Array(repeating: 0, count: 5)))
+                state.received("a", characteristic: characteristic, data: Data([0x05] + Array(repeating: 0, count: 82)), now: 1)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
                 precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
                 state.connected("a")
                 state.received("a", characteristic: "other", data: begin, now: 1)
@@ -27,6 +33,7 @@ class RingReadDiagnosticsTest < Minitest::Test
                 precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
                 state.connected("a")
                 state.connected("b")
+                state.requested("a", characteristic: characteristic, data: read)
                 state.received("a", characteristic: characteristic, data: begin, now: 1)
                 state.received("a", characteristic: characteristic, data: Data([0x04]), now: 2)
                 let snapshot = state.disconnected("a", now: 5.5)
@@ -37,6 +44,7 @@ class RingReadDiagnosticsTest < Minitest::Test
                 state.connected("a")
                 precondition(state.disconnected("a", now: 7)["ring_read_active"] as? Bool == false)
                 for status in [UInt8(0), 1, 2, 6] {
+                    state.requested("a", characteristic: characteristic, data: read)
                     state.received("a", characteristic: characteristic, data: begin, now: 8)
                     var terminal = done
                     terminal[1] = status
@@ -45,7 +53,9 @@ class RingReadDiagnosticsTest < Minitest::Test
                     precondition(stopped["ring_read_active"] as? Bool == false)
                     precondition(stopped["ring_read_age_ms"] == nil)
                 }
+                state.requested("a", characteristic: characteristic, data: read)
                 state.received("a", characteristic: characteristic, data: begin, now: 1)
+                state.requested("a", characteristic: characteristic, data: read)
                 state.received("a", characteristic: characteristic, data: begin, now: 3)
                 precondition(state.disconnected("a", now: 5)["ring_read_age_ms"] as? Int64 == 2000)
                 precondition(OmiRingReadDiagnostics().disconnected("a", now: 5).isEmpty)

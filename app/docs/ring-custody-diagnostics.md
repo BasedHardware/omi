@@ -77,7 +77,10 @@ legacy/unobserved link state and for age when no read is active.
 
 The native BLE boundary observes the storage characteristic's valid READ_BEGIN
 (0x05, at least 13 bytes) and DONE (0x04, at least 10 bytes), matching
-`RingProtocol` framing. Firmware sends DONE for completion, STOP and read errors.
+`RingProtocol` framing. BEGIN is accepted only after this link writes a ring READ
+(0x11 with 9 or 13 bytes); legacy file READs use 6 bytes and never arm it. This
+prevents legacy raw audio/file-list packets from being mistaken for ring frames.
+Firmware sends DONE for completion, STOP and read errors.
 A READ request alone does not mean active; a timeout or failed STOP does not
 prove termination before DONE. A disconnect consumes the state; a new connection
 starts inactive. A restored iOS link without an observed boundary stays unknown.

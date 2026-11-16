@@ -497,6 +497,7 @@ class OmiBleManager private constructor(private val application: Application) {
         }
 
         enqueueCommand {
+            ringReadDiagnostics.requested(addr, gatt, characteristicUuid, data)
             @Suppress("deprecation")
             val success = if (Build.VERSION.SDK_INT >= 33) {
                 val result = gatt.writeCharacteristic(characteristic, data, writeType)

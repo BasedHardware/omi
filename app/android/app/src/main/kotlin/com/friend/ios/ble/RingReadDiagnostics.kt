@@ -9,22 +9,34 @@ internal class RingReadDiagnostics {
         const val CHARACTERISTIC = "30295781-4301-eabd-2904-2849adfeae43"
     }
 
+    private val pending = mutableSetOf<String>()
     private val owners = mutableMapOf<String, Any>()
     private val beganAt = mutableMapOf<String, Long>()
 
     @Synchronized
     fun connected(address: String, owner: Any) {
         owners[address] = owner
+        pending.remove(address)
         beganAt.remove(address)
+    }
+
+    // Legacy file packets can start with 0x05 too. Require a ring READ write.
+    @Synchronized
+    fun requested(address: String, owner: Any, characteristic: String, value: ByteArray) {
+        if (owners[address] !== owner || !characteristic.equals(CHARACTERISTIC, ignoreCase = true)) return
+        if (value.firstOrNull() != 0x11.toByte()) return
+        if (value.size == 9 || value.size == 13) pending.add(address) else pending.remove(address)
     }
 
     @Synchronized
     fun received(address: String, owner: Any, characteristic: String, value: ByteArray, nowMs: Long) {
         if (owners[address] !== owner) return
         if (!characteristic.equals(CHARACTERISTIC, ignoreCase = true)) return
-        if (value.size >= 13 && value[0] == 0x05.toByte()) {
+        if (value.size >= 13 && value[0] == 0x05.toByte() && pending.remove(address)) {
             beganAt[address] = nowMs
-        } else if (value.size >= 10 && value[0] == 0x04.toByte()) {
+        } else if (value.size >= 10 && value[0] == 0x04.toByte() &&
+            (pending.contains(address) || beganAt.containsKey(address))) {
+            pending.remove(address)
             beganAt.remove(address)
         }
     }
@@ -33,6 +45,7 @@ internal class RingReadDiagnostics {
     @Synchronized
     fun disconnected(address: String, nowMs: Long): Map<String, Any> {
         val began = beganAt.remove(address)
+        pending.remove(address)
         if (owners.remove(address) == null) return emptyMap()
         return buildMap {
             put("ring_read_active", began != null)

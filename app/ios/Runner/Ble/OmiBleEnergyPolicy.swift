@@ -173,19 +173,30 @@ struct OmiBleReconnectDiagnostics {
 final class OmiRingReadDiagnostics {
     static let characteristic = "30295781-4301-eabd-2904-2849adfeae43"
     private var known = Set<String>()
+    private var pending = Set<String>()
     private var beganAt: [String: TimeInterval] = [:]
 
     func connected(_ uuid: String) {
         known.insert(uuid)
+        pending.remove(uuid)
         beganAt.removeValue(forKey: uuid)
+    }
+
+    /// Legacy file data shares this characteristic and can start with 0x05.
+    /// Only ring READ writes (0x11 + u64 seq, optionally u32 count) arm BEGIN.
+    func requested(_ uuid: String, characteristic: String, data: Data) {
+        guard characteristic.lowercased() == Self.characteristic, data.first == 0x11 else { return }
+        if data.count == 9 || data.count == 13 { pending.insert(uuid) }
+        else { pending.remove(uuid) }
     }
 
     func received(_ uuid: String, characteristic: String, data: Data, now: TimeInterval) {
         guard characteristic.lowercased() == Self.characteristic else { return }
-        if data.count >= 13, data.first == 0x05 {
+        if data.count >= 13, data.first == 0x05, pending.remove(uuid) != nil {
             known.insert(uuid)
             beganAt[uuid] = now
-        } else if data.count >= 10, data.first == 0x04 {
+        } else if data.count >= 10, data.first == 0x04,
+                  pending.contains(uuid) || beganAt[uuid] != nil {
             connected(uuid)
         }
     }
@@ -193,6 +204,7 @@ final class OmiRingReadDiagnostics {
     /// Consume before link teardown; a later reconnect starts a new observation.
     func disconnected(_ uuid: String, now: TimeInterval) -> [String: Any] {
         let began = beganAt.removeValue(forKey: uuid)
+        pending.remove(uuid)
         guard known.remove(uuid) != nil else { return [:] }
         var fields: [String: Any] = ["ring_read_active": began != nil]
         if let began {

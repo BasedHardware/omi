@@ -827,6 +827,7 @@ final class OmiBleManager: NSObject {
             writeCompletions[key, default: []].append(PendingGattOperation(
                 id: nextGattOperationId,
                 issue: { [weak self] in
+                    self?.ringReadDiagnostics.requested(peripheralUuid, characteristic: characteristicUuid, data: payload)
                     self?.peripherals[peripheralUuid]?.writeValue(payload, for: characteristic, type: .withResponse)
                 },
                 completion: completion
@@ -835,6 +836,7 @@ final class OmiBleManager: NSObject {
             return
         }
 
+        ringReadDiagnostics.requested(peripheralUuid, characteristic: characteristicUuid, data: data.data)
         peripherals[peripheralUuid]?.writeValue(data.data, for: characteristic, type: writeType)
         completion(.success(()))
     }
