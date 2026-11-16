@@ -19,6 +19,10 @@ from utils.conversations.v3.outline import SILENCE
 QUIET = timedelta(seconds=30)
 
 
+class NotReady(Conflict):
+    """No paid permit was spent; accepted inputs still need catch-up or a tail."""
+
+
 def source_patch(uid, snapshot, *, now, decoded=None):
     row = snapshot.to_dict() or {}
     if row.get('v3_manual_end') or row.get('data_protection_level') == 'private' or row.get('is_locked'):
@@ -100,12 +104,18 @@ def sources_current(tx, client, uid, row, *, quiet=False):
             or source.get('data_protection_level') == 'private'
         ):
             return None
-        if policy.transcription_pending(source) or policy.transcription_failed(source):
+        if policy.transcription_failed(source):
+            return None
+        if policy.transcription_pending(source):
+            if quiet:
+                raise NotReady('transcription_pending')
             return None
         if quiet and source.get('v3_quiet_due') and datetime.now(timezone.utc) < source['v3_quiet_due']:
-            return None
+            raise NotReady('quiet_not_due')
         decoded = store.decode_row(uid, snap)
         if not decoded or summary_input.fingerprint(decoded) != expected.get(rid):
+            if quiet:
+                raise NotReady('projection_pending')
             return None
         revisions[rid] = snap.update_time
     return revisions
@@ -128,10 +138,11 @@ def reserve(uid, cid, token, revision, *, quiet=False, firestore_client=None):
         ):
             raise Conflict('account_deletion')
         if lease.get('token') != token or not lease.get('until') or lease['until'] <= now:
+            if quiet:
+                raise NotReady('lease_lost')
             raise Conflict('lease_lost')
         if (
             not row
-            or snapshot.update_time != revision
             or row.get('deleted')
             or row.get('is_locked')
             or row.get('recording')
@@ -140,22 +151,23 @@ def reserve(uid, cid, token, revision, *, quiet=False, firestore_client=None):
             or summary_input.exact(row)
         ):
             return None
-        if quiet and (
-            not row.get('v3_derived')
-            or row.get('status') != 'in_progress'
-            or not row.get('finished_at')
-            or now < row['finished_at'] + QUIET
-        ):
-            return None
-        sources = sources_current(tx, client, uid, row, quiet=quiet) if row.get('v3_derived') else {}
-        if sources is None:
-            return None
         key = summary_input.fingerprint(row)
-        # Do not evict spent permits: even a correction back to old text cannot
-        # buy it again. Refuse further speculation if the bounded ledger is full.
         spent = list(lease.get('snapshot_inputs') or [])
         if key in spent or len(spent) >= store.LIMIT:
             return None
+        if snapshot.update_time != revision:
+            if quiet:
+                raise NotReady('projection_changed')
+            return None
+        if quiet and (not row.get('v3_derived') or row.get('status') != 'in_progress' or not row.get('finished_at')):
+            return None
+        if quiet and now < row['finished_at'] + QUIET:
+            raise NotReady('quiet_not_due')
+        sources = sources_current(tx, client, uid, row, quiet=quiet) if row.get('v3_derived') else {}
+        if sources is None:
+            return None
+        # Do not evict spent permits: even a correction back to old text cannot
+        # buy it again. Refuse further speculation if the bounded ledger is full.
         tx.update(held, {'snapshot_inputs': [*spent, key]})
         return {'row': row, 'revision': snapshot.update_time, 'sources': sources, 'input_hash': key}
 

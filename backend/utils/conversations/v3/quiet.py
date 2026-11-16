@@ -34,7 +34,7 @@ async def run(uid, rid, generation):
     row = await run_blocking(db_executor, _open_row, uid)
     if row:
         result = await snapshot(uid, row)
-        if result == 'busy':
+        if result in {'busy', 'retry'}:
             return 'retry'
     await run_blocking(db_executor, attempts.settle, uid, rid, generation)
     return 'settled'
@@ -92,6 +92,8 @@ async def snapshot(uid, row):
             monotonic() - started - writer_seconds,
         )
         return 'stored'
+    except attempts.NotReady:
+        return 'retry'
     except Conflict:
         return 'superseded'
     except HTTPException as exc:

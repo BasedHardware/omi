@@ -283,10 +283,27 @@ async def test_catchup_preserves_discovery_of_unprojected_partial_tail(seeded, b
     )
     monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('known pending tail bought notes'))
     generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
-    assert await quiet.run(uid, rid, generation) == 'settled'
+    for _ in range(3):
+        assert await quiet.run(uid, rid, generation) == 'retry'
     assert coll.document('pending-tail').get().to_dict()['v3_pending']
+    assert coll.document(rid).get().to_dict()['v3_quiet_pending']
     assert not coll.document(cid).get().to_dict().get('summary_covers_through')
     assert not leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict().get('snapshot_inputs')
+    # Partial completion is metadata-only when the new transport was silence;
+    # no changed() callback or transcript generation can rearm the older source.
+    coll.document('pending-tail').update({'record_audio_partial': {'generation': 2, 'applied_generation': 2}})
+    paid = []
+
+    def write(owner, row, emit):
+        paid.append(row['id'])
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'Notes after a silent tail.'}]}
+
+    monkeypatch.setattr(summary, 'write', write)
+    assert await quiet.run(uid, rid, generation) == 'settled'
+    assert await quiet.run(uid, rid, generation) == 'superseded'
+    current = store.decode_row(uid, coll.document(cid).get())
+    assert current['structured']['sections'][0]['body_markdown'] == 'Notes after a silent tail.'
+    assert paid == [cid] and current['status'] == 'in_progress'
 
 
 @pytest.mark.asyncio
@@ -358,6 +375,134 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
     assert not leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict().get('snapshot_inputs')
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('resolve_speaker', [False, True])
+@pytest.mark.parametrize('owner', ['automatic', 'explicit'])
+async def test_real_final_processor_persists_new_calendar_context_before_freshness_stamp(
+    seeded, monkeypatch, resolve_speaker, owner
+):
+    import inspect
+    from models.calendar_context import CalendarMeetingContext
+    from models.structured import Structured
+    from utils.conversations import process_conversation as pc
+
+    client, uid, cid, rid, coll = seeded
+    row = coll.document(cid).get().to_dict()
+    context = CalendarMeetingContext(
+        calendar_event_id='calendar-discovered',
+        title='Friday planning',
+        start_time=row['started_at'],
+        duration_minutes=120,
+    )
+    coll.document(cid).update({'status': 'processing', 'v3_process_pending': True})
+    monkeypatch.setattr(pc.member_notes, 'before_notes', lambda *a, **kw: None)
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *a: False)
+    monkeypatch.setattr(pc, 'owner_recognition_already_observed', lambda *a, **kw: True)
+    monkeypatch.setattr(pc, 'is_release_probe_uid', lambda *a: False)
+    monkeypatch.setattr(pc, '_stored_meeting_lookup_enabled', lambda: True)
+    monkeypatch.setattr(pc, '_meeting_context_from_redis_mapping', lambda *a: None)
+    monkeypatch.setattr(pc, '_meeting_context_from_time_overlap', lambda *a: context)
+    monkeypatch.setattr(pc, 'merged_member_contexts', lambda *a: None)
+
+    async def no_calendar_provider(*a, **kw):
+        return None
+
+    monkeypatch.setattr(pc, 'get_overlapping_calendar_event', no_calendar_provider)
+    monkeypatch.setattr(pc.screen_activity_db, 'get_screen_activity', lambda *a, **kw: [])
+
+    def resolve(owner, conversation, **kw):
+        if resolve_speaker:
+            conversation.transcript_segments[0].is_user = False
+        return False
+
+    monkeypatch.setattr(pc, 'resolve_speakers_for_processing', resolve)
+    monkeypatch.setattr(pc, 'serving_for', lambda *a: False)
+    monkeypatch.setattr(pc, 'finish_home_salience', lambda uid, structured, row, **kw: structured)
+    monkeypatch.setattr(pc.early_abort, 'checkpoint_for', lambda *a: None)
+    monkeypatch.setattr(pc, 'record_final', lambda *a: None)
+    monkeypatch.setattr(pc, 'record_capture_loss', lambda *a: None)
+    monkeypatch.setattr(pc, 'emit_recorded_decision', lambda *a: None)
+    monkeypatch.setattr(pc, 'exclude_from_derived', lambda *a, **kw: False)
+    monkeypatch.setattr(pc, 'owner_recognition_needs_profile', lambda *a: False)
+    monkeypatch.setattr(pc, 'emit_finalized_owner_recognition', lambda *a, **kw: None)
+    monkeypatch.setattr(store.conversations, '_sync_conversation_search_index', lambda *a, **kw: None)
+    observed = []
+
+    def notes(owner, language, conversation, **kw):
+        assert conversation.external_data['calendar_meeting_context']['calendar_event_id'] == 'calendar-discovered'
+        observed.append(conversation.id)
+        return (
+            Structured(
+                title='Plan',
+                overview='Calendar-grounded final notes.',
+                sections=[{'heading': 'Plan', 'body_markdown': 'Ship on Friday with the calendar team.'}],
+            ),
+            False,
+        )
+
+    monkeypatch.setattr(pc, '_get_structured', notes)
+    # Exercise the real processor body, enrichment helper, normal payload and
+    # real lifecycle persistence. Only provider/effect boundaries are replaced.
+    body = inspect.unwrap(pc.process_conversation)
+
+    def process(*a, **kw):
+        return body(*a, defer_derived_effects=True, **kw)
+
+    monkeypatch.setattr(pc, 'process_conversation', process)
+    if owner == 'automatic':
+        await service.drain_processing(uid)
+    else:
+        from models.conversation import Conversation
+        from utils.conversations.processing_trigger import ProcessingTrigger
+
+        await asyncio.to_thread(
+            service.recording_short_path(process),
+            uid,
+            'en',
+            Conversation(**row),
+            trigger=ProcessingTrigger.USER_REPROCESS,
+            persistence_observer=lambda success: None,
+        )
+    await service.drain_processing(uid)
+    current = store.decode_row(uid, coll.document(cid).get())
+    assert current['external_data']['calendar_meeting_context']['calendar_event_id'] == 'calendar-discovered'
+    assert current['transcript_segments'][0]['is_user'] is (not resolve_speaker)
+    assert summary.fresh(current) and current['summary_is_snapshot'] is False
+    assert not current['v3_process_pending'] and observed == [cid]
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('calendar final notes bought again'))
+    assert await summary.prepare(uid, current) is None
+
+
+@pytest.mark.asyncio
+async def test_spent_paid_attempt_is_terminal_even_if_a_tail_arrives_before_retry(seeded, builder_path, monkeypatch):
+    client, uid, cid, rid, coll = seeded
+    paid = []
+
+    def failed(*a):
+        paid.append(cid)
+        raise RuntimeError('synthetic paid provider failure')
+
+    monkeypatch.setattr(summary, 'write', failed)
+    generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
+    with pytest.raises(RuntimeError, match='synthetic paid provider failure'):
+        await quiet.run(uid, rid, generation)
+    start = coll.document(cid).get().to_dict()['finished_at'] + timedelta(seconds=1)
+    coll.document('late-tail').set(
+        {
+            'recording': True,
+            'status': 'in_progress',
+            'v3_pending': True,
+            'started_at': start,
+            'finished_at': start,
+            'created_at': start,
+            'record_audio_partial': {'generation': 2, 'applied_generation': 1},
+        }
+    )
+    assert await quiet.run(uid, rid, generation) == 'settled'
+    assert not coll.document(rid).get().to_dict()['v3_quiet_pending']
+    assert paid == [cid]
+
+
 @pytest.mark.parametrize(
     'race', ['resume', 'new_recording', 'correction', 'split', 'delete', 'lock', 'private', 'account_deletion']
 )
@@ -406,8 +551,12 @@ def test_not_ready_content_never_spends_a_permit(seeded, guard):
         coll.document(cid).update({'transcript_segments': [{'text': 'brief', 'start': 0, 'end': 1, 'is_user': True}]})
     else:
         coll.document('pending').set({'recording': True, 'v3_pending': True})
-    token, permit = claim(seeded)
-    assert permit is None
+    if guard in {'active', 'tail', 'new_pending'}:
+        with pytest.raises(attempts.NotReady):
+            claim(seeded)
+    else:
+        token, permit = claim(seeded)
+        assert permit is None
     assert not leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict().get('snapshot_inputs')
 
 
