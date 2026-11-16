@@ -725,10 +725,16 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
-    from utils.summary_quality import clean_structured, stable_title
+    from utils.summary_quality import clean_structured, stable_title, valid_title, title_or_fallback
 
     if relevance_discarded is False:
         cleaned = clean_structured(structured.model_dump())
+        if not valid_title(structured.title):
+            cleaned['title'] = title_or_fallback(
+                deterministic_minimum_title(
+                    conversation, tz_name_provider=lambda: notification_db.get_user_time_zone(uid)
+                )
+            )
         previous = getattr(conversation, 'structured', None)
         old_title = (
             getattr(previous, 'title', '') if getattr(previous, 'title_provenance', None) != 'server_minimum' else ''

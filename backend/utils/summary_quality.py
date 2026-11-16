@@ -39,7 +39,7 @@ _MECHANICS = re.compile(
     re.I,
 )
 _PLACEHOLDER = re.compile(
-    r"^(?:[-—–….*\s]+|(?:new|unknown) moment.*|untitled|none|null|conversation|talking|discussion notes|discussion \d+)$",
+    r"^(?:[-—–….*\s]+|(?:new|unknown) moment.*|untitled|none|null|in progress|processing[.…]*|transcribing[.…]*|writing notes[.…]*|conversation|talking|discussion notes|discussion \d+)$",
     re.I,
 )
 
@@ -117,10 +117,18 @@ def clean_structured(data: Mapping[str, Any]) -> dict[str, Any]:
 def episode_quality(previous: Mapping[str, Any], proposed: Mapping[str, Any]) -> dict[str, Any]:
     """Apply inside the episode CAS, after membership/deletion handling."""
     out = dict(proposed)
-    title, reason = stable_title(previous.get('title'), out.get('title'))
-    out['title'] = title
-    if reason:
-        out['title_change_reason'] = reason
+    if (
+        not previous.get('title')
+        and not out.get('title')
+        and not any(out.get(key) for key in ('bullets', 'lede', 'moments'))
+    ):
+        # An unprocessed episode must keep its honest pending presentation.
+        out['title'] = ''
+    else:
+        title, reason = stable_title(previous.get('title'), out.get('title'))
+        out['title'] = title
+        if reason:
+            out['title_change_reason'] = reason
     for key in ('bullets', 'follow_ups', 'open_questions'):
         if key in out:
             out[key] = [text for item in out[key] or [] if (text := safe_body(item))]

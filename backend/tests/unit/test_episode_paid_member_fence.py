@@ -79,7 +79,7 @@ def test_unchanged_paid_members_write_in_the_same_transaction(paid_store, monkey
     monkeypatch.setattr(composer.episodes_db, 'update_episode', update)
     assert composer.compose(UID, 'ep1', collaborators=s.c) == 'composed'
     assert len(s.calls) == 1
-    assert _episode_now(s)['title'] == 'Omi app bugs and labeling tool'
+    assert _episode_now(s)['title'] == 'old'
     assert len(attempts) == (4 if fallback else 1)
     assert all(a['expected_member_revisions'] == {'c1': T0, 'c2': T0} for a in attempts)
     published_tx = s.db.transactions[-1]

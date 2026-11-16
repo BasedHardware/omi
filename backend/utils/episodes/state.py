@@ -122,7 +122,9 @@ def parse_update(raw: str, *, known_item_ids: Sequence[str]) -> IncrementalUpdat
     known = set(known_item_ids)
     update = IncrementalUpdate(
         title=title_or_fallback(clean_text(data.get('title'), MAX_TOPIC_CHARS)),
-        moment_heading=title_or_fallback(clean_text(data.get('moment_heading'), MAX_HEADING_CHARS)),
+        moment_heading=title_or_fallback(
+            clean_text(data.get('moment_heading') or data.get('title'), MAX_HEADING_CHARS)
+        ),
         bullets=[
             text
             for line in _clean_list(data.get('bullets'), limit=MAX_BULLETS, chars=MAX_ITEM_CHARS)
