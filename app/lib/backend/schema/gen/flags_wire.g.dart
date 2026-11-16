@@ -17,18 +17,10 @@ class GeneratedClientFlag {
 
   factory GeneratedClientFlag.fromJson(Map<String, dynamic> json) {
     return GeneratedClientFlag(
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      key: _required(
-          _readFieldValue<String>(_readField(json, const ["key"]), "key", _readString,
-              requiredField: true, nullable: false),
-          "key"),
-      payloadJson: _readFieldValue<String>(_readField(json, const ["payload_json"]), "payload_json", _readString,
-          requiredField: false, nullable: true),
-      variant: _readFieldValue<String>(_readField(json, const ["variant"]), "variant", _readString,
-          requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      key: _required(_readFieldValue<String>(_readField(json, const ["key"]), "key", _readString, requiredField: true, nullable: false), "key"),
+      payloadJson: _readFieldValue<String>(_readField(json, const ["payload_json"]), "payload_json", _readString, requiredField: false, nullable: true),
+      variant: _readFieldValue<String>(_readField(json, const ["variant"]), "variant", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -53,13 +45,8 @@ class GeneratedClientFlagsResponse {
 
   factory GeneratedClientFlagsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedClientFlagsResponse(
-      flags: _required(
-          _readFieldValue<List<GeneratedClientFlag>>(_readField(json, const ["flags"]), "flags",
-              (value) => _readObjectList(value, GeneratedClientFlag.fromJson),
-              requiredField: true, nullable: false),
-          "flags"),
-      version: _readFieldValue<int>(_readField(json, const ["version"]), "version", _readInt,
-          requiredField: true, nullable: true),
+      flags: _required(_readFieldValue<List<GeneratedClientFlag>>(_readField(json, const ["flags"]), "flags", (value) => _readObjectList(value, GeneratedClientFlag.fromJson), requiredField: true, nullable: false), "flags"),
+      version: _readFieldValue<int>(_readField(json, const ["version"]), "version", _readInt, requiredField: true, nullable: true),
     );
   }
 
@@ -144,7 +131,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -160,27 +149,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

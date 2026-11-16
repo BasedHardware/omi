@@ -33,43 +33,18 @@ class GeneratedChatSessionResponse {
 
   factory GeneratedChatSessionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedChatSessionResponse(
-      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString,
-          requiredField: false, nullable: true),
-      channel: _readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString,
-          requiredField: false, nullable: true),
-      channelLinkId: _readFieldValue<String>(
-          _readField(json, const ["channel_link_id"]), "channel_link_id", _readString,
-          requiredField: false, nullable: true),
-      createdAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "created_at"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      messageCount: _required(
-          _readFieldValue<int>(_readField(json, const ["message_count"]), "message_count", _readInt,
-              requiredField: true, nullable: false),
-          "message_count"),
-      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString,
-          requiredField: false, nullable: true),
-      preview: _readFieldValue<String>(_readField(json, const ["preview"]), "preview", _readString,
-          requiredField: false, nullable: true),
-      starred: _required(
-          _readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool,
-              requiredField: true, nullable: false),
-          "starred"),
-      surface: _readFieldValue<String>(_readField(json, const ["surface"]), "surface", _readString,
-          requiredField: false, nullable: true),
-      title: _required(
-          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
-              requiredField: true, nullable: false),
-          "title"),
-      updatedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "updated_at"),
+      appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
+      channel: _readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString, requiredField: false, nullable: true),
+      channelLinkId: _readFieldValue<String>(_readField(json, const ["channel_link_id"]), "channel_link_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      messageCount: _required(_readFieldValue<int>(_readField(json, const ["message_count"]), "message_count", _readInt, requiredField: true, nullable: false), "message_count"),
+      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: false, nullable: true),
+      preview: _readFieldValue<String>(_readField(json, const ["preview"]), "preview", _readString, requiredField: false, nullable: true),
+      starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: true, nullable: false), "starred"),
+      surface: _readFieldValue<String>(_readField(json, const ["surface"]), "surface", _readString, requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
     );
   }
 
@@ -164,7 +139,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -180,27 +157,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

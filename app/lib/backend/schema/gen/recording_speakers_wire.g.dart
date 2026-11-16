@@ -17,21 +17,10 @@ class GeneratedRecordingTranscriptResponse {
 
   factory GeneratedRecordingTranscriptResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingTranscriptResponse(
-      conversations: _required(
-          _readFieldValue<List<GeneratedRecordingTranscriptMember>>(_readField(json, const ["conversations"]),
-              "conversations", (value) => _readObjectList(value, GeneratedRecordingTranscriptMember.fromJson),
-              requiredField: true, nullable: false),
-          "conversations"),
-      coverage: _required(
-          _readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString,
-              requiredField: false, nullable: false, defaultValue: "partial"),
-          "coverage"),
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString,
-          requiredField: false, nullable: true),
+      conversations: _required(_readFieldValue<List<GeneratedRecordingTranscriptMember>>(_readField(json, const ["conversations"]), "conversations", (value) => _readObjectList(value, GeneratedRecordingTranscriptMember.fromJson), requiredField: true, nullable: false), "conversations"),
+      coverage: _required(_readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString, requiredField: false, nullable: false, defaultValue: "partial"), "coverage"),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -58,20 +47,9 @@ class GeneratedRecordingTranscriptMember {
 
   factory GeneratedRecordingTranscriptMember.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingTranscriptMember(
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      recordingOffsetSeconds: _required(
-          _readFieldValue<double>(
-              _readField(json, const ["recording_offset_seconds"]), "recording_offset_seconds", _readDouble,
-              requiredField: true, nullable: false),
-          "recording_offset_seconds"),
-      transcriptSegments: _required(
-          _readFieldValue<List<GeneratedRecordingTranscriptSegment>>(_readField(json, const ["transcript_segments"]),
-              "transcript_segments", (value) => _readObjectList(value, GeneratedRecordingTranscriptSegment.fromJson),
-              requiredField: true, nullable: false),
-          "transcript_segments"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      recordingOffsetSeconds: _required(_readFieldValue<double>(_readField(json, const ["recording_offset_seconds"]), "recording_offset_seconds", _readDouble, requiredField: true, nullable: false), "recording_offset_seconds"),
+      transcriptSegments: _required(_readFieldValue<List<GeneratedRecordingTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedRecordingTranscriptSegment.fromJson), requiredField: true, nullable: false), "transcript_segments"),
     );
   }
 
@@ -121,52 +99,21 @@ class GeneratedRecordingTranscriptSegment {
 
   factory GeneratedRecordingTranscriptSegment.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingTranscriptSegment(
-      end: _required(
-          _readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble,
-              requiredField: true, nullable: false),
-          "end"),
-      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-          requiredField: false, nullable: true),
-      isUser: _required(
-          _readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool,
-              requiredField: true, nullable: false),
-          "is_user"),
-      originalText: _readFieldValue<String>(_readField(json, const ["original_text"]), "original_text", _readString,
-          requiredField: false, nullable: true),
-      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString,
-          requiredField: false, nullable: true),
-      speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString,
-          requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
-      speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt,
-          requiredField: false, nullable: true),
-      speakerIdScope: _readFieldValue<String>(
-          _readField(json, const ["speaker_id_scope"]), "speaker_id_scope", _readString,
-          requiredField: false, nullable: true),
-      speakerLabelSource: _readFieldValue<String>(
-          _readField(json, const ["speaker_label_source"]), "speaker_label_source", _readString,
-          requiredField: false, nullable: true),
-      speechProfileProcessed: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool,
-              requiredField: false, nullable: false, defaultValue: true),
-          "speech_profile_processed"),
-      start: _required(
-          _readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble,
-              requiredField: true, nullable: false),
-          "start"),
-      streamSpeaker: _required(
-          _readFieldValue<String>(_readField(json, const ["stream_speaker"]), "stream_speaker", _readString,
-              requiredField: true, nullable: false),
-          "stream_speaker"),
-      sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString,
-          requiredField: false, nullable: true),
-      text: _required(
-          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
-              requiredField: true, nullable: false),
-          "text"),
-      translations: _readFieldValue<List<GeneratedTranslation>>(_readField(json, const ["translations"]),
-          "translations", (value) => _readObjectList(value, GeneratedTranslation.fromJson),
-          requiredField: false, nullable: true),
+      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
+      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
+      isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: true, nullable: false), "is_user"),
+      originalText: _readFieldValue<String>(_readField(json, const ["original_text"]), "original_text", _readString, requiredField: false, nullable: true),
+      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
+      speaker: _readFieldValue<String>(_readField(json, const ["speaker"]), "speaker", _readString, requiredField: false, nullable: true, defaultValue: "SPEAKER_00"),
+      speakerId: _readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: false, nullable: true),
+      speakerIdScope: _readFieldValue<String>(_readField(json, const ["speaker_id_scope"]), "speaker_id_scope", _readString, requiredField: false, nullable: true),
+      speakerLabelSource: _readFieldValue<String>(_readField(json, const ["speaker_label_source"]), "speaker_label_source", _readString, requiredField: false, nullable: true),
+      speechProfileProcessed: _required(_readFieldValue<bool>(_readField(json, const ["speech_profile_processed"]), "speech_profile_processed", _readBool, requiredField: false, nullable: false, defaultValue: true), "speech_profile_processed"),
+      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+      streamSpeaker: _required(_readFieldValue<String>(_readField(json, const ["stream_speaker"]), "stream_speaker", _readString, requiredField: true, nullable: false), "stream_speaker"),
+      sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      translations: _readFieldValue<List<GeneratedTranslation>>(_readField(json, const ["translations"]), "translations", (value) => _readObjectList(value, GeneratedTranslation.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -206,21 +153,10 @@ class GeneratedRecordingSpeakerResponse {
 
   factory GeneratedRecordingSpeakerResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingSpeakerResponse(
-      appliedCount: _required(
-          _readFieldValue<int>(_readField(json, const ["applied_count"]), "applied_count", _readInt,
-              requiredField: true, nullable: false),
-          "applied_count"),
-      conversations: _required(
-          _readFieldValue<List<GeneratedRecordingMemberCount>>(_readField(json, const ["conversations"]),
-              "conversations", (value) => _readObjectList(value, GeneratedRecordingMemberCount.fromJson),
-              requiredField: true, nullable: false),
-          "conversations"),
-      coverage: _required(
-          _readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString,
-              requiredField: false, nullable: false, defaultValue: "partial"),
-          "coverage"),
-      episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString,
-          requiredField: false, nullable: true),
+      appliedCount: _required(_readFieldValue<int>(_readField(json, const ["applied_count"]), "applied_count", _readInt, requiredField: true, nullable: false), "applied_count"),
+      conversations: _required(_readFieldValue<List<GeneratedRecordingMemberCount>>(_readField(json, const ["conversations"]), "conversations", (value) => _readObjectList(value, GeneratedRecordingMemberCount.fromJson), requiredField: true, nullable: false), "conversations"),
+      coverage: _required(_readFieldValue<String>(_readField(json, const ["coverage"]), "coverage", _readString, requiredField: false, nullable: false, defaultValue: "partial"), "coverage"),
+      episodeId: _readFieldValue<String>(_readField(json, const ["episode_id"]), "episode_id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -247,16 +183,9 @@ class GeneratedRecordingMemberCount {
 
   factory GeneratedRecordingMemberCount.fromJson(Map<String, dynamic> json) {
     return GeneratedRecordingMemberCount(
-      appliedCount: _required(
-          _readFieldValue<int>(_readField(json, const ["applied_count"]), "applied_count", _readInt,
-              requiredField: true, nullable: false),
-          "applied_count"),
-      conversationId: _required(
-          _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString,
-              requiredField: true, nullable: false),
-          "conversation_id"),
-      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString,
-          requiredField: false, nullable: true),
+      appliedCount: _required(_readFieldValue<int>(_readField(json, const ["applied_count"]), "applied_count", _readInt, requiredField: true, nullable: false), "applied_count"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      error: _readFieldValue<String>(_readField(json, const ["error"]), "error", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -280,14 +209,8 @@ class GeneratedTranslation {
 
   factory GeneratedTranslation.fromJson(Map<String, dynamic> json) {
     return GeneratedTranslation(
-      lang: _required(
-          _readFieldValue<String>(_readField(json, const ["lang"]), "lang", _readString,
-              requiredField: true, nullable: false),
-          "lang"),
-      text: _required(
-          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
-              requiredField: true, nullable: false),
-          "text"),
+      lang: _required(_readFieldValue<String>(_readField(json, const ["lang"]), "lang", _readString, requiredField: true, nullable: false), "lang"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
     );
   }
 
@@ -372,7 +295,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -388,27 +313,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -10,9 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:meta/meta.dart' show immutable, protected, visibleForTesting;
 
 Object? _extractReplyValueOrThrow(
-  List<Object?>? replyList,
-  String channelName, {
-  required bool isNullValid,
+    List<Object?>? replyList,
+    String channelName, {
+    required bool isNullValid,
 }) {
   if (replyList == null) {
     throw PlatformException(
@@ -34,6 +34,7 @@ Object? _extractReplyValueOrThrow(
   return replyList.firstOrNull;
 }
 
+
 List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty = false}) {
   if (empty) {
     return <Object?>[];
@@ -43,7 +44,6 @@ List<Object?> wrapResponse({Object? result, PlatformException? error, bool empty
   }
   return <Object?>[error.code, error.message, error.details];
 }
-
 bool _deepEquals(Object? a, Object? b) {
   if (identical(a, b)) {
     return true;
@@ -55,7 +55,9 @@ bool _deepEquals(Object? a, Object? b) {
     return a == b;
   }
   if (a is List && b is List) {
-    return a.length == b.length && a.indexed.every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
+    return a.length == b.length &&
+        a.indexed
+            .every(((int, dynamic) item) => _deepEquals(item.$2, b[item.$1]));
   }
   if (a is Map && b is Map) {
     if (a.length != b.length) {
@@ -104,6 +106,7 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
+
 class SiriConversation {
   SiriConversation({
     required this.id,
@@ -134,8 +137,7 @@ class SiriConversation {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriConversation decode(Object result) {
     result as List<Object?>;
@@ -157,11 +159,7 @@ class SiriConversation {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) &&
-        _deepEquals(title, other.title) &&
-        _deepEquals(summary, other.summary) &&
-        _deepEquals(startedAtMs, other.startedAtMs) &&
-        _deepEquals(updatedAtMs, other.updatedAtMs);
+    return _deepEquals(id, other.id) && _deepEquals(title, other.title) && _deepEquals(summary, other.summary) && _deepEquals(startedAtMs, other.startedAtMs) && _deepEquals(updatedAtMs, other.updatedAtMs);
   }
 
   @override
@@ -195,8 +193,7 @@ class SiriMemory {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriMemory decode(Object result) {
     result as List<Object?>;
@@ -217,10 +214,7 @@ class SiriMemory {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) &&
-        _deepEquals(content, other.content) &&
-        _deepEquals(createdAtMs, other.createdAtMs) &&
-        _deepEquals(expiresAtMs, other.expiresAtMs);
+    return _deepEquals(id, other.id) && _deepEquals(content, other.content) && _deepEquals(createdAtMs, other.createdAtMs) && _deepEquals(expiresAtMs, other.expiresAtMs);
   }
 
   @override
@@ -262,8 +256,7 @@ class SiriTask {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriTask decode(Object result) {
     result as List<Object?>;
@@ -286,12 +279,7 @@ class SiriTask {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) &&
-        _deepEquals(title, other.title) &&
-        _deepEquals(completed, other.completed) &&
-        _deepEquals(createdAtMs, other.createdAtMs) &&
-        _deepEquals(dueAtMs, other.dueAtMs) &&
-        _deepEquals(completedAtMs, other.completedAtMs);
+    return _deepEquals(id, other.id) && _deepEquals(title, other.title) && _deepEquals(completed, other.completed) && _deepEquals(createdAtMs, other.createdAtMs) && _deepEquals(dueAtMs, other.dueAtMs) && _deepEquals(completedAtMs, other.completedAtMs);
   }
 
   @override
@@ -345,8 +333,7 @@ class SiriSessionConfig {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriSessionConfig decode(Object result) {
     result as List<Object?>;
@@ -372,15 +359,7 @@ class SiriSessionConfig {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(uid, other.uid) &&
-        _deepEquals(generation, other.generation) &&
-        _deepEquals(baseUrl, other.baseUrl) &&
-        _deepEquals(profile, other.profile) &&
-        _deepEquals(appVersion, other.appVersion) &&
-        _deepEquals(appBuild, other.appBuild) &&
-        _deepEquals(deviceIdHash, other.deviceIdHash) &&
-        _deepEquals(token, other.token) &&
-        _deepEquals(tokenExpiresAtMs, other.tokenExpiresAtMs);
+    return _deepEquals(uid, other.uid) && _deepEquals(generation, other.generation) && _deepEquals(baseUrl, other.baseUrl) && _deepEquals(profile, other.profile) && _deepEquals(appVersion, other.appVersion) && _deepEquals(appBuild, other.appBuild) && _deepEquals(deviceIdHash, other.deviceIdHash) && _deepEquals(token, other.token) && _deepEquals(tokenExpiresAtMs, other.tokenExpiresAtMs);
   }
 
   @override
@@ -422,8 +401,7 @@ class SiriTelemetryRecord {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriTelemetryRecord decode(Object result) {
     result as List<Object?>;
@@ -446,12 +424,7 @@ class SiriTelemetryRecord {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(kind, other.kind) &&
-        _deepEquals(intent, other.intent) &&
-        _deepEquals(outcome, other.outcome) &&
-        _deepEquals(latencyMs, other.latencyMs) &&
-        _deepEquals(entityCounts, other.entityCounts) &&
-        _deepEquals(entryPath, other.entryPath);
+    return _deepEquals(kind, other.kind) && _deepEquals(intent, other.intent) && _deepEquals(outcome, other.outcome) && _deepEquals(latencyMs, other.latencyMs) && _deepEquals(entityCounts, other.entityCounts) && _deepEquals(entryPath, other.entryPath);
   }
 
   @override
@@ -481,8 +454,7 @@ class SiriPendingRoute {
   }
 
   Object encode() {
-    return _toList();
-  }
+    return _toList();  }
 
   static SiriPendingRoute decode(Object result) {
     result as List<Object?>;
@@ -510,6 +482,7 @@ class SiriPendingRoute {
   int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
 }
 
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -517,22 +490,22 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is SiriConversation) {
+    }    else if (value is SiriConversation) {
       buffer.putUint8(129);
       writeValue(buffer, value.encode());
-    } else if (value is SiriMemory) {
+    }    else if (value is SiriMemory) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    } else if (value is SiriTask) {
+    }    else if (value is SiriTask) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is SiriSessionConfig) {
+    }    else if (value is SiriSessionConfig) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is SiriTelemetryRecord) {
+    }    else if (value is SiriTelemetryRecord) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is SiriPendingRoute) {
+    }    else if (value is SiriPendingRoute) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
     } else {
@@ -575,8 +548,7 @@ class SiriIndexApi {
   final String pigeonVar_messageChannelSuffix;
 
   Future<void> upsertConversations(String uid, List<SiriConversation> conversations) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertConversations$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertConversations$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -586,16 +558,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   /// Replace only the authoritative time window; null covers all conversations.
   Future<void> reconcileConversations(String uid, List<SiriConversation> conversations, int? coveredAfterMs) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileConversations$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileConversations$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -605,15 +577,15 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<void> upsertMemories(String uid, List<SiriMemory> memories) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertMemories$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertMemories$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -623,16 +595,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   /// Called only after a complete, unfiltered owner memory fetch.
   Future<void> reconcileMemories(String uid, List<SiriMemory> memories) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileMemories$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileMemories$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -642,10 +614,11 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<void> upsertTasks(String uid, List<SiriTask> tasks) async {
@@ -659,16 +632,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   /// A complete active-only fetch preserves completed rows when false.
   Future<void> reconcileTasks(String uid, List<SiriTask> tasks, bool includeCompleted) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileTasks$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileTasks$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -678,15 +651,15 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<void> deleteEntities(String uid, String type, List<String> ids) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.deleteEntities$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.deleteEntities$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -696,16 +669,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   /// Clear one owner's persisted snapshot and Spotlight index before a fresh authoritative traversal.
   Future<void> repairOwnerIndex(String uid) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.repairOwnerIndex$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.repairOwnerIndex$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -715,10 +688,11 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<int> wipe() async {
@@ -732,17 +706,17 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as int;
   }
 
   /// Durably block engine-free Siri and clear its token before Firebase signs out.
   Future<void> prepareForSignOut() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.prepareForSignOut$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.prepareForSignOut$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -752,16 +726,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
   Future<int?> generationForOwner(String uid) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -771,10 +745,11 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
     return pigeonVar_replyValue as int?;
   }
 
@@ -789,15 +764,15 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<void> setCurrentScreen(String route, String? entityId) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.setCurrentScreen$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.setCurrentScreen$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -807,15 +782,15 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<void> publishSessionConfig(SiriSessionConfig config) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.publishSessionConfig$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.publishSessionConfig$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -825,15 +800,15 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<SiriPendingRoute?> takePendingRoute() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.takePendingRoute$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.takePendingRoute$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -843,16 +818,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
     return pigeonVar_replyValue as SiriPendingRoute?;
   }
 
   Future<void> finishPendingRoute(String route, String uid, int generation, bool delivered) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.finishPendingRoute$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.finishPendingRoute$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -862,10 +837,11 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 
   Future<bool> isEnabled() async {
@@ -879,16 +855,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as bool;
   }
 
   Future<List<SiriTelemetryRecord>> takeTelemetry() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.takeTelemetry$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.takeTelemetry$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -898,18 +874,18 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return (pigeonVar_replyValue! as List<Object?>).cast<SiriTelemetryRecord>();
   }
 
   /// True only when the Runner was compiled with the Siri toolchain, so Dart can
   /// skip App Shortcuts UI (e.g. the Shortcuts button) in stable-compiler builds.
   Future<bool> appShortcutsAvailable() async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.appShortcutsAvailable$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.appShortcutsAvailable$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -919,16 +895,16 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: false,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
     return pigeonVar_replyValue! as bool;
   }
 
   Future<void> donateAction(String uid, String type, String id) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.omi_siri.SiriIndexApi.donateAction$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.donateAction$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -938,10 +914,11 @@ class SiriIndexApi {
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 }
 
@@ -956,11 +933,7 @@ abstract class SiriEventsApi {
 
   Future<void> setListening(bool enabled);
 
-  static void setUp(
-    SiriEventsApi? api, {
-    BinaryMessenger? binaryMessenger,
-    String messageChannelSuffix = '',
-  }) {
+  static void setUp(SiriEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -977,7 +950,7 @@ abstract class SiriEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -998,7 +971,7 @@ abstract class SiriEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1021,7 +994,7 @@ abstract class SiriEventsApi {
             return wrapResponse(result: output);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });
@@ -1042,7 +1015,7 @@ abstract class SiriEventsApi {
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
-          } catch (e) {
+          }          catch (e) {
             return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
           }
         });

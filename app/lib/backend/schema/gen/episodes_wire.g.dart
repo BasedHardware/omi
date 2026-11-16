@@ -25,34 +25,14 @@ class GeneratedEpisodeMember {
 
   factory GeneratedEpisodeMember.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeMember(
-      emoji: _required(
-          _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "emoji"),
-      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime,
-          requiredField: false, nullable: true),
-      gist: _required(
-          _readFieldValue<String>(_readField(json, const ["gist"]), "gist", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "gist"),
-      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString,
-          requiredField: false, nullable: true),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      startedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "started_at"),
-      status: _required(
-          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
-              requiredField: false, nullable: false, defaultValue: "completed"),
-          "status"),
-      title: _required(
-          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "title"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: false, nullable: true),
+      gist: _required(_readFieldValue<String>(_readField(json, const ["gist"]), "gist", _readString, requiredField: false, nullable: false, defaultValue: ""), "gist"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "completed"), "status"),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
   }
 
@@ -83,15 +63,9 @@ class GeneratedEpisodeListResponse {
 
   factory GeneratedEpisodeListResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeListResponse(
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      episodes: _readFieldValue<List<GeneratedEpisode>>(_readField(json, const ["episodes"]), "episodes",
-          (value) => _readObjectList(value, GeneratedEpisode.fromJson),
-          requiredField: false, nullable: true),
-      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString,
-          requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      episodes: _readFieldValue<List<GeneratedEpisode>>(_readField(json, const ["episodes"]), "episodes", (value) => _readObjectList(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
+      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -127,37 +101,14 @@ class GeneratedEpisodeMoment {
 
   factory GeneratedEpisodeMoment.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeMoment(
-      conversationId: _required(
-          _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString,
-              requiredField: true, nullable: false),
-          "conversation_id"),
-      endOffset: _required(
-          _readFieldValue<double>(_readField(json, const ["end_offset"]), "end_offset", _readDouble,
-              requiredField: false, nullable: false, defaultValue: 0.0),
-          "end_offset"),
-      endedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["ended_at"]), "ended_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "ended_at"),
-      heading: _required(
-          _readFieldValue<String>(_readField(json, const ["heading"]), "heading", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "heading"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      points: _readFieldValue<List<GeneratedEpisodePoint>>(_readField(json, const ["points"]), "points",
-          (value) => _readObjectList(value, GeneratedEpisodePoint.fromJson),
-          requiredField: false, nullable: true),
-      startOffset: _required(
-          _readFieldValue<double>(_readField(json, const ["start_offset"]), "start_offset", _readDouble,
-              requiredField: false, nullable: false, defaultValue: 0.0),
-          "start_offset"),
-      startedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "started_at"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      endOffset: _required(_readFieldValue<double>(_readField(json, const ["end_offset"]), "end_offset", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "end_offset"),
+      endedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["ended_at"]), "ended_at", _readDateTime, requiredField: true, nullable: false), "ended_at"),
+      heading: _required(_readFieldValue<String>(_readField(json, const ["heading"]), "heading", _readString, requiredField: false, nullable: false, defaultValue: ""), "heading"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      points: _readFieldValue<List<GeneratedEpisodePoint>>(_readField(json, const ["points"]), "points", (value) => _readObjectList(value, GeneratedEpisodePoint.fromJson), requiredField: false, nullable: true),
+      startOffset: _required(_readFieldValue<double>(_readField(json, const ["start_offset"]), "start_offset", _readDouble, requiredField: false, nullable: false, defaultValue: 0.0), "start_offset"),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
     );
   }
 
@@ -186,12 +137,8 @@ class GeneratedEpisodePoint {
 
   factory GeneratedEpisodePoint.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodePoint(
-      details: _readFieldValue<List<String>>(_readField(json, const ["details"]), "details", _readStringList,
-          requiredField: false, nullable: true),
-      text: _required(
-          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
-              requiredField: true, nullable: false),
-          "text"),
+      details: _readFieldValue<List<String>>(_readField(json, const ["details"]), "details", _readStringList, requiredField: false, nullable: true),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
     );
   }
 
@@ -230,39 +177,16 @@ class GeneratedEpisodeProvisionalItem {
 
   factory GeneratedEpisodeProvisionalItem.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeProvisionalItem(
-      actionItemId: _readFieldValue<String>(_readField(json, const ["action_item_id"]), "action_item_id", _readString,
-          requiredField: false, nullable: true),
-      conversationId: _readFieldValue<String>(
-          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
-          requiredField: false, nullable: true),
-      createdAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "created_at"),
-      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime,
-          requiredField: false, nullable: true),
-      explicit: _required(
-          _readFieldValue<bool>(_readField(json, const ["explicit"]), "explicit", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "explicit"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      kind: _required(
-          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
-              requiredField: false, nullable: false, defaultValue: "task"),
-          "kind"),
-      segmentOffset: _readFieldValue<double>(_readField(json, const ["segment_offset"]), "segment_offset", _readDouble,
-          requiredField: false, nullable: true),
-      status: _required(
-          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
-              requiredField: false, nullable: false, defaultValue: "provisional"),
-          "status"),
-      text: _required(
-          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
-              requiredField: true, nullable: false),
-          "text"),
+      actionItemId: _readFieldValue<String>(_readField(json, const ["action_item_id"]), "action_item_id", _readString, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
+      explicit: _required(_readFieldValue<bool>(_readField(json, const ["explicit"]), "explicit", _readBool, requiredField: false, nullable: false, defaultValue: false), "explicit"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "task"), "kind"),
+      segmentOffset: _readFieldValue<double>(_readField(json, const ["segment_offset"]), "segment_offset", _readDouble, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "provisional"), "status"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
     );
   }
 
@@ -329,71 +253,26 @@ class GeneratedEpisode {
 
   factory GeneratedEpisode.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisode(
-      bullets: _readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList,
-          requiredField: false, nullable: true),
-      closeReason: _readFieldValue<String>(_readField(json, const ["close_reason"]), "close_reason", _readString,
-          requiredField: false, nullable: true),
-      closedAt: _readFieldValue<DateTime>(_readField(json, const ["closed_at"]), "closed_at", _readDateTime,
-          requiredField: false, nullable: true),
-      composeDeferred: _required(
-          _readFieldValue<bool>(_readField(json, const ["compose_deferred"]), "compose_deferred", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "compose_deferred"),
-      conversationIds: _readFieldValue<List<String>>(
-          _readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList,
-          requiredField: false, nullable: true),
-      emoji: _required(
-          _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "emoji"),
-      followUps: _readFieldValue<List<String>>(_readField(json, const ["follow_ups"]), "follow_ups", _readStringList,
-          requiredField: false, nullable: true),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      lastActivityAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["last_activity_at"]), "last_activity_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "last_activity_at"),
-      lede: _required(
-          _readFieldValue<String>(_readField(json, const ["lede"]), "lede", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "lede"),
-      members: _readFieldValue<List<GeneratedEpisodeMember>>(_readField(json, const ["members"]), "members",
-          (value) => _readObjectList(value, GeneratedEpisodeMember.fromJson),
-          requiredField: false, nullable: true),
-      moments: _readFieldValue<List<GeneratedEpisodeMoment>>(_readField(json, const ["moments"]), "moments",
-          (value) => _readObjectList(value, GeneratedEpisodeMoment.fromJson),
-          requiredField: false, nullable: true),
-      people: _readFieldValue<List<String>>(_readField(json, const ["people"]), "people", _readStringList,
-          requiredField: false, nullable: true),
-      provisionalItems: _readFieldValue<List<GeneratedEpisodeProvisionalItem>>(
-          _readField(json, const ["provisional_items"]),
-          "provisional_items",
-          (value) => _readObjectList(value, GeneratedEpisodeProvisionalItem.fromJson),
-          requiredField: false,
-          nullable: true),
-      sources: _readFieldValue<List<String>>(_readField(json, const ["sources"]), "sources", _readStringList,
-          requiredField: false, nullable: true),
-      startedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "started_at"),
-      stateUpdatedAt: _readFieldValue<DateTime>(
-          _readField(json, const ["state_updated_at"]), "state_updated_at", _readDateTime,
-          requiredField: false, nullable: true),
-      status: _required(
-          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
-              requiredField: true, nullable: false),
-          "status"),
-      timerStartedAt: _readFieldValue<DateTime>(
-          _readField(json, const ["timer_started_at"]), "timer_started_at", _readDateTime,
-          requiredField: false, nullable: true),
-      title: _required(
-          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
-              requiredField: false, nullable: false, defaultValue: ""),
-          "title"),
+      bullets: _readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList, requiredField: false, nullable: true),
+      closeReason: _readFieldValue<String>(_readField(json, const ["close_reason"]), "close_reason", _readString, requiredField: false, nullable: true),
+      closedAt: _readFieldValue<DateTime>(_readField(json, const ["closed_at"]), "closed_at", _readDateTime, requiredField: false, nullable: true),
+      composeDeferred: _required(_readFieldValue<bool>(_readField(json, const ["compose_deferred"]), "compose_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "compose_deferred"),
+      conversationIds: _readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: false, nullable: true),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
+      followUps: _readFieldValue<List<String>>(_readField(json, const ["follow_ups"]), "follow_ups", _readStringList, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      lastActivityAt: _required(_readFieldValue<DateTime>(_readField(json, const ["last_activity_at"]), "last_activity_at", _readDateTime, requiredField: true, nullable: false), "last_activity_at"),
+      lede: _required(_readFieldValue<String>(_readField(json, const ["lede"]), "lede", _readString, requiredField: false, nullable: false, defaultValue: ""), "lede"),
+      members: _readFieldValue<List<GeneratedEpisodeMember>>(_readField(json, const ["members"]), "members", (value) => _readObjectList(value, GeneratedEpisodeMember.fromJson), requiredField: false, nullable: true),
+      moments: _readFieldValue<List<GeneratedEpisodeMoment>>(_readField(json, const ["moments"]), "moments", (value) => _readObjectList(value, GeneratedEpisodeMoment.fromJson), requiredField: false, nullable: true),
+      people: _readFieldValue<List<String>>(_readField(json, const ["people"]), "people", _readStringList, requiredField: false, nullable: true),
+      provisionalItems: _readFieldValue<List<GeneratedEpisodeProvisionalItem>>(_readField(json, const ["provisional_items"]), "provisional_items", (value) => _readObjectList(value, GeneratedEpisodeProvisionalItem.fromJson), requiredField: false, nullable: true),
+      sources: _readFieldValue<List<String>>(_readField(json, const ["sources"]), "sources", _readStringList, requiredField: false, nullable: true),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
+      stateUpdatedAt: _readFieldValue<DateTime>(_readField(json, const ["state_updated_at"]), "state_updated_at", _readDateTime, requiredField: false, nullable: true),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      timerStartedAt: _readFieldValue<DateTime>(_readField(json, const ["timer_started_at"]), "timer_started_at", _readDateTime, requiredField: false, nullable: true),
+      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
   }
 
@@ -436,16 +315,9 @@ class GeneratedEpisodeLiveResponse {
 
   factory GeneratedEpisodeLiveResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeLiveResponse(
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      episode: _readFieldValue<GeneratedEpisode>(
-          _readField(json, const ["episode"]), "episode", (value) => _readObject(value, GeneratedEpisode.fromJson),
-          requiredField: false, nullable: true),
-      lastClosedEpisode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["last_closed_episode"]),
-          "last_closed_episode", (value) => _readObject(value, GeneratedEpisode.fromJson),
-          requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      episode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["episode"]), "episode", (value) => _readObject(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
+      lastClosedEpisode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["last_closed_episode"]), "last_closed_episode", (value) => _readObject(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -469,13 +341,8 @@ class GeneratedEpisodeLookupResponse {
 
   factory GeneratedEpisodeLookupResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeLookupResponse(
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      episode: _readFieldValue<GeneratedEpisode>(
-          _readField(json, const ["episode"]), "episode", (value) => _readObject(value, GeneratedEpisode.fromJson),
-          requiredField: false, nullable: true),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      episode: _readFieldValue<GeneratedEpisode>(_readField(json, const ["episode"]), "episode", (value) => _readObject(value, GeneratedEpisode.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -496,9 +363,7 @@ class GeneratedEpisodeWrapUpRequest {
 
   factory GeneratedEpisodeWrapUpRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedEpisodeWrapUpRequest(
-      conversationId: _readFieldValue<String>(
-          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
-          requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -582,7 +447,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -598,27 +465,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

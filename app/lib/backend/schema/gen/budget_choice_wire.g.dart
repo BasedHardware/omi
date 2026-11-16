@@ -15,18 +15,9 @@ class GeneratedBudgetChoiceRequest {
 
   factory GeneratedBudgetChoiceRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedBudgetChoiceRequest(
-      choice: _required(
-          _readFieldValue<String>(_readField(json, const ["choice"]), "choice", _readString,
-              requiredField: true, nullable: false),
-          "choice"),
-      dontAskAgain: _required(
-          _readFieldValue<bool>(_readField(json, const ["dont_ask_again"]), "dont_ask_again", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "dont_ask_again"),
-      period: _required(
-          _readFieldValue<String>(_readField(json, const ["period"]), "period", _readString,
-              requiredField: true, nullable: false),
-          "period"),
+      choice: _required(_readFieldValue<String>(_readField(json, const ["choice"]), "choice", _readString, requiredField: true, nullable: false), "choice"),
+      dontAskAgain: _required(_readFieldValue<bool>(_readField(json, const ["dont_ask_again"]), "dont_ask_again", _readBool, requiredField: false, nullable: false, defaultValue: false), "dont_ask_again"),
+      period: _required(_readFieldValue<String>(_readField(json, const ["period"]), "period", _readString, requiredField: true, nullable: false), "period"),
     );
   }
 
@@ -52,18 +43,9 @@ class GeneratedBudgetChoiceRecord {
 
   factory GeneratedBudgetChoiceRecord.fromJson(Map<String, dynamic> json) {
     return GeneratedBudgetChoiceRecord(
-      choice: _required(
-          _readFieldValue<String>(_readField(json, const ["choice"]), "choice", _readString,
-              requiredField: true, nullable: false),
-          "choice"),
-      dontAskAgain: _required(
-          _readFieldValue<bool>(_readField(json, const ["dont_ask_again"]), "dont_ask_again", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "dont_ask_again"),
-      period: _required(
-          _readFieldValue<String>(_readField(json, const ["period"]), "period", _readString,
-              requiredField: true, nullable: false),
-          "period"),
+      choice: _required(_readFieldValue<String>(_readField(json, const ["choice"]), "choice", _readString, requiredField: true, nullable: false), "choice"),
+      dontAskAgain: _required(_readFieldValue<bool>(_readField(json, const ["dont_ask_again"]), "dont_ask_again", _readBool, requiredField: false, nullable: false, defaultValue: false), "dont_ask_again"),
+      period: _required(_readFieldValue<String>(_readField(json, const ["period"]), "period", _readString, requiredField: true, nullable: false), "period"),
     );
   }
 
@@ -91,21 +73,10 @@ class GeneratedBudgetChoiceResponse {
 
   factory GeneratedBudgetChoiceResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBudgetChoiceResponse(
-      ask: _required(
-          _readFieldValue<bool>(_readField(json, const ["ask"]), "ask", _readBool,
-              requiredField: true, nullable: false),
-          "ask"),
-      choice: _readFieldValue<GeneratedBudgetChoiceRecord>(_readField(json, const ["choice"]), "choice",
-          (value) => _readObject(value, GeneratedBudgetChoiceRecord.fromJson),
-          requiredField: true, nullable: true),
-      period: _required(
-          _readFieldValue<String>(_readField(json, const ["period"]), "period", _readString,
-              requiredField: true, nullable: false),
-          "period"),
-      state: _required(
-          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
-              requiredField: true, nullable: false),
-          "state"),
+      ask: _required(_readFieldValue<bool>(_readField(json, const ["ask"]), "ask", _readBool, requiredField: true, nullable: false), "ask"),
+      choice: _readFieldValue<GeneratedBudgetChoiceRecord>(_readField(json, const ["choice"]), "choice", (value) => _readObject(value, GeneratedBudgetChoiceRecord.fromJson), requiredField: true, nullable: true),
+      period: _required(_readFieldValue<String>(_readField(json, const ["period"]), "period", _readString, requiredField: true, nullable: false), "period"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
     );
   }
 
@@ -132,19 +103,9 @@ class GeneratedBudgetChoiceWriteResponse {
 
   factory GeneratedBudgetChoiceWriteResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedBudgetChoiceWriteResponse(
-      ask: _required(
-          _readFieldValue<bool>(_readField(json, const ["ask"]), "ask", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "ask"),
-      choice: _required(
-          _readFieldValue<GeneratedBudgetChoiceRecord>(_readField(json, const ["choice"]), "choice",
-              (value) => _readObject(value, GeneratedBudgetChoiceRecord.fromJson),
-              requiredField: true, nullable: false),
-          "choice"),
-      period: _required(
-          _readFieldValue<String>(_readField(json, const ["period"]), "period", _readString,
-              requiredField: true, nullable: false),
-          "period"),
+      ask: _required(_readFieldValue<bool>(_readField(json, const ["ask"]), "ask", _readBool, requiredField: false, nullable: false, defaultValue: false), "ask"),
+      choice: _required(_readFieldValue<GeneratedBudgetChoiceRecord>(_readField(json, const ["choice"]), "choice", (value) => _readObject(value, GeneratedBudgetChoiceRecord.fromJson), requiredField: true, nullable: false), "choice"),
+      period: _required(_readFieldValue<String>(_readField(json, const ["period"]), "period", _readString, requiredField: true, nullable: false), "period"),
     );
   }
 
@@ -230,7 +191,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -246,27 +209,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

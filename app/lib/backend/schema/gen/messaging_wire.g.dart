@@ -15,18 +15,9 @@ class GeneratedChannelLinkRequest {
 
   factory GeneratedChannelLinkRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinkRequest(
-      channel: _required(
-          _readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString,
-              requiredField: true, nullable: false),
-          "channel"),
-      kind: _required(
-          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
-              requiredField: true, nullable: false),
-          "kind"),
-      provider: _required(
-          _readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString,
-              requiredField: true, nullable: false),
-          "provider"),
+      channel: _required(_readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString, requiredField: true, nullable: false), "channel"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: true, nullable: false), "provider"),
     );
   }
 
@@ -56,22 +47,11 @@ class GeneratedChannelLinkProof {
 
   factory GeneratedChannelLinkProof.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinkProof(
-      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString,
-          requiredField: false, nullable: true),
-      deepLink: _readFieldValue<String>(_readField(json, const ["deep_link"]), "deep_link", _readString,
-          requiredField: false, nullable: true),
-      expiresAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "expires_at"),
-      kind: _required(
-          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
-              requiredField: true, nullable: false),
-          "kind"),
-      proof: _required(
-          _readFieldValue<String>(_readField(json, const ["proof"]), "proof", _readString,
-              requiredField: true, nullable: false),
-          "proof"),
+      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString, requiredField: false, nullable: true),
+      deepLink: _readFieldValue<String>(_readField(json, const ["deep_link"]), "deep_link", _readString, requiredField: false, nullable: true),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      proof: _required(_readFieldValue<String>(_readField(json, const ["proof"]), "proof", _readString, requiredField: true, nullable: false), "proof"),
     );
   }
 
@@ -113,45 +93,16 @@ class GeneratedChannelLink {
 
   factory GeneratedChannelLink.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLink(
-      channel: _required(
-          _readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString,
-              requiredField: true, nullable: false),
-          "channel"),
-      displayHandle: _readFieldValue<String>(_readField(json, const ["display_handle"]), "display_handle", _readString,
-          requiredField: false, nullable: true),
-      externalId: _required(
-          _readFieldValue<String>(_readField(json, const ["external_id"]), "external_id", _readString,
-              requiredField: true, nullable: false),
-          "external_id"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      insights: _required(
-          _readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "insights"),
-      keepPrivateMemoriesInApp: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool,
-              requiredField: false, nullable: false, defaultValue: true),
-          "keep_private_memories_in_app"),
-      linkedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["linked_at"]), "linked_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "linked_at"),
-      provider: _required(
-          _readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString,
-              requiredField: true, nullable: false),
-          "provider"),
-      visibleInApp: _required(
-          _readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "visible_in_app"),
-      voiceNotes: _required(
-          _readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool,
-              requiredField: false, nullable: false, defaultValue: true),
-          "voice_notes"),
+      channel: _required(_readFieldValue<String>(_readField(json, const ["channel"]), "channel", _readString, requiredField: true, nullable: false), "channel"),
+      displayHandle: _readFieldValue<String>(_readField(json, const ["display_handle"]), "display_handle", _readString, requiredField: false, nullable: true),
+      externalId: _required(_readFieldValue<String>(_readField(json, const ["external_id"]), "external_id", _readString, requiredField: true, nullable: false), "external_id"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      insights: _required(_readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool, requiredField: false, nullable: false, defaultValue: false), "insights"),
+      keepPrivateMemoriesInApp: _required(_readFieldValue<bool>(_readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool, requiredField: false, nullable: false, defaultValue: true), "keep_private_memories_in_app"),
+      linkedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["linked_at"]), "linked_at", _readDateTime, requiredField: true, nullable: false), "linked_at"),
+      provider: _required(_readFieldValue<String>(_readField(json, const ["provider"]), "provider", _readString, requiredField: true, nullable: false), "provider"),
+      visibleInApp: _required(_readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool, requiredField: false, nullable: false, defaultValue: false), "visible_in_app"),
+      voiceNotes: _required(_readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool, requiredField: false, nullable: false, defaultValue: true), "voice_notes"),
     );
   }
 
@@ -182,15 +133,8 @@ class GeneratedChannelLinksResponse {
 
   factory GeneratedChannelLinksResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinksResponse(
-      availability: _required(
-          _readFieldValue<Map<String, dynamic>>(_readField(json, const ["availability"]), "availability", _readMap,
-              requiredField: false, nullable: false, defaultValue: const {}),
-          "availability"),
-      links: _required(
-          _readFieldValue<List<GeneratedChannelLink>>(_readField(json, const ["links"]), "links",
-              (value) => _readObjectList(value, GeneratedChannelLink.fromJson),
-              requiredField: true, nullable: false),
-          "links"),
+      availability: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["availability"]), "availability", _readMap, requiredField: false, nullable: false, defaultValue: const {}), "availability"),
+      links: _required(_readFieldValue<List<GeneratedChannelLink>>(_readField(json, const ["links"]), "links", (value) => _readObjectList(value, GeneratedChannelLink.fromJson), requiredField: true, nullable: false), "links"),
     );
   }
 
@@ -217,15 +161,10 @@ class GeneratedChannelVisibilityRequest {
 
   factory GeneratedChannelVisibilityRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelVisibilityRequest(
-      insights: _readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool,
-          requiredField: false, nullable: true),
-      keepPrivateMemoriesInApp: _readFieldValue<bool>(
-          _readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool,
-          requiredField: false, nullable: true),
-      visibleInApp: _readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool,
-          requiredField: false, nullable: true),
-      voiceNotes: _readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool,
-          requiredField: false, nullable: true),
+      insights: _readFieldValue<bool>(_readField(json, const ["insights"]), "insights", _readBool, requiredField: false, nullable: true),
+      keepPrivateMemoriesInApp: _readFieldValue<bool>(_readField(json, const ["keep_private_memories_in_app"]), "keep_private_memories_in_app", _readBool, requiredField: false, nullable: true),
+      visibleInApp: _readFieldValue<bool>(_readField(json, const ["visible_in_app"]), "visible_in_app", _readBool, requiredField: false, nullable: true),
+      voiceNotes: _readFieldValue<bool>(_readField(json, const ["voice_notes"]), "voice_notes", _readBool, requiredField: false, nullable: true),
     );
   }
 
@@ -248,10 +187,7 @@ class GeneratedChannelLinkReceipt {
 
   factory GeneratedChannelLinkReceipt.fromJson(Map<String, dynamic> json) {
     return GeneratedChannelLinkReceipt(
-      status: _required(
-          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
-              requiredField: true, nullable: false),
-          "status"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
     );
   }
 
@@ -335,7 +271,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -351,27 +289,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

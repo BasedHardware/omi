@@ -19,24 +19,11 @@ class GeneratedSearchOverviewFolder {
 
   factory GeneratedSearchOverviewFolder.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchOverviewFolder(
-      color: _required(
-          _readFieldValue<String>(_readField(json, const ["color"]), "color", _readString,
-              requiredField: false, nullable: false, defaultValue: "#6B7280"),
-          "color"),
-      count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt,
-          requiredField: false, nullable: true),
-      icon: _required(
-          _readFieldValue<String>(_readField(json, const ["icon"]), "icon", _readString,
-              requiredField: false, nullable: false, defaultValue: "folder"),
-          "icon"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      name: _required(
-          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
-              requiredField: true, nullable: false),
-          "name"),
+      color: _required(_readFieldValue<String>(_readField(json, const ["color"]), "color", _readString, requiredField: false, nullable: false, defaultValue: "#6B7280"), "color"),
+      count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: true),
+      icon: _required(_readFieldValue<String>(_readField(json, const ["icon"]), "icon", _readString, requiredField: false, nullable: false, defaultValue: "folder"), "icon"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
     );
   }
 
@@ -70,19 +57,12 @@ class GeneratedSearchOverviewResponse {
 
   factory GeneratedSearchOverviewResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchOverviewResponse(
-      folders: _readFieldValue<List<GeneratedSearchOverviewFolder>>(_readField(json, const ["folders"]), "folders",
-          (value) => _readObjectList(value, GeneratedSearchOverviewFolder.fromJson),
-          requiredField: false, nullable: true),
-      memories: _readFieldValue<int>(_readField(json, const ["memories"]), "memories", _readInt,
-          requiredField: false, nullable: true),
-      people: _readFieldValue<int>(_readField(json, const ["people"]), "people", _readInt,
-          requiredField: false, nullable: true),
-      places: _readFieldValue<int>(_readField(json, const ["places"]), "places", _readInt,
-          requiredField: false, nullable: true),
-      recaps: _readFieldValue<int>(_readField(json, const ["recaps"]), "recaps", _readInt,
-          requiredField: false, nullable: true),
-      starred: _readFieldValue<int>(_readField(json, const ["starred"]), "starred", _readInt,
-          requiredField: false, nullable: true),
+      folders: _readFieldValue<List<GeneratedSearchOverviewFolder>>(_readField(json, const ["folders"]), "folders", (value) => _readObjectList(value, GeneratedSearchOverviewFolder.fromJson), requiredField: false, nullable: true),
+      memories: _readFieldValue<int>(_readField(json, const ["memories"]), "memories", _readInt, requiredField: false, nullable: true),
+      people: _readFieldValue<int>(_readField(json, const ["people"]), "people", _readInt, requiredField: false, nullable: true),
+      places: _readFieldValue<int>(_readField(json, const ["places"]), "places", _readInt, requiredField: false, nullable: true),
+      recaps: _readFieldValue<int>(_readField(json, const ["recaps"]), "recaps", _readInt, requiredField: false, nullable: true),
+      starred: _readFieldValue<int>(_readField(json, const ["starred"]), "starred", _readInt, requiredField: false, nullable: true),
     );
   }
 
@@ -135,57 +115,21 @@ class GeneratedProductMemorySearchItem {
 
   factory GeneratedProductMemorySearchItem.fromJson(Map<String, dynamic> json) {
     return GeneratedProductMemorySearchItem(
-      accessReason: _required(
-          _readFieldValue<String>(_readField(json, const ["access_reason"]), "access_reason", _readString,
-              requiredField: true, nullable: false),
-          "access_reason"),
-      agentUse: _required(
-          _readFieldValue<String>(_readField(json, const ["agent_use"]), "agent_use", _readString,
-              requiredField: true, nullable: false),
-          "agent_use"),
-      confidence: _readFieldValue<double>(_readField(json, const ["confidence"]), "confidence", _readDouble,
-          requiredField: false, nullable: true),
-      content: _required(
-          _readFieldValue<String>(_readField(json, const ["content"]), "content", _readString,
-              requiredField: true, nullable: false),
-          "content"),
-      date: _required(
-          _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString,
-              requiredField: true, nullable: false),
-          "date"),
-      evidence: _readFieldValue<List<Map<String, dynamic>>>(
-          _readField(json, const ["evidence"]), "evidence", _readMapList,
-          requiredField: false, nullable: true),
-      lifecycleStatus: _required(
-          _readFieldValue<String>(_readField(json, const ["lifecycle_status"]), "lifecycle_status", _readString,
-              requiredField: true, nullable: false),
-          "lifecycle_status"),
-      memoryId: _required(
-          _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString,
-              requiredField: true, nullable: false),
-          "memory_id"),
-      memoryLayer: _required(
-          _readFieldValue<String>(_readField(json, const ["memory_layer"]), "memory_layer", _readString,
-              requiredField: true, nullable: false),
-          "memory_layer"),
-      processingState: _required(
-          _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString,
-              requiredField: true, nullable: false),
-          "processing_state"),
-      source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString,
-          requiredField: false, nullable: true),
-      supersededBy: _readFieldValue<String>(_readField(json, const ["superseded_by"]), "superseded_by", _readString,
-          requiredField: false, nullable: true),
-      tier: _required(
-          _readFieldValue<String>(_readField(json, const ["tier"]), "tier", _readString,
-              requiredField: true, nullable: false),
-          "tier"),
-      visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString,
-          requiredField: false, nullable: true),
-      visibilitySource: _required(
-          _readFieldValue<String>(_readField(json, const ["visibility_source"]), "visibility_source", _readString,
-              requiredField: true, nullable: false),
-          "visibility_source"),
+      accessReason: _required(_readFieldValue<String>(_readField(json, const ["access_reason"]), "access_reason", _readString, requiredField: true, nullable: false), "access_reason"),
+      agentUse: _required(_readFieldValue<String>(_readField(json, const ["agent_use"]), "agent_use", _readString, requiredField: true, nullable: false), "agent_use"),
+      confidence: _readFieldValue<double>(_readField(json, const ["confidence"]), "confidence", _readDouble, requiredField: false, nullable: true),
+      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
+      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
+      evidence: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["evidence"]), "evidence", _readMapList, requiredField: false, nullable: true),
+      lifecycleStatus: _required(_readFieldValue<String>(_readField(json, const ["lifecycle_status"]), "lifecycle_status", _readString, requiredField: true, nullable: false), "lifecycle_status"),
+      memoryId: _required(_readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: true, nullable: false), "memory_id"),
+      memoryLayer: _required(_readFieldValue<String>(_readField(json, const ["memory_layer"]), "memory_layer", _readString, requiredField: true, nullable: false), "memory_layer"),
+      processingState: _required(_readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: true, nullable: false), "processing_state"),
+      source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true),
+      supersededBy: _readFieldValue<String>(_readField(json, const ["superseded_by"]), "superseded_by", _readString, requiredField: false, nullable: true),
+      tier: _required(_readFieldValue<String>(_readField(json, const ["tier"]), "tier", _readString, requiredField: true, nullable: false), "tier"),
+      visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: true),
+      visibilitySource: _required(_readFieldValue<String>(_readField(json, const ["visibility_source"]), "visibility_source", _readString, requiredField: true, nullable: false), "visibility_source"),
     );
   }
 
@@ -225,24 +169,10 @@ class GeneratedMemorySearchPolicyPayload {
 
   factory GeneratedMemorySearchPolicyPayload.fromJson(Map<String, dynamic> json) {
     return GeneratedMemorySearchPolicyPayload(
-      appHasDefaultMemoryGrant: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["app_has_default_memory_grant"]), "app_has_default_memory_grant", _readBool,
-              requiredField: true, nullable: false),
-          "app_has_default_memory_grant"),
-      archiveCapability: _required(
-          _readFieldValue<bool>(_readField(json, const ["archive_capability"]), "archive_capability", _readBool,
-              requiredField: true, nullable: false),
-          "archive_capability"),
-      consumer: _required(
-          _readFieldValue<String>(_readField(json, const ["consumer"]), "consumer", _readString,
-              requiredField: true, nullable: false),
-          "consumer"),
-      rawProvenanceCapability: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["raw_provenance_capability"]), "raw_provenance_capability", _readBool,
-              requiredField: true, nullable: false),
-          "raw_provenance_capability"),
+      appHasDefaultMemoryGrant: _required(_readFieldValue<bool>(_readField(json, const ["app_has_default_memory_grant"]), "app_has_default_memory_grant", _readBool, requiredField: true, nullable: false), "app_has_default_memory_grant"),
+      archiveCapability: _required(_readFieldValue<bool>(_readField(json, const ["archive_capability"]), "archive_capability", _readBool, requiredField: true, nullable: false), "archive_capability"),
+      consumer: _required(_readFieldValue<String>(_readField(json, const ["consumer"]), "consumer", _readString, requiredField: true, nullable: false), "consumer"),
+      rawProvenanceCapability: _required(_readFieldValue<bool>(_readField(json, const ["raw_provenance_capability"]), "raw_provenance_capability", _readBool, requiredField: true, nullable: false), "raw_provenance_capability"),
     );
   }
 
@@ -271,21 +201,10 @@ class GeneratedMemoryGlobalReadGateObservability {
 
   factory GeneratedMemoryGlobalReadGateObservability.fromJson(Map<String, dynamic> json) {
     return GeneratedMemoryGlobalReadGateObservability(
-      fallbackReason: _readFieldValue<String>(
-          _readField(json, const ["fallback_reason"]), "fallback_reason", _readString,
-          requiredField: false, nullable: true),
-      readDecision: _required(
-          _readFieldValue<String>(_readField(json, const ["read_decision"]), "read_decision", _readString,
-              requiredField: true, nullable: false),
-          "read_decision"),
-      reason: _required(
-          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
-              requiredField: true, nullable: false),
-          "reason"),
-      sourcePath: _required(
-          _readFieldValue<String>(_readField(json, const ["source_path"]), "source_path", _readString,
-              requiredField: true, nullable: false),
-          "source_path"),
+      fallbackReason: _readFieldValue<String>(_readField(json, const ["fallback_reason"]), "fallback_reason", _readString, requiredField: false, nullable: true),
+      readDecision: _required(_readFieldValue<String>(_readField(json, const ["read_decision"]), "read_decision", _readString, requiredField: true, nullable: false), "read_decision"),
+      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
+      sourcePath: _required(_readFieldValue<String>(_readField(json, const ["source_path"]), "source_path", _readString, requiredField: true, nullable: false), "source_path"),
     );
   }
 
@@ -316,28 +235,11 @@ class GeneratedReadRolloutCapabilities {
 
   factory GeneratedReadRolloutCapabilities.fromJson(Map<String, dynamic> json) {
     return GeneratedReadRolloutCapabilities(
-      legacyOnly: _required(
-          _readFieldValue<bool>(_readField(json, const ["legacy_only"]), "legacy_only", _readBool,
-              requiredField: true, nullable: false),
-          "legacy_only"),
-      legacyReadsAuthoritative: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["legacy_reads_authoritative"]), "legacy_reads_authoritative", _readBool,
-              requiredField: true, nullable: false),
-          "legacy_reads_authoritative"),
-      memoryReadsEnabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["memory_reads_enabled"]), "memory_reads_enabled", _readBool,
-              requiredField: true, nullable: false),
-          "memory_reads_enabled"),
-      memoryWritesEnabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["memory_writes_enabled"]), "memory_writes_enabled", _readBool,
-              requiredField: true, nullable: false),
-          "memory_writes_enabled"),
-      shadowArtifactsEnabled: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["shadow_artifacts_enabled"]), "shadow_artifacts_enabled", _readBool,
-              requiredField: true, nullable: false),
-          "shadow_artifacts_enabled"),
+      legacyOnly: _required(_readFieldValue<bool>(_readField(json, const ["legacy_only"]), "legacy_only", _readBool, requiredField: true, nullable: false), "legacy_only"),
+      legacyReadsAuthoritative: _required(_readFieldValue<bool>(_readField(json, const ["legacy_reads_authoritative"]), "legacy_reads_authoritative", _readBool, requiredField: true, nullable: false), "legacy_reads_authoritative"),
+      memoryReadsEnabled: _required(_readFieldValue<bool>(_readField(json, const ["memory_reads_enabled"]), "memory_reads_enabled", _readBool, requiredField: true, nullable: false), "memory_reads_enabled"),
+      memoryWritesEnabled: _required(_readFieldValue<bool>(_readField(json, const ["memory_writes_enabled"]), "memory_writes_enabled", _readBool, requiredField: true, nullable: false), "memory_writes_enabled"),
+      shadowArtifactsEnabled: _required(_readFieldValue<bool>(_readField(json, const ["shadow_artifacts_enabled"]), "shadow_artifacts_enabled", _readBool, requiredField: true, nullable: false), "shadow_artifacts_enabled"),
     );
   }
 
@@ -395,82 +297,24 @@ class GeneratedProductRolloutObservability {
 
   factory GeneratedProductRolloutObservability.fromJson(Map<String, dynamic> json) {
     return GeneratedProductRolloutObservability(
-      appContext: _required(
-          _readFieldValue<Map<String, dynamic>>(_readField(json, const ["app_context"]), "app_context", _readMap,
-              requiredField: true, nullable: false),
-          "app_context"),
-      archiveCapability: _required(
-          _readFieldValue<bool>(_readField(json, const ["archive_capability"]), "archive_capability", _readBool,
-              requiredField: true, nullable: false),
-          "archive_capability"),
-      archiveCapabilityGranted: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["archive_capability_granted"]), "archive_capability_granted", _readBool,
-              requiredField: true, nullable: false),
-          "archive_capability_granted"),
-      archiveCapabilityRequired: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["archive_capability_required"]), "archive_capability_required", _readBool,
-              requiredField: true, nullable: false),
-          "archive_capability_required"),
-      archiveDefaultVisible: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["archive_default_visible"]), "archive_default_visible", _readBool,
-              requiredField: true, nullable: false),
-          "archive_default_visible"),
-      capabilities: _required(
-          _readFieldValue<GeneratedReadRolloutCapabilities>(_readField(json, const ["capabilities"]), "capabilities",
-              (value) => _readObject(value, GeneratedReadRolloutCapabilities.fromJson),
-              requiredField: true, nullable: false),
-          "capabilities"),
-      consumer: _required(
-          _readFieldValue<String>(_readField(json, const ["consumer"]), "consumer", _readString,
-              requiredField: true, nullable: false),
-          "consumer"),
-      defaultMemoryGrant: _required(
-          _readFieldValue<bool>(_readField(json, const ["default_memory_grant"]), "default_memory_grant", _readBool,
-              requiredField: true, nullable: false),
-          "default_memory_grant"),
-      enabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
-              requiredField: true, nullable: false),
-          "enabled"),
-      explicitArchiveRequest: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["explicit_archive_request"]), "explicit_archive_request", _readBool,
-              requiredField: true, nullable: false),
-          "explicit_archive_request"),
-      fallbackReason: _readFieldValue<String>(
-          _readField(json, const ["fallback_reason"]), "fallback_reason", _readString,
-          requiredField: false, nullable: true),
-      legacyReadsAuthoritative: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["legacy_reads_authoritative"]), "legacy_reads_authoritative", _readBool,
-              requiredField: true, nullable: false),
-          "legacy_reads_authoritative"),
-      memoryReadsEnabled: _required(
-          _readFieldValue<bool>(_readField(json, const ["memory_reads_enabled"]), "memory_reads_enabled", _readBool,
-              requiredField: true, nullable: false),
-          "memory_reads_enabled"),
-      mode: _required(
-          _readFieldValue<String>(_readField(json, const ["mode"]), "mode", _readString,
-              requiredField: true, nullable: false),
-          "mode"),
-      readDecision: _required(
-          _readFieldValue<String>(_readField(json, const ["read_decision"]), "read_decision", _readString,
-              requiredField: true, nullable: false),
-          "read_decision"),
-      reason: _required(
-          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
-              requiredField: true, nullable: false),
-          "reason"),
-      surface: _required(
-          _readFieldValue<String>(_readField(json, const ["surface"]), "surface", _readString,
-              requiredField: true, nullable: false),
-          "surface"),
-      vectorRepairOutboxEnabled: _readFieldValue<bool>(
-          _readField(json, const ["vector_repair_outbox_enabled"]), "vector_repair_outbox_enabled", _readBool,
-          requiredField: false, nullable: true),
+      appContext: _required(_readFieldValue<Map<String, dynamic>>(_readField(json, const ["app_context"]), "app_context", _readMap, requiredField: true, nullable: false), "app_context"),
+      archiveCapability: _required(_readFieldValue<bool>(_readField(json, const ["archive_capability"]), "archive_capability", _readBool, requiredField: true, nullable: false), "archive_capability"),
+      archiveCapabilityGranted: _required(_readFieldValue<bool>(_readField(json, const ["archive_capability_granted"]), "archive_capability_granted", _readBool, requiredField: true, nullable: false), "archive_capability_granted"),
+      archiveCapabilityRequired: _required(_readFieldValue<bool>(_readField(json, const ["archive_capability_required"]), "archive_capability_required", _readBool, requiredField: true, nullable: false), "archive_capability_required"),
+      archiveDefaultVisible: _required(_readFieldValue<bool>(_readField(json, const ["archive_default_visible"]), "archive_default_visible", _readBool, requiredField: true, nullable: false), "archive_default_visible"),
+      capabilities: _required(_readFieldValue<GeneratedReadRolloutCapabilities>(_readField(json, const ["capabilities"]), "capabilities", (value) => _readObject(value, GeneratedReadRolloutCapabilities.fromJson), requiredField: true, nullable: false), "capabilities"),
+      consumer: _required(_readFieldValue<String>(_readField(json, const ["consumer"]), "consumer", _readString, requiredField: true, nullable: false), "consumer"),
+      defaultMemoryGrant: _required(_readFieldValue<bool>(_readField(json, const ["default_memory_grant"]), "default_memory_grant", _readBool, requiredField: true, nullable: false), "default_memory_grant"),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
+      explicitArchiveRequest: _required(_readFieldValue<bool>(_readField(json, const ["explicit_archive_request"]), "explicit_archive_request", _readBool, requiredField: true, nullable: false), "explicit_archive_request"),
+      fallbackReason: _readFieldValue<String>(_readField(json, const ["fallback_reason"]), "fallback_reason", _readString, requiredField: false, nullable: true),
+      legacyReadsAuthoritative: _required(_readFieldValue<bool>(_readField(json, const ["legacy_reads_authoritative"]), "legacy_reads_authoritative", _readBool, requiredField: true, nullable: false), "legacy_reads_authoritative"),
+      memoryReadsEnabled: _required(_readFieldValue<bool>(_readField(json, const ["memory_reads_enabled"]), "memory_reads_enabled", _readBool, requiredField: true, nullable: false), "memory_reads_enabled"),
+      mode: _required(_readFieldValue<String>(_readField(json, const ["mode"]), "mode", _readString, requiredField: true, nullable: false), "mode"),
+      readDecision: _required(_readFieldValue<String>(_readField(json, const ["read_decision"]), "read_decision", _readString, requiredField: true, nullable: false), "read_decision"),
+      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
+      surface: _required(_readFieldValue<String>(_readField(json, const ["surface"]), "surface", _readString, requiredField: true, nullable: false), "surface"),
+      vectorRepairOutboxEnabled: _readFieldValue<bool>(_readField(json, const ["vector_repair_outbox_enabled"]), "vector_repair_outbox_enabled", _readBool, requiredField: false, nullable: true),
     );
   }
 
@@ -527,55 +371,17 @@ class GeneratedProductMemorySearchResponse {
 
   factory GeneratedProductMemorySearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedProductMemorySearchResponse(
-      archiveDefaultVisible: _required(
-          _readFieldValue<bool>(
-              _readField(json, const ["archive_default_visible"]), "archive_default_visible", _readBool,
-              requiredField: true, nullable: false),
-          "archive_default_visible"),
-      globalReadGate: _required(
-          _readFieldValue<GeneratedMemoryGlobalReadGateObservability>(_readField(json, const ["global_read_gate"]),
-              "global_read_gate", (value) => _readObject(value, GeneratedMemoryGlobalReadGateObservability.fromJson),
-              requiredField: true, nullable: false),
-          "global_read_gate"),
-      items: _required(
-          _readFieldValue<List<GeneratedProductMemorySearchItem>>(_readField(json, const ["items"]), "items",
-              (value) => _readObjectList(value, GeneratedProductMemorySearchItem.fromJson),
-              requiredField: true, nullable: false),
-          "items"),
-      limit: _required(
-          _readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt,
-              requiredField: true, nullable: false),
-          "limit"),
-      offset: _required(
-          _readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt,
-              requiredField: true, nullable: false),
-          "offset"),
-      policy: _required(
-          _readFieldValue<GeneratedMemorySearchPolicyPayload>(_readField(json, const ["policy"]), "policy",
-              (value) => _readObject(value, GeneratedMemorySearchPolicyPayload.fromJson),
-              requiredField: true, nullable: false),
-          "policy"),
-      query: _required(
-          _readFieldValue<String>(_readField(json, const ["query"]), "query", _readString,
-              requiredField: true, nullable: false),
-          "query"),
-      returnedCount: _required(
-          _readFieldValue<int>(_readField(json, const ["returned_count"]), "returned_count", _readInt,
-              requiredField: true, nullable: false),
-          "returned_count"),
-      rollout: _required(
-          _readFieldValue<GeneratedProductRolloutObservability>(_readField(json, const ["rollout"]), "rollout",
-              (value) => _readObject(value, GeneratedProductRolloutObservability.fromJson),
-              requiredField: true, nullable: false),
-          "rollout"),
-      totalCount: _required(
-          _readFieldValue<int>(_readField(json, const ["total_count"]), "total_count", _readInt,
-              requiredField: true, nullable: false),
-          "total_count"),
-      uid: _required(
-          _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString,
-              requiredField: true, nullable: false),
-          "uid"),
+      archiveDefaultVisible: _required(_readFieldValue<bool>(_readField(json, const ["archive_default_visible"]), "archive_default_visible", _readBool, requiredField: true, nullable: false), "archive_default_visible"),
+      globalReadGate: _required(_readFieldValue<GeneratedMemoryGlobalReadGateObservability>(_readField(json, const ["global_read_gate"]), "global_read_gate", (value) => _readObject(value, GeneratedMemoryGlobalReadGateObservability.fromJson), requiredField: true, nullable: false), "global_read_gate"),
+      items: _required(_readFieldValue<List<GeneratedProductMemorySearchItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedProductMemorySearchItem.fromJson), requiredField: true, nullable: false), "items"),
+      limit: _required(_readFieldValue<int>(_readField(json, const ["limit"]), "limit", _readInt, requiredField: true, nullable: false), "limit"),
+      offset: _required(_readFieldValue<int>(_readField(json, const ["offset"]), "offset", _readInt, requiredField: true, nullable: false), "offset"),
+      policy: _required(_readFieldValue<GeneratedMemorySearchPolicyPayload>(_readField(json, const ["policy"]), "policy", (value) => _readObject(value, GeneratedMemorySearchPolicyPayload.fromJson), requiredField: true, nullable: false), "policy"),
+      query: _required(_readFieldValue<String>(_readField(json, const ["query"]), "query", _readString, requiredField: true, nullable: false), "query"),
+      returnedCount: _required(_readFieldValue<int>(_readField(json, const ["returned_count"]), "returned_count", _readInt, requiredField: true, nullable: false), "returned_count"),
+      rollout: _required(_readFieldValue<GeneratedProductRolloutObservability>(_readField(json, const ["rollout"]), "rollout", (value) => _readObject(value, GeneratedProductRolloutObservability.fromJson), requiredField: true, nullable: false), "rollout"),
+      totalCount: _required(_readFieldValue<int>(_readField(json, const ["total_count"]), "total_count", _readInt, requiredField: true, nullable: false), "total_count"),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
     );
   }
 
@@ -669,7 +475,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -685,27 +493,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

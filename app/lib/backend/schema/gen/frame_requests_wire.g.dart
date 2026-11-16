@@ -53,79 +53,28 @@ class GeneratedFrameRequest {
 
   factory GeneratedFrameRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequest(
-      accountGeneration: _required(
-          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "account_generation"),
-      attachedAt: _readFieldValue<DateTime>(_readField(json, const ["attached_at"]), "attached_at", _readDateTime,
-          requiredField: false, nullable: true),
-      attemptNumber: _required(
-          _readFieldValue<int>(_readField(json, const ["attempt_number"]), "attempt_number", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "attempt_number"),
-      byteCount: _required(
-          _readFieldValue<int>(_readField(json, const ["byte_count"]), "byte_count", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "byte_count"),
-      claimedAt: _readFieldValue<DateTime>(_readField(json, const ["claimed_at"]), "claimed_at", _readDateTime,
-          requiredField: false, nullable: true),
-      cleanupAttempts: _required(
-          _readFieldValue<int>(_readField(json, const ["cleanup_attempts"]), "cleanup_attempts", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "cleanup_attempts"),
-      cleanupNextAttemptAt: _readFieldValue<DateTime>(
-          _readField(json, const ["cleanup_next_attempt_at"]), "cleanup_next_attempt_at", _readDateTime,
-          requiredField: false, nullable: true),
-      cleanupState: _required(
-          _readFieldValue<String>(_readField(json, const ["cleanup_state"]), "cleanup_state", _readString,
-              requiredField: false, nullable: false, defaultValue: "not_required"),
-          "cleanup_state"),
-      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString,
-          requiredField: false, nullable: true),
-      conversationId: _readFieldValue<String>(
-          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
-          requiredField: false, nullable: true),
-      createdAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "created_at"),
-      dedupeKey: _required(
-          _readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString,
-              requiredField: true, nullable: false),
-          "dedupe_key"),
-      dedupeWindow: _required(
-          _readFieldValue<int>(_readField(json, const ["dedupe_window"]), "dedupe_window", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "dedupe_window"),
-      deviceId: _required(
-          _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString,
-              requiredField: true, nullable: false),
-          "device_id"),
-      expiresAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "expires_at"),
-      requestId: _required(
-          _readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString,
-              requiredField: true, nullable: false),
-          "request_id"),
-      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString,
-          requiredField: false, nullable: true),
-      state: _required(
-          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
-              requiredField: false, nullable: false, defaultValue: "requested"),
-          "state"),
-      storageId: _readFieldValue<String>(_readField(json, const ["storage_id"]), "storage_id", _readString,
-          requiredField: false, nullable: true),
-      terminalReason: _readFieldValue<String>(
-          _readField(json, const ["terminal_reason"]), "terminal_reason", _readString,
-          requiredField: false, nullable: true),
-      uid: _required(
-          _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString,
-              requiredField: true, nullable: false),
-          "uid"),
-      uploadedAt: _readFieldValue<DateTime>(_readField(json, const ["uploaded_at"]), "uploaded_at", _readDateTime,
-          requiredField: false, nullable: true),
+      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
+      attachedAt: _readFieldValue<DateTime>(_readField(json, const ["attached_at"]), "attached_at", _readDateTime, requiredField: false, nullable: true),
+      attemptNumber: _required(_readFieldValue<int>(_readField(json, const ["attempt_number"]), "attempt_number", _readInt, requiredField: false, nullable: false, defaultValue: 0), "attempt_number"),
+      byteCount: _required(_readFieldValue<int>(_readField(json, const ["byte_count"]), "byte_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "byte_count"),
+      claimedAt: _readFieldValue<DateTime>(_readField(json, const ["claimed_at"]), "claimed_at", _readDateTime, requiredField: false, nullable: true),
+      cleanupAttempts: _required(_readFieldValue<int>(_readField(json, const ["cleanup_attempts"]), "cleanup_attempts", _readInt, requiredField: false, nullable: false, defaultValue: 0), "cleanup_attempts"),
+      cleanupNextAttemptAt: _readFieldValue<DateTime>(_readField(json, const ["cleanup_next_attempt_at"]), "cleanup_next_attempt_at", _readDateTime, requiredField: false, nullable: true),
+      cleanupState: _required(_readFieldValue<String>(_readField(json, const ["cleanup_state"]), "cleanup_state", _readString, requiredField: false, nullable: false, defaultValue: "not_required"), "cleanup_state"),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      dedupeWindow: _required(_readFieldValue<int>(_readField(json, const ["dedupe_window"]), "dedupe_window", _readInt, requiredField: false, nullable: false, defaultValue: 0), "dedupe_window"),
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
+      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
+      requestId: _required(_readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString, requiredField: true, nullable: false), "request_id"),
+      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString, requiredField: false, nullable: true),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: false, nullable: false, defaultValue: "requested"), "state"),
+      storageId: _readFieldValue<String>(_readField(json, const ["storage_id"]), "storage_id", _readString, requiredField: false, nullable: true),
+      terminalReason: _readFieldValue<String>(_readField(json, const ["terminal_reason"]), "terminal_reason", _readString, requiredField: false, nullable: true),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
+      uploadedAt: _readFieldValue<DateTime>(_readField(json, const ["uploaded_at"]), "uploaded_at", _readDateTime, requiredField: false, nullable: true),
     );
   }
 
@@ -176,26 +125,12 @@ class GeneratedCreateFrameRequest {
 
   factory GeneratedCreateFrameRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedCreateFrameRequest(
-      accountGeneration: _required(
-          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "account_generation"),
-      conversationId: _readFieldValue<String>(
-          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
-          requiredField: false, nullable: true),
-      dedupeKey: _required(
-          _readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString,
-              requiredField: true, nullable: false),
-          "dedupe_key"),
-      deviceId: _required(
-          _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString,
-              requiredField: true, nullable: false),
-          "device_id"),
-      requestedTtlSeconds: _readFieldValue<int>(
-          _readField(json, const ["requested_ttl_seconds"]), "requested_ttl_seconds", _readInt,
-          requiredField: false, nullable: true),
-      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString,
-          requiredField: false, nullable: true),
+      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
+      dedupeKey: _required(_readFieldValue<String>(_readField(json, const ["dedupe_key"]), "dedupe_key", _readString, requiredField: true, nullable: false), "dedupe_key"),
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
+      requestedTtlSeconds: _readFieldValue<int>(_readField(json, const ["requested_ttl_seconds"]), "requested_ttl_seconds", _readInt, requiredField: false, nullable: true),
+      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -232,29 +167,13 @@ class GeneratedFrameRequestStateUpdate {
 
   factory GeneratedFrameRequestStateUpdate.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequestStateUpdate(
-      accountGeneration: _required(
-          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "account_generation"),
-      byteCount: _required(
-          _readFieldValue<int>(_readField(json, const ["byte_count"]), "byte_count", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "byte_count"),
-      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString,
-          requiredField: false, nullable: true),
-      deviceId: _required(
-          _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString,
-              requiredField: true, nullable: false),
-          "device_id"),
-      state: _required(
-          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
-              requiredField: true, nullable: false),
-          "state"),
-      storageId: _readFieldValue<String>(_readField(json, const ["storage_id"]), "storage_id", _readString,
-          requiredField: false, nullable: true),
-      terminalReason: _readFieldValue<String>(
-          _readField(json, const ["terminal_reason"]), "terminal_reason", _readString,
-          requiredField: false, nullable: true),
+      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
+      byteCount: _required(_readFieldValue<int>(_readField(json, const ["byte_count"]), "byte_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "byte_count"),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
+      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      storageId: _readFieldValue<String>(_readField(json, const ["storage_id"]), "storage_id", _readString, requiredField: false, nullable: true),
+      terminalReason: _readFieldValue<String>(_readField(json, const ["terminal_reason"]), "terminal_reason", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -284,18 +203,9 @@ class GeneratedFrameRequestPromotion {
 
   factory GeneratedFrameRequestPromotion.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequestPromotion(
-      accountGeneration: _required(
-          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
-              requiredField: false, nullable: false, defaultValue: 0),
-          "account_generation"),
-      conversationId: _required(
-          _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString,
-              requiredField: true, nullable: false),
-          "conversation_id"),
-      deviceId: _required(
-          _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString,
-              requiredField: true, nullable: false),
-          "device_id"),
+      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
+      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
     );
   }
 
@@ -319,15 +229,8 @@ class GeneratedFrameRequestEnvelope {
 
   factory GeneratedFrameRequestEnvelope.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequestEnvelope(
-      deduplicated: _required(
-          _readFieldValue<bool>(_readField(json, const ["deduplicated"]), "deduplicated", _readBool,
-              requiredField: false, nullable: false, defaultValue: false),
-          "deduplicated"),
-      request: _required(
-          _readFieldValue<GeneratedFrameRequest>(_readField(json, const ["request"]), "request",
-              (value) => _readObject(value, GeneratedFrameRequest.fromJson),
-              requiredField: true, nullable: false),
-          "request"),
+      deduplicated: _required(_readFieldValue<bool>(_readField(json, const ["deduplicated"]), "deduplicated", _readBool, requiredField: false, nullable: false, defaultValue: false), "deduplicated"),
+      request: _required(_readFieldValue<GeneratedFrameRequest>(_readField(json, const ["request"]), "request", (value) => _readObject(value, GeneratedFrameRequest.fromJson), requiredField: true, nullable: false), "request"),
     );
   }
 
@@ -348,9 +251,7 @@ class GeneratedFrameRequestBatch {
 
   factory GeneratedFrameRequestBatch.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequestBatch(
-      requests: _readFieldValue<List<GeneratedFrameRequest>>(_readField(json, const ["requests"]), "requests",
-          (value) => _readObjectList(value, GeneratedFrameRequest.fromJson),
-          requiredField: false, nullable: true),
+      requests: _readFieldValue<List<GeneratedFrameRequest>>(_readField(json, const ["requests"]), "requests", (value) => _readObjectList(value, GeneratedFrameRequest.fromJson), requiredField: false, nullable: true),
     );
   }
 
@@ -434,7 +335,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -450,27 +353,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

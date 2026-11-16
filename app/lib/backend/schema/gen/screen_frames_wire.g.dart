@@ -17,22 +17,10 @@ class GeneratedNormalizedRect {
 
   factory GeneratedNormalizedRect.fromJson(Map<String, dynamic> json) {
     return GeneratedNormalizedRect(
-      height: _required(
-          _readFieldValue<double>(_readField(json, const ["height"]), "height", _readDouble,
-              requiredField: true, nullable: false),
-          "height"),
-      width: _required(
-          _readFieldValue<double>(_readField(json, const ["width"]), "width", _readDouble,
-              requiredField: true, nullable: false),
-          "width"),
-      x: _required(
-          _readFieldValue<double>(_readField(json, const ["x"]), "x", _readDouble,
-              requiredField: true, nullable: false),
-          "x"),
-      y: _required(
-          _readFieldValue<double>(_readField(json, const ["y"]), "y", _readDouble,
-              requiredField: true, nullable: false),
-          "y"),
+      height: _required(_readFieldValue<double>(_readField(json, const ["height"]), "height", _readDouble, requiredField: true, nullable: false), "height"),
+      width: _required(_readFieldValue<double>(_readField(json, const ["width"]), "width", _readDouble, requiredField: true, nullable: false), "width"),
+      x: _required(_readFieldValue<double>(_readField(json, const ["x"]), "x", _readDouble, requiredField: true, nullable: false), "x"),
+      y: _required(_readFieldValue<double>(_readField(json, const ["y"]), "y", _readDouble, requiredField: true, nullable: false), "y"),
     );
   }
 
@@ -57,14 +45,8 @@ class GeneratedScreenFrameGround {
 
   factory GeneratedScreenFrameGround.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenFrameGround(
-      isNeutral: _required(
-          _readFieldValue<bool>(_readField(json, const ["is_neutral"]), "is_neutral", _readBool,
-              requiredField: true, nullable: false),
-          "is_neutral"),
-      stops: _required(
-          _readFieldValue<List<String>>(_readField(json, const ["stops"]), "stops", _readStringList,
-              requiredField: true, nullable: false),
-          "stops"),
+      isNeutral: _required(_readFieldValue<bool>(_readField(json, const ["is_neutral"]), "is_neutral", _readBool, requiredField: true, nullable: false), "is_neutral"),
+      stops: _required(_readFieldValue<List<String>>(_readField(json, const ["stops"]), "stops", _readStringList, requiredField: true, nullable: false), "stops"),
     );
   }
 
@@ -111,60 +93,20 @@ class GeneratedConversationScreenFrame {
 
   factory GeneratedConversationScreenFrame.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationScreenFrame(
-      caption: _required(
-          _readFieldValue<String>(_readField(json, const ["caption"]), "caption", _readString,
-              requiredField: true, nullable: false),
-          "caption"),
-      capturedAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "captured_at"),
-      contentUrl: _required(
-          _readFieldValue<String>(_readField(json, const ["content_url"]), "content_url", _readString,
-              requiredField: true, nullable: false),
-          "content_url"),
-      focalRegion: _readFieldValue<GeneratedNormalizedRect>(_readField(json, const ["focal_region"]), "focal_region",
-          (value) => _readObject(value, GeneratedNormalizedRect.fromJson),
-          requiredField: false, nullable: true),
-      ground: _required(
-          _readFieldValue<GeneratedScreenFrameGround>(_readField(json, const ["ground"]), "ground",
-              (value) => _readObject(value, GeneratedScreenFrameGround.fromJson),
-              requiredField: true, nullable: false),
-          "ground"),
-      height: _required(
-          _readFieldValue<int>(_readField(json, const ["height"]), "height", _readInt,
-              requiredField: true, nullable: false),
-          "height"),
-      id: _required(
-          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
-              requiredField: true, nullable: false),
-          "id"),
-      labels: _required(
-          _readFieldValue<List<String>>(_readField(json, const ["labels"]), "labels", _readStringList,
-              requiredField: true, nullable: false),
-          "labels"),
-      rank: _required(
-          _readFieldValue<int>(_readField(json, const ["rank"]), "rank", _readInt,
-              requiredField: true, nullable: false),
-          "rank"),
-      role: _required(
-          _readFieldValue<String>(_readField(json, const ["role"]), "role", _readString,
-              requiredField: true, nullable: false),
-          "role"),
-      sourceBadge: _readFieldValue<String>(_readField(json, const ["source_badge"]), "source_badge", _readString,
-          requiredField: false, nullable: true),
-      thumbnailUrl: _required(
-          _readFieldValue<String>(_readField(json, const ["thumbnail_url"]), "thumbnail_url", _readString,
-              requiredField: true, nullable: false),
-          "thumbnail_url"),
-      urlExpiresAt: _required(
-          _readFieldValue<DateTime>(_readField(json, const ["url_expires_at"]), "url_expires_at", _readDateTime,
-              requiredField: true, nullable: false),
-          "url_expires_at"),
-      width: _required(
-          _readFieldValue<int>(_readField(json, const ["width"]), "width", _readInt,
-              requiredField: true, nullable: false),
-          "width"),
+      caption: _required(_readFieldValue<String>(_readField(json, const ["caption"]), "caption", _readString, requiredField: true, nullable: false), "caption"),
+      capturedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: true, nullable: false), "captured_at"),
+      contentUrl: _required(_readFieldValue<String>(_readField(json, const ["content_url"]), "content_url", _readString, requiredField: true, nullable: false), "content_url"),
+      focalRegion: _readFieldValue<GeneratedNormalizedRect>(_readField(json, const ["focal_region"]), "focal_region", (value) => _readObject(value, GeneratedNormalizedRect.fromJson), requiredField: false, nullable: true),
+      ground: _required(_readFieldValue<GeneratedScreenFrameGround>(_readField(json, const ["ground"]), "ground", (value) => _readObject(value, GeneratedScreenFrameGround.fromJson), requiredField: true, nullable: false), "ground"),
+      height: _required(_readFieldValue<int>(_readField(json, const ["height"]), "height", _readInt, requiredField: true, nullable: false), "height"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      labels: _required(_readFieldValue<List<String>>(_readField(json, const ["labels"]), "labels", _readStringList, requiredField: true, nullable: false), "labels"),
+      rank: _required(_readFieldValue<int>(_readField(json, const ["rank"]), "rank", _readInt, requiredField: true, nullable: false), "rank"),
+      role: _required(_readFieldValue<String>(_readField(json, const ["role"]), "role", _readString, requiredField: true, nullable: false), "role"),
+      sourceBadge: _readFieldValue<String>(_readField(json, const ["source_badge"]), "source_badge", _readString, requiredField: false, nullable: true),
+      thumbnailUrl: _required(_readFieldValue<String>(_readField(json, const ["thumbnail_url"]), "thumbnail_url", _readString, requiredField: true, nullable: false), "thumbnail_url"),
+      urlExpiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["url_expires_at"]), "url_expires_at", _readDateTime, requiredField: true, nullable: false), "url_expires_at"),
+      width: _required(_readFieldValue<int>(_readField(json, const ["width"]), "width", _readInt, requiredField: true, nullable: false), "width"),
     );
   }
 
@@ -207,25 +149,12 @@ class GeneratedConversationScreenFrameSet {
 
   factory GeneratedConversationScreenFrameSet.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationScreenFrameSet(
-      adjudicatedAt: _readFieldValue<DateTime>(
-          _readField(json, const ["adjudicated_at"]), "adjudicated_at", _readDateTime,
-          requiredField: false, nullable: true),
-      banner: _readFieldValue<GeneratedConversationScreenFrame>(_readField(json, const ["banner"]), "banner",
-          (value) => _readObject(value, GeneratedConversationScreenFrame.fromJson),
-          requiredField: false, nullable: true),
-      revision: _required(
-          _readFieldValue<int>(_readField(json, const ["revision"]), "revision", _readInt,
-              requiredField: true, nullable: false),
-          "revision"),
-      selectionFingerprint: _readFieldValue<String>(
-          _readField(json, const ["selection_fingerprint"]), "selection_fingerprint", _readString,
-          requiredField: false, nullable: true),
-      strip: _readFieldValue<List<GeneratedConversationScreenFrame>>(_readField(json, const ["strip"]), "strip",
-          (value) => _readObjectList(value, GeneratedConversationScreenFrame.fromJson),
-          requiredField: false, nullable: true),
-      trustedSelectionFingerprint: _readFieldValue<String>(
-          _readField(json, const ["trusted_selection_fingerprint"]), "trusted_selection_fingerprint", _readString,
-          requiredField: false, nullable: true),
+      adjudicatedAt: _readFieldValue<DateTime>(_readField(json, const ["adjudicated_at"]), "adjudicated_at", _readDateTime, requiredField: false, nullable: true),
+      banner: _readFieldValue<GeneratedConversationScreenFrame>(_readField(json, const ["banner"]), "banner", (value) => _readObject(value, GeneratedConversationScreenFrame.fromJson), requiredField: false, nullable: true),
+      revision: _required(_readFieldValue<int>(_readField(json, const ["revision"]), "revision", _readInt, requiredField: true, nullable: false), "revision"),
+      selectionFingerprint: _readFieldValue<String>(_readField(json, const ["selection_fingerprint"]), "selection_fingerprint", _readString, requiredField: false, nullable: true),
+      strip: _readFieldValue<List<GeneratedConversationScreenFrame>>(_readField(json, const ["strip"]), "strip", (value) => _readObjectList(value, GeneratedConversationScreenFrame.fromJson), requiredField: false, nullable: true),
+      trustedSelectionFingerprint: _readFieldValue<String>(_readField(json, const ["trusted_selection_fingerprint"]), "trusted_selection_fingerprint", _readString, requiredField: false, nullable: true),
     );
   }
 
@@ -314,7 +243,9 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDateTime(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -330,27 +261,37 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
+  return [
+    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
+  ];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readString(item), 'list item')];
+  return [
+    for (final item in value) _required(_readString(item), 'list item')
+  ];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readDouble(item), 'list item')];
+  return [
+    for (final item in value) _required(_readDouble(item), 'list item')
+  ];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readInt(item), 'list item')];
+  return [
+    for (final item in value) _required(_readInt(item), 'list item')
+  ];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [for (final item in value) _required(_readMap(item), 'list item')];
+  return [
+    for (final item in value) _required(_readMap(item), 'list item')
+  ];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;
