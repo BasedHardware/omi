@@ -1851,7 +1851,6 @@ overlay:
           # the staging bucket's lifecycle: repair stays available for as long as the audio can still be
           # fetched (a renewal on day 29 is still served), and an older row is never re-woken to fetch audio
           # that is gone (David 2026-11-13, D5). Removing the line restores 14.
-          BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS: {value: '30', category: reliability}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).

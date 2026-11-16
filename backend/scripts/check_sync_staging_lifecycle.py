@@ -27,6 +27,7 @@ from google.oauth2 import service_account
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts import retention_contract  # noqa: E402
+from utils.batch_pipeline.input_retention import STAGING_BUCKET, TERMINAL_SECONDS  # noqa: E402
 
 
 def read_bucket_metadata(name: str) -> dict[str, Any]:
@@ -97,7 +98,12 @@ def policy_failure(
             return 'lifecycle_delete'
         if action not in {'Delete', 'SetStorageClass', 'AbortIncompleteMultipartUpload'}:
             return 'unsupported_lifecycle_action'
-    if governed is not None and retention_contract.floor_violations(governed[0], governed[1], lifecycle):
+    if governed is not None and retention_contract.floor_violations(
+        governed[0],
+        governed[1],
+        lifecycle,
+        input_terminal_seconds=TERMINAL_SECONDS if bucket == STAGING_BUCKET else None,
+    ):
         return 'lifecycle_delete'
     return None
 

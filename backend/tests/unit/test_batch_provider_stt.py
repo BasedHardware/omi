@@ -322,10 +322,11 @@ _DENIED = (False, 'allowance_exhausted')
     'age_days, expected',
     [
         (1.0, _DAY),  # far from expiry: the configured 24 h window
-        (27.5, 0.5 * _DAY),  # cut so the next re-check lands at the start of the last day (28 d)
-        (28.0, 7200.0),  # inside the last day before the 29-day end: the 2 h re-check
-        (28.9, 7200.0),
-        (40.0, 7200.0),  # past the end: never longer than the 2 h re-check
+        (29.0, _DAY),  # the old terminal is now far from expiry
+        (57.5, 0.5 * _DAY),  # next re-check lands at the start of the last day (58 d)
+        (58.0, 7200.0),  # inside the last day before the 59-day end: the 2 h re-check
+        (58.9, 7200.0),
+        (60.0, 7200.0),  # past the end: never longer than the 2 h re-check
     ],
 )
 def test_long_allowance_hold_rechecks_before_the_staged_audio_expires(monkeypatch, age_days, expected):
@@ -339,13 +340,13 @@ def test_long_allowance_hold_rechecks_before_the_staged_audio_expires(monkeypatc
 def test_restaged_audio_clock_is_the_one_the_hold_respects(monkeypatch):
     monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
     now = 100 * _DAY
-    row = {'audio_uri': _STAGED, 'enqueued_at': now - 28.5 * _DAY, 'audio_staged_at': now - 2 * _DAY}
+    row = {'audio_uri': _STAGED, 'enqueued_at': now - 58.5 * _DAY, 'audio_staged_at': now - 2 * _DAY}
     assert provider_stt.funding_retry_seconds(_DENIED, job=row, now=now) == _DAY
 
 
 def test_hold_window_is_unchanged_without_a_staged_clock_or_when_already_short(monkeypatch):
     now = 100 * _DAY
-    old = {'audio_uri': _STAGED, 'enqueued_at': now - 28.5 * _DAY}
+    old = {'audio_uri': _STAGED, 'enqueued_at': now - 58.5 * _DAY}
     monkeypatch.setenv('BATCH_ALLOWANCE_HOLD_RETRY_SECONDS', '86400')
     assert provider_stt.funding_retry_seconds(_DENIED, job={'audio_uri': 'gs://other/x'}, now=now) == _DAY
     assert provider_stt.funding_retry_seconds(_DENIED) == _DAY
