@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Pure preparation/verification for one state-free probe; never contacts Kubernetes or SQL."""
 
 import argparse
@@ -6,7 +7,8 @@ import re
 import uuid
 from pathlib import Path
 
-CONTRACT = json.loads(Path(__file__).with_name('readiness-contract.json').read_text())
+from readiness_contract import CONTRACT
+
 NAMESPACE = 'prod-omi-backend'
 KSA = 'batch-pipeline-worker'
 HOSTNAME = 'jobstore-reconcile-0'
@@ -71,6 +73,8 @@ def render(token, node):
                     'name': 'readiness',
                     'image': CONTRACT['image'],
                     'imagePullPolicy': 'IfNotPresent',
+                    'terminationMessagePath': '/dev/termination-log',
+                    'terminationMessagePolicy': 'File',
                     'command': COMMAND.copy(),
                     'securityContext': {
                         'allowPrivilegeEscalation': False,
@@ -193,10 +197,35 @@ def validate_manifest(pod, token, node):
     if not projection(candidate, expected):
         raise ValueError('REVIEWED_POD_SPEC_REQUIRED')
     container = spec['containers'][0]
-    if container.get('args') or container.get('envFrom') or container.get('ports') or container.get('lifecycle'):
+    if any(
+        container.get(k)
+        for k in (
+            'args',
+            'envFrom',
+            'ports',
+            'lifecycle',
+            'readinessProbe',
+            'livenessProbe',
+            'startupProbe',
+            'workingDir',
+            'volumeDevices',
+        )
+    ):
         raise ValueError('NO_ADDITIONAL_RUNTIME_INPUTS_ALLOWED')
-    if any(spec.get(k) for k in ('shareProcessNamespace', 'hostAliases', 'dnsConfig', 'runtimeClassName')):
+    if any(spec.get(k) for k in ('shareProcessNamespace', 'hostAliases', 'dnsConfig', 'runtimeClassName', 'overhead')):
         raise ValueError('NO_ADDITIONAL_PRIVILEGE_ALLOWED')
+    if not exact(container.get('resources'), expected['spec']['containers'][0]['resources']):
+        raise ValueError('REVIEWED_RESOURCE_CEILINGS_REQUIRED')
+    for mount in mounts:
+        if mount.get('readOnly') is False:
+            mount.pop('readOnly')
+    if not exact(mounts, expected['spec']['containers'][0]['volumeMounts']):
+        raise ValueError('REVIEWED_MOUNTS_REQUIRED')
+    for volume in volumes:
+        if volume.get('emptyDir', {}).get('medium') == '':
+            volume['emptyDir'].pop('medium')
+    if not exact(volumes, expected['spec']['volumes']):
+        raise ValueError('REVIEWED_VOLUMES_REQUIRED')
     security = dict(container.get('securityContext', {}))
     if security.pop('privileged', False) is not False or not exact(
         security, expected['spec']['containers'][0]['securityContext']
@@ -244,7 +273,7 @@ def validate(pod, report, token, node, uid):
             'write_attempted': False,
             'session': TARGET,
             'tls': True,
-            'migrations': CONTRACT['migrations'],
+            'migrations': [row.copy() for row in CONTRACT['migrations']],
             'indexes': [[n, True, True] for n in INDEXES],
             'rollback': True,
             'source_sha': CONTRACT['source_sha'],

@@ -1,3 +1,4 @@
+# LIFECYCLE: permanent
 """Discriminators for state-free readiness, exact metadata proof and UID-scoped cleanup."""
 
 import copy
@@ -180,6 +181,15 @@ class ReadinessTests(unittest.TestCase):
             lambda p: p['spec'].update(initContainers=[{'name': 'writer'}]),
             lambda p: p['spec'].update(ephemeralContainers=[{'name': 'debug'}]),
             lambda p: p['spec']['containers'][0].update(args=['--apply']),
+            lambda p: p['spec']['containers'][0].update(livenessProbe={'exec': {'command': ['python', 'write.py']}}),
+            lambda p: p['spec']['containers'][0].update(readinessProbe={'httpGet': {'path': '/', 'port': 80}}),
+            lambda p: p['spec']['containers'][0].update(startupProbe={'exec': {'command': ['python', 'write.py']}}),
+            lambda p: p['spec']['containers'][0].update(
+                terminationMessagePath='/var/run/secrets/kubernetes.io/serviceaccount/token'
+            ),
+            lambda p: p['spec']['containers'][0]['resources']['requests'].update(**{'nvidia.com/gpu': '1'}),
+            lambda p: p['spec']['containers'][0]['volumeMounts'][0].update(subPath='unreviewed'),
+            lambda p: p['spec']['volumes'][0]['emptyDir'].update(medium='Memory'),
             lambda p: p['spec']['containers'][0].update(envFrom=[{'secretRef': {'name': 'credentials'}}]),
             lambda p: p['spec']['containers'][0]['env'].append(
                 {'name': 'GOOGLE_OAUTH_ACCESS_TOKEN', 'value': 'fixture'}
