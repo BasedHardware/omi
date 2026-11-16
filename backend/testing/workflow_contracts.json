@@ -587,6 +587,7 @@
         "tests/unit/utils/test_listen_pusher_session.py",
         "tests/unit/test_transcribe_teardown_flush.py",
         "tests/unit/test_listen_pusher_stack_ci_wiring.py",
+        "tests/unit/test_listen_pusher_stack_emulator_retry.py",
         "testing/e2e/test_listen_stt.py",
         "testing/e2e/test_listen_pusher_wire_contract.py"
       ],
