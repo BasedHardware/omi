@@ -408,3 +408,19 @@ def test_late_merge_keeps_a_repeated_sentence_but_not_a_recaptured_one():
     }
     built = planner.build('u', window, {'r': row}, prior)
     assert [s['start'] for s in built['transcript_segments']] == [0.5, 10.0]
+
+
+def test_copy_carries_the_recording_location_and_keeps_its_own():
+    here = {'latitude': 1.5, 'longitude': 2.5, 'address': 'Synthetic street'}
+    row = recording(geolocation=here)
+    window = planner.windows([outline.stretches([row], NOW + timedelta(hours=1))[0]], [[entry()]])[0]
+    assert planner.build('u', window, {'r': row})['geolocation'] == here
+    kept = {'latitude': 9.0, 'longitude': 9.0}
+    prior = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=10),
+        'geolocation': kept,
+    }
+    assert planner.build('u', window, {'r': row}, prior)['geolocation'] == kept
