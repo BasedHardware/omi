@@ -109,3 +109,7 @@ def recurring_enabled_for(uid: str, segments) -> bool:
         )
     except ValueError:
         return False
+
+
+def original_evidence_enabled() -> bool:
+    return default_on('BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED')

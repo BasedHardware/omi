@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED',
     'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED',
     'HOME_SETTLED_EMPTY_WIRE_ENABLED',
     'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED',

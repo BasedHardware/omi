@@ -2673,6 +2673,9 @@ def process_conversation(
             settle(current)
         final_pass_settlements.clear()
         if current and completed is not None:
+            from database.owner_identity_availability import observe_safely
+
+            observe_safely(uid, completed.id)
             record_capture_loss(completed)
             _observe_owner_recognition_completion(completed)
         if persistence_observer is not None:

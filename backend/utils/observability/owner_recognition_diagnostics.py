@@ -221,6 +221,8 @@ def live_comparison(distances, evidence_seconds):
 
 
 def resolver_reason(reason):
+    if reason in contract.PROOF_REASONS:
+        PROOF_REFUSALS.labels(reason=reason).inc()
     row = _RESOLVER.get()
     if row is not None:
         row['reason'] = reason if reason in contract.REASONS else 'other'
@@ -270,7 +272,11 @@ def observe_resolver(fn):
                 log_summary('resolver_exit', row)
                 if row['pass'] == 'first' and hasattr(conversation, 'owner_recognition_diagnostics'):
                     conversation.owner_recognition_diagnostics = contract.merge(
-                        conversation.owner_recognition_diagnostics, {'first_resolver': row}
+                        conversation.owner_recognition_diagnostics, {'first_resolver': row, 'current_resolver': row}
+                    )
+                elif hasattr(conversation, 'owner_recognition_diagnostics'):
+                    conversation.owner_recognition_diagnostics = contract.merge(
+                        conversation.owner_recognition_diagnostics, {'current_resolver': row}
                     )
             except Exception:
                 pass  # Optional diagnostics cannot alter the function's result or exception.
@@ -278,3 +284,47 @@ def observe_resolver(fn):
                 _RESOLVER.reset(token)
 
     return observed
+
+
+# Per-attempt diagnostics, deliberately separate from committed revision counts.
+from prometheus_client import REGISTRY, Counter
+
+
+def _counter(name, description, label):
+    try:
+        return Counter(name, description, [label])
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]
+
+
+PROOF_REFUSALS = _counter(
+    'omi_owner_recognition_proof_refusals_total', 'Resolver proof refusals by closed reason.', 'reason'
+)
+FINAL_PASS_AVAILABILITY = _counter(
+    'omi_owner_recognition_final_pass_availability_total',
+    'Final-pass admission and dependency availability per invocation.',
+    'outcome',
+)
+for _reason in contract.PROOF_REASONS:
+    PROOF_REFUSALS.labels(reason=_reason)
+for _outcome in ('disabled', 'ineligible', 'admitted', 'dependency_unavailable'):
+    FINAL_PASS_AVAILABILITY.labels(outcome=_outcome)
+
+
+def final_pass_availability(outcome):
+    if outcome in {'disabled', 'ineligible', 'admitted', 'dependency_unavailable'}:
+        FINAL_PASS_AVAILABILITY.labels(outcome=outcome).inc()
+
+
+BATCH_EMBEDDINGS = _counter(
+    'omi_owner_recognition_batch_embeddings_total',
+    'Replacement batch-label embedding work, not GPU seconds.',
+    'outcome',
+)
+for _outcome in ('attempted', 'successful', 'cached'):
+    BATCH_EMBEDDINGS.labels(outcome=_outcome)
+
+
+def batch_embedding(outcome):
+    if outcome in {'attempted', 'successful', 'cached'}:
+        BATCH_EMBEDDINGS.labels(outcome=outcome).inc()

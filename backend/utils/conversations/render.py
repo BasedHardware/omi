@@ -153,6 +153,7 @@ def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
     for segment in conv.get('transcript_segments') or []:
         if isinstance(segment, dict):
             segment.pop('speaker_match_scores', None)
+            segment.pop('speaker_word_seconds', None)
             strip_grouping_internal_fields(segment)
     return conv
 

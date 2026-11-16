@@ -432,6 +432,7 @@ class ConversationSpeakers(BaseModel):
     status: Literal['resolved', 'capture', 'unavailable']
     version: int = 1
     participant_speaker_ids: List[int] = []
+    input_membership_sha256: Optional[str] = None
 
 
 class CaptureEvidenceMetadata(BaseModel):

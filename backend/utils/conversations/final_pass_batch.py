@@ -318,6 +318,8 @@ def _decode_units(
     deadline,
     diagnostics,
     failure_context: UnitFailureContext,
+    *,
+    identity_turns=None,
 ):
     total_bytes = 0
     for unit, reference in references.items():
@@ -391,6 +393,8 @@ def _decode_units(
                 if reason:
                     diagnostics[sid] = reason
             words = [word for word in words if word['segment_id'] not in diagnostics]
+            if identity_turns is not None:
+                identity_turns[unit] = payload['diarization']['turns']
 
             def validate(unit=unit, reference=reference):
                 try:
@@ -456,8 +460,17 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     Non-cohort calls and durable deferrals are outside that contract. A
     deferral records fallback telemetry; its later admitted retry owns the result.
     """
+    from utils.observability.owner_recognition_diagnostics import final_pass_availability
+    from config.batch_conversation_speakers import BATCH_FINAL_PASS_ENV, has_batch_authority, _default_on
+
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
+        final_pass_availability(
+            'disabled'
+            if has_batch_authority(conversation.transcript_segments) and not _default_on(BATCH_FINAL_PASS_ENV)
+            else 'ineligible'
+        )
         return {'outcome': 'skipped_ineligible'}
+    final_pass_availability('admitted')
     if not _SLOTS.acquire(blocking=False):
         # The processing boundary supplies a dedicated, capped speaker-only
         # obligation. Retry deliveries settle their own existing obligation.
@@ -466,6 +479,8 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     try:
         return _run(uid, conversation, receipt, load_prints, apply, failure_context)
     except Exception as error:
+        if error_details(error.__cause__ or error)['reason'] == 'diarizer_unconfigured' or transient_cause(error):
+            final_pass_availability('dependency_unavailable')
         transient = transient_cause(error)
         if transient is not None:
             return _defer(
