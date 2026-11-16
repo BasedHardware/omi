@@ -4781,6 +4781,28 @@
             "title": "Provider",
             "type": "string"
           },
+          "recording_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording File Id"
+          },
+          "recording_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Id"
+          },
           "source_fingerprint": {
             "anyOf": [
               {
@@ -4864,6 +4886,47 @@
           "status"
         ],
         "title": "AudioFileUrlInfo",
+        "type": "object"
+      },
+      "AudioManifestPiece": {
+        "properties": {
+          "audio_file_id": {
+            "title": "Audio File Id",
+            "type": "string"
+          },
+          "end": {
+            "minimum": 0.0,
+            "title": "End",
+            "type": "number"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "recording_id": {
+            "title": "Recording Id",
+            "type": "string"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "number"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recording_id",
+          "audio_file_id",
+          "start",
+          "end",
+          "url",
+          "expires_at"
+        ],
+        "title": "AudioManifestPiece",
         "type": "object"
       },
       "AudioPrecacheResponse": {
@@ -9780,6 +9843,17 @@
             ],
             "title": "Geolocation Scope"
           },
+          "home_hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Hidden"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -9804,6 +9878,23 @@
             "default": false,
             "title": "Is Locked",
             "type": "boolean"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "voice_work",
+                  "media",
+                  "background"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
           },
           "language": {
             "anyOf": [
@@ -9958,6 +10049,31 @@
             ],
             "title": "Recorded Start"
           },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording"
+          },
+          "recording_pieces": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecordingPiece"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Pieces"
+          },
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
@@ -10023,6 +10139,18 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "summary_covers_through": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Covers Through"
+          },
           "summary_retryable": {
             "anyOf": [
               {
@@ -10059,6 +10187,34 @@
               }
             ],
             "title": "Sync Relevance"
+          },
+          "tile_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "live",
+                  "transcribing",
+                  "writing",
+                  "done"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tile State"
+          },
+          "title_locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Locked"
           },
           "transcript_segments": {
             "default": [],
@@ -10281,6 +10437,22 @@
           "captured_duration"
         ],
         "title": "ConversationAudio",
+        "type": "object"
+      },
+      "ConversationAudioManifest": {
+        "properties": {
+          "pieces": {
+            "items": {
+              "$ref": "#/components/schemas/AudioManifestPiece"
+            },
+            "title": "Pieces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "pieces"
+        ],
+        "title": "ConversationAudioManifest",
         "type": "object"
       },
       "ConversationAudioSpan": {
@@ -11216,6 +11388,17 @@
             ],
             "title": "Geolocation Scope"
           },
+          "home_hidden": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Hidden"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -11240,6 +11423,23 @@
             "default": false,
             "title": "Is Locked",
             "type": "boolean"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "voice_work",
+                  "media",
+                  "background"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
           },
           "language": {
             "anyOf": [
@@ -11402,6 +11602,31 @@
             ],
             "title": "Recorded Start"
           },
+          "recording": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording"
+          },
+          "recording_pieces": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/RecordingPiece"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Pieces"
+          },
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
@@ -11467,6 +11692,18 @@
             "title": "Suggested Summarization Apps",
             "type": "array"
           },
+          "summary_covers_through": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Covers Through"
+          },
           "summary_retryable": {
             "anyOf": [
               {
@@ -11503,6 +11740,34 @@
               }
             ],
             "title": "Sync Relevance"
+          },
+          "tile_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "live",
+                  "transcribing",
+                  "writing",
+                  "done"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tile State"
+          },
+          "title_locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Locked"
           },
           "transcript_segments": {
             "default": [],
@@ -11999,6 +12264,29 @@
           "count"
         ],
         "title": "ConversationsCountResponse",
+        "type": "object"
+      },
+      "ConversationsLiveResponse": {
+        "properties": {
+          "conversation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Conversation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "v3": {
+            "title": "V3",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "v3"
+        ],
+        "title": "ConversationsLiveResponse",
         "type": "object"
       },
       "CreateActionItemRequest": {
@@ -28591,6 +28879,36 @@
           "applied_count"
         ],
         "title": "RecordingMemberCount",
+        "type": "object"
+      },
+      "RecordingPiece": {
+        "properties": {
+          "audio_file_id": {
+            "title": "Audio File Id",
+            "type": "string"
+          },
+          "end": {
+            "minimum": 0.0,
+            "title": "End",
+            "type": "number"
+          },
+          "recording_id": {
+            "title": "Recording Id",
+            "type": "string"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recording_id",
+          "audio_file_id",
+          "start",
+          "end"
+        ],
+        "title": "RecordingPiece",
         "type": "object"
       },
       "RecordingSelection": {
@@ -51395,6 +51713,96 @@
         ]
       }
     },
+    "/v1/conversations/live": {
+      "get": {
+        "operationId": "get_live_conversation_v1_conversations_live_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationsLiveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Live Conversation"
+      }
+    },
     "/v1/conversations/merge": {
       "post": {
         "description": "Admit completed sources, merge into a new ID asynchronously, then notify the client.",
@@ -52807,6 +53215,95 @@
           }
         ],
         "summary": "Set Assignee Conversation Speaker",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/audio-manifest": {
+      "get": {
+        "operationId": "conversation_audio_manifest_v1_conversations__conversation_id__audio_manifest_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationAudioManifest"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversation Audio Manifest",
         "tags": [
           "conversations"
         ]
@@ -55805,6 +56302,95 @@
           }
         ],
         "summary": "Patch Conversation Summary",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/v1/conversations/{conversation_id}/summary/stream": {
+      "get": {
+        "operationId": "conversation_summary_stream_v1_conversations__conversation_id__summary_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Conversation Summary Stream",
         "tags": [
           "conversations"
         ]
@@ -63578,6 +64164,22 @@
       "post": {
         "operationId": "prepare_home_feed_v1_home_feed_prepare_post",
         "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",

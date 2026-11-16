@@ -59,6 +59,16 @@
       "basis": "planning-bound",
       "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "collection": "conversation_v3_leases",
+      "owner": "lane/conversations-v3",
+      "unit": "active pendant user-day",
+      "reads_per_unit_budget": 6000,
+      "reads_per_day_budget": 60000000,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/conversations-v3.md; one builder per active minute plus conversation summary leases, 10000 active owners planning cap",
+      "reviewed": "2026-11-16"
     }
   ],
   "dynamic": [

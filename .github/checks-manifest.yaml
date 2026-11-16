@@ -1268,6 +1268,11 @@ checks:
     triggers: ["backend/charts/pusher/**", "backend/charts/backend-listen/**", "backend/scripts/verify_pusher_cohost_env_diff.py", "backend/tests/unit/test_verify_pusher_cohost_env_diff.py", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_backend_pusher_auto_deploy.yml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "2026-08-30 pusher finalization outage: unexplained pusher vs backend-listen env divergence must fail the deploy path (decision 4 co-host env-diff)"
+  - id: conversation-reader-classification
+    command: ["python3", "backend/scripts/check_conversation_readers.py"]
+    triggers: ["backend/**/*.py", "backend/docs/conversations-v3-readers.json"]
+    lanes: ["local", "ci"]
+    reason: "Recordings/conversations v3 reader inventory: raw by-id product readers bypassed the list predicate; every new reader must declare its layer."
   - id: conversation-lifecycle-write-guard
     command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]

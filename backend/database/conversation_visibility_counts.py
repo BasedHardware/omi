@@ -53,6 +53,8 @@ def count_hidden(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    hide_home: bool = False,
+    include_recordings: bool = False,
 ) -> int:
     """Count hidden rows that would otherwise match the list query.
 
@@ -72,13 +74,18 @@ def count_hidden(
         pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
         if next(iter(pending.limit(1).stream()), None) is not None:
             queries += (pending,)
-    for index, query in enumerate(queries):
+    if not include_recordings:
+        queries += (collection.where(filter=FieldFilter('recording', '==', True)),)
+    if hide_home:
+        queries += (collection.where(filter=FieldFilter('home_hidden', '==', True)),)
+    seen = set()
+    for query in queries:
         for doc in query.stream():
             data = doc.to_dict() or {}
-            if index > 0 and data.get('deleted'):
+            identity = doc.id
+            if identity in seen:
                 continue
-            if index == 2 and (data.get('dream_duplicate_of') or not bridge_pending.hidden(data, now=now)):
-                continue
+            seen.add(identity)
             if matches_list_predicates(
                 data,
                 include_discarded=include_discarded,

@@ -157,7 +157,14 @@ def _control(user):
 
 
 def _visible(row, *, episode_member=False):
-    if not row or row.get('_home_deleted') or is_relevance_discarded(row) or row.get('sync_merged_into'):
+    if (
+        not row
+        or row.get('recording')
+        or row.get('home_hidden')
+        or row.get('_home_deleted')
+        or is_relevance_discarded(row)
+        or row.get('sync_merged_into')
+    ):
         return False
     if episode_member:
         # Existing episode Home rows preserve failed transcription recovery.

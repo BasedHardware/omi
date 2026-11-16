@@ -947,10 +947,20 @@ def is_soft_deleted(conversation: Optional[Mapping[str, Any]]) -> bool:
 
 @phase_shadow.compare('home_visibility')
 def is_visible_conversation(
-    conversation: Optional[Mapping[str, Any]], *, include_discarded: bool = False, presentation: bool = False
+    conversation: Optional[Mapping[str, Any]],
+    *,
+    include_discarded: bool = False,
+    presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
 ) -> bool:
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
+        return False
+    if capture_only and conversation.get('v3_derived'):
+        return False
+    if (conversation.get('recording') and not include_recordings) or (hide_home and conversation.get('home_hidden')):
         return False
     if (
         is_soft_deleted(conversation)
@@ -1012,7 +1022,16 @@ def _with_conversation_cursor_envelope(func):
 
 
 def _collect_cursor_conversation_page(
-    conversations_ref, *, limit, include_discarded, budget, bookmark, presentation=False
+    conversations_ref,
+    *,
+    limit,
+    include_discarded,
+    budget,
+    bookmark,
+    presentation=False,
+    include_recordings=False,
+    hide_home=False,
+    capture_only=False,
 ):
     """Bound the scan by page size plus the existing hidden-row allowance."""
     conversations = []
@@ -1028,7 +1047,12 @@ def _collect_cursor_conversation_page(
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded, presentation=presentation
+                    conversation,
+                    include_discarded=include_discarded,
+                    presentation=presentation,
+                    include_recordings=include_recordings,
+                    hide_home=hide_home,
+                    capture_only=capture_only,
                 ):
                     skipped += 1
                     continue
@@ -1054,6 +1078,9 @@ def _collect_visible_conversation_page(
     cursor_filters: Optional[Dict[str, Any]] = None,
     sort_field: str = 'created_at',
     presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
 ) -> List[Dict[str, Any]]:
     """Page visible rows.
 
@@ -1104,6 +1131,9 @@ def _collect_visible_conversation_page(
                 include_discarded=include_discarded,
                 budget=budget,
                 presentation=presentation,
+                include_recordings=include_recordings,
+                hide_home=hide_home,
+                capture_only=capture_only,
                 bookmark=BookmarkDict({sort_field: stamp, '__name__': doc_id}),
             )
             return finish(conversations)
@@ -1116,7 +1146,12 @@ def _collect_visible_conversation_page(
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=include_discarded, presentation=presentation
+                    conversation,
+                    include_discarded=include_discarded,
+                    presentation=presentation,
+                    include_recordings=include_recordings,
+                    hide_home=hide_home,
+                    capture_only=capture_only,
                 ):
                     continue
                 if skipped_visible < offset:
@@ -1145,7 +1180,12 @@ def _collect_visible_conversation_page(
             last_doc = doc
             conversation = document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(
-                conversation, include_discarded=False, presentation=presentation
+                conversation,
+                include_discarded=False,
+                presentation=presentation,
+                include_recordings=include_recordings,
+                hide_home=hide_home,
+                capture_only=capture_only,
             ):
                 continue
             conversations.append(conversation)
@@ -1172,7 +1212,12 @@ def _collect_visible_conversation_page(
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
-                    conversation, include_discarded=False, presentation=presentation
+                    conversation,
+                    include_discarded=False,
+                    presentation=presentation,
+                    include_recordings=include_recordings,
+                    hide_home=hide_home,
+                    capture_only=capture_only,
                 ):
                     continue
                 conversations.append(conversation)
@@ -1399,6 +1444,10 @@ def persist_processing_result_with_lifecycle(
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
+        from database.conversations_v3_fence import permits
+
+        if not permits(transaction, db, uid, conversation_data['id']):
+            return False
         existing_snapshot = conversation_ref.get(transaction=transaction)
         source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
@@ -1831,7 +1880,7 @@ def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '
     """
     from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 
-    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked']
+    fields = ['id', 'owner_uid', 'visibility', 'deleted', 'is_locked', 'recording']
     if cached_uid:
         snapshot = (
             db.collection('users')
@@ -1870,6 +1919,7 @@ def discover_public_conversation_owner(conversation_id: str, cached_uid: str = '
     if (
         raw.get('id') != conversation_id
         or raw.get('owner_uid', uid) != uid
+        or raw.get('recording')
         or raw.get('visibility') not in {'shared', 'public'}
         or is_soft_deleted(raw)
         or raw.get('is_locked', False)
@@ -2060,6 +2110,8 @@ def get_conversations_count(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     sources: Optional[List[str]] = None,
+    hide_home: bool = False,
+    include_recordings: bool = False,
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -2095,6 +2147,8 @@ def get_conversations_count(
     matching -= conversation_visibility_counts.count_hidden(
         db.collection('users').document(uid).collection(conversations_collection),
         include_discarded=include_discarded,
+        hide_home=hide_home,
+        include_recordings=include_recordings,
         statuses=statuses,
         sources=sources,
         start_date=start_date,
@@ -2119,7 +2173,8 @@ def count_conversations_with_geolocation(uid: str, *, firestore_client: Any = No
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     query = conversations_ref.where(filter=FieldFilter('geolocation.latitude', '!=', None))
     result = query.count().get()
-    return int(result[0][0].value or 0)
+    recording_count = query.where(filter=FieldFilter('recording', '==', True)).count().get()
+    return max(0, int(result[0][0].value or 0) - int(recording_count[0][0].value or 0))
 
 
 @_with_conversation_cursor_envelope
@@ -2140,6 +2195,9 @@ def get_conversations_without_photos(
     list_fields_only: bool = False,
     *,
     presentation: bool = False,
+    include_recordings: bool = False,
+    hide_home: bool = False,
+    capture_only: bool = False,
     cursor: Optional[str] = None,
     page_envelope: bool = False,
     cursor_page: Optional[Dict[str, Any]] = None,
@@ -2170,6 +2228,8 @@ def get_conversations_without_photos(
                 'user_title',
                 'user_corrections_compressed',
                 'deleted',
+                'recording',
+                'home_hidden',
                 'dream_duplicate_of',
                 'sync_bridge_pending',
                 'relevance_decision',
@@ -2224,6 +2284,9 @@ def get_conversations_without_photos(
         offset=offset,
         include_discarded=include_discarded,
         presentation=presentation,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+        capture_only=capture_only,
         budget=budget,
         uid=uid,
         cursor=cursor,
@@ -2282,7 +2345,9 @@ def get_mcp_conversations_by_id(
     ]
 
 
-def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
+def iter_all_conversations(
+    uid: str, batch_size: int = 400, include_discarded: bool = True, *, include_recordings: bool = False
+):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -2301,7 +2366,9 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
             conv = prepare_conversation_for_read(conv, uid)
             if conv is None:
                 continue
-            if not is_visible_conversation(conv, include_discarded=include_discarded):
+            if not is_visible_conversation(
+                conv, include_discarded=include_discarded, include_recordings=include_recordings
+            ):
                 continue
             batch.append(conv)
         yield from batch
@@ -2698,8 +2765,15 @@ def get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
 ):
-    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
+    return _get_conversations_by_id(
+        uid,
+        conversation_ids,
+        include_discarded=include_discarded,
+        include_recordings=include_recordings,
+        read_site=read_site,
+    )
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read, read_budget_arg='read_budget')
@@ -2709,10 +2783,16 @@ def get_conversations_by_id_without_photos(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
     read_budget: Optional[ListReadBudget] = None,
 ):
     return _get_conversations_by_id(
-        uid, conversation_ids, include_discarded=include_discarded, read_site=read_site, read_budget=read_budget
+        uid,
+        conversation_ids,
+        include_discarded=include_discarded,
+        include_recordings=include_recordings,
+        read_site=read_site,
+        read_budget=read_budget,
     )
 
 
@@ -2722,6 +2802,7 @@ def _get_conversations_by_id(
     include_discarded: bool = False,
     *,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+    include_recordings: bool = False,
     read_budget: Optional[ListReadBudget] = None,
 ):
     user_ref = db.collection('users').document(uid)
@@ -2737,7 +2818,9 @@ def _get_conversations_by_id(
         if doc.exists:
             hits += 1
             data = doc.to_dict()
-            if not is_visible_conversation(data, include_discarded=include_discarded):
+            if not is_visible_conversation(
+                data, include_discarded=include_discarded, include_recordings=include_recordings
+            ):
                 continue
             data.setdefault('id', doc.id)
             conversations_by_id[str(data['id'])] = data
@@ -2902,7 +2985,11 @@ def get_in_progress_conversation(uid: str):
     )
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(8)
     docs = [doc.to_dict() for doc in conversations_ref.stream()]
-    conversations = [conversation for conversation in docs if conversation and not is_soft_deleted(conversation)]
+    conversations = [
+        conversation
+        for conversation in docs
+        if conversation and not conversation.get('v3_derived') and not is_soft_deleted(conversation)
+    ]
     conversation = conversations[0] if conversations else None
     return conversation
 
@@ -2918,7 +3005,9 @@ def get_processing_conversations(uid: str):
     # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
     # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
     # back to pusher for background processing — that would defeat the freemium cost saving.
-    conversations = [c for c in conversations if not c.get('deferred') and not is_soft_deleted(c)]
+    conversations = [
+        c for c in conversations if not c.get('v3_derived') and not c.get('deferred') and not is_soft_deleted(c)
+    ]
     return conversations
 
 
@@ -3967,12 +4056,15 @@ def update_conversation_segments(
     client = firestore_client if firestore_client is not None else get_firestore_client()
     doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
 
+    v3_recording = [False]
+
     @firestore.transactional
     def _write_segments(transaction):
         doc_snapshot = doc_ref.get(transaction=transaction)
         if not getattr(doc_snapshot, 'exists', False):
             return False
         current = doc_snapshot.to_dict() or {}
+        v3_recording[0] = bool(current.get('recording'))
         if current.get('record_projection_revision') and segment_update_fields is None:
             # The durable record owns the finalized capture. A delayed socket
             # flush cannot append its provisional twin after projection.
@@ -4136,6 +4228,10 @@ def update_conversation_segments(
             )
         ):
             update_payload['home_append_only'] = True
+        if current.get('recording'):
+            update_payload.update(
+                v3_pending=True, v3_pending_since=current.get('v3_pending_since') or datetime.now(timezone.utc)
+            )
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,
@@ -4164,6 +4260,10 @@ def update_conversation_segments(
         return False
     if result is not False:
         invalidate_people_stats_cache(uid)
+        if v3_recording[0]:
+            from utils.conversations.v3.triggers import changed
+
+            changed(uid, conversation_id)
     return result
 
 
@@ -4841,7 +4941,7 @@ def eligible_merge_target(conversation: Optional[dict]) -> bool:
     conversation". Discarded rows stay eligible; the merge path reprocesses
     and revives them.
     """
-    return bool(conversation) and not is_soft_deleted(conversation)
+    return bool(conversation) and not conversation.get('v3_derived') and not is_soft_deleted(conversation)
 
 
 def select_closest_conversation(conversations, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
@@ -4914,7 +5014,7 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
     conversations: List[Dict[str, Any]] = []
     for doc in query.stream():
         data = doc.to_dict()
-        if data and not is_soft_deleted(data):
+        if data and not data.get('v3_derived') and not is_soft_deleted(data):
             conversations.append(data)
     conversation = conversations[0] if conversations else None
     return conversation

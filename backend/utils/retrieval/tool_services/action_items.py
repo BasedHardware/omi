@@ -3,6 +3,7 @@ Shared service functions for action item retrieval and management.
 Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -175,7 +176,7 @@ def create_action_item_text(
         conv_db = conversations_db
         if conv_db is None:
             import database.conversations as conv_db
-        conversation = conv_db.get_conversation(uid, conversation_id)
+        conversation = read_product_conversation(conv_db.get_conversation, uid, conversation_id)
         if not conversation or conv_db.is_soft_deleted(conversation):
             return f"Error: Conversation '{conversation_id}' not found."
 

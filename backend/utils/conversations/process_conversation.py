@@ -291,6 +291,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import service as v3_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -384,6 +386,13 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        if getattr(conversation, 'v3_derived', False):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if words < 600:
+                return v3_service.models.short_tasks(uid, conversation), False
+            if covers and conversation.finished_at and covers >= conversation.finished_at:
+                return conversation.structured, False
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -725,6 +734,9 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    if getattr(conversation, 'title_locked', False):
+        structured.title = conversation.structured.title
+        structured.emoji = conversation.structured.emoji
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
@@ -2174,6 +2186,9 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    if getattr(conversation, 'recording', False):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_recording').inc()
+        return True
     if is_server_minimum(conversation):
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
         return True
@@ -2579,6 +2594,7 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
+@v3_service.recording_short_path
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
 @spelling_context_run
@@ -3152,7 +3168,7 @@ def process_conversation(
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = not is_recovery_trigger(trigger)
+        capture_audio = not is_recovery_trigger(trigger) and not getattr(conversation, 'v3_derived', False)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
