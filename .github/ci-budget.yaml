@@ -2675,13 +2675,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 7,
+      "expected_runs_per_day": 8,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day.",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day. 2026-11-15: a frozen ladder fails this run instead of passing silently, and gate_freeze_override adds one more budgeted manual run a day for operator recovery while the dispatcher is paused.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -5819,7 +5819,7 @@
     "mobile_rollout_watch.yml": {
       "name": "Mobile rollout watch",
       "owner": "CI maintainers",
-      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD.",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD. 2026-11-15: a frozen ladder now fails the scheduled run instead of reporting a green no-op, and a gate_freeze_override input is the documented recovery path when the dispatcher is paused on purpose.",
       "triggers": {
         "schedule": [
           {
@@ -5831,6 +5831,11 @@
             "capture_health_override": {
               "default": "",
               "description": "Reason to advance past a capture-health HOLD for this run only; empty = no override",
+              "type": "string"
+            },
+            "gate_freeze_override": {
+              "default": "",
+              "description": "Reason to advance although no daily train succeeded in the last 26h; empty = stay frozen",
               "type": "string"
             }
           }
