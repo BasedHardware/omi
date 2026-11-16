@@ -133,6 +133,7 @@ export function StorefrontPanel({
   const { data, loading, failed, reload } = useStorefront(source, trigger, true, initial);
   const [busyPriceId, setBusyPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [yearlyDefault, setYearlyDefault] = useState(true);
   const opened = useRef(false);
   const [confirmation, setConfirmation] = useState<{
     tier: PlanStorefrontTier;
@@ -144,6 +145,16 @@ export function StorefrontPanel({
     opened.current = true;
     trackPaywallOpened(source, data.current?.planId ?? 'unknown');
   }, [data, source]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void PlanStorefrontGate.yearlyDefaultEnabled().then((enabled) => {
+      if (!cancelled) setYearlyDefault(enabled);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const executePurchase = async (
     tier: PlanStorefrontTier,
@@ -191,6 +202,7 @@ export function StorefrontPanel({
         busyPriceId={busyPriceId}
         error={error}
         livePlanId={livePlanId}
+        yearlyDefault={yearlyDefault}
         onRetry={() => void reload()}
         onSelect={onSelect}
         onManage={onManage}

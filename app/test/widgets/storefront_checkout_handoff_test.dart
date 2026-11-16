@@ -674,7 +674,9 @@ void main() {
         'renewal_line': 'Renews monthly until you cancel. Cancel anytime in settings.',
       });
       final data = PlanStorefront.fromJson(json);
-      final price = _plan(data, 'plus').priceFor('month')!;
+      // The panel opens on yearly, so the handoff under test is the yearly offer.
+      final price = _plan(data, 'plus').priceFor('year')!;
+      expect(price.interval, 'year');
       final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id!;
       usage.debugSetSubscription(UserSubscriptionResponse(
         subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
@@ -686,7 +688,7 @@ void main() {
         insightsGainedLimit: 0,
         availablePlans: [
           SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-            PricingOption(id: catalogId, title: 'Monthly', priceString: price.headline),
+            PricingOption(id: catalogId, title: 'Yearly', priceString: price.headline),
           ])
         ],
       ));
@@ -696,7 +698,7 @@ void main() {
             'id': catalogId,
             'plan_id': 'plus',
             'title': 'Plus',
-            'interval': mismatch == 'interval' ? 'year' : 'month',
+            'interval': mismatch == 'interval' ? 'month' : 'year',
             'unit_amount': mismatch == 'amount' ? price.amountMinor + 1 : price.amountMinor,
             'price_string': price.headline,
             'is_active': false

@@ -77,6 +77,27 @@ describe('storefront goldens', () => {
     expect(buttons(data).plus).toBeNull();
   });
 
+  it('opens on yearly whenever the backend offers the interval choice', () => {
+    for (const name of ['free_settings', 'pro_settings', 'architect_settings']) {
+      expect(initialInterval(golden(name)), name).toBe('year');
+    }
+    // The kill switch returns the panel to monthly-first.
+    expect(initialInterval(golden('free_settings'), false)).toBe('month');
+  });
+
+  it('keeps monthly when the storefront publishes no yearly price', () => {
+    const data = golden('free_settings');
+    const monthlyOnly: PlanStorefront = {
+      ...data,
+      yearlyToggleLabel: null,
+      tiers: data.tiers.map((tier) => ({
+        ...tier,
+        prices: tier.prices.filter((price) => price.interval === 'month'),
+      })),
+    };
+    expect(initialInterval(monthlyOnly)).toBe('month');
+  });
+
   it('Pro at 100% upsells Architect; Plus stays inert', () => {
     const data = golden('pro_budget_cap');
     expect(budgetExhausted(data)).toBe(true);

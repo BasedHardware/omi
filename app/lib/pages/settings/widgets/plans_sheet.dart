@@ -63,6 +63,8 @@ class PlansSheet extends StatefulWidget {
   @visibleForTesting
   final Future<bool> Function()? readStorefrontGate;
   @visibleForTesting
+  final Future<bool> Function()? readYearlyDefault;
+  @visibleForTesting
   final PlanStorefrontApi? storefrontApi;
 
   const PlansSheet({
@@ -76,6 +78,7 @@ class PlansSheet extends StatefulWidget {
     this.storefrontTrigger = '',
     this.initialStorefront,
     this.readStorefrontGate,
+    this.readYearlyDefault,
     this.storefrontApi,
   });
 
@@ -86,6 +89,7 @@ class PlansSheet extends StatefulWidget {
 class _PlansSheetState extends State<PlansSheet> {
   bool _storefrontGateResolved = false;
   bool _storefrontEnabled = false;
+  bool _storefrontYearlyDefault = true;
   bool _storefrontLoading = false;
   bool _storefrontFailed = false;
   PlanStorefront? _storefront;
@@ -107,9 +111,13 @@ class _PlansSheetState extends State<PlansSheet> {
   Future<void> _initializeStorefront() async {
     final enabled = await (widget.readStorefrontGate ?? PlanStorefrontGate.sheetEnabled)();
     if (!mounted) return;
+    final yearlyDefault =
+        enabled ? await (widget.readYearlyDefault ?? PlanStorefrontGate.yearlyDefaultEnabled)() : true;
+    if (!mounted) return;
     setState(() {
       _storefrontGateResolved = true;
       _storefrontEnabled = enabled;
+      _storefrontYearlyDefault = yearlyDefault;
       _storefront = enabled ? widget.initialStorefront : null;
       _storefrontLoading = enabled && _storefront == null;
     });
@@ -786,6 +794,7 @@ class _PlansSheetState extends State<PlansSheet> {
             busy: _isUpgrading,
             livePlan: provider.subscription?.subscription.plan,
             cancelScheduled: provider.subscription?.subscription.cancelAtPeriodEnd ?? false,
+            yearlyDefault: _storefrontYearlyDefault,
             onRetry: _loadStorefront,
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
