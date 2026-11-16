@@ -322,7 +322,7 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
         }:
             assert entry['owner'] == flag['owner'] == 'quality-lead'
             assert entry['review_by'] == (
-                '2026-11-17' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
+                '2026-11-22' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
             )
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
