@@ -28,6 +28,7 @@ import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -748,7 +749,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
-  bool get _isLive => widget.conversation.v3?.tileState == ConversationTileState.live;
+  bool get _isLive =>
+      widget.conversation.v3?.tileState == ConversationTileState.live &&
+      (context.read<ConversationsV3Provider?>()?.v3 ?? false);
 
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';

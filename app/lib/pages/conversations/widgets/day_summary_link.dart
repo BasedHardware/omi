@@ -29,6 +29,23 @@ class DaySummaryHeader extends StatefulWidget {
   State<DaySummaryHeader> createState() => _DaySummaryHeaderState();
 }
 
+/// The same copy the recap recovery action uses for the date-based create endpoint.
+String daySummaryFailureMessage(BuildContext context, ApiProblem problem) {
+  final l10n = context.l10n;
+  return switch (problem.statusCode) {
+    400 => l10n.recapRegenerateNoConversations,
+    409 => '${l10n.processing}. ${l10n.recapRegenerateCooldown}',
+    429 => l10n.recapRegenerateCooldown,
+    422 => l10n.trySelectingDifferentDate,
+    402 => l10n.upgradePlan,
+    _ => switch (problem.kind) {
+        ApiProblemKind.authTerminal => l10n.sessionExpiredSignInAgain,
+        ApiProblemKind.transport => l10n.checkConnectionTryAgain,
+        _ => l10n.somethingWentWrong,
+      },
+  };
+}
+
 class _DaySummaryHeaderState extends State<DaySummaryHeader> {
   bool _busy = false;
 
@@ -48,16 +65,7 @@ class _DaySummaryHeaderState extends State<DaySummaryHeader> {
             builder: (_) => DailySummaryDetailPage(summaryId: data.id, summary: data),
           ));
         case ApiFailure<DailySummary>(:final problem):
-          OmiFeedback.error(
-            context,
-            switch (problem.statusCode) {
-              400 => context.l10n.recapRegenerateNoConversations,
-              409 || 429 => context.l10n.recapRegenerateCooldown,
-              _ => problem.kind == ApiProblemKind.transport
-                  ? context.l10n.checkConnectionTryAgain
-                  : context.l10n.somethingWentWrong,
-            },
-          );
+          OmiFeedback.error(context, daySummaryFailureMessage(context, problem));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -77,24 +85,28 @@ class _DaySummaryHeaderState extends State<DaySummaryHeader> {
         onTap: _open,
         child: Align(
           alignment: AlignmentDirectional.centerStart,
+          // At least 44 pt tall, however small the label's text.
           child: InkWell(
             key: ValueKey('day_summary_header_${DaySummaryHeader.dateKey(widget.date)}'),
             onTap: _open,
             borderRadius: OmiRadius.mdAll,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(label, style: OmiType.body.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 2),
-                  SizedBox.square(
-                    dimension: 20,
-                    child: _busy
-                        ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small))
-                        : Icon(Icons.chevron_right_rounded, size: 20, color: OmiColors.textTertiary),
-                  ),
-                ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label, style: OmiType.body.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 2),
+                    SizedBox.square(
+                      dimension: 20,
+                      child: _busy
+                          ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small))
+                          : Icon(Icons.chevron_right_rounded, size: 20, color: OmiColors.textTertiary),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

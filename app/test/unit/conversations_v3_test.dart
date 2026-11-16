@@ -216,9 +216,14 @@ void main() {
         cached: '',
       );
       provider.watch();
+      provider.watch(); // a second watcher shares the poll
       await Future<void>.delayed(Duration.zero);
       expect(calls, 1);
+      expect(provider.polling, isTrue);
       provider.unwatch();
+      expect(provider.polling, isTrue, reason: 'one watcher left');
+      provider.unwatch();
+      expect(provider.polling, isFalse);
       provider.dispose();
     });
   });

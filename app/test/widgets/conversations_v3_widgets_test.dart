@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/conversations_v3.dart';
@@ -15,6 +16,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/conversations/widgets/day_summary_link.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -27,6 +29,11 @@ ServerConversation _conversation({ConversationTileState? state, DateTime? covers
           ? null
           : ConversationV3Fields(kind: 'conversation', tileState: state, summaryCoversThrough: covers),
     );
+
+ConversationsV3Provider _v3(bool on) => ConversationsV3Provider(
+    fetchLive: () async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+    uid: () => 'u1',
+    cached: 'u1:${on ? 1 : 0}');
 
 Widget _wrap(Widget child) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -44,8 +51,11 @@ void main() {
   });
 
   group('ConversationStateTile', () {
-    Future<void> pumpTile(WidgetTester tester, ServerConversation c) async {
-      await tester.pumpWidget(_wrap(Center(child: ConversationStateTile(conversation: c))));
+    Future<void> pumpTile(WidgetTester tester, ServerConversation c, {ConversationsV3Provider? v3}) async {
+      await tester.pumpWidget(ChangeNotifierProvider<ConversationsV3Provider>.value(
+        value: v3 ?? _v3(true),
+        child: _wrap(Center(child: ConversationStateTile(conversation: c))),
+      ));
       await tester.pump();
     }
 
@@ -65,6 +75,12 @@ void main() {
       await pumpTile(tester, _conversation(state: ConversationTileState.writing));
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);
       expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
+    });
+
+    testWidgets('an account not on v3 shows the emoji, whatever an old document says', (tester) async {
+      await pumpTile(tester, _conversation(state: ConversationTileState.writing), v3: _v3(false));
+      expect(find.text('🚀'), findsOneWidget);
+      expect(find.byType(ConversationWritingPen), findsNothing);
     });
 
     testWidgets('done, and every conversation without v3 fields, shows its emoji', (tester) async {
@@ -108,17 +124,35 @@ void main() {
       expect(opened.single.id, 's1');
     });
 
-    testWidgets('a failure says so and stays put', (tester) async {
+    testWidgets('a failure says why and stays put', (tester) async {
       await tester.pumpWidget(_wrap(DaySummaryHeader(
         date: DateTime(2026, 11, 15),
         isFirst: true,
         open: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 400)),
       )));
+      expect(tester.getSize(find.byType(InkWell)).height, greaterThanOrEqualTo(44));
       await tester.tap(find.byType(InkWell));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byType(DaySummaryHeader), findsOneWidget);
       expect(find.byIcon(Icons.chevron_right_rounded), findsOneWidget, reason: 'the spinner is gone');
+      final l10n = lookupAppLocalizations(const Locale('en'));
+      expect(find.text(l10n.recapRegenerateNoConversations), findsOneWidget);
+    });
+
+    testWidgets('failure copy matches the recap recovery action', (tester) async {
+      late BuildContext context;
+      await tester.pumpWidget(_wrap(Builder(builder: (c) {
+        context = c;
+        return const SizedBox();
+      })));
+      final l10n = lookupAppLocalizations(const Locale('en'));
+      String message(ApiProblem p) => daySummaryFailureMessage(context, p);
+      expect(message(const ApiProblem(ApiProblemKind.server, statusCode: 402)), l10n.upgradePlan);
+      expect(message(const ApiProblem(ApiProblemKind.server, statusCode: 422)), l10n.trySelectingDifferentDate);
+      expect(message(const ApiProblem(ApiProblemKind.server, statusCode: 429)), l10n.recapRegenerateCooldown);
+      expect(message(const ApiProblem(ApiProblemKind.authTerminal)), l10n.sessionExpiredSignInAgain);
+      expect(message(const ApiProblem(ApiProblemKind.transport)), l10n.checkConnectionTryAgain);
     });
   });
 
@@ -204,7 +238,7 @@ void main() {
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(seconds: 2));
       }
-      expect(refreshes, lessThanOrEqualTo(3));
+      expect(refreshes, 2, reason: 'a 5 s window at 2 s holds two reads');
       expect(find.text('Writing your summary…'), findsNothing);
     });
 

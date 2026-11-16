@@ -60,6 +60,9 @@ class ConversationsV3Provider extends ChangeNotifier {
 
   ServerConversation? get live => v3 ? _live : null;
 
+  @visibleForTesting
+  bool get polling => _poll != null;
+
   static String _readCached() {
     try {
       return SharedPreferencesUtil().getString(_prefKey);

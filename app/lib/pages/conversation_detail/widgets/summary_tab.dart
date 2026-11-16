@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
@@ -141,7 +142,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         // Redo with Omi Cloud waits on a re-transcription endpoint.
                         if (conversation != null && !discarded)
                           SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
-                        if (conversation != null && !discarded && LiveSummarySection.wants(conversation))
+                        if (conversation != null &&
+                            !discarded &&
+                            context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+                            LiveSummarySection.wants(conversation))
                           LiveSummarySection(
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,

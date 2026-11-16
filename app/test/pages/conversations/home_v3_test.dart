@@ -493,6 +493,8 @@ void main() {
       final home = await _pumpHome(tester, v3: false);
       expect(home.conversationsV3.v3, isFalse);
       expect(find.byType(DaySummaryHeader), findsNothing);
+      expect(find.byType(LiveEpisodeRow), findsOneWidget, reason: "today's live episode row");
+      expect(find.byType(ConversationWritingPen), findsNothing);
       expect(_rowIds(tester), isNot(contains('live-1')));
       expect(home.episodeCalls, greaterThan(0));
       await _dispose(tester, home);
@@ -517,8 +519,8 @@ void main() {
       });
     }
 
-    ThemeData theme() {
-      final base = buildOmiTheme(brightness: Brightness.dark);
+    ThemeData theme([Brightness brightness = Brightness.dark]) {
+      final base = buildOmiTheme(brightness: brightness);
       return base.copyWith(
         appBarTheme: base.appBarTheme.copyWith(
           titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
@@ -529,6 +531,8 @@ void main() {
     testWidgets('Home, and opening the conversation in progress', (tester) async {
       await withClock(Clock.fixed(_now), () async {
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
         OmiColors.active = OmiColors.forBrightness(Brightness.dark);
         final sections = StreamController<SummaryStreamEvent>();
         LiveSummarySection.debugStream = (_) => sections.stream;
@@ -555,6 +559,20 @@ void main() {
 
         LiveSummarySection.debugStream = null;
         unawaited(sections.close());
+        debugDefaultTargetPlatformOverride = null;
+        await _dispose(tester, home);
+      });
+    });
+
+    testWidgets('Home, light', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        final palette = OmiColors.active;
+        addTearDown(() => OmiColors.active = palette);
+        OmiColors.active = OmiColors.forBrightness(Brightness.light);
+        final home = await _pumpHome(tester,
+            v3: true, boundary: boundary, theme: theme(Brightness.light), size: const Size(393, 852));
+        await shoot(tester, '004-mobile-ios-v3-home-light');
         debugDefaultTargetPlatformOverride = null;
         await _dispose(tester, home);
       });

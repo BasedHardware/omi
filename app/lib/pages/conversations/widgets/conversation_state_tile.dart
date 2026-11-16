@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// A Home row's tile. For a v3 conversation it shows where the conversation is in the pipeline:
+/// A Home row's tile. For an account on v3 it shows where the conversation is in the pipeline:
 /// today's breathing dot while it is going, a spinner while its transcript arrives, a pen while its
-/// summary is written, and the subject's emoji when done. Every other conversation shows its emoji,
-/// as before.
+/// summary is written, and the subject's emoji when done. Otherwise (and for every conversation without
+/// v3 fields, or after a rollback leaves them on old documents) it shows the emoji, as before.
 class ConversationStateTile extends StatelessWidget {
   const ConversationStateTile({super.key, required this.conversation});
 
@@ -19,7 +22,8 @@ class ConversationStateTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final state = conversation.v3?.tileState;
+    final v3On = context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false);
+    final state = v3On ? conversation.v3?.tileState : null;
     final (Widget child, String? label) = switch (state) {
       ConversationTileState.live => (const OmiBreathingDot(key: Key('conversation_tile_live')), l10n.live),
       ConversationTileState.transcribing => (
@@ -28,7 +32,7 @@ class ConversationStateTile extends StatelessWidget {
         ),
       ConversationTileState.writing => (
           const ConversationWritingPen(key: Key('conversation_tile_writing')),
-          l10n.episodeWritingNotes
+          l10n.conversationWritingSummary
         ),
       _ => (
           Text(
