@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/capture_policy.dart';
+import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -25,11 +27,13 @@ void main() {
   late CaptureReplayWorld world;
   bool? reportedMute;
   final muteWrites = <bool>[];
+  void Function(bool muted)? onMuteWrite;
 
   Future<void> boot({required bool? firmwareMuted, bool batchMode = false}) async {
     directory = await Directory.systemTemp.createTemp('capture_cold_mute_');
     reportedMute = firmwareMuted;
     muteWrites.clear();
+    onMuteWrite = null;
     world = await CaptureReplayWorld.boot(
       tempDir: directory,
       pendantCodec: BleAudioCodec.opus,
@@ -39,6 +43,7 @@ void main() {
         expect(id, pendant.id);
         muteWrites.add(muted);
         if (reportedMute != null) reportedMute = muted;
+        onMuteWrite?.call(muted);
       },
     );
     world.deviceConnection = ScriptedDeviceConnection();
@@ -141,6 +146,41 @@ void main() {
     });
   }
 
+  test('a sync-only pass that starts mid-resume defers the start and replays it when the pass ends', () async {
+    await boot(firmwareMuted: true);
+    world.controller.updateRecordingDevice(pendant);
+    await world.controller.pendingSourceSwitch;
+    await world.settle();
+
+    // The resume fence waits out a pass that is already running; this pass
+    // begins after that check, while the unmute is being written.
+    final pass = Completer<void>();
+    Future<void>? scope;
+    onMuteWrite = (muted) {
+      if (!muted) scope = SyncWakeScope.run(() => pass.future);
+    };
+    try {
+      await world.controller.resumeCapture();
+      await world.settle();
+      expect(scope, isNotNull);
+      expect(muteWrites, [false]);
+      expect(world.deviceConnection!.openAudioSubscriptions, 0, reason: 'the pass fences live capture');
+    } finally {
+      pass.complete();
+      await scope;
+    }
+    // The replay is unawaited background work: settle until it commits.
+    for (var i = 0; i < 20 && world.controller.liveCaptureSource == null; i++) {
+      await world.settle();
+    }
+
+    expect(world.controller.isPaused, isFalse);
+    expect(world.controller.liveCaptureSource, 'omi');
+    expect(world.deviceConnection!.openAudioSubscriptions, 1, reason: 'the deferred start replays after the pass');
+  });
+
+  // Existing contract (device_mute_sync.dart): the pendant's persisted mute bit
+  // is the authority on reconnect; the phone value is only the fallback.
   test('a firmware unmute overrides the persisted phone mute on cold start', () async {
     await boot(firmwareMuted: false);
     await coldConnect();
