@@ -68,13 +68,13 @@
       "display_name": "Backend emulator proofs",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day-plus-provisional-replay-path-forecast",
-      "expected_runs_per_day": 21,
+      "expected_runs_per_day": 22,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage. L1 custody/nojob and lifecycle path coverage provisionally adds one PR run/day (20 to 21 total, with the existing one nightly call unchanged), or 4 Linux runner-minutes/day within existing caps. The existing lifecycle-services install step supports these proofs; retain the 4-minute p50 target and standard runner pending terminal CI measurements. M3 PR1 'Firestore read budgets: harness + batch-unit and conversation-list scenarios (M3 PR1)' raises p50 from 4 to 6 minutes for its two new emulator proofs and test imports.",
+      "rationale": "Retain the existing standard Linux runner and 18 expected daily runs; allow one extra p50 minute above the prior three for 26 summary recovery/expiry checks (11 seconds locally) and their test imports. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). WP1 replay forecasts one additional PR run/day for widened replay/batch-owner paths (19 to 20 total, including the unchanged one nightly call), adding 4 Linux runner-minutes/day within existing caps. This incremental frequency is provisional, not a production measurement. Pushes to main matching the new replay paths provisionally add at most one run per merged PR touching those paths, at the same 4-minute p50 on the same standard Linux runner and within the existing caps; this push forecast is unmeasured. Retain the existing 4-minute p50 target and standard runner; the new five-test emulator proof took 50.40 seconds locally (28.27 seconds in the scoped native-contention case). The job timeout and global caps are unchanged; terminal CI durations/frequency remain unmeasured for this new path coverage. L1 custody/nojob and lifecycle path coverage provisionally adds one PR run/day (20 to 21 total, with the existing one nightly call unchanged), or 4 Linux runner-minutes/day within existing caps. The existing lifecycle-services install step supports these proofs; retain the 4-minute p50 target and standard runner pending terminal CI measurements. M3 PR1 'Firestore read budgets: harness + batch-unit and conversation-list scenarios (M3 PR1)' raises p50 from 4 to 6 minutes for its two new emulator proofs and test imports. SCA-1649 adds one timeliness participation apply/restore emulator test path; the proof runs inside the existing emulator-proofs job and matrix, so the forecast moves from 21 to 22 expected PR runs/day (+6 Linux runner-minutes/day at the unchanged 6-minute p50, within the existing cap) with no nightly-call, runner, matrix or timeout change. The new test took 2.56 seconds locally.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3463,7 +3463,7 @@
     "backend-emulator-proofs.yml": {
       "name": "Backend Emulator Proofs",
       "owner": "CI maintainers",
-      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added. L1 adds the custody-append/nojob emulator tests and lifecycle simulation/property paths to PR and main-push filters, with the existing lifecycle-services install step supplying redis-server, ffmpeg and libopus0; the job forecast explicitly includes one additional daily PR run.",
+      "rationale": "Run canonical-memory and task recovery proofs when their production owners, runner or direct emulator tests change; the two task-test paths close the unexecuted recovery/expiry guard gap. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. WP1 replay adds the admission harness, its emulator tests and production input owners to the existing path filters so record-lane changes run the same offline proof; no new workflow, runner or matrix is added. L1 adds the custody-append/nojob emulator tests and lifecycle simulation/property paths to PR and main-push filters, with the existing lifecycle-services install step supplying redis-server, ffmpeg and libopus0; the job forecast explicitly includes one additional daily PR run. SCA-1649 adds the timeliness participation apply/restore emulator proof to both path lists; it runs inside the existing emulator-proofs job and matrix, so no new workflow, runner, matrix or expected-run change is introduced.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3481,6 +3481,7 @@
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
+            "backend/tests/integration/test_timeliness_participation_emulator.py",
             "backend/testing/replay_harness/**",
             "backend/testing/hermetic_network.py",
             "backend/testing/store_fixtures.py",
@@ -3525,6 +3526,7 @@
             "backend/scripts/run-emulator-proofs.sh",
             "backend/tests/integration/test_summary_task_promotion_emulator.py",
             "backend/tests/integration/test_candidate_accept_expiry_emulator.py",
+            "backend/tests/integration/test_timeliness_participation_emulator.py",
             "backend/testing/replay_harness/**",
             "backend/testing/hermetic_network.py",
             "backend/testing/store_fixtures.py",
