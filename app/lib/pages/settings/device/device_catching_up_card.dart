@@ -26,8 +26,9 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   // status changes), so an identity+length memo keeps a per-chunk tick from
   // rescanning recording history on the UI isolate.
   final memo = _catchUpMemo[wals];
-  if (memo != null && memo.$1 == wals.length && memo.$2 == minute && (memo.$4 == null || nowSeconds < memo.$4!))
+  if (memo != null && memo.$1 == wals.length && memo.$2 == minute && (memo.$4 == null || nowSeconds < memo.$4!)) {
     return memo.$3;
+  }
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
@@ -59,7 +60,9 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
     if (catchUpStaleHandleOff &&
         w.status == WalStatus.uploaded &&
         w.uploadedAt < nowSeconds - 86400 &&
-        w.jobPendingConfirmedAt < nowSeconds - 300) continue;
+        w.jobPendingConfirmedAt < nowSeconds - 300) {
+      continue;
+    }
     // A recording time before the plausibility floor is a device clock that was
     // never set; the seconds still count, but the range must not stretch to it.
     if (!walTimerStartPlausible(w.timerStart)) {
