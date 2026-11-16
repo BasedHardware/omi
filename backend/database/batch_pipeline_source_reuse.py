@@ -2,7 +2,7 @@
 
 Receipts contain no text or raw digests. They never authorize a covered ACK or
 WAL release. An alias owns a fresh audio artifact and a protocol-fenced result
-marker; it can never re-enter a paid queue, including after rollback.
+marker; only a fenced canonical-loss transition can admit its own audio again.
 """
 
 from dataclasses import asdict
@@ -26,7 +26,7 @@ def receipt_id(key):
 
 
 class SourceReuseUnavailable(ProjectionBlocked):
-    """A recorded dependency must wait; never turn an accepted alias into paid work."""
+    """A recorded dependency must wait for reuse or its durable paid fallback."""
 
 
 def dependencies(job, receipt=None):
@@ -206,6 +206,11 @@ def claim(session, transaction, receipt):
             'source_conversation_ids': ids,
             # Only the whole unit's ready summary may license an admission alias.
             'complete': receipt.get('state') == 'ready',
+            **(
+                {'fallback_from': session.job['source_alias_fallback']['source_segment_id']}
+                if session.job.get('source_alias_fallback')
+                else {}
+            ),
             'expires_at': datetime.fromtimestamp(session.now, timezone.utc) + RECEIPT_RETENTION,
         },
     )

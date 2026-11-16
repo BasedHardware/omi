@@ -33,8 +33,10 @@ funding attribution, current privacy generation and source/output fences, and
 unexpired artifact registrations. Intake also reads/authenticates the result
 object before reuse. A missing object follows normal processing. Projection refusal uses the durable
 canonical output, so temporary artifact expiry cannot strand an already-computed
-duplicate. A canonical ownership/privacy/output dependency lost after alias
-acceptance holds the alias rather than redispatching it.
+duplicate. If canonical reuse becomes invalid after acceptance, the retained alias audio
+has a durable fallback through normal paid processing. Erased/dispositioned
+output, quarantine/dead-letter, incomplete source accounting or an expired/missing
+source receipt cannot leave an accepted alias permanently non-runnable.
 
 Each accepted alias retains its own new encrypted audio and a small encrypted
 result marker. It enters `result_ready` outside both the GPU and provider
@@ -47,7 +49,7 @@ translation, segment ID or merge ancestry is rewritten.
 Source/alias markers require result protocol 2 with a source-reader marker.
 Older projectors refuse them before reading a marker as a model result. New
 workers can process normal source-key jobs; an image rollback must retain new
-projection readers to drain accepted protocol-2 work. Releasing an old image
+projection readers and the fallback-aware ordered merger to drain accepted protocol-2 work. Releasing an old image
 is not a safe way to make accepted aliases into ordinary paid work.
 
 ## Custody and privacy
@@ -58,7 +60,7 @@ status path acknowledges only normal durable progress. Newly uploaded audio
 is staged before alias admission. Cancellation leaves the existing staging
 outbox responsible for cleanup; no alias job or paid dispatch is created.
 
-Original input and every canonical output privacy dependency travel on the
+While reusing a canonical, original input and every canonical output privacy dependency travel on the
 alias job, result and both artifacts. Registration checks them before storage,
 authorization checks them after storage, admission checks them transactionally,
 and projection rechecks them before committing. Account/protection generation
@@ -69,13 +71,38 @@ private content outside erasure discovery. Receipts expire at the ordinary
 45-day ledger horizon; artifact availability remains bounded by existing
 24-hour completion retention. No retention extension is introduced.
 
+## Accepted-alias fallback and restart
+
+A single transaction rechecks canonical validity, the alias's own upload/chunk,
+account generation and deletion fences, its original ledger ownership and its
+retained audio reservation. It reserves the source range for that alias and
+routes its same unit ID to normal multilingual provider admission. Aliases skipped LID; this route handles long or unknown-language input without relying on bounded GPU language recovery. Fresh provider funding checks precede every ASR call. Recovery winning the
+transaction race keeps the zero-charge canonical path; fallback winning keeps
+its reservation even if the old canonical later recovers. Other aliases wait
+for the reserved fallback owner instead of starting another paid copy.
+
+No canonical text is copied or restored. Inherited canonical dependencies become
+bounded audit provenance; the independent own-audio job and artifacts retain
+only their own upload fences. An erased alias or erasure-requested own audio
+cannot run. Deleted canonical destinations remain tombstoned and normal
+assignment cannot restore them. A missing expired marker blob is unnecessary
+for own-audio processing; a missing/erased own audio reservation refuses it.
+
+The pending alias result-log slot is preserved on its job while ordinary
+worker/provider failure recovery expects no committed result. Queue admission,
+slot suspension and range reservation commit atomically. The ordered merger
+restores the computed result into that same slot, with no second sequence or
+predecessor link, including after restart or a lost reply. Normal speech usage
+settlement and funding/month/partial fences apply; an already completed alias
+ledger is never reopened. Custody and audio retention are unchanged.
+
 ## Kill switch and observation
 
 `BATCH_SOURCE_REUSE_ENABLED` defaults on. Set false to stop new source-proof
 packing and admission aliases. Malformed explicit values also stop new
 admission. Previously accepted source-key jobs retain their projection fence;
-accepted aliases remain non-runnable paid work and finish through the same
-pointer path. Already-computed duplicates without an accepted alias wait while
+accepted aliases still resolve: a current canonical uses the zero-charge pointer,
+otherwise a fenced fallback processes their own retained audio under normal admission and charging. Already-computed duplicates without an accepted alias wait while
 OFF instead of creating a new alias or re-entering paid work. Missing-input
 repair also keeps the accepted per-file packing after OFF, under the original full-bundle byte HMAC and boundary CAS. The switch
 never erases custody receipts or rewrites charges.
@@ -84,13 +111,17 @@ Counters have a closed `event` label and no owner/source/content identifiers:
 
 - `omi_batch_pipeline_source_reuse_total`: reused, avoided_asr_input,
   alias_wait, alias_refusal, uncovered_tail, duplicate_projection_refusal,
-  custody_failure.
+  custody_failure, fallback.
 - `omi_batch_pipeline_source_reuse_seconds_total`: source input seconds for
   the corresponding duration-bearing events.
 
 `avoided_asr_input` counts accepted pre-dispatch alias input envelopes;
 `reused` counts newly committed projection aliases (including already-computed
-racers). These are not GPU runtime, padded/VAD ASR window seconds or dollars.
+racers). The avoided-input figure is gross: fallback input must be subtracted
+when estimating net avoided ASR input after a canonical loss. These are not GPU runtime, padded/VAD ASR window seconds or dollars.
+`duplicate_projection_refusal` counts an actual single-owner refusal, never a
+successful alias projection. `fallback` counts the committed transition to paid
+own-audio processing, not subsequent polls or transaction retries.
 Repeated waits/refusals count attempts. A lost commit reply/process exit can
 undercount observed transitions. `uncovered_tail` is the full undecidable unit
 in this whole-file slice; it never authorizes trimming. Fleet savings require

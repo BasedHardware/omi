@@ -18,6 +18,7 @@ def observe(event: str, seconds: float = 0.0) -> None:
         'uncovered_tail',
         'duplicate_projection_refusal',
         'custody_failure',
+        'fallback',
     }:
         raise ValueError('closed source reuse event required')
     EVENTS.labels(event).inc()

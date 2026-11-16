@@ -1,6 +1,36 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # R40: own retained-audio fallback preserves its committed owner-log slot.
+    'database/batch_pipeline_source_fallback.py': [
+        (
+            'enqueue',
+            'state',
+            "'provider_pending'",
+            (
+                'attempt',
+                'available_at',
+                'lease_until',
+                'merge_pending',
+                'policy',
+                'protocol_version',
+                'requires_compute_admission',
+                'source_alias_fallback',
+                'source_conversation_ids',
+                'source_reuse_version',
+                'state',
+                'stt_route',
+                'token',
+            ),
+        ),
+        (
+            'merge_ready',
+            'projection_state',
+            "'pending'",
+            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result', 'source_reuse_version'),
+        ),
+        ('merge_ready', 'state', "'committed'", ('merge_pending', 'state')),
+    ],
     # Source aliases bypass paid work and enter the existing ordered result log.
     'database/batch_pipeline_source_reuse.py': [
         (

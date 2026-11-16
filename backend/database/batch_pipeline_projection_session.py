@@ -189,7 +189,8 @@ class ProjectionSession:
             ids.append(self.job['conversation_id'])
         if self.job.get('capture_source_conversation_id'):
             ids.append(self.job['capture_source_conversation_id'])
-        ids.extend(self.job.get('source_conversation_ids') or [])
+        if not getattr(self, 'detach_source_alias', False):
+            ids.extend(self.job.get('source_conversation_ids') or [])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)

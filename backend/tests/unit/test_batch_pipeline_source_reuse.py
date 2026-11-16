@@ -1,4 +1,4 @@
-"""Exact bytes, zero paid redispatch, privacy and single-owner transactions."""
+"""Exact-byte reuse, fenced paid fallback, privacy and single-owner transactions."""
 
 from copy import deepcopy
 from dataclasses import asdict, replace
@@ -16,7 +16,8 @@ from database.batch_pipeline_source_projection import project_alias
 from database import batch_pipeline_source_reuse as reuse
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_store import FirestoreTransaction
-from database.batch_pipeline_privacy import BatchPrivacyBlocked
+from database.batch_pipeline_privacy import BatchPrivacyBlocked, PRIVACY_COLLECTION, privacy_owner_key
+from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import source_reuse
@@ -55,6 +56,9 @@ def decoded(paths, *, device='device', epoch=None, maximum=3600):
 def local(monkeypatch):
     monkeypatch.setenv('SYNC_CONTENT_ID_SECRET', 'synthetic-source-secret')
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
+    from database import batch_pipeline_store
+
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *args, **kwargs: 0.0)
     monkeypatch.delenv('BATCH_SOURCE_REUSE_ENABLED', raising=False)
 
 
@@ -221,6 +225,7 @@ def prepare_copy(store, original, *, accepted=True):
         {
             **item.to_dict(),
             'projection_binding': asdict(binding),
+            'policy': BatchUnitPolicy().to_dict(),
             'state': 'committed',
             'owner_key': owner_key(UID),
             'result': result,
@@ -344,7 +349,7 @@ def test_normal_assignment_cannot_bypass_source_fence():
 
 
 @pytest.mark.parametrize('restore', [False, True])
-def test_source_deletion_or_restore_generation_race_blocks_alias(restore):
+def test_source_deletion_detaches_but_restore_generation_race_blocks_alias(restore):
     store, original = setup_store()
     copy, binding = prepare_copy(store, original)
     before = deepcopy(store.client.rows)
@@ -356,8 +361,13 @@ def test_source_deletion_or_restore_generation_race_blocks_alias(restore):
         )
     with pytest.raises((BatchPrivacyBlocked, reuse.SourceReuseUnavailable)):
         project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
-    assert store.ref('results', COPY).get().to_dict()['projection_state'] == 'pending'
-    assert store.client.rows[store.ref('jobs', COPY).path] == before[store.ref('jobs', COPY).path]
+    if restore:
+        assert store.ref('results', COPY).get().to_dict()['projection_state'] == 'pending'
+        assert store.client.rows[store.ref('jobs', COPY).path] == before[store.ref('jobs', COPY).path]
+    else:
+        assert store.ref('jobs', COPY).get().to_dict()['state'] == 'provider_pending'
+        assert 'visible' not in store.ref('jobs', COPY).get().to_dict()['source_conversation_ids']
+        assert not store.ref('results', COPY).get().exists
 
 
 def test_rollback_never_makes_accepted_alias_runnable_and_keeps_fence(monkeypatch):
@@ -539,14 +549,14 @@ def test_competing_sync_projections_claim_exactly_one_owner_in_either_order(firs
     assert store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['segment_id'] == first
 
 
-def test_unfinished_owner_waits_and_never_projects_alias_text():
+def test_unfinished_owner_falls_back_and_never_projects_alias_text():
     store, original = setup_store()
     copy, binding = prepare_copy(store, original)
     store.client.rows[store.ref('results', SOURCE).path]['projection']['state'] = 'persisted'
-    with pytest.raises(reuse.SourceReuseUnavailable, match='not ready'):
+    with pytest.raises(reuse.SourceReuseUnavailable, match='fallback enqueued'):
         project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
-    assert 'projection' not in store.ref('results', COPY).get().to_dict()
-    assert store.ref('jobs', COPY).get().to_dict()['state'] == 'committed'
+    assert not store.ref('results', COPY).get().exists
+    assert store.ref('jobs', COPY).get().to_dict()['state'] == 'provider_pending'
 
 
 def test_long_exact_copy_never_selects_adjacent_short_native_row():
@@ -749,3 +759,289 @@ def test_off_stops_new_projection_aliases_but_retains_already_computed_work(monk
         project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
     assert store.ref('jobs', COPY).get().to_dict() == before
     assert 'projection' not in store.ref('results', COPY).get().to_dict()
+
+
+@pytest.mark.parametrize('defect', ['erased', 'quarantined', 'dead', 'ledger', 'expired', 'missing', 'disposition'])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_lost_canonical_fallback_is_durable_idempotent_and_survives_off(defect, enabled, monkeypatch):
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    monkeypatch.setenv('BATCH_SOURCE_REUSE_ENABLED', str(enabled).lower())
+    if defect == 'erased':
+        store.client.rows[store.ref('results', SOURCE).path]['projection_state'] = 'erased'
+    elif defect in {'quarantined', 'dead'}:
+        store.client.rows[store.ref('jobs', SOURCE).path]['state'] = defect
+    elif defect == 'ledger':
+        patch_document(store, sync_content_ledger_ref(store.client, UID, 'source-content'), {'status': 'processing'})
+    elif defect == 'expired':
+        patch_document(
+            store,
+            store.ref(reuse.TABLE, reuse.receipt_id(KEY)),
+            {'expires_at': datetime.fromtimestamp(NOW - 1, timezone.utc)},
+        )
+    elif defect == 'missing':
+        del store.client.rows[store.ref(reuse.TABLE, reuse.receipt_id(KEY)).path]
+    else:
+        store.client.rows[store.ref('results', SOURCE).path]['projection']['disposition'] = 'superseded'
+    observed = []
+    monkeypatch.setattr(source_reuse, 'observe', lambda event, seconds=0: observed.append(event))
+    with pytest.raises(reuse.SourceReuseUnavailable, match='fallback enqueued'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    queued = store.ref('jobs', COPY).get().to_dict()
+    assert queued['audio_uri'] == item.audio_uri and not queued['requires_compute_admission']
+    assert queued['stt_route']['stt_route'] == 'provider'
+    assert queued['state'] == 'provider_pending' and queued['merge_pending']
+    assert not queued.get('source_alias_of') and not queued.get('source_alias')
+    assert queued['source_alias_fallback']['source_segment_id'] == SOURCE
+    assert store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['segment_id'] == COPY
+    assert not store.ref('results', COPY).get().exists
+    before = deepcopy(store.client.rows)
+    with pytest.raises(reuse.SourceReuseUnavailable, match='processing pending'):
+        project_alias(store, item, binding, NOW + 1, policy=ProjectionPolicy())
+    assert store.client.rows == before and observed.count('fallback') == 1
+
+
+@pytest.mark.parametrize('erasure', ['own_conversation', 'account_generation', 'own_artifact', 'own_result'])
+def test_alias_erasure_prevents_fallback_compute(erasure):
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    if erasure == 'own_conversation':
+        store.client.collection('users').document(UID).collection('deleted_conversations').document(
+            item.conversation_id
+        ).create({})
+    elif erasure == 'account_generation':
+        store.client.collection(PRIVACY_COLLECTION).document(privacy_owner_key(UID)).create({'generation': 1})
+    elif erasure == 'own_artifact':
+        patch_document(store, store.ref('artifacts', artifact_id(COPY, item.audio_uri)), {'erasure_requested': True})
+    else:
+        patch_document(store, store.ref('results', COPY), {'projection_state': 'erased'})
+    before = deepcopy(store.client.rows)
+    with pytest.raises((BatchPrivacyBlocked, ProjectionBlocked)):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert before == store.client.rows
+
+
+def test_successful_alias_never_counts_duplicate_projection_refusal(monkeypatch):
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    events = []
+    monkeypatch.setattr(source_reuse, 'observe', lambda event, seconds=0: events.append(event))
+    assert project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert events == ['reused']
+    session = store.session(COPY, binding, NOW)
+    # A real second visible assignment still records its refusal.
+    session.receipt = lambda: {}
+    session.job = store.ref('jobs', COPY).get().to_dict()
+    with pytest.raises(reuse.SourceReuseUnavailable):
+        reuse.prepare(session, store.client.transaction())
+    assert events == ['reused', 'duplicate_projection_refusal']
+
+
+@pytest.mark.parametrize('recovery_first', [True, False])
+def test_canonical_recovery_races_one_fallback_owner(recovery_first):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Event, RLock
+
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    # The strict fixture enforces read-before-write. The shared lock gives the
+    # two actual threads serializable commits; this does not emulate contention.
+    lock, start, first_done = RLock(), Barrier(2), Event()
+    store.run = lambda fn, **kwargs: serialized(fn)
+
+    def serialized(fn):
+        with lock:
+            return fn(store.client.transaction())
+
+    def recovery():
+        start.wait()
+        if not recovery_first:
+            assert first_done.wait(10)
+        with lock:
+            patch_document(store, store.ref('jobs', SOURCE), {'state': 'committed'})
+        if recovery_first:
+            first_done.set()
+
+    def fallback():
+        start.wait()
+        if recovery_first:
+            assert first_done.wait(10)
+        try:
+            return project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+        except reuse.SourceReuseUnavailable as error:
+            assert 'fallback enqueued' in str(error)
+            return False
+        finally:
+            if not recovery_first:
+                first_done.set()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        recovered, fallback_result = pool.submit(recovery), pool.submit(fallback)
+        recovered.result(timeout=15)
+        assert fallback_result.result(timeout=15) is recovery_first
+    owner = store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['segment_id']
+    assert owner == (SOURCE if recovery_first else COPY)
+    job = store.ref('jobs', COPY).get().to_dict()
+    assert job['state'] == ('committed' if recovery_first else 'provider_pending')
+    if not recovery_first:
+        # Recovery cannot reclaim the reserved range or undo its paid fallback.
+        loser = store.session(
+            SOURCE, ProjectionBinding(UID, 'source-job', 'source-content', (SOURCE,), privacy_generation=0), NOW
+        )
+        loser.job = store.ref('jobs', SOURCE).get().to_dict()
+        loser.source_owner = store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()
+        with pytest.raises(reuse.SourceReuseUnavailable):
+            reuse.claim(loser, store.client.transaction(), {'state': 'ready'})
+
+
+def test_fallback_restart_replaces_same_log_slot_and_charges_own_speech(monkeypatch):
+    from utils.batch_pipeline.scheduler import Scheduler
+    from utils.batch_pipeline.merge import OrderedMerge
+    from utils.batch_pipeline.contracts import WorkResult
+    from database.batch_pipeline_source_fallback import merge_ready
+
+    store, original = setup_store()
+    original = replace(original, duration_seconds=120.0)
+    patch_document(store, store.ref('jobs', SOURCE), {'duration_seconds': 120.0})
+    item, binding = prepare_copy(store, original)
+    slot = store.ref('results', COPY).get().to_dict()
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+
+    def run(body):
+        view = FirestoreTransaction(store.client, NS, store.client.transaction())
+        value = body(view)
+        view.flush()
+        return value
+
+    store.store.run = run
+    # Query ordering is not modelled by the strict document fixture. This
+    # selects the one pending job; all admission/merge writes remain real.
+    monkeypatch.setattr(FirestoreTransaction, 'first_pending', lambda tx, key: tx.get('jobs', COPY))
+    from utils.batch_pipeline.provider_stt import ProviderSttStage
+
+    artifacts = Mock()
+    artifacts.fetch_audio.return_value = b'synthetic-retained-audio'
+    artifacts.persist_recovery_result.return_value = 'gs://synthetic/fresh-result#2'
+    vendor = Mock(
+        return_value={
+            'audio_seconds': 120.0,
+            'speech_seconds': 3.0,
+            'speech_spans': [{'start': 0.0, 'end': 3.0}],
+            'words': [{'word': 'synthetic', 'timestamp': [0.0, 1.0], 'speaker': 'SPEAKER_00'}],
+            'diarization': {'turns': []},
+            'words_provider': 'modulate',
+            'language': 'en',
+            'recovery_version': 1,
+        }
+    )
+    allowed = Mock(return_value=False)
+    stage = ProviderSttStage(
+        store.store,
+        artifacts,
+        stt=vendor,
+        allowed=allowed,
+        inspect=lambda *_: (b'\0\0' * 16000 * 120, 120.0, [{'start': 0.0, 'end': 3.0}]),
+        clock=lambda: NOW + 2,
+        armed=lambda: False,
+    )
+    assert stage.run(COPY).outcome == 'deferred'
+    vendor.assert_not_called()
+    artifacts.fetch_audio.assert_not_called()
+    allowed.return_value = True
+    assert stage.run(COPY).outcome == 'done'
+    assert vendor.call_count == 1 and allowed.call_count == 3
+    assert vendor.call_args.args[1] == 'multi'
+    result = WorkResult(COPY, 'gs://synthetic/fresh-result#2')
+    owner_before = store.ref('owners', owner_key(UID)).get().to_dict()
+    merged = OrderedMerge(store.store, head_wait_seconds=0, catch_up_depth=1).commit_next(UID, NOW + 3)
+    assert merged['previous_segment_id'] == slot['previous_segment_id']
+    assert merged['committed_at'] == slot['committed_at']
+    assert merged['result']['result_uri'] == 'gs://synthetic/fresh-result#2'
+    assert merged['projection_redriven_at'] == NOW + 3
+    assert store.ref('owners', owner_key(UID)).get().to_dict().get('log_sequence') == owner_before.get('log_sequence')
+    with pytest.raises(ProjectionBlocked):
+        run(lambda tx: merge_ready(tx, tx.get('jobs', COPY), NOW + 4))
+    fresh_job = store.ref('jobs', COPY).get().to_dict()
+    fresh_item = WorkItem(**{key: fresh_job[key] for key in WorkItem.__dataclass_fields__ if key in fresh_job})
+    assert not project_alias(store, fresh_item, binding, NOW + 4, policy=ProjectionPolicy())
+    monkeypatch.setattr('database.llm_usage.resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
+    monkeypatch.setattr('database.hourly_usage_updates.prepare_hourly_usage_updates', lambda *args, **kwargs: {})
+    # Normal fresh speech accounting, never the old zero-speech alias receipt.
+    session = store.session(COPY, binding, NOW + 5)
+    tx = store.client.transaction()
+    session.prepare(tx)
+    session.speech_seconds = 3.0
+    receipt = session.persist(tx, ({'id': 'independent-output', 'language': 'en'}, True, []))
+    receipt['state'] = 'ready'
+    session.write_receipt(tx, receipt)
+    monkeypatch.setattr('database.llm_usage.resolve_usage_plan_id', lambda *args, **kwargs: 'synthetic-plan')
+    monkeypatch.setattr('database.hourly_usage_updates.prepare_hourly_usage_updates', lambda *args, **kwargs: {})
+    accounting = store.prepare_accounting(binding, NOW + 6)
+    assert accounting['seconds'] == 3.0
+    ledger = sync_content_ledger_ref(store.client, UID, binding.content_id)
+    for now in (NOW + 6, NOW + 7):
+        store._commit_usage(store.client.transaction(), ledger, ledger.get().to_dict(), binding, accounting, 3, now)
+    assert ledger.get().to_dict()['usage_committed_seconds'] == 3
+    assert store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['complete']
+
+
+def test_fallback_does_not_recreate_deleted_canonical_output():
+    store, original = setup_store(corrected=True)
+    item, binding = prepare_copy(store, original)
+    user = store.client.collection('users').document(UID)
+    user.collection('deleted_conversations').document('visible').create({})
+    before = user.collection('conversations').document('visible').get().to_dict()
+    with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert user.collection('conversations').document('visible').get().to_dict() == before
+    job = store.ref('jobs', COPY).get().to_dict()
+    assert 'visible' not in job['source_conversation_ids']
+    artifact = store.ref('artifacts', artifact_id(COPY, item.audio_uri)).get().to_dict()
+    assert 'visible' not in artifact['conversation_ids']
+    # A new erasure of the alias's own independent capture still blocks work.
+    user.collection('deleted_conversations').document(item.conversation_id).create({})
+    with pytest.raises(BatchPrivacyBlocked):
+        from database.batch_pipeline_policy import check_unit_privacy
+
+        check_unit_privacy(FirestoreTransaction(store.client, NS, store.client.transaction()), job)
+
+
+def test_canonical_loss_after_pointer_persist_still_falls_back():
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    assert project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
+        project_alias(store, item, binding, NOW + 1, policy=ProjectionPolicy())
+    assert not store.ref('results', COPY).get().exists
+    assert store.ref('jobs', COPY).get().to_dict()['state'] == 'provider_pending'
+
+
+def patch_document(store, reference, changes):
+    store.client.transaction().update(reference, changes)
+
+
+def test_fallback_requires_own_audio_but_not_expired_alias_marker():
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    marker_uri = store.ref('jobs', COPY).get().to_dict()['result']['result_uri']
+    del store.client.rows[store.ref('artifacts', artifact_id(COPY, marker_uri)).path]
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert store.ref('jobs', COPY).get().to_dict()['stt_route']['stt_route'] == 'provider'
+
+
+def test_fallback_cannot_guess_missing_admission_funding_policy():
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    del store.client.rows[store.ref('jobs', COPY).path]['policy']
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    before = deepcopy(store.client.rows)
+    with pytest.raises(ProjectionBlocked, match='funding policy required'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    assert store.client.rows == before
