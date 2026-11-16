@@ -16,35 +16,44 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(1, str(ROOT.parents[1]))
 from readiness_contract import CONTRACT
+from testing.import_isolation import AutoMockModule, stub_modules
 
-# These controls exercise source and receipt logic, never SDK behavior. Load a
-# private runner module with explicit failing SDK seams, even when SDKs happen
-# to be installed. Restore sys.modules so other tests cannot inherit the fakes.
-SDK_MODULES = {
-    name: types.ModuleType(name)
-    for name in (
-        'google',
-        'google.auth',
-        'google.auth.compute_engine',
-        'google.auth.compute_engine.credentials',
-        'psycopg',
-    )
-}
-SDK_MODULES['google'].auth = SDK_MODULES['google.auth']
+readiness = None
 
 
 def unexpected_sdk_call(*args, **kwargs):
     raise AssertionError('PORTABLE_CONTROL_MUST_NOT_CALL_SDK')
 
 
-SDK_MODULES['google.auth'].default = unexpected_sdk_call
-SDK_MODULES['google.auth.compute_engine.credentials'].Credentials = unexpected_sdk_call
-SDK_MODULES['psycopg'].connect = unexpected_sdk_call
-RUNNER_SPEC = importlib.util.spec_from_file_location('portable_readiness_under_test', ROOT / 'runner_readiness.py')
-readiness = importlib.util.module_from_spec(RUNNER_SPEC)
-with patch.dict(sys.modules, SDK_MODULES):
-    RUNNER_SPEC.loader.exec_module(readiness)
+def setUpModule():
+    # Discovery stays pure. SDK substitution is confined to this test fixture,
+    # through the sanctioned helper that restores modules and parent attributes.
+    global readiness
+    modules = {
+        name: AutoMockModule(name)
+        for name in (
+            'google',
+            'google.auth',
+            'google.auth.compute_engine',
+            'google.auth.compute_engine.credentials',
+            'psycopg',
+        )
+    }
+    modules['google.auth'].default = unexpected_sdk_call
+    modules['google.auth.compute_engine.credentials'].Credentials = unexpected_sdk_call
+    modules['psycopg'].connect = unexpected_sdk_call
+    spec = importlib.util.spec_from_file_location('portable_readiness_under_test', ROOT / 'runner_readiness.py')
+    with stub_modules(modules):
+        readiness = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(readiness)
+
+
+def tearDownModule():
+    global readiness
+    readiness = None
+
 
 EXPECTED = CONTRACT['migrations']
 HOLD_KEYS = {
@@ -56,6 +65,25 @@ HOLD_KEYS = {
     'state_initialized',
     'write_attempted',
 }
+
+
+class CollectionTests(unittest.TestCase):
+    def test_discovery_never_substitutes_sdk_modules_or_loads_runner(self):
+        program = f'''
+import sys,pathlib,unittest.mock as mock
+sys.path.insert(0, {str(ROOT.parents[1])!r})
+import testing.import_isolation as isolation
+path=pathlib.Path({str(Path(__file__).resolve())!r})
+before={{k:v for k,v in sys.modules.items() if k=='google' or k.startswith('google.') or k=='psycopg'}}
+namespace={{'__file__':str(path),'__name__':'collection_only'}}
+with mock.patch.object(mock.patch,'dict',side_effect=AssertionError('DISCOVERY_SDK_MUTATION')), mock.patch.object(isolation,'stub_modules',side_effect=AssertionError('DISCOVERY_SDK_MUTATION')):
+    exec(compile(path.read_text(),str(path),'exec'),namespace)
+after={{k:v for k,v in sys.modules.items() if k=='google' or k.startswith('google.') or k=='psycopg'}}
+assert before.keys()==after.keys() and all(after[k] is v for k,v in before.items())
+assert namespace['readiness'] is None
+'''
+        result = subprocess.run([sys.executable, '-S', '-c', program], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class Cursor:

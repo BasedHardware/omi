@@ -16,4 +16,4 @@ Primary docs: [Artifact Registry permission hint API](https://docs.cloud.google.
 
 The next independent step is the [state-free metadata readiness packet](readiness.md). It requires fresh exact-candidate native qualification and publication first, then a separately reviewed execution packet. It neither copies data, mounts persistent state nor applies migrations.
 
-Portable publication controls run with the Python standard library alone. Source/receipt tests load a private copy of the runner with scoped SDK seams that fail on use; they never skip for missing packages. Actual dependency imports and credential-refusal behavior remain separate exact-image native qualification gates.
+Portable publication controls run with the Python standard library alone. During unittest setup, source/receipt tests load a private runner copy through the sanctioned import-isolation helper, with SDK seams that fail on use. Discovery never substitutes SDK modules, and tests never skip for missing packages. Actual dependency imports and credential-refusal behavior remain separate exact-image native qualification gates.
