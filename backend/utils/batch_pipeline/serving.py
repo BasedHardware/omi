@@ -8,6 +8,7 @@ import logging
 import os
 import time
 
+from config import batch_pipeline_protected_share as protected_share
 from config.batch_pipeline import (
     held_partial_enabled,
     owner_chain_projection_enabled,
@@ -80,6 +81,9 @@ class Serving:
     ):
         self.store = store
         self.metrics = metrics
+        # Bounded process state: retry cursors and small-pull share cadence
+        # must survive queue() calls on the serving/maintenance plane too.
+        self._queues = {pool: Scheduler(store, metrics=metrics, pool=pool) for pool in ('batch', 'live')}
         self.projector = projector
         self.cleanup = cleanup
         self.reap_staging = reap_staging
@@ -109,7 +113,11 @@ class Serving:
         self.held_pass_segments = 0
 
     def queue(self, pool='batch'):
-        return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if not protected_share.enabled():
+            return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if pool not in self._queues:
+            raise ValueError('pool must be batch or live')
+        return self._queues[pool]
 
     def pull(self, limit: int, capacity: PoolCapacity, *, pool: str = 'batch'):
         return self.queue(pool).pull(time.time(), limit, capacity=capacity)
