@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-test-context-exit-preempts-cleanup",
+  "violated_contract": "A disconnect test that asserts close-time persistence must let the server handle the disconnect before the test transport cancels its ASGI task. Starlette TestClient context exit sends disconnect and immediately cancels the application, so context exit alone is not a receipt that cleanup completed.",
+  "canonical_prevention": "Observe completion of the actual per-session ASGI application, explicitly send disconnect and join its completion with a hard bound while the TestClient session is still active. Then retain durable content, finite audio interval, original media and rollback assertions. Cover the cancellation boundary with a real TestClient application whose close-time cleanup yields, and exercise the real listen archive with delayed close I/O. Propagate handler failures and retain ordinary cancellation when the test body fails.",
+  "canonical_prevention_artifact": [
+    "backend/testing/e2e/test_desktop_batch_only.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/testing/e2e/test_desktop_batch_only.py"
+  ],
+  "status": "open"
+}

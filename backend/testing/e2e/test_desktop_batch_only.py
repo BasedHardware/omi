@@ -5,10 +5,55 @@ from fakes.listen_pusher_wire import ScriptedPusherPeer, install_fake_firestore_
 from fakes.stt import install_streaming_stt_fake
 from listen_test_helpers import is_conversation_session_event, is_ready_event, receive_until, seed_listen_user
 
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
+import asyncio
 import json
+import threading
 from types import SimpleNamespace
+from fastapi.testclient import TestClient
 import pytest
+
+
+@contextmanager
+def _complete_websocket_session(session):
+    """Let the real disconnect handler finish before TestClient cancels its task."""
+    completed = threading.Event()
+    app = session.app
+
+    async def observed_app(scope, receive, send):
+        try:
+            await app(scope, receive, send)
+        finally:
+            completed.set()
+
+    session.app = observed_app
+    try:
+        with session as websocket:
+            yield websocket
+            # TestClient's context exit sends disconnect then cancels the app.
+            # Join its real close-time custody flush while the app can still run.
+            websocket.close()
+            assert completed.wait(5), 'listen disconnect handler did not finish'
+    finally:
+        session.app = app
+
+
+def test_websocket_session_finishes_disconnect_cleanup():
+    committed = threading.Event()
+
+    async def app(scope, receive, send):
+        assert scope['type'] == 'websocket'
+        assert (await receive())['type'] == 'websocket.connect'
+        await send({'type': 'websocket.accept'})
+        assert (await receive())['type'] == 'websocket.disconnect'
+        # Stand in only for the close-time I/O yield; TestClient and its actual
+        # ASGI cancellation remain real. Bare context exit cancels this cleanup.
+        await asyncio.sleep(0.05)
+        committed.set()
+
+    with _complete_websocket_session(TestClient(app).websocket_connect('/')):
+        pass
+    assert committed.is_set()
 
 
 @pytest.fixture
@@ -57,7 +102,7 @@ def test_native_desktop_custody_or_exact_live_rollback(
     auto_percent='0',
     learned=None,
 ):
-    from config.server_batch import owned
+    from config.server_batch import has_audio, owned
     from database.conversations import prepare_conversation_for_read
     from tests.unit.test_audio_durable_outbox import Blob
     from utils.other.raw_audio import decode_capture
@@ -116,10 +161,21 @@ def test_native_desktop_custody_or_exact_live_rollback(
             sockets = install_streaming_stt_fake(monkeypatch)
         data = b'\x80' * 480 + b'\x90' * 480 + b'\x70' * 480
         language_query = '' if language is None else f'language={language}&'
-        with client.websocket_connect(
+        language_admitted = language == 'en' or (auto_percent == '100' and learned == {'en': 100})
+        batch_owned = (
+            disabled
+            and consent
+            and not byok
+            and language_admitted
+            and (platform in {'macos', 'windows'} or mobile_percent == '100')
+        )
+        connection = client.websocket_connect(
             f'/v4/listen?{language_query}sample_rate=8000&codec=pcm8&source={source}&vad_gate=disabled',
             headers={'Authorization': 'Bearer dev-token', 'X-App-Platform': platform},
-        ) as websocket:
+        )
+        # Only the batch-owned branch asserts close-time archive custody. Live
+        # rollback keeps its existing streaming-transcript observation boundary.
+        with _complete_websocket_session(connection) if batch_owned else connection as websocket:
             session = receive_until(websocket, is_conversation_session_event)
             receive_until(websocket, is_ready_event)
             websocket.send_bytes(data)
@@ -131,19 +187,12 @@ def test_native_desktop_custody_or_exact_live_rollback(
         row = user.collection('conversations').document(session['conversation_id']).get().to_dict()
         assert row is not None
         decoded = prepare_conversation_for_read(row, test_uid)
-        language_admitted = language == 'en' or (auto_percent == '100' and learned == {'en': 100})
-        if (
-            disabled
-            and consent
-            and not byok
-            and language_admitted
-            and (platform in {'macos', 'windows'} or mobile_percent == '100')
-        ):
+        if batch_owned:
             assert owned(row)
             if language is None:
                 assert decoded['language'] == 'multi'  # No declared-English manifest bypass.
             assert not decoded.get('transcript_segments')
-            assert row['has_content']
+            assert has_audio(row)
             assert not sockets
             expected = b'\x00\x00' * 480 + b'\x00\x10' * 480 + b'\x00\xf0' * 480
             assert b''.join(frame.raw[12:] for frame in peer.frames_of_type(101)) == expected
@@ -164,6 +213,23 @@ def test_native_desktop_custody_or_exact_live_rollback(
             assert not owned(row)
     finally:
         peer.close()
+
+
+def test_native_desktop_waits_for_slow_archive_close(client, test_uid, monkeypatch, remote):
+    from utils.other.live_audio_archive import LiveAudioArchive
+
+    close = LiveAudioArchive.close
+
+    async def delayed_close(archive):
+        # Make close-time I/O yield so TestClient cancellation cannot accidentally
+        # masquerade as a completed disconnect. All real custody writes still run.
+        await asyncio.sleep(0.05)
+        await close(archive)
+
+    monkeypatch.setattr(LiveAudioArchive, 'close', delayed_close)
+    test_native_desktop_custody_or_exact_live_rollback(
+        client, test_uid, monkeypatch, remote, True, True, 'macos', 'desktop', '0', False
+    )
 
 
 @pytest.mark.parametrize('platform', ['ios', 'android'])
