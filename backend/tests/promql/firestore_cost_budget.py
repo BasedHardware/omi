@@ -89,16 +89,39 @@ def main():
     ]
     median = rules[-1]["data"][1]["model"]["expr"]
     hourly = rules[-1]["data"][0]["model"]["expr"]
+    # GMP rejected offsets on the raw selectors inside these hourly subqueries.
+    # Execute the committed outer-offset form and all seven daily offsets here;
+    # production compatibility still requires the exact-head GMP readback.
+    tests.append(
+        {
+            "name": "GMP outer-offset regression preserves current and seven-day raw totals",
+            "interval": "1m",
+            "input_series": [
+                {"series": 'firestore_googleapis_com:document_read_count{type="QUERY"}', "values": "100x11519"},
+                {"series": 'firestore_googleapis_com:document_read_count{type="LOOKUP"}', "values": "0x11519"},
+                {"series": 'firestore_googleapis_com:document_read_count{type="NOT_FOUND"}', "values": "0x11519"},
+            ],
+            "promql_expr_test": [
+                {"expr": query, "eval_time": "7d16h30m", "exp_samples": [{"labels": "{}", "value": 6100}]}
+                for query in (hourly, median)
+            ],
+        }
+    )
     for name, values, query, expected in (
-        ("one missing minute is not extrapolated", "100x29 _ 100x28", hourly, [{"labels": "{}", "value": 5900}]),
         (
-            "58 raw minutes accepted without extrapolation",
-            "100x28 _ _ 100x28",
+            "one missing minute is not extrapolated on pinned inclusive engine",
+            "100x29 _ 100x28",
+            hourly,
+            [{"labels": "{}", "value": 6000}],
+        ),
+        (
+            "58 raw minutes accepted without extrapolation on pinned inclusive engine",
+            "100x27 _ _ _ 100x28",
             hourly,
             [{"labels": "{}", "value": 5800}],
         ),
-        ("57 raw minutes reject current hour", "100x27 _ _ _ 100x28", hourly, []),
-        ("missing baseline minutes reject median", "100x27 _ _ _ 100x28", median, []),
+        ("57 raw minutes reject current hour", "100x26 _ _ _ _ 100x28", hourly, []),
+        ("missing baseline minutes reject median", "100x26 _ _ _ _ 100x28", median, []),
         ("zero baseline rejects division", "0x59", median, []),
     ):
         tests.append(

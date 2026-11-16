@@ -111,6 +111,7 @@ class Bucket:
 def remote(monkeypatch):
     monkeypatch.setenv('PUSHER_AUDIO_FILE_INCREMENTAL_ENABLED', '0')
     monkeypatch.setattr(pusher_audio_projection.record_projection_rebuild, 'mark_many', MagicMock())
+    monkeypatch.setattr(live_audio_archive.record_projection_rebuild, 'mark_due', MagicMock())
     monkeypatch.setattr(pusher_audio_projection.conversations_db, 'get_conversation_raw_snapshot', lambda *a, **kw: {})
     bucket = Bucket()
     monkeypatch.setattr(record_audio_db, 'seal_record_audio', MagicMock(return_value='not_batch_owner'))
