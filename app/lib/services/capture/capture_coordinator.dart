@@ -1837,10 +1837,16 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
       DeviceStartRequested() => event.device?.id,
       _ => null,
     };
+    // Ask the existing pure admission reducer before retiring the old owner.
+    // A refused batch handoff or muted no-resume request is not a takeover.
+    final phoneTakingOver = awaitingLink &&
+        event is PhoneStartRequested &&
+        _reducePhoneStart(state, event, env).effects.any((effect) => effect is CheckPhonePermission);
     final invalidated = event is DeviceStopRequested ||
         (event is FinishRequested && _rejectStaleTarget(state, event.target, env) == null) ||
         event is CaptureIdentityChanged ||
-        (awaitingLink && (event is PhoneStartRequested || event is PhoneBatchStartRequested)) ||
+        phoneTakingOver ||
+        (awaitingLink && event is PhoneBatchStartRequested) ||
         event is BatchModeSetRequested ||
         event is OnboardingBatchChanged ||
         (event is DeviceUpdated && event.device == null && event.reconnectDeviceId == null) ||

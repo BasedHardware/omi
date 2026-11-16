@@ -951,6 +951,22 @@ void main() {
       await send(DeviceStartRequested(device: pendant));
       expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
     });
+    test('refused batch-pendant phone takeover preserves grace', () async {
+      final original = await drop(batch: true);
+      await send(const PhoneStartRequested());
+      expect(coordinator.state.pendantSuspension!.recordingId, original.recordingId);
+      expect(fake.mic, isFalse);
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+    });
+    test('muted resumePolicy false phone refusal preserves grace', () async {
+      final original = await drop(paused: true);
+      await send(const PhoneStartRequested(resumePolicy: false));
+      expect(coordinator.state.pendantSuspension!.recordingId, original.recordingId);
+      expect(fake.mic, isFalse);
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+    });
     test('denied phone permission leaves the grace recording available', () async {
       final original = await drop();
       fake.permitPhone = false;
