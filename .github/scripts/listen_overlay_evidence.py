@@ -149,6 +149,11 @@ class Reader:
                         os.killpg(p.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                except PermissionError:
+                    # macOS can return EPERM for the group after the child exits
+                    # between poll and killpg. Never suppress denial for a live child.
+                    if p.poll() is None:
+                        raise
                 finally:
                     p.wait()
 

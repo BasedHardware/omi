@@ -303,3 +303,33 @@ def test_real_subprocess_output_is_capped_and_private_error_is_never_echoed(tmp_
     assert result.stdout == ''
     assert result.stderr.strip() == 'LISTEN_OVERLAY_EVIDENCE_REFUSED'
     assert not (tmp_path / 'receipt.json').exists()
+
+
+@pytest.mark.parametrize('terminal', [None, 1])
+def test_reader_cleanup_permission_denial_is_ignored_only_after_terminal_poll(monkeypatch, terminal):
+    ticks = iter([0, 0, 0, 11])
+    reader = evidence.Reader(clock=lambda: next(ticks))
+    polls = iter([None, None, terminal])
+    waited, killed = [], []
+
+    class Child:
+        pid = 123456
+
+        def poll(self):
+            return next(polls)
+
+        def wait(self):
+            waited.append(True)
+            return terminal
+
+    def denied(pid, sig):
+        killed.append((pid, sig))
+        raise PermissionError('synthetic owned-group denial')
+
+    monkeypatch.setattr(evidence.subprocess, 'Popen', lambda *args, **kwargs: Child())
+    monkeypatch.setattr(evidence.os, 'killpg', denied)
+    expected = PermissionError if terminal is None else evidence.Refused
+    with pytest.raises(expected):
+        reader.run(['offline-synthetic-child'])
+    assert killed == [(Child.pid, evidence.signal.SIGKILL)]
+    assert waited == [True]
