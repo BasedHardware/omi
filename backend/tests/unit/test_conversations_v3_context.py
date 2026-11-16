@@ -77,6 +77,9 @@ def test_short_and_covered_rows_do_not_retrieve_context(context_notes_seam, monk
     short.transcript_segments[0].text = 'useful speech ' * 40
     process._get_structured('u', 'en', short)
     covered = conversation(summary_covers_through=AT + timedelta(seconds=40))
+    from utils.conversations.v3.summary_input import fingerprint
+
+    covered.summary_input_hash = fingerprint(covered)
     process._get_structured('u', 'en', covered)
 
 

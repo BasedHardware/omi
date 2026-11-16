@@ -17,10 +17,13 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 
 
 def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypatch):
+    from database import conversations_v3_quiet
+
     tasks = {}
     calls = []
     monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
     monkeypatch.setattr(triggers.store, 'mark_pending', lambda *a, **kw: True)
+    monkeypatch.setattr(conversations_v3_quiet, 'obligation', lambda *a: None)
 
     def enqueue(queue, url, task_id, payload, **kwargs):
         calls.append(task_id)

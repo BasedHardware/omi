@@ -163,12 +163,17 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
 
     @firestore.transactional
     def mark(tx):
-        row = ref.get(transaction=tx).to_dict() or {}
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
         if not row.get('recording') or row.get('deleted'):
             return False
+        from database import conversations_v3_quiet
+
         update = {'v3_pending': True, 'v3_pending_since': row.get('v3_pending_since') or datetime.now(timezone.utc)}
+        update.update(conversations_v3_quiet.source_patch(uid, snapshot, now=datetime.now(timezone.utc)))
         if manual_end:
             update['v3_manual_end'] = True
+            update['v3_quiet_pending'] = False
         tx.update(ref, update)
         return True
 

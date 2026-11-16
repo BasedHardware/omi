@@ -107,6 +107,18 @@
     "policy": "conversations",
     "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
   },
+  "backend/database/conversations_v3_quiet.py:user_conversations": {
+    "policy": "both",
+    "reason": "Summary-only quiet permits compare canonical inputs with owner-scoped recording revisions and pending tails; deletion and privacy remain fenced."
+  },
+  "backend/utils/conversations/v3/quiet.py:user_conversations": {
+    "policy": "conversations",
+    "reason": "The server-owned builder open_id selects one canonical live row; the paid permit rechecks recording/deletion/lock/privacy and source identity."
+  },
+  "backend/utils/conversations/v3/quiet.py:collection_group": {
+    "policy": "both",
+    "reason": "The existing authenticated sweeper redispatches only durable quiet obligations without model work or lifecycle effects."
+  },
   "backend/database/conversations_v3_processing.py:user_conversations": {
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."

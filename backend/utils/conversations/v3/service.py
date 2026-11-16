@@ -20,7 +20,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import outline, planner, models, metrics, policy, visibility, context
+from utils.conversations.v3 import outline, planner, models, metrics, policy, visibility, context, summary_input
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -181,6 +181,11 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
             if prior:
                 used.add(prior['id'])
             row = planner.build(uid, window, recordings, prior)
+            row['v3_source_hashes'] = {
+                rid: summary_input.fingerprint(recordings[rid])
+                for rid in row['v3_recording_ids']
+                if rid in recordings and not recordings[rid].get('_v3_unreadable')
+            }
             if derive:
                 row['backfilled'] = True
             if prior and prior.get('deleted'):
@@ -474,6 +479,9 @@ async def sweep():
         if len(purges) < 1000:
             break
         cursor = purges[-1]
+    from utils.conversations.v3.quiet import sweep as sweep_quiet
+
+    await sweep_quiet(client)
     return len(users)
 
 

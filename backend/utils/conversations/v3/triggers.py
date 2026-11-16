@@ -38,7 +38,7 @@ def _mark_resolved(uid, row):
         )
 
 
-def enqueue(uid, *, at=None, manual_end_id=None):
+def enqueue(uid, *, at=None, manual_end_id=None, quiet_recording_id=None, quiet_generation=None, recovery=None):
     instant = at or datetime.now(timezone.utc)
     minute = int(instant.timestamp()) // 60
     task_id = 'conversations-v3-' + hashlib.sha256(uid.encode()).hexdigest()[:32] + '-' + str(minute)
@@ -46,6 +46,14 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         # A live task may already have completed in this minute. Its retained
         # Cloud Tasks name must not swallow the user's later explicit close.
         task_id += '-end-' + hashlib.sha256(manual_end_id.encode()).hexdigest()[:32]
+    payload = {'uid': uid}
+    if quiet_recording_id and quiet_generation:
+        # Stable across retries/seals, distinct from builder and manual-close work.
+        key = hashlib.sha256((uid + ':' + quiet_recording_id + ':' + quiet_generation).encode()).hexdigest()
+        task_id = 'conversations-v3-quiet-' + key
+        if recovery is not None:
+            task_id += '-retry-' + str(recovery)
+        payload.update(quiet_recording_id=quiet_recording_id, quiet_generation=quiet_generation)
     base = os.getenv('CONVERSATIONS_V3_TASKS_URL', '').rstrip('/')
     if not base:
         from urllib.parse import urlsplit
@@ -58,7 +66,7 @@ def enqueue(uid, *, at=None, manual_end_id=None):
         os.getenv('CONVERSATIONS_V3_TASKS_QUEUE', 'conversations-v3'),
         base + '/v1/conversations-v3/reconcile',
         task_id,
-        {'uid': uid},
+        payload,
         schedule_at=int(instant.timestamp()),
     )
 
@@ -73,3 +81,32 @@ def changed(uid, cid, *, manual_end=False):
             record_fallback(
                 component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
             )
+        # Transcript appends reach this path while a transport is still open.
+        # Quiet dispatch has its own durable marker even after the builder clears v3_pending.
+        from database import conversations_v3_quiet
+
+        try:
+            quiet = conversations_v3_quiet.obligation(uid, cid)
+            if quiet:
+                dispatch_quiet(uid, cid, quiet)
+        except Exception as error:
+            logger.warning('v3 quiet dispatch deferred exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
+            )
+
+
+def dispatch_quiet(uid, cid, row, *, recovery=None):
+    try:
+        enqueue(
+            uid,
+            at=row['v3_quiet_due'],
+            quiet_recording_id=cid,
+            quiet_generation=row['v3_quiet_generation'],
+            recovery=recovery,
+        )
+    except Exception as error:
+        logger.warning('v3 quiet dispatch deferred exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='other', from_mode='dispatch', to_mode='sweeper', reason='enqueue_failed', outcome='degraded'
+        )

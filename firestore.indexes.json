@@ -6593,6 +6593,29 @@
     },
     {
       "collectionGroup": "conversations",
+      "fieldPath": "v3_quiet_pending",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
       "fieldPath": "v3_audio_purge_pending",
       "ttl": false,
       "indexes": [

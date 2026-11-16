@@ -520,6 +520,8 @@ class Conversation(BaseModel):
     recording_pieces: Optional[List[RecordingPiece]] = None
     manual_end: Optional[bool] = None
     summary_covers_through: Optional[datetime] = None
+    summary_input_hash: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    summary_is_snapshot: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_derived: SkipJsonSchema[Optional[bool]] = None
     v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None

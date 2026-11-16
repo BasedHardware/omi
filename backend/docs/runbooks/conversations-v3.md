@@ -40,6 +40,23 @@ windows across the silence boundary, even with the same people. Short socket
 captures and reconnects do not themselves split a continuous stretch. The
 two-hour cap still bounds each resulting window. Missing transcript is not
 proof of acoustic silence; qualify transcript completeness separately.
+Summary-only notes start after approximately 30 seconds of quiet from the latest
+accepted transcript. They use the existing Standard on-open notes writer, shared
+summary lease and exact content/window fingerprint while the canonical conversation
+stays in_progress until its unchanged five-minute boundary. No memories, tasks,
+webhooks or lifecycle completion run for this snapshot. Source revisions and pending
+transcript tails fence late writes even before the builder catches up resumed speech.
+The existing OIDC task endpoint/queue carries purpose/content-specific quiet jobs;
+durable source markers survive dispatch failure for the ordinary sweeper.
+There is one speculative paid attempt per exact content/window, shared with on-open
+requests, with a bounded 128-entry spent-permit ledger on the summary lease. Failed
+paid calls await normal final processing; only dispatch/ownership/read retries are
+automatic. Seals and duplicate deliveries do not buy another call for unchanged input.
+Final processing recomputes notes and performs normal derived effects; provisional
+notes do not authorize final reuse. This costs one additional final notes call when
+an early snapshot succeeded. Thirty seconds is the quiet dispatch target, not a
+completion guarantee: queue/executor time, first section and full model latency must
+be measured separately (the existing model deadline remains 90 seconds).
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

@@ -133,6 +133,10 @@ def test_short_threshold_and_covered_summary(monkeypatch, words, covered, foregr
         structured={'title': 'Existing', 'sections': [{'heading': 'Plan', 'body_markdown': 'Real notes.'}]},
         transcript_segments=[{'text': 'speech ' * words, 'start': 0, 'end': 30, 'is_user': True}],
     )
+    if covered:
+        from utils.conversations.v3.summary_input import fingerprint
+
+        row.summary_input_hash = fingerprint(row)
     with process.v3_service.models.notes_mode('u', foreground=foreground):
         structured, _ = process._get_structured('u', 'en', row)
     assert bool(calls) is expect_short

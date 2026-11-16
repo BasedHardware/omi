@@ -451,13 +451,13 @@ def _get_structured(
                 return conversation.structured, True
             if words < 300 and not full_v3_notes:
                 return v3_service.models.short_tasks(uid, conversation), False
-            covers = getattr(conversation, 'summary_covers_through', None)
+            from utils.conversations.v3.summary_input import exact
+
             if (
                 not v3_service.models.foreground()
                 and not v3_policy.explicit_retry(conversation, trigger)
-                and covers
-                and conversation.finished_at
-                and covers >= conversation.finished_at
+                and not getattr(conversation, 'summary_is_snapshot', False)
+                and exact(conversation)
             ):
                 return conversation.structured, False
         prompt_conversation_id = (

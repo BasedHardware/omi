@@ -2282,6 +2282,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_REQUIREMENTS + (
     FieldIndexRequirement('conversations_v3_pending_sweep', 'conversations', 'v3_pending', ('ASCENDING',)),
     FieldIndexRequirement('conversations_v3_processing_sweep', 'conversations', 'v3_process_pending', ('ASCENDING',)),
+    FieldIndexRequirement('conversations_v3_quiet_sweep', 'conversations', 'v3_quiet_pending', ('ASCENDING',)),
     FieldIndexRequirement(
         'conversations_v3_audio_purge_sweep', 'conversations', 'v3_audio_purge_pending', ('ASCENDING',)
     ),

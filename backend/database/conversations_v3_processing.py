@@ -13,7 +13,9 @@ from database.account_deletion_policy import account_deletion_marker_blocks_acce
 from utils.conversations.v3 import Conflict
 
 
-def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
+def store_summary(
+    uid, cid, token, revision, structured, covers, *, input_hash=None, source_revisions=None, firestore_client=None
+):
     client = firestore_client or store.get_firestore_client()
     ref, held = store.user_conversations(client, uid).document(cid), leases.lease_ref(client, uid, 'summary-' + cid)
     patch = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
@@ -40,6 +42,15 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             or lease['until'] <= datetime.now(timezone.utc)
         ):
             raise Conflict('summary_source_changed')
+        if source_revisions is not None:
+            from database import conversations_v3_quiet
+
+            if (
+                current.get('data_protection_level') == 'private'
+                or conversations_v3_quiet.sources_current(tx, client, uid, store.decode_row(uid, snapshot))
+                != source_revisions
+            ):
+                raise Conflict('summary_source_changed')
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
@@ -48,6 +59,7 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
             {
                 **patch,
                 'summary_covers_through': covers,
+                **({'summary_input_hash': input_hash, 'summary_is_snapshot': True} if input_hash else {}),
                 **(
                     {'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False}
                     if current.get('v3_derived') and current.get('status') != 'in_progress'

@@ -12,10 +12,19 @@ router = APIRouter()
 
 class ReconcileRequest(BaseModel):
     uid: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
+    quiet_recording_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[^/]+$')
+    quiet_generation: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
 
 
 @router.post('/v1/conversations-v3/reconcile', include_in_schema=False)
 async def reconcile(body: ReconcileRequest, _retry: int = Depends(verify_cloud_tasks_oidc)):
+    if body.quiet_recording_id and body.quiet_generation:
+        from utils.conversations.v3 import quiet
+
+        outcome = await quiet.run(body.uid, body.quiet_recording_id, body.quiet_generation)
+        if outcome == 'retry':
+            raise HTTPException(503, 'quiet_snapshot_not_ready')
+        return {'outcome': outcome}
     return {'outcome': await service.reconcile(body.uid)}
 
 

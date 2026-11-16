@@ -17,23 +17,19 @@ from fastapi import HTTPException
 
 from database import conversations_v3 as store
 from models.conversation import Conversation
-from utils.conversations.v3 import models, policy
+from utils.conversations.v3 import models, summary_input
 from utils.executors import run_blocking, db_executor, llm_executor
 
 
 def fresh(row):
+    if row.get('v3_derived'):
+        return summary_input.exact(row)
     covers, end = row.get('summary_covers_through'), row.get('finished_at')
-    return bool(covers and end and end - covers < timedelta(minutes=5))
+    return bool(covers and end and timedelta(0) <= end - covers < timedelta(minutes=5))
 
 
 def summary_eligible(row):
-    return not row.get('v3_derived') or (
-        row.get('kind') not in {'media', 'background'}
-        and (
-            policy.manual_intent(row)
-            or sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
-        )
-    )
+    return summary_input.eligible(row)
 
 
 def done(row):
@@ -106,6 +102,16 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         if row.get('recording') or row.get('is_locked'):
             yield 'error: {"detail":"Conversation not available"}\n\n'
             return
+        permit = None
+        if row.get('v3_derived'):
+            from database import conversations_v3_quiet
+
+            permit = await run_blocking(
+                db_executor, conversations_v3_quiet.reserve, uid, cid, token, snapshot.update_time
+            )
+            if permit is None:
+                yield done(row)
+                return
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.
         from utils.executors import start_background_task
@@ -132,6 +138,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             snapshot.update_time,
             structured,
             row.get('finished_at'),
+            **({'input_hash': permit['input_hash'], 'source_revisions': permit['sources']} if permit else {}),
         )
         for section in structured.get('sections') or []:
             text = (
