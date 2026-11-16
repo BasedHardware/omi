@@ -639,7 +639,7 @@ checks:
     reason: "the guard-artifact ratchet's counting window, threshold, allowlist shrink rule, and shallow-history skip must stay behaviorally covered"
   - id: failure-class-cli-tests
     command: ["python3", "scripts/test_failure_class.py"]
-    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/checks-manifest.yaml"]
+    triggers: ["scripts/failure-class", "scripts/test_failure_class.py", "scripts/git_test_env.py", ".github/failure-classes/**", ".github/failure-class-families.json", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the failure-class CLI is the registry's only schema authority; its hermetic tests had no blocking lane and had silently gone stale"
   - id: desktop-changelog-data
