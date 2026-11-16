@@ -152,9 +152,13 @@ def build(uid, window, recordings, existing=None):
         'language': first.get('language'),
         'data_protection_level': first.get('data_protection_level', 'standard'),
         'private_cloud_sync_enabled': bool(first.get('private_cloud_sync_enabled')),
-        'is_locked': any(recordings[l['conversation_id']].get('is_locked', False) for l in lines),
+        'is_locked': (
+            existing['is_locked']
+            if existing and 'is_locked' in existing
+            else any(recordings[l['conversation_id']].get('is_locked', False) for l in lines)
+        ),
         'status': 'processing' if window['finished'] else 'in_progress',
-        'discarded': False,
+        'discarded': bool((existing or {}).get('discarded')),
         'kind': window['kind'],
         'home_hidden': hidden if window['finished'] else window['kind'] in {'media', 'background'},
         'title_locked': bool(

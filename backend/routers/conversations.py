@@ -173,7 +173,7 @@ from utils.conversations.v3 import audio as v3_audio, summary as v3_summary
 router = APIRouter()
 
 
-@router.get('/v1/conversations/live', response_model=ConversationsLiveResponse)
+@router.get('/v1/conversations/live', response_model=ConversationsLiveResponse, response_model_exclude_unset=True)
 def get_live_conversation(
     uid: str = Depends(auth.get_current_user_uid), channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER)
 ):
@@ -183,7 +183,21 @@ def get_live_conversation(
     if not enabled:
         return {'v3': False, 'conversation': None}
     rows = conversations_db.get_conversations_without_photos(uid, limit=1, statuses=['in_progress'], hide_home=True)
-    return {'v3': True, 'conversation': rows[0] if rows else None}
+    row = next((r for r in rows if not r.get('recording')), None)
+    compact = (
+        {
+            key: row[key]
+            for key in ('id', 'structured', 'started_at', 'created_at', 'status', 'tile_state')
+            if key in row
+        }
+        if row
+        else None
+    )
+    if compact and 'structured' in compact:
+        compact['structured'] = {
+            key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
+        }
+    return {'v3': True, 'conversation': compact}
 
 
 def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:
@@ -815,7 +829,7 @@ def reprocess_conversation(
     first_party_only = source == FIRST_PARTY_SUMMARY_SOURCE
     if first_party_only and app_id:
         raise HTTPException(status_code=400, detail='app_id and source=omi are mutually exclusive')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id, allow_recording=True)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Reprocess force-processes a *discarded* conversation to revive it, but a
     # soft-deleted tombstone is invisible to the user and must not be reprocessed:
     # process_conversation would regenerate structured data, action items, memories
@@ -2733,7 +2747,7 @@ def merge_conversations(
 
     conversations = []
     for conv_id in request.conversation_ids:
-        conv = conversations_db.get_conversation(uid, conv_id)
+        conv = _get_valid_conversation_by_id(uid, conv_id)
         if conv is None:
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         conversations.append(conv)
@@ -2771,7 +2785,21 @@ def conversation_audio_manifest(conversation_id: str, uid: str = Depends(auth.ge
     '/v1/conversations/{conversation_id}/summary/stream',
     tags=['conversations'],
     response_class=StreamingResponse,
-    responses={200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}}},
+    responses={
+        200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}},
+        409: {
+            'description': 'Another summary writer holds the lease; poll conversation detail.',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'properties': {'detail': {'type': 'string', 'const': 'summary_in_progress'}},
+                        'required': ['detail'],
+                    }
+                }
+            },
+        },
+    },
 )
 async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
@@ -2779,8 +2807,14 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
     if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
         from utils.conversations.v3.service import reconcile
 
-        await reconcile(uid, on_open=True)
+        try:
+            await asyncio.wait_for(reconcile(uid, on_open=True, conversation_id=conversation_id), timeout=8)
+        except asyncio.TimeoutError:
+            pass
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(
-        v3_summary.stream(uid, conversation), media_type='text/event-stream', headers={'Cache-Control': 'no-cache'}
+        v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
     )

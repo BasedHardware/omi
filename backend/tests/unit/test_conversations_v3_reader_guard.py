@@ -40,3 +40,10 @@ def test_alias_and_document_path_readers_are_detected(tmp_path):
         "from database.conversations import get_conversation as read_one\ndef read(db, uid, cid):\n    read_one(uid, cid)\n    return db.document(f'users/{uid}/conversations/{cid}').get()\n"
     )
     assert {operation for _, operation, _ in load().references(tmp_path)} == {'read_one', 'document_path'}
+
+
+def test_attribute_collection_constant_is_detected(tmp_path):
+    path = tmp_path / 'backend/database/recovery.py'
+    path.parent.mkdir(parents=True)
+    path.write_text('def read(db):\n    return db.collection(jobs.CONVERSATIONS_COLLECTION).stream()\n')
+    assert list(load().references(tmp_path)) == [('backend/database/recovery.py', 'collection', 2)]

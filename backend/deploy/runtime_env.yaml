@@ -464,6 +464,16 @@ environments:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
             value: based-hardware
+          CONVERSATIONS_V3_STAGE:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATIONS_V3_STAGE
+            category: rollout
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATIONS_V3_FIRST_APP_BUILD
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -789,6 +799,16 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: METRICS_SECRET
+          CONVERSATIONS_V3_STAGE:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATIONS_V3_STAGE
+            category: rollout
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            config_map:
+              name: dev-omi-backend-config
+              key: CONVERSATIONS_V3_FIRST_APP_BUILD
+            category: rollout
       config_map:
         name: dev-omi-backend-config
         entries:
@@ -863,6 +883,12 @@ environments:
             source: environment
           X_OAUTH_REDIRECT_URI:
             source: environment
+          CONVERSATIONS_V3_STAGE:
+            source: literal
+            value: beta
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            source: literal
+            value: ''
     region: us-central1
     desktop_backend:
       env:
@@ -938,6 +964,10 @@ environments:
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
+        CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+        CONVERSATIONS_V3_FIRST_APP_BUILD:
+          value: ''
+          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
@@ -1382,6 +1412,10 @@ environments:
             HOSTED_PUSHER_API_URL:
               value: http://pusher.omiapi.com
               category: service_discovery
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1783,6 +1817,10 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2168,6 +2206,10 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -2527,6 +2569,10 @@ environments:
               category: replay_capture
             CONVERSATION_RELEVANCE_JEV_PERCENT:
               value: '0'
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2598,6 +2644,10 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
         x-connector-sync-job:
@@ -2671,6 +2721,10 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
         frame-request-retention-job:
@@ -2713,6 +2767,10 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           flags:
             --task-timeout: 900s
             --max-retries: '3'
@@ -2768,6 +2826,10 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omiapi.com
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
       workflow_files:
@@ -3379,6 +3441,16 @@ environments:
               key: MCP_OAUTH_CLIENTS_JSON
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
           SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          CONVERSATIONS_V3_STAGE:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATIONS_V3_STAGE
+            category: rollout
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATIONS_V3_FIRST_APP_BUILD
+            category: rollout
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -3650,6 +3722,16 @@ environments:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           NOTES_TIER_ESCALATION_ENABLED: {value: 'true', category: rollout}
+          CONVERSATIONS_V3_STAGE:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATIONS_V3_STAGE
+            category: rollout
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            config_map:
+              name: prod-omi-backend-config
+              key: CONVERSATIONS_V3_FIRST_APP_BUILD
+            category: rollout
       parakeet-lid:
         env:
           PARAKEET_DEVICE:
@@ -3751,6 +3833,12 @@ environments:
             source: environment
           SYNC_TASKS_INVOKER_SA:
             source: environment
+          CONVERSATIONS_V3_STAGE:
+            source: literal
+            value: beta
+          CONVERSATIONS_V3_FIRST_APP_BUILD:
+            source: literal
+            value: ''
     region: us-central1
     desktop_backend:
       env:
@@ -3841,6 +3929,10 @@ environments:
         MENTOR_PIPELINE: {value: cohort, category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
+        CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+        CONVERSATIONS_V3_FIRST_APP_BUILD:
+          value: ''
+          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
@@ -4454,6 +4546,10 @@ environments:
               env_var: SYNC_TASKS_HANDLER_URL
               default: https://backend-sync-hhibjajaja-uc.a.run.app/v2/sync-jobs/run
               category: reliability
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -4998,6 +5094,10 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-jobs-fresh
               category: reliability
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           flags:
             --timeout: 3600s
           forbidden_env:
@@ -5507,6 +5607,10 @@ environments:
             SYNC_TASKS_QUEUE:
               value: sync-backfill-fresh
               category: reliability
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -5963,6 +6067,10 @@ environments:
               value: based-hardware
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'true', category: rollout}
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -6032,6 +6140,10 @@ environments:
             DEMAND_PROCESSING_PERCENT: {value: '0', category: rollout}
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
         x-connector-sync-job:
           flags:
             --task-timeout: 3600s
@@ -6102,6 +6214,10 @@ environments:
               value: 'on'
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
         frame-request-retention-job:
           secrets:
             POSTHOG_PROJECT_API_KEY:
@@ -6145,6 +6261,10 @@ environments:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           flags:
             --task-timeout: 900s
             --max-retries: '3'
@@ -6199,6 +6319,10 @@ environments:
               value: based-hardware
             BASE_API_URL:
               value: https://api.omi.me
+            CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
+            CONVERSATIONS_V3_FIRST_APP_BUILD:
+              value: ''
+              category: config
           forbidden_env:
           - HOSTED_PUSHER_API_URL
       workflow_files:

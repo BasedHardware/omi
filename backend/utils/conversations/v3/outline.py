@@ -97,9 +97,15 @@ def stretches(members, now):
         group = groups[-1]
         group['lines'].append(line)
         group['end'] = max(group['end'], line['end'])
-    for group in groups:
-        group['manual_end'] = any(group['lines'][0]['start'] <= cut <= group['end'] for cut in manual_cuts)
-        group['finished'] = now - group['end'] >= SILENCE or group['manual_end']
+    for index, group in enumerate(groups):
+        next_start = (
+            groups[index + 1]['lines'][0]['start'] if index + 1 < len(groups) else now + timedelta(microseconds=1)
+        )
+        group['manual_end'] = any(group['lines'][0]['start'] <= cut < next_start for cut in manual_cuts)
+        continues = any(
+            r.get('_v3_page_continues') and r['id'] == group['lines'][-1]['conversation_id'] for r in members
+        )
+        group['finished'] = (now - group['end'] >= SILENCE and not continues) or group['manual_end']
         group['fingerprint'] = hashlib.sha256(
             json.dumps(
                 [{k: line[k] for k in ('start', 'end', 'text', 'conversation_id')} for line in group['lines']],
@@ -167,3 +173,18 @@ def parse(content, group):
     if not entries:
         raise ValueError('empty_outline')
     return entries
+
+
+def fallback(group):
+    """Conservative bounded failure path: preserve speech and deterministic cuts."""
+    return [
+        {
+            'first_line': 1,
+            'title': ' '.join(group['lines'][0]['text'].split()[:7]),
+            'line': '',
+            'kind': 'conversation',
+            'people': [],
+            'sections': [],
+            'emoji': '💬',
+        }
+    ]

@@ -192,6 +192,7 @@ def _title(conversation: dict) -> str:
 def _entity_page_conversation_page(uid: str) -> dict[str, dict]:
     """Read one bounded, lean conversation page without photo or transcript hydration."""
     fields = [
+        'recording',
         'created_at',
         'started_at',
         'finished_at',

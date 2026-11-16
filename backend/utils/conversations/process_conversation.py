@@ -386,13 +386,6 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
-        if getattr(conversation, 'v3_derived', False):
-            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            covers = getattr(conversation, 'summary_covers_through', None)
-            if words < 600:
-                return v3_service.models.short_tasks(uid, conversation), False
-            if covers and conversation.finished_at and covers >= conversation.finished_at:
-                return conversation.structured, False
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -431,6 +424,20 @@ def _get_structured(
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
+        if getattr(conversation, 'v3_derived', False):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            if conversation.kind in {'media', 'background'} or words < 20:
+                return conversation.structured, True
+            if words < 300:
+                return v3_service.models.short_tasks(uid, conversation), False
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if (
+                not v3_service.models.foreground()
+                and covers
+                and conversation.finished_at
+                and covers >= conversation.finished_at
+            ):
+                return conversation.structured, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)

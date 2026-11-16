@@ -4,6 +4,11 @@ Markers are durable obligations. Dispatch failure never clears one; the sweeper
 retries it. Switching admission off does not stop existing obligations.
 """
 
+from database import conversations_v3_leases as leases
+
+from database import conversations_v3_processing as writers
+
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -12,7 +17,6 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.v3.triggers import enqueue, changed
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
-from utils.conversations.v3.errors import Conflict
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from utils.conversations.v3 import outline, planner, models, metrics
@@ -27,14 +31,16 @@ def recording_short_path(fn):
     def guarded(uid, language_code, conversation, *args, **kwargs):
         if not getattr(conversation, 'recording', False):
             if getattr(conversation, 'v3_derived', False) and not fence.current():
-                token = store.acquire(uid, 'summary-' + conversation.id)
+                token = leases.acquire(uid, 'summary-' + conversation.id)
                 if not token:
                     raise RuntimeError('v3_summary_busy')
                 try:
-                    with fence.writer(uid, conversation.id, token), models.notes_mode(uid):
+                    with leases.keepalive(uid, 'summary-' + conversation.id, token), fence.writer(
+                        uid, conversation.id, token
+                    ), models.notes_mode(uid):
                         return fn(uid, language_code, conversation, *args, **kwargs)
                 finally:
-                    store.release(uid, 'summary-' + conversation.id, token)
+                    leases.release(uid, 'summary-' + conversation.id, token)
             return fn(uid, language_code, conversation, *args, **kwargs)
         # Import the lifecycle owner lazily: lifecycle also calls this module at
         # intake. No model, entitlement, notes, derived side effect or webhook.
@@ -79,13 +85,18 @@ def _match(window, existing, used):
     return min(candidates, key=lambda r: r['started_at']) if candidates else None
 
 
-async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
-    token = await run_blocking(db_executor, store.acquire, uid, 'builder')
+async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _pass=0):
+    token = await run_blocking(db_executor, leases.acquire, uid, 'builder')
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
         return 'busy'
     try:
-        recordings, existing, cached = await run_blocking(db_executor, store.load_derive if derive else store.load, uid)
+        recordings, existing, cached = await run_blocking(
+            db_executor,
+            store.load_derive if derive else store.load,
+            uid,
+            **({'conversation_id': conversation_id} if on_open and conversation_id else {})
+        )
         now = datetime.now(timezone.utc)
         eligible = [
             r
@@ -95,25 +106,46 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
             and not r.get('deleted')
             and not r.get('sync_merged_into')
             and r.get('data_protection_level') != 'private'
+            and r.get('started_at')
         ]
-        if not eligible and any(not r.get('deleted') and not r.get('sync_merged_into') for r in recordings.values()):
-            raise Conflict('recording_not_readable')
         groups = outline.stretches(eligible, now)
+        if on_open and conversation_id:
+            target = existing.get(conversation_id)
+            if target is None:
+                return 'stored'
+            ids = set(target.get('v3_recording_ids') or [])
+            groups = [
+                g
+                for g in groups
+                if any(l['conversation_id'] in ids for l in g['lines'])
+                and g['lines'][0]['start'] <= target['finished_at']
+                and g['end'] >= target['started_at']
+            ]
+            if not groups:
+                return 'stored'
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
         outlines, cache = [], []
         for group in groups:
-            await run_blocking(db_executor, store.renew, uid, 'builder', token)
+            await run_blocking(db_executor, leases.renew, uid, 'builder', token)
             hit = saved.get(group['fingerprint'])
             if hit:
                 entries = hit['entries']
             elif group['finished'] or on_open:
-                metrics.MODEL_CALLS.labels('outline').inc()
                 messages = outline.messages(group, timezone.utc)
                 if outlines:
-                    messages.append(('human', 'Preceding conversation: ' + str(outlines[-1][-1])))
-                content = await run_blocking(llm_executor, models.outline, uid, messages)
-                entries = outline.parse(content, group)
+                    previous = outlines[-1][-1]
+                    messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
+                if await run_blocking(db_executor, store.outline_attempt, uid, token, group['fingerprint']):
+                    metrics.MODEL_CALLS.labels('outline').inc()
+                    content = await run_blocking(llm_executor, models.outline, uid, messages)
+                    try:
+                        entries = outline.parse(content, group)
+                    except (ValueError, KeyError, TypeError):
+                        entries = outline.fallback(group)
+                        metrics.RECONCILES.labels('outline_fallback').inc()
+                else:
+                    entries = outline.fallback(group)
             else:
                 # First speech is visible without a paid call. Outline on open
                 # or at the five-minute deadline provides the first real title.
@@ -172,8 +204,10 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
                 row['v3_process_pending'] = True
                 row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
             rows.append(row)
-        await run_blocking(db_executor, store.renew, uid, 'builder', token)
-        await run_blocking(db_executor, _commit, uid, token, recordings, existing, rows, cache[-128:])
+        await run_blocking(db_executor, leases.renew, uid, 'builder', token)
+        await run_blocking(
+            db_executor, _commit, uid, token, recordings, existing, rows, cache[-128:], clear_pending=not on_open
+        )
         for group in groups:
             if not group['finished']:
                 # A different minute than the currently executing task avoids
@@ -189,7 +223,10 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
         metrics.RECONCILES.labels('error').inc()
         raise
     finally:
-        await run_blocking(db_executor, store.release, uid, 'builder', token)
+        await run_blocking(db_executor, leases.release, uid, 'builder', token)
+    if on_open:
+        await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
+        return 'committed'
     await drain_processing(uid)
     if not derive and await run_blocking(db_executor, has_pending, uid):
         if _pass < 2:
@@ -199,10 +236,10 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
     return 'committed'
 
 
-def _commit(uid, token, recordings, existing, rows, cache):
+def _commit(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
     from utils.conversations import lifecycle
 
-    lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache)
+    lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache, clear_pending=clear_pending)
 
 
 async def drain_processing(uid):
@@ -210,14 +247,30 @@ async def drain_processing(uid):
     for row in rows:
         if row is None:
             continue
-        token = await run_blocking(db_executor, store.acquire, uid, 'summary-' + row['id'])
+        token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
         if token is None:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
             continue
         try:
-            await run_blocking(postprocess_executor, _process, uid, row, token)
+            worker = asyncio.create_task(run_blocking(postprocess_executor, _process, uid, row, token))
+            keeper = asyncio.create_task(renew_until_done(uid, 'summary-' + row['id'], token, worker))
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                await asyncio.shield(worker)
+                await keeper
+                raise
+            await keeper
         finally:
-            await run_blocking(db_executor, store.release, uid, 'summary-' + row['id'], token)
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
+
+
+async def renew_until_done(uid, key, token, worker):
+    while not worker.done():
+        done, _ = await asyncio.wait({worker}, timeout=leases.LEASE_SECONDS / 3)
+        if done:
+            return
+        await run_blocking(db_executor, leases.renew, uid, key, token)
 
 
 def pending_processing(uid):
@@ -235,7 +288,12 @@ def _process(uid, row, token):
     from utils.conversations import lifecycle
     from utils.conversations.process_conversation import process_conversation
 
-    if not row or row.get('deleted') or row.get('is_locked'):
+    if not row:
+        return
+    if row.get('deleted') or row.get('is_locked'):
+        writers.settle_processing(uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True)
+        return
+    if not writers.begin_processing(uid, row, token):
         return
     words = sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or [])
     if row.get('kind') in {'media', 'background'} or words < 20 or (row.get('backfilled') and words < 600):
@@ -254,30 +312,43 @@ def _process(uid, row, token):
             raise RuntimeError('v3_processing_not_completed')
         metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
     metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
-    store.settle_processing(uid, row['id'], token, row.get('sync_content_revision'), row['finished_at'])
+    writers.settle_processing(
+        uid,
+        row['id'],
+        token,
+        row.get('sync_content_revision'),
+        row['finished_at'],
+        content_hash=writers.processing_hash(row),
+    )
 
 
 async def sweep():
     client = await run_blocking(db_executor, store.get_firestore_client)
-    rows = await run_blocking(
-        db_executor,
-        lambda: list(
-            client.collection_group('conversations')
-            .where(filter=FieldFilter('v3_pending', '==', True))
-            .limit(1000)
-            .stream()
-        ),
-    )
     now = datetime.now(timezone.utc)
     users = set()
-    for doc in rows:
-        row = doc.to_dict() or {}
-        since = row.get('v3_pending_since')
-        if since and now - since >= timedelta(minutes=10):
+    cursor = None
+    while True:
+        query = (
+            client.collection_group('conversations')
+            .where(filter=FieldFilter('v3_pending', '==', True))
+            .where(filter=FieldFilter('v3_pending_since', '<=', now - timedelta(minutes=10)))
+            .order_by('v3_pending_since')
+            .order_by('__name__')
+            .limit(1000)
+        )
+        if cursor is not None:
+            query = query.start_after(cursor)
+        rows = await run_blocking(db_executor, lambda: list(query.stream()))
+        for doc in rows:
+            row = doc.to_dict() or {}
+            since = row['v3_pending_since']
             parts = doc.reference.path.split('/')
             if len(parts) == 4 and parts[0] == 'users':
                 users.add(parts[1])
                 metrics.PENDING_AGE.observe((now - since).total_seconds())
+        if len(rows) < 1000:
+            break
+        cursor = rows[-1]
     for uid in users:
         await run_blocking(db_executor, enqueue, uid)
     processing = await run_blocking(

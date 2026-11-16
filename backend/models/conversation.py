@@ -1102,9 +1102,18 @@ class ConversationAnalytics(BaseModel):
     speakers: List[SpeakerAnalytics] = []
 
 
+class LiveConversation(BaseModel):
+    id: str
+    structured: Structured
+    started_at: datetime
+    created_at: datetime
+    status: ConversationStatus
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done']] = None
+
+
 class ConversationsLiveResponse(BaseModel):
     v3: bool
-    conversation: Optional[Conversation] = None
+    conversation: Optional[LiveConversation] = None
 
 
 class AudioManifestPiece(RecordingPiece):

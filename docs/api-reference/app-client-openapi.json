@@ -12271,7 +12271,7 @@
           "conversation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Conversation"
+                "$ref": "#/components/schemas/LiveConversation"
               },
               {
                 "type": "null"
@@ -21648,6 +21648,56 @@
           "event_id"
         ],
         "title": "LinkCalendarEventRequest",
+        "type": "object"
+      },
+      "LiveConversation": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConversationStatus"
+          },
+          "structured": {
+            "$ref": "#/components/schemas/Structured"
+          },
+          "tile_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "live",
+                  "transcribing",
+                  "writing",
+                  "done"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tile State"
+          }
+        },
+        "required": [
+          "id",
+          "structured",
+          "started_at",
+          "created_at",
+          "status"
+        ],
+        "title": "LiveConversation",
         "type": "object"
       },
       "LlmTotalCostResponse": {
@@ -56373,6 +56423,25 @@
           },
           "404": {
             "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "const": "summary_in_progress",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Another summary writer holds the lease; poll conversation detail."
           },
           "422": {
             "content": {

@@ -113,7 +113,9 @@ def build_artifact(uid, conversation):
                 selected = playback.resolve_sources(
                     af, playback.list_audio_chunks(uid, part['recording_id'], source_identity=True)
                 )
-            pcm = playback._merge_playback_sources(uid, part['recording_id'], sorted(af['chunk_timestamps']), selected)
+            pcm = playback._merge_playback_sources(  # pyright: ignore[reportPrivateUsage] -- shared source identity/PCM assembly
+                uid, part['recording_id'], sorted(af['chunk_timestamps']), selected
+            )
             if selected is not None:
                 playback.validate_sources(
                     [af], playback.list_audio_chunks(uid, part['recording_id'], source_identity=True)
@@ -130,8 +132,8 @@ def build_artifact(uid, conversation):
                 {
                     'file_id': af['id'],
                     'wall_offset': round((part['origin'] - origin).total_seconds() + left, 3),
-                    'artifact_offset': round(len(pcm_buf) / playback._PCM_BYTES_PER_SECOND, 3),
-                    'len': round(len(clipped) / playback._PCM_BYTES_PER_SECOND, 3),
+                    'artifact_offset': round(len(pcm_buf) / (playback.AUDIO_SAMPLE_RATE * 2), 3),
+                    'len': round(len(clipped) / (playback.AUDIO_SAMPLE_RATE * 2), 3),
                 }
             )
             pcm_buf.extend(clipped)

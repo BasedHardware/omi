@@ -779,6 +779,7 @@ and an explicit empty literal renders as `''`.
 | `CELL_WIPE_WRITER_DRAIN_SECONDS` | Default 5 seconds; bounded 0..60 writer drain after directory wipe fence | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `CLOUD_LIVE_STT_MODE` | Cloud live STT policy: stream default (today), when_watched forces #21481 demand routing on, off opens no cloud streaming STT session (vendor or Parakeet window) while audio is still received and persisted; BYOK custom STT never suppressed; invalid values fail safe to stream | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
 | `CONVERSATIONS_V3_BACKFILL` | Default off; OIDC-only bounded historical derive mode, never implied by live admission | backend | env | closed | — | — | — | — | keep | keep | — | lane/conversations-v3 / lead2 |
+| `CONVERSATIONS_V3_FIRST_APP_BUILD` | First released v3 mobile build; missing/invalid reports unknown and cannot qualify the episode deletion gate | backend | env | closed | — | — | — | — | keep | keep | — | lane/conversations-v3 / lead2 |
 | `CONVERSATIONS_V3_TASKS_QUEUE` | Optional dedicated named-task queue; defaults to the conversations-v3 queue | backend | env | closed | — | — | — | — | keep | keep | — | lane/conversations-v3 / lead2 |
 | `CONVERSATIONS_V3_TASKS_URL` | Optional dedicated builder origin; otherwise uses the configured sync task origin and identity | backend | env | closed | — | — | — | — | keep | keep | — | lane/conversations-v3 / lead2 |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner | backend | env | closed | — | — | — | — | keep | keep | — | auditfix |
@@ -1234,6 +1235,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CLOUD_LIVE_STT_MODE` — Cloud live STT policy: stream default (today), when_watched forces #21481 demand routing on, off opens no cloud streaming STT session (vendor or Parakeet window) while audio is still received and persisted; BYOK custom STT never suppressed; invalid values fail safe to stream (fail: closed)
 - `CONVERSATIONS_V3` — Default on; off stops marking NEW pendant recordings, while persisted obligations keep draining (fail: open)
 - `CONVERSATIONS_V3_BACKFILL` — Default off; OIDC-only bounded historical derive mode, never implied by live admission (fail: closed)
+- `CONVERSATIONS_V3_FIRST_APP_BUILD` — First released v3 mobile build; missing/invalid reports unknown and cannot qualify the episode deletion gate (fail: closed)
 - `CONVERSATIONS_V3_STAGE` — Default beta; cohort/beta/all admission is per owner using the shared sticky beta marker (fail: closed)
 - `CONVERSATIONS_V3_TASKS_QUEUE` — Optional dedicated named-task queue; defaults to the conversations-v3 queue (fail: closed)
 - `CONVERSATIONS_V3_TASKS_URL` — Optional dedicated builder origin; otherwise uses the configured sync task origin and identity (fail: closed)

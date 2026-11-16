@@ -290,7 +290,7 @@ def test_episode_http_route_uses_episode_admission_and_fans_out(recording, monke
 
     episode = service.episodes_db.get_episode('u', 'e')
     admitted = []
-    monkeypatch.setattr(routes, '_admitted', lambda uid, channel: admitted.append((uid, channel)) or True)
+    monkeypatch.setattr(routes, '_admitted', lambda uid, channel, **kw: admitted.append((uid, channel)) or True)
     monkeypatch.setattr(routes.service, 'episode_by_id', lambda *args: episode)
     app = FastAPI()
     app.include_router(routes.router)
@@ -305,7 +305,7 @@ def test_episode_http_route_uses_episode_admission_and_fans_out(recording, monke
         assert decode(recording, 'c0')['transcript_segments'][0]['person_id'] == 'new'
         assert decode(recording, 'c2')['transcript_segments'][0]['person_id'] == 'new'
         before = deepcopy(recording.rows)
-        monkeypatch.setattr(routes, '_admitted', lambda *args: False)
+        monkeypatch.setattr(routes, '_admitted', lambda *args, **kw: False)
         denied = client.patch('/v1/episodes/e/assign-speaker', json=request().model_dump())
         assert denied.status_code == 404
         assert recording.rows == before

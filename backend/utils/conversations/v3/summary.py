@@ -4,11 +4,16 @@ Section events use the chat line protocol. Only a complete, revision-fenced
 result is stored; cancellation releases the same lease as background notes.
 """
 
+from database import conversations_v3_leases as leases
+
+from database import conversations_v3_processing as writers
+
 import asyncio
 import base64
 import json
 from datetime import timedelta
 from typing import Any
+from fastapi import HTTPException
 
 from database import conversations_v3 as store
 from models.conversation import Conversation
@@ -19,6 +24,13 @@ from utils.executors import run_blocking, db_executor, llm_executor
 def fresh(row):
     covers, end = row.get('summary_covers_through'), row.get('finished_at')
     return bool(covers and end and end - covers < timedelta(minutes=5))
+
+
+def summary_eligible(row):
+    return not row.get('v3_derived') or (
+        row.get('kind') not in {'media', 'background'}
+        and sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
+    )
 
 
 def done(row):
@@ -41,14 +53,20 @@ def write(uid, row, emit):
     return structured.model_dump()
 
 
-async def stream(uid: str, row: dict[str, Any]):
-    if fresh(row):
+async def prepare(uid, row):
+    if fresh(row) or not summary_eligible(row):
+        return None
+    token = await run_blocking(db_executor, leases.acquire, uid, 'summary-' + row['id'])
+    if token is None:
+        raise HTTPException(409, 'summary_in_progress')
+    return token
+
+
+async def stream(uid: str, row: dict[str, Any], *, token=None):
+    if fresh(row) or not summary_eligible(row):
         yield done(row)
         return
-    token = await run_blocking(db_executor, store.acquire, uid, 'summary-' + row['id'])
-    if token is None:
-        yield 'error: {"detail":"Summary is being written; poll conversation detail"}\n\n'
-        return
+    token = token or await prepare(uid, row)
     cid = row['id']
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=128)
@@ -83,6 +101,9 @@ async def stream(uid: str, row: dict[str, Any]):
         from utils.executors import start_background_task
 
         worker = start_background_task(run_blocking(llm_executor, write, uid, row, emit), name='v3-summary-open')
+        from utils.conversations.v3.service import renew_until_done
+
+        keeper = start_background_task(renew_until_done(uid, 'summary-' + cid, token, worker), name='v3-summary-lease')
         while not worker.done() or not queue.empty():
             try:
                 section = await asyncio.wait_for(queue.get(), timeout=1)
@@ -91,9 +112,10 @@ async def stream(uid: str, row: dict[str, Any]):
                 if not worker.done():
                     yield ': heartbeat\n\n'
         structured = await worker
+        await keeper
         await run_blocking(
             db_executor,
-            store.store_summary,
+            writers.store_summary,
             uid,
             row['id'],
             token,
@@ -112,10 +134,12 @@ async def stream(uid: str, row: dict[str, Any]):
                 yield 'data: ' + text.replace('\n', '\\n') + '\n\n'
         yield done({**row, 'structured': structured, 'summary_covers_through': row.get('finished_at')})
     except asyncio.CancelledError:
-        if worker:
-            worker.cancel()
+        if worker and not worker.done():
+            # The blocking model thread cannot be cancelled. Retain its lease
+            # until it exits, without publishing its result after disconnect.
+            await asyncio.shield(worker)
         raise
     except Exception:
         yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     finally:
-        await run_blocking(db_executor, store.release, uid, 'summary-' + row['id'], token)
+        await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)

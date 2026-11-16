@@ -413,9 +413,13 @@ class _CountDoc:
 def _count_filter_match(data, filt):
     """Firestore comparison semantics: a document missing the field never matches."""
     field = getattr(filt, 'field_path', None)
-    if not field or field not in data:
+    if not field:
         return False
-    actual = data[field]
+    actual = data
+    for part in field.split('.'):
+        if not isinstance(actual, dict) or part not in actual:
+            return False
+        actual = actual[part]
     op = getattr(filt, 'op_string', '==')
     value = getattr(filt, 'value', None)
     if op == '==':
@@ -768,3 +772,32 @@ class TestConversationsCountRealHelper:
             record[0]['matched_unordered'] == record[0]['count']
         ), 'created_at ordering must not change membership vs the same range unordered'
         assert result == expected
+
+
+def test_pending_bridge_preserves_user_curated_rows_and_layer_counts_use_aggregates(monkeypatch):
+    from database.conversation_visibility_counts import count_hidden
+    from utils.sync import bridge_pending
+
+    now = bridge_pending.current_time()
+    docs = [
+        {'id': 'starred', 'discarded': False, 'starred': True, 'sync_bridge_pending': {'expires_at': now + 100}},
+        {'id': 'pending', 'discarded': False, 'sync_bridge_pending': {'expires_at': now + 100}},
+        {'id': 'recording', 'discarded': False, 'recording': True},
+        {'id': 'hidden', 'discarded': False, 'home_hidden': True},
+        {'id': 'both', 'discarded': False, 'recording': True, 'home_hidden': True},
+        {'id': 'double-hidden', 'discarded': False, 'recording': True, 'deleted': True},
+    ]
+    aggregate_calls = []
+    query = _CountQuery(docs, aggregate_calls)
+    original_stream = _CountQuery.stream
+
+    def stream(self):
+        assert not any(
+            f.field_path in {'recording', 'home_hidden'} for f in self._filters
+        ), 'layer count streamed documents'
+        return original_stream(self)
+
+    monkeypatch.setattr(_CountQuery, 'stream', stream)
+    assert count_hidden(query, include_discarded=False, hide_home=True) == 5
+    assert len(aggregate_calls) == 3
+    assert count_hidden(query, include_discarded=False, hide_home=True, starred=True) == 0

@@ -195,7 +195,7 @@ def test_only_finally_discarded_members_are_absent_from_live_and_list_http(store
             'relevance_decision': {'verdict': 'discard', 'decided_by': 'model', 'trigger': 'sync_update', 'arm': 'jev'},
         }
     )
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     live = service.live_episode
@@ -465,7 +465,7 @@ def test_home_http_returns_honest_batch_member_state(store, monkeypatch, outcome
     elif outcome == 'projected':
         member.update(record_projection_revision=1, structured={'title': 'Recovered transcript'})
     root.collection('conversations').document('capture').set(member)
-    monkeypatch.setattr(router, '_admitted', lambda *a: True)
+    monkeypatch.setattr(router, '_admitted', lambda *a, **kw: True)
     monkeypatch.setattr(home_read, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
     monkeypatch.setattr(home_read, 'schedule_missed_composes', lambda *a, **kw: 0)
