@@ -13,5 +13,6 @@
   "scope_hints": [
     "desktop/macos/Desktop/Tests/**"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-11-16T09:18:00.150129Z"
 }
