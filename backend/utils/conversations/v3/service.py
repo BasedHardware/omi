@@ -356,6 +356,7 @@ def _process(uid, row, token):
     if not writers.begin_processing(uid, row, token):
         return
     words = sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or [])
+    input_hash = summary_input.fingerprint(row)
     if row.get('kind') in {'media', 'background'} or (
         not policy.manual_intent(row) and (words < 20 or (row.get('backfilled') and words < 600))
     ):
@@ -377,6 +378,7 @@ def _process(uid, row, token):
             return
         if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
             raise RuntimeError('v3_processing_not_completed')
+        input_hash = summary_input.fingerprint(result)
         metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()
     metrics.SUMMARY_LATENCY.observe(max(0, (datetime.now(timezone.utc) - row['finished_at']).total_seconds()))
     writers.settle_processing(
@@ -386,7 +388,7 @@ def _process(uid, row, token):
         row.get('sync_content_revision'),
         row['finished_at'],
         content_hash=writers.processing_hash(row),
-        input_hash=summary_input.fingerprint(row),
+        input_hash=input_hash,
     )
 
 

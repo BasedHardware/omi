@@ -508,7 +508,8 @@ def test_manual_end_processes_its_own_short_window(monkeypatch, backfilled):
     def full(uid, language, conversation, **kw):
         called.append(conversation)
         kw['persistence_observer'](True)
-        return SimpleNamespace(status='completed')
+        conversation.status = 'completed'
+        return conversation
 
     monkeypatch.setattr(process, 'process_conversation', full)
     service._process('u', row, 'token')

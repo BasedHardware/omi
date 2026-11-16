@@ -318,8 +318,10 @@ async def test_reconcile_recovers_quiet_obligation_after_accepted_content_trigge
 
 
 @pytest.mark.asyncio
-async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_permit(seeded, monkeypatch):
-    from types import SimpleNamespace
+@pytest.mark.parametrize('resolve_speaker', [False, True])
+async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_permit(
+    seeded, monkeypatch, resolve_speaker
+):
     from utils.conversations import process_conversation
 
     client, uid, cid, rid, coll = seeded
@@ -328,9 +330,12 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
 
     def process(owner, language, row, **kw):
         full_calls.append(row.id)
+        if resolve_speaker:
+            row.transcript_segments[0].is_user = False
         coll.document(cid).update(
             {
                 'status': 'completed',
+                'transcript_segments': [segment.model_dump() for segment in row.transcript_segments],
                 'structured': {
                     'title': 'Final',
                     'emoji': '💬',
@@ -339,7 +344,8 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
             }
         )
         kw['persistence_observer'](True)
-        return SimpleNamespace(status='completed')
+        row.status = 'completed'
+        return row
 
     monkeypatch.setattr(process_conversation, 'process_conversation', process)
     await service.drain_processing(uid)
@@ -472,7 +478,8 @@ async def test_real_builder_quiet_snapshot_then_normal_close_runs_final_work_onc
             }
         )
         kw['persistence_observer'](True)
-        return SimpleNamespace(status='completed')
+        row.status = 'completed'
+        return row
 
     monkeypatch.setattr(summary, 'write', write)
     monkeypatch.setattr(process_conversation, 'process_conversation', process)

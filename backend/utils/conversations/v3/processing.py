@@ -11,7 +11,6 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
         raise RuntimeError('v3_summary_busy')
     row = conversation.model_dump()
     revision, content_hash = row.get('sync_content_revision'), writers.processing_hash(row)
-    input_hash = summary_input.fingerprint(conversation)
     persisted = []
     observer = kwargs.pop('persistence_observer', None)
 
@@ -44,7 +43,7 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                 revision,
                 conversation.finished_at,
                 content_hash=content_hash,
-                input_hash=input_hash,
+                input_hash=summary_input.fingerprint(result),
             )
             result.tile_state = 'done'
             if not result.home_hidden and result.structured.title:
