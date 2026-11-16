@@ -988,10 +988,25 @@ runs:
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
         mode: routing
+        require_existing_queue: ${{ inputs.cloud_run_service != 'all' }}
+        sync_env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
         project_id: ${{ inputs.project_id }}
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
         backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+
+    - name: Compose exact selected sync routing expectations
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && success()) }}
+      shell: bash
+      env:
+        SYNC_ROUTING_ENV: ${{ steps.sync-routing.outputs.sync_backfill_env_vars }}
+      run: |
+        set -euo pipefail
+        umask 077
+        printf '%s\n' "$SYNC_ROUTING_ENV" > "$RUNNER_TEMP/sync-routing.env"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/sync_backfill_routing.py" \
+          --state "$RUNNER_TEMP/backend-runtime-env-state.json" \
+          --routing-env "$RUNNER_TEMP/sync-routing.env"
 
     - name: Validate backend-sync memory trial
       if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
@@ -1274,7 +1289,8 @@ runs:
           "${scope_args[@]}" \
           --env ${{ inputs.runtime_env }} \
           --project ${{ inputs.project_id }} \
-          --region ${{ inputs.region }} \
+          --region ${{ inputs.region }}
+
     - name: Verify ${{ inputs.service }} release provenance
       if: ${{ inputs.integration_only != 'true' && success() }}
       shell: bash
@@ -1361,12 +1377,16 @@ runs:
           canary_args=(--integration-canary-state "$RUNNER_TEMP/integration-canary-private.json"
                        --integration-canary-source "${{ inputs.admitted_sha }}")
         fi
+        routing_args=()
+        if [[ -f "$RUNNER_TEMP/sync-routing.env" ]]; then
+          routing_args=(--sync-routing-env-file "$RUNNER_TEMP/sync-routing.env")
+        fi
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
           --env ${{ inputs.runtime_env }} \
           --manifest "$GITHUB_WORKSPACE/backend/deploy/runtime_env.yaml" \
           --check-workflows \
           --workflow-root "$DEPLOY_WORKFLOW_ROOT" \
-          "${canary_args[@]}" \
+          "${canary_args[@]}" "${routing_args[@]}" \
           --cloud-run-service "${{ inputs.cloud_run_service }}" \
           --check-live-cloud-run
 

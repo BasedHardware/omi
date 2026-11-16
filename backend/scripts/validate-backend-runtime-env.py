@@ -164,6 +164,11 @@ def main() -> int:
         choices=('all', 'backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'),
         default='all',
     )
+    parser.add_argument(
+        '--sync-routing-env-file',
+        type=Path,
+        help='Exact control-produced three-key sync routing overlay for live validation only.',
+    )
     args = parser.parse_args()
 
     errors = validate_runtime_env(
@@ -177,6 +182,7 @@ def main() -> int:
         integration_canary_state=args.integration_canary_state,
         integration_canary_source=args.integration_canary_source,
         cloud_run_service=args.cloud_run_service,
+        sync_routing_env_path=args.sync_routing_env_file,
     )
     for error in errors:
         print(f'ERROR [{error.scope}]: {error.message}', file=sys.stderr)

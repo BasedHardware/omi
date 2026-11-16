@@ -194,9 +194,11 @@ def test_step_census_refuses_an_unclassified_new_step():
 
     # Every current writer and recovery/status step has been scoped explicitly.
     # A new step requires updating this census with a target-scope disposition.
+    # Added routing composition is local-only, sync-scoped, and exercised by the
+    # actual-shell test below; it never invokes a production transport.
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "b054ce3b02fd03145c537914d75e19c88d1f826697f10ef047424700dc01033c"
+        == "d063de4eca0ba68df4fb289aade700b662aa7fa8330fdb0a385f17c524f14ccd"
     )
 
 
@@ -275,8 +277,9 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
     assert not output.exists()
 
 
-@pytest.mark.parametrize('failure', ['', 'ops', 'project', 'empty-project'])
-def test_selected_sync_routing_uses_control_ops_without_backfill_writes(tmp_path, failure):
+@pytest.mark.parametrize('routing_enabled', [True, False])
+@pytest.mark.parametrize('failure', ['', 'ops', 'project', 'empty-project', 'queue'])
+def test_selected_sync_routing_uses_control_ops_without_backfill_writes(tmp_path, failure, routing_enabled):
     import shutil
     import sys
 
@@ -316,10 +319,14 @@ def test_selected_sync_routing_uses_control_ops_without_backfill_writes(tmp_path
     gcloud = tmp_path / 'gcloud'
     gcloud.write_text('''#!/bin/bash
 printf '%s\\n' "$*" >> "$CALLS"
-[[ "$*" == "projects describe based-hardware --format=value(projectNumber)" ]] || exit 99
-[[ "$FAILURE" != project ]] || exit 3
-[[ "$FAILURE" != empty-project ]] || exit 0
-echo 123456
+if [[ "$*" == "tasks queues describe control-current --project=based-hardware --location=us-central1 --format=value(name)" ]]; then
+  [[ "$FAILURE" != queue ]] || exit 3
+  echo projects/based-hardware/locations/us-central1/queues/control-current
+elif [[ "$*" == "projects describe based-hardware --format=value(projectNumber)" ]]; then
+  [[ "$FAILURE" != project ]] || exit 3
+  [[ "$FAILURE" != empty-project ]] || exit 0
+  echo 123456
+else exit 99; fi
 ''')
     gcloud.chmod(0o700)
     output = tmp_path / 'output'
@@ -331,6 +338,8 @@ echo 123456
         GITHUB_OUTPUT=str(output),
         DEPLOY_CONTROL_SCRIPTS=str(controls),
         BACKFILL_ENV='SYNC_BACKFILL_TASKS_QUEUE=manifest-retired',
+        REQUIRE_EXISTING_QUEUE='true',
+        SYNC_ENV='SYNC_BACKFILL_ROUTING_ENABLED=' + str(routing_enabled).lower(),
         FAILURE=failure,
         CALLS=str(calls),
     )
@@ -345,9 +354,10 @@ echo 123456
             env['BACKFILL_QUEUE'] = next(
                 line.split('=', 1)[1] for line in output.read_text().splitlines() if line.startswith('backfill_queue=')
             )
-    assert (result.returncode == 0) == (not failure), result.stderr
+    should_fail = bool(failure and (failure != 'queue' or routing_enabled))
+    assert (result.returncode == 0) == (not should_fail), result.stderr
     text = output.read_text()
-    if failure:
+    if should_fail:
         assert 'sync_backfill_env_vars<<' not in text
     else:
         assert 'backfill_queue=control-current\n' in text
@@ -356,6 +366,56 @@ echo 123456
         url = 'https://backend-sync-backfill-123456.us-central1.run.app/v2/sync-jobs/run'
         assert f'SYNC_BACKFILL_TASKS_HANDLER_URL={url}\n' in text
         assert f'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE={url}\n' in text
-    assert not calls.exists() or calls.read_text().splitlines() == [
-        'projects describe based-hardware --format=value(projectNumber)'
-    ]
+    observed = calls.read_text().splitlines() if calls.exists() else []
+    expected = [] if failure == 'ops' else ['projects describe based-hardware --format=value(projectNumber)']
+    if failure in ('', 'queue') and routing_enabled:
+        expected.append(
+            'tasks queues describe control-current --project=based-hardware --location=us-central1 --format=value(name)'
+        )
+    assert observed == expected
+
+
+def test_real_sync_routing_step_composes_only_local_expectations(tmp_path):
+    routing = step('Compose exact selected sync routing expectations')
+    assert "inputs.cloud_run_service == 'backend-sync'" in routing['if']
+    assert STEPS.index(routing) < STEPS.index(next(s for s in STEPS if s.get('id') == 'deploy-backend-sync'))
+    state = {
+        'services': {
+            service: {
+                'env': [
+                    {'name': 'UNCHANGED', 'value': service},
+                    {'name': 'SYNC_BACKFILL_TASKS_QUEUE', 'value': 'manifest-retired'},
+                ]
+            }
+            for service in SERVICES
+        }
+    }
+    path = tmp_path / 'backend-runtime-env-state.json'
+    path.write_text(json.dumps(state))
+    overlay = (
+        'SYNC_BACKFILL_TASKS_QUEUE=control-current\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backfill.example.invalid/v2/sync-jobs/run'
+    )
+    completed = subprocess.run(
+        ['bash', '-c', routing['run']],
+        env=dict(
+            os.environ,
+            RUNNER_TEMP=str(tmp_path),
+            DEPLOY_CONTROL_SCRIPTS=str(ROOT / 'backend/scripts'),
+            SYNC_ROUTING_ENV=overlay,
+        ),
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0, completed.stderr
+    updated = json.loads(path.read_text())
+    for name in SERVICES:
+        if name != 'backend-sync':
+            assert updated['services'][name] == state['services'][name]
+    bindings = {e['name']: e for e in updated['services']['backend-sync']['env']}
+    assert bindings['SYNC_BACKFILL_TASKS_QUEUE']['value'] == 'control-current'
+    assert (tmp_path / 'sync-routing.env').read_text().strip() == overlay
+    validation = step('Validate backend runtime env after deploy')['run']
+    assert '--sync-routing-env-file' in validation

@@ -4111,3 +4111,34 @@ def test_future_capture_admissions_default_off_until_reader_rollout(environment)
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
     ] == 'false'
+
+
+@pytest.mark.parametrize('service', ['all', 'backend-sync'])
+def test_control_sync_routing_validates_deployed_values_without_changing_manifest(tmp_path, monkeypatch, service):
+    from scripts.sync_backfill_routing import compose_rendered_routing, read_routing
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    config = validator._get_env_config(manifest, 'prod')
+    original = copy.deepcopy(config)
+    overlay = tmp_path / 'routing.env'
+    overlay.write_text(
+        'SYNC_BACKFILL_TASKS_QUEUE=control-current\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backfill.example.invalid/v2/sync-jobs/run\n'
+    )
+    state = compose_rendered_routing(render_cloud_run_state(config, monkeypatch), read_routing(overlay))
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    mismatches = validator.validate_runtime_env(env='prod', cloud_run_state_path=path, cloud_run_service=service)
+    assert any('SYNC_BACKFILL_TASKS_QUEUE' in e.message for e in mismatches), [(e.scope, e.message) for e in mismatches]
+    assert (
+        validator.validate_runtime_env(
+            env='prod', cloud_run_state_path=path, cloud_run_service=service, sync_routing_env_path=overlay
+        )
+        == []
+    )
+    assert config == original
+    assert validator.validate_runtime_env(
+        env='prod', cloud_run_state_path=path, cloud_run_service='backend-integration', sync_routing_env_path=overlay
+    )[0].message == ('sync routing overlay outside selected service scope')
