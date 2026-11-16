@@ -1544,6 +1544,32 @@ FIELD_SITES = {
             ),
         )
     ],
+    # Live membership repair uses the existing episode states, under the
+    # recorded-timeline fence; it never changes conversation/audio status.
+    'database/episode_live_members.py': [
+        (
+            'place.commit',
+            'status',
+            "'closed'",
+            ('close_reason', 'closed_at', 'home_needs_prepare', 'recorded_end', 'state_version', 'status'),
+        ),
+        (
+            'place.commit',
+            'status',
+            "'live'",
+            (
+                'close_reason',
+                'closed_at',
+                'conversation_ids',
+                'id',
+                'last_activity_at',
+                'member_activity',
+                'started_at',
+                'state_version',
+                'status',
+            ),
+        ),
+    ],
     'database/episode_recorded_components.py': [
         ('_state', 'status', "'closed'", ('closed_at', 'member_activity', 'recorded_end', 'state_version', 'status')),
         ('attach.commit', 'recorded_merged_into', "owner['id']", ('recorded_merged_into', 'state_version')),

@@ -569,3 +569,18 @@ def record_batch_pending_overdue() -> None:
         EPISODE_BATCH_PENDING_OVERDUE_READS_TOTAL.inc()
     except Exception:
         pass
+
+
+LIVE_MEMBER = reuse_or_create(
+    Counter,
+    'omi_episode_live_member_total',
+    'Live member repair commits or compose-readiness exclusions (observations, not unique members)',
+    ['outcome'],
+)
+
+
+def record_live_member(outcome: str) -> None:
+    try:
+        LIVE_MEMBER.labels(outcome=_label(outcome, frozenset({'rehomed', 'excluded_readiness'}))).inc()
+    except Exception:
+        pass

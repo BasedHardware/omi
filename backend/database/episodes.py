@@ -31,6 +31,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from config.recorded_time import recorded_episodes_enabled
+from config import episode_live_members as live_members
 from config.episode_attach import membership_dedupe_enabled
 from config.episodes import (
     MAX_EPISODE_SECONDS,
@@ -776,7 +777,11 @@ def _close(
     current_id = _link_target(client, uid, CURRENT, transaction)
     if not raw or raw.get('status') != 'live':
         return None
-    if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
+    if (
+        reason in {'idle', 'gap'}
+        and expected_activity_at is not None
+        and raw.get('last_activity_at') != expected_activity_at
+    ):
         return None  # Speech won the race with a lazy reader's stale idle decision.
     if expected_conversation_ids is not None and set(raw.get('conversation_ids') or []) != set(
         expected_conversation_ids
@@ -919,7 +924,7 @@ def _update(
     link_conversation_ids: Sequence[str],
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     recovery_conversation_id: Optional[str] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> dict[str, Any]:
     timeline_enabled = recorded_episodes_enabled()
     timeline_row = None
@@ -954,6 +959,7 @@ def _update(
     # the member was absent; missing revision metadata on an existing row fails
     # closed rather than trusting a client-written updated_at field.
     home_member_versions = {}
+    excluded_live_ids = []
     for cid, revision in (expected_member_revisions or {}).items():
         member = (
             client.collection('users')
@@ -964,6 +970,17 @@ def _update(
         )
         if member.exists:
             home_member_versions[cid] = (member.to_dict() or {}).get('home_source_version')
+            if revision == live_members.CAPTURING_REVISION:
+                # Continuous audio appends do not invalidate a finished-subset
+                # summary. Finishing/hiding this member still fences the write.
+                if (
+                    not live_members.enabled()
+                    or not live_members.capturing(member.to_dict() or {})
+                    or is_relevance_discarded(member.to_dict() or {})
+                ):
+                    raise EpisodeConflict('member_revision_changed')
+                excluded_live_ids.append(cid)
+                continue
             current_revision = firestore_revision_datetime(getattr(member, 'update_time', None))
             if revision is None or current_revision != revision:
                 raise EpisodeConflict('member_revision_changed')
@@ -972,6 +989,7 @@ def _update(
     merged = _merge_state(unseal(uid, raw) or {}, updates)
     if expected_member_revisions is not None:
         merged['home_content_member_versions'] = home_member_versions
+        merged['compose_excluded_live_member_ids'] = excluded_live_ids
     if retained_bounds_changed(raw, merged):
         merged = retained_bounds(transaction, client, uid, raw, merged)
     _drop_legacy_receipts(merged, segment_receipts)
@@ -1015,7 +1033,7 @@ def update_episode(
     segment_receipts: Optional[Mapping[str, Sequence[str]]] = None,
     firestore_client: Any = None,
     recovery_conversation_id: Optional[str] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> dict[str, Any]:
     """CAS update of any episode (open or closed). Raises ``EpisodeConflict`` on a lost race.
 

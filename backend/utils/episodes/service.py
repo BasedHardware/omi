@@ -54,6 +54,8 @@ from utils.sync.repeat_work_metrics import conversation_scope
 from utils.episodes.timeline import episode_owning_recorded_time, choose_recorded_episode
 from utils.episodes.timeline import episode_at as episode_at, episodes_between as episodes_between
 from database import episode_timeline, episode_attach_memo
+from database import episode_live_members as live_members_db
+from config import episode_live_members as live_members
 from database._client import get_firestore_client
 
 from config.episodes import (
@@ -364,7 +366,11 @@ def _close(
     ``closing`` keeps that member's items for finalization without reopening.
     ``preserve_for_reconciliation`` keeps other members' provisional items.
     """
-    expected_activity_at = policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None
+    expected_activity_at = (
+        policy.utc(episode.get('last_activity_at'))
+        if reason == 'idle' or (reason == 'gap' and live_members.enabled())
+        else None
+    )
     # Fold unapplied WAL speech into these notes before close, explicitly
     # targeting this episode to avoid recursion or reassignment.
     if synced_f:
@@ -1695,6 +1701,22 @@ def attach_recorded(
     )
     template['sources'] = [source] if (source := getattr(row.get('source'), 'value', row.get('source'))) else []
     template |= f_join.arm_fields(uid)
+    if live_members.enabled() and live_members.capturing(row):
+        placed = live_members_db.place(
+            uid,
+            conversation_id,
+            template=template,
+            firestore_client=c.firestore_client if c.firestore_client is not None else get_firestore_client(),
+            admission=admission,
+            pending_at=template['created_at'] if pending_transcription else None,
+            deadline_floor=deadline_floor,
+        )
+        if placed is not None:
+            if isinstance(placed, str):
+                raise AdmissionClosed()
+            if placed.pop('_live_member_rehomed', False):
+                metrics.record_live_member('rehomed')
+            return placed
     placed = episode_timeline.attach_recorded(
         uid,
         conversation_id,
@@ -1714,6 +1736,33 @@ def attach_recorded(
         raise AdmissionClosed()
     placed.pop('_recorded_windows', None)
     return placed
+
+
+def repair_closed_live_members(uid: str, episode: Mapping[str, Any], c: Collaborators) -> bool:
+    """Lazy repair; uncertainty retains membership, while composition excludes active captures."""
+    if not live_members.enabled() or policy.is_live(episode) or episode.get('close_reason') not in {'gap', 'idle'}:
+        return False
+    boundary = policy.utc(episode.get('closed_at'))
+    changed = False
+    for cid in episode.get('conversation_ids') or []:
+        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        start = live_members.capture_start(row or {})
+        if not row or not live_members.capturing(row) or not boundary or not start or start < boundary:
+            continue
+        try:
+            placed = attach_recorded(uid, cid, row, start, start + timedelta(seconds=1), c)
+            changed |= placed.get('id') != episode.get('id')
+        except Exception as error:
+            logger.warning('event=episode_live_member_repair exception_type=%s', type(error).__name__)
+            record_fallback(
+                component='conversation_notes',
+                from_mode='episode_live_member_rehome',
+                to_mode='episode_finished_member_compose',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+    return changed
 
 
 def _record_recovered(

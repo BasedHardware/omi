@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1.types import Write
 from config.episodes import home_hide_below_floor_rows_enabled, home_step_projection_enabled
+from config import episode_live_members as live_members
 from prometheus_client import Counter, Histogram
 
 from database._client import get_firestore_client, run_transactional
@@ -81,6 +82,10 @@ CONVERSATION_FIELDS = [
     'sync_processing_hold',
     'bridge_pending',
     'record_projection_revision',
+    'record_lane_owner',
+    'sync_live_target',
+    'record_audio_closed',
+    'server_batch_audio_closed',
     'record_phase',
     'finalization_status',
     'summary_retryable',
@@ -120,6 +125,7 @@ EPISODE_FIELDS = [
     'content',
     'composed_at',
     'composed_member_ids',
+    'compose_excluded_live_member_ids',
     'composed_membership',
     'summary_needs_regeneration',
     'home_content_member_versions',
@@ -403,6 +409,9 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
             row = dict(doc.to_dict() or {}, id=eid)
             row['created_at'] = utc(row.get('created_at')) or getattr(doc, 'create_time', None)
             ids = _retained(row)
+            excluded_live_ids = (
+                set(row.get('compose_excluded_live_member_ids') or []) if live_members.enabled() else set()
+            )
             membership = hashlib.sha256(json.dumps(ids, separators=(',', ':')).encode()).hexdigest()
             staged: dict[str, Any] = row.get('home_prepare_state') or {}
             if (
@@ -426,7 +435,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                     'display': None,
                     'certified': True,
                     'legacy_valid': bool(utc(row.get('composed_at')))
-                    and set(row.get('composed_member_ids') or []) == set(ids)
+                    and (set(row.get('composed_member_ids') or []) | excluded_live_ids) == set(ids)
                     and (row.get('composed_membership') is None or set(row['composed_membership']) == set(ids))
                     and not row.get('summary_needs_regeneration'),
                     'member_versions': {},
@@ -476,11 +485,11 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                             staged['sources'] = sorted(set(staged['sources']) | {str(raw['source'])[:64]})[:16]
                         if staged['display'] is None:
                             staged['display'] = seal_display(uid, content(raw, 'conversation'))
+                    excluded_live = cid in excluded_live_ids and live_members.capturing(raw)
                     staged['certified'] = (
                         staged['certified']
                         and belongs
-                        and bool(proof.get(cid))
-                        and proof.get(cid) == _member_home_version(raw)
+                        and (excluded_live or (bool(proof.get(cid)) and proof.get(cid) == _member_home_version(raw)))
                         and not tombstoned
                     )
                     original = utc(raw.get('home_legacy_source_updated_at')) or utc(raw['_home_snapshot_updated_at'])
@@ -492,7 +501,7 @@ def prepare(uid: str, *, firestore_client: Any = None) -> dict[str, Any]:
                         and not raw.get('home_content_invalidated')
                         and original is not None
                         and composed is not None
-                        and original <= composed
+                        and (excluded_live or original <= composed)
                     )
                     staged.setdefault('member_versions', {})[cid] = _member_home_version(raw)
                 else:
