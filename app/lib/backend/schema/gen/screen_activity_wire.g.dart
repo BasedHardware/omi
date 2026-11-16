@@ -27,15 +27,35 @@ class GeneratedScreenActivityRow {
 
   factory GeneratedScreenActivityRow.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivityRow(
-      appName: _required(_readFieldValue<String>(_readField(json, const ["appName"]), "appName", _readString, requiredField: false, nullable: false, defaultValue: ""), "appName"),
-      captureEligible: _required(_readFieldValue<bool>(_readField(json, const ["captureEligible"]), "captureEligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "captureEligible"),
-      clientDeviceId: _readFieldValue<String>(_readField(json, const ["clientDeviceId"]), "clientDeviceId", _readString, requiredField: false, nullable: true),
-      deviceName: _readFieldValue<String>(_readField(json, const ["deviceName"]), "deviceName", _readString, requiredField: false, nullable: true),
-      embedding: _readFieldValue<List<double>>(_readField(json, const ["embedding"]), "embedding", _readDoubleList, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<int>(_readField(json, const ["id"]), "id", _readInt, requiredField: true, nullable: false), "id"),
-      ocrText: _required(_readFieldValue<String>(_readField(json, const ["ocrText"]), "ocrText", _readString, requiredField: false, nullable: false, defaultValue: ""), "ocrText"),
-      timestamp: _required(_readFieldValue<String>(_readField(json, const ["timestamp"]), "timestamp", _readString, requiredField: true, nullable: false), "timestamp"),
-      windowTitle: _required(_readFieldValue<String>(_readField(json, const ["windowTitle"]), "windowTitle", _readString, requiredField: false, nullable: false, defaultValue: ""), "windowTitle"),
+      appName: _required(
+          _readFieldValue<String>(_readField(json, const ["appName"]), "appName", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "appName"),
+      captureEligible: _required(
+          _readFieldValue<bool>(_readField(json, const ["captureEligible"]), "captureEligible", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "captureEligible"),
+      clientDeviceId: _readFieldValue<String>(_readField(json, const ["clientDeviceId"]), "clientDeviceId", _readString,
+          requiredField: false, nullable: true),
+      deviceName: _readFieldValue<String>(_readField(json, const ["deviceName"]), "deviceName", _readString,
+          requiredField: false, nullable: true),
+      embedding: _readFieldValue<List<double>>(_readField(json, const ["embedding"]), "embedding", _readDoubleList,
+          requiredField: false, nullable: true),
+      id: _required(
+          _readFieldValue<int>(_readField(json, const ["id"]), "id", _readInt, requiredField: true, nullable: false),
+          "id"),
+      ocrText: _required(
+          _readFieldValue<String>(_readField(json, const ["ocrText"]), "ocrText", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "ocrText"),
+      timestamp: _required(
+          _readFieldValue<String>(_readField(json, const ["timestamp"]), "timestamp", _readString,
+              requiredField: true, nullable: false),
+          "timestamp"),
+      windowTitle: _required(
+          _readFieldValue<String>(_readField(json, const ["windowTitle"]), "windowTitle", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "windowTitle"),
     );
   }
 
@@ -75,13 +95,31 @@ class GeneratedFrameRequestDelivery {
 
   factory GeneratedFrameRequestDelivery.fromJson(Map<String, dynamic> json) {
     return GeneratedFrameRequestDelivery(
-      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: true, nullable: false), "account_generation"),
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
-      expiresAt: _required(_readFieldValue<String>(_readField(json, const ["expires_at"]), "expires_at", _readString, requiredField: true, nullable: false), "expires_at"),
-      requestId: _required(_readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString, requiredField: true, nullable: false), "request_id"),
-      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString, requiredField: false, nullable: true),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      accountGeneration: _required(
+          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
+              requiredField: true, nullable: false),
+          "account_generation"),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      deviceId: _required(
+          _readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString,
+              requiredField: true, nullable: false),
+          "device_id"),
+      expiresAt: _required(
+          _readFieldValue<String>(_readField(json, const ["expires_at"]), "expires_at", _readString,
+              requiredField: true, nullable: false),
+          "expires_at"),
+      requestId: _required(
+          _readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString,
+              requiredField: true, nullable: false),
+          "request_id"),
+      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString,
+          requiredField: false, nullable: true),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -111,9 +149,18 @@ class GeneratedScreenActivitySyncRequest {
 
   factory GeneratedScreenActivitySyncRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivitySyncRequest(
-      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
-      deviceRetentionSeconds: _readFieldValue<int>(_readField(json, const ["deviceRetentionSeconds"]), "deviceRetentionSeconds", _readInt, requiredField: false, nullable: true),
-      rows: _required(_readFieldValue<List<GeneratedScreenActivityRow>>(_readField(json, const ["rows"]), "rows", (value) => _readObjectList(value, GeneratedScreenActivityRow.fromJson), requiredField: true, nullable: false), "rows"),
+      accountGeneration: _required(
+          _readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "account_generation"),
+      deviceRetentionSeconds: _readFieldValue<int>(
+          _readField(json, const ["deviceRetentionSeconds"]), "deviceRetentionSeconds", _readInt,
+          requiredField: false, nullable: true),
+      rows: _required(
+          _readFieldValue<List<GeneratedScreenActivityRow>>(_readField(json, const ["rows"]), "rows",
+              (value) => _readObjectList(value, GeneratedScreenActivityRow.fromJson),
+              requiredField: true, nullable: false),
+          "rows"),
     );
   }
 
@@ -139,9 +186,17 @@ class GeneratedScreenActivitySyncResponse {
 
   factory GeneratedScreenActivitySyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivitySyncResponse(
-      frameRequests: _readFieldValue<List<GeneratedFrameRequestDelivery>>(_readField(json, const ["frame_requests"]), "frame_requests", (value) => _readObjectList(value, GeneratedFrameRequestDelivery.fromJson), requiredField: false, nullable: true),
-      lastId: _required(_readFieldValue<int>(_readField(json, const ["last_id"]), "last_id", _readInt, requiredField: true, nullable: false), "last_id"),
-      synced: _required(_readFieldValue<int>(_readField(json, const ["synced"]), "synced", _readInt, requiredField: true, nullable: false), "synced"),
+      frameRequests: _readFieldValue<List<GeneratedFrameRequestDelivery>>(_readField(json, const ["frame_requests"]),
+          "frame_requests", (value) => _readObjectList(value, GeneratedFrameRequestDelivery.fromJson),
+          requiredField: false, nullable: true),
+      lastId: _required(
+          _readFieldValue<int>(_readField(json, const ["last_id"]), "last_id", _readInt,
+              requiredField: true, nullable: false),
+          "last_id"),
+      synced: _required(
+          _readFieldValue<int>(_readField(json, const ["synced"]), "synced", _readInt,
+              requiredField: true, nullable: false),
+          "synced"),
     );
   }
 
@@ -227,9 +282,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -245,37 +298,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

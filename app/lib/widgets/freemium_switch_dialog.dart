@@ -99,7 +99,8 @@ class FreemiumSwitchHandler {
     if (!FreeTierOnDeviceSttFlag.isEnabled()) return false;
     // A Custom STT the reader set up answers the sheet's question. The phone choice made automatically
     // at the cap does not: the sheet still offers Omi Pro, once a month.
-    return !SharedPreferencesUtil().customSttConfig.isEnabled || PhoneTranscriptionChoice.isPinned();
+    return !SharedPreferencesUtil().customSttConfig.isEnabled ||
+        PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil());
   }
 
   /// The free plan's at-cap sheet: Omi Pro first, this phone second. Returns true when it handled the

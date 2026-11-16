@@ -15,9 +15,16 @@ class GeneratedPersonRef {
 
   factory GeneratedPersonRef.fromJson(Map<String, dynamic> json) {
     return GeneratedPersonRef(
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
-      organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString, requiredField: false, nullable: true),
-      personId: _required(_readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: true, nullable: false), "person_id"),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
+      organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString,
+          requiredField: false, nullable: true),
+      personId: _required(
+          _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString,
+              requiredField: true, nullable: false),
+          "person_id"),
     );
   }
 
@@ -43,9 +50,18 @@ class GeneratedEntityRef {
 
   factory GeneratedEntityRef.fromJson(Map<String, dynamic> json) {
     return GeneratedEntityRef(
-      entityId: _required(_readFieldValue<String>(_readField(json, const ["entity_id"]), "entity_id", _readString, requiredField: true, nullable: false), "entity_id"),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
-      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      entityId: _required(
+          _readFieldValue<String>(_readField(json, const ["entity_id"]), "entity_id", _readString,
+              requiredField: true, nullable: false),
+          "entity_id"),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
+      type: _required(
+          _readFieldValue<String>(_readField(json, const ["type"]), "type", _readString,
+              requiredField: true, nullable: false),
+          "type"),
     );
   }
 
@@ -77,12 +93,26 @@ class GeneratedEntitySummary {
 
   factory GeneratedEntitySummary.fromJson(Map<String, dynamic> json) {
     return GeneratedEntitySummary(
-      conversationCount: _required(_readFieldValue<int>(_readField(json, const ["conversation_count"]), "conversation_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "conversation_count"),
-      entityId: _required(_readFieldValue<String>(_readField(json, const ["entity_id"]), "entity_id", _readString, requiredField: true, nullable: false), "entity_id"),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
-      signals: _readFieldValue<List<String>>(_readField(json, const ["signals"]), "signals", _readStringList, requiredField: false, nullable: true),
-      subtitle: _readFieldValue<String>(_readField(json, const ["subtitle"]), "subtitle", _readString, requiredField: false, nullable: true),
-      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      conversationCount: _required(
+          _readFieldValue<int>(_readField(json, const ["conversation_count"]), "conversation_count", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "conversation_count"),
+      entityId: _required(
+          _readFieldValue<String>(_readField(json, const ["entity_id"]), "entity_id", _readString,
+              requiredField: true, nullable: false),
+          "entity_id"),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
+      signals: _readFieldValue<List<String>>(_readField(json, const ["signals"]), "signals", _readStringList,
+          requiredField: false, nullable: true),
+      subtitle: _readFieldValue<String>(_readField(json, const ["subtitle"]), "subtitle", _readString,
+          requiredField: false, nullable: true),
+      type: _required(
+          _readFieldValue<String>(_readField(json, const ["type"]), "type", _readString,
+              requiredField: true, nullable: false),
+          "type"),
     );
   }
 
@@ -115,11 +145,20 @@ class GeneratedReviewEvidence {
 
   factory GeneratedReviewEvidence.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewEvidence(
-      at: _readFieldValue<DateTime>(_readField(json, const ["at"]), "at", _readDateTime, requiredField: false, nullable: true),
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      conversationTitle: _readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString, requiredField: false, nullable: true),
-      quote: _required(_readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: true, nullable: false), "quote"),
-      speakerLabel: _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString, requiredField: false, nullable: true),
+      at: _readFieldValue<DateTime>(_readField(json, const ["at"]), "at", _readDateTime,
+          requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      conversationTitle: _readFieldValue<String>(
+          _readField(json, const ["conversation_title"]), "conversation_title", _readString,
+          requiredField: false, nullable: true),
+      quote: _required(
+          _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString,
+              requiredField: true, nullable: false),
+          "quote"),
+      speakerLabel: _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -149,10 +188,20 @@ class GeneratedTranscriptLine {
 
   factory GeneratedTranscriptLine.fromJson(Map<String, dynamic> json) {
     return GeneratedTranscriptLine(
-      at: _readFieldValue<DateTime>(_readField(json, const ["at"]), "at", _readDateTime, requiredField: false, nullable: true),
-      isTarget: _required(_readFieldValue<bool>(_readField(json, const ["is_target"]), "is_target", _readBool, requiredField: true, nullable: false), "is_target"),
-      speakerLabel: _required(_readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString, requiredField: true, nullable: false), "speaker_label"),
-      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      at: _readFieldValue<DateTime>(_readField(json, const ["at"]), "at", _readDateTime,
+          requiredField: false, nullable: true),
+      isTarget: _required(
+          _readFieldValue<bool>(_readField(json, const ["is_target"]), "is_target", _readBool,
+              requiredField: true, nullable: false),
+          "is_target"),
+      speakerLabel: _required(
+          _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString,
+              requiredField: true, nullable: false),
+          "speaker_label"),
+      text: _required(
+          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
+              requiredField: true, nullable: false),
+          "text"),
     );
   }
 
@@ -189,14 +238,37 @@ class GeneratedSpeakerItem {
 
   factory GeneratedSpeakerItem.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerItem(
-      affectedConversationCount: _required(_readFieldValue<int>(_readField(json, const ["affected_conversation_count"]), "affected_conversation_count", _readInt, requiredField: true, nullable: false), "affected_conversation_count"),
-      candidates: _readFieldValue<List<GeneratedPersonRef>>(_readField(json, const ["candidates"]), "candidates", (value) => _readObjectList(value, GeneratedPersonRef.fromJson), requiredField: false, nullable: true),
-      context: _readFieldValue<List<GeneratedTranscriptLine>>(_readField(json, const ["context"]), "context", (value) => _readObjectList(value, GeneratedTranscriptLine.fromJson), requiredField: false, nullable: true),
-      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
-      conversationTitle: _required(_readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString, requiredField: true, nullable: false), "conversation_title"),
-      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
-      promptId: _required(_readFieldValue<String>(_readField(json, const ["prompt_id"]), "prompt_id", _readString, requiredField: true, nullable: false), "prompt_id"),
-      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+      affectedConversationCount: _required(
+          _readFieldValue<int>(
+              _readField(json, const ["affected_conversation_count"]), "affected_conversation_count", _readInt,
+              requiredField: true, nullable: false),
+          "affected_conversation_count"),
+      candidates: _readFieldValue<List<GeneratedPersonRef>>(_readField(json, const ["candidates"]), "candidates",
+          (value) => _readObjectList(value, GeneratedPersonRef.fromJson),
+          requiredField: false, nullable: true),
+      context: _readFieldValue<List<GeneratedTranscriptLine>>(_readField(json, const ["context"]), "context",
+          (value) => _readObjectList(value, GeneratedTranscriptLine.fromJson),
+          requiredField: false, nullable: true),
+      conversationId: _required(
+          _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString,
+              requiredField: true, nullable: false),
+          "conversation_id"),
+      conversationTitle: _required(
+          _readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString,
+              requiredField: true, nullable: false),
+          "conversation_title"),
+      end: _required(
+          _readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble,
+              requiredField: true, nullable: false),
+          "end"),
+      promptId: _required(
+          _readFieldValue<String>(_readField(json, const ["prompt_id"]), "prompt_id", _readString,
+              requiredField: true, nullable: false),
+          "prompt_id"),
+      start: _required(
+          _readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble,
+              requiredField: true, nullable: false),
+          "start"),
     );
   }
 
@@ -233,12 +305,24 @@ class GeneratedTaskItem {
 
   factory GeneratedTaskItem.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskItem(
-      candidateId: _required(_readFieldValue<String>(_readField(json, const ["candidate_id"]), "candidate_id", _readString, requiredField: true, nullable: false), "candidate_id"),
-      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
-      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
-      evidence: _readFieldValue<GeneratedReviewEvidence>(_readField(json, const ["evidence"]), "evidence", (value) => _readObject(value, GeneratedReviewEvidence.fromJson), requiredField: false, nullable: true),
-      workstreamId: _readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString, requiredField: false, nullable: true),
-      workstreamTitle: _readFieldValue<String>(_readField(json, const ["workstream_title"]), "workstream_title", _readString, requiredField: false, nullable: true),
+      candidateId: _required(
+          _readFieldValue<String>(_readField(json, const ["candidate_id"]), "candidate_id", _readString,
+              requiredField: true, nullable: false),
+          "candidate_id"),
+      description: _required(
+          _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString,
+              requiredField: true, nullable: false),
+          "description"),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime,
+          requiredField: false, nullable: true),
+      evidence: _readFieldValue<GeneratedReviewEvidence>(_readField(json, const ["evidence"]), "evidence",
+          (value) => _readObject(value, GeneratedReviewEvidence.fromJson),
+          requiredField: false, nullable: true),
+      workstreamId: _readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString,
+          requiredField: false, nullable: true),
+      workstreamTitle: _readFieldValue<String>(
+          _readField(json, const ["workstream_title"]), "workstream_title", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -267,9 +351,20 @@ class GeneratedSamePersonItem {
 
   factory GeneratedSamePersonItem.fromJson(Map<String, dynamic> json) {
     return GeneratedSamePersonItem(
-      left: _required(_readFieldValue<GeneratedEntitySummary>(_readField(json, const ["left"]), "left", (value) => _readObject(value, GeneratedEntitySummary.fromJson), requiredField: true, nullable: false), "left"),
-      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
-      right: _required(_readFieldValue<GeneratedEntitySummary>(_readField(json, const ["right"]), "right", (value) => _readObject(value, GeneratedEntitySummary.fromJson), requiredField: true, nullable: false), "right"),
+      left: _required(
+          _readFieldValue<GeneratedEntitySummary>(
+              _readField(json, const ["left"]), "left", (value) => _readObject(value, GeneratedEntitySummary.fromJson),
+              requiredField: true, nullable: false),
+          "left"),
+      reason: _required(
+          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+              requiredField: true, nullable: false),
+          "reason"),
+      right: _required(
+          _readFieldValue<GeneratedEntitySummary>(_readField(json, const ["right"]), "right",
+              (value) => _readObject(value, GeneratedEntitySummary.fromJson),
+              requiredField: true, nullable: false),
+          "right"),
     );
   }
 
@@ -295,9 +390,16 @@ class GeneratedSpellingContextSegment {
 
   factory GeneratedSpellingContextSegment.fromJson(Map<String, dynamic> json) {
     return GeneratedSpellingContextSegment(
-      isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_user"),
-      speakerLabel: _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString, requiredField: false, nullable: true),
-      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+      isUser: _required(
+          _readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "is_user"),
+      speakerLabel: _readFieldValue<String>(_readField(json, const ["speaker_label"]), "speaker_label", _readString,
+          requiredField: false, nullable: true),
+      text: _required(
+          _readFieldValue<String>(_readField(json, const ["text"]), "text", _readString,
+              requiredField: true, nullable: false),
+          "text"),
     );
   }
 
@@ -329,12 +431,26 @@ class GeneratedSpellingContext {
 
   factory GeneratedSpellingContext.fromJson(Map<String, dynamic> json) {
     return GeneratedSpellingContext(
-      conversationDate: _readFieldValue<DateTime>(_readField(json, const ["conversation_date"]), "conversation_date", _readDateTime, requiredField: false, nullable: true),
-      conversationTitle: _required(_readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString, requiredField: true, nullable: false), "conversation_title"),
-      mainIndex: _required(_readFieldValue<int>(_readField(json, const ["main_index"]), "main_index", _readInt, requiredField: true, nullable: false), "main_index"),
-      quoteEnd: _readFieldValue<int>(_readField(json, const ["quote_end"]), "quote_end", _readInt, requiredField: false, nullable: true),
-      quoteStart: _readFieldValue<int>(_readField(json, const ["quote_start"]), "quote_start", _readInt, requiredField: false, nullable: true),
-      segments: _required(_readFieldValue<List<GeneratedSpellingContextSegment>>(_readField(json, const ["segments"]), "segments", (value) => _readObjectList(value, GeneratedSpellingContextSegment.fromJson), requiredField: true, nullable: false), "segments"),
+      conversationDate: _readFieldValue<DateTime>(
+          _readField(json, const ["conversation_date"]), "conversation_date", _readDateTime,
+          requiredField: false, nullable: true),
+      conversationTitle: _required(
+          _readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString,
+              requiredField: true, nullable: false),
+          "conversation_title"),
+      mainIndex: _required(
+          _readFieldValue<int>(_readField(json, const ["main_index"]), "main_index", _readInt,
+              requiredField: true, nullable: false),
+          "main_index"),
+      quoteEnd: _readFieldValue<int>(_readField(json, const ["quote_end"]), "quote_end", _readInt,
+          requiredField: false, nullable: true),
+      quoteStart: _readFieldValue<int>(_readField(json, const ["quote_start"]), "quote_start", _readInt,
+          requiredField: false, nullable: true),
+      segments: _required(
+          _readFieldValue<List<GeneratedSpellingContextSegment>>(_readField(json, const ["segments"]), "segments",
+              (value) => _readObjectList(value, GeneratedSpellingContextSegment.fromJson),
+              requiredField: true, nullable: false),
+          "segments"),
     );
   }
 
@@ -365,10 +481,21 @@ class GeneratedSpellingItem {
 
   factory GeneratedSpellingItem.fromJson(Map<String, dynamic> json) {
     return GeneratedSpellingItem(
-      allowCustom: _required(_readFieldValue<bool>(_readField(json, const ["allow_custom"]), "allow_custom", _readBool, requiredField: true, nullable: false), "allow_custom"),
-      context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context", (value) => _readObject(value, GeneratedSpellingContext.fromJson), requiredField: false, nullable: true),
-      options: _required(_readFieldValue<List<String>>(_readField(json, const ["options"]), "options", _readStringList, requiredField: true, nullable: false), "options"),
-      termId: _required(_readFieldValue<String>(_readField(json, const ["term_id"]), "term_id", _readString, requiredField: true, nullable: false), "term_id"),
+      allowCustom: _required(
+          _readFieldValue<bool>(_readField(json, const ["allow_custom"]), "allow_custom", _readBool,
+              requiredField: true, nullable: false),
+          "allow_custom"),
+      context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context",
+          (value) => _readObject(value, GeneratedSpellingContext.fromJson),
+          requiredField: false, nullable: true),
+      options: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["options"]), "options", _readStringList,
+              requiredField: true, nullable: false),
+          "options"),
+      termId: _required(
+          _readFieldValue<String>(_readField(json, const ["term_id"]), "term_id", _readString,
+              requiredField: true, nullable: false),
+          "term_id"),
     );
   }
 
@@ -403,13 +530,34 @@ class GeneratedEdit {
 
   factory GeneratedEdit.fromJson(Map<String, dynamic> json) {
     return GeneratedEdit(
-      after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
-      before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
-      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
-      target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
+      after: _required(
+          _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "after"),
+      before: _required(
+          _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "before"),
+      evidence: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList,
+              requiredField: true, nullable: false),
+          "evidence"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      other: _required(
+          _readFieldValue<String>(_readField(json, const ["other"]), "other", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "other"),
+      reason: _required(
+          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+              requiredField: true, nullable: false),
+          "reason"),
+      target: _required(
+          _readFieldValue<String>(_readField(json, const ["target"]), "target", _readString,
+              requiredField: true, nullable: false),
+          "target"),
     );
   }
 
@@ -449,14 +597,38 @@ class GeneratedMemoryHygieneEdit {
 
   factory GeneratedMemoryHygieneEdit.fromJson(Map<String, dynamic> json) {
     return GeneratedMemoryHygieneEdit(
-      after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
-      before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
-      effectiveFrom: _required(_readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString, requiredField: false, nullable: false, defaultValue: ""), "effective_from"),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
-      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
-      target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
+      after: _required(
+          _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "after"),
+      before: _required(
+          _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "before"),
+      effectiveFrom: _required(
+          _readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "effective_from"),
+      evidence: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList,
+              requiredField: true, nullable: false),
+          "evidence"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      other: _required(
+          _readFieldValue<String>(_readField(json, const ["other"]), "other", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "other"),
+      reason: _required(
+          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+              requiredField: true, nullable: false),
+          "reason"),
+      target: _required(
+          _readFieldValue<String>(_readField(json, const ["target"]), "target", _readString,
+              requiredField: true, nullable: false),
+          "target"),
     );
   }
 
@@ -501,16 +673,46 @@ class GeneratedHarnessEdit {
 
   factory GeneratedHarnessEdit.fromJson(Map<String, dynamic> json) {
     return GeneratedHarnessEdit(
-      after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
-      before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
-      effectiveFrom: _required(_readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString, requiredField: false, nullable: false, defaultValue: ""), "effective_from"),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
-      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
-      target: _required(_readFieldValue<String>(_readField(json, const ["target"]), "target", _readString, requiredField: true, nullable: false), "target"),
-      value: _required(_readFieldValue<int>(_readField(json, const ["value"]), "value", _readInt, requiredField: false, nullable: false, defaultValue: 3), "value"),
-      whyItMatters: _required(_readFieldValue<String>(_readField(json, const ["why_it_matters"]), "why_it_matters", _readString, requiredField: false, nullable: false, defaultValue: ""), "why_it_matters"),
+      after: _required(
+          _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "after"),
+      before: _required(
+          _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "before"),
+      effectiveFrom: _required(
+          _readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "effective_from"),
+      evidence: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList,
+              requiredField: true, nullable: false),
+          "evidence"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      other: _required(
+          _readFieldValue<String>(_readField(json, const ["other"]), "other", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "other"),
+      reason: _required(
+          _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+              requiredField: true, nullable: false),
+          "reason"),
+      target: _required(
+          _readFieldValue<String>(_readField(json, const ["target"]), "target", _readString,
+              requiredField: true, nullable: false),
+          "target"),
+      value: _required(
+          _readFieldValue<int>(_readField(json, const ["value"]), "value", _readInt,
+              requiredField: false, nullable: false, defaultValue: 3),
+          "value"),
+      whyItMatters: _required(
+          _readFieldValue<String>(_readField(json, const ["why_it_matters"]), "why_it_matters", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "why_it_matters"),
     );
   }
 
@@ -545,10 +747,20 @@ class GeneratedTerm {
 
   factory GeneratedTerm.fromJson(Map<String, dynamic> json) {
     return GeneratedTerm(
-      aliases: _readFieldValue<List<String>>(_readField(json, const ["aliases"]), "aliases", _readStringList, requiredField: false, nullable: true),
-      evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      spelling: _required(_readFieldValue<String>(_readField(json, const ["spelling"]), "spelling", _readString, requiredField: true, nullable: false), "spelling"),
+      aliases: _readFieldValue<List<String>>(_readField(json, const ["aliases"]), "aliases", _readStringList,
+          requiredField: false, nullable: true),
+      evidence: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList,
+              requiredField: true, nullable: false),
+          "evidence"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      spelling: _required(
+          _readFieldValue<String>(_readField(json, const ["spelling"]), "spelling", _readString,
+              requiredField: true, nullable: false),
+          "spelling"),
     );
   }
 
@@ -583,13 +795,24 @@ class GeneratedAgentProposalItem {
 
   factory GeneratedAgentProposalItem.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentProposalItem(
-      edit: _readFieldValue<GeneratedEdit>(_readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson), requiredField: false, nullable: true),
-      operation: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["operation"]), "operation", _readMap, requiredField: false, nullable: true),
-      otherContent: _readFieldValue<String>(_readField(json, const ["other_content"]), "other_content", _readString, requiredField: false, nullable: true),
-      otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
-      targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString, requiredField: false, nullable: true),
-      targetLabel: _required(_readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: false, defaultValue: ""), "target_label"),
-      vocabulary: _readFieldValue<GeneratedTerm>(_readField(json, const ["vocabulary"]), "vocabulary", (value) => _readObject(value, GeneratedTerm.fromJson), requiredField: false, nullable: true),
+      edit: _readFieldValue<GeneratedEdit>(
+          _readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson),
+          requiredField: false, nullable: true),
+      operation: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["operation"]), "operation", _readMap,
+          requiredField: false, nullable: true),
+      otherContent: _readFieldValue<String>(_readField(json, const ["other_content"]), "other_content", _readString,
+          requiredField: false, nullable: true),
+      otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString,
+          requiredField: false, nullable: true),
+      targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString,
+          requiredField: false, nullable: true),
+      targetLabel: _required(
+          _readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "target_label"),
+      vocabulary: _readFieldValue<GeneratedTerm>(
+          _readField(json, const ["vocabulary"]), "vocabulary", (value) => _readObject(value, GeneratedTerm.fromJson),
+          requiredField: false, nullable: true),
     );
   }
 
@@ -615,7 +838,10 @@ class GeneratedAgentProposalAnswer {
 
   factory GeneratedAgentProposalAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentProposalAnswer(
-      decision: _required(_readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString, requiredField: true, nullable: false), "decision"),
+      decision: _required(
+          _readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString,
+              requiredField: true, nullable: false),
+          "decision"),
     );
   }
 
@@ -653,16 +879,38 @@ class GeneratedReviewItem {
 
   factory GeneratedReviewItem.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItem(
-      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
-      itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: false, nullable: true),
-      samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonItem.fromJson), requiredField: false, nullable: true),
-      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
-      speaker: _readFieldValue<GeneratedSpeakerItem>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson), requiredField: false, nullable: true),
-      spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingItem.fromJson), requiredField: false, nullable: true),
-      task: _readFieldValue<GeneratedTaskItem>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson), requiredField: false, nullable: true),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      createdAt: _required(
+          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+              requiredField: true, nullable: false),
+          "created_at"),
+      itemId: _required(
+          _readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString,
+              requiredField: true, nullable: false),
+          "item_id"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString,
+          requiredField: false, nullable: true),
+      samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person",
+          (value) => _readObject(value, GeneratedSamePersonItem.fromJson),
+          requiredField: false, nullable: true),
+      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString,
+          requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerItem>(
+          _readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson),
+          requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling",
+          (value) => _readObject(value, GeneratedSpellingItem.fromJson),
+          requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskItem>(
+          _readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson),
+          requiredField: false, nullable: true),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: true, nullable: false),
+          "title"),
     );
   }
 
@@ -711,17 +959,41 @@ class GeneratedReviewItemV2 {
 
   factory GeneratedReviewItemV2.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItemV2(
-      agentProposal: _readFieldValue<GeneratedAgentProposalItem>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalItem.fromJson), requiredField: false, nullable: true),
-      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
-      itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString, requiredField: false, nullable: true),
-      samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonItem.fromJson), requiredField: false, nullable: true),
-      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString, requiredField: false, nullable: true),
-      speaker: _readFieldValue<GeneratedSpeakerItem>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson), requiredField: false, nullable: true),
-      spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingItem.fromJson), requiredField: false, nullable: true),
-      task: _readFieldValue<GeneratedTaskItem>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson), requiredField: false, nullable: true),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
+      agentProposal: _readFieldValue<GeneratedAgentProposalItem>(_readField(json, const ["agent_proposal"]),
+          "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalItem.fromJson),
+          requiredField: false, nullable: true),
+      createdAt: _required(
+          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+              requiredField: true, nullable: false),
+          "created_at"),
+      itemId: _required(
+          _readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString,
+              requiredField: true, nullable: false),
+          "item_id"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      quote: _readFieldValue<String>(_readField(json, const ["quote"]), "quote", _readString,
+          requiredField: false, nullable: true),
+      samePerson: _readFieldValue<GeneratedSamePersonItem>(_readField(json, const ["same_person"]), "same_person",
+          (value) => _readObject(value, GeneratedSamePersonItem.fromJson),
+          requiredField: false, nullable: true),
+      sourceRef: _readFieldValue<String>(_readField(json, const ["source_ref"]), "source_ref", _readString,
+          requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerItem>(
+          _readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerItem.fromJson),
+          requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingItem>(_readField(json, const ["spelling"]), "spelling",
+          (value) => _readObject(value, GeneratedSpellingItem.fromJson),
+          requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskItem>(
+          _readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskItem.fromJson),
+          requiredField: false, nullable: true),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: true, nullable: false),
+          "title"),
     );
   }
 
@@ -753,8 +1025,15 @@ class GeneratedReviewItemsResponseV2 {
 
   factory GeneratedReviewItemsResponseV2.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItemsResponseV2(
-      items: _required(_readFieldValue<List<GeneratedReviewItemV2>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedReviewItemV2.fromJson), requiredField: true, nullable: false), "items"),
-      remainingToday: _required(_readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt, requiredField: true, nullable: false), "remaining_today"),
+      items: _required(
+          _readFieldValue<List<GeneratedReviewItemV2>>(_readField(json, const ["items"]), "items",
+              (value) => _readObjectList(value, GeneratedReviewItemV2.fromJson),
+              requiredField: true, nullable: false),
+          "items"),
+      remainingToday: _required(
+          _readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt,
+              requiredField: true, nullable: false),
+          "remaining_today"),
     );
   }
 
@@ -785,12 +1064,25 @@ class GeneratedReviewAnswerV2 {
 
   factory GeneratedReviewAnswerV2.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewAnswerV2(
-      agentProposal: _readFieldValue<GeneratedAgentProposalAnswer>(_readField(json, const ["agent_proposal"]), "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalAnswer.fromJson), requiredField: false, nullable: true),
-      notSure: _required(_readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool, requiredField: false, nullable: false, defaultValue: false), "not_sure"),
-      samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson), requiredField: false, nullable: true),
-      speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson), requiredField: false, nullable: true),
-      spelling: _readFieldValue<GeneratedSpellingAnswer>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingAnswer.fromJson), requiredField: false, nullable: true),
-      task: _readFieldValue<GeneratedTaskAnswer>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskAnswer.fromJson), requiredField: false, nullable: true),
+      agentProposal: _readFieldValue<GeneratedAgentProposalAnswer>(_readField(json, const ["agent_proposal"]),
+          "agent_proposal", (value) => _readObject(value, GeneratedAgentProposalAnswer.fromJson),
+          requiredField: false, nullable: true),
+      notSure: _required(
+          _readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "not_sure"),
+      samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person",
+          (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson),
+          requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker",
+          (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson),
+          requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingAnswer>(_readField(json, const ["spelling"]), "spelling",
+          (value) => _readObject(value, GeneratedSpellingAnswer.fromJson),
+          requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskAnswer>(
+          _readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskAnswer.fromJson),
+          requiredField: false, nullable: true),
     );
   }
 
@@ -817,8 +1109,15 @@ class GeneratedReviewItemsResponse {
 
   factory GeneratedReviewItemsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewItemsResponse(
-      items: _required(_readFieldValue<List<GeneratedReviewItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedReviewItem.fromJson), requiredField: true, nullable: false), "items"),
-      remainingToday: _required(_readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt, requiredField: true, nullable: false), "remaining_today"),
+      items: _required(
+          _readFieldValue<List<GeneratedReviewItem>>(_readField(json, const ["items"]), "items",
+              (value) => _readObjectList(value, GeneratedReviewItem.fromJson),
+              requiredField: true, nullable: false),
+          "items"),
+      remainingToday: _required(
+          _readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt,
+              requiredField: true, nullable: false),
+          "remaining_today"),
     );
   }
 
@@ -843,9 +1142,15 @@ class GeneratedSpeakerAnswer {
 
   factory GeneratedSpeakerAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerAnswer(
-      isMe: _required(_readFieldValue<bool>(_readField(json, const ["is_me"]), "is_me", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_me"),
-      newPersonName: _readFieldValue<String>(_readField(json, const ["new_person_name"]), "new_person_name", _readString, requiredField: false, nullable: true),
-      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
+      isMe: _required(
+          _readFieldValue<bool>(_readField(json, const ["is_me"]), "is_me", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "is_me"),
+      newPersonName: _readFieldValue<String>(
+          _readField(json, const ["new_person_name"]), "new_person_name", _readString,
+          requiredField: false, nullable: true),
+      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -875,11 +1180,19 @@ class GeneratedTaskAnswer {
 
   factory GeneratedTaskAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedTaskAnswer(
-      decision: _required(_readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString, requiredField: true, nullable: false), "decision"),
-      dismissReason: _readFieldValue<String>(_readField(json, const ["dismiss_reason"]), "dismiss_reason", _readString, requiredField: false, nullable: true),
-      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime, requiredField: false, nullable: true),
-      editedDescription: _readFieldValue<String>(_readField(json, const ["edited_description"]), "edited_description", _readString, requiredField: false, nullable: true),
-      workstreamId: _readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString, requiredField: false, nullable: true),
+      decision: _required(
+          _readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString,
+              requiredField: true, nullable: false),
+          "decision"),
+      dismissReason: _readFieldValue<String>(_readField(json, const ["dismiss_reason"]), "dismiss_reason", _readString,
+          requiredField: false, nullable: true),
+      dueAt: _readFieldValue<DateTime>(_readField(json, const ["due_at"]), "due_at", _readDateTime,
+          requiredField: false, nullable: true),
+      editedDescription: _readFieldValue<String>(
+          _readField(json, const ["edited_description"]), "edited_description", _readString,
+          requiredField: false, nullable: true),
+      workstreamId: _readFieldValue<String>(_readField(json, const ["workstream_id"]), "workstream_id", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -903,7 +1216,10 @@ class GeneratedSamePersonAnswer {
 
   factory GeneratedSamePersonAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedSamePersonAnswer(
-      decision: _required(_readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString, requiredField: true, nullable: false), "decision"),
+      decision: _required(
+          _readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString,
+              requiredField: true, nullable: false),
+          "decision"),
     );
   }
 
@@ -923,7 +1239,10 @@ class GeneratedSpellingAnswer {
 
   factory GeneratedSpellingAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedSpellingAnswer(
-      value: _required(_readFieldValue<String>(_readField(json, const ["value"]), "value", _readString, requiredField: true, nullable: false), "value"),
+      value: _required(
+          _readFieldValue<String>(_readField(json, const ["value"]), "value", _readString,
+              requiredField: true, nullable: false),
+          "value"),
     );
   }
 
@@ -951,11 +1270,22 @@ class GeneratedReviewAnswer {
 
   factory GeneratedReviewAnswer.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewAnswer(
-      notSure: _required(_readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool, requiredField: false, nullable: false, defaultValue: false), "not_sure"),
-      samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person", (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson), requiredField: false, nullable: true),
-      speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker", (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson), requiredField: false, nullable: true),
-      spelling: _readFieldValue<GeneratedSpellingAnswer>(_readField(json, const ["spelling"]), "spelling", (value) => _readObject(value, GeneratedSpellingAnswer.fromJson), requiredField: false, nullable: true),
-      task: _readFieldValue<GeneratedTaskAnswer>(_readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskAnswer.fromJson), requiredField: false, nullable: true),
+      notSure: _required(
+          _readFieldValue<bool>(_readField(json, const ["not_sure"]), "not_sure", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "not_sure"),
+      samePerson: _readFieldValue<GeneratedSamePersonAnswer>(_readField(json, const ["same_person"]), "same_person",
+          (value) => _readObject(value, GeneratedSamePersonAnswer.fromJson),
+          requiredField: false, nullable: true),
+      speaker: _readFieldValue<GeneratedSpeakerAnswer>(_readField(json, const ["speaker"]), "speaker",
+          (value) => _readObject(value, GeneratedSpeakerAnswer.fromJson),
+          requiredField: false, nullable: true),
+      spelling: _readFieldValue<GeneratedSpellingAnswer>(_readField(json, const ["spelling"]), "spelling",
+          (value) => _readObject(value, GeneratedSpellingAnswer.fromJson),
+          requiredField: false, nullable: true),
+      task: _readFieldValue<GeneratedTaskAnswer>(
+          _readField(json, const ["task"]), "task", (value) => _readObject(value, GeneratedTaskAnswer.fromJson),
+          requiredField: false, nullable: true),
     );
   }
 
@@ -983,9 +1313,18 @@ class GeneratedReviewAnswerReceipt {
 
   factory GeneratedReviewAnswerReceipt.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewAnswerReceipt(
-      applied: _required(_readFieldValue<bool>(_readField(json, const ["applied"]), "applied", _readBool, requiredField: true, nullable: false), "applied"),
-      itemId: _required(_readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString, requiredField: true, nullable: false), "item_id"),
-      remainingToday: _required(_readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt, requiredField: true, nullable: false), "remaining_today"),
+      applied: _required(
+          _readFieldValue<bool>(_readField(json, const ["applied"]), "applied", _readBool,
+              requiredField: true, nullable: false),
+          "applied"),
+      itemId: _required(
+          _readFieldValue<String>(_readField(json, const ["item_id"]), "item_id", _readString,
+              requiredField: true, nullable: false),
+          "item_id"),
+      remainingToday: _required(
+          _readFieldValue<int>(_readField(json, const ["remaining_today"]), "remaining_today", _readInt,
+              requiredField: true, nullable: false),
+          "remaining_today"),
     );
   }
 
@@ -1011,9 +1350,18 @@ class GeneratedChangeRef {
 
   factory GeneratedChangeRef.fromJson(Map<String, dynamic> json) {
     return GeneratedChangeRef(
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      label: _required(_readFieldValue<String>(_readField(json, const ["label"]), "label", _readString, requiredField: true, nullable: false), "label"),
-      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      label: _required(
+          _readFieldValue<String>(_readField(json, const ["label"]), "label", _readString,
+              requiredField: true, nullable: false),
+          "label"),
+      type: _required(
+          _readFieldValue<String>(_readField(json, const ["type"]), "type", _readString,
+              requiredField: true, nullable: false),
+          "type"),
     );
   }
 
@@ -1059,19 +1407,45 @@ class GeneratedReviewChange {
 
   factory GeneratedReviewChange.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewChange(
-      after: _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: true),
-      before: _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: true),
-      changeId: _required(_readFieldValue<String>(_readField(json, const ["change_id"]), "change_id", _readString, requiredField: true, nullable: false), "change_id"),
-      context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context", (value) => _readObject(value, GeneratedSpellingContext.fromJson), requiredField: false, nullable: true),
-      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
-      diff: _readFieldValue<GeneratedReviewChangeDiff>(_readField(json, const ["diff"]), "diff", (value) => _readObject(value, GeneratedReviewChangeDiff.fromJson), requiredField: false, nullable: true),
-      editKind: _readFieldValue<String>(_readField(json, const ["edit_kind"]), "edit_kind", _readString, requiredField: false, nullable: true),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
-      refs: _readFieldValue<List<GeneratedChangeRef>>(_readField(json, const ["refs"]), "refs", (value) => _readObjectList(value, GeneratedChangeRef.fromJson), requiredField: false, nullable: true),
-      snippet: _readFieldValue<String>(_readField(json, const ["snippet"]), "snippet", _readString, requiredField: false, nullable: true),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
-      undone: _required(_readFieldValue<bool>(_readField(json, const ["undone"]), "undone", _readBool, requiredField: false, nullable: false, defaultValue: false), "undone"),
+      after: _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString,
+          requiredField: false, nullable: true),
+      before: _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString,
+          requiredField: false, nullable: true),
+      changeId: _required(
+          _readFieldValue<String>(_readField(json, const ["change_id"]), "change_id", _readString,
+              requiredField: true, nullable: false),
+          "change_id"),
+      context: _readFieldValue<GeneratedSpellingContext>(_readField(json, const ["context"]), "context",
+          (value) => _readObject(value, GeneratedSpellingContext.fromJson),
+          requiredField: false, nullable: true),
+      createdAt: _required(
+          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+              requiredField: true, nullable: false),
+          "created_at"),
+      diff: _readFieldValue<GeneratedReviewChangeDiff>(
+          _readField(json, const ["diff"]), "diff", (value) => _readObject(value, GeneratedReviewChangeDiff.fromJson),
+          requiredField: false, nullable: true),
+      editKind: _readFieldValue<String>(_readField(json, const ["edit_kind"]), "edit_kind", _readString,
+          requiredField: false, nullable: true),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+          requiredField: false, nullable: true),
+      refs: _readFieldValue<List<GeneratedChangeRef>>(
+          _readField(json, const ["refs"]), "refs", (value) => _readObjectList(value, GeneratedChangeRef.fromJson),
+          requiredField: false, nullable: true),
+      snippet: _readFieldValue<String>(_readField(json, const ["snippet"]), "snippet", _readString,
+          requiredField: false, nullable: true),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: true, nullable: false),
+          "title"),
+      undone: _required(
+          _readFieldValue<bool>(_readField(json, const ["undone"]), "undone", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "undone"),
     );
   }
 
@@ -1121,16 +1495,27 @@ class GeneratedReviewChangeDiff {
 
   factory GeneratedReviewChangeDiff.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewChangeDiff(
-      after: _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: true),
-      before: _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: true),
-      contextAfter: _readFieldValue<String>(_readField(json, const ["context_after"]), "context_after", _readString, requiredField: false, nullable: true),
-      contextBefore: _readFieldValue<String>(_readField(json, const ["context_before"]), "context_before", _readString, requiredField: false, nullable: true),
-      field: _readFieldValue<String>(_readField(json, const ["field"]), "field", _readString, requiredField: false, nullable: true),
-      groupKey: _readFieldValue<String>(_readField(json, const ["group_key"]), "group_key", _readString, requiredField: false, nullable: true),
-      occurrences: _readFieldValue<int>(_readField(json, const ["occurrences"]), "occurrences", _readInt, requiredField: false, nullable: true),
-      sourceStartedAt: _readFieldValue<DateTime>(_readField(json, const ["source_started_at"]), "source_started_at", _readDateTime, requiredField: false, nullable: true),
-      sourceTitle: _readFieldValue<String>(_readField(json, const ["source_title"]), "source_title", _readString, requiredField: false, nullable: true),
-      targetLabel: _readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: true),
+      after: _readFieldValue<String>(_readField(json, const ["after"]), "after", _readString,
+          requiredField: false, nullable: true),
+      before: _readFieldValue<String>(_readField(json, const ["before"]), "before", _readString,
+          requiredField: false, nullable: true),
+      contextAfter: _readFieldValue<String>(_readField(json, const ["context_after"]), "context_after", _readString,
+          requiredField: false, nullable: true),
+      contextBefore: _readFieldValue<String>(_readField(json, const ["context_before"]), "context_before", _readString,
+          requiredField: false, nullable: true),
+      field: _readFieldValue<String>(_readField(json, const ["field"]), "field", _readString,
+          requiredField: false, nullable: true),
+      groupKey: _readFieldValue<String>(_readField(json, const ["group_key"]), "group_key", _readString,
+          requiredField: false, nullable: true),
+      occurrences: _readFieldValue<int>(_readField(json, const ["occurrences"]), "occurrences", _readInt,
+          requiredField: false, nullable: true),
+      sourceStartedAt: _readFieldValue<DateTime>(
+          _readField(json, const ["source_started_at"]), "source_started_at", _readDateTime,
+          requiredField: false, nullable: true),
+      sourceTitle: _readFieldValue<String>(_readField(json, const ["source_title"]), "source_title", _readString,
+          requiredField: false, nullable: true),
+      targetLabel: _readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -1161,8 +1546,13 @@ class GeneratedReviewChangesResponse {
 
   factory GeneratedReviewChangesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedReviewChangesResponse(
-      changes: _required(_readFieldValue<List<GeneratedReviewChange>>(_readField(json, const ["changes"]), "changes", (value) => _readObjectList(value, GeneratedReviewChange.fromJson), requiredField: true, nullable: false), "changes"),
-      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
+      changes: _required(
+          _readFieldValue<List<GeneratedReviewChange>>(_readField(json, const ["changes"]), "changes",
+              (value) => _readObjectList(value, GeneratedReviewChange.fromJson),
+              requiredField: true, nullable: false),
+          "changes"),
+      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -1189,10 +1579,22 @@ class GeneratedOpenLoopCard {
 
   factory GeneratedOpenLoopCard.fromJson(Map<String, dynamic> json) {
     return GeneratedOpenLoopCard(
-      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
-      contextLine: _required(_readFieldValue<String>(_readField(json, const ["context_line"]), "context_line", _readString, requiredField: true, nullable: false), "context_line"),
-      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
-      question: _required(_readFieldValue<String>(_readField(json, const ["question"]), "question", _readString, requiredField: true, nullable: false), "question"),
+      cardId: _required(
+          _readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString,
+              requiredField: true, nullable: false),
+          "card_id"),
+      contextLine: _required(
+          _readFieldValue<String>(_readField(json, const ["context_line"]), "context_line", _readString,
+              requiredField: true, nullable: false),
+          "context_line"),
+      date: _required(
+          _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString,
+              requiredField: true, nullable: false),
+          "date"),
+      question: _required(
+          _readFieldValue<String>(_readField(json, const ["question"]), "question", _readString,
+              requiredField: true, nullable: false),
+          "question"),
     );
   }
 
@@ -1215,7 +1617,9 @@ class GeneratedOpenLoopCardsResponse {
 
   factory GeneratedOpenLoopCardsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedOpenLoopCardsResponse(
-      cards: _readFieldValue<List<GeneratedOpenLoopCard>>(_readField(json, const ["cards"]), "cards", (value) => _readObjectList(value, GeneratedOpenLoopCard.fromJson), requiredField: false, nullable: true),
+      cards: _readFieldValue<List<GeneratedOpenLoopCard>>(
+          _readField(json, const ["cards"]), "cards", (value) => _readObjectList(value, GeneratedOpenLoopCard.fromJson),
+          requiredField: false, nullable: true),
     );
   }
 
@@ -1235,7 +1639,10 @@ class GeneratedOpenLoopAnswerRequest {
 
   factory GeneratedOpenLoopAnswerRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedOpenLoopAnswerRequest(
-      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
+      action: _required(
+          _readFieldValue<String>(_readField(json, const ["action"]), "action", _readString,
+              requiredField: true, nullable: false),
+          "action"),
     );
   }
 
@@ -1259,9 +1666,18 @@ class GeneratedOpenLoopAnswerResponse {
 
   factory GeneratedOpenLoopAnswerResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedOpenLoopAnswerResponse(
-      cardId: _required(_readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString, requiredField: true, nullable: false), "card_id"),
-      date: _required(_readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: true, nullable: false), "date"),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      cardId: _required(
+          _readFieldValue<String>(_readField(json, const ["card_id"]), "card_id", _readString,
+              requiredField: true, nullable: false),
+          "card_id"),
+      date: _required(
+          _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString,
+              requiredField: true, nullable: false),
+          "date"),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -1347,9 +1763,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -1365,37 +1779,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

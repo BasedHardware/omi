@@ -231,7 +231,7 @@ void main() {
       const config = CustomSttConfig(
           provider: SttProvider.onDeviceWhisper, language: 'en', identity: SttModeResolver.freemiumOnDeviceId);
       if (pinned) {
-        final persisted = await PhoneTranscriptionChoice.adopt(config);
+        final persisted = await PhoneTranscriptionChoice.adopt(config, SharedPreferencesUtil());
         await SharedPreferencesUtil().saveConfigForProvider(persisted.provider, persisted);
       }
       final capture = _Capture();

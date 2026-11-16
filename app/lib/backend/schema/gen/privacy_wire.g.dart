@@ -15,9 +15,18 @@ class GeneratedMigrationRequest {
 
   factory GeneratedMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequest(
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
-      type: _required(_readFieldValue<String>(_readField(json, const ["type"]), "type", _readString, requiredField: true, nullable: false), "type"),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      targetLevel: _required(
+          _readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString,
+              requiredField: true, nullable: false),
+          "target_level"),
+      type: _required(
+          _readFieldValue<String>(_readField(json, const ["type"]), "type", _readString,
+              requiredField: true, nullable: false),
+          "type"),
     );
   }
 
@@ -39,7 +48,11 @@ class GeneratedBatchMigrationRequest {
 
   factory GeneratedBatchMigrationRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedBatchMigrationRequest(
-      requests: _required(_readFieldValue<List<GeneratedMigrationRequest>>(_readField(json, const ["requests"]), "requests", (value) => _readObjectList(value, GeneratedMigrationRequest.fromJson), requiredField: true, nullable: false), "requests"),
+      requests: _required(
+          _readFieldValue<List<GeneratedMigrationRequest>>(_readField(json, const ["requests"]), "requests",
+              (value) => _readObjectList(value, GeneratedMigrationRequest.fromJson),
+              requiredField: true, nullable: false),
+          "requests"),
     );
   }
 
@@ -59,7 +72,10 @@ class GeneratedMigrationTargetRequest {
 
   factory GeneratedMigrationTargetRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationTargetRequest(
-      targetLevel: _required(_readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString, requiredField: true, nullable: false), "target_level"),
+      targetLevel: _required(
+          _readFieldValue<String>(_readField(json, const ["target_level"]), "target_level", _readString,
+              requiredField: true, nullable: false),
+          "target_level"),
     );
   }
 
@@ -81,8 +97,12 @@ class GeneratedMigrationStatusResponse {
 
   factory GeneratedMigrationStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationStatusResponse(
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -103,7 +123,9 @@ class GeneratedMigrationRequestsResponse {
 
   factory GeneratedMigrationRequestsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMigrationRequestsResponse(
-      needsMigration: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["needs_migration"]), "needs_migration", _readMapList, requiredField: false, nullable: true),
+      needsMigration: _readFieldValue<List<Map<String, dynamic>>>(
+          _readField(json, const ["needs_migration"]), "needs_migration", _readMapList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -143,17 +165,32 @@ class GeneratedUserProfileResponse {
 
   factory GeneratedUserProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserProfileResponse(
-      company: _readFieldValue<String>(_readField(json, const ["company"]), "company", _readString, requiredField: false, nullable: true),
-      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
-      dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
-      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
-      job: _readFieldValue<String>(_readField(json, const ["job"]), "job", _readString, requiredField: false, nullable: true),
-      migrationStatus: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["migration_status"]), "migration_status", _readMap, requiredField: false, nullable: true),
-      motivation: _readFieldValue<String>(_readField(json, const ["motivation"]), "motivation", _readString, requiredField: false, nullable: true),
-      name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: true),
-      timeZone: _readFieldValue<String>(_readField(json, const ["time_zone"]), "time_zone", _readString, requiredField: false, nullable: true),
-      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
-      useCase: _readFieldValue<String>(_readField(json, const ["use_case"]), "use_case", _readString, requiredField: false, nullable: true),
+      company: _readFieldValue<String>(_readField(json, const ["company"]), "company", _readString,
+          requiredField: false, nullable: true),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+          requiredField: false, nullable: true),
+      dataProtectionLevel: _readFieldValue<String>(
+          _readField(json, const ["data_protection_level"]), "data_protection_level", _readString,
+          requiredField: false, nullable: true),
+      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString,
+          requiredField: false, nullable: true),
+      job: _readFieldValue<String>(_readField(json, const ["job"]), "job", _readString,
+          requiredField: false, nullable: true),
+      migrationStatus: _readFieldValue<Map<String, dynamic>>(
+          _readField(json, const ["migration_status"]), "migration_status", _readMap,
+          requiredField: false, nullable: true),
+      motivation: _readFieldValue<String>(_readField(json, const ["motivation"]), "motivation", _readString,
+          requiredField: false, nullable: true),
+      name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+          requiredField: false, nullable: true),
+      timeZone: _readFieldValue<String>(_readField(json, const ["time_zone"]), "time_zone", _readString,
+          requiredField: false, nullable: true),
+      uid: _required(
+          _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString,
+              requiredField: true, nullable: false),
+          "uid"),
+      useCase: _readFieldValue<String>(_readField(json, const ["use_case"]), "use_case", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -247,9 +284,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -265,37 +300,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

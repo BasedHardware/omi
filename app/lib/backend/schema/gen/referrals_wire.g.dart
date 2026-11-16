@@ -11,7 +11,10 @@ class GeneratedReferralLinkResponse {
 
   factory GeneratedReferralLinkResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedReferralLinkResponse(
-      referralUrl: _required(_readFieldValue<String>(_readField(json, const ["referral_url"]), "referral_url", _readString, requiredField: true, nullable: false), "referral_url"),
+      referralUrl: _required(
+          _readFieldValue<String>(_readField(json, const ["referral_url"]), "referral_url", _readString,
+              requiredField: true, nullable: false),
+          "referral_url"),
     );
   }
 
@@ -49,16 +52,39 @@ class GeneratedCampaignSnapshotResponse {
 
   factory GeneratedCampaignSnapshotResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCampaignSnapshotResponse(
-      campaignId: _required(_readFieldValue<String>(_readField(json, const ["campaign_id"]), "campaign_id", _readString, requiredField: true, nullable: false), "campaign_id"),
-      claimableMonths: _required(_readFieldValue<int>(_readField(json, const ["claimable_months"]), "claimable_months", _readInt, requiredField: true, nullable: false), "claimable_months"),
-      claimedMonths: _required(_readFieldValue<int>(_readField(json, const ["claimed_months"]), "claimed_months", _readInt, requiredField: true, nullable: false), "claimed_months"),
-      earnedMonths: _readFieldValue<int>(_readField(json, const ["earned_months"]), "earned_months", _readInt, requiredField: false, nullable: true),
-      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
-      milestoneProgress: _readFieldValue<int>(_readField(json, const ["milestone_progress"]), "milestone_progress", _readInt, requiredField: false, nullable: true),
-      qualifiedPurchases: _required(_readFieldValue<int>(_readField(json, const ["qualified_purchases"]), "qualified_purchases", _readInt, requiredField: true, nullable: false), "qualified_purchases"),
-      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: true),
-      referralUrl: _readFieldValue<String>(_readField(json, const ["referral_url"]), "referral_url", _readString, requiredField: false, nullable: true),
-      rewardStatus: _required(_readFieldValue<String>(_readField(json, const ["reward_status"]), "reward_status", _readString, requiredField: true, nullable: false), "reward_status"),
+      campaignId: _required(
+          _readFieldValue<String>(_readField(json, const ["campaign_id"]), "campaign_id", _readString,
+              requiredField: true, nullable: false),
+          "campaign_id"),
+      claimableMonths: _required(
+          _readFieldValue<int>(_readField(json, const ["claimable_months"]), "claimable_months", _readInt,
+              requiredField: true, nullable: false),
+          "claimable_months"),
+      claimedMonths: _required(
+          _readFieldValue<int>(_readField(json, const ["claimed_months"]), "claimed_months", _readInt,
+              requiredField: true, nullable: false),
+          "claimed_months"),
+      earnedMonths: _readFieldValue<int>(_readField(json, const ["earned_months"]), "earned_months", _readInt,
+          requiredField: false, nullable: true),
+      enabled: _required(
+          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
+              requiredField: true, nullable: false),
+          "enabled"),
+      milestoneProgress: _readFieldValue<int>(
+          _readField(json, const ["milestone_progress"]), "milestone_progress", _readInt,
+          requiredField: false, nullable: true),
+      qualifiedPurchases: _required(
+          _readFieldValue<int>(_readField(json, const ["qualified_purchases"]), "qualified_purchases", _readInt,
+              requiredField: true, nullable: false),
+          "qualified_purchases"),
+      reason: _readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString,
+          requiredField: false, nullable: true),
+      referralUrl: _readFieldValue<String>(_readField(json, const ["referral_url"]), "referral_url", _readString,
+          requiredField: false, nullable: true),
+      rewardStatus: _required(
+          _readFieldValue<String>(_readField(json, const ["reward_status"]), "reward_status", _readString,
+              requiredField: true, nullable: false),
+          "reward_status"),
     );
   }
 
@@ -93,10 +119,22 @@ class GeneratedCampaignAttributionResponse {
 
   factory GeneratedCampaignAttributionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedCampaignAttributionResponse(
-      campaignId: _required(_readFieldValue<String>(_readField(json, const ["campaign_id"]), "campaign_id", _readString, requiredField: true, nullable: false), "campaign_id"),
-      checkoutUrl: _required(_readFieldValue<String>(_readField(json, const ["checkout_url"]), "checkout_url", _readString, requiredField: true, nullable: false), "checkout_url"),
-      discountPercent: _required(_readFieldValue<int>(_readField(json, const ["discount_percent"]), "discount_percent", _readInt, requiredField: true, nullable: false), "discount_percent"),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      campaignId: _required(
+          _readFieldValue<String>(_readField(json, const ["campaign_id"]), "campaign_id", _readString,
+              requiredField: true, nullable: false),
+          "campaign_id"),
+      checkoutUrl: _required(
+          _readFieldValue<String>(_readField(json, const ["checkout_url"]), "checkout_url", _readString,
+              requiredField: true, nullable: false),
+          "checkout_url"),
+      discountPercent: _required(
+          _readFieldValue<int>(_readField(json, const ["discount_percent"]), "discount_percent", _readInt,
+              requiredField: true, nullable: false),
+          "discount_percent"),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -183,9 +221,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -201,37 +237,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

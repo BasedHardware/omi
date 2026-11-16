@@ -8,6 +8,7 @@ import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -98,8 +99,9 @@ class SttModeResolver {
     bool Function()? pinnedReader,
     Future<CustomSttConfig> Function(CustomSttConfig config)? adoptPhoneChoice,
   })  : flagReader = flagReader ?? _defaultFlag,
-        pinnedReader = pinnedReader ?? PhoneTranscriptionChoice.isPinned,
-        adoptPhoneChoice = adoptPhoneChoice ?? PhoneTranscriptionChoice.adopt,
+        pinnedReader = pinnedReader ?? (() => PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil())),
+        adoptPhoneChoice =
+            adoptPhoneChoice ?? ((config) => PhoneTranscriptionChoice.adopt(config, SharedPreferencesUtil())),
         killSwitchReader = killSwitchReader ?? FreeTierOnDeviceSttFlag.killed,
         prepareOnDevice = prepareOnDevice ?? OnDeviceSttPreparer.prepare,
         allowanceReader = allowanceReader ?? _defaultAllowance,

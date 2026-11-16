@@ -27,15 +27,37 @@ class GeneratedPendingWorkItem {
 
   factory GeneratedPendingWorkItem.fromJson(Map<String, dynamic> json) {
     return GeneratedPendingWorkItem(
-      conversationIds: _required(_readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: true, nullable: false), "conversation_ids"),
-      durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
-      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      recordingCount: _required(_readFieldValue<int>(_readField(json, const ["recording_count"]), "recording_count", _readInt, requiredField: false, nullable: false, defaultValue: 1), "recording_count"),
-      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
-      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: true),
+      conversationIds: _required(
+          _readFieldValue<List<String>>(
+              _readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList,
+              requiredField: true, nullable: false),
+          "conversation_ids"),
+      durationSeconds: _required(
+          _readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble,
+              requiredField: true, nullable: false),
+          "duration_seconds"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString,
+          requiredField: false, nullable: true),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      recordingCount: _required(
+          _readFieldValue<int>(_readField(json, const ["recording_count"]), "recording_count", _readInt,
+              requiredField: false, nullable: false, defaultValue: 1),
+          "recording_count"),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
+          requiredField: true, nullable: true),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
+      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime,
+          requiredField: true, nullable: true),
     );
   }
 
@@ -69,10 +91,23 @@ class GeneratedPendingWorkSnapshot {
 
   factory GeneratedPendingWorkSnapshot.fromJson(Map<String, dynamic> json) {
     return GeneratedPendingWorkSnapshot(
-      attentionUnseenCount: _required(_readFieldValue<int>(_readField(json, const ["attention_unseen_count"]), "attention_unseen_count", _readInt, requiredField: true, nullable: false), "attention_unseen_count"),
-      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
-      homeProcessingToday: _required(_readFieldValue<bool>(_readField(json, const ["home_processing_today"]), "home_processing_today", _readBool, requiredField: false, nullable: false, defaultValue: false), "home_processing_today"),
-      items: _required(_readFieldValue<List<GeneratedPendingWorkItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedPendingWorkItem.fromJson), requiredField: true, nullable: false), "items"),
+      attentionUnseenCount: _required(
+          _readFieldValue<int>(_readField(json, const ["attention_unseen_count"]), "attention_unseen_count", _readInt,
+              requiredField: true, nullable: false),
+          "attention_unseen_count"),
+      enabled: _required(
+          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
+              requiredField: true, nullable: false),
+          "enabled"),
+      homeProcessingToday: _required(
+          _readFieldValue<bool>(_readField(json, const ["home_processing_today"]), "home_processing_today", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "home_processing_today"),
+      items: _required(
+          _readFieldValue<List<GeneratedPendingWorkItem>>(_readField(json, const ["items"]), "items",
+              (value) => _readObjectList(value, GeneratedPendingWorkItem.fromJson),
+              requiredField: true, nullable: false),
+          "items"),
     );
   }
 
@@ -97,8 +132,12 @@ class GeneratedAttentionRetryStatus {
 
   factory GeneratedAttentionRetryStatus.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionRetryStatus(
-      operationId: _readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString, requiredField: true, nullable: true),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      operationId: _readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString,
+          requiredField: true, nullable: true),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -139,17 +178,47 @@ class GeneratedAttentionItem {
 
   factory GeneratedAttentionItem.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionItem(
-      conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
-      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
-      durationSeconds: _required(_readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble, requiredField: true, nullable: false), "duration_seconds"),
-      failureCode: _required(_readFieldValue<String>(_readField(json, const ["failure_code"]), "failure_code", _readString, requiredField: true, nullable: false), "failure_code"),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      retry: _required(_readFieldValue<GeneratedAttentionRetryStatus>(_readField(json, const ["retry"]), "retry", (value) => _readObject(value, GeneratedAttentionRetryStatus.fromJson), requiredField: true, nullable: false), "retry"),
-      retryable: _required(_readFieldValue<bool>(_readField(json, const ["retryable"]), "retryable", _readBool, requiredField: true, nullable: false), "retryable"),
-      seen: _required(_readFieldValue<bool>(_readField(json, const ["seen"]), "seen", _readBool, requiredField: true, nullable: false), "seen"),
-      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
-      title: _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: true),
+      conversationId: _required(
+          _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString,
+              requiredField: true, nullable: false),
+          "conversation_id"),
+      createdAt: _required(
+          _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+              requiredField: true, nullable: false),
+          "created_at"),
+      durationSeconds: _required(
+          _readFieldValue<double>(_readField(json, const ["duration_seconds"]), "duration_seconds", _readDouble,
+              requiredField: true, nullable: false),
+          "duration_seconds"),
+      failureCode: _required(
+          _readFieldValue<String>(_readField(json, const ["failure_code"]), "failure_code", _readString,
+              requiredField: true, nullable: false),
+          "failure_code"),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      retry: _required(
+          _readFieldValue<GeneratedAttentionRetryStatus>(_readField(json, const ["retry"]), "retry",
+              (value) => _readObject(value, GeneratedAttentionRetryStatus.fromJson),
+              requiredField: true, nullable: false),
+          "retry"),
+      retryable: _required(
+          _readFieldValue<bool>(_readField(json, const ["retryable"]), "retryable", _readBool,
+              requiredField: true, nullable: false),
+          "retryable"),
+      seen: _required(
+          _readFieldValue<bool>(_readField(json, const ["seen"]), "seen", _readBool,
+              requiredField: true, nullable: false),
+          "seen"),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
+          requiredField: true, nullable: true),
+      title: _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+          requiredField: true, nullable: true),
     );
   }
 
@@ -183,9 +252,19 @@ class GeneratedAttentionItemsPage {
 
   factory GeneratedAttentionItemsPage.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionItemsPage(
-      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
-      items: _required(_readFieldValue<List<GeneratedAttentionItem>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedAttentionItem.fromJson), requiredField: true, nullable: false), "items"),
-      unseenCount: _required(_readFieldValue<int>(_readField(json, const ["unseen_count"]), "unseen_count", _readInt, requiredField: true, nullable: false), "unseen_count"),
+      enabled: _required(
+          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
+              requiredField: true, nullable: false),
+          "enabled"),
+      items: _required(
+          _readFieldValue<List<GeneratedAttentionItem>>(_readField(json, const ["items"]), "items",
+              (value) => _readObjectList(value, GeneratedAttentionItem.fromJson),
+              requiredField: true, nullable: false),
+          "items"),
+      unseenCount: _required(
+          _readFieldValue<int>(_readField(json, const ["unseen_count"]), "unseen_count", _readInt,
+              requiredField: true, nullable: false),
+          "unseen_count"),
     );
   }
 
@@ -209,8 +288,14 @@ class GeneratedAttentionRetryResponse {
 
   factory GeneratedAttentionRetryResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionRetryResponse(
-      operationId: _required(_readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString, requiredField: true, nullable: false), "operation_id"),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      operationId: _required(
+          _readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString,
+              requiredField: true, nullable: false),
+          "operation_id"),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -235,9 +320,18 @@ class GeneratedAttentionRetryAllOperation {
 
   factory GeneratedAttentionRetryAllOperation.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionRetryAllOperation(
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      operationId: _required(_readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString, requiredField: true, nullable: false), "operation_id"),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      operationId: _required(
+          _readFieldValue<String>(_readField(json, const ["operation_id"]), "operation_id", _readString,
+              requiredField: true, nullable: false),
+          "operation_id"),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: true, nullable: false),
+          "state"),
     );
   }
 
@@ -259,7 +353,11 @@ class GeneratedAttentionRetryAllResponse {
 
   factory GeneratedAttentionRetryAllResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAttentionRetryAllResponse(
-      operations: _required(_readFieldValue<List<GeneratedAttentionRetryAllOperation>>(_readField(json, const ["operations"]), "operations", (value) => _readObjectList(value, GeneratedAttentionRetryAllOperation.fromJson), requiredField: true, nullable: false), "operations"),
+      operations: _required(
+          _readFieldValue<List<GeneratedAttentionRetryAllOperation>>(_readField(json, const ["operations"]),
+              "operations", (value) => _readObjectList(value, GeneratedAttentionRetryAllOperation.fromJson),
+              requiredField: true, nullable: false),
+          "operations"),
     );
   }
 
@@ -279,7 +377,10 @@ class GeneratedRetryAllRequest {
 
   factory GeneratedRetryAllRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedRetryAllRequest(
-      idempotencyKey: _required(_readFieldValue<String>(_readField(json, const ["idempotency_key"]), "idempotency_key", _readString, requiredField: true, nullable: false), "idempotency_key"),
+      idempotencyKey: _required(
+          _readFieldValue<String>(_readField(json, const ["idempotency_key"]), "idempotency_key", _readString,
+              requiredField: true, nullable: false),
+          "idempotency_key"),
     );
   }
 
@@ -301,8 +402,14 @@ class GeneratedSeenRequest {
 
   factory GeneratedSeenRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedSeenRequest(
-      all: _required(_readFieldValue<bool>(_readField(json, const ["all"]), "all", _readBool, requiredField: false, nullable: false, defaultValue: false), "all"),
-      ids: _required(_readFieldValue<List<String>>(_readField(json, const ["ids"]), "ids", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "ids"),
+      all: _required(
+          _readFieldValue<bool>(_readField(json, const ["all"]), "all", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "all"),
+      ids: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["ids"]), "ids", _readStringList,
+              requiredField: false, nullable: false, defaultValue: const []),
+          "ids"),
     );
   }
 
@@ -387,9 +494,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -405,37 +510,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

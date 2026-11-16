@@ -544,7 +544,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       await SharedPreferencesUtil().saveCustomSttConfig(onPhone);
       SharedPreferencesUtil().paywallOnDeviceSttConfigId = '';
     } else {
-      await PhoneTranscriptionChoice.adopt(onPhone);
+      await PhoneTranscriptionChoice.adopt(onPhone, SharedPreferencesUtil());
     }
   }
 
@@ -1018,7 +1018,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   /// Cloud minutes the pinned phone choice could use again after the monthly reset, or null.
   int? _switchBackMinutes(UsageProvider usage) {
-    if (_currentMode != TranscriptionMode.onDevice || !PhoneTranscriptionChoice.isPinned()) return null;
+    if (_currentMode != TranscriptionMode.onDevice || !PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()))
+      return null;
     final allowance = usage.subscription?.transcriptionAllowance;
     final remaining = allowance?.remainingSeconds;
     if (allowance == null || !allowance.isManaged || remaining == null || remaining < 60) return null;

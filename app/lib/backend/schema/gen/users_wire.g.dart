@@ -17,10 +17,22 @@ class GeneratedAccountDeletionLossSummary {
 
   factory GeneratedAccountDeletionLossSummary.fromJson(Map<String, dynamic> json) {
     return GeneratedAccountDeletionLossSummary(
-      backlogConversations: _required(_readFieldValue<int>(_readField(json, const ["backlog_conversations"]), "backlog_conversations", _readInt, requiredField: false, nullable: false, defaultValue: 0), "backlog_conversations"),
-      backlogSeconds: _required(_readFieldValue<int>(_readField(json, const ["backlog_seconds"]), "backlog_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "backlog_seconds"),
-      heldAudioSeconds: _required(_readFieldValue<int>(_readField(json, const ["held_audio_seconds"]), "held_audio_seconds", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_audio_seconds"),
-      heldRecordings: _required(_readFieldValue<int>(_readField(json, const ["held_recordings"]), "held_recordings", _readInt, requiredField: false, nullable: false, defaultValue: 0), "held_recordings"),
+      backlogConversations: _required(
+          _readFieldValue<int>(_readField(json, const ["backlog_conversations"]), "backlog_conversations", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "backlog_conversations"),
+      backlogSeconds: _required(
+          _readFieldValue<int>(_readField(json, const ["backlog_seconds"]), "backlog_seconds", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "backlog_seconds"),
+      heldAudioSeconds: _required(
+          _readFieldValue<int>(_readField(json, const ["held_audio_seconds"]), "held_audio_seconds", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "held_audio_seconds"),
+      heldRecordings: _required(
+          _readFieldValue<int>(_readField(json, const ["held_recordings"]), "held_recordings", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "held_recordings"),
     );
   }
 
@@ -51,11 +63,23 @@ class GeneratedAccountDeletionStatusResponse {
 
   factory GeneratedAccountDeletionStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAccountDeletionStatusResponse(
-      gracePeriodDays: _required(_readFieldValue<int>(_readField(json, const ["grace_period_days"]), "grace_period_days", _readInt, requiredField: false, nullable: false, defaultValue: 0), "grace_period_days"),
-      lossSummary: _required(_readFieldValue<GeneratedAccountDeletionLossSummary>(_readField(json, const ["loss_summary"]), "loss_summary", (value) => _readObject(value, GeneratedAccountDeletionLossSummary.fromJson), requiredField: true, nullable: false), "loss_summary"),
-      pendingDeletion: _required(_readFieldValue<bool>(_readField(json, const ["pending_deletion"]), "pending_deletion", _readBool, requiredField: false, nullable: false, defaultValue: false), "pending_deletion"),
-      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
-      wipeAt: _readFieldValue<DateTime>(_readField(json, const ["wipe_at"]), "wipe_at", _readDateTime, requiredField: false, nullable: true),
+      gracePeriodDays: _required(
+          _readFieldValue<int>(_readField(json, const ["grace_period_days"]), "grace_period_days", _readInt,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "grace_period_days"),
+      lossSummary: _required(
+          _readFieldValue<GeneratedAccountDeletionLossSummary>(_readField(json, const ["loss_summary"]), "loss_summary",
+              (value) => _readObject(value, GeneratedAccountDeletionLossSummary.fromJson),
+              requiredField: true, nullable: false),
+          "loss_summary"),
+      pendingDeletion: _required(
+          _readFieldValue<bool>(_readField(json, const ["pending_deletion"]), "pending_deletion", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "pending_deletion"),
+      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+          requiredField: false, nullable: true),
+      wipeAt: _readFieldValue<DateTime>(_readField(json, const ["wipe_at"]), "wipe_at", _readDateTime,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -83,9 +107,18 @@ class GeneratedAccountDeletionRestoreResponse {
 
   factory GeneratedAccountDeletionRestoreResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAccountDeletionRestoreResponse(
-      billingCancelled: _required(_readFieldValue<bool>(_readField(json, const ["billing_cancelled"]), "billing_cancelled", _readBool, requiredField: false, nullable: false, defaultValue: false), "billing_cancelled"),
-      restored: _required(_readFieldValue<bool>(_readField(json, const ["restored"]), "restored", _readBool, requiredField: true, nullable: false), "restored"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      billingCancelled: _required(
+          _readFieldValue<bool>(_readField(json, const ["billing_cancelled"]), "billing_cancelled", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "billing_cancelled"),
+      restored: _required(
+          _readFieldValue<bool>(_readField(json, const ["restored"]), "restored", _readBool,
+              requiredField: true, nullable: false),
+          "restored"),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -113,10 +146,20 @@ class GeneratedAccountDeletionActionResponse {
 
   factory GeneratedAccountDeletionActionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAccountDeletionActionResponse(
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      pendingDeletion: _required(_readFieldValue<bool>(_readField(json, const ["pending_deletion"]), "pending_deletion", _readBool, requiredField: false, nullable: false, defaultValue: false), "pending_deletion"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      wipeAt: _readFieldValue<DateTime>(_readField(json, const ["wipe_at"]), "wipe_at", _readDateTime, requiredField: false, nullable: true),
+      message: _required(
+          _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+              requiredField: true, nullable: false),
+          "message"),
+      pendingDeletion: _required(
+          _readFieldValue<bool>(_readField(json, const ["pending_deletion"]), "pending_deletion", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "pending_deletion"),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
+      wipeAt: _readFieldValue<DateTime>(_readField(json, const ["wipe_at"]), "wipe_at", _readDateTime,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -147,11 +190,26 @@ class GeneratedMobileFeedbackReceipt {
 
   factory GeneratedMobileFeedbackReceipt.fromJson(Map<String, dynamic> json) {
     return GeneratedMobileFeedbackReceipt(
-      created: _required(_readFieldValue<bool>(_readField(json, const ["created"]), "created", _readBool, requiredField: true, nullable: false), "created"),
-      eventId: _required(_readFieldValue<String>(_readField(json, const ["event_id"]), "event_id", _readString, requiredField: true, nullable: false), "event_id"),
-      feedbackId: _required(_readFieldValue<String>(_readField(json, const ["feedback_id"]), "feedback_id", _readString, requiredField: true, nullable: false), "feedback_id"),
-      persisted: _required(_readFieldValue<bool>(_readField(json, const ["persisted"]), "persisted", _readBool, requiredField: false, nullable: false, defaultValue: true), "persisted"),
-      schemaVersion: _required(_readFieldValue<String>(_readField(json, const ["schema_version"]), "schema_version", _readString, requiredField: false, nullable: false, defaultValue: "mobile_feedback_receipt.v1"), "schema_version"),
+      created: _required(
+          _readFieldValue<bool>(_readField(json, const ["created"]), "created", _readBool,
+              requiredField: true, nullable: false),
+          "created"),
+      eventId: _required(
+          _readFieldValue<String>(_readField(json, const ["event_id"]), "event_id", _readString,
+              requiredField: true, nullable: false),
+          "event_id"),
+      feedbackId: _required(
+          _readFieldValue<String>(_readField(json, const ["feedback_id"]), "feedback_id", _readString,
+              requiredField: true, nullable: false),
+          "feedback_id"),
+      persisted: _required(
+          _readFieldValue<bool>(_readField(json, const ["persisted"]), "persisted", _readBool,
+              requiredField: false, nullable: false, defaultValue: true),
+          "persisted"),
+      schemaVersion: _required(
+          _readFieldValue<String>(_readField(json, const ["schema_version"]), "schema_version", _readString,
+              requiredField: false, nullable: false, defaultValue: "mobile_feedback_receipt.v1"),
+          "schema_version"),
     );
   }
 
@@ -177,8 +235,12 @@ class GeneratedUserStatusResponse {
 
   factory GeneratedUserStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserStatusResponse(
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -207,11 +269,26 @@ class GeneratedUserWebhooksStatusResponse {
 
   factory GeneratedUserWebhooksStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserWebhooksStatusResponse(
-      audioBytes: _required(_readFieldValue<bool>(_readField(json, const ["audio_bytes"]), "audio_bytes", _readBool, requiredField: true, nullable: false), "audio_bytes"),
-      buttonEvent: _required(_readFieldValue<bool>(_readField(json, const ["button_event"]), "button_event", _readBool, requiredField: false, nullable: false, defaultValue: false), "button_event"),
-      daySummary: _required(_readFieldValue<bool>(_readField(json, const ["day_summary"]), "day_summary", _readBool, requiredField: true, nullable: false), "day_summary"),
-      memoryCreated: _required(_readFieldValue<bool>(_readField(json, const ["memory_created"]), "memory_created", _readBool, requiredField: true, nullable: false), "memory_created"),
-      realtimeTranscript: _required(_readFieldValue<bool>(_readField(json, const ["realtime_transcript"]), "realtime_transcript", _readBool, requiredField: true, nullable: false), "realtime_transcript"),
+      audioBytes: _required(
+          _readFieldValue<bool>(_readField(json, const ["audio_bytes"]), "audio_bytes", _readBool,
+              requiredField: true, nullable: false),
+          "audio_bytes"),
+      buttonEvent: _required(
+          _readFieldValue<bool>(_readField(json, const ["button_event"]), "button_event", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "button_event"),
+      daySummary: _required(
+          _readFieldValue<bool>(_readField(json, const ["day_summary"]), "day_summary", _readBool,
+              requiredField: true, nullable: false),
+          "day_summary"),
+      memoryCreated: _required(
+          _readFieldValue<bool>(_readField(json, const ["memory_created"]), "memory_created", _readBool,
+              requiredField: true, nullable: false),
+          "memory_created"),
+      realtimeTranscript: _required(
+          _readFieldValue<bool>(_readField(json, const ["realtime_transcript"]), "realtime_transcript", _readBool,
+              requiredField: true, nullable: false),
+          "realtime_transcript"),
     );
   }
 
@@ -235,7 +312,11 @@ class GeneratedStoreRecordingPermissionResponse {
 
   factory GeneratedStoreRecordingPermissionResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedStoreRecordingPermissionResponse(
-      storeRecordingPermission: _required(_readFieldValue<bool>(_readField(json, const ["store_recording_permission"]), "store_recording_permission", _readBool, requiredField: true, nullable: false), "store_recording_permission"),
+      storeRecordingPermission: _required(
+          _readFieldValue<bool>(
+              _readField(json, const ["store_recording_permission"]), "store_recording_permission", _readBool,
+              requiredField: true, nullable: false),
+          "store_recording_permission"),
     );
   }
 
@@ -255,7 +336,11 @@ class GeneratedPrivateCloudSyncResponse {
 
   factory GeneratedPrivateCloudSyncResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedPrivateCloudSyncResponse(
-      privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: true, nullable: false), "private_cloud_sync_enabled"),
+      privateCloudSyncEnabled: _required(
+          _readFieldValue<bool>(
+              _readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool,
+              requiredField: true, nullable: false),
+          "private_cloud_sync_enabled"),
     );
   }
 
@@ -279,9 +364,19 @@ class GeneratedOnboardingStateResponse {
 
   factory GeneratedOnboardingStateResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedOnboardingStateResponse(
-      acquisitionSource: _required(_readFieldValue<String>(_readField(json, const ["acquisition_source"]), "acquisition_source", _readString, requiredField: false, nullable: false, defaultValue: ""), "acquisition_source"),
-      completed: _required(_readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: false, defaultValue: false), "completed"),
-      deviceOnboardingCompleted: _required(_readFieldValue<bool>(_readField(json, const ["device_onboarding_completed"]), "device_onboarding_completed", _readBool, requiredField: false, nullable: false, defaultValue: false), "device_onboarding_completed"),
+      acquisitionSource: _required(
+          _readFieldValue<String>(_readField(json, const ["acquisition_source"]), "acquisition_source", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "acquisition_source"),
+      completed: _required(
+          _readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "completed"),
+      deviceOnboardingCompleted: _required(
+          _readFieldValue<bool>(
+              _readField(json, const ["device_onboarding_completed"]), "device_onboarding_completed", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "device_onboarding_completed"),
     );
   }
 
@@ -303,7 +398,8 @@ class GeneratedUserLanguageResponse {
 
   factory GeneratedUserLanguageResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserLanguageResponse(
-      language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -327,9 +423,16 @@ class GeneratedUserLanguageUpdateResponse {
 
   factory GeneratedUserLanguageUpdateResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserLanguageUpdateResponse(
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      singleLanguageMode: _required(_readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool, requiredField: true, nullable: false), "single_language_mode"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+          requiredField: false, nullable: true),
+      singleLanguageMode: _required(
+          _readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool,
+              requiredField: true, nullable: false),
+          "single_language_mode"),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -353,8 +456,14 @@ class GeneratedAvailableLanguage {
 
   factory GeneratedAvailableLanguage.fromJson(Map<String, dynamic> json) {
     return GeneratedAvailableLanguage(
-      code: _required(_readFieldValue<String>(_readField(json, const ["code"]), "code", _readString, requiredField: true, nullable: false), "code"),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
+      code: _required(
+          _readFieldValue<String>(_readField(json, const ["code"]), "code", _readString,
+              requiredField: true, nullable: false),
+          "code"),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
     );
   }
 
@@ -375,7 +484,11 @@ class GeneratedAvailableLanguagesResponse {
 
   factory GeneratedAvailableLanguagesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAvailableLanguagesResponse(
-      languages: _required(_readFieldValue<List<GeneratedAvailableLanguage>>(_readField(json, const ["languages"]), "languages", (value) => _readObjectList(value, GeneratedAvailableLanguage.fromJson), requiredField: true, nullable: false), "languages"),
+      languages: _required(
+          _readFieldValue<List<GeneratedAvailableLanguage>>(_readField(json, const ["languages"]), "languages",
+              (value) => _readObjectList(value, GeneratedAvailableLanguage.fromJson),
+              requiredField: true, nullable: false),
+          "languages"),
     );
   }
 
@@ -397,8 +510,12 @@ class GeneratedMemorySummaryRatingResponse {
 
   factory GeneratedMemorySummaryRatingResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMemorySummaryRatingResponse(
-      hasRating: _required(_readFieldValue<bool>(_readField(json, const ["has_rating"]), "has_rating", _readBool, requiredField: true, nullable: false), "has_rating"),
-      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt, requiredField: false, nullable: true),
+      hasRating: _required(
+          _readFieldValue<bool>(_readField(json, const ["has_rating"]), "has_rating", _readBool,
+              requiredField: true, nullable: false),
+          "has_rating"),
+      rating: _readFieldValue<int>(_readField(json, const ["rating"]), "rating", _readInt,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -421,8 +538,12 @@ class GeneratedTrainingDataOptInResponse {
 
   factory GeneratedTrainingDataOptInResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedTrainingDataOptInResponse(
-      optedIn: _required(_readFieldValue<bool>(_readField(json, const ["opted_in"]), "opted_in", _readBool, requiredField: true, nullable: false), "opted_in"),
-      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true),
+      optedIn: _required(
+          _readFieldValue<bool>(_readField(json, const ["opted_in"]), "opted_in", _readBool,
+              requiredField: true, nullable: false),
+          "opted_in"),
+      status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -451,11 +572,23 @@ class GeneratedTranscriptionPreferencesResponse {
 
   factory GeneratedTranscriptionPreferencesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedTranscriptionPreferencesResponse(
-      customSttSince: _readFieldValue<DateTime>(_readField(json, const ["custom_stt_since"]), "custom_stt_since", _readDateTime, requiredField: false, nullable: true),
-      language: _required(_readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: false, defaultValue: ""), "language"),
-      singleLanguageMode: _required(_readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool, requiredField: false, nullable: false, defaultValue: false), "single_language_mode"),
-      usesCustomStt: _required(_readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool, requiredField: false, nullable: false, defaultValue: false), "uses_custom_stt"),
-      vocabulary: _readFieldValue<List<String>>(_readField(json, const ["vocabulary"]), "vocabulary", _readStringList, requiredField: false, nullable: true),
+      customSttSince: _readFieldValue<DateTime>(
+          _readField(json, const ["custom_stt_since"]), "custom_stt_since", _readDateTime,
+          requiredField: false, nullable: true),
+      language: _required(
+          _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "language"),
+      singleLanguageMode: _required(
+          _readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "single_language_mode"),
+      usesCustomStt: _required(
+          _readFieldValue<bool>(_readField(json, const ["uses_custom_stt"]), "uses_custom_stt", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "uses_custom_stt"),
+      vocabulary: _readFieldValue<List<String>>(_readField(json, const ["vocabulary"]), "vocabulary", _readStringList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -481,8 +614,11 @@ class GeneratedTranscriptionPreferencesUpdate {
 
   factory GeneratedTranscriptionPreferencesUpdate.fromJson(Map<String, dynamic> json) {
     return GeneratedTranscriptionPreferencesUpdate(
-      singleLanguageMode: _readFieldValue<bool>(_readField(json, const ["single_language_mode"]), "single_language_mode", _readBool, requiredField: false, nullable: true),
-      vocabulary: _readFieldValue<List<String>>(_readField(json, const ["vocabulary"]), "vocabulary", _readStringList, requiredField: false, nullable: true),
+      singleLanguageMode: _readFieldValue<bool>(
+          _readField(json, const ["single_language_mode"]), "single_language_mode", _readBool,
+          requiredField: false, nullable: true),
+      vocabulary: _readFieldValue<List<String>>(_readField(json, const ["vocabulary"]), "vocabulary", _readStringList,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -503,7 +639,8 @@ class GeneratedUserWebhookUrlResponse {
 
   factory GeneratedUserWebhookUrlResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserWebhookUrlResponse(
-      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: false, nullable: true),
+      url: _readFieldValue<String>(_readField(json, const ["url"]), "url", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -527,9 +664,18 @@ class GeneratedDailySummarySettingsResponse {
 
   factory GeneratedDailySummarySettingsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummarySettingsResponse(
-      depth: _required(_readFieldValue<String>(_readField(json, const ["depth"]), "depth", _readString, requiredField: false, nullable: false, defaultValue: "brief"), "depth"),
-      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: true, nullable: false), "enabled"),
-      hour: _required(_readFieldValue<int>(_readField(json, const ["hour"]), "hour", _readInt, requiredField: true, nullable: false), "hour"),
+      depth: _required(
+          _readFieldValue<String>(_readField(json, const ["depth"]), "depth", _readString,
+              requiredField: false, nullable: false, defaultValue: "brief"),
+          "depth"),
+      enabled: _required(
+          _readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool,
+              requiredField: true, nullable: false),
+          "enabled"),
+      hour: _required(
+          _readFieldValue<int>(_readField(json, const ["hour"]), "hour", _readInt,
+              requiredField: true, nullable: false),
+          "hour"),
     );
   }
 
@@ -557,10 +703,20 @@ class GeneratedDailySummaryTestResponse {
 
   factory GeneratedDailySummaryTestResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryTestResponse(
-      conversationsCount: _required(_readFieldValue<int>(_readField(json, const ["conversations_count"]), "conversations_count", _readInt, requiredField: true, nullable: false), "conversations_count"),
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      summaryId: _required(_readFieldValue<String>(_readField(json, const ["summary_id"]), "summary_id", _readString, requiredField: true, nullable: false), "summary_id"),
+      conversationsCount: _required(
+          _readFieldValue<int>(_readField(json, const ["conversations_count"]), "conversations_count", _readInt,
+              requiredField: true, nullable: false),
+          "conversations_count"),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
+      summaryId: _required(
+          _readFieldValue<String>(_readField(json, const ["summary_id"]), "summary_id", _readString,
+              requiredField: true, nullable: false),
+          "summary_id"),
     );
   }
 
@@ -583,7 +739,10 @@ class GeneratedMentorNotificationSettingsResponse {
 
   factory GeneratedMentorNotificationSettingsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedMentorNotificationSettingsResponse(
-      frequency: _required(_readFieldValue<int>(_readField(json, const ["frequency"]), "frequency", _readInt, requiredField: true, nullable: false), "frequency"),
+      frequency: _required(
+          _readFieldValue<int>(_readField(json, const ["frequency"]), "frequency", _readInt,
+              requiredField: true, nullable: false),
+          "frequency"),
     );
   }
 
@@ -609,10 +768,15 @@ class GeneratedDailySummaryActionItem {
 
   factory GeneratedDailySummaryActionItem.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryActionItem(
-      completed: _readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool, requiredField: false, nullable: true),
-      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: true),
-      priority: _readFieldValue<String>(_readField(json, const ["priority"]), "priority", _readString, requiredField: false, nullable: true),
-      sourceConversationId: _readFieldValue<String>(_readField(json, const ["source_conversation_id"]), "source_conversation_id", _readString, requiredField: false, nullable: true),
+      completed: _readFieldValue<bool>(_readField(json, const ["completed"]), "completed", _readBool,
+          requiredField: false, nullable: true),
+      description: _readFieldValue<String>(_readField(json, const ["description"]), "description", _readString,
+          requiredField: false, nullable: true),
+      priority: _readFieldValue<String>(_readField(json, const ["priority"]), "priority", _readString,
+          requiredField: false, nullable: true),
+      sourceConversationId: _readFieldValue<String>(
+          _readField(json, const ["source_conversation_id"]), "source_conversation_id", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -641,10 +805,15 @@ class GeneratedDailySummaryTopicHighlight {
 
   factory GeneratedDailySummaryTopicHighlight.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryTopicHighlight(
-      conversationIds: _readFieldValue<List<String>>(_readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList, requiredField: false, nullable: true),
-      emoji: _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: true),
-      summary: _readFieldValue<String>(_readField(json, const ["summary"]), "summary", _readString, requiredField: false, nullable: true),
-      topic: _readFieldValue<String>(_readField(json, const ["topic"]), "topic", _readString, requiredField: false, nullable: true),
+      conversationIds: _readFieldValue<List<String>>(
+          _readField(json, const ["conversation_ids"]), "conversation_ids", _readStringList,
+          requiredField: false, nullable: true),
+      emoji: _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString,
+          requiredField: false, nullable: true),
+      summary: _readFieldValue<String>(_readField(json, const ["summary"]), "summary", _readString,
+          requiredField: false, nullable: true),
+      topic: _readFieldValue<String>(_readField(json, const ["topic"]), "topic", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -669,8 +838,11 @@ class GeneratedDailySummaryUnresolvedQuestion {
 
   factory GeneratedDailySummaryUnresolvedQuestion.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryUnresolvedQuestion(
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      question: _readFieldValue<String>(_readField(json, const ["question"]), "question", _readString, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      question: _readFieldValue<String>(_readField(json, const ["question"]), "question", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -693,8 +865,11 @@ class GeneratedDailySummaryDecisionMade {
 
   factory GeneratedDailySummaryDecisionMade.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryDecisionMade(
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      decision: _readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      decision: _readFieldValue<String>(_readField(json, const ["decision"]), "decision", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -717,8 +892,11 @@ class GeneratedDailySummaryKnowledgeNugget {
 
   factory GeneratedDailySummaryKnowledgeNugget.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryKnowledgeNugget(
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      insight: _readFieldValue<String>(_readField(json, const ["insight"]), "insight", _readString, requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      insight: _readFieldValue<String>(_readField(json, const ["insight"]), "insight", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -745,10 +923,20 @@ class GeneratedLearnedMemoryRef {
 
   factory GeneratedLearnedMemoryRef.fromJson(Map<String, dynamic> json) {
     return GeneratedLearnedMemoryRef(
-      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: false, nullable: true),
-      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: ""), "category"),
-      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
-      memoryId: _required(_readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: true, nullable: false), "memory_id"),
+      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime,
+          requiredField: false, nullable: true),
+      category: _required(
+          _readFieldValue<String>(_readField(json, const ["category"]), "category", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "category"),
+      content: _required(
+          _readFieldValue<String>(_readField(json, const ["content"]), "content", _readString,
+              requiredField: true, nullable: false),
+          "content"),
+      memoryId: _required(
+          _readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString,
+              requiredField: true, nullable: false),
+          "memory_id"),
     );
   }
 
@@ -795,19 +983,45 @@ class GeneratedDailySummaryDayStats {
 
   factory GeneratedDailySummaryDayStats.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryDayStats(
-      actionItemsCount: _readFieldValue<int>(_readField(json, const ["action_items_count"]), "action_items_count", _readInt, requiredField: false, nullable: true),
-      actionItemsCreated: _readFieldValue<int>(_readField(json, const ["action_items_created"]), "action_items_created", _readInt, requiredField: false, nullable: true),
-      memoriesCreated: _readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: true),
-      memoriesLearnedCount: _readFieldValue<int>(_readField(json, const ["memories_learned_count"]), "memories_learned_count", _readInt, requiredField: false, nullable: true),
-      proactiveMoments: _readFieldValue<int>(_readField(json, const ["proactive_moments"]), "proactive_moments", _readInt, requiredField: false, nullable: true),
-      reportedDeviceWatchingMinutes: _readFieldValue<int>(_readField(json, const ["reported_device_watching_minutes"]), "reported_device_watching_minutes", _readInt, requiredField: false, nullable: true),
-      summarizedConversations: _readFieldValue<int>(_readField(json, const ["summarized_conversations"]), "summarized_conversations", _readInt, requiredField: false, nullable: true),
-      totalConversations: _readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: true),
-      totalDurationMinutes: _readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: true),
-      watchingCoverage: _readFieldValue<String>(_readField(json, const ["watching_coverage"]), "watching_coverage", _readString, requiredField: false, nullable: true),
-      watchingMinutes: _readFieldValue<int>(_readField(json, const ["watching_minutes"]), "watching_minutes", _readInt, requiredField: false, nullable: true),
-      watchingMinutesBasis: _readFieldValue<String>(_readField(json, const ["watching_minutes_basis"]), "watching_minutes_basis", _readString, requiredField: false, nullable: true),
-      watchingMinutesUnit: _required(_readFieldValue<String>(_readField(json, const ["watching_minutes_unit"]), "watching_minutes_unit", _readString, requiredField: false, nullable: false, defaultValue: "minutes"), "watching_minutes_unit"),
+      actionItemsCount: _readFieldValue<int>(
+          _readField(json, const ["action_items_count"]), "action_items_count", _readInt,
+          requiredField: false, nullable: true),
+      actionItemsCreated: _readFieldValue<int>(
+          _readField(json, const ["action_items_created"]), "action_items_created", _readInt,
+          requiredField: false, nullable: true),
+      memoriesCreated: _readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt,
+          requiredField: false, nullable: true),
+      memoriesLearnedCount: _readFieldValue<int>(
+          _readField(json, const ["memories_learned_count"]), "memories_learned_count", _readInt,
+          requiredField: false, nullable: true),
+      proactiveMoments: _readFieldValue<int>(
+          _readField(json, const ["proactive_moments"]), "proactive_moments", _readInt,
+          requiredField: false, nullable: true),
+      reportedDeviceWatchingMinutes: _readFieldValue<int>(
+          _readField(json, const ["reported_device_watching_minutes"]), "reported_device_watching_minutes", _readInt,
+          requiredField: false, nullable: true),
+      summarizedConversations: _readFieldValue<int>(
+          _readField(json, const ["summarized_conversations"]), "summarized_conversations", _readInt,
+          requiredField: false, nullable: true),
+      totalConversations: _readFieldValue<int>(
+          _readField(json, const ["total_conversations"]), "total_conversations", _readInt,
+          requiredField: false, nullable: true),
+      totalDurationMinutes: _readFieldValue<int>(
+          _readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt,
+          requiredField: false, nullable: true),
+      watchingCoverage: _readFieldValue<String>(
+          _readField(json, const ["watching_coverage"]), "watching_coverage", _readString,
+          requiredField: false, nullable: true),
+      watchingMinutes: _readFieldValue<int>(_readField(json, const ["watching_minutes"]), "watching_minutes", _readInt,
+          requiredField: false, nullable: true),
+      watchingMinutesBasis: _readFieldValue<String>(
+          _readField(json, const ["watching_minutes_basis"]), "watching_minutes_basis", _readString,
+          requiredField: false, nullable: true),
+      watchingMinutesUnit: _required(
+          _readFieldValue<String>(
+              _readField(json, const ["watching_minutes_unit"]), "watching_minutes_unit", _readString,
+              requiredField: false, nullable: false, defaultValue: "minutes"),
+          "watching_minutes_unit"),
     );
   }
 
@@ -847,11 +1061,17 @@ class GeneratedDailySummaryLocationPin {
 
   factory GeneratedDailySummaryLocationPin.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryLocationPin(
-      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString, requiredField: false, nullable: true),
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      latitude: _readFieldValue<double>(_readField(json, const ["latitude"]), "latitude", _readDouble, requiredField: false, nullable: true),
-      longitude: _readFieldValue<double>(_readField(json, const ["longitude"]), "longitude", _readDouble, requiredField: false, nullable: true),
-      time: _readFieldValue<String>(_readField(json, const ["time"]), "time", _readString, requiredField: false, nullable: true),
+      address: _readFieldValue<String>(_readField(json, const ["address"]), "address", _readString,
+          requiredField: false, nullable: true),
+      conversationId: _readFieldValue<String>(
+          _readField(json, const ["conversation_id"]), "conversation_id", _readString,
+          requiredField: false, nullable: true),
+      latitude: _readFieldValue<double>(_readField(json, const ["latitude"]), "latitude", _readDouble,
+          requiredField: false, nullable: true),
+      longitude: _readFieldValue<double>(_readField(json, const ["longitude"]), "longitude", _readDouble,
+          requiredField: false, nullable: true),
+      time: _readFieldValue<String>(_readField(json, const ["time"]), "time", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -901,20 +1121,51 @@ class GeneratedDailySummaryResponse {
 
   factory GeneratedDailySummaryResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummaryResponse(
-      actionItems: _readFieldValue<List<GeneratedDailySummaryActionItem>>(_readField(json, const ["action_items"]), "action_items", (value) => _readObjectList(value, GeneratedDailySummaryActionItem.fromJson), requiredField: false, nullable: true),
-      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
-      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString, requiredField: false, nullable: true),
-      dayEmoji: _readFieldValue<String>(_readField(json, const ["day_emoji"]), "day_emoji", _readString, requiredField: false, nullable: true),
-      decisionsMade: _readFieldValue<List<GeneratedDailySummaryDecisionMade>>(_readField(json, const ["decisions_made"]), "decisions_made", (value) => _readObjectList(value, GeneratedDailySummaryDecisionMade.fromJson), requiredField: false, nullable: true),
-      headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
-      highlights: _readFieldValue<List<GeneratedDailySummaryTopicHighlight>>(_readField(json, const ["highlights"]), "highlights", (value) => _readObjectList(value, GeneratedDailySummaryTopicHighlight.fromJson), requiredField: false, nullable: true),
-      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: false, nullable: true),
-      knowledgeNuggets: _readFieldValue<List<GeneratedDailySummaryKnowledgeNugget>>(_readField(json, const ["knowledge_nuggets"]), "knowledge_nuggets", (value) => _readObjectList(value, GeneratedDailySummaryKnowledgeNugget.fromJson), requiredField: false, nullable: true),
-      locations: _readFieldValue<List<GeneratedDailySummaryLocationPin>>(_readField(json, const ["locations"]), "locations", (value) => _readObjectList(value, GeneratedDailySummaryLocationPin.fromJson), requiredField: false, nullable: true),
-      memoriesLearned: _readFieldValue<List<GeneratedLearnedMemoryRef>>(_readField(json, const ["memories_learned"]), "memories_learned", (value) => _readObjectList(value, GeneratedLearnedMemoryRef.fromJson), requiredField: false, nullable: true),
-      overview: _readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: true),
-      stats: _readFieldValue<GeneratedDailySummaryDayStats>(_readField(json, const ["stats"]), "stats", (value) => _readObject(value, GeneratedDailySummaryDayStats.fromJson), requiredField: false, nullable: true),
-      unresolvedQuestions: _readFieldValue<List<GeneratedDailySummaryUnresolvedQuestion>>(_readField(json, const ["unresolved_questions"]), "unresolved_questions", (value) => _readObjectList(value, GeneratedDailySummaryUnresolvedQuestion.fromJson), requiredField: false, nullable: true),
+      actionItems: _readFieldValue<List<GeneratedDailySummaryActionItem>>(_readField(json, const ["action_items"]),
+          "action_items", (value) => _readObjectList(value, GeneratedDailySummaryActionItem.fromJson),
+          requiredField: false, nullable: true),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime,
+          requiredField: false, nullable: true),
+      date: _readFieldValue<String>(_readField(json, const ["date"]), "date", _readString,
+          requiredField: false, nullable: true),
+      dayEmoji: _readFieldValue<String>(_readField(json, const ["day_emoji"]), "day_emoji", _readString,
+          requiredField: false, nullable: true),
+      decisionsMade: _readFieldValue<List<GeneratedDailySummaryDecisionMade>>(
+          _readField(json, const ["decisions_made"]),
+          "decisions_made",
+          (value) => _readObjectList(value, GeneratedDailySummaryDecisionMade.fromJson),
+          requiredField: false,
+          nullable: true),
+      headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString,
+          requiredField: false, nullable: true),
+      highlights: _readFieldValue<List<GeneratedDailySummaryTopicHighlight>>(_readField(json, const ["highlights"]),
+          "highlights", (value) => _readObjectList(value, GeneratedDailySummaryTopicHighlight.fromJson),
+          requiredField: false, nullable: true),
+      id: _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+          requiredField: false, nullable: true),
+      knowledgeNuggets: _readFieldValue<List<GeneratedDailySummaryKnowledgeNugget>>(
+          _readField(json, const ["knowledge_nuggets"]),
+          "knowledge_nuggets",
+          (value) => _readObjectList(value, GeneratedDailySummaryKnowledgeNugget.fromJson),
+          requiredField: false,
+          nullable: true),
+      locations: _readFieldValue<List<GeneratedDailySummaryLocationPin>>(_readField(json, const ["locations"]),
+          "locations", (value) => _readObjectList(value, GeneratedDailySummaryLocationPin.fromJson),
+          requiredField: false, nullable: true),
+      memoriesLearned: _readFieldValue<List<GeneratedLearnedMemoryRef>>(_readField(json, const ["memories_learned"]),
+          "memories_learned", (value) => _readObjectList(value, GeneratedLearnedMemoryRef.fromJson),
+          requiredField: false, nullable: true),
+      overview: _readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString,
+          requiredField: false, nullable: true),
+      stats: _readFieldValue<GeneratedDailySummaryDayStats>(_readField(json, const ["stats"]), "stats",
+          (value) => _readObject(value, GeneratedDailySummaryDayStats.fromJson),
+          requiredField: false, nullable: true),
+      unresolvedQuestions: _readFieldValue<List<GeneratedDailySummaryUnresolvedQuestion>>(
+          _readField(json, const ["unresolved_questions"]),
+          "unresolved_questions",
+          (value) => _readObjectList(value, GeneratedDailySummaryUnresolvedQuestion.fromJson),
+          requiredField: false,
+          nullable: true),
     );
   }
 
@@ -947,7 +1198,9 @@ class GeneratedDailySummariesResponse {
 
   factory GeneratedDailySummariesResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedDailySummariesResponse(
-      summaries: _readFieldValue<List<GeneratedDailySummaryResponse>>(_readField(json, const ["summaries"]), "summaries", (value) => _readObjectList(value, GeneratedDailySummaryResponse.fromJson), requiredField: false, nullable: true),
+      summaries: _readFieldValue<List<GeneratedDailySummaryResponse>>(_readField(json, const ["summaries"]),
+          "summaries", (value) => _readObjectList(value, GeneratedDailySummaryResponse.fromJson),
+          requiredField: false, nullable: true),
     );
   }
 
@@ -975,11 +1228,24 @@ class GeneratedFairUseDailyGenerationsBudgetResponse {
 
   factory GeneratedFairUseDailyGenerationsBudgetResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFairUseDailyGenerationsBudgetResponse(
-      dailyLimitMs: _required(_readFieldValue<int>(_readField(json, const ["daily_limit_ms"]), "daily_limit_ms", _readInt, requiredField: true, nullable: false), "daily_limit_ms"),
-      exhausted: _required(_readFieldValue<bool>(_readField(json, const ["exhausted"]), "exhausted", _readBool, requiredField: true, nullable: false), "exhausted"),
-      remainingMs: _required(_readFieldValue<int>(_readField(json, const ["remaining_ms"]), "remaining_ms", _readInt, requiredField: true, nullable: false), "remaining_ms"),
-      resetsAt: _readFieldValue<String>(_readField(json, const ["resets_at"]), "resets_at", _readString, requiredField: false, nullable: true),
-      usedMs: _required(_readFieldValue<int>(_readField(json, const ["used_ms"]), "used_ms", _readInt, requiredField: true, nullable: false), "used_ms"),
+      dailyLimitMs: _required(
+          _readFieldValue<int>(_readField(json, const ["daily_limit_ms"]), "daily_limit_ms", _readInt,
+              requiredField: true, nullable: false),
+          "daily_limit_ms"),
+      exhausted: _required(
+          _readFieldValue<bool>(_readField(json, const ["exhausted"]), "exhausted", _readBool,
+              requiredField: true, nullable: false),
+          "exhausted"),
+      remainingMs: _required(
+          _readFieldValue<int>(_readField(json, const ["remaining_ms"]), "remaining_ms", _readInt,
+              requiredField: true, nullable: false),
+          "remaining_ms"),
+      resetsAt: _readFieldValue<String>(_readField(json, const ["resets_at"]), "resets_at", _readString,
+          requiredField: false, nullable: true),
+      usedMs: _required(
+          _readFieldValue<int>(_readField(json, const ["used_ms"]), "used_ms", _readInt,
+              requiredField: true, nullable: false),
+          "used_ms"),
     );
   }
 
@@ -1007,9 +1273,18 @@ class GeneratedFairUseLimitsResponse {
 
   factory GeneratedFairUseLimitsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFairUseLimitsResponse(
-      dailyHours: _required(_readFieldValue<double>(_readField(json, const ["daily_hours"]), "daily_hours", _readDouble, requiredField: true, nullable: false), "daily_hours"),
-      threeDayHours: _required(_readFieldValue<double>(_readField(json, const ["three_day_hours"]), "three_day_hours", _readDouble, requiredField: true, nullable: false), "three_day_hours"),
-      weeklyHours: _required(_readFieldValue<double>(_readField(json, const ["weekly_hours"]), "weekly_hours", _readDouble, requiredField: true, nullable: false), "weekly_hours"),
+      dailyHours: _required(
+          _readFieldValue<double>(_readField(json, const ["daily_hours"]), "daily_hours", _readDouble,
+              requiredField: true, nullable: false),
+          "daily_hours"),
+      threeDayHours: _required(
+          _readFieldValue<double>(_readField(json, const ["three_day_hours"]), "three_day_hours", _readDouble,
+              requiredField: true, nullable: false),
+          "three_day_hours"),
+      weeklyHours: _required(
+          _readFieldValue<double>(_readField(json, const ["weekly_hours"]), "weekly_hours", _readDouble,
+              requiredField: true, nullable: false),
+          "weekly_hours"),
     );
   }
 
@@ -1035,9 +1310,18 @@ class GeneratedFairUseUsagePctResponse {
 
   factory GeneratedFairUseUsagePctResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFairUseUsagePctResponse(
-      daily: _required(_readFieldValue<double>(_readField(json, const ["daily"]), "daily", _readDouble, requiredField: true, nullable: false), "daily"),
-      threeDay: _required(_readFieldValue<double>(_readField(json, const ["three_day"]), "three_day", _readDouble, requiredField: true, nullable: false), "three_day"),
-      weekly: _required(_readFieldValue<double>(_readField(json, const ["weekly"]), "weekly", _readDouble, requiredField: true, nullable: false), "weekly"),
+      daily: _required(
+          _readFieldValue<double>(_readField(json, const ["daily"]), "daily", _readDouble,
+              requiredField: true, nullable: false),
+          "daily"),
+      threeDay: _required(
+          _readFieldValue<double>(_readField(json, const ["three_day"]), "three_day", _readDouble,
+              requiredField: true, nullable: false),
+          "three_day"),
+      weekly: _required(
+          _readFieldValue<double>(_readField(json, const ["weekly"]), "weekly", _readDouble,
+              requiredField: true, nullable: false),
+          "weekly"),
     );
   }
 
@@ -1075,15 +1359,45 @@ class GeneratedFairUseStatusResponse {
 
   factory GeneratedFairUseStatusResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedFairUseStatusResponse(
-      caseRef: _required(_readFieldValue<String>(_readField(json, const ["case_ref"]), "case_ref", _readString, requiredField: true, nullable: false), "case_ref"),
-      dgBudget: _required(_readFieldValue<GeneratedFairUseDailyGenerationsBudgetResponse>(_readField(json, const ["dg_budget"]), "dg_budget", (value) => _readObject(value, GeneratedFairUseDailyGenerationsBudgetResponse.fromJson), requiredField: true, nullable: false), "dg_budget"),
-      limits: _required(_readFieldValue<GeneratedFairUseLimitsResponse>(_readField(json, const ["limits"]), "limits", (value) => _readObject(value, GeneratedFairUseLimitsResponse.fromJson), requiredField: true, nullable: false), "limits"),
-      message: _required(_readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: true, nullable: false), "message"),
-      speechHours3day: _required(_readFieldValue<double>(_readField(json, const ["speech_hours_3day"]), "speech_hours_3day", _readDouble, requiredField: true, nullable: false), "speech_hours_3day"),
-      speechHoursToday: _required(_readFieldValue<double>(_readField(json, const ["speech_hours_today"]), "speech_hours_today", _readDouble, requiredField: true, nullable: false), "speech_hours_today"),
-      speechHoursWeekly: _required(_readFieldValue<double>(_readField(json, const ["speech_hours_weekly"]), "speech_hours_weekly", _readDouble, requiredField: true, nullable: false), "speech_hours_weekly"),
-      stage: _required(_readFieldValue<String>(_readField(json, const ["stage"]), "stage", _readString, requiredField: true, nullable: false), "stage"),
-      usagePct: _required(_readFieldValue<GeneratedFairUseUsagePctResponse>(_readField(json, const ["usage_pct"]), "usage_pct", (value) => _readObject(value, GeneratedFairUseUsagePctResponse.fromJson), requiredField: true, nullable: false), "usage_pct"),
+      caseRef: _required(
+          _readFieldValue<String>(_readField(json, const ["case_ref"]), "case_ref", _readString,
+              requiredField: true, nullable: false),
+          "case_ref"),
+      dgBudget: _required(
+          _readFieldValue<GeneratedFairUseDailyGenerationsBudgetResponse>(_readField(json, const ["dg_budget"]),
+              "dg_budget", (value) => _readObject(value, GeneratedFairUseDailyGenerationsBudgetResponse.fromJson),
+              requiredField: true, nullable: false),
+          "dg_budget"),
+      limits: _required(
+          _readFieldValue<GeneratedFairUseLimitsResponse>(_readField(json, const ["limits"]), "limits",
+              (value) => _readObject(value, GeneratedFairUseLimitsResponse.fromJson),
+              requiredField: true, nullable: false),
+          "limits"),
+      message: _required(
+          _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+              requiredField: true, nullable: false),
+          "message"),
+      speechHours3day: _required(
+          _readFieldValue<double>(_readField(json, const ["speech_hours_3day"]), "speech_hours_3day", _readDouble,
+              requiredField: true, nullable: false),
+          "speech_hours_3day"),
+      speechHoursToday: _required(
+          _readFieldValue<double>(_readField(json, const ["speech_hours_today"]), "speech_hours_today", _readDouble,
+              requiredField: true, nullable: false),
+          "speech_hours_today"),
+      speechHoursWeekly: _required(
+          _readFieldValue<double>(_readField(json, const ["speech_hours_weekly"]), "speech_hours_weekly", _readDouble,
+              requiredField: true, nullable: false),
+          "speech_hours_weekly"),
+      stage: _required(
+          _readFieldValue<String>(_readField(json, const ["stage"]), "stage", _readString,
+              requiredField: true, nullable: false),
+          "stage"),
+      usagePct: _required(
+          _readFieldValue<GeneratedFairUseUsagePctResponse>(_readField(json, const ["usage_pct"]), "usage_pct",
+              (value) => _readObject(value, GeneratedFairUseUsagePctResponse.fromJson),
+              requiredField: true, nullable: false),
+          "usage_pct"),
     );
   }
 
@@ -1175,9 +1489,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -1193,37 +1505,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

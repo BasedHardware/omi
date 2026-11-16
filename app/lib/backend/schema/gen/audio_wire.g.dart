@@ -15,9 +15,14 @@ class GeneratedAudioPrecacheResponse {
 
   factory GeneratedAudioPrecacheResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioPrecacheResponse(
-      audioFileCount: _readFieldValue<int>(_readField(json, const ["audio_file_count"]), "audio_file_count", _readInt, requiredField: false, nullable: true),
-      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      audioFileCount: _readFieldValue<int>(_readField(json, const ["audio_file_count"]), "audio_file_count", _readInt,
+          requiredField: false, nullable: true),
+      message: _readFieldValue<String>(_readField(json, const ["message"]), "message", _readString,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -47,11 +52,22 @@ class GeneratedAudioFileUrlInfo {
 
   factory GeneratedAudioFileUrlInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFileUrlInfo(
-      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
-      duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: false, nullable: false, defaultValue: 0), "duration"),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString,
+          requiredField: false, nullable: true),
+      duration: _required(
+          _readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble,
+              requiredField: false, nullable: false, defaultValue: 0),
+          "duration"),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -81,10 +97,22 @@ class GeneratedConversationAudioSpanInfo {
 
   factory GeneratedConversationAudioSpanInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationAudioSpanInfo(
-      artifactOffset: _required(_readFieldValue<double>(_readField(json, const ["artifact_offset"]), "artifact_offset", _readDouble, requiredField: true, nullable: false), "artifact_offset"),
-      fileId: _required(_readFieldValue<String>(_readField(json, const ["file_id"]), "file_id", _readString, requiredField: true, nullable: false), "file_id"),
-      len: _required(_readFieldValue<double>(_readField(json, const ["len"]), "len", _readDouble, requiredField: true, nullable: false), "len"),
-      wallOffset: _required(_readFieldValue<double>(_readField(json, const ["wall_offset"]), "wall_offset", _readDouble, requiredField: true, nullable: false), "wall_offset"),
+      artifactOffset: _required(
+          _readFieldValue<double>(_readField(json, const ["artifact_offset"]), "artifact_offset", _readDouble,
+              requiredField: true, nullable: false),
+          "artifact_offset"),
+      fileId: _required(
+          _readFieldValue<String>(_readField(json, const ["file_id"]), "file_id", _readString,
+              requiredField: true, nullable: false),
+          "file_id"),
+      len: _required(
+          _readFieldValue<double>(_readField(json, const ["len"]), "len", _readDouble,
+              requiredField: true, nullable: false),
+          "len"),
+      wallOffset: _required(
+          _readFieldValue<double>(_readField(json, const ["wall_offset"]), "wall_offset", _readDouble,
+              requiredField: true, nullable: false),
+          "wall_offset"),
     );
   }
 
@@ -117,12 +145,24 @@ class GeneratedConversationAudioUrlInfo {
 
   factory GeneratedConversationAudioUrlInfo.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationAudioUrlInfo(
-      capturedDuration: _readFieldValue<double>(_readField(json, const ["captured_duration"]), "captured_duration", _readDouble, requiredField: false, nullable: true),
-      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString, requiredField: false, nullable: true),
-      duration: _readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: false, nullable: true),
-      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString, requiredField: false, nullable: true),
-      spans: _required(_readFieldValue<List<GeneratedConversationAudioSpanInfo>>(_readField(json, const ["spans"]), "spans", (value) => _readObjectList(value, GeneratedConversationAudioSpanInfo.fromJson), requiredField: false, nullable: false, defaultValue: const []), "spans"),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      capturedDuration: _readFieldValue<double>(
+          _readField(json, const ["captured_duration"]), "captured_duration", _readDouble,
+          requiredField: false, nullable: true),
+      contentType: _readFieldValue<String>(_readField(json, const ["content_type"]), "content_type", _readString,
+          requiredField: false, nullable: true),
+      duration: _readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble,
+          requiredField: false, nullable: true),
+      signedUrl: _readFieldValue<String>(_readField(json, const ["signed_url"]), "signed_url", _readString,
+          requiredField: false, nullable: true),
+      spans: _required(
+          _readFieldValue<List<GeneratedConversationAudioSpanInfo>>(_readField(json, const ["spans"]), "spans",
+              (value) => _readObjectList(value, GeneratedConversationAudioSpanInfo.fromJson),
+              requiredField: false, nullable: false, defaultValue: const []),
+          "spans"),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
     );
   }
 
@@ -151,9 +191,19 @@ class GeneratedAudioUrlsResponse {
 
   factory GeneratedAudioUrlsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioUrlsResponse(
-      audioFiles: _required(_readFieldValue<List<GeneratedAudioFileUrlInfo>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson), requiredField: true, nullable: false), "audio_files"),
-      conversationAudio: _readFieldValue<GeneratedConversationAudioUrlInfo>(_readField(json, const ["conversation_audio"]), "conversation_audio", (value) => _readObject(value, GeneratedConversationAudioUrlInfo.fromJson), requiredField: false, nullable: true),
-      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt, requiredField: false, nullable: true),
+      audioFiles: _required(
+          _readFieldValue<List<GeneratedAudioFileUrlInfo>>(_readField(json, const ["audio_files"]), "audio_files",
+              (value) => _readObjectList(value, GeneratedAudioFileUrlInfo.fromJson),
+              requiredField: true, nullable: false),
+          "audio_files"),
+      conversationAudio: _readFieldValue<GeneratedConversationAudioUrlInfo>(
+          _readField(json, const ["conversation_audio"]),
+          "conversation_audio",
+          (value) => _readObject(value, GeneratedConversationAudioUrlInfo.fromJson),
+          requiredField: false,
+          nullable: true),
+      pollAfterMs: _readFieldValue<int>(_readField(json, const ["poll_after_ms"]), "poll_after_ms", _readInt,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -239,9 +289,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -257,37 +305,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

@@ -45,24 +45,70 @@ class GeneratedHomeFeedCard {
 
   factory GeneratedHomeFeedCard.fromJson(Map<String, dynamic> json) {
     return GeneratedHomeFeedCard(
-      detailId: _required(_readFieldValue<String>(_readField(json, const ["detail_id"]), "detail_id", _readString, requiredField: true, nullable: false), "detail_id"),
-      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
-      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: false, nullable: true),
-      hasTasks: _required(_readFieldValue<bool>(_readField(json, const ["has_tasks"]), "has_tasks", _readBool, requiredField: false, nullable: false, defaultValue: false), "has_tasks"),
-      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString, requiredField: false, nullable: true),
-      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
-      isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
-      memberCount: _required(_readFieldValue<int>(_readField(json, const ["member_count"]), "member_count", _readInt, requiredField: false, nullable: false, defaultValue: 1), "member_count"),
-      preview: _required(_readFieldValue<String>(_readField(json, const ["preview"]), "preview", _readString, requiredField: false, nullable: false, defaultValue: ""), "preview"),
-      revision: _required(_readFieldValue<String>(_readField(json, const ["revision"]), "revision", _readString, requiredField: true, nullable: false), "revision"),
-      sortAt: _required(_readFieldValue<DateTime>(_readField(json, const ["sort_at"]), "sort_at", _readDateTime, requiredField: true, nullable: false), "sort_at"),
-      sources: _readFieldValue<List<String>>(_readField(json, const ["sources"]), "sources", _readStringList, requiredField: false, nullable: true),
-      starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
-      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
-      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
-      summaryAvailable: _required(_readFieldValue<bool>(_readField(json, const ["summary_available"]), "summary_available", _readBool, requiredField: false, nullable: false, defaultValue: false), "summary_available"),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
+      detailId: _required(
+          _readFieldValue<String>(_readField(json, const ["detail_id"]), "detail_id", _readString,
+              requiredField: true, nullable: false),
+          "detail_id"),
+      emoji: _required(
+          _readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "emoji"),
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime,
+          requiredField: false, nullable: true),
+      hasTasks: _required(
+          _readFieldValue<bool>(_readField(json, const ["has_tasks"]), "has_tasks", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "has_tasks"),
+      homeStep: _readFieldValue<String>(_readField(json, const ["home_step"]), "home_step", _readString,
+          requiredField: false, nullable: true),
+      id: _required(
+          _readFieldValue<String>(_readField(json, const ["id"]), "id", _readString,
+              requiredField: true, nullable: false),
+          "id"),
+      isLocked: _required(
+          _readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "is_locked"),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: true, nullable: false),
+          "kind"),
+      memberCount: _required(
+          _readFieldValue<int>(_readField(json, const ["member_count"]), "member_count", _readInt,
+              requiredField: false, nullable: false, defaultValue: 1),
+          "member_count"),
+      preview: _required(
+          _readFieldValue<String>(_readField(json, const ["preview"]), "preview", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "preview"),
+      revision: _required(
+          _readFieldValue<String>(_readField(json, const ["revision"]), "revision", _readString,
+              requiredField: true, nullable: false),
+          "revision"),
+      sortAt: _required(
+          _readFieldValue<DateTime>(_readField(json, const ["sort_at"]), "sort_at", _readDateTime,
+              requiredField: true, nullable: false),
+          "sort_at"),
+      sources: _readFieldValue<List<String>>(_readField(json, const ["sources"]), "sources", _readStringList,
+          requiredField: false, nullable: true),
+      starred: _required(
+          _readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "starred"),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime,
+          requiredField: false, nullable: true),
+      status: _required(
+          _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString,
+              requiredField: true, nullable: false),
+          "status"),
+      summaryAvailable: _required(
+          _readFieldValue<bool>(_readField(json, const ["summary_available"]), "summary_available", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "summary_available"),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: false, nullable: false, defaultValue: ""),
+          "title"),
     );
   }
 
@@ -107,11 +153,23 @@ class GeneratedHomeFeedResponse {
 
   factory GeneratedHomeFeedResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedHomeFeedResponse(
-      generation: _required(_readFieldValue<String>(_readField(json, const ["generation"]), "generation", _readString, requiredField: true, nullable: false), "generation"),
-      hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: false, nullable: false, defaultValue: false), "has_more"),
-      items: _readFieldValue<List<GeneratedHomeFeedCard>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedHomeFeedCard.fromJson), requiredField: false, nullable: true),
-      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString, requiredField: false, nullable: true),
-      truncated: _required(_readFieldValue<bool>(_readField(json, const ["truncated"]), "truncated", _readBool, requiredField: false, nullable: false, defaultValue: false), "truncated"),
+      generation: _required(
+          _readFieldValue<String>(_readField(json, const ["generation"]), "generation", _readString,
+              requiredField: true, nullable: false),
+          "generation"),
+      hasMore: _required(
+          _readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "has_more"),
+      items: _readFieldValue<List<GeneratedHomeFeedCard>>(
+          _readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedHomeFeedCard.fromJson),
+          requiredField: false, nullable: true),
+      nextCursor: _readFieldValue<String>(_readField(json, const ["next_cursor"]), "next_cursor", _readString,
+          requiredField: false, nullable: true),
+      truncated: _required(
+          _readFieldValue<bool>(_readField(json, const ["truncated"]), "truncated", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "truncated"),
     );
   }
 
@@ -139,9 +197,18 @@ class GeneratedHomeFeedPreparationResponse {
 
   factory GeneratedHomeFeedPreparationResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedHomeFeedPreparationResponse(
-      hasMore: _required(_readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool, requiredField: true, nullable: false), "has_more"),
-      processed: _required(_readFieldValue<int>(_readField(json, const ["processed"]), "processed", _readInt, requiredField: true, nullable: false), "processed"),
-      ready: _required(_readFieldValue<bool>(_readField(json, const ["ready"]), "ready", _readBool, requiredField: true, nullable: false), "ready"),
+      hasMore: _required(
+          _readFieldValue<bool>(_readField(json, const ["has_more"]), "has_more", _readBool,
+              requiredField: true, nullable: false),
+          "has_more"),
+      processed: _required(
+          _readFieldValue<int>(_readField(json, const ["processed"]), "processed", _readInt,
+              requiredField: true, nullable: false),
+          "processed"),
+      ready: _required(
+          _readFieldValue<bool>(_readField(json, const ["ready"]), "ready", _readBool,
+              requiredField: true, nullable: false),
+          "ready"),
     );
   }
 
@@ -227,9 +294,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -245,37 +310,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

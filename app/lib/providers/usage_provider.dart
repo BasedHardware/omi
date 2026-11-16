@@ -272,7 +272,7 @@ class UsageProvider with ChangeNotifier {
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {
     // The phone choice belongs to the account that made it; the next account starts on Omi.
-    unawaited(PhoneTranscriptionChoice.release());
+    unawaited(PhoneTranscriptionChoice.release(SharedPreferencesUtil()));
     SharedPreferencesUtil().phoneModelOnWifiPending = '';
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();

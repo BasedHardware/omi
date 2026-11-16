@@ -25,14 +25,34 @@ class GeneratedChatAtCap {
 
   factory GeneratedChatAtCap.fromJson(Map<String, dynamic> json) {
     return GeneratedChatAtCap(
-      body: _required(_readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: true, nullable: false), "body"),
-      resetAt: _required(_readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt, requiredField: true, nullable: false), "reset_at"),
-      resetLine: _required(_readFieldValue<String>(_readField(json, const ["reset_line"]), "reset_line", _readString, requiredField: true, nullable: false), "reset_line"),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: false, nullable: false, defaultValue: "paused"), "state"),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
-      trigger: _required(_readFieldValue<String>(_readField(json, const ["trigger"]), "trigger", _readString, requiredField: false, nullable: false, defaultValue: "usage_budget"), "trigger"),
-      upgradeLabel: _readFieldValue<String>(_readField(json, const ["upgrade_label"]), "upgrade_label", _readString, requiredField: false, nullable: true),
-      upgradePlan: _readFieldValue<String>(_readField(json, const ["upgrade_plan"]), "upgrade_plan", _readString, requiredField: false, nullable: true),
+      body: _required(
+          _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString,
+              requiredField: true, nullable: false),
+          "body"),
+      resetAt: _required(
+          _readFieldValue<int>(_readField(json, const ["reset_at"]), "reset_at", _readInt,
+              requiredField: true, nullable: false),
+          "reset_at"),
+      resetLine: _required(
+          _readFieldValue<String>(_readField(json, const ["reset_line"]), "reset_line", _readString,
+              requiredField: true, nullable: false),
+          "reset_line"),
+      state: _required(
+          _readFieldValue<String>(_readField(json, const ["state"]), "state", _readString,
+              requiredField: false, nullable: false, defaultValue: "paused"),
+          "state"),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: true, nullable: false),
+          "title"),
+      trigger: _required(
+          _readFieldValue<String>(_readField(json, const ["trigger"]), "trigger", _readString,
+              requiredField: false, nullable: false, defaultValue: "usage_budget"),
+          "trigger"),
+      upgradeLabel: _readFieldValue<String>(_readField(json, const ["upgrade_label"]), "upgrade_label", _readString,
+          requiredField: false, nullable: true),
+      upgradePlan: _readFieldValue<String>(_readField(json, const ["upgrade_plan"]), "upgrade_plan", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -69,12 +89,31 @@ class GeneratedStorefrontCapChoice {
 
   factory GeneratedStorefrontCapChoice.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontCapChoice(
-      body: _required(_readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: true, nullable: false), "body"),
-      dontAskAgainLabel: _required(_readFieldValue<String>(_readField(json, const ["dont_ask_again_label"]), "dont_ask_again_label", _readString, requiredField: true, nullable: false), "dont_ask_again_label"),
-      onDeviceLabel: _required(_readFieldValue<String>(_readField(json, const ["on_device_label"]), "on_device_label", _readString, requiredField: true, nullable: false), "on_device_label"),
-      onDeviceUpgradeLine: _required(_readFieldValue<String>(_readField(json, const ["on_device_upgrade_line"]), "on_device_upgrade_line", _readString, requiredField: true, nullable: false), "on_device_upgrade_line"),
-      title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: true, nullable: false), "title"),
-      upgradeLabel: _required(_readFieldValue<String>(_readField(json, const ["upgrade_label"]), "upgrade_label", _readString, requiredField: true, nullable: false), "upgrade_label"),
+      body: _required(
+          _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString,
+              requiredField: true, nullable: false),
+          "body"),
+      dontAskAgainLabel: _required(
+          _readFieldValue<String>(_readField(json, const ["dont_ask_again_label"]), "dont_ask_again_label", _readString,
+              requiredField: true, nullable: false),
+          "dont_ask_again_label"),
+      onDeviceLabel: _required(
+          _readFieldValue<String>(_readField(json, const ["on_device_label"]), "on_device_label", _readString,
+              requiredField: true, nullable: false),
+          "on_device_label"),
+      onDeviceUpgradeLine: _required(
+          _readFieldValue<String>(
+              _readField(json, const ["on_device_upgrade_line"]), "on_device_upgrade_line", _readString,
+              requiredField: true, nullable: false),
+          "on_device_upgrade_line"),
+      title: _required(
+          _readFieldValue<String>(_readField(json, const ["title"]), "title", _readString,
+              requiredField: true, nullable: false),
+          "title"),
+      upgradeLabel: _required(
+          _readFieldValue<String>(_readField(json, const ["upgrade_label"]), "upgrade_label", _readString,
+              requiredField: true, nullable: false),
+          "upgrade_label"),
     );
   }
 
@@ -119,17 +158,38 @@ class GeneratedStorefrontCurrent {
 
   factory GeneratedStorefrontCurrent.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontCurrent(
-      amountMinor: _readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: false, nullable: true),
-      cancelAtPeriodEnd: _required(_readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool, requiredField: false, nullable: false, defaultValue: false), "cancel_at_period_end"),
-      currency: _readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: false, nullable: true),
-      interval: _readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: false, nullable: true),
-      legacy: _required(_readFieldValue<bool>(_readField(json, const ["legacy"]), "legacy", _readBool, requiredField: true, nullable: false), "legacy"),
-      legacyNote: _readFieldValue<String>(_readField(json, const ["legacy_note"]), "legacy_note", _readString, requiredField: false, nullable: true),
-      line: _required(_readFieldValue<String>(_readField(json, const ["line"]), "line", _readString, requiredField: true, nullable: false), "line"),
-      lineTemplate: _readFieldValue<String>(_readField(json, const ["line_template"]), "line_template", _readString, requiredField: false, nullable: true),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
-      planId: _required(_readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: true, nullable: false), "plan_id"),
-      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
+      amountMinor: _readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt,
+          requiredField: false, nullable: true),
+      cancelAtPeriodEnd: _required(
+          _readFieldValue<bool>(_readField(json, const ["cancel_at_period_end"]), "cancel_at_period_end", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "cancel_at_period_end"),
+      currency: _readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString,
+          requiredField: false, nullable: true),
+      interval: _readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString,
+          requiredField: false, nullable: true),
+      legacy: _required(
+          _readFieldValue<bool>(_readField(json, const ["legacy"]), "legacy", _readBool,
+              requiredField: true, nullable: false),
+          "legacy"),
+      legacyNote: _readFieldValue<String>(_readField(json, const ["legacy_note"]), "legacy_note", _readString,
+          requiredField: false, nullable: true),
+      line: _required(
+          _readFieldValue<String>(_readField(json, const ["line"]), "line", _readString,
+              requiredField: true, nullable: false),
+          "line"),
+      lineTemplate: _readFieldValue<String>(_readField(json, const ["line_template"]), "line_template", _readString,
+          requiredField: false, nullable: true),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
+      planId: _required(
+          _readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString,
+              requiredField: true, nullable: false),
+          "plan_id"),
+      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -183,19 +243,43 @@ class GeneratedStorefrontPrice {
 
   factory GeneratedStorefrontPrice.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontPrice(
-      amountMinor: _required(_readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: true, nullable: false), "amount_minor"),
-      confirmLineTemplates: _readFieldValue<List<String>>(_readField(json, const ["confirm_line_templates"]), "confirm_line_templates", _readStringList, requiredField: false, nullable: true),
-      confirmLines: _readFieldValue<List<String>>(_readField(json, const ["confirm_lines"]), "confirm_lines", _readStringList, requiredField: false, nullable: true),
-      ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
-      ctaLabelTemplate: _readFieldValue<String>(_readField(json, const ["cta_label_template"]), "cta_label_template", _readString, requiredField: false, nullable: true),
-      currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: true, nullable: false), "currency"),
-      headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
-      interval: _required(_readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: true, nullable: false), "interval"),
-      monthsFree: _readFieldValue<int>(_readField(json, const ["months_free"]), "months_free", _readInt, requiredField: false, nullable: true),
-      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString, requiredField: false, nullable: true),
-      renewalLine: _readFieldValue<String>(_readField(json, const ["renewal_line"]), "renewal_line", _readString, requiredField: false, nullable: true),
-      savingMinor: _readFieldValue<int>(_readField(json, const ["saving_minor"]), "saving_minor", _readInt, requiredField: false, nullable: true),
-      subline: _readFieldValue<String>(_readField(json, const ["subline"]), "subline", _readString, requiredField: false, nullable: true),
+      amountMinor: _required(
+          _readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt,
+              requiredField: true, nullable: false),
+          "amount_minor"),
+      confirmLineTemplates: _readFieldValue<List<String>>(
+          _readField(json, const ["confirm_line_templates"]), "confirm_line_templates", _readStringList,
+          requiredField: false, nullable: true),
+      confirmLines: _readFieldValue<List<String>>(
+          _readField(json, const ["confirm_lines"]), "confirm_lines", _readStringList,
+          requiredField: false, nullable: true),
+      ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString,
+          requiredField: false, nullable: true),
+      ctaLabelTemplate: _readFieldValue<String>(
+          _readField(json, const ["cta_label_template"]), "cta_label_template", _readString,
+          requiredField: false, nullable: true),
+      currency: _required(
+          _readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString,
+              requiredField: true, nullable: false),
+          "currency"),
+      headline: _required(
+          _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString,
+              requiredField: true, nullable: false),
+          "headline"),
+      interval: _required(
+          _readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString,
+              requiredField: true, nullable: false),
+          "interval"),
+      monthsFree: _readFieldValue<int>(_readField(json, const ["months_free"]), "months_free", _readInt,
+          requiredField: false, nullable: true),
+      priceId: _readFieldValue<String>(_readField(json, const ["price_id"]), "price_id", _readString,
+          requiredField: false, nullable: true),
+      renewalLine: _readFieldValue<String>(_readField(json, const ["renewal_line"]), "renewal_line", _readString,
+          requiredField: false, nullable: true),
+      savingMinor: _readFieldValue<int>(_readField(json, const ["saving_minor"]), "saving_minor", _readInt,
+          requiredField: false, nullable: true),
+      subline: _readFieldValue<String>(_readField(json, const ["subline"]), "subline", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -245,16 +329,38 @@ class GeneratedStorefrontResponse {
 
   factory GeneratedStorefrontResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontResponse(
-      atCap: _readFieldValue<GeneratedStorefrontCapChoice>(_readField(json, const ["at_cap"]), "at_cap", (value) => _readObject(value, GeneratedStorefrontCapChoice.fromJson), requiredField: false, nullable: true),
-      catalogRevision: _required(_readFieldValue<int>(_readField(json, const ["catalog_revision"]), "catalog_revision", _readInt, requiredField: true, nullable: false), "catalog_revision"),
-      chatAtCap: _readFieldValue<GeneratedChatAtCap>(_readField(json, const ["chat_at_cap"]), "chat_at_cap", (value) => _readObject(value, GeneratedChatAtCap.fromJson), requiredField: false, nullable: true),
-      current: _readFieldValue<GeneratedStorefrontCurrent>(_readField(json, const ["current"]), "current", (value) => _readObject(value, GeneratedStorefrontCurrent.fromJson), requiredField: false, nullable: true),
-      header: _readFieldValue<String>(_readField(json, const ["header"]), "header", _readString, requiredField: false, nullable: true),
-      schemaVersion: _required(_readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt, requiredField: false, nullable: false, defaultValue: 2), "schema_version"),
-      showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
-      tiers: _readFieldValue<List<GeneratedStorefrontTier>>(_readField(json, const ["tiers"]), "tiers", (value) => _readObjectList(value, GeneratedStorefrontTier.fromJson), requiredField: false, nullable: true),
-      usage: _readFieldValue<GeneratedStorefrontUsage>(_readField(json, const ["usage"]), "usage", (value) => _readObject(value, GeneratedStorefrontUsage.fromJson), requiredField: false, nullable: true),
-      yearlyToggleLabel: _readFieldValue<String>(_readField(json, const ["yearly_toggle_label"]), "yearly_toggle_label", _readString, requiredField: false, nullable: true),
+      atCap: _readFieldValue<GeneratedStorefrontCapChoice>(_readField(json, const ["at_cap"]), "at_cap",
+          (value) => _readObject(value, GeneratedStorefrontCapChoice.fromJson),
+          requiredField: false, nullable: true),
+      catalogRevision: _required(
+          _readFieldValue<int>(_readField(json, const ["catalog_revision"]), "catalog_revision", _readInt,
+              requiredField: true, nullable: false),
+          "catalog_revision"),
+      chatAtCap: _readFieldValue<GeneratedChatAtCap>(_readField(json, const ["chat_at_cap"]), "chat_at_cap",
+          (value) => _readObject(value, GeneratedChatAtCap.fromJson),
+          requiredField: false, nullable: true),
+      current: _readFieldValue<GeneratedStorefrontCurrent>(_readField(json, const ["current"]), "current",
+          (value) => _readObject(value, GeneratedStorefrontCurrent.fromJson),
+          requiredField: false, nullable: true),
+      header: _readFieldValue<String>(_readField(json, const ["header"]), "header", _readString,
+          requiredField: false, nullable: true),
+      schemaVersion: _required(
+          _readFieldValue<int>(_readField(json, const ["schema_version"]), "schema_version", _readInt,
+              requiredField: false, nullable: false, defaultValue: 2),
+          "schema_version"),
+      showSubscriptionUi: _required(
+          _readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool,
+              requiredField: false, nullable: false, defaultValue: true),
+          "show_subscription_ui"),
+      tiers: _readFieldValue<List<GeneratedStorefrontTier>>(_readField(json, const ["tiers"]), "tiers",
+          (value) => _readObjectList(value, GeneratedStorefrontTier.fromJson),
+          requiredField: false, nullable: true),
+      usage: _readFieldValue<GeneratedStorefrontUsage>(
+          _readField(json, const ["usage"]), "usage", (value) => _readObject(value, GeneratedStorefrontUsage.fromJson),
+          requiredField: false, nullable: true),
+      yearlyToggleLabel: _readFieldValue<String>(
+          _readField(json, const ["yearly_toggle_label"]), "yearly_toggle_label", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -305,18 +411,51 @@ class GeneratedStorefrontTier {
 
   factory GeneratedStorefrontTier.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontTier(
-      action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
-      blockedLine: _readFieldValue<String>(_readField(json, const ["blocked_line"]), "blocked_line", _readString, requiredField: false, nullable: true),
-      bullets: _required(_readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList, requiredField: true, nullable: false), "bullets"),
-      compact: _required(_readFieldValue<bool>(_readField(json, const ["compact"]), "compact", _readBool, requiredField: false, nullable: false, defaultValue: false), "compact"),
-      ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
-      hoursLine: _required(_readFieldValue<String>(_readField(json, const ["hours_line"]), "hours_line", _readString, requiredField: true, nullable: false), "hours_line"),
-      isCurrent: _required(_readFieldValue<bool>(_readField(json, const ["is_current"]), "is_current", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_current"),
-      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: true, nullable: false), "name"),
-      planId: _required(_readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString, requiredField: true, nullable: false), "plan_id"),
-      prices: _required(_readFieldValue<List<GeneratedStorefrontPrice>>(_readField(json, const ["prices"]), "prices", (value) => _readObjectList(value, GeneratedStorefrontPrice.fromJson), requiredField: true, nullable: false), "prices"),
-      recommended: _required(_readFieldValue<bool>(_readField(json, const ["recommended"]), "recommended", _readBool, requiredField: false, nullable: false, defaultValue: false), "recommended"),
-      tierId: _required(_readFieldValue<String>(_readField(json, const ["tier_id"]), "tier_id", _readString, requiredField: true, nullable: false), "tier_id"),
+      action: _required(
+          _readFieldValue<String>(_readField(json, const ["action"]), "action", _readString,
+              requiredField: true, nullable: false),
+          "action"),
+      blockedLine: _readFieldValue<String>(_readField(json, const ["blocked_line"]), "blocked_line", _readString,
+          requiredField: false, nullable: true),
+      bullets: _required(
+          _readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList,
+              requiredField: true, nullable: false),
+          "bullets"),
+      compact: _required(
+          _readFieldValue<bool>(_readField(json, const ["compact"]), "compact", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "compact"),
+      ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString,
+          requiredField: false, nullable: true),
+      hoursLine: _required(
+          _readFieldValue<String>(_readField(json, const ["hours_line"]), "hours_line", _readString,
+              requiredField: true, nullable: false),
+          "hours_line"),
+      isCurrent: _required(
+          _readFieldValue<bool>(_readField(json, const ["is_current"]), "is_current", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "is_current"),
+      name: _required(
+          _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString,
+              requiredField: true, nullable: false),
+          "name"),
+      planId: _required(
+          _readFieldValue<String>(_readField(json, const ["plan_id"]), "plan_id", _readString,
+              requiredField: true, nullable: false),
+          "plan_id"),
+      prices: _required(
+          _readFieldValue<List<GeneratedStorefrontPrice>>(_readField(json, const ["prices"]), "prices",
+              (value) => _readObjectList(value, GeneratedStorefrontPrice.fromJson),
+              requiredField: true, nullable: false),
+          "prices"),
+      recommended: _required(
+          _readFieldValue<bool>(_readField(json, const ["recommended"]), "recommended", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "recommended"),
+      tierId: _required(
+          _readFieldValue<String>(_readField(json, const ["tier_id"]), "tier_id", _readString,
+              requiredField: true, nullable: false),
+          "tier_id"),
     );
   }
 
@@ -365,16 +504,30 @@ class GeneratedStorefrontUsage {
 
   factory GeneratedStorefrontUsage.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontUsage(
-      hoursLeft: _readFieldValue<int>(_readField(json, const ["hours_left"]), "hours_left", _readInt, requiredField: false, nullable: true),
-      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "unavailable"), "kind"),
-      mcpCapReached: _required(_readFieldValue<bool>(_readField(json, const ["mcp_cap_reached"]), "mcp_cap_reached", _readBool, requiredField: false, nullable: false, defaultValue: false), "mcp_cap_reached"),
-      meterLine: _readFieldValue<String>(_readField(json, const ["meter_line"]), "meter_line", _readString, requiredField: false, nullable: true),
-      moreLabel: _readFieldValue<String>(_readField(json, const ["more_label"]), "more_label", _readString, requiredField: false, nullable: true),
-      nudgeLine: _readFieldValue<String>(_readField(json, const ["nudge_line"]), "nudge_line", _readString, requiredField: false, nullable: true),
-      percent: _readFieldValue<int>(_readField(json, const ["percent"]), "percent", _readInt, requiredField: false, nullable: true),
-      periodId: _readFieldValue<String>(_readField(json, const ["period_id"]), "period_id", _readString, requiredField: false, nullable: true),
-      proGates: _readFieldValue<List<String>>(_readField(json, const ["pro_gates"]), "pro_gates", _readStringList, requiredField: false, nullable: true),
-      resetLabel: _readFieldValue<String>(_readField(json, const ["reset_label"]), "reset_label", _readString, requiredField: false, nullable: true),
+      hoursLeft: _readFieldValue<int>(_readField(json, const ["hours_left"]), "hours_left", _readInt,
+          requiredField: false, nullable: true),
+      kind: _required(
+          _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString,
+              requiredField: false, nullable: false, defaultValue: "unavailable"),
+          "kind"),
+      mcpCapReached: _required(
+          _readFieldValue<bool>(_readField(json, const ["mcp_cap_reached"]), "mcp_cap_reached", _readBool,
+              requiredField: false, nullable: false, defaultValue: false),
+          "mcp_cap_reached"),
+      meterLine: _readFieldValue<String>(_readField(json, const ["meter_line"]), "meter_line", _readString,
+          requiredField: false, nullable: true),
+      moreLabel: _readFieldValue<String>(_readField(json, const ["more_label"]), "more_label", _readString,
+          requiredField: false, nullable: true),
+      nudgeLine: _readFieldValue<String>(_readField(json, const ["nudge_line"]), "nudge_line", _readString,
+          requiredField: false, nullable: true),
+      percent: _readFieldValue<int>(_readField(json, const ["percent"]), "percent", _readInt,
+          requiredField: false, nullable: true),
+      periodId: _readFieldValue<String>(_readField(json, const ["period_id"]), "period_id", _readString,
+          requiredField: false, nullable: true),
+      proGates: _readFieldValue<List<String>>(_readField(json, const ["pro_gates"]), "pro_gates", _readStringList,
+          requiredField: false, nullable: true),
+      resetLabel: _readFieldValue<String>(_readField(json, const ["reset_label"]), "reset_label", _readString,
+          requiredField: false, nullable: true),
     );
   }
 
@@ -467,9 +620,7 @@ DateTime? _readDateTime(dynamic value) {
 
 List<DateTime>? _readDateTimeList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDateTime(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDateTime(item), 'list item')];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {
@@ -485,37 +636,27 @@ T? _readObject<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
 
 List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) fromJson) {
   if (value is! List) return null;
-  return [
-    for (final item in value) fromJson(_required(_readMap(item), 'list item'))
-  ];
+  return [for (final item in value) fromJson(_required(_readMap(item), 'list item'))];
 }
 
 List<String>? _readStringList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readString(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readString(item), 'list item')];
 }
 
 List<double>? _readDoubleList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readDouble(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readDouble(item), 'list item')];
 }
 
 List<int>? _readIntList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readInt(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readInt(item), 'list item')];
 }
 
 List<Map<String, dynamic>>? _readMapList(dynamic value) {
   if (value is! List) return null;
-  return [
-    for (final item in value) _required(_readMap(item), 'list item')
-  ];
+  return [for (final item in value) _required(_readMap(item), 'list item')];
 }
 
 List<dynamic>? _readDynamicList(dynamic value) => value is List ? value : null;

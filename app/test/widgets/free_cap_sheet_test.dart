@@ -79,8 +79,10 @@ void main() {
     });
 
     test('the phone choice made automatically at the cap still gets the sheet', () async {
-      await PhoneTranscriptionChoice.adopt(const CustomSttConfig(
-          provider: SttProvider.onDeviceWhisper, language: 'en', identity: SttModeResolver.freemiumOnDeviceId));
+      await PhoneTranscriptionChoice.adopt(
+          const CustomSttConfig(
+              provider: SttProvider.onDeviceWhisper, language: 'en', identity: SttModeResolver.freemiumOnDeviceId),
+          SharedPreferencesUtil());
       expect(FreemiumSwitchHandler.freeCapEligible(_usage()), isTrue);
     });
   });

@@ -10,8 +10,7 @@ import 'package:omi/models/stt_provider.dart';
 /// later release never touches a Custom STT the reader set up themselves.
 abstract final class PhoneTranscriptionChoice {
   /// True when the persisted STT config is the pinned free-plan phone choice.
-  static bool isPinned([SharedPreferencesUtil? prefs]) {
-    final p = prefs ?? SharedPreferencesUtil();
+  static bool isPinned(SharedPreferencesUtil p) {
     final pin = p.paywallOnDeviceSttConfigId;
     if (pin.isEmpty) return false;
     final config = p.customSttConfig;
@@ -19,8 +18,7 @@ abstract final class PhoneTranscriptionChoice {
   }
 
   /// Persists [config] as the phone choice and pins it. Raw audio stays on the phone.
-  static Future<CustomSttConfig> adopt(CustomSttConfig config, [SharedPreferencesUtil? prefs]) async {
-    final p = prefs ?? SharedPreferencesUtil();
+  static Future<CustomSttConfig> adopt(CustomSttConfig config, SharedPreferencesUtil p) async {
     final persisted = CustomSttConfig.fromJson(config.copyWith(sendRawAudioToOmi: false).toJson());
     await p.saveCustomSttConfig(persisted);
     p.paywallOnDeviceSttConfigId = persisted.sttConfigId;
@@ -29,8 +27,7 @@ abstract final class PhoneTranscriptionChoice {
 
   /// Returns to Omi's cloud transcription when the pinned choice is still the persisted config.
   /// Returns true when the persisted config changed.
-  static Future<bool> release([SharedPreferencesUtil? prefs]) async {
-    final p = prefs ?? SharedPreferencesUtil();
+  static Future<bool> release(SharedPreferencesUtil p) async {
     final changed = isPinned(p);
     if (changed) await p.saveCustomSttConfig(CustomSttConfig.defaultConfig);
     if (p.paywallOnDeviceSttConfigId.isNotEmpty) p.paywallOnDeviceSttConfigId = '';

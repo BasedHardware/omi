@@ -269,7 +269,7 @@ void main() {
     test('switching to the phone at the cap persists and pins the choice', () async {
       final decision = await resolver(allowance: atCap).decide(persistedCustomStt: _default, codec: BleAudioCodec.opus);
       expect(decision.path, SttResolvedPath.onDevice);
-      expect(PhoneTranscriptionChoice.isPinned(), isTrue);
+      expect(PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()), isTrue);
       final persisted = SharedPreferencesUtil().customSttConfig;
       expect(persisted.provider, SttProvider.onDeviceWhisper);
       expect(persisted.sendRawAudioToOmi, isFalse);
@@ -277,14 +277,14 @@ void main() {
     });
 
     test('the pinned choice stays on the phone after the monthly reset', () async {
-      final pinned = await PhoneTranscriptionChoice.adopt(_onDevice());
+      final pinned = await PhoneTranscriptionChoice.adopt(_onDevice(), SharedPreferencesUtil());
       final decision = await resolver(allowance: within).decide(persistedCustomStt: pinned, codec: BleAudioCodec.opus);
       expect(decision.path, SttResolvedPath.honorCustom);
       expect(decision.opensManagedOmiSocket, isFalse);
     });
 
     test('the kill switch returns a pinned phone choice to the cloud', () async {
-      final pinned = await PhoneTranscriptionChoice.adopt(_onDevice());
+      final pinned = await PhoneTranscriptionChoice.adopt(_onDevice(), SharedPreferencesUtil());
       final decision =
           await resolver(allowance: within, killed: true).decide(persistedCustomStt: pinned, codec: BleAudioCodec.opus);
       expect(decision.path, SttResolvedPath.managed);
@@ -293,7 +293,7 @@ void main() {
     test('release leaves a Custom STT the reader set up themselves', () async {
       await SharedPreferencesUtil().saveCustomSttConfig(_custom);
       SharedPreferencesUtil().paywallOnDeviceSttConfigId = 'something-else';
-      expect(await PhoneTranscriptionChoice.release(), isFalse);
+      expect(await PhoneTranscriptionChoice.release(SharedPreferencesUtil()), isFalse);
       expect(SharedPreferencesUtil().customSttConfig.provider, SttProvider.deepgramLive);
       expect(SharedPreferencesUtil().paywallOnDeviceSttConfigId, isEmpty);
     });
