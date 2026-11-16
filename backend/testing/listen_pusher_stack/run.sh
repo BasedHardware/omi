@@ -25,18 +25,15 @@ if ! java -version >/dev/null 2>&1; then
   exit 1
 fi
 
-# The repository firebase.json intentionally has stable shared ports. Generate
-# a minimal config for this one local run instead, so it cannot collide with a
-# developer emulator or any other test worktree.
-emulator_port="$(node -e 'const net = require("net"); const server = net.createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')"
-emulator_config="$(mktemp "${TMPDIR:-/tmp}/omi-listen-pusher-firebase.XXXXXX")"
-trap 'rm -f "$emulator_config"' EXIT
-node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({emulators: {firestore: {host: "127.0.0.1", port: Number(process.argv[2])}}}))' \
-  "$emulator_config" "$emulator_port"
-
 # CI passes ``--state-dir`` (and any other runner argument) to the listen-pusher
 # runner only, never to the subsequent pytest command.  Appending after ``&&``
 # would leak the flag into pytest, which does not understand it.
+#
+# The state root is emitted as a token, not as the caller's path: the inner
+# command is one shell string, so a path with a space is escaped inside it and a
+# literal substitution in the supervisor would silently miss. The supervisor
+# replaces the token with each attempt's own ``<root>/attempt-<n>``.
+attempt_state_token='@ATTEMPT_STATE_DIR@'
 lifecycle_only=false
 if [[ "${1:-}" == "--lifecycle-only" ]]; then
   lifecycle_only=true
@@ -47,30 +44,51 @@ lifecycle_args=""
 lifecycle_state=""
 next_is_state=false
 for argument in "$@"; do
-  printf -v escaped_argument ' %q' "$argument"
-  runner_args+="$escaped_argument"
   if [[ "$next_is_state" == true ]]; then
     lifecycle_state="$argument"
     next_is_state=false
-  elif [[ "$argument" == --state-dir ]]; then
-    next_is_state=true
+    printf -v escaped_argument ' %q' "$attempt_state_token"
   elif [[ "$argument" == --state-dir=* ]]; then
     lifecycle_state="${argument#--state-dir=}"
+    printf -v escaped_argument ' %q' "--state-dir=$attempt_state_token"
+  else
+    printf -v escaped_argument ' %q' "$argument"
+  fi
+  runner_args+="$escaped_argument"
+  if [[ "$argument" == --state-dir ]]; then
+    next_is_state=true
   elif [[ "$argument" == --keep ]]; then
     lifecycle_args+=" --keep"
   fi
 done
 if [[ -n "$lifecycle_state" ]]; then
-  printf -v escaped_state ' %q' "$lifecycle_state/lifecycle-sim"
+  printf -v escaped_state ' %q' "$attempt_state_token/lifecycle-sim"
   lifecycle_args+=" --state-dir$escaped_state"
 fi
 
+runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v && PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${lifecycle_args} --extra-test-module testing/lifecycle_properties/test_properties.py"
+lifecycle_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${runner_args}"
+
+# Firebase needs a concrete loopback port and can only bind it after this script
+# released the probe socket that chose it. A Firestore client that lands on an
+# HTTP responder in that window fails with `Trying to connect an http1.x server
+# (HTTP status 400)` or an opaque 60s RetryError. emulator_supervisor.py gives
+# every attempt a fresh port, proves Firestore gRPC readiness before the
+# gauntlet starts, and retries only that startup class (max 3 attempts / 20 min).
+emulator_args=(
+  --project demo-omi-listen-stack
+  --max-total-seconds "${OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS:-900}"
+  --readiness-timeout "${OMI_STACK_EMULATOR_READINESS_TIMEOUT:-120}"
+)
+if [[ -n "$lifecycle_state" ]]; then
+  emulator_args+=(--log-dir "$lifecycle_state/emulator" --state-dir "$lifecycle_state")
+fi
+
 if [[ "$lifecycle_only" == true ]]; then
-  npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
-    "PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${runner_args}"
+  PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.emulator_supervisor \
+    --inner "$lifecycle_command" "${emulator_args[@]}"
   exit 0
 fi
 
-runner_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.run${runner_args} && PYTHONPATH=backend backend/.venv/bin/python -m pytest backend/tests/unit/test_stale_processing_emulator_concurrency.py -v && PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecycle_sim.run${lifecycle_args} --extra-test-module testing/lifecycle_properties/test_properties.py"
-npx --no-install firebase emulators:exec --only firestore --project demo-omi-listen-stack --config "$emulator_config" \
-  "$runner_command"
+PYTHONPATH=backend backend/.venv/bin/python -m testing.listen_pusher_stack.emulator_supervisor \
+  --inner "$runner_command" "${emulator_args[@]}"

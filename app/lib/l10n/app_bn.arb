@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "আপনার ফোনে রেকর্ড হচ্ছে",
+    "wrapUp": "শেষ করুন",
+    "recordingDiscarded": "রেকর্ডিং বাতিল হয়েছে",
     "undo": "পূর্বাবস্থা",
     "@undo": {
         "description": "Undo button text"
@@ -12215,5 +12218,28 @@
     "monthlySwitchDoneBody": "আজ {price} পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।",
     "processingDeleteScopeChanged": "প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।",
     "syncTooOldExplanation": "This recording is older than the 30-day automatic sync window. The audio is still on this phone.",
-    "syncGetHelp": "Get help"
+    "syncGetHelp": "Get help",
+    "freeCapTitle": "এই মাসের {minutes} মিনিট ব্যবহার হয়ে গেছে",
+    "freeCapBody": "Omi এখনও রেকর্ড করছে। কীভাবে ট্রান্সক্রিপশন চালিয়ে যাবেন বেছে নিন।",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "সীমাহীন ক্লাউড ট্রান্সক্রিপশন",
+    "freeCapProAccuracy": "সেরা নির্ভুলতা",
+    "freeCapProWaiting": "আপনার অপেক্ষমাণ রেকর্ডিং ট্রান্সক্রাইব করে",
+    "freeCapPhoneSubtitle": "বিনামূল্যে। ফিরে না যাওয়া পর্যন্ত চালু থাকবে।",
+    "transcribingOnThisPhone": "এই ফোনে ট্রান্সক্রাইব হচ্ছে",
+    "getPro": "Pro নিন",
+    "unlock": "আনলক",
+    "transcribeWith": "যেটি দিয়ে ট্রান্সক্রাইব হবে",
+    "omiCloud": "Omi ক্লাউড",
+    "thisPhone": "এই ফোন",
+    "onDeviceReady": "প্রস্তুত",
+    "cloudMinutesLeft": "{left}/{limit} মিনিট বাকি · {date} রিসেট হবে",
+    "cloudMinutesAvailable": "{minutes} ক্লাউড মিনিট উপলব্ধ",
+    "switchBack": "ফিরে যান",
+    "setUpThisPhone": "এই ফোন সেট আপ করুন",
+    "speechRecognition": "স্পিচ রিকগনিশন",
+    "audioStaysOnPhone": "অডিও আপনার ফোনেই থাকে",
+    "onDeviceModelDownloadSize": "{size} MB ডাউনলোড",
+    "downloadNow": "এখনই ডাউনলোড করুন",
+    "onWifiLater": "পরে Wi-Fi-তে"
 }

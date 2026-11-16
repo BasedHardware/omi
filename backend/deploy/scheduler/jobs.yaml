@@ -454,11 +454,10 @@ environments:
         attempt_deadline: 600s
         owner: backend/docs/runbooks/error-class-alerts.md
       - name: app-review-config-sweep-hourly
-        lifecycle: planned
         region: us-central1
         schedule: "17 * * * *"
         time_zone: Etc/UTC
-        state: PAUSED
+        state: ENABLED
         target:
           type: http
           uri: https://backend-sync-hhibjajaja-uc.a.run.app/v2/app-review-config/sweep

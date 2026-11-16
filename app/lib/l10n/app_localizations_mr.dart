@@ -1991,6 +1991,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
+  String get recordingWithYourPhone => 'तुमच्या फोनवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get wrapUp => 'पूर्ण करा';
+
+  @override
+  String get recordingDiscarded => 'रेकॉर्डिंग रद्द केले';
+
+  @override
   String get undo => 'पूर्ववत् करा';
 
   @override
@@ -15478,4 +15487,81 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get syncGetHelp => 'Get help';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'या महिन्याची $minutes मिनिटे वापरली गेली आहेत';
+  }
+
+  @override
+  String get freeCapBody => 'Omi अजूनही रेकॉर्ड करत आहे. ट्रान्सक्रिप्शन कसे सुरू ठेवायचे ते निवडा.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'अमर्यादित क्लाउड ट्रान्सक्रिप्शन';
+
+  @override
+  String get freeCapProAccuracy => 'सर्वोत्तम अचूकता';
+
+  @override
+  String get freeCapProWaiting => 'तुमची प्रतीक्षेतील रेकॉर्डिंग्ज ट्रान्सक्राइब करते';
+
+  @override
+  String get freeCapPhoneSubtitle => 'मोफत. तुम्ही परत बदलेपर्यंत चालू राहते.';
+
+  @override
+  String get transcribingOnThisPhone => 'या फोनवर ट्रान्सक्राइब होत आहे';
+
+  @override
+  String get getPro => 'Pro मिळवा';
+
+  @override
+  String get unlock => 'अनलॉक करा';
+
+  @override
+  String get transcribeWith => 'याद्वारे ट्रान्सक्राइब करा';
+
+  @override
+  String get omiCloud => 'Omi क्लाउड';
+
+  @override
+  String get thisPhone => 'हा फोन';
+
+  @override
+  String get onDeviceReady => 'तयार';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit मिनिटे शिल्लक · $date रोजी रीसेट';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes क्लाउड मिनिटे उपलब्ध';
+  }
+
+  @override
+  String get switchBack => 'परत बदला';
+
+  @override
+  String get setUpThisPhone => 'हा फोन सेट करा';
+
+  @override
+  String get speechRecognition => 'स्पीच रेकग्निशन';
+
+  @override
+  String get audioStaysOnPhone => 'ऑडिओ तुमच्या फोनवरच राहतो';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB डाउनलोड';
+  }
+
+  @override
+  String get downloadNow => 'आता डाउनलोड करा';
+
+  @override
+  String get onWifiLater => 'नंतर Wi-Fi वर';
 }

@@ -3841,7 +3841,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         },
         "currentPlan": {
@@ -3855,6 +3856,29 @@
             "operator",
             "architect",
             "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "freeCapSheetChoice",
+      "wire_name": "Free Cap Sheet Choice",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "upgrade",
+            "transcribe_on_phone",
+            "dismissed"
           ]
         }
       },
@@ -3921,7 +3945,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },
@@ -4560,7 +4585,8 @@
             "budget_80",
             "onboarding",
             "aha_first_summary",
-            "free_cap"
+            "free_cap",
+            "on_phone_banner"
           ]
         }
       },

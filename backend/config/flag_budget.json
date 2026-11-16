@@ -26,6 +26,11 @@
   "seed_review_by": "2026-11-15",
   "budget": 161,
   "names": {
+    "MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS": {
+      "owner": "quality-lead / q12-mcp-paging",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_ADMISSION_LANGUAGE_EXCLUSION_ENABLED": {
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"

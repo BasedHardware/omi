@@ -1990,6 +1990,15 @@ class AppLocalizationsUr extends AppLocalizations {
   String get memoryHistory => 'تاریخ';
 
   @override
+  String get recordingWithYourPhone => 'آپ کے فون سے ریکارڈنگ ہو رہی ہے';
+
+  @override
+  String get wrapUp => 'ختم کریں';
+
+  @override
+  String get recordingDiscarded => 'ریکارڈنگ رد کر دی گئی';
+
+  @override
   String get undo => 'واپس لیں';
 
   @override
@@ -15482,4 +15491,81 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncGetHelp => 'Get help';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'آپ نے اس مہینے کے $minutes منٹ استعمال کر لیے ہیں';
+  }
+
+  @override
+  String get freeCapBody => 'Omi اب بھی ریکارڈ کر رہا ہے۔ منتخب کریں کہ ٹرانسکرپشن کیسے جاری رکھیں۔';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'لامحدود کلاؤڈ ٹرانسکرپشن';
+
+  @override
+  String get freeCapProAccuracy => 'بہترین درستگی';
+
+  @override
+  String get freeCapProWaiting => 'آپ کی منتظر ریکارڈنگز ٹرانسکرائب کرتا ہے';
+
+  @override
+  String get freeCapPhoneSubtitle => 'مفت۔ واپس تبدیل کرنے تک آن رہتا ہے۔';
+
+  @override
+  String get transcribingOnThisPhone => 'اس فون پر ٹرانسکرائب ہو رہا ہے';
+
+  @override
+  String get getPro => 'Pro حاصل کریں';
+
+  @override
+  String get unlock => 'ان لاک کریں';
+
+  @override
+  String get transcribeWith => 'اس کے ساتھ ٹرانسکرائب کریں';
+
+  @override
+  String get omiCloud => 'Omi کلاؤڈ';
+
+  @override
+  String get thisPhone => 'یہ فون';
+
+  @override
+  String get onDeviceReady => 'تیار';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit منٹ باقی · $date کو ری سیٹ';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes کلاؤڈ منٹ دستیاب ہیں';
+  }
+
+  @override
+  String get switchBack => 'واپس جائیں';
+
+  @override
+  String get setUpThisPhone => 'یہ فون سیٹ اپ کریں';
+
+  @override
+  String get speechRecognition => 'اسپیچ ریکگنیشن';
+
+  @override
+  String get audioStaysOnPhone => 'آڈیو آپ کے فون پر ہی رہتا ہے';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB ڈاؤن لوڈ';
+  }
+
+  @override
+  String get downloadNow => 'ابھی ڈاؤن لوڈ کریں';
+
+  @override
+  String get onWifiLater => 'بعد میں Wi-Fi پر';
 }

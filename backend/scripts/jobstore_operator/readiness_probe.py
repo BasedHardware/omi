@@ -14,6 +14,9 @@ KSA = 'batch-pipeline-worker'
 HOSTNAME = 'jobstore-reconcile-0'
 STATE_ROOT = '/home/ubuntu/.local/state/omi-jobstore-reconcile'
 TOKEN_LABEL = 'omi/readiness-token'
+# Exact admission labels observed on 2026-11-16. Relocation needs re-review
+# and fresh independent node UID/region/zone evidence, never caller-supplied labels.
+TOPOLOGY_LABELS = {'topology.kubernetes.io/region': 'us-central1', 'topology.kubernetes.io/zone': 'us-central1-a'}
 COMMAND = ['/opt/operator-venv/bin/python', '/opt/runner/process_guard.py', '--readiness']
 TARGET = ['jobstore_prod', 'batch-pipeline-worker@based-hardware.iam', '172.25.29.2']
 INDEXES = ['jobs_due_leased_c', 'jobs_due_result_c', 'jobs_due_retry_c']
@@ -41,7 +44,7 @@ def render(token, node):
         'metadata': {
             'name': name,
             'namespace': NAMESPACE,
-            'labels': {TOKEN_LABEL: token},
+            'labels': {TOKEN_LABEL: token, **TOPOLOGY_LABELS},
             'annotations': {
                 'omi/source-sha': CONTRACT['source_sha'],
                 'omi/supervisor-sha256': CONTRACT['supervisor_sha256'],

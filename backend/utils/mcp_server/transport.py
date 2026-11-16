@@ -40,6 +40,7 @@ from utils.mcp_server.payloads import (
 )
 from utils.mcp_server.registry import (
     MCP_TOOLS,
+    TOOLS_BY_NAME,
     TOOL_REQUIRED_SCOPE,
     execute_tool,
     spec_for_tool,
@@ -110,7 +111,11 @@ def _tools_for_scopes(scopes: List[str]) -> List[Dict[str, Any]]:
     from config.demand_processing import tool_enabled
 
     return [
-        tool
+        (
+            TOOLS_BY_NAME[tool['name']].list_entry()
+            if tool['name'] in {'get_conversation_by_id', 'get_conversations_by_ids'}
+            else tool
+        )
         for tool in MCP_TOOLS
         if TOOL_REQUIRED_SCOPE.get(tool["name"]) in scope_set
         and (tool['name'] != 'process_recent_conversations' or tool_enabled())

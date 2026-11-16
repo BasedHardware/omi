@@ -1978,6 +1978,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'Grabando con tu teléfono';
+
+  @override
+  String get wrapUp => 'Terminar';
+
+  @override
+  String get recordingDiscarded => 'Grabación descartada';
+
+  @override
   String get undo => 'Deshacer';
 
   @override
@@ -15514,4 +15523,81 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get syncGetHelp => 'Get help';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Has usado los $minutes minutos de este mes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi sigue grabando. Elige cómo seguir transcribiendo.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcripción en la nube ilimitada';
+
+  @override
+  String get freeCapProAccuracy => 'La mejor precisión';
+
+  @override
+  String get freeCapProWaiting => 'Transcribe tus grabaciones en espera';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Se mantiene hasta que vuelvas a cambiar.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcribiendo en este teléfono';
+
+  @override
+  String get getPro => 'Obtener Pro';
+
+  @override
+  String get unlock => 'Desbloquear';
+
+  @override
+  String get transcribeWith => 'Transcribir con';
+
+  @override
+  String get omiCloud => 'Nube de Omi';
+
+  @override
+  String get thisPhone => 'Este teléfono';
+
+  @override
+  String get onDeviceReady => 'Listo';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Quedan $left de $limit min · se renueva el $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minutos en la nube disponibles';
+  }
+
+  @override
+  String get switchBack => 'Volver';
+
+  @override
+  String get setUpThisPhone => 'Configurar este teléfono';
+
+  @override
+  String get speechRecognition => 'Reconocimiento de voz';
+
+  @override
+  String get audioStaysOnPhone => 'El audio se queda en tu teléfono';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Descarga de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Descargar ahora';
+
+  @override
+  String get onWifiLater => 'Luego con Wi-Fi';
 }
