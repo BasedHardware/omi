@@ -2538,6 +2538,23 @@ final class PaywallOpened extends RegisteredEvent {
   Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
 }
 
+enum FreeCapSheetChoiceChoice {
+  upgrade("upgrade"),
+  transcribeOnPhone("transcribe_on_phone"),
+  dismissed("dismissed");
+  const FreeCapSheetChoiceChoice(this.wireName);
+  final String wireName;
+}
+
+final class FreeCapSheetChoice extends RegisteredEvent {
+  const FreeCapSheetChoice({required this.choice});
+  final FreeCapSheetChoiceChoice choice;
+  @override
+  String get wireName => "Free Cap Sheet Choice";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
+}
+
 enum UpgradePlanSelectedPlan {
   basic("basic"),
   plus("plus"),

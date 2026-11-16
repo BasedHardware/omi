@@ -3865,6 +3865,29 @@
       "correlation": null
     },
     {
+      "id": "freeCapSheetChoice",
+      "wire_name": "Free Cap Sheet Choice",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "upgrade",
+            "transcribe_on_phone",
+            "dismissed"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "upgradePlanSelected",
       "wire_name": "Upgrade Plan Selected",
       "status": "active",

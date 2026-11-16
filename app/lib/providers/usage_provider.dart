@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
@@ -60,6 +62,8 @@ class UsageProvider with ChangeNotifier {
   @override
   void dispose() {
     _backlogRefreshTimer?.cancel();
+    unawaited(_wifiWait?.cancel());
+    _wifiWait = null;
     _sessionGeneration++;
     super.dispose();
   }
@@ -168,10 +172,11 @@ class UsageProvider with ChangeNotifier {
 
   bool get _isPaidPlan => _subscription?.subscription.plan.isPaid ?? false;
 
-  /// Called after a paid plan or a sign-out released the phone choice, so capture can reconnect
-  /// to Omi's cloud transcription. Wired by the home page to the capture provider.
-  VoidCallback? _onPhoneChoiceReleased;
-  set onPhoneChoiceReleased(VoidCallback? callback) => _onPhoneChoiceReleased = callback;
+  /// Called when the persisted phone choice changed outside Settings (a paid plan or sign-out
+  /// released it, or "On Wi-Fi later" finished), so capture reconnects with the new source. Wired
+  /// by the home page to the capture provider.
+  VoidCallback? _onPhoneChoiceChanged;
+  set onPhoneChoiceChanged(VoidCallback? callback) => _onPhoneChoiceChanged = callback;
 
   bool get canAccessPhoneCalls => phoneCallQuota?.hasAccess ?? _isPaidPlan;
 
@@ -210,27 +215,61 @@ class UsageProvider with ChangeNotifier {
 
   /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only),
   /// and finishes an Android "On Wi-Fi later" choice once its model lands.
-  static Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
+  Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
     final prefs = SharedPreferencesUtil();
-    final pending = prefs.phoneModelOnWifiPending;
-    if (pending.isNotEmpty) {
-      await OnDeviceSttPreparer.prepareAndWait();
-      final freemium = FreemiumTranscriptionService();
-      final config = freemium.readiness == FreemiumReadiness.ready ? freemium.getFreemiumConfig() : null;
-      if (config == null || prefs.phoneModelOnWifiPending != pending) return;
-      prefs.phoneModelOnWifiPending = '';
-      final onPhone = config.copyWith(sendRawAudioToOmi: false);
-      if (pending == 'pin') {
-        await PhoneTranscriptionChoice.adopt(onPhone, prefs);
-      } else {
-        await prefs.saveCustomSttConfig(onPhone);
-      }
-      return;
-    }
+    if (prefs.phoneModelOnWifiPending.isNotEmpty) return _finishPhoneOnWifi(prefs);
     if (!OnDeviceSttPreparer.shouldPrepareFor(allowance)) return;
     if (!FreeTierOnDeviceSttFlag.isEnabled() || await FreeTierOnDeviceSttFlag.killed()) return;
     if (prefs.customSttConfig.isEnabled) return;
     OnDeviceSttPreparer.prepare();
+  }
+
+  StreamSubscription<List<ConnectivityResult>>? _wifiWait;
+
+  /// Android "On Wi-Fi later": downloads the model on Wi-Fi, then persists the phone choice. It
+  /// never overrides a source chosen since, and decides pinning by the plan when it finishes.
+  Future<void> _finishPhoneOnWifi(SharedPreferencesUtil prefs) async {
+    final pending = prefs.phoneModelOnWifiPending;
+    // The reader picked another Custom STT since: that choice stands.
+    bool superseded() => prefs.customSttConfig.isEnabled && !PhoneTranscriptionChoice.isPinned(prefs);
+    if (superseded()) {
+      prefs.phoneModelOnWifiPending = '';
+      return;
+    }
+    if (pending == 'pin' && await FreeTierOnDeviceSttFlag.killed()) return;
+    await OnDeviceSttPreparer.prepareAndWait();
+    if (prefs.phoneModelOnWifiPending != pending) return;
+    final freemium = FreemiumTranscriptionService();
+    final config = freemium.readiness == FreemiumReadiness.ready ? freemium.getFreemiumConfig() : null;
+    if (config == null) return _retryOnWifi();
+    if (superseded()) {
+      prefs.phoneModelOnWifiPending = '';
+      return;
+    }
+    prefs.phoneModelOnWifiPending = '';
+    final onPhone = config.copyWith(sendRawAudioToOmi: false);
+    // Upgraded while the model downloaded: a paid plan with cloud minutes keeps the choice unpinned.
+    final allowance = _subscription?.transcriptionAllowance;
+    final paidManaged = _isPaidPlan && (allowance == null || allowance.isManaged);
+    if (pending == 'pin' && !paidManaged) {
+      await PhoneTranscriptionChoice.adopt(onPhone, prefs);
+    } else {
+      await prefs.saveCustomSttConfig(onPhone);
+    }
+    _onPhoneChoiceChanged?.call();
+  }
+
+  /// The preparer only checks Wi-Fi once; a pending choice listens for the next Wi-Fi itself.
+  void _retryOnWifi() {
+    if (_wifiWait != null) return;
+    _wifiWait = Connectivity().onConnectivityChanged.listen((networks) {
+      if (!networks.contains(ConnectivityResult.wifi)) return;
+      unawaited(_wifiWait?.cancel());
+      _wifiWait = null;
+      if (SharedPreferencesUtil().phoneModelOnWifiPending.isNotEmpty) {
+        unawaited(_finishPhoneOnWifi(SharedPreferencesUtil()));
+      }
+    });
   }
 
   @visibleForTesting
@@ -274,6 +313,8 @@ class UsageProvider with ChangeNotifier {
     // The phone choice belongs to the account that made it; the next account starts on Omi.
     unawaited(PhoneTranscriptionChoice.release(SharedPreferencesUtil()));
     SharedPreferencesUtil().phoneModelOnWifiPending = '';
+    unawaited(_wifiWait?.cancel());
+    _wifiWait = null;
     _backlogIdempotencyKey = null;
     _backlogRefreshTimer?.cancel();
     _backlogRefreshTimer = null;
@@ -380,7 +421,7 @@ class UsageProvider with ChangeNotifier {
     final allowance = _subscription?.transcriptionAllowance;
     final canUseManaged = _isPaidPlan && (allowance == null || allowance.isManaged);
     if (!canUseManaged || prefs.paywallOnDeviceSttConfigId.isEmpty) return;
-    if (await PhoneTranscriptionChoice.release(prefs)) _onPhoneChoiceReleased?.call();
+    if (await PhoneTranscriptionChoice.release(prefs)) _onPhoneChoiceChanged?.call();
   }
 
   /// Alias for fetchSubscription - refreshes subscription data from backend

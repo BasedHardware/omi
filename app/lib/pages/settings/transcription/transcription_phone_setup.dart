@@ -96,7 +96,9 @@ class PhoneModelSetupGroup extends StatelessWidget {
   final int megabytes;
   final bool waitingForWifi;
   final VoidCallback onDownloadNow;
-  final VoidCallback onWifiLater;
+
+  /// Null hides "On Wi-Fi later" (the background download serves only the default model).
+  final VoidCallback? onWifiLater;
 
   @override
   Widget build(BuildContext context) {
@@ -132,13 +134,13 @@ class PhoneModelSetupGroup extends StatelessWidget {
                     label: l10n.downloadNow,
                     onPressed: onDownloadNow),
               ),
-              const SizedBox(width: OmiSpacing.sm),
-              Expanded(
-                child: OmiButton.secondary(
-                    key: const Key('transcription_phone_download_wifi'),
-                    label: l10n.onWifiLater,
-                    onPressed: onWifiLater),
-              ),
+              if (onWifiLater case final later?) ...[
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: OmiButton.secondary(
+                      key: const Key('transcription_phone_download_wifi'), label: l10n.onWifiLater, onPressed: later),
+                ),
+              ],
             ],
           ),
         ),

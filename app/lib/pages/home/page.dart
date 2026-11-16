@@ -781,7 +781,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       updateEntitlement();
       _overflowUsage = usage;
       final capture = _captureProvider!;
-      usage.onPhoneChoiceReleased = () => unawaited(capture.onTranscriptionSettingsChanged());
+      usage.onPhoneChoiceChanged = () => unawaited(capture.onTranscriptionSettingsChanged());
       _overflowEntitlementListener = () {
         updateEntitlement();
         if (mounted) _freemiumHandler.checkAndShowPaywall(context, _captureProvider!);
@@ -1151,7 +1151,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _homeWidgets?.dispose();
     // Clean up freemium handler
     if (_overflowEntitlementListener != null) _overflowUsage?.removeListener(_overflowEntitlementListener!);
-    _overflowUsage?.onPhoneChoiceReleased = null;
+    _overflowUsage?.onPhoneChoiceChanged = null;
     _onDeviceRunner?.dispose();
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak

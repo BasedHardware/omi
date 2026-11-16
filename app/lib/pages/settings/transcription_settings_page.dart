@@ -35,6 +35,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/phone_transcription_choice.dart';
+import 'package:omi/services/capture/stt_mode_resolver.dart';
+import 'package:omi/services/on_device/on_device_model.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/ui/ui.dart';
@@ -75,6 +77,10 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   // This phone's readiness for on-device transcription (iOS: Apple's recognizer).
   AppleSpeechReadiness? _iosReadiness;
+
+  /// The reader picked This phone on this page (or arrived from the cap sheet to pick it). Only that
+  /// choice is pinned for a free plan; an on-device config they set up before is theirs to keep.
+  bool _phoneChosenHere = false;
   bool get _phoneReady => Platform.isIOS ? _iosReadiness?.ready == true : _isModelFilePresent;
 
   // Device codec compatibility
@@ -368,7 +374,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _regenerateRequestJson(_selectedProvider);
     }
 
-    if (_selectedProvider == SttProvider.onDeviceWhisper) {
+    if (_selectedProvider != SttProvider.onDeviceWhisper) return;
+    // iOS has no model file to wait for: a language change applies at once, like the source does.
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      if (_currentMode == TranscriptionMode.onDevice) unawaited(_applySource());
+    } else {
       _checkLocalModel();
     }
   }
@@ -536,16 +546,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   bool get _isPaidPlan => context.read<UsageProvider>().subscription?.subscription.plan.isPaid ?? false;
 
-  /// Persists an on-device config with raw audio kept on the phone. A free plan's choice is pinned
-  /// ([PhoneTranscriptionChoice]) so a later paid plan returns capture to Omi on its own; a paid
-  /// reader's choice is theirs to keep.
+  /// Persists an on-device config with raw audio kept on the phone. A free plan's phone choice is
+  /// pinned ([PhoneTranscriptionChoice]) so a later paid plan returns capture to Omi on its own; a
+  /// paid reader's choice, and an on-device config set up before this flow, are theirs to keep.
   Future<void> _persistOnDevice(CustomSttConfig config) async {
+    final prefs = SharedPreferencesUtil();
     final onPhone = config.copyWith(sendRawAudioToOmi: false);
     if (_isPaidPlan) {
-      await SharedPreferencesUtil().saveCustomSttConfig(onPhone);
-      SharedPreferencesUtil().paywallOnDeviceSttConfigId = '';
+      await prefs.saveCustomSttConfig(onPhone);
+      prefs.paywallOnDeviceSttConfigId = '';
+    } else if (_phoneChosenHere || PhoneTranscriptionChoice.isPinned(prefs)) {
+      await PhoneTranscriptionChoice.adopt(onPhone, prefs);
     } else {
-      await PhoneTranscriptionChoice.adopt(onPhone, SharedPreferencesUtil());
+      await prefs.saveCustomSttConfig(onPhone);
     }
   }
 
@@ -559,7 +572,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     await _saveCurrentProviderConfig();
     if (_currentMode == TranscriptionMode.onDevice) {
       // Android needs its Whisper model first; the download persists the choice when it lands.
-      if (!Platform.isIOS && !(_urlController.text.isNotEmpty && await File(_urlController.text).exists())) return;
+      final needsModel = defaultTargetPlatform != TargetPlatform.iOS;
+      if (needsModel && !(_urlController.text.isNotEmpty && await File(_urlController.text).exists())) return;
       await _persistOnDevice(_buildCurrentConfig());
     } else {
       await PhoneTranscriptionChoice.release(prefs);
@@ -593,6 +607,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     }
 
     setState(() => _isSaving = true);
+    // Saving a cloud provider supersedes a pending "On Wi-Fi later" phone choice.
+    SharedPreferencesUtil().phoneModelOnWifiPending = '';
 
     try {
       // Save current provider's complete config
@@ -907,11 +923,13 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       case TranscriptionMode.onDevice:
         await _switchToOnDevice();
         if (mounted && _currentMode == TranscriptionMode.onDevice) {
+          _phoneChosenHere = true;
           await _applySource();
           await _refreshPhoneReadiness();
         }
         break;
       case TranscriptionMode.cloudProvider:
+        SharedPreferencesUtil().phoneModelOnWifiPending = '';
         if (_selectedProvider == SttProvider.onDeviceWhisper) {
           await _saveCurrentProviderConfig();
           if (!mounted) return;
@@ -945,13 +963,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final mode = _currentMode;
     final l10n = context.l10n;
     final usage = context.watch<UsageProvider>();
+    // A free plan at its cap has no cloud minutes to go back to: the resolver would return it to
+    // the phone at the next recording, so Omi cloud is not offered until the reset.
+    final cloudSpent = mode == TranscriptionMode.onDevice &&
+        !_isPaidPlan &&
+        SttModeResolver.wantsOnDevice(usage.subscription?.transcriptionAllowance);
     Widget row(TranscriptionMode m, String title, {String? subtitle, Key? key}) => OmiSettingsRow(
           key: key,
           title: title,
           subtitle: subtitle,
           trailing: m == mode ? Icon(Icons.check, color: OmiColors.textPrimary, size: 22) : null,
           showChevron: false,
-          onTap: m == mode ? null : () => unawaited(_selectMode(m)),
+          onTap: m == mode || (m == TranscriptionMode.omi && cloudSpent) ? null : () => unawaited(_selectMode(m)),
         );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1304,7 +1327,9 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             megabytes: _estimatedModelMegabytes(_currentModel).round(),
             waitingForWifi: SharedPreferencesUtil().phoneModelOnWifiPending.isNotEmpty,
             onDownloadNow: () => _downloadModel(confirm: false),
-            onWifiLater: _downloadOnWifiLater,
+            // The background download fetches the default model only; another model downloads now.
+            onWifiLater:
+                _currentModel.isEmpty || _currentModel == WhisperOnDeviceModel.modelName ? _downloadOnWifiLater : null,
           )
         else
           WhisperModelStatus(
