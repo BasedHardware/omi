@@ -1,0 +1,39 @@
+{
+  "repository": "BasedHardware/omi",
+  "source_sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
+  "source_tree": "25c38ee2fa9caff96ce6b920fd4f0843e80d6ad0",
+  "build_inputs_sha256": "cf6d520e6a0939bbd3d15429b366477da8719aba58af629521984b4bf1052d90",
+  "supervisor_sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",
+  "oci_manifest_digest": "sha256:8b0bf0de13348de53700dee40b5f83f02c5edf3db184345f5c0769601efaefd0",
+  "archive_sha256": "b9a0b9cd859f8ef022e4cb44692b5641c3ddb576f80d6780da1a8982c7ae2d0b",
+  "archive_bytes": 3514967040,
+  "parts": [
+    {
+      "name": "operator.oci.tar.part-000",
+      "bytes": 1800000000,
+      "sha256": "a9877d1695b08b02d124988e2af965a38065d5388b44971a8248820e76a65bc8",
+      "asset_id": null
+    },
+    {
+      "name": "operator.oci.tar.part-001",
+      "bytes": 1714967040,
+      "sha256": "ea422336d28478b4d2305f5316e9573f961c81534b2c3cd9b855e2b80d304130",
+      "asset_id": null
+    }
+  ],
+  "fixture": {
+    "name": "operator-fixtures.tar.gz",
+    "bytes": 48361,
+    "sha256": "7c6f052598369cc55ce759cf7543914cfc473b52c0a0e276c7b7f9c6f83bf201",
+    "asset_id": null
+  },
+  "release_tag": "jobstore-operator-input-8b0bf0de1334",
+  "release_id": null,
+  "asset_ids": null,
+  "native_qualification": null,
+  "registry_write_authorization": null,
+  "required_disposable_free_bytes": 20963938304,
+  "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
+  "status": "SOURCE_ONLY_NOT_APPROVED_OR_DISPATCHABLE",
+  "loaded_tag": "omi-jobstore-operator:root-97074-20261115-isolated-venv"
+}
