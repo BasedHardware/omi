@@ -23,7 +23,9 @@ def project_alias(store, item, binding, now, *, policy):
             if session.job.get('source_alias'):
                 raise SourceReuseUnavailable('accepted alias source receipt unavailable')
             return False, False
-        canonical = current(view, item, now)
+        # The durable projected output owns visible speech after temporary
+        # ASR artifacts expire. Only new pre-dispatch reuse requires those blobs.
+        canonical = current(view, item, now, require_artifacts=False)
         if canonical is None:
             source_reuse.observe('alias_wait')
             raise SourceReuseUnavailable('canonical source result not ready')

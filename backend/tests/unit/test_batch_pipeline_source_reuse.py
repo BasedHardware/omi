@@ -712,3 +712,14 @@ def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(monkeypatch):
     assert paid.call_count == 1 and paid.call_args.args[1].segment_id == tail_id
     assert store.ref('jobs', COPY).get().to_dict()['state'] == 'result_ready'
     assert store.ref('jobs', tail_id).get().to_dict()['state'] == 'ready'
+
+
+def test_projection_refusal_finishes_after_temporary_canonical_artifacts_expire():
+    store, original = setup_store()
+    copy, binding = prepare_copy(store, original)
+    # New compute-reuse admission must abstain, but a durable canonical output
+    # still owns the source and must not strand or duplicate an existing job.
+    del store.client.rows[store.ref('artifacts', artifact_id(SOURCE, original.audio_uri)).path]
+    assert reuse.current(FirestoreTransaction(store.client, NS, store.client.transaction()), copy, NOW) is None
+    assert project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
+    assert store.ref('results', COPY).get().to_dict()['projection']['speech_seconds'] == 0

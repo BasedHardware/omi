@@ -31,8 +31,10 @@ Admission aliases require a current committed success/silence result, all
 projection parts ready, the original content ledger completed under its own
 funding attribution, current privacy generation and source/output fences, and
 unexpired artifact registrations. Intake also reads/authenticates the result
-object before reuse. A missing object follows normal processing; a dependency
-lost after alias acceptance holds the alias rather than redispatching it.
+object before reuse. A missing object follows normal processing. Projection refusal uses the durable
+canonical output, so temporary artifact expiry cannot strand an already-computed
+duplicate. A canonical ownership/privacy/output dependency lost after alias
+acceptance holds the alias rather than redispatching it.
 
 Each accepted alias retains its own new encrypted audio and a small encrypted
 result marker. It enters `result_ready` outside both the GPU and provider

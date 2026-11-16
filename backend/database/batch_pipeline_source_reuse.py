@@ -45,7 +45,7 @@ def dependencies(job, receipt=None):
     )
 
 
-def current(tx, item: WorkItem, now: float, *, expected=None):
+def current(tx, item: WorkItem, now: float, *, expected=None, require_artifacts=True):
     """Fresh transactional source, generation, deletion, result and accounting proof."""
     key = item.source_reuse_key
     row = tx.get(TABLE, receipt_id(key)) if key else {}
@@ -90,19 +90,20 @@ def current(tx, item: WorkItem, now: float, *, expected=None):
         or (job.get('result') or {}).get('outcome') not in {'success', 'silence'}
     ):
         return None
-    for uri in (job.get('audio_uri'), (job.get('result') or {}).get('result_uri')):
-        if not uri:
-            return None
-        artifact = tx.get('artifacts', artifact_id(sid, uri))
-        if (
-            artifact.get('owner_id') != item.owner_id
-            or artifact.get('privacy_generation') != item.privacy_generation
-            or isinstance(artifact.get('cleanup_after'), datetime)
-            and artifact['cleanup_after'] <= stamp
-            or artifact.get('erasure_requested')
-            or artifact.get('write_pending_until')
-        ):
-            return None
+    if require_artifacts:
+        for uri in (job.get('audio_uri'), (job.get('result') or {}).get('result_uri')):
+            if not uri:
+                return None
+            artifact = tx.get('artifacts', artifact_id(sid, uri))
+            if (
+                artifact.get('owner_id') != item.owner_id
+                or artifact.get('privacy_generation') != item.privacy_generation
+                or isinstance(artifact.get('cleanup_after'), datetime)
+                and artifact['cleanup_after'] <= stamp
+                or artifact.get('erasure_requested')
+                or artifact.get('write_pending_until')
+            ):
+                return None
     ids = sorted(set(dependencies(job, row)) | set(dependencies(asdict(item))))
     tx.check_privacy(item.owner_id, ids, item.privacy_generation)
     return {'segment_id': sid, 'job': job, 'receipt': receipt, 'dependencies': ids}
