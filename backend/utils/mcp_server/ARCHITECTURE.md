@@ -25,6 +25,7 @@ array bodies, status codes, and rate buckets.
 | `payloads.py` | Single leaf for `_tool_result_payload`/`_complete_result` shared by transport and handlers, so the batch response budget measures the real serialized wire form (envelope + SSE frame) |
 | `errors.py` | `ToolExecutionError` → stable model-visible `isError` code mapping (JSON-RPC error envelopes are built in `transport.py`) |
 | `helpers.py` | Shared shaping: date parsing, conversation cards, transcript bounding (int parsing lives in `utils/mcp_memories.py`) |
+| `detail_views.py` | Detail-read views over the transcript pager: `view=outline` (note sections anchored to the segments they cite), `offset` entry points, the `format=lines` rendering, and the `omi_mcp_transcript_pages_total` counter |
 | `constants.py` | Request bounds: batch cap 20, fetch/list/char limits (tools-list TTLs live in `versions.py`) |
 | `handlers/memories.py` | Memory tools incl. ledger-aware `edit_memory` via `update_content` |
 | `handlers/conversations.py` | Conversation list/get/search tools |
@@ -63,6 +64,11 @@ array bodies, status codes, and rate buckets.
   field offsets; no text is discarded at page boundaries. The segment default
   is request-time env `MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS` (500;
   rollback 120). Text defaults stay 24k and the serialized cap stays 120k.
+  `view=outline` returns the note sections with segment anchors and no
+  transcript; `offset` starts a page at a section; `format=lines` renders a
+  page as one line per speaker turn inside the same budget. Cards carry
+  `status` and `duration_seconds`, and the v3 `kind`, `shown_on_home` and
+  `summary_covers_through` where stored.
   List tools offer cursors;
   `get_action_items` also supports `updated_since`.
 - Scope challenges stay protocol errors (`-32003` with `mcp/www_authenticate`);

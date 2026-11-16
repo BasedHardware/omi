@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+from utils.conversations.duration import transcript_span_seconds
 from utils.conversations.render import redact_conversation_for_list
 from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
@@ -91,6 +92,7 @@ def conversation_card(
         "finished_at": conversation.get("finished_at"),
         "language": conversation.get("language"),
         "discarded": bool(conversation.get("discarded", False)),
+        **conversation_state_fields(conversation),
         **conversation_call_fields(conversation),
         "structured": {
             key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured
@@ -99,6 +101,40 @@ def conversation_card(
 
 
 _conversation_card = conversation_card
+
+# Optional card fields: present only on documents that store them (conversations v3),
+# so older cards stay the same size; ``fields`` may still name them.
+OPTIONAL_CARD_FIELDS = ('kind', 'shown_on_home', 'summary_covers_through')
+CONVERSATION_KINDS = ('conversation', 'voice_work', 'media', 'background')
+
+
+def conversation_state_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    """Where a conversation is in its life and what kind of talk it is.
+
+    ``status`` says whether a by-id read is still live (lists hold completed
+    conversations only). ``kind`` separates the wearer's own conversations from
+    media and other people's background talk; ``shown_on_home`` is the positive
+    form of the stored Home-hiding flag. ``duration_seconds`` is the transcript's
+    speech span, so an agent can size its reads; it is null where the transcript is
+    not loaded (list cards), because the wall window can start long before speech.
+    """
+    status = conversation.get('status')
+    status = getattr(status, 'value', status)
+    duration = transcript_span_seconds(conversation.get('transcript_segments'))
+    fields: Dict[str, Any] = {
+        'status': status if isinstance(status, str) else None,
+        'duration_seconds': round(duration) if isinstance(duration, (int, float)) else None,
+    }
+    kind = conversation.get('kind')
+    if kind in CONVERSATION_KINDS:
+        fields['kind'] = kind
+    hidden = conversation.get('home_hidden')
+    if isinstance(hidden, bool):
+        fields['shown_on_home'] = not hidden
+    covers = conversation.get('summary_covers_through')
+    if covers is not None:
+        fields['summary_covers_through'] = covers
+    return fields
 
 
 def public_transcript_timing(fields: Dict[str, Any]) -> Dict[str, Any]:
@@ -307,7 +343,11 @@ def select_card_fields(card: Dict[str, Any], fields: Any) -> Dict[str, Any]:
     aliases = {'title', 'overview', 'category', 'emoji'}
     requested = {'structured.' + key if key in aliases else key for key in fields}
     nested = {key.split('.', 1)[1] for key in requested if key.startswith('structured.')}
-    unknown = {key for key in requested if key not in card and key not in {'structured.' + name for name in aliases}}
+    unknown = {
+        key
+        for key in requested
+        if key not in card and key not in OPTIONAL_CARD_FIELDS and key not in {'structured.' + name for name in aliases}
+    }
     if unknown:
         raise ToolExecutionError('Unknown card fields: ' + ', '.join(sorted(unknown)), code=-32602)
     result = {key: value for key, value in card.items() if key == 'id' or key in requested}
