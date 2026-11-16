@@ -75,7 +75,12 @@ worker:
   # lanes 124.7 vs x 4 lanes 180 audio-h/GPU-h. One step to 3 first to watch shard-claim contention.
   # Decoded memory stays inside each process's shared 1800 audio-second prepare budget and the
   # 7200 audio-second bound. Kill switch / rollback: pipelineDepth 2.
-  pipelineDepth: 3
+  # Four lanes (2026-11-16, L4 stockout caps the fleet at ~9 pods while ready grows):
+  # 9 pods complete ~880 units/min against ~1,220 leases/min with GPU util ~37% and
+  # chain-busy ~35% of target, so per-pod claim overlap is the lever. Bench 2p x 4
+  # lanes 180 audio-h/GPU-h. 4 is the worker's WORKER_PIPELINE_DEPTH_MAX.
+  # Rollback: pipelineDepth 3 (values-only Helm roll).
+  pipelineDepth: 4
   servingMetricsMinRefreshSeconds: 60
   # Matches the prod backend hosts (deploy contract reader-split invariant):
   # window allocation 100, replica recovery explicitly off, and the
