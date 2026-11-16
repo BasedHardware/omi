@@ -7034,6 +7034,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepavyko prisijungti su Apple, bandykite dar kartą.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepavyko gauti Firebase žetono, bandykite dar kartą.';
 
   @override
@@ -13425,6 +13429,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Turite Omi Pro kodą? Įveskite jį kitame ekrane.';
+
+  @override
   String get paywallTrialCancelNote => 'Atšaukti bet kada. Jokių mokesčių, jokių baudų.';
 
   @override
@@ -15421,6 +15428,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atnaujinkite kortelę arba vėl naudokite $plan už $price per mėnesį';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
   }
@@ -15445,4 +15457,34 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pereiti prie mėnesinio';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per mėnesį';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Pakeičia neapmokėtą $yearly metinį mokestį. Atnaujinama kas mėnesį. Atšaukti galite bet kada.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Mokėjimas atmestas. Jūsų planas nepasikeitė.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Dabar mokate kas mėnesį';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šiandien sumokėta $price. Atnaujinama kas mėnesį.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
 }

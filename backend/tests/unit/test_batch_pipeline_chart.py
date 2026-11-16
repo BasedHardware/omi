@@ -282,7 +282,9 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
             assert 'BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED' not in worker_env
             if environment == 'prod':
                 assert worker_env['BATCH_HELD_POLL_SKIP_ENABLED'] == 'true'
-                assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == integration_levers
+                assert json.loads(worker_env['FIRESTORE_READ_LEVERS']) == dict(
+                    integration_levers, usage_month_cache=0, usage_month_total=0
+                )
             else:
                 assert 'BATCH_HELD_POLL_SKIP_ENABLED' not in worker_env
                 assert worker_env['FIRESTORE_READ_LEVERS'] == '{}'
@@ -1029,7 +1031,7 @@ def test_prod_worker_levers_match_backend_integration():
     manifest = json.loads((CHART.parents[1] / 'deploy/firestore_read_levers_manifest.json').read_text())
     worker = manifest['surfaces']['chart/prod/batch-pipeline-worker']
     integration = manifest['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert worker['explicit'] == integration['explicit']
-    assert worker['effective'] == integration['effective']
+    assert worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
+    assert worker['effective'] == dict(integration['effective'], usage_month_cache=0, usage_month_total=0)
     assert worker['explicit']['bpp_decision_cache'] == 100
     assert 'inheritance' not in worker

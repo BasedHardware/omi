@@ -38,6 +38,14 @@ CLOUD_RUN_SYNC_EXPORTER_DEV = (
 )
 
 
+def test_app_review_sweep_counter_is_declared_with_its_outcome_label():
+    from utils.metrics import OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL
+
+    inventory = json.loads((MONITORING / 'metric-inventory.prod.json').read_text())
+    assert 'omi_app_review_config_sweep_total' in inventory['declared_metrics']
+    assert tuple(OMI_APP_REVIEW_CONFIG_SWEEP_TOTAL._labelnames) == ('outcome',)
+
+
 def _cpu_millicores(value: object) -> float:
     text = str(value)
     return float(text[:-1]) if text.endswith('m') else float(text) * 1000
@@ -356,6 +364,7 @@ CLOUD_RUN_SYNC_EXPORTER_FILTER = (
 # series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_batch_timeliness_',
+    'prometheus.googleapis.com/omi_batch_allowance_held_units/',
     'prometheus.googleapis.com/omi_batch_held_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_projection_drain_oldest_age_seconds/',
     'prometheus.googleapis.com/omi_batch_staged_input_clock_invalid_total/',
@@ -391,6 +400,7 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_held_content_',
     'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
     'prometheus.googleapis.com/omi_queue_oldest_ready_',
+    'prometheus.googleapis.com/omi_batch_pipeline_census_',
 ]
 
 

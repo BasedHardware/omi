@@ -7047,6 +7047,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Pierakstīšanās ar Apple neizdevās. Mēģiniet vēlreiz vai turpiniet ar Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.';
 
   @override
@@ -13434,6 +13438,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vai jums ir Omi Pro kods? Ievadiet to nākamajā ekrānā.';
+
+  @override
   String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
 
   @override
@@ -15432,6 +15439,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atjauniniet karti vai atgūstiet $plan par $price mēnesī';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atjauniniet karti, lai atgūtu $plan';
   }
@@ -15456,4 +15468,34 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pāriet uz mēneša maksu';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mēnesī';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Aizstāj neapmaksāto gada maksu $yearly. Atjaunojas katru mēnesi. Atceliet jebkurā laikā.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksājums noraidīts. Jūsu plāns nav mainīts.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Tagad jūs maksājat katru mēnesi';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šodien samaksāts $price. Atjaunojas katru mēnesi.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
 }

@@ -7095,6 +7095,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Échec de la connexion avec Apple, veuillez réessayer.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'La connexion avec Apple n\'a pas fonctionné. Réessayez ou continuez avec Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Échec de la récupération du jeton Firebase, veuillez réessayer.';
 
   @override
@@ -13508,6 +13512,9 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vous avez un code Omi Pro ? Saisissez-le à l\'écran suivant.';
+
+  @override
   String get paywallTrialCancelNote => 'Annulez à tout moment. Sans frais ni pénalités.';
 
   @override
@@ -15524,6 +15531,11 @@ class AppLocalizationsFr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Votre carte a été refusée';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Mettez-la à jour ou retrouvez $plan pour $price par mois';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Mettez-la à jour pour retrouver $plan';
   }
@@ -15548,4 +15560,35 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Passer au mensuel';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price par mois';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Remplace le paiement annuel impayé de $yearly. Renouvellement mensuel. Résiliable à tout moment.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Paiement refusé. Votre forfait n\'a pas changé.';
+
+  @override
+  String get monthlySwitchUnavailable =>
+      'Le changement n\'est pas disponible pour le moment. Mettez plutôt votre carte à jour.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Vous êtes passé au mensuel';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price payés aujourd\'hui. Renouvellement mensuel.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'La liste en cours de traitement a changé. Vérifiez-la et réessayez.';
 }

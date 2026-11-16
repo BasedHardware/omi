@@ -7,7 +7,7 @@ import logging
 import random
 from threading import Lock
 import uuid
-from time import monotonic
+from time import monotonic, time as wall_time
 
 from database.batch_pipeline_store import Store, Transaction, pull_operation
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -24,8 +24,9 @@ from config.batch_pipeline import (
     skip_unchanged_control_write_enabled,
 )
 from config.policy import resolve_batch_policy
+from config import batch_pipeline_protected_share as protected_share
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
-from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations
+from database.batch_pipeline_policy import stage_in_transaction, record_policy_observations, check_unit_privacy
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity, attach_held_vad
 from utils.batch_pipeline.capacity import within_unit_ceiling
@@ -34,6 +35,7 @@ from utils.batch_pipeline.control import activate, consume_frontier_hint, field,
 from utils.batch_pipeline.errors import error_site_field, validate_worker_failure
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
+from database import batch_pipeline_allowance_hold as allowance_hold
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -163,6 +165,14 @@ class _OwnWrites:
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._own(self._tx.ready_predecessor(owner_key, priority, segment_id))
 
+    def protected_ready(self, owner_key: str, priority: int, now: float, *, after=None) -> list[dict]:
+        rows = []
+        for job in self._tx.protected_ready(owner_key, priority, now, after=after):
+            current = self._own(job)
+            if current is not None:
+                rows.append(current)
+        return rows
+
     def service_frontier(self, priority: int) -> float:
         return self._tx.service_frontier(priority)
 
@@ -234,6 +244,48 @@ def owns_lease(job: dict, token: str, now: float) -> bool:
     return job.get('state') == 'leased' and job.get('token') == token and job['lease_until'] > now
 
 
+def _prefer_protected(tx, queue, job, budget, now, max_seconds, shared_gpu):
+    """One indexed page per owner visit, sharing the original FIFO and DRR credit.
+
+    Old workers see a valid ordinary queue at every commit. A failed splice
+    changes no links. The cursor can skip held/invalid/future-due candidates
+    without an unbounded walk or a new priority value that old readers ignore.
+    """
+    if budget[0] <= 0:
+        return None
+    budget[0] -= 1
+    page = tx.protected_ready(job['owner_key'], job['priority'], now, after=queue.get('protected_after'))
+    budget[1] += max(1, len(page))  # Firestore charges at least one read for an empty query.
+    queue['protected_after'] = None
+    for candidate in page:
+        queue['protected_after'] = [candidate['capture_at'], candidate['segment_id']]
+        if not protected_share.eligible(candidate, now) or not _pool_allows(candidate, max_seconds, shared_gpu):
+            continue
+        try:
+            check_unit_privacy(tx, candidate)
+        except BatchPrivacyBlocked:
+            continue
+        if candidate['segment_id'] == job['segment_id']:
+            return candidate
+        previous = tx.ready_predecessor(job['owner_key'], job['priority'], candidate['segment_id'])
+        budget[1] += 2  # LIMIT 2; ambiguous predecessors fail closed.
+        if not previous or previous.get('state') != 'ready' or previous.get('next') != candidate['segment_id']:
+            continue
+        try:
+            check_unit_privacy(tx, previous)
+        except BatchPrivacyBlocked:
+            continue
+        previous['next'] = candidate['next']
+        if queue['tail'] == candidate['segment_id']:
+            queue['tail'] = previous['segment_id']
+        candidate['next'] = queue['head']
+        queue['head'] = candidate['segment_id']
+        tx.put('jobs', previous['segment_id'], previous)
+        tx.put('jobs', candidate['segment_id'], candidate)
+        return candidate
+    return None
+
+
 def _defer(job: dict, now: float, reason: str) -> None:
     job.update(
         state='retry',
@@ -258,6 +310,11 @@ class Scheduler:
         self._contention_backoff_until = 0.0
         self._contention_generation = 0
         self._contention_lock = Lock()
+        self._share_lock = Lock()
+        self._share_turn = 0
+        self._residual_turn = 0
+        self._protected_priority_turn = 0
+        self._protected_retry_after = None
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         return self.store.run(lambda tx: self.enqueue_in_transaction(tx, item, now))
@@ -354,6 +411,9 @@ class Scheduler:
         # Only a dedicated-batch lane may borrow past claimed fresh shards; a
         # shared live GPU takes one short item and stays strictly fresh-first.
         borrow = borrow_when_fresh_busy and shared_gpu_id is None and pull_busy_borrow_enabled()
+        protected = protected_share.enabled() and shared_gpu_id is None
+        discovery_budget = [protected_share.READY_OWNER_BUDGET, 0, protected_share.READY_OWNER_BUDGET]
+        service_plan = {}
         while len(result) < limit:
             remaining = limit - len(result) if multi else 1
             try:
@@ -365,6 +425,10 @@ class Scheduler:
                     max_fresh=remaining,
                     max_backfill=min(remaining, backfill_budget),
                     borrow_when_fresh_busy=borrow,
+                    protected=protected,
+                    discovery_budget=discovery_budget,
+                    service_plan=service_plan,
+                    service_slots=min(backfill_budget, limit - len(result)),
                 )
             except Exception as error:
                 if isinstance(error, FirestoreContentionExhausted):
@@ -414,7 +478,61 @@ class Scheduler:
                 if self._contention_generation == contention_generation:
                     self._contention_failures = 0
                     self._contention_backoff_until = 0.0
+        if protected and self.metrics:
+            try:
+                self.metrics.record_discovery('ready', discovery_budget[1])
+            except Exception:
+                pass
         return result
+
+    def _service_phases(self, protected, plan, slots):
+        # Build the bounded pull-cycle quotas only after FRESH and its busy
+        # fence. Batch within a quota so protection does not serialize every
+        # residual lease into a separate claim/transaction.
+        yield Priority.FRESH, False
+        if not protected:
+            yield Priority.RECENT, False
+            yield Priority.DEEP, False
+            return
+        if not plan:
+            with self._share_lock:
+                percent = protected_share.share_percent()
+                quota = {'protected': 0, Priority.RECENT: 0, Priority.DEEP: 0}
+                residual = (Priority.RECENT, Priority.DEEP)
+                if self._residual_turn % 2:
+                    residual = tuple(reversed(residual))
+                for _ in range(slots):
+                    if (self._share_turn * percent) % 100 < percent:
+                        quota['protected'] += 1
+                    else:
+                        quota[(Priority.RECENT, Priority.DEEP)[self._residual_turn % 2]] += 1
+                        self._residual_turn += 1
+                    self._share_turn += 1
+                urgent = (Priority.RECENT, Priority.DEEP)
+                if self._protected_priority_turn % 2:
+                    urgent = tuple(reversed(urgent))
+                self._protected_priority_turn += bool(quota['protected'])
+                plan.update(quota=quota, urgent=urgent, residual=residual)
+        quota = plan['quota']
+        if quota['protected']:
+            for priority in plan['urgent']:
+                yield priority, True
+            # Neither protected priority supplied a lease (or discovery hit
+            # its budget). Lend unused opportunities, never spend them on holds.
+            with self._share_lock:
+                for _ in range(quota['protected']):
+                    quota[(Priority.RECENT, Priority.DEEP)[self._residual_turn % 2]] += 1
+                    self._residual_turn += 1
+            quota['protected'] = 0
+        for priority in (*plan['residual'], plan['residual'][0]):
+            if not quota[priority]:
+                continue
+            yield priority, False
+            # Empty residual classes lend to the other one. Revisit the first
+            # preference once if the second proved empty after it was served.
+            other = Priority.DEEP if priority == Priority.RECENT else Priority.RECENT
+            quota[other] += quota[priority]
+            quota[priority] = 0
 
     def _pull_one(
         self,
@@ -426,11 +544,22 @@ class Scheduler:
         max_fresh: int = 1,
         max_backfill: int = 1,
         borrow_when_fresh_busy: bool = False,
+        protected: bool = False,
+        discovery_budget: list[int] | None = None,
+        service_plan: dict | None = None,
+        service_slots=0,
     ) -> list[LeasedWork]:
-        for priority in Priority:
+        if discovery_budget is None:
+            discovery_budget = [0, 0, 0]
+        if service_plan is None:
+            service_plan = {}
+        for priority, protected_phase in self._service_phases(protected, service_plan, service_slots or max_backfill):
             if priority != Priority.FRESH and not allow_backfill:
                 break
             max_leases = max_fresh if priority == Priority.FRESH else max_backfill
+            service_key = 'protected' if protected_phase else priority
+            if protected and priority != Priority.FRESH:
+                max_leases = min(max_leases, service_plan['quota'][service_key])
             if max_leases < 1:
                 break
             spread = shard_spread_enabled()
@@ -440,6 +569,8 @@ class Scheduler:
             refreshed = False
             candidate_fanout = control_candidate_fanout()
             for _ in range(128):
+                if protected_phase and (discovery_budget[0] <= 0 or discovery_budget[2] <= 0):
+                    break
                 if spread:
                     if candidates is None:
                         candidates = self.store.control_candidates(
@@ -447,7 +578,10 @@ class Scheduler:
                         )
                     shard = next((key for key in candidates if key not in excluded), None)
                 else:
-                    shard = self.store.control_candidate(int(priority), self.pool, now)
+                    if protected_phase:
+                        shard = self.store.control_candidate(int(priority), self.pool, now, exclude=excluded)
+                    else:
+                        shard = self.store.control_candidate(int(priority), self.pool, now)
                 if shard is None:
                     if (
                         spread
@@ -465,8 +599,25 @@ class Scheduler:
                         refreshed = True
                         continue
                     break
-                receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
+                if protected_phase:
+                    discovery_budget[2] -= 1
+                if protected:
+                    receipts, eligible = self._pull_shard(
+                        now,
+                        shard,
+                        priority,
+                        max_seconds,
+                        shared_gpu_id,
+                        max_leases,
+                        protected_phase=protected_phase,
+                        discovery_budget=discovery_budget,
+                        service=('protected' if protected_phase else priority.name.lower()) if protected else None,
+                    )
+                else:
+                    receipts, eligible = self._pull_shard(now, shard, priority, max_seconds, shared_gpu_id, max_leases)
                 if receipts:
+                    if protected and priority != Priority.FRESH:
+                        service_plan['quota'][service_key] -= len(receipts)
                     for _, enqueued_at, relet in receipts:
                         if self.metrics:
                             try:
@@ -494,7 +645,7 @@ class Scheduler:
                     continue
             else:
                 return []
-            if busy and not borrow_when_fresh_busy:
+            if busy and not borrow_when_fresh_busy and not protected_phase:
                 # Busy higher-priority work is still pending. Do not borrow
                 # backfill capacity while another puller owns its shard.
                 return []
@@ -504,11 +655,26 @@ class Scheduler:
             # first lane never borrows, which keeps fresh-first per pump.
         return []
 
-    def _pull_shard(self, now, shard, priority, max_seconds, shared_gpu_id, max_leases=1):
+    def _pull_shard(
+        self,
+        now,
+        shard,
+        priority,
+        max_seconds,
+        shared_gpu_id,
+        max_leases=1,
+        *,
+        protected_phase=False,
+        discovery_budget: list[int] | None = None,
+        service=None,
+    ):
+        if discovery_budget is None:
+            discovery_budget = [0, 0, 0]
         candidates = {}
         started = monotonic()
         spread = shard_spread_enabled()
         claim_token = uuid.uuid4().hex
+        attempt_budgets: list[list[int]] = []
 
         def current_time():
             return now + max(0.0, monotonic() - started)
@@ -540,6 +706,10 @@ class Scheduler:
             owner_count = max(1, len(ring))
             head_budget = [HEAD_OWNER_BUDGET]
             visits, write_stop = 0, False
+            # Attempt-local accounting: retries cannot exhaust the next callback's budget.
+            protected_budget = [discovery_budget[0], 0]
+            if protected_phase:
+                attempt_budgets.append(protected_budget)
             # MAX_VISITS still bounds the whole walk, and with it the queue
             # writes; later leases spend what the first left, from cached reads.
             while visits < MAX_VISITS and len(receipts) < max_leases:
@@ -550,11 +720,28 @@ class Scheduler:
                 if not ring:
                     break
                 queue_key = ring[0]
+                if (
+                    protected_phase
+                    and protected_budget[0] <= 0
+                    and queue_key not in eligible_queues
+                    and queue_key not in blocked
+                ):
+                    write_stop = True
+                    break
                 queue = tx.get('queues', queue_key)
                 job = tx.get('jobs', queue['head']) if queue.get('head') else {}
                 if not job:
                     ring.pop(0)  # A completed purge may have removed this queue.
                     continue
+                if protected_phase and queue_key not in eligible_queues and queue_key not in blocked:
+                    selected = _prefer_protected(
+                        tx, queue, job, protected_budget, current_time(), max_seconds, bool(gpu_key)
+                    )
+                    tx.put('queues', queue_key, queue)
+                    if selected is None:
+                        blocked.add(queue_key)
+                    else:
+                        job = selected
                 job.setdefault('unit_kind', 'conversation')
                 if queue_key not in eligible_queues and queue_key not in blocked:
                     try:
@@ -571,7 +758,7 @@ class Scheduler:
                         policy = stage_in_transaction(
                             tx, job, 'scheduler', observations=observations, candidates=candidates
                         )
-                        if policy.head_priority:
+                        if policy.head_priority and not protected_phase:
                             job = _prefer_merge_head(
                                 tx,
                                 queue,
@@ -598,6 +785,9 @@ class Scheduler:
                             )
                         except BatchPrivacyBlocked:
                             allowed, park = False, 'privacy'
+                        if allowed:
+                            if protected_phase:
+                                allowed = protected_share.eligible(job, current_time())
                         if allowed:
                             eligible_queues[queue_key] = job['duration_seconds']
                         else:
@@ -629,6 +819,11 @@ class Scheduler:
                                 other['deficit'] += (rounds - 1) * QUANTUM_SECONDS
                                 tx.put('queues', key, other)
                     continue
+                lease_clock = current_time()
+                if protected_phase and not protected_share.eligible(job, lease_clock):
+                    blocked.add(queue_key)
+                    eligible_queues.pop(queue_key, None)
+                    continue
                 queue['deficit'] -= cost
                 queue['head'] = job['next']
                 queue['continuing'] = True
@@ -636,6 +831,17 @@ class Scheduler:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
                 token = uuid.uuid4().hex
+                if (
+                    (job.get('projection_binding') or {}).get('native_record')
+                    and job['attempt'] == 0
+                    and not job.get('admission_refusals')
+                ):
+                    job.setdefault('record_first_leased_at', wall_time())
+                cohort_age = (
+                    lease_clock - protected_share.capture_end(job)
+                    if service is not None and protected_share.eligible(job, lease_clock)
+                    else None
+                )
                 job.update(
                     state='leased',
                     token=token,
@@ -665,20 +871,30 @@ class Scheduler:
                 receipts.append(
                     (LeasedWork(item, token, job['attempt'], job['lease_until']), job['enqueued_at'], relet)
                 )
+                if service is not None:
+                    observations.append(('service_' + service, cohort_age))
                 # The owner's next head is a different unit: it gets its own
                 # privacy, policy and pool checks before it can be leased.
                 eligible_queues.pop(queue_key, None)
                 owner_count = max(1, len(ring))
             # Ring rotations after the last lease commit with their deficits.
             control[field(int(priority), 'active')] = bool(ring)
-            if not receipts and not eligible_queues and not write_stop:
+            if not receipts and not eligible_queues and not write_stop and not protected_phase:
                 control[field(int(priority), self.pool + '_available_at')] = now + 30
             tx.put('control', shard, control)
             # A write stop proved nothing about the unvisited queues: no backoff.
-            return receipts or None, bool(receipts or eligible_queues or write_stop), observations
+            return receipts or None, bool(receipts or eligible_queues or write_stop), observations, protected_budget
 
-        with pull_operation('pull', shard):
-            receipts, eligible, observations = self.store.run(commit)
+        try:
+            with pull_operation('pull', shard):
+                outcome = self.store.run(commit)
+        finally:
+            if protected_phase:
+                discovery_budget[1] += sum(budget[1] for budget in attempt_budgets)
+        receipts, eligible, observations = outcome[:3]
+        if protected_phase and len(outcome) == 4:
+            used, _ = outcome[3]
+            discovery_budget[0] = used
         try:
             record_policy_observations(observations)
         except Exception:
@@ -689,7 +905,10 @@ class Scheduler:
                 if event in {'policy_fallback', 'policy_stage'}:
                     continue
                 try:
-                    self.metrics.record_head(event, priority, age=age)
+                    if event.startswith('service_'):
+                        self.metrics.record_service(event[len('service_') :], age=age)
+                    else:
+                        self.metrics.record_head(event, priority, age=age)
                 except Exception:
                     pass  # Metrics cannot turn an issued lease into a failed pull.
         return receipts, eligible
@@ -862,6 +1081,8 @@ class Scheduler:
             if held_reason:
                 job['compute_decision'] = {'reason': held_reason, 'outcome': 'held', 'at': now}
                 job['last_policy_hold'] = {'reason': held_reason, 'at': now}
+            if allowance_hold.enabled() and held_reason == 'allowance_exhausted' and allowance_hold.park(tx, job, now):
+                return True
             tx.put('jobs', segment_id, job)
             return True
 
@@ -898,8 +1119,27 @@ class Scheduler:
         self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
         candidates, observations = {}, []
+        protected = protected_share.enabled()
         for state in ('leased', 'retry'):
-            for segment_id in self.store.due(state, now, limit):
+            protected_ids = set()
+            if state == 'retry' and protected:
+                size = max(1, min(limit, protected_share.RETRY_PAGE_SIZE))
+                reserved = max(1, size * protected_share.share_percent() // 100)
+                # Preserve at least one oldest-due discovery, even for limit=1.
+                ordinary = self.store.due(state, now, max(1, size - reserved))
+                with self._share_lock:
+                    page = self.store.protected_retries(now, reserved, after=self._protected_retry_after)
+                    self._protected_retry_after = [page[-1]['capture_at'], page[-1]['segment_id']] if page else None
+                protected_ids = {row['segment_id'] for row in page if protected_share.eligible(row, now)}
+                segments = list(dict.fromkeys([*ordinary, *sorted(protected_ids)]))
+                if self.metrics:
+                    try:
+                        self.metrics.record_discovery('retry', max(1, len(ordinary)) + max(1, len(page)))
+                    except Exception:
+                        pass
+            else:
+                segments = self.store.due(state, now, limit)
+            for segment_id in segments:
 
                 def commit(tx: Transaction):
                     observations.clear()
@@ -915,6 +1155,10 @@ class Scheduler:
                             defer=_defer,
                         )
                     elif job.get('state') == 'retry' and job['available_at'] <= now:
+                        if segment_id in protected_ids and not protected_share.eligible(job, now):
+                            return None
+                        if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
+                            return ('allowance_parked', 0, None)
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
@@ -934,6 +1178,15 @@ class Scheduler:
                     recovered += 1
                     observe_recovery(outcome, self.metrics)
         return recovered
+
+    @staticmethod
+    def release_allowance_in_transaction(tx: Transaction, job: dict, now: float) -> None:
+        """Capture-ordered owner release rejoins DRR; current admission is still mandatory."""
+        allowance_hold.restore_retry(job, now)
+        job.update(state='ready', compute_decision={'outcome': 'unattempted'})
+        control = read_control(tx, scheduler_control_key(job['owner_key']))
+        _append(tx, control, job)
+        tx.put('jobs', job['segment_id'], job)
 
     @staticmethod
     def restore_audio_in_transaction(tx: Transaction, job: dict, now: float) -> None:

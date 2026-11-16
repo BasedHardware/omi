@@ -44,6 +44,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+import 'package:omi/services/capture/capture_end.dart';
 import 'package:omi/services/capture/capture_liveness_watchdog.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
@@ -179,12 +180,24 @@ class CaptureController extends ChangeNotifier
   bool _mobileStandardBatchAllowed = false;
   bool _mobileBatchOwnsSocketAudio = false;
 
+  /// End-of-recording clock for pendant audio the batch lane journals. Fed by
+  /// the lane's VAD; reports through [captureEndReporter] when one is installed.
+  final CaptureEndDetector _captureEnd = CaptureEndDetector();
+  CaptureEndReporter? captureEndReporter;
+
+  void _reportCaptureEnd(CaptureEndSignal? signal) {
+    final reporter = captureEndReporter;
+    if (signal == null || reporter == null) return;
+    unawaited(reporter.report(signal));
+  }
+
   void installMobileStandardBatch(MobileStandardBatch lane) {
     if (_captureControllerDisposed) {
       unawaited(lane.close());
       return;
     }
     _mobileStandardBatch = lane;
+    lane.onSpeech = _captureEnd.speech;
     lane.authorize(_mobileStandardBatchAllowed, localPreview: _localPreview.admitted);
     lifetime.listenTo(lane.visibility, lane.visibilityChanged);
     lifetime.own(lane.close);
@@ -342,6 +355,10 @@ class CaptureController extends ChangeNotifier
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
   LocalSttFailure? _localSetupFailure;
+
+  /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
+  bool _transcribingOnPhoneAtCap = false;
+  bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -1822,6 +1839,7 @@ class CaptureController extends ChangeNotifier
 
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2314,7 +2332,12 @@ class CaptureController extends ChangeNotifier
                 _recordingDevice?.type != DeviceType.omi,
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
+            deviceId: deviceId,
+            packetCounter: snapshot[0] | (snapshot[1] << 8),
+            fragmentIndex: snapshot[2],
           );
+          // No wall timer: the silence end is checked as packets arrive.
+          if (batched) _reportCaptureEnd(_captureEnd.packet(activeRecordingId, DateTime.now()));
           if (batched != _mobileBatchOwnsSocketAudio) {
             _mobileBatchOwnsSocketAudio = batched;
             final handle = _wedgeSession?.handle;
@@ -2525,6 +2548,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -3441,6 +3465,12 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _deviceStopTelemetryBody({required bool cleanDevice}) async {
+    // A lost or removed pendant is not user intent; only an explicit stop is.
+    _reportCaptureEnd(_captureEnd.stopped(
+      activeRecordingId,
+      cleanDevice ? CaptureEndType.disconnect : CaptureEndType.userInitiated,
+      DateTime.now(),
+    ));
     _recordingTelemetry.complete(reason: cleanDevice ? 'device_disconnected' : 'user_stopped');
   }
 
@@ -4080,7 +4110,11 @@ class CaptureController extends ChangeNotifier
         );
         _mobileStandardBatchAllowed = event.mobileStandardBatch;
         _mobileStandardBatch?.authorize(event.mobileStandardBatch, localPreview: localPreview);
-        if (event.status == 'mobile_batch_admission') return;
+        if (event.status == 'mobile_batch_admission') {
+          // Absent means the server wants no silence end from this phone.
+          _captureEnd.silenceSeconds = event.endSilenceSeconds;
+          return;
+        }
       }
       // Handle freemium threshold event via status field
       if (event.status == 'freemium_threshold_reached') {

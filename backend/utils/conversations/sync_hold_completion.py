@@ -53,4 +53,4 @@ def defer_held_budget_denial() -> None:
             return
         # A prior summary is not a receipt for this revision. Keep the outbox
         # wake through resets/upgrades, including a denial at a later dispatch.
-        raise processing_hold.ProcessingDeferred('processing_budget', time.time() + processing_hold.QUIET_SECONDS)
+        raise processing_hold.ProcessingDeferred('processing_budget', time.time() + processing_hold.quiet_seconds())

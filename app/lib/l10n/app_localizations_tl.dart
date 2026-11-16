@@ -7093,6 +7093,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nabigo ang pag-sign in gamit ang Apple, mangyaring subukan ulit.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Hindi gumana ang pag-sign in gamit ang Apple. Subukang muli o magpatuloy gamit ang Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nabigo ang pagkuha ng firebase token, mangyaring subukan ulit.';
 
   @override
@@ -13508,6 +13512,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'May Omi Pro code ka? Ilagay ito sa susunod na screen.';
+
+  @override
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override
@@ -15519,6 +15526,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'I-update ang card, o ibalik ang $plan sa $price bawat buwan';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'I-update ang card para maibalik ang $plan';
   }
@@ -15543,4 +15555,35 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Lumipat sa Buwanan';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat buwan';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Papalitan ang hindi pa nababayarang taunang singil na $yearly. Nire-renew buwan-buwan. Kanselahin anumang oras.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Tinanggihan ang bayad. Hindi nagbago ang plan mo.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Buwanan ka na';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Nabayaran ang $price ngayon. Nire-renew buwan-buwan.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
 }

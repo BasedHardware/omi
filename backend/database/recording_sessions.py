@@ -15,7 +15,7 @@ from typing import Any, Literal, Mapping, TypedDict
 from google.cloud import firestore
 from config.server_batch import owned as server_batch_owned
 
-from database import conversations as conversations_db, transcript_pointer
+from database import conversations as conversations_db, transcript_pointer, episode_empty_members
 from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -305,6 +305,7 @@ def tombstone_and_delete_empty_conversation(
             or conversation.get('is_locked')
             or conversation.get('sync_content_revision')
             or (server_batch_owned(conversation) and not closed_empty_batch)
+            or episode_empty_members.preserve_registered_audio(conversation)
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False
@@ -333,6 +334,7 @@ def tombstone_and_delete_empty_conversation(
             ):
                 return False
 
+        episode_removal = episode_empty_members.prepare(transaction, client, uid, conversation_id, conversation)
         if session_ref is not None:
             session_snapshot = session_ref.get(transaction=transaction)
             if getattr(session_snapshot, 'exists', False):
@@ -357,6 +359,7 @@ def tombstone_and_delete_empty_conversation(
             # snapshot that belongs to the attempt that actually commits.
             deleted_conversation.clear()
             deleted_conversation.update(conversation)
+        episode_empty_members.apply(transaction, episode_removal)
         transaction.delete(conversation_ref)
         return True
 

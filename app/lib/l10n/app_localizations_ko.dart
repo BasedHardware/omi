@@ -6928,6 +6928,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple로 로그인하지 못했습니다. 다시 시도해 주세요.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple로 로그인하지 못했습니다. 다시 시도하거나 Google로 계속하세요.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.';
 
   @override
@@ -13218,6 +13221,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro 코드가 있나요? 다음 화면에서 입력하세요.';
+
+  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -15177,6 +15183,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paymentDeclinedTitle => '카드가 거절되었습니다';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '카드를 업데이트하거나 $plan을 월 $price에 다시 이용하세요';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan을 다시 이용하려면 카드를 업데이트하세요';
   }
@@ -15201,4 +15212,34 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '월간 결제로 전환';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, 월 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '미결제된 연간 요금 $yearly을 대신합니다. 매월 갱신됩니다. 언제든지 해지할 수 있습니다.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '결제가 거절되었습니다. 플랜은 변경되지 않았습니다.';
+
+  @override
+  String get monthlySwitchUnavailable => '지금은 전환할 수 없습니다. 대신 카드를 업데이트하세요.';
+
+  @override
+  String get monthlySwitchDoneTitle => '월간 결제로 전환되었습니다';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '오늘 $price이 결제되었습니다. 매월 갱신됩니다.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
 }

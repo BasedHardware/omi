@@ -10,6 +10,7 @@ import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/utils/conversations/home_member_fallback.dart';
 
 final _t0 = DateTime.utc(2026, 10, 20, 12);
 
@@ -622,6 +623,35 @@ void main() {
     expect(history.heldHomeEpisodes!()['live']!.single.id, 'c1');
     episodes.debugSetHomeEpisodes([]);
     expect(history.heldHomeEpisodes!(), isEmpty);
+  });
+
+  test('temporary READY members grant no suppression until a restorable composed replacement exists', () {
+    final members = [
+      for (final id in ['a', 'b'])
+        ServerConversation(id: id, createdAt: _t0, homeStep: 'ready', structured: Structured('Notes $id', 'Own notes'))
+    ];
+    final history = _HomeHistory()..conversations = members;
+    final episodes = EpisodeProvider()..debugSetLive(null);
+    addTearDown(history.dispose);
+    addTearDown(episodes.dispose);
+    episodes.observeHomeConversations(history);
+    Episode snapshot({String lede = ''}) => Episode(
+        id: 'owner',
+        live: false,
+        startedAt: _t0,
+        lastActivityAt: _t0,
+        members: members,
+        conversationIds: members.map((m) => m.id).toList(),
+        lede: lede);
+    episodes.debugSetHomeEpisodes([snapshot()]);
+    expect(history.heldHomeEpisodes!(), isEmpty);
+    episodes.debugSetHomeEpisodes([snapshot(lede: 'Composed replacement')]);
+    expect(acknowledgeLoadedHomeMembers(history.heldHomeEpisodes!(), []).values.expand((v) => v), isEmpty,
+        reason: 'a projected replacement cannot suppress an unrestorable source');
+    final acknowledged = acknowledgeLoadedHomeMembers(history.heldHomeEpisodes!(), members);
+    expect(acknowledged['owner']!.map((m) => m.id).toSet(), {'a', 'b'});
+    final restored = retainSuppressedHomeMembers([], {for (final m in members) m.id: m}, ['a', 'b']);
+    expect(restored, members, reason: 'an overlay outage still has exact member snapshots');
   });
 
   test('local member deletion stays hidden after DELETE settles, while Undo restores it', () async {

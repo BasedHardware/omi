@@ -9,8 +9,11 @@ from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
+from database import record_wal_capacity
+from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
+from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -84,10 +87,17 @@ def _delete_job(
         queue = queue_ref.get(transaction=transaction).to_dict() or {}
         # Segment IDs are globally unique; this needs only a single-field index.
         predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
+        hold_ref = client.collection(f'{namespace}_{ALLOWANCE_OWNERS}').document(key)
+        hold = hold_ref.get(transaction=transaction).to_dict() if job.get('state') == ALLOWANCE_HELD else None
         if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
             raise RuntimeError('batch queue ownership mismatch')
         touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
         touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
+        if hold:
+            hold['held_count'] = max(0, hold.get('held_count', 0) - 1)
+            hold['active'] = hold['held_count'] > 0
+            transaction.set(hold_ref, hold)
+            touched.append((ALLOWANCE_OWNERS, key))
         if queue.get('head') == snapshot.id:
             queue['head'] = job.get('next', '')
         if queue.get('tail') == snapshot.id:
@@ -199,6 +209,10 @@ def purge_batch_owner(
         from utils.batch_pipeline.retention import delete_batch_object
 
         delete_uri = delete_batch_object
+    # Sweep before deleting reservations: crash orphans have no receipt URI.
+    # Failure leaves metadata and quota reachable and the purge incomplete.
+    if default_storage_cleanup:
+        purge_record_wal_owner(uid, conversation_id)
     deleted = 0
     for namespace in namespaces:
         segments = set()
@@ -212,6 +226,7 @@ def purge_batch_owner(
             'coalesce_groups',
             'coalesce_sources',
             'coalesce_heads',
+            'allowance_holds',
         ):
             after = None
             while True:
@@ -247,6 +262,8 @@ def purge_batch_owner(
                         _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
                     elif table == 'results' and conversation_id is not None:
                         _erase_result(client, namespace, snapshot)
+                    elif table == 'intakes' and data.get('kind') in {'record_wal_file', 'record_wal_reservation'}:
+                        record_wal_capacity.erase_file(client, snapshot.reference, uid)
                     elif table == 'coalesce_groups':
                         from database.batch_pipeline_coalescing import purge_group
 
@@ -280,7 +297,7 @@ def purge_batch_owner(
 
                 purge_batch_storage_owner(uid, namespace)
         # A5: the Postgres copy (A2 shadow) is erased in the same retryable flow, before the purge is
-        # recorded as finished; a failure raises and the caller retries. No-op outside shadow mode.
+        # recorded as finished; a failure raises and the caller retries, even outside shadow mode.
         purge_jobstore_owner(namespace, uid)
     if conversation_id is None:
         finish_privacy_purge(client, uid, generation)

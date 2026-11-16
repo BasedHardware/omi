@@ -7040,6 +7040,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ile giriş yapılamadı, lütfen tekrar deneyin.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple ile giriş yapılamadı. Tekrar deneyin veya Google ile devam edin.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase jetonu alınamadı, lütfen tekrar deneyin.';
 
   @override
@@ -13416,6 +13419,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro kodunuz mu var? Bir sonraki ekranda girin.';
+
+  @override
   String get paywallTrialCancelNote => 'İstediğiniz zaman iptal edin. Ücret yok, ceza yok.';
 
   @override
@@ -15409,6 +15415,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Kartınız reddedildi';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Kartınızı güncelleyin veya $plan planını aylık $price ile geri alın';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan planınızı geri almak için kartınızı güncelleyin';
   }
@@ -15433,4 +15444,34 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Aylığa geçin';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, aylık $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ödenmemiş $yearly yıllık ücretin yerine geçer. Her ay yenilenir. İstediğiniz zaman iptal edin.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Ödeme reddedildi. Planınız değişmedi.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Artık aylık ödüyorsunuz';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Bugün $price ödendi. Her ay yenilenir.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
 }

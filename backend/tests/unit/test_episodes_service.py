@@ -299,7 +299,8 @@ def test_unplaced_consumption_survives_episode_boundary_and_failed_open():
     assert episodes_db.get_current_episode(UID, firestore_client=store) is None
 
 
-def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess():
+@pytest.fixture
+def fifty_thousand_unplaced_segments():
     """A pathological all-unplaced conversation: receipts must shard out of the episode
     document (no document may approach the 1 MiB limit) while the finalization tail of
     the whole transcript still dedupes against everything consumed live."""
@@ -338,6 +339,14 @@ def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_re
         assert service.record_moment(UID, moment, c) == 'applied'
         consumed_ids |= {s['id'] for s in moment.segments}
 
+    tail = unplaced_batch(0, total, minutes=1 + batches * 1.5, trigger='finalize')
+    return store, model, c, consumed_ids, total, tail
+
+
+def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess(
+    fifty_thousand_unplaced_segments,
+):
+    store, model, c, consumed_ids, total, tail = fifty_thousand_unplaced_segments
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     raw_episode = store.rows[('users', UID, 'episodes', episode['id'])]
     episode_bytes = len(json.dumps(raw_episode, default=str))
@@ -361,7 +370,6 @@ def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_re
 
     # The whole-transcript finalization tail costs nothing: no id is processed twice.
     calls_before = len(model.calls)
-    tail = unplaced_batch(0, total, minutes=1 + batches * 1.5, trigger='finalize')
     assert service.record_moment(UID, tail, c) == 'skipped_applied'
     assert len(model.calls) == calls_before
 

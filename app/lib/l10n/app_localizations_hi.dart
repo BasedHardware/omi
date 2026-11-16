@@ -7008,6 +7008,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple से साइन इन विफल, कृपया पुनः प्रयास करें।';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple से साइन इन नहीं हो पाया। फिर से कोशिश करें या Google के साथ जारी रखें।';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।';
 
   @override
@@ -13384,6 +13388,9 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro कोड है? अगली स्क्रीन पर उसे डालें।';
+
+  @override
   String get paywallTrialCancelNote => 'कभी भी रद्द करें। कोई शुल्क नहीं, कोई जुर्माना नहीं।';
 
   @override
@@ -15380,6 +15387,11 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paymentDeclinedTitle => 'आपका कार्ड अस्वीकार हो गया';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'कार्ड अपडेट करें, या $plan वापस पाएं $price प्रति माह में';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan वापस पाने के लिए कार्ड अपडेट करें';
   }
@@ -15404,4 +15416,34 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'मासिक पर स्विच करें';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price प्रति माह';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly के बकाया सालाना शुल्क की जगह लेता है। हर महीने रिन्यू होता है। कभी भी रद्द करें।';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'भुगतान अस्वीकार हुआ। आपका प्लान नहीं बदला।';
+
+  @override
+  String get monthlySwitchUnavailable => 'अभी स्विच उपलब्ध नहीं है। इसके बजाय कार्ड अपडेट करें।';
+
+  @override
+  String get monthlySwitchDoneTitle => 'अब आप मासिक प्लान पर हैं';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'आज $price का भुगतान हुआ। हर महीने रिन्यू होता है।';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।';
 }

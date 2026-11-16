@@ -60,6 +60,7 @@ class ProjectionSession:
         self.policy = policy or store.policy(segment_id)
         self.client = store.client
         self.result_ref = store.ref('results', segment_id)
+        self.job_ref = store.ref('jobs', segment_id)
         self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
         self.ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
         self.entry: dict[str, Any] = {}
@@ -97,7 +98,9 @@ class ProjectionSession:
                 {
                     'projection': receipt,
                     'projection_state': receipt['state'],
-                    **projection_finish_state_fields(receipt['state'], self.now),
+                    **projection_finish_state_fields(
+                        receipt['state'], self.now, async_projection=self.policy.async_projection
+                    ),
                 },
             )
             return False
@@ -114,7 +117,9 @@ class ProjectionSession:
                 changes.update(
                     projection=summary,
                     projection_state='quarantine_held',
-                    **projection_finish_state_fields('quarantine_held', self.now),
+                    **projection_finish_state_fields(
+                        'quarantine_held', self.now, async_projection=self.policy.async_projection
+                    ),
                 )
                 transaction.update(self.result_ref, changes)
                 return sibling_hold_changed
@@ -122,13 +127,15 @@ class ProjectionSession:
             changes.update(
                 projection=summary,
                 projection_state='ready',
-                **projection_finish_state_fields('ready', self.now),
+                **projection_finish_state_fields('ready', self.now, async_projection=self.policy.async_projection),
             )
         transaction.update(self.result_ref, changes)
         return False
 
     def guard(self, transaction, conversation_ids=()):
         snapshots: dict[str, Any] = {}
+        if self.job.get('capture_source_conversation_id'):
+            conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
         try:
             return assert_batch_write_allowed(
                 self.client,
@@ -166,6 +173,8 @@ class ProjectionSession:
             ids.append(self.binding.target_conversation_id)
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
+        if self.job.get('capture_source_conversation_id'):
+            ids.append(self.job['capture_source_conversation_id'])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
@@ -440,7 +449,9 @@ class ProjectionSession:
             if privacy_replay:
                 changes.update(
                     projection_state='pending',
-                    **projection_finish_state_fields('pending', self.now),
+                    **projection_finish_state_fields(
+                        'pending', self.now, async_projection=self.policy.async_projection
+                    ),
                 )
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
@@ -503,7 +514,9 @@ class ProjectionSession:
             changes.update(
                 projection=summary,
                 projection_state=summary_state,
-                **projection_finish_state_fields(summary_state, self.now),
+                **projection_finish_state_fields(
+                    summary_state, self.now, async_projection=self.policy.async_projection
+                ),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
             if not held and self.entry.get('projection_redriven_at'):
@@ -515,7 +528,11 @@ class ProjectionSession:
                 {
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
-                    **projection_finish_state_fields('quarantine_held' if quarantined else receipt['state'], self.now),
+                    **projection_finish_state_fields(
+                        'quarantine_held' if quarantined else receipt['state'],
+                        self.now,
+                        async_projection=self.policy.async_projection,
+                    ),
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
                     **(
                         {
