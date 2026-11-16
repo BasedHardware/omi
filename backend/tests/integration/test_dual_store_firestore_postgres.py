@@ -134,6 +134,8 @@ TX_READ_CASES = [
     ('fresh_first_ready_pending', ('owner',), {}),
     ('ready_predecessor', ('owner', 1, 'target'), {}),
     ('service_frontier', (1,), {}),
+    ('get_existing', ('queues', 'q'), {}),
+    ('get_existing', ('queues', 'absent'), {}),
 ]
 
 
@@ -326,3 +328,26 @@ def test_observing_record_pending_never_promotes_recovery_state(dual, monkeypatc
         primary_module, 'promote_record_recoveries', lambda *a: pytest.fail('observer attempted a write')
     )
     assert compare_serving_query(store.primary, shadow, 'due', 'record_pending', 10, 2, budget_s=5) == 'match'
+
+
+@pytest.mark.parametrize('document', [None, {}, {'revision': 1}])
+def test_actual_get_existing_distinguishes_absent_empty_and_present(dual, document):
+    from database.jobstore.serving_parity import compare_serving_query, query_value
+
+    store, shadow, _ = dual
+    # Seed the readers independently: the mirror intentionally omits malformed
+    # empty documents. This proves read semantics, not empty-document mirroring.
+    if document is not None:
+        store.primary.client.collection(f'{store.namespace}_owners').document('existence').set(document)
+        with shadow.pool.connection() as conn, conn.transaction():
+            shadow.write_doc(conn, 'owners', 'existence', document)
+    for source in (store.primary, shadow):
+        assert (
+            query_value(source, 'get_existing', ('owners', 'existence'), {}, transaction=True, budget_s=5) == document
+        )
+    assert (
+        compare_serving_query(
+            store.primary, shadow, 'get_existing', 'owners', 'existence', transaction=True, budget_s=5
+        )
+        == 'match'
+    )
