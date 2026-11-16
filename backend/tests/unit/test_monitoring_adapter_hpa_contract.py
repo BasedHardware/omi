@@ -214,9 +214,7 @@ def _owned_hpa_and_adapter_sources():
         'batch-pipeline-worker',
     }
     return [
-        str(source.relative_to(CHARTS.parents[1]))
-        for source in sources
-        if source.relative_to(CHARTS).parts[0] in owned
+        str(source.relative_to(CHARTS.parents[1])) for source in sources if source.relative_to(CHARTS).parts[0] in owned
     ]
 
 
