@@ -1784,6 +1784,8 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Preserve the serving value (ro-prod readback, 2026-11-16; SCA-2470).
+          HOME_FEED_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
