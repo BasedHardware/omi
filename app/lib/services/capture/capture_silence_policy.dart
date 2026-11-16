@@ -38,7 +38,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
     // only DeviceStartRequested may consume this suspension.
     return CaptureTransition(state, [
       const RunStage(SilencePauseMarkerStage(false)),
-      PolicyWrite(grace!.wasPaused),
+      if (grace!.wasPaused != env.policyMuted) PolicyWrite(grace.wasPaused, unlessCallActive: true),
     ]);
   }
   final device = state.connectedDevice;

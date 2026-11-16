@@ -728,15 +728,25 @@ void main() {
     late DateTime now;
     var call = false;
     var signedIn = true;
+    var accountId = 'account-1';
+    var silencePaused = false;
     setUp(() {
       now = DateTime.utc(2026, 11, 17);
       call = false;
       signedIn = true;
+      accountId = 'account-1';
+      silencePaused = false;
       fake = HarnessPorts();
       coordinator = CaptureCoordinator(
           ports: fake.ports,
           readEnvironment: () => environment(coordinator.state,
-              muted: fake.muted, batch: fake.batch, call: call, now: () => now, signedIn: signedIn));
+              muted: fake.muted,
+              batch: fake.batch,
+              call: call,
+              now: () => now,
+              signedIn: signedIn,
+              accountId: accountId,
+              silencePaused: silencePaused));
     });
     tearDown(() => coordinator.dispose());
     Future<void> send(CaptureEvent event) async => (await coordinator.dispatch(event)).throwIfFailed();
@@ -861,7 +871,7 @@ void main() {
         final original = await drop(paused: paused);
         await send(DeviceUpdated(pendant));
         final result = transitionCapture(coordinator.state, const ResumeSilencePaused(),
-            environment(coordinator.state, muted: true, silencePaused: true, now: () => now));
+            environment(coordinator.state, muted: !paused, silencePaused: true, now: () => now));
         expect(result.effects.whereType<MintRecording>(), isEmpty);
         expect(result.state.active, isNull);
         expect(result.state.pendantSuspension!.recordingId, original.recordingId);
@@ -869,6 +879,49 @@ void main() {
         expect(result.effects.whereType<PolicyWrite>().single.muted, paused);
       });
     }
+    test('historical silence resume does not rewrite an unchanged capture policy', () async {
+      await drop();
+      final result = transitionCapture(coordinator.state, const ResumeSilencePaused(),
+          environment(coordinator.state, silencePaused: true, now: () => now));
+      expect(result.effects.whereType<PolicyWrite>(), isEmpty);
+      expect(result.effects.whereType<RunStage>().single.stage, isA<SilencePauseMarkerStage>());
+    });
+    test('a call starting while the silence marker clears prevents the queued unmute', () async {
+      await drop();
+      await send(DeviceUpdated(pendant));
+      fake.muted = true;
+      silencePaused = true;
+      fake.log.clear();
+      final held = fake.hold = Completer<void>();
+      final resume = coordinator.dispatch(const ResumeSilencePaused());
+      await pumpEventQueue();
+      expect(fake.log, contains('stage:SilencePauseMarkerStage'));
+      call = true;
+      held.complete();
+      (await resume).throwIfFailed();
+      expect(fake.muted, isTrue);
+      expect(fake.log, isNot(contains('policy:false')));
+      expect(coordinator.state.pendantSuspension!.wasPaused, isFalse);
+    });
+    test('same-device start after an account change mints a new owner', () async {
+      await send(DeviceStartRequested(device: pendant));
+      final original = coordinator.state.active!;
+      accountId = 'account-2';
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+      expect(coordinator.state.active!.accountId, accountId);
+    });
+    test('account reset while reconnect resume waits for a call retires the debt', () async {
+      await drop();
+      call = true;
+      await send(const CallStateChanged());
+      await send(DeviceStartRequested(device: pendant));
+      await send(const CaptureIdentityChanged());
+      expect(coordinator.state.pendantSuspension, isNull);
+      call = false;
+      await send(const CallStateChanged());
+      expect(coordinator.state.active, isNull);
+    });
     test('expiry wake completes once and snapshot is sanitized at launch', () async {
       await drop();
       final restored = CaptureCoordinatorState.fromJson(coordinator.state.toJson());
@@ -910,12 +963,30 @@ void main() {
     test('same-device duplicate starts join, and an active device switch still mints fresh', () async {
       await send(DeviceStartRequested(device: pendant));
       final original = coordinator.state.active!;
+      fake.log.clear();
       await send(DeviceStartRequested(device: pendant));
       expect(fake.nextId, 1);
+      expect(fake.log, isNot(contains('stage:UpdateRecordingDeviceStage')));
       final other = BtDevice(id: 'other', name: 'Omi', type: DeviceType.omi, rssi: -40);
       await send(DeviceUpdated(other));
       await send(DeviceStartRequested(device: other));
       expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('an account changed before disconnect cannot inherit the active recording', () async {
+      await send(DeviceStartRequested(device: pendant));
+      final original = coordinator.state.active!;
+      accountId = 'account-2';
+      await send(DeviceUpdated(null, reconnectDeviceId: pendant.id));
+      expect(coordinator.state.pendantSuspension, isNull);
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('successful reconnect clears a previous failure diagnostic', () async {
+      await drop();
+      final state = coordinator.state.copyWith(lastFailure: () => 'prior call policy failure');
+      final result =
+          transitionCapture(state, DeviceStartRequested(device: pendant), environment(state, now: () => now));
+      expect(result.state.lastFailure, isNull);
     });
     test('account switch while signed in retires the previous account identity', () async {
       await drop();
@@ -944,7 +1015,29 @@ void main() {
       await send(const CallStateChanged());
       await send(DeviceStartRequested(device: pendant));
       expect(coordinator.state.pendantSuspension!.reason, SuspendReason.call);
+      final saved = CaptureCoordinatorState.fromJson(coordinator.state.toJson());
+      expect(saved.pendantSuspension!.reconnectResumePending, isTrue);
+      expect(saved.pendantSuspension!.accountId, accountId);
+      final pending = transitionCapture(coordinator.state, DeviceStartRequested(device: pendant),
+          environment(coordinator.state, call: true, now: () => now));
+      expect(
+          pending.effects
+              .whereType<RunStage>()
+              .map((e) => e.stage)
+              .whereType<ReconnectObservationStage>()
+              .where((e) => e.outcome == 'reconnect_resumed'),
+          isEmpty);
       call = false;
+      final released = transitionCapture(
+          coordinator.state, const CallStateChanged(), environment(coordinator.state, now: () => now));
+      expect(
+          released.effects
+              .whereType<RunStage>()
+              .map((e) => e.stage)
+              .whereType<ReconnectObservationStage>()
+              .single
+              .outcome,
+          'reconnect_resumed');
       await send(const CallStateChanged());
       expect(coordinator.state.active!.recordingId, original.recordingId);
     });

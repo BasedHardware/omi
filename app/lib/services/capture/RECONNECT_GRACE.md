@@ -1,7 +1,8 @@
 # Pendant recording identity across a link loss
 
 `SuspendReason.reconnect` retains the logical session key, client recording ID,
-transport, device identity and user pause bit for 120 seconds. Only native
+transport, account/device identity and user pause bit for 120 seconds. The
+account is bound when the active recording is minted, not at disconnect. Only native
 connection timeouts and remote termination qualify. iOS delivers stable tokens
 instead of localized error prose; Android preserves HCI status and gives manual
 intent precedence. Unknown reasons, pairing loss and adapter shutdown are fresh
@@ -21,8 +22,12 @@ Expiry is checked on every coordinator event; a cancellable lifetime-owned timer
 also wakes the reducer at the deadline. Manual stop/finish/disconnect, device
 switch, account reset/sign-out, source takeover and mode changes retire grace.
 Mute/unmute during the gap changes its saved pause bit and local capture policy.
-A reconnect during an Omi call becomes ordinary call suspension; the call then
-releases it. Snapshot launch sanitization discards grace; process restart never
+A reconnect during an Omi call becomes call suspension with a typed pending
+resume observation; the event is emitted only after the call releases capture.
+Historical silence recovery clears its old marker without minting through grace
+or overriding a call that started during an awaited effect. Manual-disconnect
+markers belong only to a connected episode, so an already-down action cannot
+poison a later connection. Snapshot launch sanitization discards grace; process restart never
 adopts an old recording ID.
 
 `RecordingLifecycleTelemetry` emits the existing `Recording Observation` event

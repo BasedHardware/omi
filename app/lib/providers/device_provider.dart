@@ -103,7 +103,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   final Set<String> _intentionalDisconnectDevices = {};
 
   void markDisconnectIntentional(String deviceId) {
-    _intentionalDisconnectDevices.add(deviceId);
+    // A marker belongs to the connected episode. An already-down action
+    // still retires capture below, but has no later disconnect to classify.
+    if (connectedDevice?.id.toUpperCase() == deviceId.toUpperCase()) {
+      _intentionalDisconnectDevices.add(deviceId.toUpperCase());
+    }
     // The link may already be down, with no further native callback owed.
     captureProvider?.updateRecordingDevice(null);
     _wedgeMonitor.dismissDeviceEpisode(deviceId);
@@ -367,10 +371,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         capture!.recordingState == RecordingState.deviceRecord &&
         !capture.isPaused &&
         !SharedPreferencesUtil().batchModeEnabled;
-    final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
-    // A manual action while already down may have no endedDevice/callback
-    // to consume its marker. A new connection begins a new intent episode.
-    if (device != null) _intentionalDisconnectDevices.remove(device.id);
+    final endedSessionWasIntentional =
+        endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id.toUpperCase());
     final isNewConnection = device != null && connectedDevice?.id != device.id;
     if (isNewConnection || device == null) _resetBatteryState();
     connectedDevice = device;
@@ -1059,7 +1061,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   void _notifyCaptureLinkLost(String? deviceId) {
-    final intentional = deviceId != null && _intentionalDisconnectDevices.contains(deviceId);
+    final intentional = deviceId != null && _intentionalDisconnectDevices.contains(deviceId.toUpperCase());
     if (!intentional && deviceId != null && BleBridge.instance.preservesCaptureIntent(deviceId)) return;
     captureProvider?.updateRecordingDevice(null,
         reconnectDeviceId: !intentional &&

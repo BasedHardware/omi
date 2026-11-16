@@ -369,7 +369,10 @@ void main() {
     'manual',
     'pairing_lost',
     'unknown',
-    'clean_disconnect'
+    'clean_disconnect',
+    'capture_recovery',
+    'cccd_timeout',
+    'cccd_timeout_exhausted'
   ]) {
     test('capture receives $reason immediately even when reconnect cancels the UI debounce', () async {
       const id = 'AA:AA:AA:AA:AA:13';
@@ -382,14 +385,18 @@ void main() {
       provider.pairedDevice = _device(id);
       BleBridge.instance.onPeripheralDisconnected(id, reason);
       provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
-      expect(capture.cleared, 1);
-      expect(
-          capture.reconnectDevices.single,
-          ['connection_timeout', 'remote_device_terminated', 'gatt_status_8', 'gatt_status_19'].contains(reason)
-              ? id
-              : null);
+      final recovery = ['capture_recovery', 'cccd_timeout', 'cccd_timeout_exhausted'].contains(reason);
+      expect(capture.cleared, recovery ? 0 : 1);
+      if (!recovery) {
+        expect(
+            capture.reconnectDevices.single,
+            ['connection_timeout', 'remote_device_terminated', 'gatt_status_8', 'gatt_status_19'].contains(reason)
+                ? id
+                : null);
+      }
       provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.connected);
-      expect(capture.cleared, 1);
+      expect(capture.cleared, recovery ? 0 : 1);
+      if (recovery) expect(capture.reconnectDevices, isEmpty);
     });
   }
 
@@ -402,11 +409,45 @@ void main() {
     addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
     provider.captureProvider = capture;
     provider.markDisconnectIntentional(id);
+    expect(capture.reconnectDevices, [null]);
     await provider.setConnectedDevice(_device(id));
     capture.reconnectDevices.clear();
     BleBridge.instance.onPeripheralDisconnected(id, 'connection_timeout');
     provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
     expect(capture.reconnectDevices, [id]);
+  });
+
+  test('manual intent on a live link survives metadata refresh and excludes grace', () async {
+    const id = 'AA:AA:AA:AA:AA:15';
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
+    provider.captureProvider = capture;
+    await provider.setConnectedDevice(_device(id));
+    provider.markDisconnectIntentional(id.toLowerCase());
+    expect(capture.reconnectDevices, [null]);
+    await provider.setConnectedDevice(_device(id));
+    BleBridge.instance.onPeripheralDisconnected(id, 'connection_timeout');
+    provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
+    expect(capture.reconnectDevices, [null, null]);
+  });
+
+  test('manual forget immediately retires an already admitted reconnect grace', () async {
+    const id = 'AA:AA:AA:AA:AA:16';
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
+    provider.captureProvider = capture;
+    await provider.setConnectedDevice(_device(id));
+    BleBridge.instance.onPeripheralDisconnected(id, 'connection_timeout');
+    provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
+    expect(capture.reconnectDevices, [id]);
+    provider.markDisconnectIntentional(id);
+    expect(capture.reconnectDevices, [id, null]);
   });
 
   test('unreadable diagnostics still emit with unknown reason fields', () async {
