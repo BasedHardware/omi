@@ -1,3 +1,5 @@
+"""Verify loaded OCI identity and owned-tag cleanup without Docker execution."""
+
 import sys
 from pathlib import Path
 

@@ -1,3 +1,5 @@
+"""Verify pinned private-draft custody and exact input bytes with offline fakes."""
+
 import sys
 from pathlib import Path
 

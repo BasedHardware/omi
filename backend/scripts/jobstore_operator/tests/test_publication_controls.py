@@ -1,3 +1,5 @@
+"""Verify closed publication admission and current-run proof with offline controls."""
+
 import sys
 from pathlib import Path
 
