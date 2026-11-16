@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from utils.conversations.duration import transcript_span_seconds
+from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.render import redact_conversation_for_list
 from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
@@ -114,13 +114,16 @@ def conversation_state_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
     ``status`` says whether a by-id read is still live (lists hold completed
     conversations only). ``kind`` separates the wearer's own conversations from
     media and other people's background talk; ``shown_on_home`` is the positive
-    form of the stored Home-hiding flag. ``duration_seconds`` is the transcript's
-    speech span, so an agent can size its reads; it is null where the transcript is
-    not loaded (list cards), because the wall window can start long before speech.
+    form of the stored Home-hiding flag. ``duration_seconds`` is the shared
+    duration (transcript speech span, or the wall window for a transcript-free
+    record such as a photo-only capture) where the transcript is loaded; it is null
+    on list cards, which load no transcript, because there the wall window can
+    start long before speech.
     """
     status = conversation.get('status')
     status = getattr(status, 'value', status)
-    duration = transcript_span_seconds(conversation.get('transcript_segments'))
+    loaded = isinstance(conversation.get('transcript_segments'), list)
+    duration = conversation_duration_seconds(conversation) if loaded else None
     fields: Dict[str, Any] = {
         'status': status if isinstance(status, str) else None,
         'duration_seconds': round(duration) if isinstance(duration, (int, float)) else None,
