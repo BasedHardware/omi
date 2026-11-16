@@ -57,10 +57,11 @@ listen subprocess tests passed on rerun. This is composite coverage, not one
 all-green invocation of the entire 394-file inventory at the final head.
 
 Final touched/focused file run: 592 passed across 17 files. Follow-up audio and
-heartbeat assertions bring latest JUnit coverage to 616 passed across 18 files
+heartbeat assertions initially brought JUnit coverage to 616 passed across 18 files
 (including the 21 existing plugin transport tests); no test failure/skip/error.
 The last isolated stream rerun moves a heavy router import to collection so its
-call-phase CPU guard passes. Focused v3 tests: 131 passed.
+call-phase CPU guard passes. The final single 19-file run at e1e57ff3a7d passes 649 tests with no errors,
+failures or skips, including the outside-query witness and 133 focused v3 tests.
 Current-source Dart fallback decoders: 3 passed. Slow Firestore digest: 1 passed,
 606 deselected; fast query-shape guard: 606 passed, 1 deselected. Pyright: 0 errors.
 App-client OpenAPI additive gate and all generated-client freshness checks pass.
@@ -77,6 +78,7 @@ omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/re
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-audio-final-tests.txt BACKEND_PYTEST_WORKERS=1 bash backend/test.sh
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-small-tests.txt BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-stream-last-tests.txt BACKEND_PYTEST_WORKERS=1 bash backend/test.sh
+omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-final-head-tests.txt BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
 omi-heavy run -- env BACKEND_PYTEST_MARK_EXPR=slow BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/TESTS-DIGEST-V3.txt bash backend/test.sh
 backend/scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check
 backend/.venv/bin/python backend/scripts/generate_dart_models.py --all --check
@@ -142,3 +144,12 @@ Synthetic integration and branch execution are separate evidence: metadata
 preflight tests whether the candidate combines with current origin/main; the
 component tests execute this branch. The lead still owns combined Q12/mobile
 runtime qualification and exact-head PR CI.
+
+
+The first full preflight at e1e57ff3a7d passed the index guard (607 query-shape
+tests), reader classification and synthetic-integration size gate, then found
+two unclassified public runtime bindings. The follow-on declaration classifies
+CONVERSATIONS_V3_STAGE and CONVERSATIONS_V3_FIRST_APP_BUILD as config in
+config/deployment-setting-classification.json. Two parameterized source tests
+pin config classification and regular environment placement for every service.
+No deployment or external configuration was changed.

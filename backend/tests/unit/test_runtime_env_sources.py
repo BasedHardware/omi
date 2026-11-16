@@ -1,6 +1,7 @@
 """Source overlays must compose exactly to the checked-in deploy manifest."""
 
 import runpy
+import json
 from pathlib import Path
 
 import yaml
@@ -69,3 +70,15 @@ def test_one_stage_source_moves_all_runtime_roles(tmp_path):
     for env in manifest['environments'].values():
         assert all(s['env']['CONVERSATIONS_V3_STAGE']['value'] == 'all' for s in env['cloud_run']['services'].values())
         assert env['gke']['config_map']['entries']['CONVERSATIONS_V3_STAGE']['value'] == 'all'
+
+
+@pytest.mark.parametrize('name', ['CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'])
+def test_shared_v3_settings_are_public_runtime_configuration(name):
+    policy = json.loads((ROOT / 'config/deployment-setting-classification.json').read_text())
+    assert name in policy['kinds']['config']
+    assert name not in policy['kinds']['secret']
+    manifest = COMPOSER['compose_manifest']()
+    for env in manifest['environments'].values():
+        for service in env['cloud_run']['services'].values():
+            assert name in service['env']
+            assert name not in service.get('secrets', {})
