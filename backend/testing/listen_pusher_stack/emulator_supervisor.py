@@ -21,6 +21,10 @@ What it guarantees
   exit that carries an assertion, ``StackFailure``, or pytest failure is final
   and is never retried - a real regression must stay red.
 * Attempts stop at the cap (3) and at the wall-clock budget. Both are hard.
+* Each attempt runs with its own ``<state-dir>/attempt-<n>`` scenario state.
+  ``run.sh`` embeds ``ATTEMPT_STATE_TOKEN`` instead of the caller's path, so a
+  state root containing a space is still rewritten (the inner command is one
+  shell string, where that path is already escaped).
 
 The retry contract is the per-attempt marker file written by the generated
 inner script:
@@ -61,6 +65,10 @@ DEFAULT_MAX_TOTAL_SECONDS = 900.0
 MAX_TOTAL_SECONDS_CEILING = 1800.0
 DEFAULT_READINESS_TIMEOUT_SECONDS = 120.0
 FIREBASE_COMMAND = ('npx', '--no-install', 'firebase')
+# `run.sh` embeds this token where the caller's state root belongs; each
+# attempt substitutes its own `<state>/attempt-<n>` so a retry can never inherit
+# a half-run ledger, cursor or evidence set.
+ATTEMPT_STATE_TOKEN = '@ATTEMPT_STATE_DIR@'
 
 MARKER_READINESS_FAILED = 'readiness_failed'
 MARKER_STARTED = 'started'
@@ -251,7 +259,14 @@ def _run_attempt(
     if state_dir:
         attempt_state = Path(state_dir) / f'attempt-{index}'
         attempt_state.mkdir(parents=True, exist_ok=True)
-        inner_command = inner_command.replace(state_dir, str(attempt_state))
+        # The token, not the caller's path, is what run.sh embeds: the inner
+        # command is a shell string, so a path with a space is already escaped
+        # there and a literal substitution would silently miss it. The
+        # replacement is shell-quoted for the same reason.
+        inner_command = inner_command.replace(ATTEMPT_STATE_TOKEN, shlex.quote(str(attempt_state)))
+    # Printed so the shell-routing contract (which state dir each phase gets) is
+    # observable after the generated script is removed.
+    print(f'[emulator] attempt {index} inner: {inner_command}', flush=True)
     try:
         config = work_dir / 'firebase.json'
         config.write_text(
@@ -389,6 +404,8 @@ def run_supervisor(
 ) -> int:
     if not 1 <= max_attempts <= MAX_ATTEMPTS_CEILING:
         raise ValueError(f'max_attempts must be between 1 and {MAX_ATTEMPTS_CEILING}')
+    if ATTEMPT_STATE_TOKEN in inner_command and not state_dir:
+        raise ValueError('inner command references the attempt state token but no state_dir was given')
     if log_dir is None:
         log_dir = Path(tempfile.mkdtemp(prefix='omi-listen-pusher-emulator-logs-'))
     log_dir.mkdir(parents=True, exist_ok=True)

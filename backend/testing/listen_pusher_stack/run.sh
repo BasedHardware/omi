@@ -28,6 +28,12 @@ fi
 # CI passes ``--state-dir`` (and any other runner argument) to the listen-pusher
 # runner only, never to the subsequent pytest command.  Appending after ``&&``
 # would leak the flag into pytest, which does not understand it.
+#
+# The state root is emitted as a token, not as the caller's path: the inner
+# command is one shell string, so a path with a space is escaped inside it and a
+# literal substitution in the supervisor would silently miss. The supervisor
+# replaces the token with each attempt's own ``<root>/attempt-<n>``.
+attempt_state_token='@ATTEMPT_STATE_DIR@'
 lifecycle_only=false
 if [[ "${1:-}" == "--lifecycle-only" ]]; then
   lifecycle_only=true
@@ -38,21 +44,25 @@ lifecycle_args=""
 lifecycle_state=""
 next_is_state=false
 for argument in "$@"; do
-  printf -v escaped_argument ' %q' "$argument"
-  runner_args+="$escaped_argument"
   if [[ "$next_is_state" == true ]]; then
     lifecycle_state="$argument"
     next_is_state=false
-  elif [[ "$argument" == --state-dir ]]; then
-    next_is_state=true
+    printf -v escaped_argument ' %q' "$attempt_state_token"
   elif [[ "$argument" == --state-dir=* ]]; then
     lifecycle_state="${argument#--state-dir=}"
+    printf -v escaped_argument ' %q' "--state-dir=$attempt_state_token"
+  else
+    printf -v escaped_argument ' %q' "$argument"
+  fi
+  runner_args+="$escaped_argument"
+  if [[ "$argument" == --state-dir ]]; then
+    next_is_state=true
   elif [[ "$argument" == --keep ]]; then
     lifecycle_args+=" --keep"
   fi
 done
 if [[ -n "$lifecycle_state" ]]; then
-  printf -v escaped_state ' %q' "$lifecycle_state/lifecycle-sim"
+  printf -v escaped_state ' %q' "$attempt_state_token/lifecycle-sim"
   lifecycle_args+=" --state-dir$escaped_state"
 fi
 

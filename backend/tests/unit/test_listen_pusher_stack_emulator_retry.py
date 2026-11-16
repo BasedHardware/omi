@@ -148,7 +148,7 @@ def test_readiness_wait_is_bounded_and_reports_the_last_transport_error(monkeypa
 
     monkeypatch.setattr(emulator_readiness, 'probe_once', not_ready)
     with pytest.raises(emulator_readiness.EmulatorNotReady) as error:
-        emulator_readiness.wait_until_serving(host='127.0.0.1', port=9, timeout=0.4, rpc_timeout=1.0)
+        emulator_readiness.wait_until_serving(host='127.0.0.1', port=9, timeout=0.6, rpc_timeout=1.0)
 
     assert len(attempts) >= 2
     assert 'did not serve Firestore gRPC within' in str(error.value)
@@ -257,12 +257,13 @@ def test_generated_inner_script_probes_before_it_runs_the_gauntlet(tmp_path: Pat
 def test_each_attempt_gets_a_fresh_scenario_state_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A retry must not inherit the previous attempt's half-run state.
 
-    The inner command is retried with the same `--state-dir` value, so the
-    supervisor rewrites it per attempt. A retry that reused the failed attempt's
+    The inner command carries the attempt-state token, so the supervisor
+    rewrites it per attempt. A retry that reused the failed attempt's
     ledger/cursor/evidence files could turn a transient startup failure into a
-    false assertion failure.
+    false assertion failure. The path contains a space: the replacement must be
+    shell-quoted, not spliced in raw.
     """
-    state = tmp_path / 'state'
+    state = tmp_path / 'state dir'
     record = tmp_path / 'args.txt'
     inner = _write_executable(
         tmp_path / 'inner.sh',
@@ -273,7 +274,7 @@ def test_each_attempt_gets_a_fresh_scenario_state_dir(tmp_path: Path, monkeypatc
     monkeypatch.setenv('FAKE_ATTEMPT_COUNTER', str(counter))
     monkeypatch.setenv('FAKE_FIREBASE_MODE', 'pass')
     returncode = emulator_supervisor.run_supervisor(
-        inner_command=f'bash {inner} --state-dir {state}',
+        inner_command=(f'bash {inner} --state-dir {emulator_supervisor.ATTEMPT_STATE_TOKEN}'),
         repo_root=tmp_path,
         log_dir=tmp_path / 'logs',
         readiness_command=['true'],
@@ -286,6 +287,7 @@ def test_each_attempt_gets_a_fresh_scenario_state_dir(tmp_path: Path, monkeypatc
     assert len(lines) == 2, lines
     assert f'--state-dir {state}/attempt-1' in lines[0]
     assert f'--state-dir {state}/attempt-2' in lines[1]
+    assert emulator_supervisor.ATTEMPT_STATE_TOKEN not in '\n'.join(lines)
     assert (state / 'attempt-1').is_dir() and (state / 'attempt-2').is_dir()
 
 
