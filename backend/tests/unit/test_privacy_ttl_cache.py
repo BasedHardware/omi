@@ -1,5 +1,6 @@
 """Token-certified privacy reuse: a 60s upper bound never substitutes for the revoke fence."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone, timedelta
 from functools import partial
 import json
@@ -1225,7 +1226,6 @@ def test_reland_admission_fence_keeps_warm_shadow_candidates_observation_only(wo
 
 @pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
 def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(world, monkeypatch, shape):
-    from contextlib import nullcontext
 
     db, reads, _, _ = world
     # Admission remains OFF. Sampling is 100 here to exercise a deterministic
@@ -1288,7 +1288,6 @@ def test_owner_comparison_metric_rejects_identifier_labels():
 
 @pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
 def test_production_owner_shadow_reports_unrotated_revoke_and_serves_live_block(world, monkeypatch, shape):
-    from contextlib import nullcontext
 
     db, reads, _, _ = world
     enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')
@@ -1321,7 +1320,6 @@ def test_production_owner_shadow_reports_unrotated_revoke_and_serves_live_block(
 
 @pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
 def test_production_levers_enforcement_reads_one_token_for_warm_owner(world, monkeypatch, shape):
-    from contextlib import nullcontext
 
     db, reads, _, _ = world
     enable(monkeypatch, 'bpp_owner_memo', 'bpp_owner_memo_enforce', 'bpp_decision_cache', 'bpp_generation_memo')
@@ -1348,7 +1346,6 @@ def test_production_levers_enforcement_reads_one_token_for_warm_owner(world, mon
 
 @pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
 def test_unreadable_kill_switch_reproduces_zero_owner_hits_with_production_levers(world, monkeypatch, shape):
-    from contextlib import nullcontext
 
     db, reads, _, _ = world
     enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')

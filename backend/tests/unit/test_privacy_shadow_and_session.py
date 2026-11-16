@@ -1,15 +1,22 @@
 """Decision comparisons and durable-token validation across real cache helpers."""
 
+from contextlib import nullcontext
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 import json
+import re
+import time
 
 import fakeredis
+from google.api_core import exceptions
 import pytest
+import yaml
 
 from database import batch_pipeline_privacy as privacy, conversation_tombstones as tombstones
 from database import fsr_read_cache as cache, legal_holds, privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 
 UID = 'privacy-test-owner'
 TOKEN = ('batch_pipeline_privacy', privacy.privacy_owner_key(UID))
@@ -348,7 +355,6 @@ async def test_pusher_ticker_failure_is_observable_without_ending_socket(world, 
     ],
 )
 def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, shape, kind, label):
-    from contextlib import nullcontext
 
     db, _, _, _ = world
     enable(monkeypatch, 'privacy_checks_shadow')
@@ -369,10 +375,6 @@ def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, s
 
 
 def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
-    from pathlib import Path
-    import re
-    import yaml
-    from google.api_core import exceptions
 
     class PrivateOwnerContentError(Exception):
         pass
@@ -405,8 +407,6 @@ def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
 
 
 def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(world, monkeypatch):
-    import time
-    from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 
     db, reads, _, _ = world
     enable(monkeypatch, 'privacy_checks_shadow', 'bpp_generation_memo', 'bpp_decision_cache')
