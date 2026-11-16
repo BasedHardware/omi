@@ -15676,4 +15676,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Mamaya sa Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
 }

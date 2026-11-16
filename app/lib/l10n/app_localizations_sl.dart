@@ -15582,4 +15582,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Pozneje prek Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš povzetek…';
 }

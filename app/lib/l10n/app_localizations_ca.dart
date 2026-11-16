@@ -15630,4 +15630,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Més tard amb Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Escrivint el teu resum…';
 }

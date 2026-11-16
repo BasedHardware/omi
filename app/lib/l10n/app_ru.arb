@@ -4718,5 +4718,6 @@
     "audioStaysOnPhone": "Аудио остаётся на телефоне",
     "onDeviceModelDownloadSize": "Загрузка {size} МБ",
     "downloadNow": "Скачать сейчас",
-    "onWifiLater": "Позже по Wi-Fi"
+    "onWifiLater": "Позже по Wi-Fi",
+    "conversationWritingSummary": "Пишем ваше резюме…"
 }

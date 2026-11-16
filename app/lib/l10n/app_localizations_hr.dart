@@ -15590,4 +15590,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Kasnije na Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš sažetak…';
 }

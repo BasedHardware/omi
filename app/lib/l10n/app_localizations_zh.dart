@@ -15302,4 +15302,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onWifiLater => '稍后通过 Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
 }

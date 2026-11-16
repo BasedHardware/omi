@@ -15332,4 +15332,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onWifiLater => '나중에 Wi-Fi로';
+
+  @override
+  String get conversationWritingSummary => '요약을 작성하는 중…';
 }

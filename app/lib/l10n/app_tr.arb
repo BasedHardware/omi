@@ -4718,5 +4718,6 @@
     "audioStaysOnPhone": "Ses telefonunuzda kalır",
     "onDeviceModelDownloadSize": "{size} MB indirme",
     "downloadNow": "Şimdi İndir",
-    "onWifiLater": "Sonra Wi-Fi'da"
+    "onWifiLater": "Sonra Wi-Fi'da",
+    "conversationWritingSummary": "Özetiniz yazılıyor…"
 }

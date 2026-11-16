@@ -15612,4 +15612,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Később Wi-Fin';
+
+  @override
+  String get conversationWritingSummary => 'Összefoglaló írása…';
 }

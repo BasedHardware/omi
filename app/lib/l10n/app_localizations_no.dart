@@ -15557,4 +15557,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Senere på Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Skriver sammendraget ditt…';
 }

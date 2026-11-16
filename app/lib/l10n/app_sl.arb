@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "Zvok ostane na telefonu",
     "onDeviceModelDownloadSize": "Prenos {size} MB",
     "downloadNow": "Prenesi zdaj",
-    "onWifiLater": "Pozneje prek Wi-Fi"
+    "onWifiLater": "Pozneje prek Wi-Fi",
+    "conversationWritingSummary": "Pišemo vaš povzetek…"
 }

@@ -1,3 +1,4 @@
+from utils.conversations.v3 import models as v3_models
 from dataclasses import replace
 from types import SimpleNamespace
 import asyncio
@@ -537,11 +538,19 @@ def _get_shaped_conversation_notes(
     # response_format and prompt_cache_breakpoint. The shaped notes mount never
     # carries a cache breakpoint; parser-based extraction needs no provider
     # cache hint to work on any lane.
-    model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    model = (
+        v3_models.notes_client()
+        if v3_models.active()
+        else get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    )
     # Long or meeting-like conversations get the agentic writer; it returns None
     # (one-shot below, unchanged) when ineligible, disabled, or on any failure.
-    agent_payload = agentic_notes_payload(
-        uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+    agent_payload = (
+        None
+        if v3_models.active()
+        else agentic_notes_payload(
+            uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+        )
     )
     if agent_payload is not None:
         validated_agent_output = _notes_output_schema(uid, agent=True).model_validate(agent_payload)
@@ -574,7 +583,9 @@ def _get_shaped_conversation_notes(
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
             # Isolate first so the cloner sees the notes model; unsupported models keep their options.
-            if escalated:
+            if v3_models.active():
+                call_model = bind_notes_effort(isolated_model, 'low')
+            elif escalated:
                 call_model = bind_notes_effort(isolated_model, 'xhigh')
             else:
                 call_model = isolated_model

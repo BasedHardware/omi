@@ -5,6 +5,7 @@ Firestore or metrics, so ``process_conversation`` only wires them together.
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 from datetime import timedelta
@@ -100,7 +101,8 @@ def occasion_retention(uid: str, conversation: Any, conversation_id: Optional[st
             for other_id in episode.get('conversation_ids') or []:
                 if other_id == cid:
                     continue
-                other = conversations_db.get_conversation_raw_snapshot(
+                other = read_product_conversation(
+                    conversations_db.get_conversation_raw_snapshot,
                     uid,
                     other_id,
                     field_paths=[

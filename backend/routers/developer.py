@@ -7,6 +7,7 @@ from-segments intake carries capture evidence lineage, so compatibility rules
 apply here that do not apply to app-facing routes.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from models.developer_transcript import SimpleTranscriptSegment
 from routers import developer_segments
 from routers.developer_segments_models import (
@@ -2149,8 +2150,11 @@ def _ingest_conversation_from_segments(
                 conversation_id,
             )
             return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
-        existing_conversation = conversations_db.get_conversation(
-            uid, conversation_id, read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY
+        existing_conversation = read_product_conversation(
+            conversations_db.get_conversation,
+            uid,
+            conversation_id,
+            read_site=FirestoreReadSite.DEVELOPER_FROM_SEGMENTS_IDEMPOTENCY,
         )
         if existing_conversation:
             if _is_stale_from_segments_claim(
@@ -2253,7 +2257,7 @@ def _ingest_conversation_from_segments(
         if client_projection is not None:
             create_payload.update(client_processing_mutation(client_projection))
         if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
-            existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            existing_conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
             if existing_conversation:
                 logger.info(
                     "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
@@ -2551,7 +2555,7 @@ def update_conversation_endpoint(
     - **title**: New title for the conversation (optional)
     - **discarded**: Whether the conversation is discarded (optional)
     """
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -2569,7 +2573,7 @@ def update_conversation_endpoint(
         else:
             lifecycle_service.restore_discarded(uid, conversation_id)
 
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if conversation:
         populate_folder_names(uid, [conversation])
     return conversation

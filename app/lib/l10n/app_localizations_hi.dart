@@ -15536,4 +15536,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'बाद में Wi-Fi पर';
+
+  @override
+  String get conversationWritingSummary => 'आपका सारांश लिखा जा रहा है…';
 }

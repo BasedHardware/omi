@@ -15564,4 +15564,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sonra Wi-Fi\'da';
+
+  @override
+  String get conversationWritingSummary => 'Özetiniz yazılıyor…';
 }

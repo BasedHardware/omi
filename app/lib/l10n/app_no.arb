@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Lyden blir på telefonen din",
     "onDeviceModelDownloadSize": "{size} MB nedlasting",
     "downloadNow": "Last ned nå",
-    "onWifiLater": "Senere på Wi-Fi"
+    "onWifiLater": "Senere på Wi-Fi",
+    "conversationWritingSummary": "Skriver sammendraget ditt…"
 }

@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "ऑडिओ तुमच्या फोनवरच राहतो",
     "onDeviceModelDownloadSize": "{size} MB डाउनलोड",
     "downloadNow": "आता डाउनलोड करा",
-    "onWifiLater": "नंतर Wi-Fi वर"
+    "onWifiLater": "नंतर Wi-Fi वर",
+    "conversationWritingSummary": "तुमचा सारांश लिहित आहे…"
 }

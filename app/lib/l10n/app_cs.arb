@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Zvuk zůstává v telefonu",
     "onDeviceModelDownloadSize": "Stažení {size} MB",
     "downloadNow": "Stáhnout nyní",
-    "onWifiLater": "Později přes Wi-Fi"
+    "onWifiLater": "Později přes Wi-Fi",
+    "conversationWritingSummary": "Píšeme vaše shrnutí…"
 }

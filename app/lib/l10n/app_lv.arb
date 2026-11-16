@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Audio paliek jūsu tālrunī",
     "onDeviceModelDownloadSize": "{size} MB lejupielāde",
     "downloadNow": "Lejupielādēt tagad",
-    "onWifiLater": "Vēlāk ar Wi-Fi"
+    "onWifiLater": "Vēlāk ar Wi-Fi",
+    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…"
 }

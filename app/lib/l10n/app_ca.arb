@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "L'àudio es queda al telèfon",
     "onDeviceModelDownloadSize": "Baixada de {size} MB",
     "downloadNow": "Baixa ara",
-    "onWifiLater": "Més tard amb Wi-Fi"
+    "onWifiLater": "Més tard amb Wi-Fi",
+    "conversationWritingSummary": "Escrivint el teu resum…"
 }

@@ -12,6 +12,7 @@ def _desc(path: str) -> FirestoreIndexField:
 
 
 MCP_CONVERSATION_CARD_FIELD_PATHS = (
+    'recording',
     'id',
     'status',
     'discarded',

@@ -15546,4 +15546,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onWifiLater => 'بعداً با Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
 }

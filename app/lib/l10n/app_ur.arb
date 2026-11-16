@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "آڈیو آپ کے فون پر ہی رہتا ہے",
     "onDeviceModelDownloadSize": "{size} MB ڈاؤن لوڈ",
     "downloadNow": "ابھی ڈاؤن لوڈ کریں",
-    "onWifiLater": "بعد میں Wi-Fi پر"
+    "onWifiLater": "بعد میں Wi-Fi پر",
+    "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…"
 }

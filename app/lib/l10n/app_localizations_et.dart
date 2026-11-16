@@ -15546,4 +15546,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Hiljem Wi-Fi kaudu';
+
+  @override
+  String get conversationWritingSummary => 'Kirjutame sinu kokkuvõtet…';
 }

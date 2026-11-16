@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Ljudet stannar på telefonen",
     "onDeviceModelDownloadSize": "{size} MB nedladdning",
     "downloadNow": "Ladda ned nu",
-    "onWifiLater": "Senare via Wi-Fi"
+    "onWifiLater": "Senare via Wi-Fi",
+    "conversationWritingSummary": "Skriver din sammanfattning…"
 }

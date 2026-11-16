@@ -60,7 +60,14 @@ class HomeFeedProvider extends ChangeNotifier {
   Future<void> retry() =>
       _reconcileRequested ? reconcileLoadedWindow() : (_needsRefresh || _cursor == null ? refresh() : loadMore());
 
+  /// True while the account runs recordings and conversations (v3): Home reads the plain
+  /// conversation list, so the feed stays inactive and makes no calls.
+  bool Function()? suppressed;
+
+  bool get _off => suppressed?.call() == true;
+
   void setActive(bool active) {
+    active = active && !_off;
     if (_active == active && _uid == _owner()) return;
     final resuming = !_active && active && _uid == _owner();
     _active = active;
@@ -149,7 +156,7 @@ class HomeFeedProvider extends ChangeNotifier {
 
   Future<void> _start() async {
     final uid = _owner();
-    if (uid.isEmpty || _disposed || !_active) return;
+    if (uid.isEmpty || _disposed || !_active || _off) return;
     if (_uid == uid && initialized) return;
     _uid = uid;
     final generation = ++_generation;
@@ -163,6 +170,8 @@ class HomeFeedProvider extends ChangeNotifier {
   bool _current(int generation, String uid) => !_disposed && _active && generation == _generation && uid == _owner();
   Future<void> refresh() {
     if (_uid != _owner()) setActive(_active);
+    // The switch can turn on while the feed is already active: re-check on every read.
+    if (_off && _active) setActive(false);
     if (_disposed || !_active) return Future.value();
     if (_flight != null) return _flight!;
     _uid = _owner();
@@ -183,14 +192,14 @@ class HomeFeedProvider extends ChangeNotifier {
 
   Future<void> loadMore() {
     if (_flight != null) return _flight!;
-    if (!_active || !_hasMore || _disposed || unsupported || !initialized) return Future.value();
+    if (_off || !_active || !_hasMore || _disposed || unsupported || !initialized) return Future.value();
     if (_needsRefresh) return refresh();
     return _read(replace: false);
   }
 
   Future<void> warm() async {
     final generation = _generation;
-    for (var request = 1; request < maxWarmRequests && generation == _generation && _active; request++) {
+    for (var request = 1; request < maxWarmRequests && generation == _generation && _active && !_off; request++) {
       if (!_hasMore ||
           problem != null ||
           _items.length >= maxCards ||
@@ -296,7 +305,7 @@ class HomeFeedProvider extends ChangeNotifier {
   /// episode shells until this commit preserves the scrolled reader's row geometry.
   Future<void> reconcileLoadedWindow() {
     if (_flight != null) return _flight!;
-    if (_disposed || !_active) return Future.value();
+    if (_disposed || !_active || _off) return Future.value();
     final generation = _generation, uid = _uid, target = _items.length;
     final done = Completer<void>();
     _flight = done.future;
