@@ -48,9 +48,13 @@ switch — means off, and off restores the exact previous intake path: identical
 persistence, results and enrichment decisions, main-format lineage logging and
 no probe reads. Append timing on the fleet path remains independently observable.
 
-The switch alone does not widen the change: activation additionally requires
+The switch alone does not widen the write-side change: activation additionally requires
 ``sync_lineage_resolve_active_for(uid)``, so it reaches only users admitted to
-lineage binding.
+lineage binding. Prompt rendering independently uses the same kill switch
+for a non-mutating multi-scope batch projection. It prefers placed copies,
+requires bounded lexical coverage or identical text at the same endpoints,
+and preserves manual/translated lines and uncertain repetition. No stored
+transcript, annotation, audio receipt or paid-work admission is changed.
 
 Pure module: stdlib plus the sibling lineage gate, read at the call boundary,
 never at import.
