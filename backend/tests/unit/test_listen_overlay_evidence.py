@@ -156,7 +156,7 @@ def test_rendered_key_union_includes_removed_and_added_keys():
 
 
 @pytest.mark.parametrize(
-    'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement']
+    'fault', [None, 'live-movement', 'wrong-source', 'wrong-image', 'wrong-attempt', 'helm-movement', 'missing-runtime']
 )
 def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(tmp_path, fault):
     private_file = tmp_path / 'private.yaml'
@@ -256,6 +256,8 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         'based-hardware',
         ['-f', '<private-overlay>'],
     )
+    if fault == 'missing-runtime':
+        del req['bindings']['runtime_manifest_sha256']
     reader = Fake()
     with patch.object(evidence, 'bindings', return_value=req['bindings']):
         if fault:
@@ -273,6 +275,8 @@ def test_complete_producer_uses_only_bounded_reads_and_refuses_changed_binding(t
         assert not (args[0] == 'kubectl' and 'apply' in args)
         if args[0] == 'helm' and 'upgrade' in args:
             assert '--dry-run=client' in args
+    if fault == 'missing-runtime':
+        assert reader.commands == []
 
 
 def test_real_subprocess_output_is_capped_and_private_error_is_never_echoed(tmp_path):
