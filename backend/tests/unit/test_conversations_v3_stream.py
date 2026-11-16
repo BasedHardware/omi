@@ -12,6 +12,7 @@ import pytest
 from utils.conversations.v3 import summary
 from utils.conversations import process_conversation as process
 from models.structured import Structured
+from routers import conversations as routes
 
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
@@ -153,7 +154,6 @@ async def test_summary_renews_lease_until_model_finishes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
-    from routers import conversations as routes
     from fastapi import HTTPException
 
     async def blocking(pool, fn, *args, **kwargs):
@@ -173,7 +173,6 @@ async def test_summary_route_returns_409_before_streaming_response(monkeypatch):
 @pytest.mark.asyncio
 async def test_on_open_reconcile_timeout_streams_stored_row(monkeypatch):
     import asyncio
-    from routers import conversations as routes
     from utils.conversations.v3 import service
 
     async def blocking(pool, fn, *args, **kwargs):
