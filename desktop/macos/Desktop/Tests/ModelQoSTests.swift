@@ -43,7 +43,7 @@ final class ModelQoSTests: XCTestCase {
       ModelQoS.activeTier = tier
       XCTAssertEqual(ModelQoS.Claude.chat, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.floatingBar, "claude-sonnet-4-6")
-      XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-20250514")
+      XCTAssertEqual(ModelQoS.Claude.chatLabQuery, "claude-sonnet-4-6")
       XCTAssertEqual(ModelQoS.Claude.chatLabGrade, "claude-haiku-4-5-20251001")
       XCTAssertEqual(ModelQoS.Claude.defaultSelection, "claude-sonnet-4-6")
     }
