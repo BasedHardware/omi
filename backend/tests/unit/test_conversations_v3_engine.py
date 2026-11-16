@@ -49,6 +49,22 @@ def test_recorded_clock_and_near_duplicate():
     assert groups[0]['lines'][0]['start'] == NOW + timedelta(seconds=1)
 
 
+def test_repeated_speech_in_one_recording_is_kept():
+    said = 'Can you hear me now over there?'
+    a = recording('a', segments=[{'text': said, 'start': t, 'end': t + 2} for t in (0, 5, 10)])
+    groups = outline.stretches([a], NOW + timedelta(hours=1))
+    assert [line['start'] for line in groups[0]['lines']] == [NOW + timedelta(seconds=t) for t in (0, 5, 10)]
+
+
+def test_duplicate_capture_needs_overlapping_time():
+    said = 'Can you hear me now over there?'
+    a = recording('a', segments=[{'text': said, 'start': 0, 'end': 2}])
+    overlapping = recording('b', segments=[{'text': said, 'start': 1, 'end': 3}])
+    later = recording('c', segments=[{'text': said, 'start': 10, 'end': 12}])
+    groups = outline.stretches([a, overlapping, later], NOW + timedelta(hours=1))
+    assert [line['start'] for line in groups[0]['lines']] == [NOW, NOW + timedelta(seconds=10)]
+
+
 def test_finished_fingerprint_invalidated_by_late_speech():
     row = recording()
     group = outline.stretches([row], NOW + timedelta(hours=1))[0]

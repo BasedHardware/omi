@@ -49,9 +49,13 @@ Write in English unless the speech is mostly in another language."""
 SILENCE = timedelta(minutes=5)
 
 
+# Clock slack when matching the same speech captured by two recordings.
+DUPLICATE_OVERLAP_SLACK = timedelta(seconds=2)
+
+
 def stretches(members, now):
     lines = []
-    seen = {}
+    seen = []
     for row in sorted(
         members, key=lambda r: (utc(r.get('started_at')) or utc(r.get('recorded_start')) or now, r['id'])
     ):
@@ -65,17 +69,24 @@ def stretches(members, now):
             start = origin + timedelta(seconds=float(segment.get('start') or 0))
             end = origin + timedelta(seconds=max(float(segment.get('end') or 0), float(segment.get('start') or 0)))
             normalized = ' '.join(text.casefold().split())
-            near = [old for old, at in seen.items() if abs((start - at).total_seconds()) <= 20]
+            # Only duplicate capture is dropped: the same speech recorded by another recording at an
+            # overlapping time. A speaker repeating a sentence within one recording is real speech.
             if any(
-                normalized == old
-                or (
-                    min(len(normalized.split()), len(old.split())) >= 6
-                    and SequenceMatcher(None, normalized, old).ratio() >= 0.92
+                rid != row['id']
+                and start <= o_end + DUPLICATE_OVERLAP_SLACK
+                and end >= o_start - DUPLICATE_OVERLAP_SLACK
+                and (
+                    normalized == old
+                    or (
+                        min(len(normalized.split()), len(old.split())) >= 6
+                        and SequenceMatcher(None, normalized, old).ratio() >= 0.92
+                    )
                 )
-                for old in near
+                for old, o_start, o_end, rid in seen
+                if abs((start - o_start).total_seconds()) <= 20
             ):
                 continue
-            seen[normalized] = start
+            seen.append((normalized, start, end, row['id']))
             if any(start < utc(span['end']) and end > utc(span['start']) for span in row.get('deleted_spans') or []):
                 continue
             speaker = (

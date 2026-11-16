@@ -383,6 +383,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   Timer? _v3Quick;
   DateTime? _v3QuickSince;
   int? _v3ProcessingSignature;
+  String? _v3LiveId;
   DateTime? _v3EventRefreshAt;
 
   /// Episodes were asked for before the switch answered (and so made no call); ask again once it says
@@ -411,7 +412,7 @@ class _ConversationsPageState extends State<ConversationsPage>
   /// v3 Home after a frame. Until the server shows the conversation in progress, a streaming capture
   /// re-reads it every 5 s for up to 3 minutes. A capture event (a recording ended or was processed)
   /// re-reads the list and the live conversation instead of adding the recording as a row.
-  void _afterV3Frame({required bool waitingForLive, required int processingSignature}) {
+  void _afterV3Frame({required bool waitingForLive, required int processingSignature, required String? liveId}) {
     final v3 = _v3;
     if (v3 == null || !mounted) return;
     if (waitingForLive && _v3Watching) {
@@ -439,6 +440,13 @@ class _ConversationsPageState extends State<ConversationsPage>
         (last == null || clock.now().difference(last) >= const Duration(seconds: 10))) {
       _v3EventRefreshAt = clock.now();
       unawaited(v3.refresh());
+      unawaited(context.read<ConversationProvider>().fetchConversations());
+    }
+    // The conversation in progress closed (it left the live slot or another took it): re-read the list
+    // so it appears as an ordinary row, whatever the processing signature did.
+    final previousLive = _v3LiveId;
+    _v3LiveId = liveId;
+    if (previousLive != null && previousLive != liveId) {
       unawaited(context.read<ConversationProvider>().fetchConversations());
     }
   }
@@ -895,8 +903,11 @@ class _ConversationsPageState extends State<ConversationsPage>
           final waiting = streaming && v3Live == null;
           final signature =
               Object.hashAll(snapshot.processingConversations.map((c) => Object.hash(c.id, c.status, c.homeStep)));
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => _afterV3Frame(waitingForLive: waiting, processingSignature: signature));
+          WidgetsBinding.instance.addPostFrameCallback((_) => _afterV3Frame(
+                waitingForLive: waiting,
+                processingSignature: signature,
+                liveId: v3Live?.id,
+              ));
         }
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/

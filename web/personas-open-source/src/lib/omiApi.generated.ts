@@ -734,15 +734,6 @@ export interface AudioFileUrlInfo {
   status: string;
 }
 
-export interface AudioManifestPiece {
-  audio_file_id: string;
-  end: number;
-  expires_at: string;
-  recording_id: string;
-  start: number;
-  url: string;
-}
-
 export interface AudioPrecacheResponse {
   audio_file_count?: number | null;
   message?: string | null;
@@ -1629,10 +1620,6 @@ export interface ConversationAudio {
   content_type?: string;
   duration: number;
   spans?: Array<ConversationAudioSpan>;
-}
-
-export interface ConversationAudioManifest {
-  pieces: Array<AudioManifestPiece>;
 }
 
 export interface ConversationAudioSpan {
@@ -6870,7 +6857,6 @@ export interface OmiApiSchemas {
   "AudioDownloadPendingResponse": AudioDownloadPendingResponse;
   "AudioFile": AudioFile;
   "AudioFileUrlInfo": AudioFileUrlInfo;
-  "AudioManifestPiece": AudioManifestPiece;
   "AudioPrecacheResponse": AudioPrecacheResponse;
   "AudioTimelineProvenance": AudioTimelineProvenance;
   "AudioUrlsResponse": AudioUrlsResponse;
@@ -6992,7 +6978,6 @@ export interface OmiApiSchemas {
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
   "ConversationAnalytics": ConversationAnalytics;
   "ConversationAudio": ConversationAudio;
-  "ConversationAudioManifest": ConversationAudioManifest;
   "ConversationAudioSpan": ConversationAudioSpan;
   "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
@@ -8885,17 +8870,6 @@ export interface OmiApiPaths {
       operationId: "set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch";
       responses: {
         "200": Conversation;
-        "401": void;
-        "404": void;
-        "422": HTTPValidationError;
-      };
-    };
-  };
-  "/v1/conversations/{conversation_id}/audio-manifest": {
-    get: {
-      operationId: "conversation_audio_manifest_v1_conversations__conversation_id__audio_manifest_get";
-      responses: {
-        "200": ConversationAudioManifest;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -15728,25 +15702,6 @@ export async function set_assignee_conversation_segment_v1_conversations__conver
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
-}
-
-export async function conversation_audio_manifest_v1_conversations__conversation_id__audio_manifest_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationAudioManifest> {
-  const _base = init?.baseURL ?? "";
-  const _path = `/v1/conversations/${path.conversation_id}/audio-manifest`;
-  const _search = "";
-  const _res = await fetch(`${_base}${_path}${_search}`, {
-    method: "GET",
-    headers: {
-      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
-      ...init?.headers,
-      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
-      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
-      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
-      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
-    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -24299,4 +24254,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 554 client methods generated.
+// Total: 553 client methods generated.

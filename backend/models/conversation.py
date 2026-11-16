@@ -1135,12 +1135,3 @@ class LiveConversation(BaseModel):
 class ConversationsLiveResponse(BaseModel):
     v3: bool
     conversation: Optional[LiveConversation] = None
-
-
-class AudioManifestPiece(RecordingPiece):
-    url: str
-    expires_at: datetime
-
-
-class ConversationAudioManifest(BaseModel):
-    pieces: List[AudioManifestPiece]

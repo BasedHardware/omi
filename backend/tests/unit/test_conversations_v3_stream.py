@@ -17,6 +17,12 @@ from routers import conversations as routes
 AT = datetime(2026, 11, 16, tzinfo=timezone.utc)
 
 
+def test_section_frames_carry_newlines_as_the_chat_crlf_marker():
+    frame = summary.section_frame('## Decisions\n- Ship Friday\n- Freeze Thursday')
+    assert frame == 'data: ## Decisions__CRLF__- Ship Friday__CRLF__- Freeze Thursday\n\n'
+    assert '\\n' not in frame
+
+
 def test_on_open_summary_refresh_threshold():
     assert summary.fresh({'summary_covers_through': AT, 'finished_at': AT + timedelta(minutes=5)}) is False
     assert (

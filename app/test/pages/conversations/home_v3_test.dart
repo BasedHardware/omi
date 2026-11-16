@@ -262,6 +262,9 @@ class _Home {
   final bool remembered;
   int episodeCalls = 0;
   int liveReads = 0;
+
+  /// False once the conversation in progress has closed.
+  bool liveOpen = true;
   final sync = _StubSyncProvider();
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
@@ -305,7 +308,7 @@ class _Home {
       liveReads++;
       return ApiSuccess(ConversationsLiveRead(
         v3: v3,
-        conversation: v3
+        conversation: v3 && liveOpen
             ? _conversation('live-1', _now.subtract(const Duration(minutes: 20)), 'Launch checklist',
                 v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.live))
             : null,
@@ -422,6 +425,14 @@ Future<void> _dispose(WidgetTester tester, _Home home) async {
 
 class _Conversations extends ConversationProvider {
   _Conversations() : super(isSignedIn: () => false);
+
+  int listReads = 0;
+
+  @override
+  Future<bool> fetchConversations({bool restoreMergeWatches = true}) async {
+    listReads++;
+    return true;
+  }
 }
 
 List<String> _rowIds(WidgetTester tester) =>
@@ -467,6 +478,24 @@ void main() {
       expect(find.byKey(const ValueKey('day_summary_header_2026-11-16')), findsNothing);
 
       expect(home.episodeCalls, 0, reason: 'a v3 account makes no episode calls');
+      await _dispose(tester, home);
+    });
+  });
+
+  testWidgets('v3: the list is re-read when the conversation in progress closes', (tester) async {
+    await withClock(Clock.fixed(_now), () async {
+      final home = await _pumpHome(tester, v3: true);
+      expect(_rowIds(tester).first, 'live-1');
+      final before = home.conversations.listReads;
+
+      home.liveOpen = false;
+      await home.conversationsV3.refresh();
+      await tester.pump();
+      await tester.pump();
+
+      expect(home.conversationsV3.live, isNull);
+      expect(home.conversations.listReads, before + 1,
+          reason: 'the closed conversation comes back as an ordinary row from the list read');
       await _dispose(tester, home);
     });
   });

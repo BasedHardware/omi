@@ -140,7 +140,7 @@ def test_audio_alias_is_owner_checked(monkeypatch):
         audio.resolve('synthetic', {'id': 'different'}, {'id': 'file', 'recording_id': 'r'})
 
 
-def test_deleted_manifest_spans_preserve_neighbours():
+def test_deleted_spans_preserve_neighbours():
     assert audio.subtract_spans(0, 100, [(20, 30), (60, 120)]) == [(0, 20), (30, 60)]
 
 

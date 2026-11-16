@@ -4910,47 +4910,6 @@
         "title": "AudioFileUrlInfo",
         "type": "object"
       },
-      "AudioManifestPiece": {
-        "properties": {
-          "audio_file_id": {
-            "title": "Audio File Id",
-            "type": "string"
-          },
-          "end": {
-            "minimum": 0.0,
-            "title": "End",
-            "type": "number"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
-          "recording_id": {
-            "title": "Recording Id",
-            "type": "string"
-          },
-          "start": {
-            "minimum": 0.0,
-            "title": "Start",
-            "type": "number"
-          },
-          "url": {
-            "title": "Url",
-            "type": "string"
-          }
-        },
-        "required": [
-          "recording_id",
-          "audio_file_id",
-          "start",
-          "end",
-          "url",
-          "expires_at"
-        ],
-        "title": "AudioManifestPiece",
-        "type": "object"
-      },
       "AudioPrecacheResponse": {
         "properties": {
           "audio_file_count": {
@@ -10482,22 +10441,6 @@
           "captured_duration"
         ],
         "title": "ConversationAudio",
-        "type": "object"
-      },
-      "ConversationAudioManifest": {
-        "properties": {
-          "pieces": {
-            "items": {
-              "$ref": "#/components/schemas/AudioManifestPiece"
-            },
-            "title": "Pieces",
-            "type": "array"
-          }
-        },
-        "required": [
-          "pieces"
-        ],
-        "title": "ConversationAudioManifest",
         "type": "object"
       },
       "ConversationAudioSpan": {
@@ -53362,95 +53305,6 @@
           }
         ],
         "summary": "Set Assignee Conversation Speaker",
-        "tags": [
-          "conversations"
-        ]
-      }
-    },
-    "/v1/conversations/{conversation_id}/audio-manifest": {
-      "get": {
-        "operationId": "conversation_audio_manifest_v1_conversations__conversation_id__audio_manifest_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "conversation_id",
-            "required": true,
-            "schema": {
-              "title": "Conversation Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "title": "Authorization",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Platform",
-            "required": false,
-            "schema": {
-              "title": "X-App-Platform",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-Device-Id-Hash",
-            "required": false,
-            "schema": {
-              "title": "X-Device-Id-Hash",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "X-App-Version",
-            "required": false,
-            "schema": {
-              "title": "X-App-Version",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConversationAudioManifest"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "firebaseBearer": []
-          }
-        ],
-        "summary": "Conversation Audio Manifest",
         "tags": [
           "conversations"
         ]

@@ -192,8 +192,6 @@ SCHEMA_GROUPS = {
             'RecordingPiece',
             'LiveConversation',
             'ConversationsLiveResponse',
-            'AudioManifestPiece',
-            'ConversationAudioManifest',
             'RecordAudioPartial',
             'ProjectedActionItem',
             'ProjectedSection',

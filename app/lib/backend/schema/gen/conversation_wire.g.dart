@@ -1526,66 +1526,6 @@ class GeneratedConversationsLiveResponse {
   }
 }
 
-class GeneratedAudioManifestPiece {
-  final String audioFileId;
-  final double end;
-  final DateTime expiresAt;
-  final String recordingId;
-  final double start;
-  final String url;
-
-  const GeneratedAudioManifestPiece({
-    required this.audioFileId,
-    required this.end,
-    required this.expiresAt,
-    required this.recordingId,
-    required this.start,
-    required this.url,
-  });
-
-  factory GeneratedAudioManifestPiece.fromJson(Map<String, dynamic> json) {
-    return GeneratedAudioManifestPiece(
-      audioFileId: _required(_readFieldValue<String>(_readField(json, const ["audio_file_id"]), "audio_file_id", _readString, requiredField: true, nullable: false), "audio_file_id"),
-      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
-      expiresAt: _required(_readFieldValue<DateTime>(_readField(json, const ["expires_at"]), "expires_at", _readDateTime, requiredField: true, nullable: false), "expires_at"),
-      recordingId: _required(_readFieldValue<String>(_readField(json, const ["recording_id"]), "recording_id", _readString, requiredField: true, nullable: false), "recording_id"),
-      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
-      url: _required(_readFieldValue<String>(_readField(json, const ["url"]), "url", _readString, requiredField: true, nullable: false), "url"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'audio_file_id': audioFileId,
-      'end': end,
-      'expires_at': expiresAt.toUtc().toIso8601String(),
-      'recording_id': recordingId,
-      'start': start,
-      'url': url,
-    };
-  }
-}
-
-class GeneratedConversationAudioManifest {
-  final List<GeneratedAudioManifestPiece> pieces;
-
-  const GeneratedConversationAudioManifest({
-    required this.pieces,
-  });
-
-  factory GeneratedConversationAudioManifest.fromJson(Map<String, dynamic> json) {
-    return GeneratedConversationAudioManifest(
-      pieces: _required(_readFieldValue<List<GeneratedAudioManifestPiece>>(_readField(json, const ["pieces"]), "pieces", (value) => _readObjectList(value, GeneratedAudioManifestPiece.fromJson), requiredField: true, nullable: false), "pieces"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'pieces': pieces.map((value) => value.toJson()).toList(),
-    };
-  }
-}
-
 class GeneratedRecordAudioPartial {
   final int appliedGeneration;
   final int generation;

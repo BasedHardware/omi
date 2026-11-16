@@ -56,6 +56,11 @@ def write(uid, row, emit):
     return structured.model_dump()
 
 
+def section_frame(markdown: str) -> str:
+    """One streamed section in the chat SSE framing: newlines travel as __CRLF__, which the app decodes."""
+    return 'data: ' + markdown.replace('\n', '__CRLF__') + '\n\n'
+
+
 async def prepare(uid, row):
     if fresh(row) or not summary_eligible(row):
         return None
@@ -112,7 +117,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         while not worker.done() or not queue.empty():
             try:
                 section = await asyncio.wait_for(queue.get(), timeout=1)
-                yield 'data: ' + section.replace('\n', '\\n') + '\n\n'
+                yield section_frame(section)
             except asyncio.TimeoutError:
                 if not worker.done():
                     yield ': heartbeat\n\n'
@@ -136,7 +141,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
                 + str(section.get('body_markdown') or '')
             )
             if text not in sent:
-                yield 'data: ' + text.replace('\n', '\\n') + '\n\n'
+                yield section_frame(text)
         yield done({**row, 'structured': structured, 'summary_covers_through': row.get('finished_at')})
     except asyncio.CancelledError:
         if worker and not worker.done():

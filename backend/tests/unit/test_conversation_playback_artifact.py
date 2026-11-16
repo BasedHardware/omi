@@ -497,18 +497,6 @@ def test_v3_download_never_returns_covering_recording(monkeypatch):
     assert result.status_code == 202
 
 
-def test_manifest_skips_missing_piece_without_hiding_available_audio(monkeypatch):
-    audio, row, _ = _v3_fixture(monkeypatch)
-    row['recording_pieces'].append({'recording_id': 'gone', 'audio_file_id': 'gone', 'start': 0, 'end': 2})
-    monkeypatch.setattr(
-        playback,
-        'get_audio_signed_urls',
-        lambda *a, **kw: {'audio_files': [{'id': 'file', 'signed_url': 'https://synthetic-window-source'}]},
-    )
-    result = audio.manifest('u', row)
-    assert [(p['start'], p['end']) for p in result['pieces']] == [(1, 3), (6, 8)]
-
-
 def test_cached_backup_artifact_keeps_legacy_audio_files_protocol(monkeypatch):
     from types import SimpleNamespace
 

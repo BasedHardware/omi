@@ -167,7 +167,7 @@ logger = logging.getLogger(__name__)
 from config.conversations_v3 import conversations_v3_enabled
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from utils.episodes import client_gate
-from models.conversation import ConversationsLiveResponse, ConversationAudioManifest
+from models.conversation import ConversationsLiveResponse
 from utils.conversations.v3 import audio as v3_audio, summary as v3_summary
 
 router = APIRouter()
@@ -2772,15 +2772,6 @@ def merge_conversations(
         conversation_ids=request.conversation_ids,
         merged_conversation_id=job['merge_target_id'],
     )
-
-
-@router.get(
-    '/v1/conversations/{conversation_id}/audio-manifest',
-    response_model=ConversationAudioManifest,
-    tags=['conversations'],
-)
-def conversation_audio_manifest(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    return v3_audio.manifest(uid, _get_valid_conversation_by_id(uid, conversation_id))
 
 
 @router.get(

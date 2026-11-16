@@ -1,10 +1,9 @@
-"""Owner-checked recording audio aliases and window manifests."""
+"""Owner-checked recording audio aliases and window-exact conversation playback artifacts."""
 
 import hashlib
 import io
 import json
 from typing import Any
-from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
@@ -166,60 +165,3 @@ def subtract_spans(start, end, deleted):
                     next_intervals.append((right, b))
         intervals = next_intervals
     return intervals
-
-
-def manifest(uid, conversation):
-    from utils.sync.playback import get_audio_signed_urls
-
-    result = []
-    now = datetime.now(timezone.utc)
-    files = conversation.get('audio_files') or []
-    pieces = conversation.get('recording_pieces')
-    if pieces is None:
-        pieces = [
-            {'recording_id': conversation['id'], 'audio_file_id': af['id'], 'start': 0.0, 'end': af.get('duration', 0)}
-            for af in files
-        ]
-    for piece in pieces:
-        alias = next(
-            (
-                af
-                for af in files
-                if (af.get('recording_file_id') or af['id']) == piece['audio_file_id']
-                and (af.get('recording_id') or conversation['id']) == piece['recording_id']
-            ),
-            None,
-        )
-        if not alias:
-            continue
-        try:
-            rid, original, recording = resolve(uid, conversation, alias)
-        except HTTPException as exc:
-            if exc.status_code == 404:
-                continue
-            raise
-        response = get_audio_signed_urls(uid, rid, [original], conversation=recording)
-        url_info = next((af for af in response.get('audio_files', []) if af['id'] == original['id']), {})
-        url = url_info.get('signed_url')
-        if not url:
-            continue
-        origin = playback_origin(original, recording)
-        if origin is None:
-            raise HTTPException(503, 'Audio clock metadata is being prepared')
-        deleted = []
-        for span in recording.get('deleted_spans') or []:
-            start, end = utc(span['start']), utc(span['end'])
-            if start is None or end is None:
-                raise HTTPException(503, 'Audio deletion metadata is being prepared')
-            deleted.append(((start - origin).total_seconds(), (end - origin).total_seconds()))
-        for a, b in subtract_spans(piece['start'], piece['end'], deleted):
-            result.append(
-                {
-                    **piece,
-                    'start': a,
-                    'end': b,
-                    'url': url,
-                    'expires_at': url_info.get('expires_at') or now + timedelta(minutes=5),
-                }
-            )
-    return {'pieces': result}

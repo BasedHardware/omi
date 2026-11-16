@@ -1,4 +1,4 @@
-// Wire types for the recordings-and-conversations (v3) reads: the live read, audio manifest pieces and
+// Wire types for the recordings-and-conversations (v3) reads: the live read and
 // the summary stream's events, with their decoders. The HTTP calls live in backend/http/api/conversations_v3.dart.
 import 'dart:convert';
 
@@ -27,46 +27,6 @@ class ConversationsLiveRead {
       }
     }
     return ConversationsLiveRead(v3: v3, conversation: live);
-  }
-}
-
-/// One playable piece of a conversation's audio: a span of one recording's file, with a signed URL.
-class AudioManifestPiece {
-  const AudioManifestPiece({
-    required this.recordingId,
-    required this.audioFileId,
-    required this.url,
-    required this.start,
-    required this.end,
-    this.expiresAt,
-  });
-
-  final String recordingId;
-  final String audioFileId;
-  final String url;
-
-  /// Seconds on that file's clock.
-  final double start;
-  final double end;
-  final DateTime? expiresAt;
-
-  Duration get length => Duration(milliseconds: ((end - start) * 1000).round());
-
-  static AudioManifestPiece? fromJson(Object? json) {
-    if (json is! Map) return null;
-    final url = json['url'];
-    final start = json['start'];
-    final end = json['end'];
-    if (url is! String || url.isEmpty || start is! num || end is! num || end <= start) return null;
-    final expires = json['expires_at'];
-    return AudioManifestPiece(
-      recordingId: json['recording_id'] is String ? json['recording_id'] as String : '',
-      audioFileId: json['audio_file_id'] is String ? json['audio_file_id'] as String : '',
-      url: url,
-      start: start.toDouble(),
-      end: end.toDouble(),
-      expiresAt: expires is String ? DateTime.tryParse(expires) : null,
-    );
   }
 }
 

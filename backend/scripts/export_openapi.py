@@ -147,10 +147,6 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated first-party v3 capability/live row; not a Developer API key route.',
     (
         'GET',
-        '/v1/conversations/{conversation_id}/audio-manifest',
-    ): 'Firebase-authenticated first-party audio windows; not a Developer API key route.',
-    (
-        'GET',
         '/v1/conversations/{conversation_id}/summary/stream',
     ): 'Firebase-authenticated first-party on-open notes stream; not a Developer API key route.',
     (
