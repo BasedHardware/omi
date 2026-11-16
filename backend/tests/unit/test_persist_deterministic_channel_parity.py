@@ -203,7 +203,11 @@ def test_the_handoff_contract_admits_the_closed_pair():
 
 def test_the_disposition_constants_are_stage_scoped():
     assert VALIDATION_DISPOSITION_PERSIST_STAGE == WorkerValidationStage.PERSIST.value
-    assert VALIDATION_DISPOSITION_PERSIST_REASONS == {'persist_payload_invalid'}
+    # persist_privacy_refused joined for the persist tail's privacy fence:
+    # the transactional privacy authority's refusal is deterministic on
+    # identical input and is user intent, so it joins the payload refusal
+    # in the stage-scoped disposition pair.
+    assert VALIDATION_DISPOSITION_PERSIST_REASONS == {'persist_payload_invalid', 'persist_privacy_refused'}
 
 
 def test_the_disposition_arm_answers_for_the_closed_pair_at_persist():

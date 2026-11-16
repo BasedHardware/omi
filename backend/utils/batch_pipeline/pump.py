@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from functools import partial
 from typing import Any
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_privacy_attempt import with_batch_privacy_attempt
 from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
 
@@ -386,6 +387,28 @@ class Pump:
             try:
                 async with self._maintenance:
                     await self._maintain()
+            except BatchPrivacyBlocked as error:
+                # The privacy fence's verdict is a designed outcome, not a
+                # fault: the owner's account, data-protection setting,
+                # privacy generation or conversation state stopped accepting
+                # server results, the fence read the live documents inside
+                # the transaction and refused, and every replay of the same
+                # step raises the same refusal. Booking it on the ERROR
+                # fault channel re-reported one user-intent decision every
+                # sweep forever (the ``batch_maintenance outcome=retry
+                # exception_type=BatchPrivacyBlocked`` ERROR line), while the
+                # scheduler's park and the recovery sweep's fence-first
+                # check settle the refused unit by design. Report the
+                # designed outcome on INFO — the site field keeps any lane
+                # leak visible — and let the sweep's normal cadence
+                # continue.
+                #
+                # Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+                logger.info(
+                    'event=batch_maintenance outcome=privacy_blocked exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
             except Exception as error:
                 logger.error(
                     'event=batch_maintenance outcome=retry exception_type=%s%s',
@@ -404,6 +427,29 @@ class Pump:
                 count = await self.run_once(stop_event=stop_event, maintain=maintain)
             except FatalGpuError:
                 raise  # Fatal CUDA requires process replacement, never another pull.
+            except BatchPrivacyBlocked as error:
+                # The privacy fence's verdict is a designed outcome, not a
+                # fault: the owner's account, data-protection setting,
+                # privacy generation or conversation state stopped accepting
+                # server results, the fence read the live documents inside
+                # the transaction and refused, and every replay of the same
+                # pass raises the same refusal. Booking it on the ERROR
+                # fault channel re-reported one user-intent decision every
+                # idle cycle forever (the ``batch_pump outcome=retry
+                # exception_type=BatchPrivacyBlocked`` ERROR line), while the
+                # scheduler's park and the recovery sweep's fence-first
+                # check settle the refused unit by design. Report the
+                # designed outcome on INFO — the site field keeps any lane
+                # leak visible — take the idle backoff, and let the next
+                # pass serve every other owner.
+                #
+                # Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+                logger.info(
+                    'event=batch_pump outcome=privacy_blocked exception_type=%s%s',
+                    type(error).__name__,
+                    error_site_field(error),
+                )
+                count = 0
             except Exception as error:
                 logger.error(
                     'event=batch_pump outcome=retry exception_type=%s%s',

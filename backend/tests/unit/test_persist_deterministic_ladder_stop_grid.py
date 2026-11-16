@@ -240,7 +240,9 @@ FLAGGED = {'vad_nonfinite', 'vad_order', 'vad_bounds', 'word_shape', 'word_clock
 def _expected_disposition(stage, reason, disposition_enabled):
     if stage == 'fetch_decode' and (reason in TRIO or reason in POISON):
         return True
-    if stage == 'persist' and reason == 'persist_payload_invalid':
+    # The persist pair: the 400-class payload refusal and the privacy
+    # fence's refusal both end the chain as typed custody handoffs.
+    if stage == 'persist' and reason in ('persist_payload_invalid', 'persist_privacy_refused'):
         return True
     return bool(disposition_enabled) and reason in FLAGGED and stage in WORKER_VALIDATION_STAGES
 

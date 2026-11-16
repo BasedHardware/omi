@@ -102,7 +102,9 @@ def test_matrix_reasons_cover_the_named_token():
 def test_matrix_covers_fifteen_distinct_reasons_plus_unknown():
     # decode_payload_invalid joined for the fetch_decode bare-ValueError
     # poison's typed custody handoff; the matrix grows with the vocabulary.
-    assert len(_matrix_reasons()) == 16
+    # persist_privacy_refused joined for the persist tail's privacy fence
+    # (the transactional privacy authority's deterministic refusal).
+    assert len(_matrix_reasons()) == 17
 
 
 def test_the_unknown_reason_stays_evidence_only_in_the_matrix():

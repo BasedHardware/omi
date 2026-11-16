@@ -182,7 +182,25 @@ VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS = frozenset(
 #
 # Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
 VALIDATION_DISPOSITION_PERSIST_STAGE = WorkerValidationStage.PERSIST.value
-VALIDATION_DISPOSITION_PERSIST_REASONS = frozenset({WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value})
+# The persist tail's second deterministic refusal is the privacy fence: the
+# transactional privacy authority refuses a unit whose owner's account,
+# data-protection setting, privacy generation or conversation state changed
+# while its GPU window ran (``BatchPrivacyBlocked``). Identical input
+# reproduces the refusal on every attempt — the fence reads the same live
+# documents the replay's identity fields name — and it is user intent, not a
+# worker fault, so the boundary ends the chain with the typed
+# ``persist_privacy_refused`` custody handoff and the fenced recovery lane
+# settles it through its own fence-first privacy check without
+# re-recognition. The pair stays stage-scoped like the payload refusal: the
+# privacy authority raises inside the persist register's transaction, so the
+# same token at any other stage — and a foreign shape at persist (the
+# transport/contention families, ``unknown``) — keeps its fault
+# classification.
+#
+# Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+VALIDATION_DISPOSITION_PERSIST_REASONS = frozenset(
+    {WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value, WorkerValidationReason.PERSIST_PRIVACY_REFUSED.value}
+)
 VALIDATION_DISPOSITION_FLAGGED_REASONS = frozenset(
     {
         WorkerValidationReason.VAD_NONFINITE.value,

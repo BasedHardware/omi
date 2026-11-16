@@ -606,6 +606,30 @@ class WorkerValidationReason(StrEnum):
     #
     # Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
     PERSIST_PAYLOAD_INVALID = 'persist_payload_invalid'
+    # A persist-tail refusal the transactional privacy authority raised:
+    # ``BatchPrivacyBlocked`` is the fence's typed verdict that the owner's
+    # account, data-protection setting, privacy generation or conversation
+    # state stopped accepting server results for this unit while its GPU
+    # window ran. The fence reads the live documents inside the register's
+    # transaction — after decode, VAD, diarization and ASR are all done — and
+    # the identity fields and payload that produced the refusal are exactly
+    # what every replay sends, so the refusal is deterministic on identical
+    # input and is user intent, not a worker fault. It used to fall through
+    # every persist loss classifier as an anonymous retryable fault: the
+    # re-strike lane skipped it (a non-Google custody class), the booking
+    # boundary booked ``error_class=BatchPrivacyBlocked stage=persist
+    # reason=unclassified``, and the job ladder re-ran the full GPU pipeline
+    # for every remaining attempt only to raise the same refusal at the same
+    # fence before quarantining blind on the ERROR fault channels. The
+    # boundary now ends the chain at the first occurrence with this typed
+    # token and retains custody for the fenced recovery lane, whose
+    # fence-first privacy check settles the refused unit without
+    # re-recognition. The persist transport and contention families keep
+    # their verdicts; a plain ``RuntimeError`` carrying a privacy-shaped
+    # message is not the fence and stays a retryable worker fault.
+    #
+    # Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+    PERSIST_PRIVACY_REFUSED = 'persist_privacy_refused'
     # A fetch_decode decode/parse poison: a bare builtin ``ValueError`` the
     # fetch/decode arm raised while materializing or decoding the unit's
     # pinned stored bytes that is NOT one of the typed decode-family classes

@@ -15,6 +15,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
+from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.firestore_transaction_retry import FirestoreContentionExhausted, is_transaction_contention
 
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
@@ -339,6 +340,32 @@ def persist_loss_is_deterministic(error: BaseException) -> bool:
     if not isinstance(error, InvalidArgument):
         return False
     return not persist_loss_is_contention(error)
+
+
+def persist_loss_is_privacy_refusal(error: BaseException) -> bool:
+    """True for the persist tail's privacy fence, a refusal no retry can clear.
+
+    ``BatchPrivacyBlocked`` is the transactional privacy authority's typed
+    verdict that the owner's account, data-protection setting, privacy
+    generation or conversation state no longer accepts server results for
+    this unit: the fence read the live documents inside the register's
+    transaction and refused. The identity fields and payload that produced
+    the refusal are exactly what every replay sends, so the GPU ladder's
+    remaining attempts each re-run the full pipeline only to raise the same
+    refusal at the same fence before quarantining blind — and the recovery
+    re-run would feed the same fence the same audio again. The verdict reads
+    the exception type — never its message or its bounded reason token — so
+    a hostile or unknown refusal text cannot drift the split. The lane's own
+    classifiers keep their arms untouched: contention
+    (``persist_loss_is_contention``), transport
+    (``persist_loss_is_restrikeable``) and the payload refusal
+    (``persist_loss_is_deterministic``) answer exactly as documented, and a
+    plain ``RuntimeError`` that merely carries a privacy-shaped message is
+    not the fence and stays a worker fault.
+
+    Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+    """
+    return isinstance(error, BatchPrivacyBlocked)
 
 
 _DECODE_PAYLOAD_TYPED_FAMILY = (
@@ -735,10 +762,11 @@ class PipelineWorker:
         non-strikeable fault, an exhausted strike budget, or the gate
         off raises the first fault untouched; the booking boundary then
         classifies it — a deterministic refusal (the 400-class
-        ``InvalidArgument`` that is not the expired-chain contention shape)
-        ends the chain as the typed ``persist_payload_invalid`` custody
-        handoff, and every other fault keeps the legacy retryable booking
-        and its evidence.
+        ``InvalidArgument`` that is not the expired-chain contention shape,
+        or the privacy fence's ``BatchPrivacyBlocked``) ends the chain as
+        the typed ``persist_payload_invalid`` / ``persist_privacy_refused``
+        custody handoff, and every other fault keeps the legacy retryable
+        booking and its evidence.
 
         Failure-Class: FC-persist-contention-exhaustion-discards-completed-gpu-results
         """
@@ -1089,6 +1117,24 @@ class PipelineWorker:
                 )
                 if persist_payload_invalid:
                     reason = WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value
+                # A persist-tail privacy refusal is deterministic on identical
+                # input and is user intent, not a worker fault: the fence read
+                # the live privacy documents inside the register's transaction
+                # and refused this unit's results. A retry re-runs the full GPU
+                # pipeline against the same fence and fails the same way, so it
+                # must end the chain at its first occurrence — the same
+                # terminal route the payload refusal rides — with custody
+                # retained for the fenced recovery lane whose fence-first
+                # privacy check settles the unit without re-recognition. The
+                # verdict reads the type through the dedicated classifier,
+                # never the refusal's message or reason token.
+                #
+                # Failure-Class: FC-privacy-refusal-at-persist-walks-gpu-retry-ladder-as-unclassified-worker-fault
+                persist_privacy_refused = (
+                    stage == WorkerValidationStage.PERSIST.value and persist_loss_is_privacy_refusal(exc)
+                )
+                if persist_privacy_refused:
+                    reason = WorkerValidationReason.PERSIST_PRIVACY_REFUSED.value
                 # A bare ValueError the fetch/decode arm raised while parsing
                 # or decoding this unit's pinned stored bytes (a NaN admitted
                 # duration ``round()`` refuses in the retained manifest
@@ -1147,6 +1193,7 @@ class PipelineWorker:
                     or retained_audio_invalid
                     or decoded_duration_mismatch
                     or persist_payload_invalid
+                    or persist_privacy_refused
                     or decode_payload_invalid
                     or (
                         isinstance(exc, BatchValidationError)
