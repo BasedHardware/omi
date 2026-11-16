@@ -66,7 +66,7 @@ allowance is why its separate reversible kill switch is provided.
 
 ## Verification
 
-Final commands, results and head receipt will be appended after completion.
+Final exact commands and results follow below.
 Test inventory: conversations-v3-review4-tests.txt. Initial development run
 caught fixture omissions (required structured/is_user and a UTC-day assumption);
 these are corrected and not counted as passing evidence.
@@ -77,3 +77,75 @@ cancel_owner_stale repeatedly; kernel-verified exact owned native process groups
 and orphaned owner PIDs were terminated, then agentctl terminal state was collected.
 No scope finding or independent SHIP review is claimed. Its disposable checkout
 was removed by the panel collector; no unrelated checkout was touched.
+
+## Round-4 final verification receipt
+
+Source commit: bd8632ab08f9aa53f682a3a38a990f5ea5af2b9b.
+The documentation receipt commit changes no runtime or test code.
+
+Backend commands (one pytest process per file; pinned worktree venv;
+all under the managed heavy gate):
+
+```sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- env \
+  PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review4-pytest-xml \
+  BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review4-tests.txt \
+  BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- env \
+  PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review4-pytest-xml \
+  BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review4-focused-tests.txt \
+  BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
+```
+
+The full 35-file run had 3,715 passing tests and exposed one new driver fixture error (factory instead of
+copied budget object). The corrected 14-file focused/Firestore rerun passes
+**1,081 tests**, including all touched test files and seven Firestore guards.
+Latest per-file JUnit receipts over the 35-file inventory total **3,717 passed**,
+including **190 focused v3**, zero remaining failures, errors or skips. These are
+a union of the full run plus the corrective rerun, not an assertion that the
+initial full command exited zero. The new context file has 12 passing tests.
+Logs: review4-final-tests.log, review4-focused-tests.log; review4-junit/ and
+review4-counts.json under the prescribed brief directory.
+
+Other exact commands:
+
+```sh
+backend/scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --write
+backend/.venv/bin/python backend/scripts/generate_dart_models.py --all
+backend/.venv/bin/python backend/scripts/generate_ts_openapi_types.py
+backend/.venv/bin/python backend/scripts/generate_swift_openapi_types.py
+backend/scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check
+backend/.venv/bin/python backend/scripts/generate_dart_models.py --all --check
+backend/.venv/bin/python backend/scripts/generate_ts_openapi_types.py --check
+backend/.venv/bin/python backend/scripts/generate_swift_openapi_types.py --check
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/python backend/scripts/check_app_client_openapi_compatibility.py --base-ref origin/main
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- env PYRIGHT_PYTHON_FORCE_VERSION=1.1.403 backend/.venv/bin/python -m pyright -p backend/pyrightconfig.json --pythonpath backend/.venv/bin/python --level error
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- backend/.venv/bin/python backend/scripts/scan_async_blockers.py --dirs backend/routers backend/utils backend/dependencies.py --diff-base 92b697098eb6ff200165cf005577c916aeab189f --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload
+backend/.venv/bin/python backend/scripts/check_conversation_readers.py --inventory
+scripts/pr-preflight --metadata-only --pr-body-file /Volumes/Ephemeral/scratch/episode-dayparts-brief/PR-BODY-V3.md
+```
+
+All pass: generated OpenAPI/Dart/TS/Swift outputs are byte-identical; additive
+compatibility preserved; typecheck zero errors; async gate zero selected
+findings; reader audit **491 references**; PR metadata **five checks**.
+No schema change in this round. Read-only merge-tree is clean against
+origin/main 6ecaf35e39b4b726d77a2da2880f3c39166e26b0; no actual merge/rebase or
+combined-runtime acceptance is claimed.
+
+```sh
+/Users/dazheng/workspace/omi/bin/omi-heavy run -- env \
+  PATH="/Volumes/Ephemeral/scratch/conversations-v3-flutter-3.44.5/flutter/bin:$PATH" \
+  OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/episode-dayparts-brief/PR-BODY-V3.md \
+  make preflight
+```
+
+Exit 0: **81 checks passed in 510.14 seconds**, including 75 Python checks,
+607 Firestore shape tests, 73 plugin-transport tests, web typecheck and
+1,079 Vitest plus six Bun tests, five admin tests, runtime-env composition and
+desktop formatting/lint. Source and PR body stayed frozen throughout.
+Receipt: review4-preflight-frozen.log.
+
+Not run: production/private-data reads, live model quality/cost/latency or churn
+measurement, dev end-to-end, released-device acceptance, emulator contention,
+image build or combined lead/Q12 runtime qualification. The <=5% churn rollout
+criterion remains a measured rollout gate, not a synthetic-test claim.
