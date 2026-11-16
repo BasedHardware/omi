@@ -202,6 +202,28 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     CHECKER.validate(root),
                 )
 
+    def test_required_evidence_steps_cannot_continue_after_failure(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        for name in (
+            'Reconstruct evidence runtime before credentials',
+            'Produce private-overlay effect receipt without mutation',
+        ):
+            for value in ('true', 'false', '${{ always() }}'):
+                with self.subTest(name=name, value=value), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    for relative in CHECKER.WORKFLOWS:
+                        target = root / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(ROOT / relative, target)
+                    old = '      - name: ' + name + '\n'
+                    self.assertEqual(source.count(old), 1)
+                    text = source.replace(old, old + '        continue-on-error: ' + value + '\n', 1)
+                    (root / CHECKER.LISTEN_WORKFLOW).write_text(text)
+                    self.assertIn(
+                        f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                        CHECKER.validate(root),
+                    )
+
     def test_controls_must_precede_real_bootstrap_and_duplicate_keys_refuse(self):
         source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
         start = source.index('      - name: Checkout trusted overlay evidence controls')

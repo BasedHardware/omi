@@ -239,7 +239,7 @@ def evidence_commands_bound(text: str) -> bool:
             step['job'] != 'helm-upgrade'
             or step.get('run') != run
             or step.get('if') != "${{ inputs.mode == 'evidence' }}"
-            or any(key in step for key in ('uses', 'working-directory', 'shell'))
+            or any(key in step for key in ('uses', 'working-directory', 'shell', 'continue-on-error'))
         ):
             return False
         expected_env = (
