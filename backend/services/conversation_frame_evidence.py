@@ -70,9 +70,7 @@ def delete_conversation_and_frame_evidence(
     # Deletion inventory must survive a previous attempt that removed the
     # pointer's blob but failed before metadata cleanup.
     try:
-        conversation = (
-            read_product_conversation(conversations_db.get_conversation_raw_snapshot, uid, conversation_id) or {}
-        )
+        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
     except Exception:
         raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
     source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]

@@ -14,12 +14,13 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.v3.triggers import mark_new, enqueue, changed, conversations_v3_enabled
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
+from database.conversations_v3 import Conflict
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import enqueue_named_task
 from utils.conversations.v3 import outline, planner, models, metrics
 from utils.conversations.processing_trigger import ProcessingTrigger
-from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor
+from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ async def reconcile(uid, *, on_open=False, derive=False, _pass=0):
             and r.get('data_protection_level') != 'private'
         ]
         if not eligible and any(not r.get('deleted') and not r.get('sync_merged_into') for r in recordings.values()):
-            raise store.Conflict('recording_not_readable')
+            raise Conflict('recording_not_readable')
         groups = outline.stretches(eligible, now)
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
@@ -254,7 +255,7 @@ def _process(uid, row, token):
 
 
 async def sweep():
-    client = store.get_firestore_client()
+    client = await run_blocking(db_executor, store.get_firestore_client)
     rows = await run_blocking(
         db_executor,
         lambda: list(
@@ -302,7 +303,7 @@ async def sweep():
     for doc in purges:
         parts = doc.reference.path.split('/')
         if len(parts) == 4 and parts[0] == 'users':
-            await run_blocking(db_executor, purge_audio, parts[1], parts[3])
+            await run_blocking(storage_executor, purge_audio, parts[1], parts[3])
     return len(users)
 
 
@@ -323,7 +324,7 @@ def purge_audio(uid, rid):
 
 
 async def measure_legacy_users():
-    client = store.get_firestore_client()
+    client = await run_blocking(db_executor, store.get_firestore_client)
     since = datetime.now(timezone.utc) - timedelta(days=1)
     snapshots = await run_blocking(
         db_executor,

@@ -2775,7 +2775,7 @@ def conversation_audio_manifest(conversation_id: str, uid: str = Depends(auth.ge
 )
 async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
-    require_generated_compute(uid, 'conversation_v3_summary_open')
+    await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
     if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
         from utils.conversations.v3.service import reconcile
 
