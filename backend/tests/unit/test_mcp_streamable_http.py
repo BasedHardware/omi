@@ -61,6 +61,7 @@ EXPECTED_TOOL_ORDER = [
     "get_conversations_by_ids",
     "search_memories",
     "search_conversations",
+    "search_transcripts",
     "search_x_posts",
     "get_x_posts",
     "get_action_items",
@@ -101,6 +102,7 @@ FAKE_SUCCESS = {
     },
     "search_memories": {"memories": []},
     "search_conversations": {"conversations": []},
+    "search_transcripts": {"matches": [], "complete": True, "examined": 0, "next_cursor": None},
     "search_x_posts": {"posts": []},
     "get_x_posts": {"posts": []},
     "get_action_items": {"action_items": []},
@@ -807,6 +809,7 @@ class TestUnknownsAndScope:
             "get_conversation_by_id",
             "get_conversations_by_ids",
             "search_conversations",
+            "search_transcripts",
             "get_daily_summaries",
         }
 
