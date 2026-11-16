@@ -34,6 +34,15 @@ segment-bound wearer label from the authoritative speaker-evidence projection.
 Without it, background becomes conversation and uses the normal 300-word rule
 (or the manual-end override). Media stays hidden. home_hidden_reason records
 this decision and outline_kind retains the original classification.
+Five minutes of placed-speech silence is a hard window boundary. An outline's
+`resumes_previous` may undo a topic split within that interval, never rejoin
+windows across the silence boundary, even with the same people. Short socket
+captures and reconnects do not themselves split a continuous stretch. The
+two-hour cap still bounds each resulting window. Missing transcript is not
+proof of acoustic silence; qualify transcript completeness separately.
+The recording-speaker picker for a derived conversation reads and edits only
+that copied window. Shared source scopes cannot expand it into other product
+conversations. Legacy recording-wide naming keeps its existing behavior.
 Search and agent reads retain short and hidden conversations. The exact reader
 classification is `../conversations-v3-readers.json`; run
 `python backend/scripts/check_conversation_readers.py --inventory` for every site.
@@ -46,7 +55,13 @@ hydration rejects them. Admin raw-index counts may therefore be inflated.
 Each source has a durable `v3_pending` obligation. Tasks use the dedicated `conversations-v3`
 Cloud Tasks queue and the configured sync origin/OIDC identity unless
 `CONVERSATIONS_V3_TASKS_QUEUE` / `CONVERSATIONS_V3_TASKS_URL` override them. A named
-task coalesces each owner-minute. The builder holds a Firestore token/expiry
+task coalesces each owner-minute. Explicit manual ends use a separate,
+deterministic source-close task name so an already completed live task in the
+same minute cannot swallow the close. They do not wait for the silence deadline.
+Automatic end detection still waits five minutes of speech quiet; this is not
+a measured 30-second end-to-notes guarantee. On-open Standard notes stream
+through the existing summary endpoint without that background close wait.
+The builder holds a Firestore token/expiry
 lease, revision-checks sources and targets, and writes conversation copies and
 recording claims together. A conflict retains pending work. The five-minute
 sweeper cursor-pages capture, processing and purge obligations. Purge errors

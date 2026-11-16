@@ -3213,7 +3213,7 @@ class CaptureController extends ChangeNotifier
     _phoneMic.stop();
     await _wal.getSyncs().phone.finalizeCurrentSession();
     updateRecordingState(RecordingState.stop);
-    await _socket?.stop(reason: 'stop stream recording');
+    await _socket?.stop(reason: 'stop stream recording', userStop: reason == 'user_stopped');
     _recordingTelemetry.complete(reason: reason);
     await _clearPhoneRestoreMarker();
     return true;
@@ -4879,7 +4879,7 @@ class CaptureController extends ChangeNotifier
             source: spec.source,
           );
         },
-        closeSocket: (reason) async => _socket?.stop(reason: reason),
+        closeSocket: (reason, {bool userStop = false}) async => _socket?.stop(reason: reason, userStop: userStop),
         startNativeMic: (mode) async {
           if (mode == PhoneMicSessionMode.live) {
             await _resumeMicRecording();

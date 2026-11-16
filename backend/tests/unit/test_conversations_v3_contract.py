@@ -16,6 +16,33 @@ from utils.conversations.v3 import service, audio, triggers
 from utils.conversations.processing_trigger import ProcessingTrigger
 
 
+def test_manual_end_wake_survives_a_completed_live_task_in_same_minute(monkeypatch):
+    tasks = {}
+    calls = []
+    monkeypatch.setenv('CONVERSATIONS_V3_TASKS_URL', 'https://test.invalid')
+    monkeypatch.setattr(triggers.store, 'mark_pending', lambda *a, **kw: True)
+
+    def enqueue(queue, url, task_id, payload, **kwargs):
+        calls.append(task_id)
+        tasks.setdefault(task_id, (payload, kwargs))
+
+    monkeypatch.setattr(triggers, 'enqueue_named_task', enqueue)
+    fixed = datetime(2026, 11, 16, 12, 0, 10, tzinfo=timezone.utc)
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed
+
+    monkeypatch.setattr(triggers, 'datetime', Clock)
+    triggers.changed('owner', 'recording')  # Live task runs and Cloud Tasks retains its name.
+    triggers.changed('owner', 'recording', manual_end=True)
+    triggers.changed('owner', 'recording', manual_end=True)  # Delivery retry stays idempotent.
+    assert len(tasks) == 2
+    assert calls[0] != calls[1] == calls[2]
+    assert all(kw['schedule_at'] == int(fixed.timestamp()) for _, kw in tasks.values())
+
+
 @pytest.mark.parametrize(
     'stage,seen,cohort,expected',
     [

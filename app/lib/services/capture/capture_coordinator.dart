@@ -837,8 +837,9 @@ class SocketOpen extends CaptureEffect {
 }
 
 class SocketClose extends CaptureEffect {
-  const SocketClose(this.reason);
+  const SocketClose(this.reason, {this.userStop = false});
   final String reason;
+  final bool userStop; // The user stopped: the server finalizes now instead of awaiting a reconnect.
 }
 
 /// Native phone mic start for a transport: live resumes the existing mic
@@ -1172,8 +1173,8 @@ class CaptureEffectPorts {
   /// `_initiateWebsocket` (ensure-aware).
   final Future<void> Function(SocketOpen spec) openSocket;
 
-  /// `_socket?.stop(reason:)`.
-  final Future<void> Function(String reason) closeSocket;
+  /// `_socket?.stop(reason:, userStop:)`.
+  final Future<void> Function(String reason, {bool userStop}) closeSocket;
 
   /// Live: `_resumeMicRecording`; batch: `_startPhoneMicBatch`.
   final Future<void> Function(PhoneMicSessionMode mode) startNativeMic;
@@ -1754,7 +1755,7 @@ class CaptureCoordinator {
         BleStreamStop() => _ports.stopBleStream(disableNativeBackground: effect.disableNativeBackground),
         BleStreamStart() => _ports.startBleStream(),
         SocketOpen() => _ports.openSocket(effect),
-        SocketClose() => _ports.closeSocket(effect.reason),
+        SocketClose() => _ports.closeSocket(effect.reason, userStop: effect.userStop),
         NativeMicStart() => _ports.startNativeMic(effect.mode),
         NativeMicStop() => _ports.stopNativeMic(),
         NativeWriterGate() => _ports.setNativeWriterGate(effect.source, effect.admitted),
@@ -2555,7 +2556,7 @@ CaptureTransition _reduceDeviceStop(CaptureCoordinatorState state, DeviceStopReq
     ),
     [
       RunStage(StopDeviceSessionStage(cleanDevice: event.cleanDevice)),
-      const SocketClose('stop stream device recording'),
+      SocketClose('stop stream device recording', userStop: !event.cleanDevice),
       RunStage(DeviceStopTelemetryStage(cleanDevice: event.cleanDevice)),
     ],
   );

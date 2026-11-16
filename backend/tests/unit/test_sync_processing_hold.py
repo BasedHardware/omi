@@ -264,6 +264,90 @@ def test_first_summary_repair_cannot_bypass_a_stored_hold(monkeypatch):
     full.assert_not_called()
 
 
+def sealed_live_row():
+    # The server sealed this live recording at 150; a phone copy just landed
+    # (last_content_at 100), which alone would hold notes until 700.
+    return {
+        **row(),
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_sealed_at': 150.0,
+        'record_projection_revision': 1,
+        'sync_live_target': True,
+        'updated_at': 'revision-at-admission',
+    }
+
+
+def run_claim(monkeypatch, current, ledger_stages, *, client=None):
+    from database import capture_end as capture_end_db
+
+    class Reached(Exception):
+        pass
+
+    transitions = [{'stage': stage, 'at': at} for stage, at in ledger_stages]
+    monkeypatch.setattr(capture_end_db, 'load_ledger', Mock(return_value={'transitions': transitions}))
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    if client is None:
+        monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(callback.time, 'time', lambda: 200)
+    full = Mock(side_effect=Reached)
+    # Past admission and the summary claim, the next step builds the model for processing.
+    monkeypatch.setattr(callback, 'deserialize_conversation', full)
+    context = {'owner': 'worker', 'lease_until': 4e9, 'first_pending_at': 100, 'sync_hold': True}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        try:
+            callback.enrich_conversation('u', 'c', 'en')
+        except Reached:
+            pass
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    return context, full
+
+
+def test_sealed_live_record_is_processed_at_claim_once_every_unit_landed(monkeypatch):
+    current = sealed_live_row()
+    context, full = run_claim(monkeypatch, current, [('sealed', 150.0), ('transcribed', 180.0)])
+    full.assert_called_once()
+    assert context['hold_outcome'] == 'end_proof' and 'defer_until' not in context
+    assert context['hold_snapshot'] == hold.content_snapshot(current)
+
+
+def test_sealed_live_record_with_a_unit_still_transcribing_keeps_the_quiet_wait(monkeypatch):
+    # Revision 1 projected, its sibling unit not yet: the record's projection has not completed.
+    context, full = run_claim(monkeypatch, sealed_live_row(), [('sealed', 150.0)])
+    full.assert_not_called()
+    assert context['hold_outcome'] == 'quiet_wait' and context['defer_until'] == 700
+
+
+def test_a_reopen_between_admission_and_the_summary_run_fences_the_run(monkeypatch):
+    from google.api_core.exceptions import FailedPrecondition
+
+    class Reopened:
+        """The row changed after admission read it (a reconnect reopened the record)."""
+
+        def __init__(self):
+            self.preconditions = []
+
+        def collection(self, *_):
+            return self
+
+        def document(self, *_):
+            return self
+
+        def update(self, _fields, option=None):
+            self.preconditions.append(option)
+            raise FailedPrecondition('document changed since the snapshot')
+
+    client = Reopened()
+    with pytest.raises(callback.SyncConversationPersistenceFenced):
+        run_claim(monkeypatch, sealed_live_row(), [('sealed', 150.0), ('transcribed', 180.0)], client=client)
+    assert len(client.preconditions) == 1
+
+
 @pytest.mark.parametrize('has_summary', [True, False])
 def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch, has_summary):
     world = World(monkeypatch)
