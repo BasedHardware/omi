@@ -145,7 +145,7 @@ SEARCH_TRANSCRIPTS_OUTPUT_FIELDS: Dict[str, Any] = {
         },
     },
     'examined': {'type': 'integer', 'description': 'Conversations examined by this call'},
-    'complete': {'type': 'boolean', 'description': 'True when every conversation in the window was examined'},
+    'complete': {'type': 'boolean', 'description': 'True when the scan reached the end of the window (see unreadable)'},
     'unreadable': {'type': 'integer', 'description': 'Conversations that could not be read; coverage is partial'},
     'next_cursor': {'type': ['string', 'null']},
     'search_coverage': {'type': 'string'},

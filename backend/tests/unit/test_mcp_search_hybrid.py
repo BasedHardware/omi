@@ -134,6 +134,18 @@ def test_stale_index_ids_never_crowd_out_valid_hits_further_down(indexes):
     assert [c['id'] for c in search(limit=3)['conversations']] == ['k1', 'k2', 'k3']
 
 
+def test_an_unconfigured_vector_index_is_reported_unavailable_not_empty(monkeypatch):
+    monkeypatch.setattr(conversations.vector_db, 'index', None)
+    with pytest.raises(conversations._VectorIndexUnconfigured):
+        conversations._query_configured_vectors('budget', 'uid')
+
+
+def test_unreadable_records_make_coverage_partial_even_at_the_end(scan):
+    scan['rows'], scan['unreadable'] = [conversation('ok', words={0: 'series a'})], 1
+    result = find()
+    assert result['complete'] is True and result['search_coverage'] == 'literal_transcript_scan_partial'
+
+
 def test_no_hits_with_the_keyword_index_down_is_an_actionable_503(indexes):
     indexes['keyword_error'] = RuntimeError('typesense down')
     with pytest.raises(ToolExecutionError) as error:

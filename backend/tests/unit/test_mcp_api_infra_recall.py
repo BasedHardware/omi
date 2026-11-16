@@ -28,6 +28,7 @@ def core():
         'database.vector_db',
         query_vectors=Mock(return_value=[]),
         embeddings=SimpleNamespace(embed_query=Mock(return_value=[1.0])),
+        index=object(),  # a configured index; an unconfigured one reports keyword_only
     )
     search = module(
         'utils.conversations.search',

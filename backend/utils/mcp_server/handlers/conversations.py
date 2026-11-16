@@ -581,6 +581,18 @@ class ConversationSearchHits:
     keyword_ok: bool
 
 
+class _VectorIndexUnconfigured(RuntimeError):
+    pass
+
+
+def _query_configured_vectors(*args: Any, **kwargs: Any) -> List[str]:
+    # An unconfigured index makes query_vectors return [] instead of raising: that is no semantic
+    # search at all, so report the index as unavailable rather than as an empty semantic result.
+    if getattr(vector_db, 'index', None) is None:
+        raise _VectorIndexUnconfigured()
+    return vector_db.query_vectors(*args, **kwargs)
+
+
 def search_conversation_hits(
     uid: str,
     query: Any,
@@ -609,7 +621,7 @@ def search_conversation_hits(
             limit=limit,
             starts_at=starts_at,
             ends_at=ends_at,
-            query_vectors=vector_db.query_vectors,
+            query_vectors=_query_configured_vectors,
             embed_query=vector_db.embeddings.embed_query,
         )
     except FailedPrecondition as exc:

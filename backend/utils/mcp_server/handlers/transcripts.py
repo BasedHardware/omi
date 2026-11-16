@@ -152,7 +152,8 @@ def search_transcripts(
         'complete': complete,
         'unreadable': unreadable,
         'next_cursor': None if complete or conversation_id else next_cursor,
-        'search_coverage': 'literal_transcript_scan' + ('' if complete else '_partial'),
+        # Cursor exhaustion (complete) and coverage differ: unreadable records were never searched.
+        'search_coverage': 'literal_transcript_scan' + ('' if complete and not unreadable else '_partial'),
     }
     return localize_timestamps(result, zone)
 
