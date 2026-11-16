@@ -123,6 +123,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/episode_live_members.py:collection": {
+    "policy": "storage",
+    "reason": "Episode live-member transactions by id for accounts not on v3; episode admission rejects recordings as members and v3 owners make no episode writes. Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
   "backend/database/episode_recorded_components.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -155,6 +159,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/listen_batch_reconnect.py:collection": {
+    "policy": "both",
+    "reason": "Listen batch reconnect continuity resumes the open capture document by id. Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
   "backend/database/listen_continuations.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -178,6 +186,10 @@
   "backend/database/no_speech_terminal.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
+  },
+  "backend/database/notes_quality_repair.py:collection": {
+    "policy": "storage",
+    "reason": "Notes repair writes one processed conversation by id; recordings never get notes, so it never targets one. Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
   "backend/database/oversized_conversation_terminal.py:collection": {
     "policy": "storage",
@@ -631,6 +643,10 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
+  "backend/utils/batch_pipeline/retention.py:collection": {
+    "policy": "both",
+    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+  },
   "backend/utils/batch_pipeline/shadow_projection.py:collection": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -798,6 +814,10 @@
   "backend/utils/enrichment/consumer.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
+  },
+  "backend/utils/enrichment/custody.py:collection": {
+    "policy": "both",
+    "reason": "Enrichment custody follows the donor's redirect hop by id. Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
   "backend/utils/enrichment/early_abort.py:get_conversation_raw_snapshot": {
     "policy": "both",
