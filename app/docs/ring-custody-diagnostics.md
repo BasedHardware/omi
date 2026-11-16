@@ -104,3 +104,8 @@ Only actual disconnects in that local calendar day enter the counters. The
 known-state count excludes legacy/unknown values, so zero active reads with zero
 known states is unobserved. Per-disconnect ages remain local export metadata;
 analytics carries no new identifiers or paths. This measures overlap, not cause.
+
+Both platforms use sleep-inclusive monotonic clocks for read age: iOS
+`mach_continuous_time` and Android `elapsedRealtime`. The passive iOS observer
+also sees valid storage boundaries during capture recovery's cancellation window;
+the existing audio/capture fence remains in effect for its downstream consumers.

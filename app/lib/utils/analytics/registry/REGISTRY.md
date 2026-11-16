@@ -92,3 +92,9 @@ remain legacy and the file is not marked adopted. This is not full C7 adoption
 of the daily envelope. RSSI ranges are [-90,-80), [-80,-60), >=-60 and <-90;
 nonnegative/missing RSSI is unknown. `disconnects_with_ring_read_state` counts
 only explicit booleans; older/missing observations are never inferred inactive.
+
+This registration freezes the existing daily wire name and these seven extension
+properties under the registry's immutable-shape rule. A later full typed daily
+envelope cannot add the legacy fields to this row or register the same name
+again: it needs a new wire name plus an explicit consumer/history migration.
+The generated tracking-plan row describes this partial extension only.

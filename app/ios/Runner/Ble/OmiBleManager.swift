@@ -1437,7 +1437,7 @@ final class OmiBleManager: NSObject {
         eventType: String
     ) {
         let ringRead = eventType == "disconnect"
-            ? ringReadDiagnostics.disconnected(uuid, now: ProcessInfo.processInfo.systemUptime) : [:]
+            ? ringReadDiagnostics.disconnected(uuid, now: OmiRingReadDiagnostics.now()) : [:]
         guard healthStore.enabled else { return }
         if eventType == "disconnect" { healthStore.end(uuid, at: CheckedIntegerConversion.epochMs()) }
         let defaults = UserDefaults.standard
@@ -2078,11 +2078,11 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         // Handle notification
         guard error == nil, peripheral.state == .connected,
-              captureReconnects[uuid]?.disconnected != false,
               let data = characteristic.value, !data.isEmpty else { return }
 
         guard peripherals[uuid] === peripheral else { return }
-        ringReadDiagnostics.received(uuid, characteristic: charUuid, data: data, now: ProcessInfo.processInfo.systemUptime)
+        ringReadDiagnostics.received(uuid, characteristic: charUuid, data: data, now: OmiRingReadDiagnostics.now())
+        guard captureReconnects[uuid]?.disconnected != false else { return }
         let wasTransferring = captureStorageProgress.isActive(uuid, now: ProcessInfo.processInfo.systemUptime)
         captureStorageProgress.received(uuid, characteristic: charUuid, now: ProcessInfo.processInfo.systemUptime)
         if !wasTransferring && captureStorageProgress.isActive(uuid, now: ProcessInfo.processInfo.systemUptime) {

@@ -172,6 +172,14 @@ struct OmiBleReconnectDiagnostics {
 /// An unobserved/restored link stays unknown until a protocol boundary is seen.
 final class OmiRingReadDiagnostics {
     static let characteristic = "30295781-4301-eabd-2904-2849adfeae43"
+    private static let secondsPerTick: Double = {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        return Double(timebase.numer) / Double(timebase.denom) / 1_000_000_000
+    }()
+
+    /// Like Android elapsedRealtime, this clock advances during system sleep.
+    static func now() -> TimeInterval { Double(mach_continuous_time()) * secondsPerTick }
     private var known = Set<String>()
     private var pending: [String: Data] = [:]
     private var beganAt: [String: TimeInterval] = [:]
