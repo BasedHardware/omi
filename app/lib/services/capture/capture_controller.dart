@@ -163,8 +163,6 @@ class CaptureController extends ChangeNotifier
   /// device service's own answer in the production reconnect path.
   final bool Function(String deviceId)? _pendantReconnectBlocked;
   final ValueListenable<PhoneCallState>? _omiCallState;
-  // Installed BLE callbacks must stay retired even if a call ends before queued teardown.
-  int _callCaptureRevision = 0;
   final CaptureNativeWriterGate _nativeWriterGate;
   final CaptureWedgeMonitor? _wedgeMonitorOverride;
   void Function(String deviceId, int byteCount)? _ingressByteObserver;
@@ -2314,7 +2312,6 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<bool> streamAudioToWs(String deviceId, BleAudioCodec codec, {int? deviceRevision}) async {
-    final callRevision = _callCaptureRevision;
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision) || _omiCallActive || _deviceIdentityStale(deviceRevision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
@@ -2325,7 +2322,6 @@ class CaptureController extends ChangeNotifier
         if (_captureControllerDisposed ||
             !_admitsCapture(revision) ||
             _omiCallActive ||
-            callRevision != _callCaptureRevision ||
             _recordingDevice?.id != deviceId) {
           return;
         }
@@ -3354,7 +3350,6 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOmiCallStateChanged() {
-    if (_omiCallActive) _callCaptureRevision++;
     final debt = _captureInstance?.readModel.pendantSuspension;
     final reconnecting = debt?.reason == SuspendReason.reconnect || debt?.reconnectResumePending == true;
     if (!_captureControllerDisposed &&

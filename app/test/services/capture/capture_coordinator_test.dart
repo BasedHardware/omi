@@ -2505,6 +2505,28 @@ void main() {
     }, pendantCodec: BleAudioCodec.opus);
   });
 
+  test('a call that ends during initial listener registration leaves audio flowing', () async {
+    await withReviewWorld((world) async {
+      final connection = _HeldAudioRegistration();
+      world.deviceConnection = connection;
+      final held = Completer<void>();
+      connection.holdRegistration = held;
+      connection.registrationEntered = Completer<void>();
+      final start = world.controller.streamDeviceRecording(device: pendant);
+      await connection.registrationEntered!.future;
+      world.omiCall.value = PhoneCallState.connecting;
+      world.omiCall.value = PhoneCallState.idle;
+      held.complete();
+      await start;
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(connection.openAudioSubscriptions, 1);
+      final framesBefore = world.wal.syncs.phone.testFrameSynced.length;
+      connection.emitAudio(value: 13);
+      expect(world.wal.syncs.phone.testFrameSynced.length, greaterThan(framesBefore));
+    }, pendantCodec: BleAudioCodec.opus);
+  });
+
   test('real controller expires reconnect grace and disposes its timer', () async {
     await withReviewWorld((world) async {
       world.deviceConnection = ScriptedDeviceConnection();
