@@ -42,6 +42,7 @@ from zoneinfo import ZoneInfo
 
 
 from utils.conversations import phase_shadow
+from config import episode_live_members as live_members
 
 from config.episodes import (
     COMPOSER_FEATURE,
@@ -830,7 +831,7 @@ def _members(
     episode: Mapping[str, Any],
     c: Any,
     *,
-    revisions: Optional[dict[str, Optional[datetime]]] = None,
+    revisions: Optional[dict[str, live_members.MemberRevision]] = None,
     waiting_until: Optional[list[datetime]] = None,
     waiting_members: Optional[list[str]] = None,
     wait_observations: Optional[dict[str, Any]] = None,
@@ -845,6 +846,11 @@ def _members(
             # updated_at, including after decoding and Home projection.
             revisions[cid] = row.get('updated_at') if row else None
         if not row or hidden_member(row) or not conversations_db.is_visible_conversation(row):
+            continue
+        if live_members.enabled() and not policy.is_live(episode) and live_members.capturing(row):
+            if revisions is not None:
+                revisions[cid] = live_members.CAPTURING_REVISION
+            metrics.record_live_member('excluded_readiness')
             continue
         if str(row.get('status') or '') not in _DONE:
             return 'waiting', []
@@ -880,7 +886,7 @@ def _write(
     updates: _Updates,
     *,
     guard: Optional[Callable[[Mapping[str, Any]], Optional[str]]] = None,
-    expected_member_revisions: Optional[Mapping[str, Optional[datetime]]] = None,
+    expected_member_revisions: Optional[Mapping[str, live_members.MemberRevision]] = None,
 ) -> str:
     """CAS write with bounded retries. ``guard(current)`` returns an outcome to stop, or None."""
     outcome = 'conflict'
@@ -1147,7 +1153,7 @@ def _write_single_member(
     members: Sequence[Mapping[str, Any]],
     print_: str,
     member_ids: list[str],
-    member_revisions: Mapping[str, Optional[datetime]],
+    member_revisions: Mapping[str, live_members.MemberRevision],
 ) -> str:
     """Persist the code-built notes for a one-conversation episode. Never raises to callers."""
     composed = single_member_updates(members[0])
@@ -1196,7 +1202,9 @@ def _compose(
         return 'no_episode'
     if policy.is_live(episode):
         return 'live'
-    member_revisions: dict[str, Optional[datetime]] = {}
+    if service.repair_closed_live_members(uid, episode, c):
+        episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
+    member_revisions: dict[str, live_members.MemberRevision] = {}
     waiting_until: list[datetime] = []
     waiting_members: list[str] = []
     wait_observations: dict[str, Any] = {}
@@ -1463,7 +1471,7 @@ def _compose(
     # The model call took seconds: re-read the evidence. A discard, a transcript upgrade or a
     # membership change since then makes this result stale; its own trigger composes again.
     fresh_episode = episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client) or episode
-    fresh_revisions: dict[str, Optional[datetime]] = {}
+    fresh_revisions: dict[str, live_members.MemberRevision] = {}
     fresh_state, fresh = _members(uid, fresh_episode, c, revisions=fresh_revisions)
     superseded = fresh_state != 'ok' or fingerprint(fresh) != print_
     member_changed = bool(set(member_ids) - set(_retained_ids(fresh_episode)))

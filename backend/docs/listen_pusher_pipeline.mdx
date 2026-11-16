@@ -10167,3 +10167,13 @@ one observed reconciler period, verify zero marked in-progress rows, then roll
 back listen. Keep upgraded workers until outstanding finalization work drains.
 Details, aggregate readback query and ramp:
 [change note](listen_pusher_pipeline/changes/2026-11-16-batch-reconnect-grace.md).
+
+
+### Closed episodes and still-capturing live members
+
+`EPISODE_LIVE_MEMBER_CLOSE_ENABLED` defaults on; `false` restores legacy placement
+and all-member readiness. A live capture starting at or after a gap boundary
+opens or joins the successor under the existing recorded-timeline fence. Closed
+episodes compose finished members while an open live capture remains excluded;
+finish/read recovery includes it again. No custody or billing contract changes.
+See [the change note](./listen_pusher_pipeline/changes/2026-11-16-live-member-close.md).
