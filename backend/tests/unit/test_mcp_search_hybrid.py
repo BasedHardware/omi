@@ -244,6 +244,32 @@ def test_legacy_segments_without_ids_still_get_a_segment_index(scan):
     assert hit['segment_index'] == 21 and hit.get('segment_id') is None and '_position' not in hit
 
 
+def test_a_long_segment_is_clipped_around_all_of_its_words(scan):
+    text = 'budget ' + 'filler words here ' * 40 + 'then the review of the budget closed it'
+    scan['rows'] = [conversation('long-segment', words={0: text})]
+    (hit,) = find('budget review')['matches'][0]['hits']
+    assert 'review' in hit['text'] and 'budget' in hit['text'] and hit['segment_index'] == 0
+
+
+def test_matching_stops_at_its_deadline_and_resumes_after_the_last_finished_record(scan, monkeypatch):
+    ticks = iter([0.0] + [0.0] * 2 + [100.0] * 50)
+    monkeypatch.setattr(transcripts, '_clock', lambda: next(ticks))
+    fallbacks = []
+    monkeypatch.setattr(transcripts, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    scan['rows'] = [conversation(f'c{i}', words={0: 'series a'}) for i in range(5)]
+    result = find()
+    assert result['complete'] is False and result['examined'] == len(result['matches']) >= 1
+    assert result['next_cursor'] == f'cursor-{result["examined"] - 1}'
+    assert [f['reason'] for f in fallbacks] == ['capacity_full']
+
+
+def test_unreadable_records_are_counted_as_a_degraded_fallback(scan, monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(transcripts, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    scan['rows'], scan['unreadable'] = [conversation('ok', words={0: 'series a'})], 2
+    assert find()['unreadable'] == 2 and [f['to_mode'] for f in fallbacks] == ['partial_page']
+
+
 def test_many_hits_in_one_conversation_are_capped_and_flagged(scan):
     scan['rows'] = [conversation('dense', count=20, words={i: f'series a point {i}' for i in range(0, 20, 2)})]
     (match,) = find()['matches']

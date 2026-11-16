@@ -8,6 +8,7 @@ around them with ``get_conversation_by_id`` ``offset``.
 """
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
@@ -37,6 +38,7 @@ def search_transcripts(
     arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
+    deadline = _clock() + search_views.TRANSCRIPT_SCAN_SECONDS + _MATCH_SECONDS
     query = ' '.join(str(arguments.get('query') or '').split())
     if not query or len(query) > search_views.TRANSCRIPT_QUERY_MAX_CHARS:
         raise ToolExecutionError(
@@ -122,6 +124,11 @@ def search_transcripts(
         if len(matches) >= limit:
             stopped_early = True
             break
+        if examined and _clock() > deadline:
+            # Matching long transcripts has its own deadline; resume after the last record finished.
+            stopped_early = True
+            _record_partial('capacity_full')
+            break
         if not _searchable(row, start_ts, end_ts, scoped=bool(conversation_id)):
             examined += 1
             next_cursor = row_cursor or next_cursor
@@ -136,6 +143,8 @@ def search_transcripts(
         examined += 1
         next_cursor = row_cursor or next_cursor
 
+    if unreadable:
+        _record_partial('other')
     complete = exhausted and not stopped_early
     result: Dict[str, Any] = {
         'matches': matches,
@@ -146,6 +155,22 @@ def search_transcripts(
         'search_coverage': 'literal_transcript_scan' + ('' if complete else '_partial'),
     }
     return localize_timestamps(result, zone)
+
+
+# Matching time after the scan's read budget, like chat's transcript search (4s reads, 6s overall).
+_MATCH_SECONDS = 2.0
+_clock = time.monotonic
+
+
+def _record_partial(reason: str) -> None:
+    record_fallback(
+        component='firestore_read',
+        from_mode='transcript_search',
+        to_mode='partial_page',
+        reason=reason,
+        outcome='degraded',
+        log=logger,
+    )
 
 
 # Headroom under the serialized cap for the envelope fields and timestamp localization.
