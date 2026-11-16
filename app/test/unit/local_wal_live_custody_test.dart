@@ -14,6 +14,7 @@ import 'package:omi/services/devices/ring_protocol.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_write_intent.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
@@ -227,7 +228,7 @@ void main() {
     expect(conn.advances, isEmpty, reason: 'index save still gated — no ADVANCE may leak ahead of it');
     expect(saves, 1);
     expect(await WalFileManager.loadIndexedWals(), isEmpty);
-    expect((await WalFileManager.loadWals()).single.recoveredWriteIntent, isTrue,
+    expect(WalWriteIntent.isRecovered((await WalFileManager.loadWals()).single), isTrue,
         reason: 'intent replay recovers bytes but cannot authorize device reclaim');
     expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
     expect(custody.advanceTarget('dev', 1), isNull);
@@ -369,7 +370,7 @@ void main() {
     expect(conn.advances, isEmpty, reason: 'no durable index — no ADVANCE');
     expect(saves, 1);
     expect(await WalFileManager.loadIndexedWals(), isEmpty);
-    expect((await WalFileManager.loadWals()).single.recoveredWriteIntent, isTrue,
+    expect(WalWriteIntent.isRecovered((await WalFileManager.loadWals()).single), isTrue,
         reason: 'intent replay recovers bytes but cannot authorize device reclaim');
     expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
     expect(custody.advanceTarget('dev', 1), isNull);

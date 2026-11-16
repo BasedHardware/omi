@@ -266,7 +266,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _confirmedDurableWalKeys
       ..clear()
       ..addAll(loaded
-          .where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal && !w.recoveredWriteIntent)
+          .where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal && !WalWriteIntent.isRecovered(w))
           .map(_durableKey));
   }
 
@@ -1091,25 +1091,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _storageFileSeq = 0;
 
-  Future<String> _uniqueStorageFileName(Wal wal) async {
-    final claimable = captureEvidenceWalClaimable(wal);
-    final planned = wal.filePath;
-    var name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
-    if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
-    for (;;) {
-      final candidate = walCollisionName(name, _storageFileSeq++, claimable);
-      if (!_fileReferencedByOtherWal(wal, candidate) && !await _localFileExistsByName(candidate)) {
-        return candidate;
-      }
-    }
-  }
-
-  Future<bool> _localFileExistsByName(String fileName) async {
-    final path = await Wal.getFilePath(fileName);
-    if (path == null) return false;
-    return await File(path).exists() || await WalWriteIntent.exists(File(path).parent, fileName);
-  }
-
   Future _flush(int generation) async {
     _backlogTelemetry.flushPendantDrops();
     Logger.debug("_flushing");
@@ -1148,7 +1129,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             ..['file_path'] = fileName
             ..['storage'] = WalStorage.disk.name);
           await WalWriteIntent.write(file.parent, row, data);
-          wal.hasWriteIntent = true;
+          WalWriteIntent.markPending(wal);
         } catch (e) {
           Logger.debug('LocalWalSync: flush write failed for ${wal.id}: $e');
           _releaseAdmission(data.length);

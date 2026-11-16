@@ -8,6 +8,11 @@ import 'wal.dart';
 /// It precedes audio creation, so even a partial write retains its row metadata.
 /// Recovery visits only this directory, never adopts historical orphan audio.
 abstract final class WalWriteIntent {
+  static final _recovered = Expando<bool>('recoveredWalWriteIntent');
+  static final _pending = Expando<bool>('pendingWalWriteIntent');
+  static bool isRecovered(Wal wal) => _recovered[wal] == true;
+  static bool hasPending(Wal wal) => _pending[wal] == true;
+  static void markPending(Wal wal) => _pending[wal] = true;
   static Directory _directory(Directory documents) => Directory('${documents.path}/.wal-pending');
   static String _name(Wal wal) {
     final name = wal.filePath;
@@ -42,7 +47,7 @@ abstract final class WalWriteIntent {
         }),
         flush: true);
     await tmp.rename(intent.path);
-    wal.hasWriteIntent = true;
+    markPending(wal);
     final audio = File('${documents.path}/${_name(wal)}');
     await audio.create(exclusive: true);
     await audio.writeAsBytes(bytes, flush: true);
@@ -52,7 +57,7 @@ abstract final class WalWriteIntent {
   /// may retire its intent. A failed retirement leaves recovery evidence.
   static Future<void> retire(Directory documents, Wal wal) async {
     await retireFile(documents, _name(wal));
-    wal.hasWriteIntent = false;
+    _pending[wal] = false;
   }
 
   static Future<void> retireFile(Directory documents, String fileName) async {
@@ -81,7 +86,7 @@ abstract final class WalWriteIntent {
           if (existing.ownerUid == wal.ownerUid && existing.loadedIndexSource == '${documents.path}/wals.json') {
             await retire(documents, wal);
           } else {
-            existing.hasWriteIntent = true;
+            markPending(existing);
           }
           continue;
         }
@@ -89,8 +94,8 @@ abstract final class WalWriteIntent {
         if (!await audio.exists() || await audio.length() != record['bytes']) continue;
         if ((await sha256.bind(audio.openRead()).first).toString() != record['sha256']) continue;
         // This is recoverable audio, never proof that the index was committed.
-        wal.recoveredWriteIntent = true;
-        wal.hasWriteIntent = true;
+        _recovered[wal] = true;
+        markPending(wal);
         recovered.add(wal);
         known[(wal.id, wal.filePath)] = wal;
       } on FileSystemException {

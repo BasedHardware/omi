@@ -1,6 +1,25 @@
 part of 'local_wal_sync.dart';
 
 extension _WalIndexPersistence on LocalWalSyncImpl {
+  Future<String> _uniqueStorageFileName(Wal wal) async {
+    final claimable = captureEvidenceWalClaimable(wal);
+    final planned = wal.filePath;
+    var name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
+    if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
+    for (;;) {
+      final candidate = walCollisionName(name, _storageFileSeq++, claimable);
+      if (!_fileReferencedByOtherWal(wal, candidate) && !await _localFileExistsByName(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  Future<bool> _localFileExistsByName(String fileName) async {
+    final path = await Wal.getFilePath(fileName);
+    if (path == null) return false;
+    return await File(path).exists() || await WalWriteIntent.exists(File(path).parent, fileName);
+  }
+
   Future<bool> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return false;
     // A save joins all earlier disk writes. After a failure the next caller
@@ -20,7 +39,7 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
     final confirmedKeys = delta.disk.map(_durableKey).toList();
     final write = () async {
       await _writeIndexDelta(delta);
-      for (final wal in delta.disk.where((w) => w.hasWriteIntent)) {
+      for (final wal in delta.disk.where(WalWriteIntent.hasPending)) {
         // Cleanup is best effort AFTER commit; retrying a leftover intent is
         // idempotent. Never turn a committed write into a failed index delta.
         try {
