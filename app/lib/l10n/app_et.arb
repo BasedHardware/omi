@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Heli jääb su telefoni",
     "onDeviceModelDownloadSize": "{size} MB allalaadimine",
     "downloadNow": "Laadi kohe alla",
-    "onWifiLater": "Hiljem Wi-Fi kaudu"
+    "onWifiLater": "Hiljem Wi-Fi kaudu",
+    "conversationWritingSummary": "Kirjutame sinu kokkuvõtet…"
 }

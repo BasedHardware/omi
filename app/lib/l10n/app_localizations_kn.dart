@@ -15604,4 +15604,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onWifiLater => 'ನಂತರ Wi-Fi ನಲ್ಲಿ';
+
+  @override
+  String get conversationWritingSummary => 'ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
 }

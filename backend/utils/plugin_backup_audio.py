@@ -1,5 +1,8 @@
 """Scoped read of canonical saved audio, not an independent capture buffer."""
 
+import hashlib
+from urllib.parse import urlsplit
+
 import jwt
 from fastapi import HTTPException
 
@@ -8,6 +11,7 @@ from utils.apps import is_user_app_enabled, get_available_app_by_id
 from utils.other.endpoints import enforce_account_deletion_http_access
 from utils.plugin_transport import plugin_transport
 from utils.sync.playback import get_audio_signed_urls
+from utils.conversations.layer import has_recording_pieces
 
 
 def backup_audio_manifest(app_id: str, conversation_id: str, authorization: str, *, include_audio: bool = True) -> dict:
@@ -37,4 +41,13 @@ def backup_audio_manifest(app_id: str, conversation_id: str, authorization: str,
         raise HTTPException(status_code=404, detail='This conversation is not available for backup')
     if not include_audio:
         return {'authorized': True}
-    return get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files') or [], conversation)
+    result = get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files') or [], conversation)
+    if has_recording_pieces(conversation):
+        # Released backup workers consume audio_files, not conversation_audio.
+        # Give them exactly one immutable, window-exact artifact once ready.
+        artifact = result.get('conversation_audio') or {}
+        if artifact.get('status') == 'cached' and artifact.get('signed_url'):
+            identity = hashlib.sha256(urlsplit(artifact['signed_url']).path.encode()).hexdigest()[:16]
+            return {**result, 'audio_files': [{'id': 'conversation-' + identity, **artifact}]}
+        return result
+    return result

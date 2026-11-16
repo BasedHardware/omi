@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Аудіо залишається на телефоні",
     "onDeviceModelDownloadSize": "Завантаження {size} МБ",
     "downloadNow": "Завантажити зараз",
-    "onWifiLater": "Пізніше через Wi-Fi"
+    "onWifiLater": "Пізніше через Wi-Fi",
+    "conversationWritingSummary": "Пишемо ваш підсумок…"
 }

@@ -15618,4 +15618,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Mai târziu pe Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Se scrie rezumatul tău…';
 }

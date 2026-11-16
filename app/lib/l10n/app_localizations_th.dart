@@ -15479,4 +15479,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onWifiLater => 'ภายหลังผ่าน Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
 }

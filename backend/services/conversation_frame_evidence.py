@@ -1,6 +1,7 @@
 """Conversation-lifetime frame evidence reads and deletion convergence."""
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 from collections.abc import Callable
 
@@ -17,7 +18,7 @@ def read_conversation_frame(
     conversation_id: str,
     photo_id: str,
 ) -> tuple[bytes, str]:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversations_db.is_soft_deleted(conversation):
         raise KeyError("conversation frame not found")
     photos = conversations_db.get_conversation_photos(uid, conversation_id) or []

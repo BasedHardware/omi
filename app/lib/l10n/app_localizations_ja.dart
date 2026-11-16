@@ -15325,4 +15325,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onWifiLater => '後で Wi-Fi で';
+
+  @override
+  String get conversationWritingSummary => '要約を作成しています…';
 }

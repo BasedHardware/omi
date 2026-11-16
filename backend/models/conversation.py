@@ -478,6 +478,13 @@ class RecordAudioPartial(BaseModel):
     applied_generation: int = 0
 
 
+class RecordingPiece(BaseModel):
+    recording_id: str
+    audio_file_id: str
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
 class Conversation(BaseModel):
     title_content_units: float = Field(default=0, exclude=True)
     notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -501,6 +508,24 @@ class Conversation(BaseModel):
     arrival_at: Optional[datetime] = None
     clock: Optional[RecordedClock] = None
     episode_id: Optional[str] = None
+
+    # Server-authored; absent on pre-v3 documents. Never trusted on create requests.
+    recording: Optional[bool] = None
+    kind: Optional[Literal['conversation', 'voice_work', 'media', 'background']] = None
+    home_hidden: Optional[bool] = None
+    home_hidden_reason: Optional[str] = None
+    outline_kind: SkipJsonSchema[Optional[str]] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+    title_locked: Optional[bool] = None
+    recording_pieces: Optional[List[RecordingPiece]] = None
+    manual_end: Optional[bool] = None
+    summary_covers_through: Optional[datetime] = None
+    v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
+    v3_derived: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    v3_process_pending: SkipJsonSchema[Optional[bool]] = None
+    v3_rewrites: SkipJsonSchema[Optional[int]] = None
+    backfilled: SkipJsonSchema[Optional[bool]] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
@@ -1095,3 +1120,18 @@ class ConversationAnalytics(BaseModel):
     words_per_minute: float
     speaker_count: int
     speakers: List[SpeakerAnalytics] = []
+
+
+class LiveConversation(BaseModel):
+    id: str
+    structured: Structured
+    started_at: datetime
+    finished_at: Optional[datetime]
+    created_at: datetime
+    status: ConversationStatus
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
+
+
+class ConversationsLiveResponse(BaseModel):
+    v3: bool
+    conversation: Optional[LiveConversation] = None

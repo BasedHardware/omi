@@ -535,6 +535,21 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_conversations_v3_env(payload: str) -> str:
+    """The conversations v3 rollout stage, first app build and task queue ride every product API host."""
+    for service in ('backend', 'backend-sync', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_object_lake_env(payload: str) -> str:
     """Complete synthetic revisions with the six inert C1 lake bindings."""
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
@@ -766,7 +781,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     )
     # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
     # anchor used by the translation and sync fixture helpers above.
-    return with_object_lake_env(with_firestore_read_runtime_env(payload))
+    return with_conversations_v3_env(with_object_lake_env(with_firestore_read_runtime_env(payload)))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):

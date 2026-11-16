@@ -15558,4 +15558,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Myöhemmin Wi-Fillä';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
 }

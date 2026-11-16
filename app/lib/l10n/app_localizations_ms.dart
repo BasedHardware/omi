@@ -15590,4 +15590,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Kemudian melalui Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan anda…';
 }

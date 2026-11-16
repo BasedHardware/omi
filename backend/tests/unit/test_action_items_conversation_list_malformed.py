@@ -129,9 +129,14 @@ def untracked_list_version():
 def test_conversation_list_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}  # missing required field -> ValidationError
     page = [_valid('a1'), bad]
+    # The v3 by-id guard lives in the stubbed utils package here; call straight through to the getter.
     with patch.object(
         ai_mod.conversations_db, 'get_conversation', return_value={'id': 'c1', 'is_locked': False}
-    ), patch.object(ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page):
+    ), patch.object(
+        ai_mod, 'read_product_conversation', side_effect=lambda getter, uid, cid, **_: getter(uid, cid)
+    ), patch.object(
+        ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page
+    ):
         resp = ai_mod.get_conversation_action_items(conversation_id='c1', uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']
 

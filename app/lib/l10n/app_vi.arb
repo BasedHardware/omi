@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Âm thanh ở lại trên điện thoại",
     "onDeviceModelDownloadSize": "Tải xuống {size} MB",
     "downloadNow": "Tải ngay",
-    "onWifiLater": "Sau, qua Wi-Fi"
+    "onWifiLater": "Sau, qua Wi-Fi",
+    "conversationWritingSummary": "Đang viết bản tóm tắt của bạn…"
 }

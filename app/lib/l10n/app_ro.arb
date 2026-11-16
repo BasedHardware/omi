@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Sunetul rămâne pe telefon",
     "onDeviceModelDownloadSize": "Descărcare de {size} MB",
     "downloadNow": "Descarcă acum",
-    "onWifiLater": "Mai târziu pe Wi-Fi"
+    "onWifiLater": "Mai târziu pe Wi-Fi",
+    "conversationWritingSummary": "Se scrie rezumatul tău…"
 }

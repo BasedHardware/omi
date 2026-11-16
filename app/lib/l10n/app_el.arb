@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Ο ήχος μένει στο τηλέφωνό σας",
     "onDeviceModelDownloadSize": "Λήψη {size} MB",
     "downloadNow": "Λήψη τώρα",
-    "onWifiLater": "Αργότερα μέσω Wi-Fi"
+    "onWifiLater": "Αργότερα μέσω Wi-Fi",
+    "conversationWritingSummary": "Γράφεται η σύνοψή σας…"
 }

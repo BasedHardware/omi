@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "Nananatili ang audio sa phone mo",
     "onDeviceModelDownloadSize": "{size} MB na download",
     "downloadNow": "I-download Ngayon",
-    "onWifiLater": "Mamaya sa Wi-Fi"
+    "onWifiLater": "Mamaya sa Wi-Fi",
+    "conversationWritingSummary": "Isinusulat ang iyong buod…"
 }

@@ -19004,5 +19004,9 @@
     "onWifiLater": "On Wi-Fi Later",
     "@onWifiLater": {
         "description": "Button: download the speech model later, when on Wi-Fi"
+    },
+    "conversationWritingSummary": "Writing your summary…",
+    "@conversationWritingSummary": {
+        "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     }
 }

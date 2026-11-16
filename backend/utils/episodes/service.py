@@ -36,6 +36,7 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 """
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 import logging
 import threading
@@ -389,7 +390,9 @@ def _close(
     for cid in episode.get('recovered_conversation_ids') or []:
         if cid == detach:
             continue
-        row = conversations_db.get_conversation(uid, cid, firestore_client=c.firestore_client)
+        row = read_product_conversation(
+            conversations_db.get_conversation, uid, cid, firestore_client=c.firestore_client
+        )
         if row and not any(row.get(key) for key in ('deleted', 'discarded', 'sync_merged_into')):
             _record_recovered(uid, str(episode['id']), cid, row, c)
     if not synced_f:
@@ -1260,6 +1263,8 @@ def on_conversation_finalized(
     collaborators: Optional[Collaborators] = None,
 ) -> str:
     """After the conversation's normal processing. Returns an outcome label; never raises."""
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
     if row.get('capture_time_trust') == 'untrusted':
         return 'skipped_unknown_date'
     c = collaborators or Collaborators()
@@ -1512,7 +1517,9 @@ def _synced_f_verdict(
         # Unknown/blocked candidate metadata never permits naming or a model call.
         # Outside the cohort or killed: no owner read and no model call, so today's placement is untouched.
         return None
-    fresh = conversations_db.get_conversation_raw_snapshot(uid, conversation_id, firestore_client=c.firestore_client)
+    fresh = read_product_conversation(
+        conversations_db.get_conversation_raw_snapshot, uid, conversation_id, firestore_client=c.firestore_client
+    )
     if not fresh or not f_join.may_feed_llm(uid, fresh):
         # Intake may precede a lock/deletion: check stored privacy before constructing or naming speech.
         return None
@@ -1846,6 +1853,8 @@ def attach_synced_intake(
     episode (live or closed) never moves.
     Fail-open; returns a bounded outcome label; never raises.
     """
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
     if row.get('capture_time_trust') == 'untrusted':
         return 'skipped_unknown_date'
     c = collaborators or Collaborators()
@@ -1901,6 +1910,8 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
+    if row.get('recording') or row.get('v3_derived'):
+        return 'skipped_recording_layer'
     if row.get('capture_time_trust') == 'untrusted':
         return 'skipped_unknown_date'
     if row.get('deleted') or is_relevance_discarded(row):
@@ -1919,7 +1930,12 @@ def _on_finalized(
     if trigger == SYNC_UPDATE:
         # Absorb callbacks carry the donor row; notes must read the survivor.
         sync_row = (
-            (conversations_db.get_conversation(uid, conversation_id, firestore_client=c.firestore_client) or {})
+            (
+                read_product_conversation(
+                    conversations_db.get_conversation, uid, conversation_id, firestore_client=c.firestore_client
+                )
+                or {}
+            )
             if absorbed_from
             else row
         )

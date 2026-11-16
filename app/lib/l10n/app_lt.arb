@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Garsas lieka jūsų telefone",
     "onDeviceModelDownloadSize": "{size} MB atsisiuntimas",
     "downloadNow": "Atsisiųsti dabar",
-    "onWifiLater": "Vėliau per Wi-Fi"
+    "onWifiLater": "Vėliau per Wi-Fi",
+    "conversationWritingSummary": "Rašoma jūsų santrauka…"
 }

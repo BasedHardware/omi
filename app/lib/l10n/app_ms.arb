@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Audio kekal pada telefon anda",
     "onDeviceModelDownloadSize": "Muat turun {size} MB",
     "downloadNow": "Muat Turun Sekarang",
-    "onWifiLater": "Kemudian melalui Wi-Fi"
+    "onWifiLater": "Kemudian melalui Wi-Fi",
+    "conversationWritingSummary": "Menulis ringkasan anda…"
 }

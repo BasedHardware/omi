@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "ऑडियो आपके फ़ोन पर ही रहता है",
     "onDeviceModelDownloadSize": "{size} MB डाउनलोड",
     "downloadNow": "अभी डाउनलोड करें",
-    "onWifiLater": "बाद में Wi-Fi पर"
+    "onWifiLater": "बाद में Wi-Fi पर",
+    "conversationWritingSummary": "आपका सारांश लिखा जा रहा है…"
 }

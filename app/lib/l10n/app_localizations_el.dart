@@ -15655,4 +15655,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Αργότερα μέσω Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Γράφεται η σύνοψή σας…';
 }

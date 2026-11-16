@@ -6,6 +6,7 @@ from database import conversations
 from utils.conversations.fragment_visibility import SETTLING_FIELDS, is_relevance_discarded, is_settling_fragment
 
 VISIBILITY_FIELDS = [
+    'recording',
     'discarded',
     'deleted',
     'sync_merged_into',
@@ -20,7 +21,9 @@ VISIBILITY_FIELDS = [
 
 
 def hidden_member(row: dict[str, Any]) -> bool:
-    return bool(row.get('deleted') or row.get('sync_merged_into') or is_relevance_discarded(row))
+    return bool(
+        row.get('recording') or row.get('deleted') or row.get('sync_merged_into') or is_relevance_discarded(row)
+    )
 
 
 # Read projection only: moment attachment and composing use the narrower hidden_member.

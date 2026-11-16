@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "صدا روی تلفن شما می‌ماند",
     "onDeviceModelDownloadSize": "دانلود {size} مگابایت",
     "downloadNow": "اکنون دانلود کن",
-    "onWifiLater": "بعداً با Wi-Fi"
+    "onWifiLater": "بعداً با Wi-Fi",
+    "conversationWritingSummary": "در حال نوشتن خلاصه شما…"
 }

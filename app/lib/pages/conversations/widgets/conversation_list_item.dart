@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -9,21 +10,25 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/pages/episodes/episode_page.dart';
+import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
 import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/paywall/value_moment_paywall.dart';
 import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/held_audio/processing_backlog_view.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/conversation_task_presence_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -159,6 +164,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
         conversation.summaryRetryable,
         conversation.isLocked,
         conversation.processingDeferred,
+        conversation.v3?.tileState,
         widget.fillingSeconds,
         widget.homeEpisode?.members.length,
         widget.homeCard?.revision,
@@ -435,6 +441,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
           isMerging: provider.mergingConversationIds.contains(widget.conversation.id) ||
               widget.conversation.status == ConversationStatus.merging,
           isEligible: !widget.conversation.isLocked &&
+              !_isLive &&
               widget.homeCard?.kind != 'episode' &&
               !provider.mergingConversationIds.contains(widget.conversation.id),
         ),
@@ -463,10 +470,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
           return GestureDetector(
             onTap: onTap,
-            onLongPress:
-                isSelectionMode || isMerging || (widget.homeEpisode != null || widget.homeCard?.kind == 'episode')
-                    ? null
-                    : () => _showActions(context, provider),
+            // The conversation in progress opens; it is not deleted or edited while capture writes it.
+            onLongPress: isSelectionMode ||
+                    isMerging ||
+                    _isLive ||
+                    (widget.homeEpisode != null || widget.homeCard?.kind == 'episode')
+                ? null
+                : () => _showActions(context, provider),
             child: Stack(
               children: [
                 Padding(
@@ -479,6 +489,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       child: _SwipeDeleteRow(
                         enabled: !isSelectionMode &&
                             !isMerging &&
+                            !_isLive &&
                             widget.homeEpisode == null &&
                             widget.homeCard?.kind != 'episode',
                         // One delete path (D5): confirm unless opted out, then Undo. The confirm
@@ -573,7 +584,22 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   style: _metaStyle,
                   maxLines: 1,
                 ),
-              if (duration.isNotEmpty) Text('• $duration', style: _metaStyle, maxLines: 1),
+              if (_isLive)
+                // The conversation in progress counts from its start, whether or not its transcript
+                // came with the live read.
+                LiveEpisodeClock(
+                  key: const Key('conversation_row_live_length'),
+                  clock: clock.now,
+                  builder: (context, now) {
+                    final start = widget.conversation.startedAt ?? widget.conversation.createdAt;
+                    final seconds = now.difference(start).inSeconds;
+                    return seconds <= 0
+                        ? const SizedBox.shrink()
+                        : Text('• ${OmiDuration.compact(seconds, context.l10n)}', style: _metaStyle, maxLines: 1);
+                  },
+                )
+              else if (duration.isNotEmpty)
+                Text('• $duration', style: _metaStyle, maxLines: 1),
               if (widget.homeCard?.memberCount case final count? when count > 1)
                 Text(context.l10n.homeRecordingsCount(count), style: _metaStyle),
               if (widget.homeCard?.homeStep == 'transcribing') ...[
@@ -632,17 +658,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!discarded)
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-                    ),
-                  ),
+                if (!discarded) ConversationStateTile(conversation: widget.conversation),
                 if (!discarded) const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -733,6 +749,10 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   /// The same length the detail page shows (`OmiDuration.compact`, hub audit #15).
+  bool get _isLive =>
+      widget.conversation.v3?.tileState == ConversationTileState.live &&
+      (context.read<ConversationsV3Provider?>()?.v3 ?? false);
+
   String _getConversationDuration(BuildContext context) {
     if (widget.homeCard != null && widget.homeCard!.startedAt == null) return '';
     int durationSeconds = widget.conversation.getDurationInSeconds();

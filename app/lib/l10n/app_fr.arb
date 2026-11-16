@@ -4718,5 +4718,6 @@
     "audioStaysOnPhone": "L'audio reste sur votre téléphone",
     "onDeviceModelDownloadSize": "Téléchargement de {size} Mo",
     "downloadNow": "Télécharger",
-    "onWifiLater": "Plus tard en Wi-Fi"
+    "onWifiLater": "Plus tard en Wi-Fi",
+    "conversationWritingSummary": "Rédaction de votre résumé…"
 }

@@ -15598,4 +15598,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Później przez Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Piszemy podsumowanie…';
 }

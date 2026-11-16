@@ -15561,4 +15561,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'नंतर Wi-Fi वर';
+
+  @override
+  String get conversationWritingSummary => 'तुमचा सारांश लिहित आहे…';
 }

@@ -15588,4 +15588,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Vēlāk ar Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
 }

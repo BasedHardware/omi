@@ -4725,5 +4725,6 @@
     "audioStaysOnPhone": "Lyden bliver på din telefon",
     "onDeviceModelDownloadSize": "{size} MB download",
     "downloadNow": "Download nu",
-    "onWifiLater": "Senere på Wi-Fi"
+    "onWifiLater": "Senere på Wi-Fi",
+    "conversationWritingSummary": "Skriver dit resumé…"
 }

@@ -15618,4 +15618,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Подоцна на Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Го пишуваме вашето резиме…';
 }

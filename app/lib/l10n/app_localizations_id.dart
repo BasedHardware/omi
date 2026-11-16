@@ -15568,4 +15568,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Nanti via Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan Anda…';
 }

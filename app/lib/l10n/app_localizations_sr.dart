@@ -15561,4 +15561,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Касније на Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш сажетак…';
 }

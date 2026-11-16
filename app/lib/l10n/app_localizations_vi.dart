@@ -15554,4 +15554,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Sau, qua Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
 }

@@ -4718,5 +4718,6 @@
     "audioStaysOnPhone": "Audio tetap di ponsel Anda",
     "onDeviceModelDownloadSize": "Unduhan {size} MB",
     "downloadNow": "Unduh Sekarang",
-    "onWifiLater": "Nanti via Wi-Fi"
+    "onWifiLater": "Nanti via Wi-Fi",
+    "conversationWritingSummary": "Menulis ringkasan Anda…"
 }

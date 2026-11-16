@@ -15587,4 +15587,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onWifiLater => 'Пізніше через Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш підсумок…';
 }

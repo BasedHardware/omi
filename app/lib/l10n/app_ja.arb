@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "音声はスマートフォン内に残ります",
     "onDeviceModelDownloadSize": "{size} MB のダウンロード",
     "downloadNow": "今すぐダウンロード",
-    "onWifiLater": "後で Wi-Fi で"
+    "onWifiLater": "後で Wi-Fi で",
+    "conversationWritingSummary": "要約を作成しています…"
 }

@@ -12240,5 +12240,6 @@
     "audioStaysOnPhone": "Аўдыя застаецца на вашым тэлефоне",
     "onDeviceModelDownloadSize": "Спампоўка {size} МБ",
     "downloadNow": "Спампаваць зараз",
-    "onWifiLater": "Пазней праз Wi-Fi"
+    "onWifiLater": "Пазней праз Wi-Fi",
+    "conversationWritingSummary": "Пішам ваша рэзюмэ…"
 }

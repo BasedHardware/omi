@@ -4779,5 +4779,6 @@
     "audioStaysOnPhone": "A hang a telefonodon marad",
     "onDeviceModelDownloadSize": "{size} MB letöltés",
     "downloadNow": "Letöltés most",
-    "onWifiLater": "Később Wi-Fin"
+    "onWifiLater": "Később Wi-Fin",
+    "conversationWritingSummary": "Összefoglaló írása…"
 }

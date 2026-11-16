@@ -15657,4 +15657,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onWifiLater => 'பின்னர் Wi-Fi இல்';
+
+  @override
+  String get conversationWritingSummary => 'உங்கள் சுருக்கம் எழுதப்படுகிறது…';
 }

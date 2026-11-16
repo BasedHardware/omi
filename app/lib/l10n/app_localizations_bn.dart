@@ -15548,4 +15548,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onWifiLater => 'পরে Wi-Fi-তে';
+
+  @override
+  String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
 }

@@ -27290,6 +27290,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On Wi-Fi Later'**
   String get onWifiLater;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

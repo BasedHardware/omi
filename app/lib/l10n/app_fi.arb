@@ -4683,5 +4683,6 @@
     "audioStaysOnPhone": "Ääni pysyy puhelimessasi",
     "onDeviceModelDownloadSize": "{size} Mt:n lataus",
     "downloadNow": "Lataa nyt",
-    "onWifiLater": "Myöhemmin Wi-Fillä"
+    "onWifiLater": "Myöhemmin Wi-Fillä",
+    "conversationWritingSummary": "Kirjoitetaan yhteenvetoasi…"
 }

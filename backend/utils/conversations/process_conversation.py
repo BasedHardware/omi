@@ -301,6 +301,9 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import policy as v3_policy
+from utils.conversations.v3 import service as v3_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -389,11 +392,13 @@ def _get_structured(
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
-    meeting_context_override: Optional[CalendarMeetingContext] = None,
+    meeting_context_override: Optional[CalendarMeetingContext | str] = None,
     finalization_fence: tuple[str, int, int] | None = None,
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        full_v3_notes = v3_policy.full_notes(conversation, trigger)
+        user_kept = user_kept or v3_policy.manual_intent(conversation)
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -401,7 +406,11 @@ def _get_structured(
         def occasion_reason():
             return occasion_retention(uid, conversation, conversation_id)
 
-        media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
+        media_minimum = (
+            None
+            if full_v3_notes or is_release_probe_uid(uid)
+            else content_minimum(uid, conversation, user_kept=user_kept)
+        )
         if media_minimum is not None:
             hidden = noise_hidden_from_home(
                 uid,
@@ -418,12 +427,16 @@ def _get_structured(
         tz_str: str = tz or ''
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
-        minimum = quiet_minimum(
-            uid,
-            conversation,
-            tz=tz,
-            user_kept=user_kept,
-            summary_app_selected=summary_app_selected,
+        minimum = (
+            None
+            if full_v3_notes
+            else quiet_minimum(
+                uid,
+                conversation,
+                tz=tz,
+                user_kept=user_kept,
+                summary_app_selected=summary_app_selected,
+            )
         )
         if minimum is not None:
             decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
@@ -432,6 +445,21 @@ def _get_structured(
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
+        if v3_policy.flag(conversation, 'v3_derived'):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
+                return conversation.structured, True
+            if words < 300 and not full_v3_notes:
+                return v3_service.models.short_tasks(uid, conversation), False
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if (
+                not v3_service.models.foreground()
+                and not v3_policy.explicit_retry(conversation, trigger)
+                and covers
+                and conversation.finished_at
+                and covers >= conversation.finished_at
+            ):
+                return conversation.structured, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -439,7 +467,7 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        calendar_context = meeting_context_override
+        calendar_context = None if isinstance(meeting_context_override, str) else meeting_context_override
         if calendar_context is None:
             direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
             calendar_context = (
@@ -670,9 +698,18 @@ def _get_structured(
             main_conv,
             calendar_context,
             tz_str,
-            include_background=True,
+            include_background=not v3_policy.flag(conversation, 'v3_derived'),
             include_screen_text=True,
         )
+        if v3_policy.flag(conversation, 'v3_derived'):
+            from utils.conversations.v3 import context as v3_context
+
+            corrections_block = meeting_context_block or ''
+            meeting_context_block = (
+                meeting_context_override
+                if isinstance(meeting_context_override, str)
+                else v3_context.summary(uid, conversation, user_language, tz_str)
+            ) + corrections_block
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,
@@ -763,6 +800,10 @@ def _get_conversation_obj(
         if 'sections' in cleaned:
             structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
+    # Apply the durable v3 lock after generated-title cleanup and salience projection.
+    if v3_policy.flag(conversation, 'title_locked'):
+        structured.title = conversation.structured.title
+        structured.emoji = conversation.structured.emoji
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(
@@ -2211,6 +2252,9 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    if v3_policy.flag(conversation, 'recording'):
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_recording').inc()
+        return True
     if is_server_minimum(conversation):
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_server_minimum').inc()
         return True
@@ -2616,6 +2660,7 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
+@v3_service.recording_short_path
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
 @spelling_context_run
@@ -2861,7 +2906,7 @@ def process_conversation(
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
-        llm_hashes=llm_hashes,
+        llm_hashes=None if v3_policy.explicit_retry(conversation, trigger) else llm_hashes,
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,
@@ -3201,7 +3246,7 @@ def process_conversation(
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
             ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = not is_recovery_trigger(trigger)
+        capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
