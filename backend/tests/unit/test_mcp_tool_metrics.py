@@ -97,6 +97,14 @@ def test_capped_calls_are_counted_without_a_latency_sample_from_a_handler():
     assert calls('get_memories', 'other_registered', 'error', 'capped') == before + 1
 
 
+def test_a_quota_store_outage_is_counted_before_its_503():
+    before = calls('get_memories', 'other_registered', 'error', 'internal')
+    outage = HTTPException(status_code=503, detail='usage_unavailable')
+    with pytest.raises(HTTPException):
+        _call('get_memories', result={'memories': []}, cap=outage)
+    assert calls('get_memories', 'other_registered', 'error', 'internal') == before + 1
+
+
 def test_scope_denials_are_counted_as_authorization_denied():
     before = calls('get_memories', 'other_registered', 'error', 'authorization_denied')
     response = _call('get_memories', result={'memories': []}, scopes=['conversations.read'])
