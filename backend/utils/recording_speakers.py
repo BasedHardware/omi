@@ -42,6 +42,15 @@ def _current_conversation(uid, conversation_id):
 def members(uid, conversation_id, *, episode_id=None, extra_scopes=()):
     anchor = _current_conversation(uid, conversation_id)
     conversation_id = anchor['id']
+    if anchor.get('v3_derived') is True:
+        if anchor.get('is_locked'):
+            raise PermissionError('Conversation is locked')
+        if episode_id:
+            raise ValueError('Conversation is no longer in this recording')
+        # Source scopes can span several product windows. The copy already owns
+        # exactly the speech that its transcript and speaker picker may expose.
+        check_budget(1, len(anchor.get('transcript_segments') or []))
+        return None, [dict(anchor, transcript_segments=assignment_segments(anchor))], 'complete'
     if not enabled():
         return None, [dict(anchor, transcript_segments=assignment_segments(anchor))], 'partial'
     episode = (
