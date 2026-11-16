@@ -40,6 +40,8 @@ from utils.llm.notes_packet import get_evidence
 from utils.llm.notes_refactor_metrics import shadow
 from utils.llm.output_language import resolve_output_language
 from utils.episodes.state import IncrementalUpdate, parse_update
+from utils.summary_quality import NOTE_QUALITY_RULES
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.llm.clients import get_llm
 from utils.llm.jev_client import ask_jev
 from utils.llm.usage_tracker import track_usage
@@ -62,14 +64,16 @@ You receive the episode state so far (JSON) and the newest moment of speech. Ret
 Rules:
 """
 _MOMENT_LEGACY_LANGUAGE = '- Write in the language the people speak. Be concrete: names, places, numbers, decisions.\n'
-_MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
+_MOMENT_RULES = (
+    NOTE_QUALITY_RULES
+    + """- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
   trivia dropped. Do not repeat a bullet in other words.
 - "title": a short topic for the whole episode (at most 6 words), not for this moment only.
 - "moment_heading": at most 4 words naming what this newest moment was about.
 - "people": names of the people taking part or addressed, never "Speaker 2".
 - Dialogue labels like "You", "Speaker A" or "Speaker B" are voice markers, not names. NEVER copy a
-  "Speaker" label or any number from one into any field; call that person "a speaker" or "another
-  speaker" until their name is known, and never invent one.
+  "Speaker" label or any number from one into any field. When identity is unknown, state the
+  supported point neutrally without a speaker attribution; never invent a name.
 - "title" and "moment_heading" must say what the speech was about; never a placeholder such as
   "New moment", "Conversation" or "Talking".
 - "open_questions": at most 4 things left unresolved, or [].
@@ -81,11 +85,12 @@ _MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines,
 - "drop_ids": ids of existing items the new speech cancels or shows are already done.
 - Speech can be noisy transcription. Ignore filler, ads, TV and background talk.
 - The "You" label (or the owner's own name) marks the person wearing Omi; report their words and
-  actions in the third person, like everyone else's.
+  actions in second person only when identified confidently; otherwise use neutral subject-focused notes.
 
 Reply with one JSON object only:
 {"title": "", "moment_heading": "", "bullets": [], "people": [], "open_questions": [], "items": [], "drop_ids": []}
 """
+)
 
 PROMPT_PREFIX = _MOMENT_OPENING + _MOMENT_LEGACY_LANGUAGE + _MOMENT_RULES
 
@@ -97,7 +102,7 @@ def _moment_prompt(output_language: str) -> str:
         _MOMENT_OPENING
         + '- Be concrete: names, places, numbers, decisions.\n'
         + '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
-        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n'
+        'unknown voices need no attribution. Never assign personal stories to a name without evidence.\n'
         + _MOMENT_RULES
         + f'\nWrite all output in {output_language}. Keep names and quoted words verbatim.\n'
     )
@@ -187,6 +192,7 @@ def render_moment(
     voice_order: Sequence[str] | None = None,
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
+    segments, _ = owner_safe_transcript_segments(segments)
     owner = owner_name or _resolve_owner_name(uid) or 'You'
     display = display_participants(
         segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id, defer_short_voices=True
@@ -361,7 +367,7 @@ def run_incremental_update(
 
     repair = (
         'Quality correction required: rewrite any bullet that mostly copies the newest moment as a concise '
-        'third-person summary. Short quotes and concise summaries may reuse speech. Do not start a bullet with '
+        'concrete neutral note. Short quotes and concise summaries may reuse speech. Do not start a bullet with '
         'a speaker label such as You:, Others:, or Speaker A:. '
         'Return the complete corrected JSON object.'
     )
