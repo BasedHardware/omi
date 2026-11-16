@@ -131,12 +131,45 @@ def validate_gateway_break_glass_hatch(text: str) -> list[str]:
     return errors
 
 
+# Closed recognition only: the rollout lead approved this exact checkout pin.
+CHECKOUT_PIN = "9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
+CHECKOUT_ACTIONS = {"actions/checkout@v7", "actions/checkout@" + CHECKOUT_PIN}
+
+
+def checkout_inventory(text: str) -> tuple[str, int, bool]:
+    """Normalize the two approved spellings for existing literal contracts.
+
+    This is not a YAML parser: only uses-key lines are recognized. All checkout
+    versions/forks are counted, and anything outside the closed pair refuses.
+    Comments cannot provide a second recognized checkout or control exemption.
+    """
+    count, unknown = 0, False
+
+    def recognize(match: re.Match[str]) -> str:
+        nonlocal count, unknown
+        value = match.group('value').split('#', 1)[0].strip()
+        if not re.search(r'(?:^|/)checkout(?:@|$)', value.lower().strip("\"'")):
+            return match.group(0)
+        count += 1
+        if value not in CHECKOUT_ACTIONS:
+            unknown = True
+            return match.group(0)
+        return match.group('prefix') + 'actions/checkout@v7'
+
+    normalized = re.sub(r"(?m)^(?P<prefix>[ \t]*(?:-[ \t]+)?uses:[ \t]*)(?P<value>[^\n]+)$", recognize, text)
+    return normalized, count, unknown
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in WORKFLOWS:
         path = root / relative
         text = path.read_text(encoding="utf-8") if path.exists() else ""
-        expected_checkout = PUSHER_CHECKOUT if relative == PUSHER_WORKFLOW else LISTEN_EVIDENCE_CHECKOUT if relative == LISTEN_WORKFLOW else CHECKOUT
+        expected_checkout = (
+            PUSHER_CHECKOUT
+            if relative == PUSHER_WORKFLOW
+            else LISTEN_EVIDENCE_CHECKOUT if relative == LISTEN_WORKFLOW else CHECKOUT
+        )
         if expected_checkout not in text:
             errors.append(f"{relative} must reject caller refs for production checkout")
         if ORIGIN_MAIN_FETCH not in text or ANCESTRY_GUARD not in text:
@@ -147,12 +180,16 @@ def validate(root: Path) -> list[str]:
             errors.append(f"{relative} must diagnose a rejected checked-out source identity")
         if "${GITHUB_SHA::7}" in text:
             errors.append(f"{relative} must not label built source with GITHUB_SHA")
-        source_checkouts = text.count("uses: actions/checkout@v7") - text.count(CONTROL_CHECKOUT)
+        checkout_text, checkout_count, unknown_checkout = checkout_inventory(text)
+        if unknown_checkout:
+            errors.append(f"{relative} has an unapproved checkout action or version")
+        firestore_controls = checkout_text.count(CONTROL_CHECKOUT)
+        source_checkouts = checkout_count - firestore_controls
         if relative == LISTEN_WORKFLOW:
             # A separate immutable control checkout is not an application source.
             # Recognize only the exact path/ref/nonpersistent-credentials contract.
-            source_checkouts -= text.count(LISTEN_EVIDENCE_CONTROL)
-            if text.count(LISTEN_EVIDENCE_CONTROL) != 1:
+            source_checkouts -= checkout_text.count(LISTEN_EVIDENCE_CONTROL)
+            if checkout_text.count(LISTEN_EVIDENCE_CONTROL) != 1:
                 errors.append(f"{relative} evidence controls must use immutable workflow source in their isolated path")
         expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
         if source_checkouts != expected_checkouts:
