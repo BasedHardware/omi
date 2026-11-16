@@ -10020,6 +10020,36 @@ the pending handshake a thirty-second deadline; expiry preserves custody fences.
 Prepared EOF/deadline recovery still blocks default-on admission. See the
 [Q12-S boundary note](./listen_pusher_pipeline/changes/2026-11-15-q12-s-source-close-boundary.md).
 
+### Protected capture share
+
+`BATCH_PIPELINE_PROTECTED_SHARE_ENABLED` defaults off. Only explicit
+true/1/on/yes enables; unset, invalid and false/0/off/no preserve legacy
+dedicated-batch FRESH/RECENT/DEEP selection, retry discovery (no protected
+queries), and the original per-call Serving factory.
+`BATCH_PIPELINE_PROTECTED_SHARE_PERCENT` defaults to 25 (integer 1–50; invalid
+uses 25). After existing FRESH service, that fraction of non-FRESH lease
+opportunities can select a capture whose immutable `capture_at + duration_seconds`
+is at most 7,200 s old, inclusive, and is not in the future or marked untrusted.
+Residual slots alternate RECENT/DEEP preference at allocation and serve in
+bounded batches, sharing existing owner duration
+DRR credit. Eligibility is rechecked at lease; holds never grant protected
+compute permission. Retry discovery uses a bounded indexed capture-clock page
+and retains an oldest-due page. Stored priority, merge freshness, admission and
+capture clocks do not change. Shared-live pulls retain legacy ordering.
+
+The [protected-share change note](listen_pusher_pipeline/changes/2026-11-16-protected-share.md)
+records query/claim budgets, metrics, mixed-version behavior and Release-owned
+activation prerequisites for backend Serving maintenance/recover, CPU serving
+and GPU workers. Every composite must be READY before enabling on any role.
+Activation needs a separate lead ruling with synthetic-load evidence and does
+not ride the allowance-parking roll. Release starts with one GPU and one CPU
+serving/maintenance process, then backend maintenance and the remaining CPU/GPU
+processes after a clean one-hour window; review by 2026-11-23. FRESH service/age,
+both residual classes, held/privacy exclusion and discovery/claim budgets must
+stay clean; see the change note for the complete ramp and rollback. Lease
+urgency alone does not establish a two-hour
+transcript/projection/composition outcome.
+
 ### Episode transcript-wait repairs
 
 `EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED` defaults on: completed results with a validated STT-empty receipt covering all closed audio are settled for episode composition. Summary exhaustion, below-floor decisions or empty text alone do not qualify. The additive receipt is fenced to projection revision and pending timestamps; historical rows without proof retain the bounded wait. Off restores the prior transcript wait; late transcript evidence still schedules recomposition. The all-members-complete gate and episode boundaries are unchanged. See [rollout contract](listen_pusher_pipeline/changes/2026-11-15-episode-wait-repairs.md).
