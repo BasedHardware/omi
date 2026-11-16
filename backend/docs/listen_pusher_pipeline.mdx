@@ -10178,3 +10178,15 @@ opens or joins the successor under the existing recorded-timeline fence. Closed
 episodes compose finished members while an open live capture remains excluded;
 finish/read recovery includes it again. No custody or billing contract changes.
 See [the change note](./listen_pusher_pipeline/changes/2026-11-16-live-member-close.md).
+
+### Batch vendor overflow priorities
+
+`BATCH_VENDOR_OVERFLOW_PRIORITIES` is a comma-separated list of `fresh`, `recent`, and `deep`,
+read at each admission. Unset, empty, or malformed lists allow only `fresh`; FRESH is always
+included. `fresh,recent` also permits RECENT units to overflow from GPU to the route table's
+next healthy primary vendor, inside the existing vendor-routing cohort with legacy sync draining
+or dark. Each priority must independently pass the backlog age and admissible-ready count gates.
+`BATCH_VENDOR_OVERFLOW_ENABLED` remains the kill switch. The legacy-sync capacity fallback remains
+FRESH-only. Saturation gauges retain their names and add the bounded `priority=fresh|recent|deep`
+label. No production setting is changed; expanding the list requires a separate spend decision.
+See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-when-the-gpu-floor-is-full).

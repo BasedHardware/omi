@@ -18886,6 +18886,7 @@
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
     },
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "You've used this month's {minutes} minutes",
     "@freeCapTitle": {
         "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",

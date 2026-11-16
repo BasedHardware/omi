@@ -64,6 +64,7 @@ async def upload(
     unit_count=1,
     paths=(),
     record_origin=False,
+    batch_percent=0.0,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -124,7 +125,7 @@ async def upload(
         conversation_id=conversation_id,
         client_device_id=None,
         client_platform='ios',
-        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin, batch_percent=batch_percent),
         evidence=evidence,
     )
     return response, staged, probe

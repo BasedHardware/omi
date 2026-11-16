@@ -1,3 +1,12 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/ui/ui.dart';
+import '../../helpers/sfpro_font_fixtures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,6 +23,57 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+
+class _EnvFields implements EnvFields {
+  const _EnvFields();
+  @override
+  String? get intercomAppId => 'synthetic-support';
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+final _boundary = GlobalKey();
+const _output = String.fromEnvironment('OFFLINE_SYNC_RENDER_OUTPUT');
+
+Future<void> _loadFonts() async {
+  final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+  for (final family in manifest) {
+    final loader = FontLoader(family['family'] as String);
+    for (final font in family['fonts'] as List) {
+      loader.addFont(rootBundle.load(font['asset'] as String));
+    }
+    await loader.load();
+  }
+  for (final family in [
+    '.SF UI Text',
+    '.SF UI Display',
+    '.SF Pro Text',
+    '.SF Pro Display',
+    'SF Pro Display',
+    'CupertinoSystemText',
+    'CupertinoSystemDisplay',
+    'FlutterTest',
+    'Roboto'
+  ]) {
+    final loader = FontLoader(family);
+    for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
+    }
+    await loader.load();
+  }
+}
+
+Future<void> _frame(WidgetTester tester, String name) async {
+  expect(tester.takeException(), isNull);
+  if (_output.isEmpty) return;
+  await tester.runAsync(() async {
+    final render = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await render.toImage(pixelRatio: 3);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    await Directory(_output).create(recursive: true);
+    await File('$_output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+  });
+}
 
 /// Offline Sync lists recordings, not the 75 s / 3 min files capture writes. A customer's day of
 /// recording read as dozens of identical rows, and ten "too old" files from one afternoon were ten
@@ -145,33 +205,79 @@ Future<_Sync> _pump(
   List<Wal> wals, {
   bool removeOnDelete = true,
   List<Wal> relistOnDiscover = const [],
+  bool render = false,
+  double textScale = 1,
 }) async {
   final sync = _Sync(wals, removeOnDelete: removeOnDelete, relistOnDiscover: relistOnDiscover);
-  tester.view.physicalSize = const Size(1170, 4000);
-  tester.view.devicePixelRatio = 3;
+  tester.view.physicalSize = render ? const Size(393, 852) : const Size(1170, 4000);
+  tester.view.devicePixelRatio = render ? 1 : 3;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      GlobalMaterialLocalizations.delegate,
-      GlobalWidgetsLocalizations.delegate,
-      GlobalCupertinoLocalizations.delegate,
-    ],
-    supportedLocales: AppLocalizations.supportedLocales,
-    home: MultiProvider(
-      providers: [
-        ChangeNotifierProvider<SyncProvider>.value(value: sync),
-        ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
-        ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
-      ],
-      child: const AutoSyncPage(),
-    ),
-  ));
+  await tester.pumpWidget(RepaintBoundary(
+      key: _boundary,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildOmiTheme(brightness: Brightness.dark).copyWith(
+          appBarTheme: const AppBarTheme(
+              titleTextStyle: TextStyle(
+                  fontFamily: 'SF Pro Display', fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white)),
+        ),
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)), child: child!),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: MultiProvider(
+          providers: [
+            ChangeNotifierProvider<SyncProvider>.value(value: sync),
+            ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
+            ChangeNotifierProvider<DeviceProvider>(create: (_) => _Device()),
+          ],
+          child: const AutoSyncPage(),
+        ),
+      )));
   await tester.pump();
   return sync;
 }
 
 void main() {
+  setUpAll(() async {
+    Env.init(const _EnvFields());
+    await _loadFonts();
+  });
+
+  testWidgets('too-old recording downloads its whole audio without deleting or retrying it', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final sync = await _pump(tester, _tooOldAfternoon());
+    await tester.tap(find.byKey(const Key('too_old_download')));
+    await tester.pumpAndSettle();
+    expect(sync.shared.single, hasLength(10), reason: 'one file for the whole recording, not one per chunk');
+    expect(sync.deleted, isEmpty);
+    expect(sync.manuallyRetried, isEmpty);
+    expect(sync.wals, hasLength(10));
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final scale in [1.0, 1.5]) {
+    testWidgets('render too-old recording at text scale $scale', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+      await _pump(tester, _tooOldAfternoon(), render: true, textScale: scale);
+      await tester.ensureVisible(find.byKey(const Key('too_old_download')));
+      await tester.pumpAndSettle();
+      expect(find.text('Download Audio'), findsOneWidget);
+      expect(
+          find.text(
+              "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
+          findsOneWidget);
+      await _frame(tester, scale == 1 ? '001-mobile-ios-too-old-recording' : '002-mobile-ios-too-old-larger-text');
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();

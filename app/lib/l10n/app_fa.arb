@@ -12217,6 +12217,7 @@
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
     "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
     "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "{minutes} دقیقهٔ این ماه را استفاده کرده‌اید",
     "freeCapBody": "Omi همچنان در حال ضبط است. انتخاب کنید رونویسی چگونه ادامه پیدا کند.",
     "omiProPlanName": "Omi Pro",

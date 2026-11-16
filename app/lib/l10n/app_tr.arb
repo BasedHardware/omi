@@ -4695,6 +4695,7 @@
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
     "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "Bu ayın {minutes} dakikasını kullandınız",
     "freeCapBody": "Omi kayda devam ediyor. Transkripsiyona nasıl devam edileceğini seçin.",
     "omiProPlanName": "Omi Pro",
