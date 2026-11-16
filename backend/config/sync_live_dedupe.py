@@ -19,12 +19,21 @@ timing. This contract retains precedence over capture-refactor serving
 proposals, which may not drop a lexical abstention.
 Non-cohort users retain their existing fleet/refactor policy.
 
+Finalized batch-live targets also apply the stored-donor lexical rule to late
+sync appends, including older uploads without source-frame receipts. This
+chooses the already durable record transcript only when the bounded lexical
+matcher independently covers the incoming words, including protected negations
+and numbers; time overlap alone never removes speech.
+
 Stored sync donors consolidated into a live target use the same gate at the
 transactional content-transfer boundary, including smart absorb. Committed
 frame coverage also requires lexical safety checks; without it, the bounded lexical
 matcher supplies independent repeat proof, followed by the same exact-retry
 pass. Original donor receipts and the frozen pre-merge live snapshot stay
-separate. Retained timing overlap is observation only. See
+separate. Stored chapters can contain up to 4096 segments; above the fresh
+64-segment budget their lexical search uses a 90-second neighborhood to avoid
+abstaining on a crowded 30-minute candidate pool. Over-budget content is kept.
+Retained timing overlap is observation only. See
 ``utils/sync/ARCHITECTURE.md`` for bridge fields and widening gates.
 
 The same switch gates safe strict-overlap deferral in

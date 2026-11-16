@@ -377,6 +377,8 @@ def drop_covered_repeats(
     live_pinned: bool,
     verified_capture_indices: frozenset[int] = frozenset(),
     require_capture_proof: bool = True,
+    incoming_limit: int = MAX_INCOMING_SEGMENTS,
+    midpoint_distance_seconds: float = MAX_MIDPOINT_DISTANCE_SECONDS,
 ) -> tuple[list[dict], dict]:
     """Return (kept incoming segments, drop report) for one bound intake.
 
@@ -412,7 +414,7 @@ def drop_covered_repeats(
     dropped_count = 0
     evaluated = 0
     for index, segment in enumerate(incoming_segments):
-        if index >= MAX_INCOMING_SEGMENTS:
+        if index >= min(incoming_limit, MAX_LIVE_SEGMENTS):
             kept.append(segment)
             continue
         if require_capture_proof and index not in verified_capture_indices:
@@ -433,8 +435,9 @@ def drop_covered_repeats(
         if not math.isfinite(midpoint):
             kept.append(segment)
             continue
-        low = bisect_left(midpoints, midpoint - MAX_MIDPOINT_DISTANCE_SECONDS)
-        high = bisect_right(midpoints, midpoint + MAX_MIDPOINT_DISTANCE_SECONDS)
+        distance_limit = min(midpoint_distance_seconds, MAX_MIDPOINT_DISTANCE_SECONDS)
+        low = bisect_left(midpoints, midpoint - distance_limit)
+        high = bisect_right(midpoints, midpoint + distance_limit)
         if high - low > MAX_CANDIDATE_SEGMENTS:
             kept.append(segment)
             continue
