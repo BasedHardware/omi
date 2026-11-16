@@ -43,6 +43,10 @@ def check(contract, environment, free_bytes):
         raise ValueError('INSUFFICIENT_EXISTING_RUNNER_SCRATCH_NO_CLEANUP_OR_CAPACITY_CHANGE')
 
 
-if __name__ == '__main__':
+def main():
     contract = json.loads((Path(__file__).parent / 'artifact-contract.json').read_text())
     check(contract, os.environ, shutil.disk_usage(os.environ['RUNNER_TEMP']).free)
+
+
+if __name__ == '__main__':
+    main()
