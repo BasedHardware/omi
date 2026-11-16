@@ -2481,14 +2481,16 @@ class CaptureController extends ChangeNotifier
     Logger.debug('resetState');
     await _cleanupCurrentState();
     final staged = _capture.stagedReadModel;
-    if (_pendantSuspension != null || staged.phoneOwnsCapture || staged.callActive) {
+    if (_pendantSuspension != null || staged.phoneOwnsCapture || staged.callActive || _omiCallActive) {
       notifyListeners();
       return;
     }
 
     // Always try to stream audio if a device is present
     await _ensureDeviceSocketConnection();
+    if (_omiCallActive) return;
     await _initiateDeviceAudioStreaming();
+    if (_omiCallActive) return;
 
     // Additionally, stream photos if the device supports it
     if (_recordingDevice != null) {
@@ -2560,7 +2562,12 @@ class CaptureController extends ChangeNotifier
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
     final pendantStreamPhase = staged.phase == CapturePhase.pendantLive || staged.phase == CapturePhase.pendantPaused;
-    if (isPaused || device == null || _pendantSuspension != null || staged.callActive || !pendantStreamPhase) {
+    if (isPaused ||
+        device == null ||
+        _pendantSuspension != null ||
+        staged.callActive ||
+        _omiCallActive ||
+        !pendantStreamPhase) {
       return;
     }
     final deviceRevision = _deviceIdentityRevision;
@@ -2606,7 +2613,7 @@ class CaptureController extends ChangeNotifier
     if (_fenceUplinkForSync()) return;
     final device = _recordingDevice;
     final staged = _capture.stagedReadModel;
-    if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive) {
+    if (device == null || _pendantSuspension != null || !staged.pendantOwns || staged.callActive || _omiCallActive) {
       return;
     }
     final deviceId = device.id;
@@ -2625,6 +2632,7 @@ class CaptureController extends ChangeNotifier
       return;
     }
     await _wal.getSyncs().phone.configureDeviceAudio(codec, deviceId, device);
+    if (_deviceIdentityStale(deviceRevision) || _omiCallActive) return;
     await _saveNativeBleStreamConfig(device, codec);
     if (_deviceIdentityStale(deviceRevision) || !_capture.stagedReadModel.pendantOwns) return;
     await _setIngressAuthorized(!_preferences.capturePolicy.muted);
@@ -3331,6 +3339,17 @@ class CaptureController extends ChangeNotifier
   }
 
   void _onOmiCallStateChanged() {
+    final debt = _captureInstance?.readModel.pendantSuspension;
+    final reconnecting = debt?.reason == SuspendReason.reconnect || debt?.reconnectResumePending == true;
+    if (!_captureControllerDisposed &&
+        reconnecting &&
+        _omiCallActive &&
+        (_captureInstance?.stagedReadModel.pendantOwns ?? false)) {
+      // A queued call event cannot interrupt an awaited codec/socket/setup
+      // operation. Retire its physical tokens before that operation resumes.
+      _deviceIdentityRevision++;
+      _rollCaptureSession(_recordingDevice?.id ?? 'device');
+    }
     // Conditions are re-read when the queued step runs: a phone handoff may have run first.
     unawaited(_dispatchLogged(const CallStateChanged()));
   }
@@ -3456,7 +3475,8 @@ class CaptureController extends ChangeNotifier
     outcome.throwIfFailed();
   }
 
-  Future<Object?> _startDeviceSessionBody({required bool deviceRequested, required bool promptLocation}) async {
+  Future<Object?> _startDeviceSessionBody(
+      {required bool deviceRequested, required bool promptLocation, bool deferForCall = false}) async {
     if (deviceOnboardingProvider == null && _preferences.batchModeSuspendedForOnboarding) {
       await _restoreBatchAfterOnboardingBody();
     }
@@ -3480,6 +3500,7 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
+    if (deferForCall && _omiCallActive) return null;
     if (deviceRequested) _commitMutedStartAsPaused();
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
@@ -4940,6 +4961,7 @@ class CaptureController extends ChangeNotifier
           StartDeviceSessionStage() => _startDeviceSessionBody(
               deviceRequested: stage.deviceRequested,
               promptLocation: stage.promptLocation,
+              deferForCall: stage.deferForCall,
             ),
           StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
           SilencePauseMarkerStage() => _preferences.saveBool(_silencePausedKey, stage.paused),

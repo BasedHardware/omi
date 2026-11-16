@@ -328,6 +328,7 @@ class CaptureReplayWorld {
 
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
+  Future<BleAudioCodec> Function(String)? audioCodecLoader;
   CalendarCaptureGapMonitor? calendarGapMonitor;
   Future<void> Function(String, bool)? deviceMuteWriter;
   Future<bool?> Function(String)? deviceMuteReader;
@@ -461,7 +462,7 @@ class CaptureReplayWorld {
         if (custom != null) return custom();
         return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
-      audioCodecLoader: (deviceId) async => pendantCodec,
+      audioCodecLoader: (deviceId) => audioCodecLoader?.call(deviceId) ?? Future.value(pendantCodec),
       microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,

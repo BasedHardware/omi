@@ -97,6 +97,8 @@ class HarnessPorts {
   bool? reconnectMuted;
   bool batch = false;
   bool batchSuspended = false;
+  bool silencePaused = false;
+  Completer<void>? holdDeviceMute;
   bool permitPhone = true;
   bool prefetchedGrant = false;
   int permissionGrantClears = 0;
@@ -196,6 +198,12 @@ class HarnessPorts {
         },
         runStage: (stage) async {
           await _record('stage:${stage.runtimeType}');
+          if (stage is SilencePauseMarkerStage) silencePaused = stage.paused;
+          if (stage is PersistDeviceMuteStage && holdDeviceMute != null) {
+            final held = holdDeviceMute!;
+            holdDeviceMute = null;
+            await held.future;
+          }
           if (stage is PersistDeviceMuteStage) deviceMuted = stage.muted;
           if (stage is ResolveDeviceMuteStage) {
             muted = reconnectMuted ?? muted;
@@ -729,13 +737,11 @@ void main() {
     var call = false;
     var signedIn = true;
     var accountId = 'account-1';
-    var silencePaused = false;
     setUp(() {
       now = DateTime.utc(2026, 11, 17);
       call = false;
       signedIn = true;
       accountId = 'account-1';
-      silencePaused = false;
       fake = HarnessPorts();
       coordinator = CaptureCoordinator(
           ports: fake.ports,
@@ -746,7 +752,7 @@ void main() {
               now: () => now,
               signedIn: signedIn,
               accountId: accountId,
-              silencePaused: silencePaused));
+              silencePaused: fake.silencePaused));
     });
     tearDown(() => coordinator.dispose());
     Future<void> send(CaptureEvent event) async => (await coordinator.dispatch(event)).throwIfFailed();
@@ -890,7 +896,7 @@ void main() {
       await drop();
       await send(DeviceUpdated(pendant));
       fake.muted = true;
-      silencePaused = true;
+      fake.silencePaused = true;
       fake.log.clear();
       final held = fake.hold = Completer<void>();
       final resume = coordinator.dispatch(const ResumeSilencePaused());
@@ -921,6 +927,59 @@ void main() {
       call = false;
       await send(const CallStateChanged());
       expect(coordinator.state.active, isNull);
+    });
+    for (final timerFirst in [false, true]) {
+      for (final connected in [false, true]) {
+        test('expired manual pause survives silence recovery: timer=$timerFirst connected=$connected', () async {
+          await drop(paused: true);
+          if (connected) await send(DeviceUpdated(pendant));
+          fake.silencePaused = true;
+          now = now.add(const Duration(seconds: 120));
+          if (timerFirst) await send(const ReconnectGraceElapsed());
+          await send(const ResumeSilencePaused());
+          expect(fake.muted, isTrue);
+          expect(fake.silencePaused, isFalse);
+          expect(coordinator.state.active, isNull);
+          expect(coordinator.state.suspended, isEmpty);
+          expect(fake.nextId, 1);
+        });
+      }
+    }
+    test('a call starting during reconnect mute awaits defers ownership and its observation', () async {
+      final original = await drop();
+      fake.muted = true;
+      fake.log.clear();
+      final held = fake.holdDeviceMute = Completer<void>();
+      final start = coordinator.dispatch(DeviceStartRequested(device: pendant));
+      await pumpEventQueue();
+      expect(fake.log, contains('stage:PersistDeviceMuteStage'));
+      call = true;
+      held.complete();
+      (await start).throwIfFailed();
+      expect(coordinator.state.callActive, isTrue);
+      expect(coordinator.state.active, isNull);
+      expect(coordinator.state.pendantSuspension!.recordingId, original.recordingId);
+      expect(coordinator.state.pendantSuspension!.reconnectResumePending, isTrue);
+      expect(fake.log, isNot(contains('policy:false')));
+      expect(fake.log, isNot(contains('stage:StartDeviceSessionStage')));
+      expect(fake.log, isNot(contains('stage:ReconnectObservationStage')));
+      call = false;
+      await send(const CallStateChanged());
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+      expect(fake.log.where((e) => e == 'stage:ReconnectObservationStage'), hasLength(1));
+    });
+    test('manual pause during grace clears the legacy auto-wake marker durably', () async {
+      await drop();
+      fake.silencePaused = true;
+      fake.muted = true;
+      await send(const PauseCaptureRequested());
+      expect(coordinator.state.pendantSuspension!.wasPaused, isTrue);
+      expect(fake.muted, isTrue);
+      expect(fake.silencePaused, isFalse);
+      final launch = CaptureCoordinatorState.fromJson(coordinator.state.toJson()).sanitizedForLaunch();
+      final wake = transitionCapture(launch, const ResumeSilencePaused(),
+          environment(launch, muted: fake.muted, silencePaused: fake.silencePaused, now: () => now));
+      expect(wake.effects, isEmpty);
     });
     test('expiry wake completes once and snapshot is sanitized at launch', () async {
       await drop();
@@ -2360,6 +2419,43 @@ void main() {
       expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty);
     }, pendantCodec: BleAudioCodec.opus);
   });
+  test('real reconnect codec await is preempted by a call without losing its recording id', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final original = world.controller.activeRecordingId;
+      world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
+      await world.controller.pendingSourceSwitch;
+      final held = Completer<void>();
+      final entered = Completer<void>();
+      var holdOnce = true;
+      world.audioCodecLoader = (_) async {
+        if (holdOnce) {
+          holdOnce = false;
+          entered.complete();
+          await held.future;
+        }
+        return BleAudioCodec.opus;
+      };
+      final resume = world.controller.streamDeviceRecording(device: pendant);
+      await entered.future;
+      world.omiCall.value = PhoneCallState.active;
+      held.complete();
+      await resume;
+      await world.controller.pendingSourceSwitch;
+      expect(world.controller.pendantPausedForCall, isTrue);
+      expect(world.controller.activeRecordingId, original);
+      expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      world.omiCall.value = PhoneCallState.idle;
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.controller.activeRecordingId, original);
+      expect(world.socketRecordingIds, everyElement(original));
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
+    }, pendantCodec: BleAudioCodec.opus);
+  });
+
   test('real controller expires reconnect grace and disposes its timer', () async {
     await withReviewWorld((world) async {
       world.deviceConnection = ScriptedDeviceConnection();
