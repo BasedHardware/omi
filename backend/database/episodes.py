@@ -23,6 +23,7 @@ returns ``EpisodeConflict`` and the caller decides whether to retry.
 from __future__ import annotations
 
 from database import transcript_pointer
+from utils.summary_quality import episode_quality
 
 import json
 import uuid
@@ -239,8 +240,19 @@ def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str
     excluded = hidden | set(merged.get('duplicate_conversation_ids') or [])
     for field in ('moments', 'provisional_items'):
         merged[field] = [item for item in merged.get(field) or [] if item.get('conversation_id') not in excluded]
+    clear_notes = all(key in updates for key in ('title', 'bullets', 'moments')) and not any(
+        updates[key] for key in ('title', 'bullets', 'moments')
+    )
     if hidden - set(raw.get('discarded_conversation_ids') or []):
         merged.update(_cleared_notes())
+    elif not clear_notes:
+        removed = set(raw.get('conversation_ids') or []) - set(merged.get('conversation_ids') or [])
+        merged = episode_quality({} if removed else raw, merged)
+        if merged.get('title') != raw.get('title'):
+            merged['title_changed_at'] = datetime.now(timezone.utc)
+            if removed:
+                merged['title_change_reason'] = 'membership_removed'
+
     return merged
 
 

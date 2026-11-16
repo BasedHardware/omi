@@ -529,6 +529,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
             'model_dump',
         ),
         DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'dict'),
+        # Structured-only note cleanup; this receiver is never a Conversation/display projection.
+        DumpSite('utils/conversations/process_conversation.py', '_get_conversation_obj', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'execute_app', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',
@@ -735,6 +737,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # the successful-output persistence seams own these stamps.
         'notes_llm_input_hash',
         'notes_llm_output_hash',
+        # Server-only numeric title basis and filtered-checkpoint digest, excluded from all dumps.
+        # The fenced writer computes the basis from speech and the notes seam owns the digest.
+        'title_content_units',
+        'notes_quality_filter_input_hash',
         'l1_llm_input_hash',
         # Server-authored cross-surface event membership (#3244): member ids,
         # sources, and windows only, written solely by database.capture_groups.
@@ -2359,3 +2365,8 @@ def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(ren
         assert {field: snapshot[field] for field in checkpoints} == checkpoints
     projection_sink_fns['drop'](conv)
     assert {field: getattr(conv, field) for field in checkpoints} == checkpoints
+
+
+def test_note_quality_metadata_is_excluded_from_client_and_integration_dumps():
+    assert Conversation.model_fields['title_content_units'].exclude is True
+    assert Conversation.model_fields['notes_quality_filter_input_hash'].exclude is True

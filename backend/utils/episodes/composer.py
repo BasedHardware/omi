@@ -82,9 +82,18 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
+from utils.summary_quality import (
+    NOTE_QUALITY_RULES,
+    safe_body,
+    title_or_fallback,
+    episode_quality,
+    filter_output,
+    content_units,
+)
 from utils.episodes.visibility import hidden_member
 from utils.speakers.display import sanitize_speaker_text
 from utils.llm.clients import get_llm
@@ -112,14 +121,19 @@ Skip noise, background chatter, mumbling and filler entirely. Never write meta-c
 
 # The repair retry sees only the malformed reply, never the transcripts: the facts are
 # already in the reply, and re-sending the episode would pay for the same input twice.
-REPAIR_SYSTEM_PROMPT = """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
+REPAIR_SYSTEM_PROMPT = (
+    """You repair a malformed JSON reply from an episode summarizer. Return JSON only, in exactly this shape:
 {{"title": "<= 7 words", "emoji": "one emoji", "lede": "one or two sentences", "chapters": [{{"start": "HH:MM:SS", "end": "HH:MM:SS", "title": "<= 6 words", "points": [{{"text": "one specific point", "details": ["a supporting specific"]}}]}}], "follow_ups": ["a concrete next step"], "people": ["names of people who mattered"]}}
 Keep every fact, name, number and clock label that is already in the reply. Do not invent anything. Use an empty list for a field the reply does not have. Return only the JSON object, with no prose and no code fence."""
+    + "\n"
+    + NOTE_QUALITY_RULES
+)
 
 SYSTEM_PROMPT = (
     """You write the page people read for an "episode": one continuous stretch of {owner}'s day captured by a wearable. It can span several recordings. {owner} is the wearer; call them {owner}, never "the user" or "someone".
 You get each recording's existing summary and action items, and the full transcript (or its densest stretches when it is very long). The transcript is automatic and noisy: speaker labels can be wrong, and short fragments in other languages are usually mis-transcribed background noise. Use the summaries as a map and the transcript as the source of truth.
 Write in {language}. """
+    + NOTE_QUALITY_RULES
     + _OUTPUT_RULES
 )
 
@@ -223,7 +237,7 @@ def notes_hash(state: Mapping[str, Any]) -> str:
 def _speaker(segment: Mapping[str, Any], owner: str) -> str:
     if segment.get('is_user'):
         return owner
-    name = str(segment.get('person_name') or '').strip()
+    name = str(segment.get('person_name') or '').strip() if segment.get('person_id') else ''
     if name:
         return name
     label = str(segment.get('speaker') or 'Someone').replace('SPEAKER_', 'Speaker ')
@@ -254,7 +268,8 @@ def transcript_lines(row: Mapping[str, Any], owner: str, tz: ZoneInfo) -> list[t
             local = open_at.astimezone(tz)
             out.append((open_at, f"[{local:%H:%M:%S}] {open_speaker}: {' '.join(words)}"))
 
-    for segment in _segments(row):
+    segments, _ = owner_safe_transcript_segments(_segments(row))
+    for segment in segments:
         start = float(segment.get('start') or 0)
         at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=start)
         speaker = _speaker(segment, owner)
@@ -400,6 +415,7 @@ def parse(content: str) -> dict[str, Any]:
         raise ComposeFailed('parse_error') from error
     if not isinstance(data, dict):
         raise ComposeFailed('parse_error')
+    data = filter_output(data)
     for key in ('lede', 'overview'):
         if isinstance(data.get(key), list):
             data[key] = ' '.join(str(part) for part in data[key] if str(part).strip())
@@ -409,7 +425,9 @@ def parse(content: str) -> dict[str, Any]:
         if not isinstance(data.get(key), list):
             data[key] = []
     data['chapters'] = [chapter for chapter in data['chapters'] if isinstance(chapter, Mapping)]
-    if not str(data.get('title') or '').strip() or not str(data.get('lede') or '').strip():
+    data['title'] = title_or_fallback(data.get('title'))
+    data['lede'] = safe_body(data.get('lede'))
+    if not data['lede']:
         raise ComposeFailed('parse_error')
     return data
 
@@ -447,7 +465,7 @@ def _speech_end(row: Mapping[str, Any]) -> Optional[datetime]:
 
 
 def _line(value: Any, limit: int) -> str:
-    return trim_text(re.sub(r'\s+', ' ', sanitize_speaker_text(str(value or ''))).strip().strip('•-* ').strip(), limit)
+    return trim_text(re.sub(r'\s+', ' ', sanitize_speaker_text(safe_body(value))).strip().strip('•-* ').strip(), limit)
 
 
 def _points(chapter: Mapping[str, Any]) -> list[dict[str, Any]]:
@@ -508,7 +526,9 @@ def to_updates(
         for chapter in (data.get('chapters') or [])[: detail_budget(members)[0]]:
             if not isinstance(chapter, Mapping):
                 continue
-            heading = _line(chapter.get('title'), 60)
+            if is_placeholder_heading(str(chapter.get('title') or '')):
+                continue
+            heading = title_or_fallback(_line(chapter.get('title'), 60), index=len(drafts) + 1)
             start = _clock(chapter.get('start'), lo, hi, tz)
             if not heading or is_placeholder_heading(heading) or start is None:
                 continue
@@ -679,7 +699,7 @@ def single_member_updates(member: Mapping[str, Any]) -> dict[str, Any]:
     span_start, span_end = _span(member)
     moments = []
     for section, (start, end) in zip(sections, _section_offsets(member, sections)):
-        heading = _line(section.get('heading'), 60)
+        heading = title_or_fallback(_line(section.get('heading'), 60), index=len(moments) + 1)
         points = _markdown_points(section.get('body_markdown'))
         if not heading and not points:
             continue
@@ -1133,12 +1153,15 @@ def _write_single_member(
     composed = single_member_updates(members[0])
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         return {
-            **composed,
+            **final,
             'composed_fingerprint': print_,
             'composed_member_ids': member_ids,
             **_trigger_stamp(episode, members),
-            'composed_notes': notes_hash(composed),
+            'composed_notes': notes_hash(final),
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
@@ -1464,18 +1487,21 @@ def _compose(
     kept_pending = {'value': superseded}
 
     def finish(current: Mapping[str, Any]) -> dict[str, Any]:
+        final = episode_quality(
+            current, {**composed, 'content_word_units': sum(content_units(_segments(row)) for row in members)}
+        )
         usage = dict(current.get('usage') or {})
         usage['composer_calls'] = int(usage.get('composer_calls') or 0) + paid_calls
         usage['composer_input_tokens'] = int(usage.get('composer_input_tokens') or 0) + input_tokens
         usage['composer_output_tokens'] = int(usage.get('composer_output_tokens') or 0) + output_tokens
         usage['composer_tool_calls'] = int(usage.get('composer_tool_calls') or 0) + tool_calls
         payload = {
-            **composed,
+            **final,
             'usage': usage,
             'composed_fingerprint': print_,
             'composed_member_ids': member_ids,
             **_trigger_stamp(episode, members),
-            'composed_notes': notes_hash(composed),
+            'composed_notes': notes_hash(final),
             'composed_at': datetime.now(timezone.utc),
             'composer_version': COMPOSER_VERSION,
             'summary_needs_regeneration': False,
