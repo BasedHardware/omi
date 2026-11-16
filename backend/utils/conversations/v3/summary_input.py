@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 
 from utils.conversations.v3 import policy
-from models.transcript_segment import legacy_conversation_segment_id
+from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
 
 def _json(value):
@@ -17,6 +17,21 @@ def _json(value):
     if hasattr(value, 'model_dump'):
         return value.model_dump(mode='json', exclude_none=True)
     raise TypeError(type(value).__name__)
+
+
+def _voice(segment):
+    # Notes receive this model's legacy numeric defaults before display groups voices.
+    normalized = TranscriptSegment(
+        id='summary-input',
+        text='',
+        speaker=policy.field(segment, 'speaker') or 'SPEAKER_00',
+        speaker_id=policy.field(segment, 'speaker_id'),
+        speaker_id_scope=policy.field(segment, 'speaker_id_scope'),
+        is_user=False,
+        start=0,
+        end=0,
+    )
+    return {'speaker_id': normalized.speaker_id, 'speaker_id_scope': normalized.speaker_id_scope}
 
 
 def fingerprint(row):
@@ -46,6 +61,7 @@ def fingerprint(row):
             'text': policy.field(s, 'text'),
             'original_text': policy.field(s, 'original_text'),
             'speaker': policy.field(s, 'speaker') or 'SPEAKER_00',
+            **_voice(s),
             'is_user': bool(policy.field(s, 'is_user')),
             'person_id': policy.field(s, 'person_id'),
             'start': float(policy.field(s, 'start') or 0),

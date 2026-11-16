@@ -159,6 +159,39 @@ def test_contending_deliveries_on_open_and_replay_reserve_one_paid_snapshot(seed
     assert len(leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict()['snapshot_inputs']) == 1
 
 
+@pytest.mark.parametrize('regroup', ['speaker_id_scope', 'speaker_id'])
+def test_regrouped_voice_invalidates_stored_notes_and_arms_new_paid_quiet_input(seeded, regroup):
+    client, uid, cid, rid, coll = seeded
+    source = coll.document(rid).get().to_dict()
+    segments = source['transcript_segments']
+    for i, segment in enumerate(segments):
+        segment.update(is_user=False, speaker='SPEAKER_00', speaker_id=0, speaker_id_scope='capture:one')
+        if i >= len(segments) // 2:
+            segment[regroup] = 'capture:two' if regroup == 'speaker_id_scope' else 1
+    source['transcript_segments'] = segments
+    original = summary_input.fingerprint(source)
+    coll.document(rid).update({'transcript_segments': segments, 'v3_quiet_generation': original})
+    coll.document(cid).update({'transcript_segments': segments, 'v3_source_hashes': {rid: original}})
+    token, permit = claim(seeded)
+    persist(seeded, token, permit)
+    leases.release(uid, 'summary-' + cid, token, firestore_client=client)
+    assert summary.fresh(store.decode_row(uid, coll.document(cid).get()))
+    for segment in segments:
+        segment[regroup] = 'capture:one' if regroup == 'speaker_id_scope' else 0
+    coll.document(rid).update({'transcript_segments': segments})
+    snapshot = coll.document(rid).get()
+    patch = attempts.source_patch(uid, snapshot, now=datetime.now(timezone.utc) - timedelta(seconds=31))
+    assert patch.get('v3_quiet_pending') and patch['v3_quiet_generation'] != original
+    coll.document(rid).update(patch)
+    coll.document(cid).update(
+        {'transcript_segments': segments, 'v3_source_hashes': {rid: patch['v3_quiet_generation']}}
+    )
+    assert not summary.fresh(store.decode_row(uid, coll.document(cid).get()))
+    token, corrected = claim(seeded)
+    assert corrected and corrected['input_hash'] != permit['input_hash']
+    assert len(leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict()['snapshot_inputs']) == 2
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('first_owner', ['quiet', 'foreground'])
 @pytest.mark.parametrize('full_ledger', [False, True])

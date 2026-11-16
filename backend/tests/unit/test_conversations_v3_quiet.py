@@ -11,6 +11,7 @@ from database import conversations_v3_quiet as attempts
 from models.conversation import Conversation
 from utils.conversations.v3 import quiet, summary_input, summary, triggers, service, renewal
 from utils.conversations import process_conversation as process
+from utils.conversations import transcript_for_llm as transcript
 from tests.unit.test_conversations_v3_stream import real_notes_seam
 
 AT = datetime.now(timezone.utc) - timedelta(minutes=1)
@@ -39,6 +40,54 @@ def test_identity_survives_model_round_trip_and_transport_seal():
     assert summary_input.fingerprint(original) == summary_input.fingerprint(
         {**original, 'status': 'completed', 'audio_files': [{'id': 'seal'}]}
     )
+
+
+@pytest.mark.parametrize(
+    'voice', [{}, {'speaker': 'SPEAKER_378'}, {'speaker_id': 4}, {'speaker_id': 0, 'speaker_id_scope': 'capture:one'}]
+)
+def test_effective_voice_identity_keeps_legacy_dict_and_model_defaults(voice):
+    original = row()
+    original['transcript_segments'][0].update(voice)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+
+
+@pytest.mark.parametrize('regroup', ['speaker_id_scope', 'speaker_id'])
+def test_voice_regrouping_changes_real_notes_transcript_and_freshness(monkeypatch, regroup):
+    monkeypatch.setattr(transcript, 'get_user_name', lambda *a, **kw: None)
+    monkeypatch.setattr(transcript, 'serving_for', lambda *a: False)
+    original = row(
+        transcript_segments=[
+            {
+                'id': 'one',
+                'text': 'Friday planning ' * 150,
+                'start': 0,
+                'end': 10,
+                'is_user': False,
+                'speaker': 'SPEAKER_00',
+                'speaker_id': 0,
+                'speaker_id_scope': 'capture:one',
+            },
+            {
+                'id': 'two',
+                'text': 'Monday delivery ' * 150,
+                'start': 10,
+                'end': 20,
+                'is_user': False,
+                'speaker': 'SPEAKER_00',
+                'speaker_id': 0 if regroup == 'speaker_id_scope' else 1,
+                'speaker_id_scope': 'capture:two' if regroup == 'speaker_id_scope' else 'capture:one',
+            },
+        ]
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert len(voices) == 2 and summary.fresh(original)
+    original['transcript_segments'][1][regroup] = original['transcript_segments'][0][regroup]
+    after, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert len(voices) == 1 and before != after
+    assert not summary.fresh(original)
 
 
 @pytest.mark.parametrize(
