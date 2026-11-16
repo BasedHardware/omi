@@ -19,9 +19,10 @@ including absent documents and failures.
 
 import datetime as dt
 import logging
-import os
 import time
 from dataclasses import dataclass
+
+from utils import process_identity
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,9 @@ MAX_FUTURE_SKEW_SECONDS = 60.0
 MAX_OPERATION_ID_BYTES = 128
 READ_INTERVAL_SECONDS = 60.0
 # Cloud Run injects these; GKE does not. The split matches omi_logging.
-CLOUD_RUN_MARKERS = ('K_SERVICE', 'CLOUD_RUN_JOB', 'K_REVISION')
-IN_CLUSTER_MARKER = 'KUBERNETES_SERVICE_HOST'
-POD_NAMESPACE_ENV = 'POD_NAMESPACE'
+CLOUD_RUN_MARKERS = process_identity.CLOUD_RUN_MARKERS
+IN_CLUSTER_MARKER = process_identity.IN_CLUSTER_MARKER
+POD_NAMESPACE_ENV = process_identity.POD_NAMESPACE_ENV
 
 
 class ParticipationInvalid(ValueError):
@@ -74,11 +75,11 @@ def timeliness_plane(namespace: str) -> str | None:
     """
     if namespace != PROD_NAMESPACE:
         return None
-    if any(os.getenv(marker) for marker in CLOUD_RUN_MARKERS):
+    if process_identity.is_cloud_run():
         return None
-    if not os.getenv(IN_CLUSTER_MARKER):
+    if not process_identity.is_in_cluster():
         return None
-    pod_namespace = os.getenv(POD_NAMESPACE_ENV, '').strip()
+    pod_namespace = process_identity.pod_namespace()
     if pod_namespace and pod_namespace != GKE_PLANE:
         return None
     return GKE_PLANE
