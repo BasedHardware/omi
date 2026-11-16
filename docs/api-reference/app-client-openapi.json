@@ -67,6 +67,28 @@
               }
             ],
             "title": "Profile Text"
+          },
+          "refreshed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refreshed At"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           }
         },
         "title": "AIUserProfileResponse",
@@ -9579,6 +9601,18 @@
               }
             ]
           },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
+          },
           "capture_timezone": {
             "anyOf": [
               {
@@ -11002,6 +11036,18 @@
                 "type": "null"
               }
             ]
+          },
+          "capture_time_trust": {
+            "anyOf": [
+              {
+                "const": "untrusted",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Time Trust"
           },
           "capture_timezone": {
             "anyOf": [
@@ -20377,6 +20423,200 @@
           "count"
         ],
         "title": "HiddenNoiseDayCount",
+        "type": "object"
+      },
+      "HomeFeedCard": {
+        "properties": {
+          "detail_id": {
+            "title": "Detail Id",
+            "type": "string"
+          },
+          "emoji": {
+            "default": "",
+            "maxLength": 32,
+            "title": "Emoji",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "has_tasks": {
+            "default": false,
+            "title": "Has Tasks",
+            "type": "boolean"
+          },
+          "home_step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Step"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "episode",
+              "conversation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "member_count": {
+            "default": 1,
+            "minimum": 0.0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "preview": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Preview",
+            "type": "string"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          },
+          "sort_at": {
+            "format": "date-time",
+            "title": "Sort At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Sources",
+            "type": "array"
+          },
+          "starred": {
+            "default": false,
+            "title": "Starred",
+            "type": "boolean"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary_available": {
+            "default": false,
+            "title": "Summary Available",
+            "type": "boolean"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "detail_id",
+          "sort_at",
+          "status",
+          "revision"
+        ],
+        "title": "HomeFeedCard",
+        "type": "object"
+      },
+      "HomeFeedPreparationResponse": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready",
+          "processed",
+          "has_more"
+        ],
+        "title": "HomeFeedPreparationResponse",
+        "type": "object"
+      },
+      "HomeFeedResponse": {
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "string"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeFeedCard"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generation"
+        ],
+        "title": "HomeFeedResponse",
         "type": "object"
       },
       "IgnoredVoice": {
@@ -35166,6 +35406,81 @@
         "title": "SyncBatchRequest",
         "type": "object"
       },
+      "SyncCaptureEndRequest": {
+        "description": "The phone's statement that a recording ended. Times are device-clock epoch seconds.",
+        "properties": {
+          "end_decided_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "End Decided At",
+            "type": "number"
+          },
+          "end_type": {
+            "enum": [
+              "user_initiated",
+              "silence_backstop",
+              "disconnect"
+            ],
+            "title": "End Type",
+            "type": "string"
+          },
+          "last_speech_at": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Speech At"
+          },
+          "pending_wals": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "title": "Pending Wals",
+            "type": "integer"
+          },
+          "recording_session_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Recording Session Id",
+            "type": "string"
+          },
+          "sent_at": {
+            "exclusiveMinimum": 0.0,
+            "title": "Sent At",
+            "type": "number"
+          }
+        },
+        "required": [
+          "recording_session_id",
+          "end_type",
+          "end_decided_at",
+          "sent_at",
+          "pending_wals"
+        ],
+        "title": "SyncCaptureEndRequest",
+        "type": "object"
+      },
+      "SyncCaptureEndResponse": {
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          },
+          "retry": {
+            "default": false,
+            "title": "Retry",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "SyncCaptureEndResponse",
+        "type": "object"
+      },
       "SyncCaptureManifestFile": {
         "properties": {
           "name": {
@@ -38442,6 +38757,21 @@
               }
             ],
             "title": "Profile Text"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_edit",
+                  "exploration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           }
         },
         "title": "UpdateAIUserProfileRequest",
@@ -63158,6 +63488,207 @@
         ]
       }
     },
+    "/v1/home/feed": {
+      "get": {
+        "operationId": "get_home_feed_v1_home_feed_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-App-Channel",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-App-Channel"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Home Feed",
+        "tags": [
+          "episodes",
+          "home"
+        ]
+      }
+    },
+    "/v1/home/feed/prepare": {
+      "post": {
+        "operationId": "prepare_home_feed_v1_home_feed_prepare_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeFeedPreparationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Prepare Home Feed",
+        "tags": [
+          "episodes",
+          "home"
+        ]
+      }
+    },
     "/v1/import/jobs": {
       "get": {
         "description": "Get all import jobs for the current user.\n\nReturns:\n    List of import jobs ordered by creation date (newest first)",
@@ -75186,7 +75717,77 @@
       }
     },
     "/v1/users/ai-profile": {
+      "delete": {
+        "description": "Forget the profile; the backend builds a new one on the next refresh trigger.",
+        "operationId": "delete_ai_profile_v1_users_ai_profile_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Ai Profile",
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
+        "description": "The backend-owned profile. Never blocks on generation; a stale one is refreshed in the background.",
         "operationId": "get_ai_profile_v1_users_ai_profile_get",
         "parameters": [
           {
@@ -75355,9 +75956,87 @@
         ]
       }
     },
+    "/v1/users/ai-profile/refresh": {
+      "post": {
+        "description": "Regenerate the profile now from the owner's backend data (Generate Now / Regenerate).",
+        "operationId": "refresh_ai_profile_v1_users_ai_profile_refresh_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIUserProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Refresh Ai Profile",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/ai-profile/synthesize": {
       "post": {
-        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
+        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDeprecated: kept only for released desktop builds that still generate locally; current\nclients use the backend-owned profile (GET/PATCH/DELETE and POST /refresh). Remove once\nthe minimum supported macOS and Windows builds no longer call it.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
         "operationId": "synthesize_ai_profile_v1_users_ai_profile_synthesize_post",
         "parameters": [
           {
@@ -87339,6 +88018,91 @@
         "tags": [
           "review"
         ]
+      }
+    },
+    "/v2/sync-capture-end": {
+      "post": {
+        "description": "The phone states that a recording ended and how much of it is uploaded.\n\nStored on the recording's own session document. It lets notes start once\nthe recording's speech has landed, without the arrival-quiet wait. It never\nchanges custody and never deletes or finalizes anything itself.",
+        "operationId": "record_sync_capture_end_v2_sync_capture_end_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncCaptureEndRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCaptureEndResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Sync Capture End"
       }
     },
     "/v2/sync-capture-manifest": {

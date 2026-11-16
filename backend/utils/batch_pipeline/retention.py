@@ -19,6 +19,7 @@ from google.cloud import firestore
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
+from config.record_wal_storage import private_archive_bucket
 from database import rpc_deadline
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
@@ -29,6 +30,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
 from utils.audio_cleanup_custody import cleanup_hold_reason
+from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
@@ -50,15 +52,19 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
         for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
         if (value := os.getenv(name, '').strip())
     }
+    wal_original = bucket_name == private_archive_bucket() and path.startswith(f'record-wal/{uid}/')
     if (
         parsed.scheme != 'gs'
-        or bucket_name not in allowed_buckets
+        or (bucket_name not in allowed_buckets and not wal_original)
         or parsed.query
-        or not path.startswith(
-            (
-                f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
-                f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
-                f'syncing/{uid}/',
+        or not (
+            wal_original
+            or path.startswith(
+                (
+                    f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
+                    f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
+                    f'syncing/{uid}/',
+                )
             )
         )
         or any(part in {'.', '..'} for part in path.split('/'))
@@ -150,6 +156,8 @@ def _register_batch_artifact(
             value
             for value in (
                 job.get('conversation_id'),
+                job.get('capture_source_conversation_id'),
+                getattr(item, 'capture_source_conversation_id', None),
                 binding.get('target_conversation_id'),
                 getattr(item, 'conversation_id', None),
             )
@@ -485,7 +493,11 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             store.client,
             transaction,
             item.owner_id,
-            conversation_ids=(item.conversation_id,) if item.conversation_id else (),
+            conversation_ids=tuple(
+                value
+                for value in (item.conversation_id, getattr(item, 'capture_source_conversation_id', None))
+                if value
+            ),
             expected_generation=item.privacy_generation,
             snapshots=None if decision_only else loaded,
             read_budget=read_budget,
@@ -519,8 +531,10 @@ def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context:
     register_batch_artifact(store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item)
 
 
-def purge_batch_storage_owner(uid: str, namespace: str) -> None:
-    """Sweep all versions of the deterministic owner prefix, including orphans."""
+def purge_batch_storage_owner(uid: str, namespace: str, *, wal_originals: bool = False) -> None:
+    """Sweep deterministic owner prefixes; privacy callers include WAL orphans."""
+    if wal_originals:
+        purge_record_wal_owner(uid)
     bucket_name = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     if not bucket_name:
         return  # No artifact store can be constructed without an explicit bucket.

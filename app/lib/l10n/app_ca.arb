@@ -2220,6 +2220,7 @@
     "authFailedToSignInWithGoogle": "No s'ha pogut iniciar sessió amb Google, si us plau torneu-ho a provar.",
     "authenticationFailed": "L'autenticació ha fallat. Si us plau, torneu-ho a provar.",
     "authFailedToSignInWithApple": "No s'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.",
+    "authAppleSignInFailedUseGoogle": "No s'ha pogut iniciar la sessió amb Apple. Torna-ho a provar o continua amb Google.",
     "authFailedToRetrieveToken": "No s'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.",
     "authUnexpectedErrorFirebase": "Error inesperat en iniciar sessió, error de Firebase, si us plau torneu-ho a provar.",
     "authUnexpectedError": "Error inesperat en iniciar sessió, si us plau torneu-ho a provar",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Facturat anualment",
     "paywallTrialSaveAmount": "Estalvia {amount}",
     "paywallTrialCta": "Comença per {price}",
+    "paywallTrialCodeHint": "Tens un codi d'Omi Pro? Introdueix-lo a la pantalla següent.",
     "paywallTrialCancelNote": "Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.",
     "paywallMonthlyFallbackTitle": "Encara no vols un any sencer?",
     "paywallMonthlyFallbackTrialBody": "Comença amb el pla mensual. Els mateixos {days} dies gratis, després {price} al mes. Cancel·la quan vulguis.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Pagament rebutjat. El teu pla no ha canviat.",
     "monthlySwitchUnavailable": "Ara no es pot canviar. Actualitza la targeta.",
     "monthlySwitchDoneTitle": "Ara pagues mensualment",
-    "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes."
+    "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes.",
+    "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar."
 }

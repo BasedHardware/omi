@@ -261,6 +261,7 @@ static void ram_reset(void)
     current_batch_loaded = false;
     current_batch_packets = 0;
     current_batch_dirty = false;
+    batch_sole_copy_pending = false;
     cached_read_batch_valid = false;
     live_eval_count = 0;
     omi_live_mark_reset(&live_mark_state);
@@ -836,6 +837,226 @@ static void test_boot_mount_retries_with_backoff(void)
     printf("boot_mount_retries_with_backoff ok\n");
 }
 
+static int count_ops(char kind)
+{
+    int n = 0;
+    for (int i = 0; i < z_ops_count; i++) {
+        if (z_ops[i].kind == kind) {
+            n++;
+        }
+    }
+    return n;
+}
+
+/* A part-filled batch of records the phone already received live waits for
+ * more audio; a record that exists only on the pendant keeps the one-second
+ * bound, measured from when it was queued. */
+static void test_timed_flush_policy(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    ble_connected = true;
+
+    z_stub_now_ms = 100000;
+    CHECK(!timed_flush_due(z_stub_now_ms));
+
+    push_records(9, 0x31, 7, 9); /* delivered live */
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_LIVE_FLUSH_INTERVAL_MS - 1));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_LIVE_FLUSH_INTERVAL_MS));
+
+    /* A sole-copy record joins half a second later: due one second after it. */
+    z_stub_now_ms += 500;
+    push_records(1, 0x32, 0, 10);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS - 1));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+
+    /* Later sole-copy records do not push that deadline out. */
+    z_stub_now_ms += 900;
+    push_records(1, 0x33, 0, 11);
+    CHECK(timed_flush_due(z_stub_now_ms + 100));
+
+    /* Committing clears both clocks. */
+    CHECK(flush_current_batch(false) == 0);
+    CHECK(!current_batch_dirty && !batch_sole_copy_pending);
+    CHECK(!timed_flush_due(z_stub_now_ms + 60000));
+
+    /* The same batch keeps filling; a live-only top-up waits the long interval again. */
+    z_stub_now_ms += 10;
+    push_records(3, 0x34, 7, 14);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_LIVE_FLUSH_INTERVAL_MS));
+
+    /* Offline recording (no live session) is unchanged: one second. */
+    CHECK(flush_current_batch(false) == 0);
+    z_stub_now_ms += 10;
+    push_records(2, 0x35, 0, 0);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS - 1));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    ble_connected = false;
+    printf("timed_flush ok\n");
+}
+
+/* A record is marked live when the stack accepts it, not when the phone has it.
+ * One queued just before a disconnect reaches the batch after the disconnect
+ * flush has run; with no link it must not sit on the four-second interval. */
+static void test_live_record_after_link_loss_keeps_one_second_bound(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    sd_prio_msgq.head = sd_prio_msgq.used = 0;
+    z_stub_now_ms = 200000;
+
+    ble_connected = true;
+    push_records(4, 0x71, 9, 4);
+    sd_notify_ble_state(false);
+    /* The worker serves the disconnect flush from the priority queue first. */
+    sd_req_t req;
+    CHECK(k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0 && req.type == REQ_FLUSH);
+    CHECK(flush_current_batch(true) == 0);
+    CHECK(!current_batch_dirty);
+
+    /* Then the record that was still waiting in the write queue. */
+    z_stub_now_ms += 5;
+    push_records(1, 0x72, 9, 5);
+    CHECK(current_batch_dirty && !batch_sole_copy_pending);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS - 1));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+
+    /* Reconnected and receiving again: the longer wait applies again. */
+    CHECK(flush_current_batch(false) == 0);
+    sd_notify_ble_state(true);
+    z_stub_now_ms += 5;
+    push_records(1, 0x73, 10, 6);
+    CHECK(!timed_flush_due(z_stub_now_ms + RAW_FLUSH_INTERVAL_MS));
+    CHECK(timed_flush_due(z_stub_now_ms + RAW_LIVE_FLUSH_INTERVAL_MS));
+    ble_connected = false;
+    sd_prio_msgq.head = sd_prio_msgq.used = 0;
+    printf("link_loss_flush ok\n");
+}
+
+/* A full batch is written exactly once, whatever the timers say. */
+static void test_full_live_batch_single_write(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    z_ops_count = 0;
+    z_ops_record = true;
+    push_records(RAW_PACKETS_PER_BATCH, 0x41, 7, 36);
+    z_ops_record = false;
+    CHECK(count_ops('D') == 1);
+    CHECK(count_ops('M') == 1);
+    CHECK(ring_state.write_seq == RAW_PACKETS_PER_BATCH);
+    CHECK(!current_batch_dirty);
+    printf("full_live_batch ok\n");
+}
+
+static void info_req(sd_req_t *req, struct info_resp *resp, bool flush)
+{
+    memset(req, 0, sizeof(*req));
+    memset(resp, 0, sizeof(*resp));
+    k_sem_init(&resp->sem, 0, 1);
+    req->type = REQ_GET_RING_INFO;
+    req->u.info.resp = resp;
+    req->u.info.flush = flush;
+}
+
+/* Status polling asks for the ring position four times a second while a phone
+ * is connected. It must be answered from RAM: before this, each poll rewrote
+ * the whole buffered batch plus a metadata sector. */
+static void test_peek_info_never_writes(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    push_records(5, 0x51, 7, 5);
+    CHECK(current_batch_dirty);
+
+    sd_req_t req;
+    struct info_resp resp;
+    z_ops_count = 0;
+    z_ops_record = true;
+    for (int i = 0; i < 20; i++) {
+        info_req(&req, &resp, false);
+        CHECK(!req_needs_card(&req));
+        handle_ring_info_req(&req);
+        CHECK(resp.res == 0 && resp.sem.count == 1);
+        /* The reader still sees the buffered records as unread. */
+        CHECK(resp.info.write_seq == 5 && resp.info.read_seq == 0);
+    }
+    CHECK(z_ops_count == 0);
+    CHECK(current_batch_dirty);
+    CHECK(ring_state.write_seq == 0); /* nothing committed by a peek */
+
+    /* An explicit request commits first, as before, and reports committed state. */
+    info_req(&req, &resp, true);
+    CHECK(req_needs_card(&req));
+    handle_ring_info_req(&req);
+    z_ops_record = false;
+    CHECK(resp.res == 0 && resp.info.write_seq == 5);
+    CHECK(count_ops('D') == 1 && count_ops('M') == 1);
+    CHECK(!current_batch_dirty && ring_state.write_seq == 5);
+
+    /* With nothing buffered a peek equals the committed state. */
+    info_req(&req, &resp, false);
+    handle_ring_info_req(&req);
+    CHECK(resp.info.write_seq == 5);
+
+    /* A flush that fails is reported, not papered over with stale state. */
+    push_records(1, 0x52, 7, 6);
+    z_data_write_fail_remaining = 1;
+    info_req(&req, &resp, true);
+    handle_ring_info_req(&req);
+    CHECK(resp.res < 0);
+    printf("peek_info ok\n");
+}
+
+/* Buffered records must not report more unread audio than the ring can hold. */
+static void test_peek_info_clamps_to_capacity(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    uint32_t capacity = ring_state.capacity_packets;
+    CHECK(capacity > 0);
+    for (uint32_t i = 0; i < capacity / RAW_PACKETS_PER_BATCH; i++) {
+        push_records(RAW_PACKETS_PER_BATCH, 0x61, 0, 0);
+    }
+    CHECK(ring_state.write_seq - ring_state.read_seq == capacity);
+    push_records(3, 0x62, 0, 0);
+    sd_ring_info_t info = ring_info_with_buffered();
+    CHECK(info.write_seq == ring_state.write_seq + 3);
+    CHECK(info.write_seq - info.read_seq <= capacity);
+    printf("peek_clamp ok\n");
+}
+
+/* Losing the link must not leave "sent live" records waiting in RAM under the
+ * relaxed interval: they may never have reached the phone. */
+static void test_ble_change_requests_flush(void)
+{
+    disk_reset();
+    ram_reset();
+    CHECK(sd_mount() == 0);
+    ble_connected = false;
+    sd_prio_msgq.head = sd_prio_msgq.used = 0;
+    atomic_set(&pending_flush_on_ble_change, 0);
+
+    sd_notify_ble_state(true);
+    CHECK(k_msgq_num_used_get(&sd_prio_msgq) == 1);
+    sd_notify_ble_state(true); /* no edge, no request */
+    CHECK(k_msgq_num_used_get(&sd_prio_msgq) == 1);
+    sd_notify_ble_state(false);
+    CHECK(k_msgq_num_used_get(&sd_prio_msgq) == 2);
+
+    sd_req_t req;
+    CHECK(k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0 && req.type == REQ_FLUSH);
+    CHECK(k_msgq_get(&sd_prio_msgq, &req, K_NO_WAIT) == 0 && req.type == REQ_FLUSH);
+    printf("ble_change_flush ok\n");
+}
+
 int main(void)
 {
     test_fresh_mount();
@@ -857,6 +1078,12 @@ int main(void)
     test_ring_full_overwrite();
     test_rtc_flag();
     test_advance_rules();
+    test_timed_flush_policy();
+    test_live_record_after_link_loss_keeps_one_second_bound();
+    test_full_live_batch_single_write();
+    test_peek_info_never_writes();
+    test_peek_info_clamps_to_capacity();
+    test_ble_change_requests_flush();
     printf("sd_card harness: %d failures\n", failures);
     return failures ? 1 : 0;
 }

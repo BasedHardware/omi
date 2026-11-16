@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Gagal log masuk dengan Google, sila cuba lagi.",
     "authenticationFailed": "Pengesahan gagal. Sila cuba lagi.",
     "authFailedToSignInWithApple": "Gagal log masuk dengan Apple, sila cuba lagi.",
+    "authAppleSignInFailedUseGoogle": "Log masuk dengan Apple tidak berjaya. Cuba lagi atau teruskan dengan Google.",
     "authFailedToRetrieveToken": "Gagal mendapatkan token Firebase, sila cuba lagi.",
     "authUnexpectedErrorFirebase": "Ralat tidak dijangka semasa log masuk, ralat Firebase, sila cuba lagi.",
     "authUnexpectedError": "Ralat tidak dijangka semasa log masuk, sila cuba lagi",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Dibilkan tahunan",
     "paywallTrialSaveAmount": "Jimat {amount}",
     "paywallTrialCta": "Mula dengan {price}",
+    "paywallTrialCodeHint": "Ada kod Omi Pro? Masukkannya pada skrin seterusnya.",
     "paywallTrialCancelNote": "Batal bila-bila masa. Tiada yuran, tiada penalti.",
     "paywallMonthlyFallbackTitle": "Belum bersedia untuk setahun penuh?",
     "paywallMonthlyFallbackTrialBody": "Mulakan dengan pelan bulanan. {days} hari percuma yang sama, kemudian {price} sebulan. Batal bila-bila masa.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Pembayaran ditolak. Pelan anda tidak berubah.",
     "monthlySwitchUnavailable": "Pertukaran tidak tersedia sekarang. Kemas kini kad anda sebaliknya.",
     "monthlySwitchDoneTitle": "Anda kini membayar bulanan",
-    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan."
+    "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan.",
+    "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi."
 }

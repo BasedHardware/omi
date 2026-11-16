@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Nem sikerült bejelentkezni a Google-lel, kérjük próbálja újra.",
     "authenticationFailed": "A hitelesítés sikertelen. Kérjük, próbálja újra.",
     "authFailedToSignInWithApple": "Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.",
+    "authAppleSignInFailedUseGoogle": "Az Apple-bejelentkezés nem sikerült. Próbáld újra, vagy folytasd a Google-lel.",
     "authFailedToRetrieveToken": "Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.",
     "authUnexpectedErrorFirebase": "Váratlan hiba a bejelentkezés során, Firebase hiba, kérjük próbálja újra.",
     "authUnexpectedError": "Váratlan hiba a bejelentkezés során, kérjük próbálja újra",
@@ -4204,6 +4205,7 @@
     "paywallTrialBilledYearly": "Éves számlázás",
     "paywallTrialSaveAmount": "Spórolj {amount}-t",
     "paywallTrialCta": "Kezdd el {price}-ért",
+    "paywallTrialCodeHint": "Van Omi Pro kódod? Add meg a következő képernyőn.",
     "paywallTrialCancelNote": "Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.",
     "paywallMonthlyFallbackTitle": "Még nem állsz készen egy egész évre?",
     "paywallMonthlyFallbackTrialBody": "Kezdd inkább havi csomaggal. Ugyanúgy {days} nap ingyen, utána havi {price}. Bármikor lemondható.",
@@ -4749,5 +4751,6 @@
     "monthlySwitchDeclined": "A fizetést elutasították. A csomagja nem változott.",
     "monthlySwitchUnavailable": "A váltás most nem érhető el. Inkább frissítse a kártyát.",
     "monthlySwitchDoneTitle": "Mostantól havonta fizet",
-    "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul."
+    "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul.",
+    "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra."
 }

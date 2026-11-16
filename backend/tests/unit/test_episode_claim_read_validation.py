@@ -13,6 +13,10 @@ from models.note_claims import current_note_claims
 from models.structured import NoteClaim, Section, Structured
 from testing.import_isolation import AutoMockModule, stub_modules
 
+# Load the prompt-canonicalization chain (it registers Prometheus metrics) once at collection, so the
+# per-test module stubs do not unload and re-import it and register the same metric twice.
+import utils.conversations.transcript_repeats  # noqa: F401,E402
+
 
 def note():
     targets = {

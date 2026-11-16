@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.",
     "authFailedToRetrieveToken": "firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "వార్షికంగా బిల్ చేయబడుతుంది",
     "paywallTrialSaveAmount": "{amount} ఆదా చేయండి",
     "paywallTrialCta": "{price}కి ప్రారంభించండి",
+    "paywallTrialCodeHint": "Omi Pro కోడ్ ఉందా? తదుపరి స్క్రీన్‌లో దాన్ని నమోదు చేయండి.",
     "paywallTrialCancelNote": "ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.",
     "paywallMonthlyFallbackTitle": "పూర్తి సంవత్సరానికి ఇంకా సిద్ధంగా లేరా?",
     "paywallMonthlyFallbackTrialBody": "బదులుగా నెలవారీతో ప్రారంభించండి. అవే {days} రోజులు ఉచితం, ఆపై నెలకు {price}. ఎప్పుడైనా రద్దు చేయండి.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "చెల్లింపు తిరస్కరించబడింది. మీ ప్లాన్ మారలేదు.",
     "monthlySwitchUnavailable": "ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.",
     "monthlySwitchDoneTitle": "మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు",
-    "monthlySwitchDoneBody": "ఈరోజు {price} చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది."
+    "monthlySwitchDoneBody": "ఈరోజు {price} చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.",
+    "processingDeleteScopeChanged": "ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి."
 }

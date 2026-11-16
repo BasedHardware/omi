@@ -7043,6 +7043,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple کے ساتھ سائن ان میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple کے ساتھ سائن ان نہیں ہو سکا۔ دوبارہ کوشش کریں یا Google کے ساتھ جاری رکھیں۔';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase ٹوکن حاصل کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
 
   @override
@@ -13416,6 +13420,9 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro کوڈ ہے؟ اسے اگلی اسکرین پر درج کریں۔';
+
+  @override
   String get paywallTrialCancelNote => 'کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔';
 
   @override
@@ -15465,4 +15472,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'آج $price ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
 }

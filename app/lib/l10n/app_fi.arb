@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Kirjautuminen Googlella epäonnistui, yritä uudelleen.",
     "authenticationFailed": "Todennus epäonnistui. Yritä uudelleen.",
     "authFailedToSignInWithApple": "Kirjautuminen Applella epäonnistui, yritä uudelleen.",
+    "authAppleSignInFailedUseGoogle": "Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.",
     "authFailedToRetrieveToken": "Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.",
     "authUnexpectedErrorFirebase": "Odottamaton virhe kirjautuessa, Firebase-virhe, yritä uudelleen.",
     "authUnexpectedError": "Odottamaton virhe kirjautuessa, yritä uudelleen",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Laskutetaan vuosittain",
     "paywallTrialSaveAmount": "Säästä {amount}",
     "paywallTrialCta": "Aloita hintaan {price}",
+    "paywallTrialCodeHint": "Onko sinulla Omi Pro -koodi? Syötä se seuraavalla näytöllä.",
     "paywallTrialCancelNote": "Peruuta milloin tahansa. Ei maksuja, ei sakkoja.",
     "paywallMonthlyFallbackTitle": "Etkö ole vielä valmis koko vuodeksi?",
     "paywallMonthlyFallbackTrialBody": "Aloita kuukausitilauksella. Samat {days} päivää ilmaiseksi, sitten {price} kuukaudessa. Peru milloin vain.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Maksu hylättiin. Tilauksesi ei muuttunut.",
     "monthlySwitchUnavailable": "Vaihto ei ole juuri nyt saatavilla. Päivitä kortti sen sijaan.",
     "monthlySwitchDoneTitle": "Maksat nyt kuukausittain",
-    "monthlySwitchDoneBody": "{price} maksettu tänään. Uusiutuu kuukausittain."
+    "monthlySwitchDoneBody": "{price} maksettu tänään. Uusiutuu kuukausittain.",
+    "processingDeleteScopeChanged": "Käsittelylista muuttui. Tarkista lista ja yritä uudelleen."
 }

@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava z Applom ni uspela. Poskusite znova ali nadaljujte z Googlom.",
     "authFailedToRetrieveToken": "Pridobivanje Firebase žetona ni uspelo, prosimo, poskusite ponovno.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "Letno zaračunavanje",
     "paywallTrialSaveAmount": "Prihranite {amount}",
     "paywallTrialCta": "Začnite za {price}",
+    "paywallTrialCodeHint": "Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.",
     "paywallTrialCancelNote": "Prekličite kadar koli. Brez stroškov, brez kazni.",
     "paywallMonthlyFallbackTitle": "Celo leto je za zdaj preveč?",
     "paywallMonthlyFallbackTrialBody": "Začnite z mesečnim paketom. Enakih {days} dni brezplačno, nato {price} na mesec. Prekličite kadar koli.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.",
     "monthlySwitchUnavailable": "Preklop trenutno ni na voljo. Namesto tega posodobite kartico.",
     "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
-    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno."
+    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
+    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova."
 }

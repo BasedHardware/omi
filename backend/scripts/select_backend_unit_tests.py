@@ -182,6 +182,16 @@ CENSUS_GUARD_PREFIXES = (
     'backend/config/batch_census.py',
     'backend/scripts/batch_pipeline_poll_state_census.py',
 )
+# Census exporter (W3 / SCA-2119): a change to the sampler, the gauge families or
+# the scheduler glue must run the exporter contract in the same PR. The registry
+# entry already runs the completeness guard above.
+CENSUS_EXPORT_TESTS = ('tests/unit/test_batch_census_export.py',)
+CENSUS_EXPORT_PREFIXES = (
+    'backend/database/batch_census_export.py',
+    'backend/utils/observability/batch_census.py',
+    'backend/utils/sync/batch_census.py',
+    'backend/scripts/generate_batch_census_alerts.py',
+)
 BATCH_STAGE_ENV_RATCHET_PREFIXES = (
     'backend/utils/batch_pipeline/',
     'backend/database/batch_pipeline_',
@@ -201,6 +211,7 @@ FLAG_BUDGET_PREFIXES = (
     'backend/diarizer/batch_pipeline',
     'backend/config/batch_pipeline',
     'backend/config/batch_language_recovery.py',
+    'backend/config/listen_reconnect.py',
     'backend/utils/sync/',
     'backend/utils/stt/',
     'backend/config/policy/',
@@ -704,10 +715,12 @@ def workflow_contract_matches_path(path: str) -> bool:
     return False
 
 
-def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> tuple[list[str], str]:
+def tests_for_changed_paths(
+    changed_paths: list[str], all_tests: list[str], *, allow_full_suite: bool = True
+) -> tuple[list[str], str]:
     changed_paths = [path for path in (normalize_changed_path(path) for path in changed_paths) if path]
     if not changed_paths:
-        return all_tests, 'no changed paths were provided'
+        return (all_tests if allow_full_suite else []), 'no changed paths were provided'
 
     selected: set[str] = set()
     # Cross-cutting cap guard: a new model endpoint must declare a funded gate.
@@ -758,6 +771,8 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in SYNC_LEGACY_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(CENSUS_GUARD_PREFIXES) for path in changed_paths):
         selected.update(test for test in CENSUS_GUARD_TESTS if test in all_tests)
+    if any(path.startswith(CENSUS_EXPORT_PREFIXES) for path in changed_paths):
+        selected.update(test for test in CENSUS_EXPORT_TESTS if test in all_tests)
     if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
         selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     if any(path.startswith(FLAG_BUDGET_PREFIXES) for path in changed_paths):
@@ -769,7 +784,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(workflow_contract_tests_for_path(path, all_tests))
 
     for path in backend_paths:
-        if is_full_run_path(path):
+        if allow_full_suite and is_full_run_path(path):
             return all_tests, f'{path} requires the full backend unit suite'
 
     for path in test_paths:
@@ -778,7 +793,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
             selected.add(backend_relative)
 
     removed_or_unlisted_tests = [path for path in test_paths if path.removeprefix('backend/') not in all_tests]
-    if removed_or_unlisted_tests:
+    if allow_full_suite and removed_or_unlisted_tests:
         return all_tests, f'{removed_or_unlisted_tests[0]} was removed or is outside backend test discovery'
 
     mapped_backend_sources: set[str] = set()
@@ -804,7 +819,7 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
     unmapped_backend_sources = [
         path for path in backend_paths if path not in test_paths and path not in mapped_backend_sources
     ]
-    if unmapped_backend_sources:
+    if allow_full_suite and unmapped_backend_sources:
         return all_tests, f'{unmapped_backend_sources[0]} did not match a backend test-selection contract'
 
     if not backend_paths:
@@ -813,7 +828,19 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         return [], 'no backend files changed'
     if selected:
         return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
-    return all_tests, 'backend changes did not match a narrow area'
+    return (all_tests if allow_full_suite else []), 'backend changes did not match a narrow area'
+
+
+def focused_tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> list[str]:
+    """Keep known affected contracts even when another path requires broad CI.
+
+    Contracts precede directly changed tests so a bounded local run cannot lose
+    them to a large test-only diff. Each group is stable and deduplicated. This
+    is only pre-push feedback; the ordinary selector retains full-suite fallbacks.
+    """
+    selected, _ = tests_for_changed_paths(changed_paths, all_tests, allow_full_suite=False)
+    changed_tests = {normalize_changed_path(path).removeprefix('backend/') for path in changed_paths}
+    return sorted(set(selected) - changed_tests) + sorted(set(selected) & changed_tests)
 
 
 def match_tests(all_tests: list[str], test_globs: tuple[str, ...]) -> set[str]:
@@ -841,7 +868,12 @@ def main() -> None:
     mode.add_argument('--from-test-list', type=Path, help='file containing backend-relative test paths')
     parser.add_argument('--output', type=Path, help='write selected tests to this file instead of stdout')
     parser.add_argument('--reason-output', type=Path, help='write the selection reason to this file')
+    parser.add_argument(
+        '--focused-output', type=Path, help='write affected contracts then changed tests for bounded pre-push'
+    )
     args = parser.parse_args()
+    if args.focused_output and not args.changed_files:
+        parser.error('--focused-output requires --changed-files')
 
     all_tests = discover_all_tests()
     reason = 'full backend unit suite'
@@ -851,7 +883,11 @@ def main() -> None:
         selected = existing_tests(read_lines(args.from_test_list), all_tests)
         reason = 'using provided backend unit test list'
     else:
-        selected, reason = tests_for_changed_paths(read_lines(args.changed_files), all_tests)
+        changed_paths = read_lines(args.changed_files)
+        selected, reason = tests_for_changed_paths(changed_paths, all_tests)
+        if args.focused_output:
+            focused = focused_tests_for_changed_paths(changed_paths, all_tests)
+            args.focused_output.write_text(''.join(test + '\n' for test in focused), encoding='utf-8', newline='\n')
 
     output = '\n'.join(selected)
     if output:

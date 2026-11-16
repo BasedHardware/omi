@@ -45,11 +45,41 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
+        # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
+        # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
+        RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
+        FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
+        OCCASION_CONVERSATIONS_ENABLED: {value: 'off', category: rollout}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+        RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
         HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
@@ -270,10 +300,34 @@ overlay:
           category: rollout
     pusher:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        # Allowance watch reads the same monthly doc the Cloud Run billing gate trusts (SCA-1750).
+        # A v1 reader here rejected c2fs docs as unverified (usage_unavailable on ~40% of free live opens).
+        # Lever stays 0 on GKE; only the epoch is aligned. Rollback: delete this line and regenerate.
+        FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
         # Mirrors backend-listen (co-host env parity); evaluated on backend-sync. Kill switch: false.
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
         HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         BATCH_FINAL_PASS_ENABLED:
           config_map: {name: prod-omi-backend-config, key: BATCH_FINAL_PASS_ENABLED}
@@ -503,6 +557,10 @@ overlay:
         # removes live leftovers so the env never restates the default.
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         secrets:
           SONIOX_API_KEY:
             secret: SONIOX_API_KEY
@@ -538,13 +596,41 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          # Preserve the serving backend timings (ro-prod readback, 2026-11-15; SCA-2404).
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS: {value: '1200', category: config}
+          FIRST_SUMMARY_DEADLINE_SECONDS: {value: '60', category: config}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
@@ -904,19 +990,44 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
           # Projection finish backoff: backend-sync can run the same sweep through its authenticated
           # /v2/batch-pipeline/reconcile and batch /metrics routes, so it carries the same value as
-          # backend-integration (SCA-2173, review SCA-2270). Kill switch: set it false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          # backend-integration (SCA-2173, review SCA-2270). Off since 2026-11-14 19:41Z (SCA-2283).
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
@@ -1065,9 +1176,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -1302,8 +1410,32 @@ overlay:
         - CONVERSATION_LLM_INPUT_DEDUPE_ENABLED
         - SYNC_REPROCESS_COALESCE_ENABLED
         - REPEAT_WORK_REVISION_ENABLED
+        # Finish backoff is declared only where the finish sweep can run (backend-integration,
+        # backend-sync). A hand-set true was left on this service on 2026-11-13; deploy removes it
+        # (SCA-2283).
+        - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
@@ -1313,6 +1445,11 @@ overlay:
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
@@ -1442,9 +1579,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1655,14 +1789,34 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_HELD_POLL_SKIP_ENABLED=false.
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           BATCH_HELD_POLL_SKIP_ENABLED: {value: 'true', category: ops_kill}
           # Kill switch: set BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false.
           BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED: {value: 'true', category: ops_kill}
-          # Projection finish backoff on the only service that runs the finish sweep. On since the
-          # one-time stamping pass completed and the finish counters exported (2026-11-14, SCA-2173,
-          # SCA-2222). Kill switch: set BATCH_PROJECTION_FINISH_BACKOFF_ENABLED=false.
-          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'true', category: rollout}
+          # Projection finish backoff. Off: turned off in production on 2026-11-14 19:41Z on a 5xx
+          # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
+          # async-policy finish rows are never deferred; #25314 is the fix for those reads.
+          BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
@@ -1671,6 +1825,11 @@ overlay:
           OMI_FLAGS_SOURCE: {value: dual, category: rollout}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Off on backend-integration: this host has no HOSTED_DIARIZATION_API_URL (listed in forbidden_env),
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.

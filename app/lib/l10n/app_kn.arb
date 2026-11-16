@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ Google ಮೂಲಕ ಮುಂದುವರಿಯಿರಿ.",
     "authFailedToRetrieveToken": "Firebase ಟೋಕನ್ ಪುನರುದ್ಧರಣ ವಿಫಲವಾಗಿದೆ, ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "ವಾರ್ಷಿಕ ಬಿಲ್ ಮಾಡಲಾಗುತ್ತದೆ",
     "paywallTrialSaveAmount": "{amount} ಉಳಿಸಿ",
     "paywallTrialCta": "{price} ಗೆ ಪ್ರಾರಂಭಿಸಿ",
+    "paywallTrialCodeHint": "Omi Pro ಕೋಡ್ ಇದೆಯೇ? ಮುಂದಿನ ಪರದೆಯಲ್ಲಿ ಅದನ್ನು ನಮೂದಿಸಿ.",
     "paywallTrialCancelNote": "ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ರದ್ದುಗೊಳಿಸಿ. ಯಾವುದೇ ಶುಲ್ಕಗಳಿಲ್ಲ, ಯಾವುದೇ ದಂಡಗಳಿಲ್ಲ.",
     "paywallMonthlyFallbackTitle": "ಇಡೀ ವರ್ಷಕ್ಕೆ ಇನ್ನೂ ಸಿದ್ಧವಿಲ್ಲವೇ?",
     "paywallMonthlyFallbackTrialBody": "ಬದಲಿಗೆ ಮಾಸಿಕದಿಂದ ಪ್ರಾರಂಭಿಸಿ. ಅದೇ {days} ದಿನಗಳು ಉಚಿತ, ನಂತರ ತಿಂಗಳಿಗೆ {price}. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "ಪಾವತಿ ನಿರಾಕರಿಸಲಾಗಿದೆ. ನಿಮ್ಮ ಯೋಜನೆ ಬದಲಾಗಿಲ್ಲ.",
     "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
     "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
-    "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ."
+    "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
+    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
 }

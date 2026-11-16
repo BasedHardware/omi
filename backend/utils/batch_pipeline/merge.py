@@ -13,9 +13,11 @@ from config.batch_pipeline import (
     recovered_merge_release_enabled,
 )
 from config.policy.kill_switches import kill_switch
+from config.record_latency import record_fresh_merge_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import Store
 from utils.batch_pipeline import backlog_release
+from utils.batch_pipeline.held_terminal import held_without_recovery
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.metrics import QueueMetrics
@@ -27,6 +29,8 @@ logger = logging.getLogger(__name__)
 HEAD_WAIT_UNAVAILABLE_RETRY_SECONDS = 300
 # Pending fresh rows read per probe (the query cap); an owner rarely has more in flight.
 FRESH_PROBE_ROWS = 32
+# Ready rows scanned when a blocked record sibling hides independent work.
+RECORD_SIBLING_PROBE_ROWS = FRESH_PROBE_ROWS + 128
 # Content siblings a recovery wake may release with the recovered unit.
 RELEASE_SIBLINGS_MAX = 32
 _HEAD_STATES = frozenset({'ready', 'leased', 'retry', 'record_pending', 'privacy_blocked'})
@@ -113,6 +117,22 @@ def _awaiting_projection(tx, owner: dict) -> int:
         return sequence
     done = tx.get('results', projected).get('log_sequence')
     return sequence - done if done else 0
+
+
+def _record_sibling_pending(tx, job: dict) -> bool:
+    """Every merge route preserves the immutable native recording's unit order."""
+    if not record_fresh_merge_enabled():
+        return False
+    binding = job.get('projection_binding') or {}
+    if binding.get('native_record') is not True:
+        return False
+    for sibling in binding.get('segment_ids') or ():
+        if sibling == job['segment_id']:
+            return False
+        previous = tx.get('jobs', sibling)
+        if previous.get('state') != 'committed' and not held_without_recovery(previous):
+            return True
+    return True  # An incomplete/malformed binding cannot authorize a bypass.
 
 
 class OrderedMerge:
@@ -356,11 +376,15 @@ class OrderedMerge:
                     and (
                         _catch_up(candidate)
                         or _backlog_held(candidate)
+                        or _record_sibling_pending(tx, candidate)
                         or (tx_fresh and candidate['state'] != 'result_ready')
                     )
                     and current.get('merge_pending')
                     and current.get('state') == 'result_ready'
-                    and current.get('fresh_capture') is True
+                    and (
+                        current.get('fresh_capture') is True
+                        or (_record_sibling_pending(tx, candidate) and not over_cap and not _backlog_held(current))
+                    )
                 ):
                     return None
                 if skipped is not None:
@@ -395,6 +419,14 @@ class OrderedMerge:
                 except FailedPrecondition as error:
                     raise HeadWaitUnavailable from error
             if not candidate or candidate['state'] != 'result_ready':
+                return None
+            if _record_sibling_pending(tx, candidate):
+                blocked.update(
+                    head_state='record_sibling',
+                    sibling=True,
+                    segment_id=candidate['segment_id'],
+                    cursor=owner.get('record_sibling_cursor'),
+                )
                 return None
             if not fresh_first and _backlog_held(candidate):
                 # Not a depth hold: no marker, no re-offer. The fresh probe below still runs.
@@ -458,6 +490,7 @@ class OrderedMerge:
             tx.put('results', job['segment_id'], entry)
             job.update(state='committed', merge_pending=False)
             tx.put('jobs', job['segment_id'], job)
+            owner.pop('record_sibling_cursor', None)
             owner.update(
                 watermark=watermark if late else position,
                 log_tail=job['segment_id'],
@@ -488,9 +521,11 @@ class OrderedMerge:
             # any other fence keeps its strict-order behaviour.
             raise fenced
         depth_probe = bool(depth and (strict_catch_up or strict_blocked.get('catch_up') or fenced))
-        probe = entry is None and (backlog_probe or depth_probe)
+        sibling_probe = bool(strict_blocked.get('sibling') and fresh_query)
+        probe = entry is None and (backlog_probe or depth_probe or sibling_probe)
         if (
             probe
+            and not sibling_probe
             and kill_switch('BATCH_PIPELINE_MERGE_TX_FRESH_GATE_ENABLED', log=False)
             and time.monotonic() >= self._fresh_tx_retry_at
         ):
@@ -527,7 +562,49 @@ class OrderedMerge:
             # outside the strict transaction (no transactional query lock);
             # only a ready one opens a second, re-verifying transaction.
             try:
-                pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
+                if sibling_probe:
+                    # Existing ready-head query/index, widened only for a blocked group.
+                    cursor = strict_blocked.get('cursor') or {}
+                    after = (
+                        (cursor['capture_at'], cursor['segment_id'])
+                        if (cursor.get('head') == strict_blocked['segment_id'])
+                        else None
+                    )
+                    page = self.store.ready_pending(key, RECORD_SIBLING_PROBE_ROWS, after=after)
+
+                    def independent(tx):
+                        over_depth = bool(depth and _awaiting_projection(tx, tx.get('owners', key)) >= depth)
+                        return [
+                            row
+                            for row in page
+                            if not _record_sibling_pending(tx, row)
+                            and not _backlog_held(row)
+                            and (row.get('fresh_capture') is True or not over_depth)
+                        ]
+
+                    pending = self.store.run(independent)
+                    pending.sort(
+                        key=lambda row: (row.get('fresh_capture') is not True, row['capture_at'], row['segment_id'])
+                    )
+                    if not pending:
+                        # Persist progress only for a full blocked page. The hint
+                        # never authorizes a commit and clears on commit or exhaustion.
+                        def remember(tx):
+                            tx.check_privacy(owner_id)
+                            current = tx.get('owners', key)
+                            if len(page) >= RECORD_SIBLING_PROBE_ROWS:
+                                current['record_sibling_cursor'] = {
+                                    'head': strict_blocked['segment_id'],
+                                    'capture_at': page[-1]['capture_at'],
+                                    'segment_id': page[-1]['segment_id'],
+                                }
+                            else:
+                                current.pop('record_sibling_cursor', None)
+                            tx.put('owners', key, current)
+
+                        self.store.run(remember)
+                else:
+                    pending = self.store.fresh_pending(key, FRESH_PROBE_ROWS)
             except FailedPrecondition:
                 # Without the fresh query a catch-up hold would also hold fresh
                 # rows: take the plain order now and retry the query later. A probe made only

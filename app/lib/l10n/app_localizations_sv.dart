@@ -7033,6 +7033,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Det gick inte att logga in med Apple. Försök igen eller fortsätt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
 
   @override
@@ -13408,6 +13412,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kod? Ange den på nästa skärm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt när som helst. Inga avgifter, inga påföljder.';
 
   @override
@@ -15462,4 +15469,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Förnyas varje månad.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
 }

@@ -35,11 +35,14 @@ cat > "$WORK/fake-python" <<'STUB'
 set -euo pipefail
 output=""
 reason_output=""
+focused_output=""
+changed_files=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --output) output="$2"; shift 2 ;;
     --reason-output) reason_output="$2"; shift 2 ;;
-    --changed-files) shift 2 ;;
+    --changed-files) changed_files="$2"; shift 2 ;;
+    --focused-output) focused_output="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -50,6 +53,23 @@ while [ "$i" -lt "${STUB_SELECTED_COUNT:-0}" ]; do
   i=$((i + 1))
 done
 printf '%s\n' "${STUB_REASON:-broad selector fallout}" > "$reason_output"
+# Model the selector's contract-first artifact. The Python regression suite
+# exercises its actual path matching; this fixture verifies hook consumption.
+: > "$focused_output"
+i=0
+while [ "$i" -lt "${STUB_CONTRACT_COUNT:-0}" ]; do
+  printf 'tests/unit/test_contract_%03d.py\n' "$i" >> "$focused_output"
+  i=$((i + 1))
+done
+while IFS= read -r file; do
+  case "$file" in
+    backend/tests/*.py)
+      case "${file##*/}" in test_*.py|*_test.py) ;; *) continue ;; esac
+      [ ! -f "$file" ] || printf '%s\n' "${file#backend/}"
+      ;;
+  esac
+done < "$changed_files" | sort -u >> "$focused_output"
+
 STUB
 chmod +x "$WORK/fake-python"
 
@@ -125,17 +145,8 @@ if [ "$ran" -gt "$CAP" ]; then
   echo "$output" >&2
   exit 1
 fi
-case "$output" in
-  *"cap is $CAP"*)
-    echo "FAIL: message advertises a cap the run may exceed instead of reporting the truncation" >&2
-    echo "$output" >&2
-    exit 1
-    ;;
-esac
-grep -q "25 backend test file(s), also over the cap of $CAP" <<<"$output" || {
-  echo "FAIL: message does not report requested vs actual counts" >&2; echo "$output" >&2; exit 1; }
-grep -q "Running the first $ran in sorted order" <<<"$output" || {
-  echo "FAIL: message does not report what actually ran" >&2; echo "$output" >&2; exit 1; }
+grep -q "running $CAP of 25 affected contracts/changed tests (cap $CAP)" <<<"$output"
+grep -q "15 focused file(s) also deferred" <<<"$output"
 
 # Truncation is deterministic: the same diff selects the same files every push.
 first_list="$(cat "$WORK/ran_list")"
@@ -148,7 +159,7 @@ test "$first_list" = "$(sort "$WORK/ran_list")" || {
 # Under the cap the existing fallback behavior is unchanged.
 output="$(run_case 4 "$CAP")"
 test "$(cat "$WORK/ran_count")" = "4"
-grep -q "running 4 changed backend test file(s) instead; cap is $CAP" <<<"$output" || {
+grep -q "running 4 of 4 affected contracts/changed tests (cap $CAP)" <<<"$output" || {
   echo "FAIL: under-cap fallback message regressed" >&2; echo "$output" >&2; exit 1; }
 
 # No changed backend test files still skips the broad suite entirely.
@@ -170,5 +181,24 @@ fi
 output="$(run_case 0 "$CAP" 1)"
 test ! -f "$WORK/ran_count"
 grep -q "Skipping broad backend unit suite in pre-push" <<<"$output"
+
+# Source-only changes retain affected contracts despite broad selection.
+export STUB_CONTRACT_COUNT=3
+output="$(run_case 0 "$CAP")"
+test "$(cat "$WORK/ran_count")" = 3
+grep -qx 'tests/unit/test_contract_002.py' "$WORK/ran_list"
+
+# Contracts have priority over a large changed-test set; the cap stays hard.
+output="$(run_case 25 "$CAP")"
+test "$(cat "$WORK/ran_count")" = "$CAP"
+grep -qx 'tests/unit/test_contract_002.py' "$WORK/ran_list"
+grep -q "18 focused file(s) also deferred" <<<"$output"
+
+# Even affected contracts can exceed the budget: report that omission honestly.
+export STUB_CONTRACT_COUNT=15
+output="$(run_case 0 "$CAP")"
+test "$(cat "$WORK/ran_count")" = "$CAP"
+grep -q "5 focused file(s) also deferred" <<<"$output"
+unset STUB_CONTRACT_COUNT
 
 echo "pre-push backend unit test cap tests passed"

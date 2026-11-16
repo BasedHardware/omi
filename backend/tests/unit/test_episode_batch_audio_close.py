@@ -285,12 +285,16 @@ def test_deadline_commits_with_membership_and_close_replay_is_a_true_noop(
     assert wire['members'][0]['finished_at'] == datetime.fromtimestamp(1120 + fraction, timezone.utc)
 
 
-@pytest.mark.parametrize('outcome', ['dead_letter', 'failed', 'upload_failed', 'deadline', 'projected'])
-def test_home_pending_member_has_bounded_exit_and_can_recover(timeline_store, monkeypatch, outcome):
+@pytest.mark.parametrize('queue_hold', ['true', 'false'])
+@pytest.mark.parametrize('outcome', ['dead_letter', 'failed', 'upload_failed', 'deadline', 'max_age', 'projected'])
+def test_home_pending_member_has_bounded_exit_and_can_recover(timeline_store, monkeypatch, outcome, queue_hold):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
     store = timeline_store
     path = ('users', 'owner', 'conversations', 'capture')
     now = datetime.now(timezone.utc)
     entered = now - timedelta(hours=3) if outcome in {'deadline', 'projected'} else now
+    if outcome == 'max_age':
+        entered = now - timedelta(hours=25)
     store.rows[path] = capture(finished_at=None)
     c = service.Collaborators(firestore_client=store, now=lambda: entered)
     assert attachment.attach_closed_batch_capture('owner', 'capture', store.rows[path], collaborators=c) == 'attached'
@@ -309,10 +313,13 @@ def test_home_pending_member_has_bounded_exit_and_can_recover(timeline_store, mo
     wire = home_read.project_episode('owner', episode, members={'capture': member})['members'][0]
     if outcome == 'projected':
         assert wire['title'] == 'Recovered transcript' and wire['status'] == 'completed'
+    elif outcome == 'deadline' and queue_hold == 'true':
+        assert wire['title'] == 'Transcribing…' and wire['status'] == 'processing'
+        assert wire['finished_at'].timestamp() == 1120
     else:
         assert wire['title'] == "Couldn't transcribe" and wire['status'] == 'failed'
         assert wire['finished_at'].timestamp() == 1120
-    assert overdue.call_count == (1 if outcome == 'deadline' else 0)
+    assert overdue.call_count == (1 if outcome == 'max_age' or (outcome == 'deadline' and queue_hold == 'false') else 0)
 
 
 def test_kill_switch_keeps_attach_after_transcription_available(timeline_store, monkeypatch):
@@ -335,13 +342,16 @@ def test_kill_switch_keeps_attach_after_transcription_available(timeline_store, 
 
 
 @pytest.mark.parametrize('seconds, status', [(-0.001, 'processing'), (0, 'failed'), (0.001, 'failed')])
-def test_deadline_is_an_exact_automatic_exit(monkeypatch, seconds, status):
+@pytest.mark.parametrize('queue_hold,hours', [('false', 2), ('true', 2), ('true', 24)])
+def test_deadline_is_an_exact_automatic_exit(monkeypatch, seconds, status, queue_hold, hours):
+    monkeypatch.setenv('HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED', queue_hold)
     deadline = datetime(2026, 11, 4, tzinfo=timezone.utc)
+    now = deadline + timedelta(hours=hours - 2, seconds=seconds)
     monkeypatch.setattr(
         home_read,
         'datetime',
         SimpleNamespace(
-            now=lambda tz: deadline + timedelta(seconds=seconds),
+            now=lambda tz: now,
             fromtimestamp=datetime.fromtimestamp,
         ),
     )
@@ -354,7 +364,8 @@ def test_deadline_is_an_exact_automatic_exit(monkeypatch, seconds, status):
     }
     member = {'episode_transcription_deadline_at': deadline, 'status': 'completed'}
     wire = home_read.project_episode('owner', episode, members={'c': member})['members'][0]
-    assert wire['status'] == status
+    expected = 'processing' if queue_hold == 'true' and hours == 2 else status
+    assert wire['status'] == expected
     assert wire['title']
 
 

@@ -1,6 +1,92 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Client polling adapter only; never writes conversation lifecycle status.
+    'database/record_wal_handoff.py': [
+        (
+            'status',
+            'status',
+            "'processing'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
+    'utils/batch_pipeline/empty_transcription.py': [
+        (
+            'stamp',
+            'record_transcription_empty',
+            "{'version': 1, 'projection_revision': result['record_projection_revision'], 'pending_generation': "
+            "generation, 'spans': merged}",
+            ('record_transcription_empty',),
+        )
+    ],
+    # Home visibility defaults and response metadata only; no lifecycle writes.
+    'database/home_feed.py': [
+        ('_visible', 'status', "'completed'", ('status',)),
+        (
+            'feed.project',
+            'status',
+            "row.get('home_status') or 'completed'",
+            (
+                'detail_id',
+                'emoji',
+                'finished_at',
+                'has_tasks',
+                'home_step',
+                'id',
+                'is_locked',
+                'kind',
+                'member_count',
+                'preview',
+                'revision',
+                'sort_at',
+                'sources',
+                'starred',
+                'started_at',
+                'status',
+                'summary_available',
+                'title',
+            ),
+        ),
+    ],
+    # Read-only gate input for the member-notes wait; no lifecycle document write.
+    'utils/episodes/member_notes.py': [
+        (
+            'before_notes',
+            'status',
+            "getattr(conversation, 'status', None)",
+            ('finalization_job_id', 'id', 'record_lane_owner', 'source', 'status'),
+        ),
+    ],
+    # Close acceptance wire response only; no lifecycle document write.
+    'utils/pusher_record_close.py': [
+        (
+            'result_frame',
+            'status',
+            'status',
+            ('conversation_id', 'phase', 'request_id', 'status', 'type', 'version', 'watermark'),
+        ),
+    ],
+    # Census response metadata only; no lifecycle document writes.
+    'utils/sync/batch_census.py': [
+        (
+            'snapshot',
+            'status',
+            "OUTCOME_DISABLED; literal aliases=[('OUTCOME_DISABLED', ('disabled',))]",
+            ('failed', 'status', 'stocks', 'units'),
+        ),
+        ('snapshot', 'status', 'outcome', ('failed', 'status', 'stocks', 'units')),
+    ],
     'database/batch_pipeline_allowance_hold.py': [
         (
             'park',
@@ -222,6 +308,12 @@ FIELD_SITES = {
             'state',
             "'ready' if finished else 'persisted'",
             ('conversation_id', 'state'),
+        ),
+        (
+            'ProjectionStore.mark_enrichment.commit',
+            'state',
+            "'ready' if finished else 'persisted'",
+            ('record_notes_deferred', 'state'),
         ),
         ('ProjectionStore.ready.commit', 'state', "'ready'", ('state',)),
         (
@@ -2006,13 +2098,13 @@ FIELD_SITES = {
             'mark_record_upload_failed.commit',
             'record_audio_closed',
             'False',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         (
             'mark_record_upload_failed.commit',
             'record_upload_failed',
             'True',
-            ('record_audio_closed', 'record_upload_failed', 'record_upload_revision'),
+            ('record_audio_closed', 'record_upload_failed', 'record_upload_failed_at', 'record_upload_revision'),
         ),
         ('renew_record_token_lease.commit', 'record_audio_closed', 'False', ('record_audio_closed',)),
         ('renew_record_token_lease.commit', 'record_upload_sessions', 'sessions', ('record_upload_sessions',)),
@@ -3086,27 +3178,6 @@ FIELD_SITES = {
             "status; literal aliases=[('status', ('invalid_evidence',))]",
             ('key', 'kind', 'status'),
         ),
-        (
-            'run_session._state_pass',
-            'status',
-            "summary.get('status')",
-            (
-                'agree',
-                'arm',
-                'disagree',
-                'failure',
-                'judged',
-                'judged_harmful',
-                'profile_added',
-                'profile_rejected',
-                'profile_unsupported',
-                'rejected',
-                'rejected_top',
-                'status',
-                'unverified',
-                'would_serve',
-            ),
-        ),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
         ('run_session.defect_sink', 'status', "'recorded'", ('status',)),
     ],
@@ -3166,25 +3237,6 @@ FIELD_SITES = {
             ('processing_status', 'rationale', 'route', 'status', 'target_memory_id'),
         )
     ],
-    'utils/dream_state_pass.py': [
-        (
-            '_run',
-            'status',
-            "'ready'",
-            ('profile_lines', 'profile_ops', 'render_chars', 'stale_refs', 'status', 'total_tokens'),
-        ),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'failed'", ('status',)),
-        ('run', 'status', "'skipped_deadline'", ('status',)),
-        ('run', 'status', "'timeout'", ('status',)),
-        (
-            'run',
-            'status',
-            "{'written': 'complete', 'superseded': 'complete', 'expired': "
-            "'timeout'}.get(outcome, 'failed'); literal aliases=[('outcome', ('failed',))]",
-            ('status',),
-        ),
-    ],
     'utils/dream_telemetry.py': [
         (
             'pass_payload',
@@ -3234,6 +3286,19 @@ FIELD_SITES = {
                 'weighted_tokens',
             ),
         )
+    ],
+    # Per-blocker scheduling metadata only; no recording lifecycle transition.
+    'utils/episodes/compose_wait.py': [
+        (
+            'observation_updates',
+            'compose_transcript_wait_observations',
+            'merged',
+            (
+                'compose_transcript_wait_observations',
+                'compose_transcript_wait_started_at',
+                'compose_transcript_wait_until',
+            ),
+        ),
     ],
     'utils/episodes/composer.py': [
         (
@@ -4346,7 +4411,13 @@ FIELD_SITES = {
     'utils/workers/consumer.py': [('http_response', 'status', 'result.outcome.value', ('reason', 'status'))],
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
-        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured'))
+        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # API response only; never sent to a lifecycle persistence helper.
+        ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
+    ],
+    'utils/conversations/empty_capture.py': [
+        # Expired-placeholder wire copy, not a stored terminal transition.
+        ('project', 'status', "'completed'", ('status', 'structured', 'summary_retryable')),
     ],
 }
 

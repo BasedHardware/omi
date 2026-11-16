@@ -202,6 +202,7 @@ from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils import ai_profile_refresh
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_app_result,
@@ -680,6 +681,7 @@ def _get_structured(
         )
         from utils.conversations import llm_input_dedupe
 
+        member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = llm_input_dedupe.notes(
                 uid,
@@ -704,7 +706,7 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -3150,6 +3152,8 @@ def process_conversation(
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+            # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
+            ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:

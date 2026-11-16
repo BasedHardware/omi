@@ -6927,6 +6927,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Appleでのサインインに失敗しました。もう一度お試しください。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Appleでサインインできませんでした。もう一度お試しいただくか、Googleで続行してください。';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebaseトークンの取得に失敗しました。もう一度お試しください。';
 
   @override
@@ -13213,6 +13216,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro のコードをお持ちですか？次の画面で入力してください。';
+
+  @override
   String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
 
   @override
@@ -15226,4 +15232,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '本日$priceをお支払いいただきました。毎月更新されます。';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
 }
