@@ -51,12 +51,19 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     final current = _currentWalOwnerUid();
     bool owned(Wal wal) => wal.ownerUid == uid || (wal.ownerUid == null && uid == current);
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
+    var stampedOwner = false;
+    for (final wal in doomed) {
+      if (wal.ownerUid == null) {
+        wal.ownerUid = uid;
+        stampedOwner = true;
+      }
+    }
     var removed = 0;
     for (final wal in doomed) {
       if (!_isCurrent(generation)) break;
       if (await _deleteWal(wal, generation: generation)) removed++;
     }
-    if (removed > 0 && _isCurrent(generation)) {
+    if ((removed > 0 || stampedOwner) && _isCurrent(generation)) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
     }

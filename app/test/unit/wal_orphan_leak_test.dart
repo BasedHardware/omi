@@ -814,4 +814,32 @@ void main() {
     expect(recovered.fileWriteId, live.fileWriteId);
     expect(recovered.fileWriteId, isNotNull);
   });
+  test('a failed account purge persists the legacy owner before a session wipe', () async {
+    final wal = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        filePath: 'audio_unstamped.bin');
+    await File('${documents.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    await WalFileManager.saveWals([wal]);
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+      await WalFileManager.saveWals(rows);
+    });
+    await sync.loadForOnDeviceWorker();
+    await IOOverrides.runZoned(() => sync.purgeAccountWals('owner-a'),
+        createFile: (path) {
+          final real = Zone.root.run(() => File(path));
+          return path.endsWith('/${wal.filePath}') ? _UndeletableAudio(real) : real;
+        },
+        fseGetType: (path, links) => Zone.root.run(() => FileSystemEntity.type(path, followLinks: links)));
+    sync.clearUserData();
+    await WalFileManager.clearAll();
+    await SharedPreferencesUtil().saveString('uid', 'owner-b');
+    final restarted = LocalWalSyncImpl(_Listener());
+    await restarted.loadForOnDeviceWorker();
+    expect(restarted.testWals, isEmpty,
+        reason: 'a failed purge must not publish old unstamped audio to the next owner');
+    expect(restarted.testForeignWals.single.ownerUid, 'owner-a');
+  });
 }
