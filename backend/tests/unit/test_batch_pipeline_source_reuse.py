@@ -654,10 +654,13 @@ async def test_missing_input_repair_preserves_accepted_file_boundaries_after_off
     assert set(protocol.restore_reupload.call_args.args[3]) == set(snapshots)
 
 
-def test_mixed_bundle_admits_only_the_new_tail_as_paid_work():
+def test_mixed_bundle_admits_only_the_new_tail_as_paid_work(monkeypatch):
     from database.batch_pipeline_intake import admit
     from utils.batch_pipeline.scheduler import Scheduler
+    from database import batch_pipeline_store
 
+    # Scalar scheduling hint; ordered queries are outside the strict document fixture.
+    monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *args, **kwargs: 0.0)
     store, original = setup_store()
     copy = replace(
         original,
