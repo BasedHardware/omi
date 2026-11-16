@@ -52,6 +52,7 @@ from utils.mcp_server.helpers import (
     select_card_fields,
 )
 from utils.mcp_server.payloads import tool_response_serialized_chars
+from utils.mcp_server import detail_views
 
 logger = logging.getLogger(__name__)
 
@@ -244,13 +245,17 @@ def get_conversation_by_id(
 
     max_segments, max_chars = _conversation_fetch_bounds(arguments)
     filters = _detail_filters(arguments, conversation_id, max_segments, max_chars)
+    view = detail_views.parse_choice(arguments, 'view', detail_views.VIEWS)
+    offset = detail_views.start_offset(arguments)
     position = (
         decode_detail_cursor(arguments['cursor'], uid=uid, filters=filters)
         if arguments.get('cursor') is not None
-        else {'offset': 0, 'char_offset': 0}
+        else {'offset': offset or 0, 'char_offset': 0}
     )
 
-    conversation = fetch_conversation_for_detail(uid, conversation_id)
+    conversation = fetch_conversation_for_detail(
+        uid, conversation_id, extra_field_paths=['structured.sections'] if view == 'outline' else None
+    )
     if conversation is None:
         raise ToolExecutionError(
             "Conversation not found. Use the full id from get_conversations; shortened id prefixes are not document ids.",
@@ -259,6 +264,22 @@ def get_conversation_by_id(
 
     if conversation.get('is_locked', False):
         raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
+
+    total = len(detail_views.readable_segments(conversation.get('transcript_segments')))
+    if view == 'outline':
+        detail_views.count_page('get_conversation_by_id', view, filters['format'], True, False)
+        card = conversation_card(conversation, include_participants=filters['include_participants'])
+        return {
+            'conversation': select_card_fields(card, filters['fields']),
+            'sections': detail_views.outline_sections(conversation),
+            'total_segments': total,
+            'truncated': False,
+            'next_cursor': None,
+        }
+    if offset is not None and offset > total:
+        raise ToolExecutionError(
+            f'offset {offset} is past the end of the transcript (total_segments={total}).', code=-32602
+        )
 
     # JSON-RPC carries both text and structuredContent, and SSE escapes Unicode.
     # If metadata/encoding consumes the wire budget, return a smaller lossless
@@ -269,13 +290,21 @@ def get_conversation_by_id(
             uid, conversation, filters, position=position, page_segments=page_segments, page_chars=page_chars
         )
         if tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
+            if not filters['summary_only']:
+                detail_views.count_page(
+                    'get_conversation_by_id',
+                    view,
+                    filters['format'],
+                    position == {'offset': 0, 'char_offset': 0},
+                    result['truncated'],
+                )
             return result
         if filters['summary_only'] or (page_segments == 1 and page_chars == 1):
             break
         page_segments, page_chars = max(1, page_segments // 2), max(1, page_chars // 2)
     raise ToolExecutionError(
         'Conversation exceeds the 120000-character serialized response budget. '
-        'Retry with include_participants=false, fewer fields, or smaller max_segments/max_chars.',
+        'Retry with format=lines, include_participants=false, fewer fields, or smaller max_segments/max_chars.',
         code=-32602,
     )
 
@@ -297,6 +326,7 @@ def _detail_filters(
         'fields': arguments.get('fields'),
         'summary_only': summary_only,
         'include_participants': include_participants,
+        'format': detail_views.parse_choice(arguments, 'format', detail_views.FORMATS),
     }
 
 
@@ -317,7 +347,9 @@ def _conversation_detail_page(
         **(position or {}),
     )
     result = conversation_card(conversation, include_participants=filters['include_participants'])
-    if not summary_only:
+    if not summary_only and filters['format'] == 'lines':
+        result.update(detail_views.lines_fields(page.segments))
+    elif not summary_only:
         result['transcript_segments'] = page.segments
     next_cursor = (
         encode_detail_cursor(uid=uid, filters=filters, position=page.next_position)
@@ -405,6 +437,7 @@ def get_conversations_by_ids(
         'fields': arguments.get('fields'),
         'summary_only': arguments.get('summary_only', False),
         'include_participants': arguments.get('include_participants', True),
+        **({'format': arguments['format']} if arguments.get('format') not in (None, 'segments') else {}),
     }
     offset = 0
     if arguments.get('cursor') is not None:
@@ -463,11 +496,16 @@ def get_conversations_by_ids(
             if not items:
                 raise ToolExecutionError(
                     'Conversation exceeds the 120000-character serialized response budget. '
-                    'Retry with include_participants=false, fewer fields, or smaller max_segments/max_chars.',
+                    'Retry with format=lines, include_participants=false, fewer fields, or smaller max_segments/max_chars.',
                     code=-32602,
                 )
             break
         items.append(candidate)
+    for item in items:
+        if 'total_segments' in item and not detail_filters['summary_only']:
+            detail_views.count_page(
+                'get_conversations_by_ids', 'transcript', detail_filters['format'], True, item['truncated']
+            )
     return envelope(items)
 
 

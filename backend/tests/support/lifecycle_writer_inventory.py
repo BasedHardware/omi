@@ -3706,6 +3706,15 @@ FIELD_SITES = {
             ('date', 'generated_at', 'status', 'timezone'),
         )
     ],
+    # Read-only MCP card projection: reports the stored status; never written back.
+    'utils/mcp_server/helpers.py': [
+        (
+            'conversation_state_fields',
+            'status',
+            'status if isinstance(status, str) else None',
+            ('duration_seconds', 'status'),
+        )
+    ],
     'utils/mcp_server/oauth.py': [('mcp_authorize_consent', 'status', 'str(exc)', ('code', 'retryable', 'status'))],
     'utils/mcp_server/registry.py': [
         (
@@ -3719,6 +3728,27 @@ FIELD_SITES = {
             'status',
             "{'type': 'string'}",
             ('has_more', 'promoted', 'ready', 'retry_after_seconds', 'status'),
+        ),
+        # The conversation card's output schema (a JSON Schema, not a payload).
+        (
+            '<module>',
+            'status',
+            "{'type': ['string', 'null'], 'description': 'in_progress or processing means still being captured or written'}",
+            (
+                'calendar_event_id',
+                'call_platform',
+                'discarded',
+                'duration_seconds',
+                'is_call',
+                'kind',
+                'participants',
+                'participants_included',
+                'person_ids',
+                'shown_on_home',
+                'source',
+                'status',
+                'summary_covers_through',
+            ),
         ),
     ],
     'utils/memory/atom_keyword_index.py': [
