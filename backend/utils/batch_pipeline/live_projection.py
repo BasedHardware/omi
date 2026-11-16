@@ -7,6 +7,7 @@ from config.episodes import episodes_enabled, episode_compose_transcript_ready_e
 import math
 
 from config.record_audio import restore_pending
+from utils.batch_pipeline import empty_transcription
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.conversations.fragment_visibility import is_automatic_discard
 from utils.conversations.summary_delivery import stamp_projection_debt
@@ -137,6 +138,7 @@ def replace_record(
         has_content=bool(segments),
         sync_live_target=True,
     )
+    empty_transcription.stamp(current, result, span)
     if new and is_automatic_discard(current) and not restore_pending(current, *obligations):
         # Later speech supersedes an ordinary automatic verdict. A pending
         # explicit restore keeps its discard until the metadata commit wins.

@@ -510,8 +510,10 @@ void main() {
           key: boundary, child: await buildTypedConversationScreen(provider, pendingWork: store, theme: _theme())));
       await _capture(
           tester, boundary, '${after ? '010' : '009'}-mobile-ios-episode-owner-${after ? 'after' : 'before'}');
-      expect(find.text('Coffee with Maya'), after ? findsNothing : findsOneWidget);
+      expect(find.text('Coffee with Maya'), findsOneWidget,
+          reason: 'a delayed uncomposed owner must not absorb already-READY recording notes');
       expect(find.text('Planning the week'), findsOneWidget);
+      expect(find.byKey(const Key('home_processing_row')), findsNothing);
       await tester.pumpWidget(const SizedBox());
       debugDefaultTargetPlatformOverride = null;
     });

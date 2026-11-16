@@ -7,8 +7,13 @@ module is pure composition, not admission or a replacement for that live reader.
 from __future__ import annotations
 
 from copy import deepcopy
+import re
 
 SOURCE = '0714c5198be8f0183c8fd7dd3810d53c91af17a4'
+RESTORED_DEFAULTS = {
+    'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
+    'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+}
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 # Existing native ops_env fold ownership, carried forward before the candidate
 # instead of restoring these keys after its first traffic move.
@@ -68,19 +73,54 @@ def app_env(revision):
 
 
 def compose(config, snapshot, source):
-    if source != SOURCE or snapshot.get('source') != SOURCE or set(snapshot.get('services', {})) != set(SERVICES):
+    integration_only = snapshot.get('profile') == 'integration-only'
+    selected = ('backend-integration',) if integration_only else SERVICES
+    if (
+        not isinstance(source, str)
+        or not re.fullmatch(r'[0-9a-f]{40}', source)
+        or snapshot.get('source') != source
+        or (not integration_only and source != SOURCE)
+        or set(snapshot.get('services', {})) != set(selected)
+    ):
         raise ValueError('canary ops snapshot source/scope mismatch')
     config = deepcopy(config)
     services = config['cloud_run']['services']
-    for service in SERVICES:
+    for service in selected:
         live = app_env(snapshot['services'][service]['revision'])
         desired = services[service]
+        if integration_only:
+            # This narrow recovery is not a full manifest reconciliation. Carry
+            # every existing literal/secret binding, then apply only the named
+            # quality/backoff/provider/stamp decisions and two removals.
+            symbolic = {
+                key: deepcopy(entry)
+                for key, entry in desired.get('env', {}).items()
+                if isinstance(entry, dict) and entry.get('env_var')
+            }
+            env, secrets = {}, {}
+            for key, entry in live.items():
+                if 'valueFrom' in entry:
+                    ref = entry['valueFrom']['secretKeyRef']
+                    secrets[key] = {'secret': ref['name'], 'version': ref['key']}
+                else:
+                    if key in symbolic:
+                        # Retain native workflow-input contracts. The renderer
+                        # resolves the protected binding (or retained fallback);
+                        # candidate() then requires exact equality to the live
+                        # inverse, so a changed binding cannot alter this scope.
+                        env[key] = symbolic[key] | {'default': entry.get('value', '')}
+                    else:
+                        env[key] = {'value': entry.get('value', ''), 'category': 'ops_kill'}
+            desired['env'], desired['secrets'] = env, secrets
+            desired['forbidden_env'] = sorted(set(desired.get('forbidden_env', [])) | set(RESTORED_DEFAULTS))
         env = desired.setdefault('env', {})
         secrets = desired.setdefault('secrets', {})
         forbidden = set(desired.get('forbidden_env', []))
         if any(k in forbidden for k in QUALITY):
             raise ValueError('canary quality disposition conflicts with manifest')
         for key, entry in live.items():
+            if integration_only:
+                continue  # The complete retained map and symbolic contracts are already bound above.
             if not key.startswith(PREFIXES) or key in forbidden:
                 continue
             if 'valueFrom' in entry:
@@ -102,4 +142,11 @@ def compose(config, snapshot, source):
             env.pop(BACKOFF, None)
             secrets.pop(BACKOFF, None)
             desired['forbidden_env'] = sorted(forbidden | {BACKOFF})
+        if integration_only:
+            for key, saved in RESTORED_DEFAULTS.items():
+                if live.get(key) != {'name': key, 'value': saved}:
+                    raise ValueError('canary saved inverse differs from ruled 200/10')
+                env.pop(key, None)
+                secrets.pop(key, None)
+            desired['forbidden_env'] = sorted(set(desired.get('forbidden_env', [])) | set(RESTORED_DEFAULTS))
     return config

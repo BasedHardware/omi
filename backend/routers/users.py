@@ -169,6 +169,7 @@ from utils.daily_summary_validation import (
 )
 from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
+from utils.memory.recap_review import refresh_recap_learning_refs
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
@@ -431,10 +432,8 @@ async def run_conversation_batch_purge(
     except Exception as e:
         # The obligation stays durable; the queue retries and the reconciler redrives.
         logger.warning(
-            'conversation_batch_purge handler: attempt %d failed job=%s: %s',
-            retry_count + 1,
-            job_id,
-            type(e).__name__,
+            f'conversation_batch_purge handler: attempt {retry_count + 1} failed kind={kind} job={job_id} '
+            f'generation={generation}: {type(e).__name__}: {sanitize(str(e))}'
         )
         return JSONResponse(status_code=500, content={'status': 'retry'})
     logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
@@ -2085,7 +2084,8 @@ def get_daily_summaries(
     Returns summaries in reverse chronological order.
     """
     try:
-        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+        summaries = read_daily_summary_page(uid, limit=limit, offset=offset, request=request)
+        return {'summaries': refresh_recap_learning_refs(uid, summaries)}
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
@@ -2185,7 +2185,8 @@ def search_daily_summaries(
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
     filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
-    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
+    matches = [DailySummaryResponse.model_validate(item) for item in filtered]
+    return {'summaries': refresh_recap_learning_refs(uid, matches)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2197,7 +2198,8 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
     try:
-        return require_daily_summary(summary, uid=uid, operation='detail')
+        validated = require_daily_summary(summary, uid=uid, operation='detail')
+        return refresh_recap_learning_refs(uid, [validated])[0]
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 

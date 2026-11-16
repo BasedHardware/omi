@@ -18,11 +18,17 @@ import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
 from utils.observability.reasons import ReasonFamily, reason_label
+from database.jobstore.cohort import production_policy_applies
 
 STORE_QUERIES = frozenset(
     {
         'due',
+        'protected_retries',
         'oldest',
         'oldest_retry',
         'oldest_admissible_ready',
@@ -40,6 +46,7 @@ STORE_QUERIES = frozenset(
         'projection_page',
         'projection_successor',
         'projection_finish_backfill_complete',
+        'projection_followup_backfill_complete',
     }
 )
 TRANSACTION_QUERIES = frozenset(
@@ -50,6 +57,7 @@ TRANSACTION_QUERIES = frozenset(
         'fresh_first_pending',
         'fresh_first_ready_pending',
         'ready_predecessor',
+        'protected_ready',
         'service_frontier',
     }
 )
@@ -101,6 +109,10 @@ class _ParityPostgresStore(PostgresStore):
         with self.read_connection() as conn:
             return backfill_marker_complete(self.read_doc(conn, 'control', BACKFILL_KEY))
 
+    def projection_followup_backfill_complete(self) -> bool:
+        with self.read_connection() as conn:
+            return followup_backfill_marker_complete(self.read_doc(conn, 'control', FOLLOWUP_BACKFILL_KEY))
+
 
 def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bool, budget_s: float):
     allowed = TRANSACTION_QUERIES if transaction else STORE_QUERIES
@@ -143,6 +155,19 @@ def compare_serving_query(
         raise ValueError('only enumerated serving reads may be compared')
     if primary.namespace != shadow.namespace:
         raise ValueError('serving parity requires one namespace')
+    if production_policy_applies(primary.namespace):
+        from database.jobstore.cohort_due_parity import compare_sampled_due
+
+        state = args[0] if args else kwargs.get('state')
+        query_label = f'due_{state}' if query == 'due' and state in {'leased', 'retry', 'result_ready'} else query
+        try:
+            outcome = compare_sampled_due(primary, shadow, args, kwargs, budget_s) if query == 'due' else 'unknown'
+        except Exception:
+            outcome = 'error'
+        SERVING_PARITY_TOTAL.labels(
+            query=query_label, outcome=reason_label(ReasonFamily.PARITY, outcome, ServingParityOutcome)
+        ).inc()
+        return outcome
     try:
 
         def read(store):

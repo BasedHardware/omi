@@ -73,8 +73,7 @@ class Pool:
     def __init__(self, dsn: str, *, size: int = MAX_POOL_SIZE, connect: Callable[[], Any] | None = None):
         if not 1 <= size <= MAX_POOL_SIZE:
             raise ValueError(f'pool size must be 1..{MAX_POOL_SIZE}')
-        raw = connect or (lambda: dial(dsn))
-        self._connect = lambda: configure(raw())
+        self._connect = connect or (lambda: dial(dsn))
         self._idle: queue.LifoQueue = queue.LifoQueue()
         self._slots = threading.BoundedSemaphore(size)
         self._closed = False
@@ -92,6 +91,8 @@ class Pool:
                     # Observers must not enter unbounded credential refresh/connection setup.
                     raise TimeoutError('job store observation requires a warm connection')
                 conn = self._connect()
+                # Own the raw connection before setup so failed configuration closes it.
+                configure(conn)
             yield conn
         except BaseException:
             # A connection that failed mid-flight is not reused.

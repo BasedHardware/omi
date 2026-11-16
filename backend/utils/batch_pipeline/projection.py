@@ -328,6 +328,13 @@ def build_incoming(
     incoming['data_protection_level'] = binding.data_protection_level
     # Consumed by the existing assignment transaction, never a separate write.
     incoming['_episode_transcript_receipt'] = True
+    if item.capture_time_trust is not None:
+        incoming['capture_time_trust'] = item.capture_time_trust
+        # Use raw-source identity rather than receipt time for replay. This
+        # pre-existing partition also fences new rows from older row readers.
+        incoming['id'] = item.conversation_id or incoming['id']
+        incoming['sync_clock_run'] = incoming['id']
+        incoming['clock'] = 'imported'
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)
@@ -862,7 +869,11 @@ class Projector:
             'data_protection_level': binding.data_protection_level,
             '_batch_require_live_target': True,
             '_batch_redrive_target': bool(session.entry.get('projection_redriven_at')),
-            '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
+            '_batch_replace_live': {
+                'start': item.capture_at,
+                'end': item.capture_at + item.duration_seconds,
+                'terminal_empty_outcome': (session.entry.get('result') or {}).get('outcome'),
+            },
         }
         try:
             conversations_db.assign_sync_conversation(
@@ -1008,7 +1019,12 @@ class Projector:
                     hint is not None and hint.successor and not entry.get('projection') and str(index) not in receipts
                 ):
                     self.store.check(session)
-                if hint is not None and hint.parallel_candidate and not binding.target_conversation_id:
+                if (
+                    hint is not None
+                    and hint.parallel_candidate
+                    and not binding.target_conversation_id
+                    and item.capture_time_trust != 'untrusted'
+                ):
                     pending_candidate = self._start_candidate(binding, part, part_payload)
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None and item.requires_compute_admission:
@@ -1059,7 +1075,11 @@ class Projector:
                         receipt_box[:] = [session.persist(transaction, planned)]
 
                     candidate = None
-                    if context.target_id is None and incoming['transcript_segments']:
+                    if (
+                        context.target_id is None
+                        and incoming['transcript_segments']
+                        and item.capture_time_trust != 'untrusted'
+                    ):
                         with projection_phase('candidate', policy):
                             span = (int(incoming['started_at'].timestamp()), int(incoming['finished_at'].timestamp()))
                             deadline = hint.deadline if hint is not None else None
@@ -1730,7 +1750,7 @@ class Projector:
         Async rows belong to the follow-up drain; seeing one keeps it scheduled.
         Synchronous-policy rows replay assignment and finish exactly as the
         mixed page did, so no persisted or ready obligation loses its retry.
-        The dark finish backoff owns page selection and deferral; see
+        FinishBackoff owns async discovery hints and synchronous deferral; see
         utils/batch_pipeline/projection_finish_backoff.py.
         """
         from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -1748,7 +1768,7 @@ class Projector:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 contention = contention or policy.projection_contention
                 if policy.async_projection:
-                    self.has_async_followups = True
+                    self.finish_backoff.observed_async(segment_id, entry)
                     defer = False
                     continue
                 result = self._project_read(segment_id, job, entry, binding)

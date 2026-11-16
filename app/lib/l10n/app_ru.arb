@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Не удалось войти через Google, пожалуйста, попробуйте снова.",
     "authenticationFailed": "Аутентификация не удалась. Пожалуйста, попробуйте снова.",
     "authFailedToSignInWithApple": "Не удалось войти через Apple, пожалуйста, попробуйте снова.",
+    "authAppleSignInFailedUseGoogle": "Не удалось войти через Apple. Попробуйте ещё раз или продолжите с Google.",
     "authFailedToRetrieveToken": "Не удалось получить токен Firebase, пожалуйста, попробуйте снова.",
     "authUnexpectedErrorFirebase": "Непредвиденная ошибка при входе, ошибка Firebase, пожалуйста, попробуйте снова.",
     "authUnexpectedError": "Непредвиденная ошибка при входе, пожалуйста, попробуйте снова",
@@ -4143,6 +4144,7 @@
     "paywallTrialBilledYearly": "Оплата ежегодно",
     "paywallTrialSaveAmount": "Экономия {amount}",
     "paywallTrialCta": "Начать за {price}",
+    "paywallTrialCodeHint": "Есть код Omi Pro? Введите его на следующем экране.",
     "paywallTrialCancelNote": "Отменить в любое время. Без комиссий и штрафов.",
     "paywallMonthlyFallbackTitle": "Пока не готовы на целый год?",
     "paywallMonthlyFallbackTrialBody": "Начните с месячного плана. Те же {days} дней бесплатно, затем {price} в месяц. Отменить можно в любой момент.",
@@ -4688,5 +4690,6 @@
     "monthlySwitchDeclined": "Платёж отклонён. Ваш план не изменился.",
     "monthlySwitchUnavailable": "Переход сейчас недоступен. Вместо этого обновите карту.",
     "monthlySwitchDoneTitle": "Теперь вы платите ежемесячно",
-    "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно."
+    "monthlySwitchDoneBody": "Сегодня оплачено {price}. Продлевается ежемесячно.",
+    "processingDeleteScopeChanged": "Список обработки изменился. Проверьте его и попробуйте снова."
 }

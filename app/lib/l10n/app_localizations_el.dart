@@ -7078,6 +7078,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Αποτυχία σύνδεσης με Apple, παρακαλώ δοκιμάστε ξανά.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Η σύνδεση με Apple δεν ολοκληρώθηκε. Δοκιμάστε ξανά ή συνεχίστε με Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Αποτυχία ανάκτησης του Firebase token, παρακαλώ δοκιμάστε ξανά.';
 
   @override
@@ -13487,6 +13491,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Έχετε κωδικό Omi Pro; Εισαγάγετέ τον στην επόμενη οθόνη.';
+
+  @override
   String get paywallTrialCancelNote => 'Ακύρωση ανά πάσα στιγμή. Χωρίς χρεώσεις, χωρίς ποινές.';
 
   @override
@@ -15555,4 +15562,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Πληρώθηκαν $price σήμερα. Ανανεώνεται κάθε μήνα.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
 }

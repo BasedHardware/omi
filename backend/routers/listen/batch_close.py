@@ -2,11 +2,37 @@
 
 from typing import Any
 
-from config.server_batch import has_audio
+from config.server_batch import has_audio, owned
 from database import conversations
 from database.firestore_read_metrics import FirestoreReadSite
 from database.server_batch_audio import close_server_batch_audio
 from utils.episodes.batch_close import attach_closed_batch_capture
+
+
+async def resumable_after_drop(host: Any, conversation_id: str, row: dict | None, *, quiet_owned: bool) -> bool:
+    """A phone socket drop is not a stop: the app reconnects to the same recording.
+
+    With a quiet check owning the capture, commit this socket's audio tail without
+    the close barrier and keep it open. Otherwise the caller finalizes as before.
+    """
+    if not (
+        row
+        and quiet_owned is True
+        and not getattr(host.state, 'finalization_reason', None)
+        and owned(row)
+        and row.get('client_platform') in {'ios', 'android'}
+    ):
+        return False
+    archive = getattr(getattr(host, 'receiver', None), 'raw_archive', None)
+    if archive is not None:
+        await archive.close()
+    latest = await host.persistence.call(
+        conversations.get_conversation,
+        host.request.uid,
+        conversation_id,
+        read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
+    )
+    return bool(latest and latest.get('status') == 'in_progress' and has_audio(latest))
 
 
 async def close_batch_archive(host: Any, conversation_id: str, data: dict[str, Any]) -> dict[str, Any] | None:

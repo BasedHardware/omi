@@ -21,6 +21,7 @@ from tests.unit.fixtures.strict_firestore_transaction import (
 )
 from tests.unit.test_conversation_smart_merge import UID, World
 from utils import metrics
+from utils.home_feed import projection as home_projection
 from utils.conversations import merge_conversations
 from utils.conversations import smart_merge
 from utils.conversations import smart_merge_audit
@@ -388,6 +389,9 @@ def _strip_times(rows):
 
 
 def test_audit_outcome_does_not_change_any_conversation_write(monkeypatch):
+    # Compare logical payloads across independent runs. Home versions are
+    # opaque per-write nonces, and their encrypted display has its own nonce.
+    monkeypatch.setattr(home_projection, 'uuid4', lambda: SimpleNamespace(hex='synthetic-display-version'))
     results = {}
     for scenario in ('on', 'off', 'gate', 'deletion', 'invalid', 'read_error'):
         with monkeypatch.context() as patch:
@@ -407,8 +411,14 @@ def test_audit_outcome_does_not_change_any_conversation_write(monkeypatch):
                     lambda *a, **kw: (_ for _ in ()).throw(ConnectionError('unavailable')),
                 )
             assert _merge(world) is True
-            # Decoded: encrypted transcript blobs carry a random nonce per write.
-            results[scenario] = _strip_times({key: world.get(UID, key[-1]) for key in _conversation_rows(world.store)})
+            rows = {key: world.get(UID, key[-1]) for key in _conversation_rows(world.store)}
+            for row in rows.values():
+                if home_projection.DISPLAY in row:
+                    row[home_projection.DISPLAY] = home_projection.reveal_display(UID, row[home_projection.DISPLAY])
+                    assert row[home_projection.DISPLAY] is not None
+            # Transcript and card ciphertexts are compared as decoded content;
+            # every persisted field still participates in the equality check.
+            results[scenario] = _strip_times(rows)
             assert len(world.jev_calls) == 1
     assert all(rows == results['off'] for rows in results.values())
 

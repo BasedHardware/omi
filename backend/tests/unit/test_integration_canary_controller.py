@@ -7,6 +7,7 @@ reads or snapshot inputs. Fake-clock sleeps execute the full foreground timeline
 from __future__ import annotations
 
 import copy
+import json
 import os
 import sys
 from urllib.parse import parse_qs, urlsplit
@@ -286,6 +287,321 @@ def make_candidate(harness):
     controller, *_rest, runtime = harness
     controller.candidate(runtime)
     return harness
+
+
+class DiscoveryFixture:
+    """Offline protocol fixture, never an authenticated live producer."""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.rising = False
+        self.fresh_trip = False
+
+    def preflight(self, *, source, rollback):
+        assert len(source) == 40 and rollback == c.ROLLBACK
+
+    def collect(self, *, binding):
+        # This simulates an already-established trusted semantic adapter. It
+        # does not define a production producer, census TTL or metric policy.
+        elapsed = self.clock.time() - binding['receiving_verified_at']
+        state = 'awaiting_receipt' if elapsed < 1800 else 'qualified'
+        if self.fresh_trip or (self.rising and elapsed >= 1800):
+            state = 'rollback'
+        return {
+            'state': state,
+            'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+            'artifact_digests': ['sha256:' + 'f' * 64] if state != 'awaiting_receipt' else [],
+        }
+
+
+def extended(harness, *, reader=True):
+    controller, cloud, transport, clock, runtime = harness
+    controller.journal.path.unlink()
+    source = 'd' * 40
+    cloud.head = lambda: source
+    cloud.prove_source = lambda value: m.require(value == source, 'floor_source_mismatch')
+    controller.environ.update(
+        GITHUB_REPOSITORY='BasedHardware/omi',
+        GITHUB_REF='refs/heads/main',
+        GITHUB_WORKFLOW_REF='BasedHardware/omi/.github/workflows/gcp_backend.yml@refs/heads/main',
+        GITHUB_WORKFLOW_SHA='e' * 40,
+    )
+    transport.config = reply({'config': {'Labels': {'org.opencontainers.image.revision': source}, 'Env': []}})
+    transport.config_digest = c.digest_bytes(transport.config.raw)
+    transport.manifest = reply({'schemaVersion': 2, 'config': {'digest': transport.config_digest}})
+    transport.image = 'gcr.io/based-hardware/backend@' + c.digest_bytes(transport.manifest.raw)
+    old_env = c.app(cloud.revisions[c.ROLLBACK]['spec'])['env']
+    old_env.extend({'name': k, 'value': v} for k, v in c.RESTORED_DEFAULTS.items())
+    entries = {key: entry for key, entry in c.env_map(old_env).items() if key not in c.RESTORED_DEFAULTS}
+    entries.update(
+        {
+            key: {'name': key, 'value': value}
+            for key, value in {
+                **c.QUALITY,
+                c.BACKOFF: 'false',
+                c.PROVIDER: 'false',
+                c.STAMP: source,
+            }.items()
+        }
+    )
+    runtime['services'][c.SERVICE]['env'] = list(entries.values())
+    runtime['services'][c.SERVICE]['forbidden_env'] = list(c.RESTORED_DEFAULTS)
+    controller.discovery = DiscoveryFixture(clock) if reader else None
+    return controller, cloud, transport, clock, runtime, source
+
+
+def prepare_extended(parts, *, post_wrap_guard='internal'):
+    controller, _cloud, transport, _clock, _runtime, source = parts
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        post_wrap_guard=post_wrap_guard,
+    )
+    return parts
+
+
+def test_new_carrier_candidate_restores_only_ruled_defaults_and_never_writes_consumers(harness):
+    parts = extended(harness)
+    controller, cloud, _transport, _clock, runtime, source = parts
+    consumers = {s: copy.deepcopy(cloud.services[s]) for s in c.SERVICES if s != c.SERVICE}
+    inverse = copy.deepcopy(cloud.revisions[c.ROLLBACK])
+    prepare_extended(parts)
+    controller.candidate(runtime)
+    candidate = cloud.revisions[controller.state['candidate']]
+    env = c.env_map(c.app(candidate['spec'])['env'])
+    assert not set(c.RESTORED_DEFAULTS) & set(env)
+    assert env[c.STAMP]['value'] == source
+    assert controller.state['inverse'] == c.RESTORED_DEFAULTS
+    assert all(cloud.services[s] == before for s, before in consumers.items())
+    assert cloud.revisions[c.ROLLBACK] == inverse
+    assert all(body['metadata']['name'] == c.SERVICE for body in cloud.writes)
+    assert candidate['spec']['serviceAccountName'] == inverse['spec']['serviceAccountName']
+    assert candidate['spec']['containers'][1] == inverse['spec']['containers'][1]
+    assert candidate['spec']['containers'][0]['resources'] == inverse['spec']['containers'][0]['resources']
+
+
+def test_extension_without_authenticated_discovery_binding_cannot_prepare_or_write(harness):
+    parts = extended(harness, reader=False)
+    with pytest.raises(m.Refused, match='discovery_reader_not_bound'):
+        prepare_extended(parts)
+    assert not parts[1].writes and not parts[0].journal.path.exists()
+
+
+def test_explicit_external_mode_hands_off_pending_and_retains_saved_inverse_without_adapter(harness):
+    parts = prepare_extended(extended(harness, reader=False), post_wrap_guard='external')
+    controller, cloud, _transport, clock, runtime, source = parts
+    consumers = {name: copy.deepcopy(doc) for name, doc in cloud.services.items() if name != c.SERVICE}
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+    assert controller.state['phase'] == 'external_guard_pending'
+    assert controller.state['post_wrap_guard'] == 'external'
+    assert controller.state['discovery'] == {
+        'state': 'external_pending',
+        'owner': 'SCA-2015',
+        'rollback_executor': 'SCA-2283',
+    }
+    assert controller.state['health']['state'] == 'below_threshold'
+    handoff = controller.state['external_handoff']
+    assert handoff['revision'] == controller.state['candidate']
+    assert handoff['revision_uid'] == controller.state['candidate_uid']
+    assert handoff['source'] == source and handoff['image'] == controller.state['image']
+    assert handoff['sweep_page_rows'] == 100 and handoff['tick_seconds'] == 20
+    assert handoff['provider_release'] is False and handoff['traffic_percent'] == 100
+    assert handoff['rollback_revision'] == c.ROLLBACK
+    assert handoff['run_id'] == '123' and handoff['run_attempt'] == '1'
+    assert handoff['config_sha256'] == c.digest_bytes(c.canonical(c.service_config(controller.state['known'])).encode())
+    assert controller.state['moves'][1]['verified_at'] - controller.state['moves'][0]['verified_at'] >= 300
+    assert clock.time() - controller.state['moved_at'] >= 1200
+    assert len(cloud.writes) == 3 and all(b['metadata']['name'] == c.SERVICE for b in cloud.writes)
+    assert all(cloud.services[name] == doc for name, doc in consumers.items())
+    with pytest.raises(m.Refused, match='post_wrap_guard_external'):
+        controller.guard()
+    controller.rollback()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+    inverse = c.env_map(c.app(cloud.revisions[c.ROLLBACK]['spec'])['env'])
+    assert all(inverse[key]['value'] == value for key, value in c.RESTORED_DEFAULTS.items())
+
+
+def test_external_mode_still_rolls_back_on_the_native_qualified_http_window(harness):
+    parts = prepare_extended(extended(harness, reader=False), post_wrap_guard='external')
+    controller, cloud, transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    at_move = clock.time()
+    transport.row = lambda at: (1000, 100 if at > at_move else 0, 0.3)
+    with pytest.raises(m.Refused, match='qualified_health_rollback'):
+        controller.complete()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+
+
+@pytest.mark.parametrize('mode', ['disabled', '', 'EXTERNAL'])
+def test_unknown_postwrap_mode_cannot_prepare(harness, mode):
+    parts = extended(harness, reader=False)
+    with pytest.raises(m.Refused, match='post_wrap_guard_invalid'):
+        prepare_extended(parts, post_wrap_guard=mode)
+    assert not parts[1].writes
+
+
+def test_integration_only_runtime_cannot_remove_unruled_live_bindings(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    runtime['services'][c.SERVICE]['env'] = [
+        entry for entry in runtime['services'][c.SERVICE]['env'] if entry['name'] != 'FRESH_QUEUE'
+    ]
+    runtime['services'][c.SERVICE]['forbidden_env'].append('FRESH_QUEUE')
+    with pytest.raises(m.Refused, match='unruled_environment_change'):
+        controller.candidate(runtime)
+    assert not cloud.writes
+
+
+@pytest.mark.parametrize('key', list(c.RESTORED_DEFAULTS))
+def test_registry_refuses_baked_override_even_when_runtime_removes_it(harness, key):
+    controller, _cloud, transport, _clock, _runtime, source = extended(harness)
+    transport.config = reply(
+        {'config': {'Labels': {'org.opencontainers.image.revision': source}, 'Env': [key + '=200']}}
+    )
+    transport.config_digest = c.digest_bytes(transport.config.raw)
+    transport.manifest = reply({'schemaVersion': 2, 'config': {'digest': transport.config_digest}})
+    image = 'gcr.io/based-hardware/backend@' + c.digest_bytes(transport.manifest.raw)
+    with pytest.raises(m.Refused, match='image_bakes_restored_override'):
+        controller.registry.verify(image, source, restored_defaults=True)
+
+
+@pytest.mark.parametrize(
+    'key,value',
+    [
+        ('GITHUB_REF', 'refs/heads/other'),
+        ('GITHUB_REPOSITORY', 'foreign/omi'),
+        ('GITHUB_WORKFLOW_SHA', 'main'),
+        ('GITHUB_WORKFLOW_REF', 'BasedHardware/omi/.github/workflows/other.yml@refs/heads/main'),
+    ],
+)
+def test_extension_refuses_wrong_native_caller(harness, key, value):
+    parts = extended(harness)
+    parts[0].environ[key] = value
+    with pytest.raises(m.Refused, match='native_workflow_binding'):
+        prepare_extended(parts)
+    assert not parts[1].writes
+
+
+def test_stage_resume_does_not_repeat_a_25_percent_cas(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    original_observe = controller.observe
+    controller.observe = lambda *_: (_ for _ in ()).throw(InterruptedError())
+    with pytest.raises(InterruptedError):
+        controller.stage()
+    assert controller.state['phase'] == 'traffic_25' and len(cloud.writes) == 2
+    clock.sleep(60)
+    controller.observe = original_observe
+    controller.stage()
+    assert controller.state['phase'] == 'held_25' and len(cloud.writes) == 2
+    assert clock.monotonic() - controller.state['moved_monotonic'] >= 300
+
+
+def test_scoped_continuation_keeps_http_watch_separate_from_adapter_qualification(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    baseline = copy.deepcopy(controller.state['baseline'])
+    controller.stage()
+    controller.complete()
+    assert controller.state['phase'] == 'complete'
+    assert controller.state['discovery']['state'] == 'qualified'
+    assert clock.time() - controller.state['moved_at'] >= 1800
+    assert controller.state['baseline'] == baseline
+    assert len(cloud.writes) == 3 and all(b['metadata']['name'] == c.SERVICE for b in cloud.writes)
+    controller.rollback()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+    assert (
+        c.env_map(c.app(cloud.revisions[c.ROLLBACK]['spec'])['env'])['BATCH_PIPELINE_SERVING_TICK_SECONDS']['value']
+        == '10'
+    )
+
+
+def test_bound_adapter_rollback_restores_saved_inverse(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.discovery.rising = True
+    with pytest.raises(m.Refused, match='discovery_guard_rollback'):
+        controller.complete()
+    assert controller.state['phase'] == 'rolled_back'
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {c.ROLLBACK: 100}
+
+
+@pytest.mark.parametrize('failure', ['binding', 'artifacts', 'state'])
+def test_scoped_guard_refuses_unbound_or_malformed_adapter_decisions(harness, failure):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+
+    def collect(*, binding):
+        result = {
+            'state': 'qualified',
+            'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+            'artifact_digests': ['sha256:' + 'f' * 64],
+        }
+        if failure == 'binding':
+            result['binding_sha256'] = 'sha256:' + '0' * 64
+        elif failure == 'artifacts':
+            result['artifact_digests'] = []
+        else:
+            result['state'] = 'healthy'
+        return result
+
+    controller.discovery.collect = collect
+    with pytest.raises(m.Refused, match='discovery_'):
+        controller.guard()
+    assert len(cloud.writes) == 3
+
+
+def test_unavailable_postroll_evidence_is_not_acceptance_or_a_rollback_instruction(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    controller.complete()
+    controller.discovery.collect = lambda *, binding: {
+        'state': 'unavailable',
+        'binding_sha256': c.digest_bytes(c.canonical(binding).encode()),
+        'artifact_digests': [],
+        'private_payload': 'must-not-persist',
+    }
+    assert controller.guard() is False
+    assert controller.state['phase'] == 'awaiting_postwrap'
+    assert 'private_payload' not in controller.state['discovery']
+    assert len(cloud.writes) == 3
+
+
+def test_scoped_resume_refuses_changed_clock_control_head_and_uncertain_intent(harness):
+    parts = prepare_extended(extended(harness))
+    controller, cloud, _transport, clock, runtime, _source = parts
+    controller.candidate(runtime)
+    controller.stage()
+    saved = copy.deepcopy(controller.state)
+    controller.state['intent'] = {'kind': 'traffic_100', 'status': 'uncertain'}
+    controller.save()
+    with pytest.raises(m.Refused, match='scoped_complete_binding'):
+        controller.complete()
+    assert len(cloud.writes) == 2
+    controller.state = saved
+    controller.save()
+    clock.now += 60
+    with pytest.raises(m.Refused, match='continuation_clock_changed'):
+        controller.complete()
+    controller.environ['GITHUB_WORKFLOW_SHA'] = 'f' * 40
+    with pytest.raises(m.Refused, match='control_source_changed'):
+        controller.complete()
 
 
 def test_full_foreground_happy_path_and_immutable_baseline(harness, capsys):
@@ -1044,3 +1360,164 @@ def test_journal_lock_and_symlink_are_rejected(tmp_path):
     path.symlink_to(real)
     with pytest.raises(OSError):
         c.Journal(path).read()
+
+
+ACTUAL_PREDECESSOR = 'backend-integration-575e695-imgonly1'
+
+
+def with_actual_predecessor(harness):
+    parts = extended(harness, reader=False)
+    controller, cloud, *_ = parts
+    old = cloud.revisions.pop(c.ROLLBACK)
+    cloud.revisions[ACTUAL_PREDECESSOR] = json.loads(json.dumps(old).replace(c.ROLLBACK, ACTUAL_PREDECESSOR))
+    cloud.services[c.SERVICE] = json.loads(
+        json.dumps(cloud.services[c.SERVICE]).replace(c.ROLLBACK, ACTUAL_PREDECESSOR)
+    )
+    return parts
+
+
+def prepare_actual(parts):
+    controller, _cloud, transport, _clock, _runtime, source = parts
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        post_wrap_guard='external',
+        rollback_revision=ACTUAL_PREDECESSOR,
+    )
+
+
+def test_actual_predecessor_binds_stage_continuation_handoff_and_saved_inverse(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    inverse = copy.deepcopy(cloud.revisions[ACTUAL_PREDECESSOR])
+    prepare_actual(parts)
+    assert controller.state['rollback'] == ACTUAL_PREDECESSOR
+    controller.candidate(runtime)
+    controller.stage()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {
+        ACTUAL_PREDECESSOR: 75,
+        controller.state['candidate']: 25,
+    }
+    controller.complete()
+    assert controller.state['external_handoff']['rollback_revision'] == ACTUAL_PREDECESSOR
+    controller.rollback()
+    assert c.traffic(cloud.services[c.SERVICE]['status']['traffic']) == {ACTUAL_PREDECESSOR: 100}
+    assert cloud.revisions[ACTUAL_PREDECESSOR] == inverse
+    assert all(c.ROLLBACK not in json.dumps(write['spec']['traffic']) for write in cloud.writes)
+
+
+@pytest.mark.parametrize('damage', ['name', 'not_ready', 'namespace', 'service', 'inverse', 'split', 'requested'])
+def test_actual_predecessor_prepare_refuses_wrong_or_unqualified_binding(harness, damage):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, _runtime, _source = parts
+    revision = cloud.revisions[ACTUAL_PREDECESSOR]
+    if damage == 'name':
+        cloud.services[c.SERVICE]['status']['traffic'][0]['revisionName'] = c.ROLLBACK
+    elif damage == 'not_ready':
+        revision['status']['conditions'][0]['status'] = 'False'
+    elif damage == 'namespace':
+        revision['metadata']['namespace'] = 'wrong-project'
+    elif damage == 'service':
+        revision['metadata']['labels']['serving.knative.dev/service'] = 'backend-sync'
+    elif damage == 'inverse':
+        env = c.app(revision['spec'])['env']
+        next(row for row in env if row['name'] == 'BATCH_PIPELINE_SERVING_TICK_SECONDS')['value'] = '20'
+    elif damage == 'split':
+        cloud.services[c.SERVICE]['status']['traffic'] = [
+            {'revisionName': ACTUAL_PREDECESSOR, 'percent': 75},
+            {'revisionName': c.ROLLBACK, 'percent': 25},
+        ]
+    else:
+        cloud.services[c.SERVICE]['spec']['traffic'][0]['revisionName'] = c.ROLLBACK
+    with pytest.raises(c.Refused):
+        prepare_actual(parts)
+    assert not cloud.writes and not controller.journal.path.exists()
+
+
+@pytest.mark.parametrize('damage', ['rollback', 'snapshot_name', 'snapshot_traffic'])
+def test_predecessor_continuation_rejects_journal_binding_tamper(harness, damage):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, *_ = parts
+    prepare_actual(parts)
+    state = controller.journal.read()
+    if damage == 'rollback':
+        state['rollback'] = c.ROLLBACK
+    elif damage == 'snapshot_name':
+        state['services'][c.SERVICE]['revision']['metadata']['name'] = c.ROLLBACK
+    else:
+        state['services'][c.SERVICE]['service']['status']['traffic'][0]['revisionName'] = c.ROLLBACK
+    controller.journal.save(state)
+    with pytest.raises(c.Refused, match='journal_rollback_binding'):
+        controller.load()
+    assert not cloud.writes
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        '',
+        'latest',
+        'backend-sync-other',
+        'backend-integration-x/other',
+        'backend-integration-UPPER',
+        'backend-integration-' + 'x' * 50,
+    ],
+)
+def test_predecessor_input_is_an_exact_integration_revision(harness, name):
+    parts = extended(harness, reader=False)
+    controller, cloud, transport, _clock, _runtime, source = parts
+    with pytest.raises(c.Refused, match='rollback_revision_invalid'):
+        controller.prepare(
+            source,
+            transport.image,
+            f'{c.SERVICE}-{source[:7]}-123-1',
+            integration_only=True,
+            post_wrap_guard='external',
+            rollback_revision=name,
+        )
+    assert not cloud.writes
+
+
+def test_internal_adapter_preflight_receives_the_same_saved_predecessor(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, transport, _clock, _runtime, source = parts
+    seen = []
+
+    class Reader:
+        def preflight(self, **binding):
+            seen.append(binding)
+
+    controller.discovery = Reader()
+    controller.prepare(
+        source,
+        transport.image,
+        f'{c.SERVICE}-{source[:7]}-123-1',
+        integration_only=True,
+        rollback_revision=ACTUAL_PREDECESSOR,
+    )
+    assert seen == [{'source': source, 'rollback': ACTUAL_PREDECESSOR}]
+    assert controller.state['rollback'] == ACTUAL_PREDECESSOR
+    assert not cloud.writes
+
+
+def test_legacy_profile_does_not_gain_an_unscoped_custom_predecessor(harness):
+    controller, cloud, transport, _clock, _runtime = harness
+    with pytest.raises(c.Refused, match='rollback_profile_binding'):
+        controller.prepare(
+            c.SOURCE, transport.image, f'{c.SERVICE}-{c.SOURCE[:7]}-123-1', rollback_revision=ACTUAL_PREDECESSOR
+        )
+    assert not cloud.writes
+
+
+def test_custom_predecessor_retained_revision_drift_refuses_before_stage(harness):
+    parts = with_actual_predecessor(harness)
+    controller, cloud, _transport, _clock, runtime, _source = parts
+    prepare_actual(parts)
+    controller.candidate(runtime)
+    cloud.revisions[ACTUAL_PREDECESSOR]['metadata']['resourceVersion'] = 'changed'
+    writes = len(cloud.writes)
+    with pytest.raises(c.Refused, match='rollback_revision_drift'):
+        controller.stage()
+    assert len(cloud.writes) == writes

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Nepodarilo sa prihlásiť cez Google",
     "authenticationFailed": "Autentifikácia zlyhala",
     "authFailedToSignInWithApple": "Nepodarilo sa prihlásiť cez Apple",
+    "authAppleSignInFailedUseGoogle": "Prihlásenie cez Apple sa nepodarilo. Skúste to znova alebo pokračujte cez Google.",
     "authFailedToRetrieveToken": "Nepodarilo sa získať token",
     "authUnexpectedErrorFirebase": "Neočakávaná chyba Firebase",
     "authUnexpectedError": "Neočakávaná chyba",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Účtované ročne",
     "paywallTrialSaveAmount": "Ušetrite {amount}",
     "paywallTrialCta": "Začnite za {price}",
+    "paywallTrialCodeHint": "Máte kód Omi Pro? Zadajte ho na ďalšej obrazovke.",
     "paywallTrialCancelNote": "Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.",
     "paywallMonthlyFallbackTitle": "Celý rok je zatiaľ priveľa?",
     "paywallMonthlyFallbackTrialBody": "Začnite mesačným plánom. Rovnakých {days} dní zadarmo, potom {price} mesačne. Zrušte kedykoľvek.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Platba bola zamietnutá. Váš plán sa nezmenil.",
     "monthlySwitchUnavailable": "Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.",
     "monthlySwitchDoneTitle": "Teraz platíte mesačne",
-    "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne."
+    "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne.",
+    "processingDeleteScopeChanged": "Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova."
 }

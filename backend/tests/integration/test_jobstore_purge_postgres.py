@@ -36,11 +36,13 @@ def stores():
     customer = CustomerData()
     primary = SimStore(customer, namespace=namespace)
     pool = Pool('', connect=connect)
+    erasure_pool = Pool('', size=1, connect=connect)
     shadow = PostgresStore(namespace, pool=pool, customer_client=customer.client, harness_customer_tables=True)
-    dual = DualStore(primary, shadow, inline=True)
+    dual = DualStore(primary, shadow, inline=True, erasure_pool=erasure_pool)
     yield customer, primary, shadow, dual
     shadow.purge_namespace()
     pool.close()
+    erasure_pool.close()
 
 
 def _owner_rows(uid: str, segment: str) -> list[tuple[str, str, dict]]:
@@ -267,18 +269,13 @@ def test_cold_copy_erasure_ignores_mode_admission_and_write_switch(stores, monke
 
         cold_pool = Pool('', connect=postgres_connect())
         cold = PostgresStore(dual.namespace, pool=cold_pool, customer_client=None)
-        monkeypatch.setattr(dual_store, '_configured_copy', lambda _primary: dual_store.DualStore(primary, cold))
+        monkeypatch.setattr(
+            dual_store,
+            '_configured_copy',
+            lambda _primary: dual_store.DualStore(primary, cold, erasure_pool=dual.erasure_pool),
+        )
     assert hook.purge_owner(dual.namespace, uid) >= len(rows)
-    if cached:
-        assert not any(_postgres(shadow, table, name) for table, name, _ in rows)
-    else:
-        # The one-shot erasure handle closes its pool, so inspect with a fresh handle.
-        from database.jobstore.connection import Pool
-        from database.jobstore.postgres_store import PostgresStore
-
-        pool = Pool('', connect=postgres_connect())
-        try:
-            copy = PostgresStore(dual.namespace, pool=pool, customer_client=None)
-            assert not any(_postgres(copy, table, name) for table, name, _ in rows)
-        finally:
-            pool.close()
+    # Erasure commits through its reserved session, visible through the normal pool.
+    assert not any(_postgres(shadow, table, name) for table, name, _ in rows)
+    if not cached:
+        cold_pool.close()

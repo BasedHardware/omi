@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from utils.listen_session_bootstrap import project_listen_connect_decisions
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 BOOTSTRAP_PATH = BACKEND_DIR / "utils" / "listen_session_bootstrap.py"
 RUNTIME_PATH = BACKEND_DIR / "routers" / "listen" / "runtime.py"
@@ -46,8 +48,6 @@ def test_runtime_uses_listen_connect_bootstrap():
 
 
 def test_project_listen_connect_decisions_pins_vocabulary_and_translation():
-    from utils.listen_session_bootstrap import project_listen_connect_decisions
-
     single_language_mode, vocabulary, language, translation_language = project_listen_connect_decisions(
         language="auto",
         onboarding_mode=False,

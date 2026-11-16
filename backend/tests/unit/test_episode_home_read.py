@@ -564,7 +564,7 @@ def test_queued_episode_title_and_member_share_bound_and_rollback(monkeypatch, s
     assert member['status'] == 'completed' and episode['title'] == 'Stored title'
 
 
-def test_home_24_hour_hold_and_composer_six_hour_wait_are_independent(monkeypatch):
+def test_home_24_hour_hold_and_composer_transcript_wait_are_independent(monkeypatch):
     from utils.episodes import composer
 
     monkeypatch.setenv('EPISODE_COMPOSER', 'true')

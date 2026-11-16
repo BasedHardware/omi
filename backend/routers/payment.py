@@ -30,6 +30,7 @@ from database import (
 )
 from database.locked_content import has_recoverable_locked_content
 from database.redis_db import claim_payment_recovery_notification, set_credits_invalidation_signal
+from database.redis_db import claim_trial_ending_notification
 from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
@@ -57,6 +58,7 @@ from utils.notification_dispatch import (
     dispatch_notification_async,
 )
 from utils import billing_recovery
+from utils import trial_reminder
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
 from utils.subscription import (
     get_basic_plan_limits,
@@ -1251,6 +1253,43 @@ async def _schedule_payment_recovery_notification(
         await dispatch_notification_async(intent)
 
 
+async def _schedule_trial_ending_notification(
+    background_tasks: BackgroundTasks | None, subscription_obj: Mapping
+) -> None:
+    """Remind a trialing reader before the first charge (`customer.subscription.trial_will_end`).
+
+    Only the account whose stored subscription is this one is reminded; a stale or foreign
+    subscription sends nothing. Pre-claim failures propagate so Stripe retries the event.
+    """
+    subscription_id = subscription_obj.get('id')
+    uid = (subscription_obj.get('metadata') or {}).get('uid')
+    if not uid or not isinstance(subscription_id, str):
+        return
+    stored = await run_blocking(db_executor, users_db.get_user_subscription, uid)
+    if stored is None or stored.stripe_subscription_id != subscription_id:
+        return
+    body = trial_reminder.trial_ending_reminder_body(uid, subscription_obj, int(time.time()))
+    if body is None:
+        return
+    claimed = await run_blocking(
+        db_executor, claim_trial_ending_notification, uid, subscription_id, int(subscription_obj['trial_end'])
+    )
+    if not claimed:
+        return
+    intent = NotificationIntent(
+        user_id=uid,
+        title=trial_reminder.TRIAL_ENDING_NOTIFICATION_TITLE,
+        body=body,
+        source='stripe_trial_will_end',
+        kind=NotificationKind.TRIAL_ENDING,
+        data={'type': 'trial_ending', 'navigate_to': '/settings'},
+    )
+    if background_tasks is not None:
+        background_tasks.add_task(dispatch_notification, intent)
+    else:
+        await dispatch_notification_async(intent)
+
+
 def _update_checkout_subscription_metadata(uid: str, session: dict) -> None:
     """Converge account and optional order attribution from verified Stripe objects."""
     subscription_id = session.get('subscription')
@@ -1319,6 +1358,10 @@ async def stripe_webhook(
 
 @fresh_reader
 async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
+    if event['type'] == 'customer.subscription.trial_will_end':
+        await _schedule_trial_ending_notification(background_tasks, event['data']['object'])
+        return {"status": "success", "message": "Trial ending reminder handled."}
+
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         client_reference_id = session.get('client_reference_id')

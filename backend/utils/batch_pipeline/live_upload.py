@@ -45,12 +45,13 @@ from utils.batch_pipeline.live import OWNER, record_identity
 from utils.batch_pipeline.language_metrics import record_admission_exclusion
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.capture.batch_coverage import covered_response
-from utils.batch_pipeline import record_gap_fill
+from utils.batch_pipeline import record_gap_fill, record_wal_handoff, record_wal_metrics
 from config.record_gap_fill import gap_fill_enabled
 from utils.executors import db_executor, storage_executor, run_blocking, sync_executor
 from utils.metrics import OMI_PIPELINE_RECORD_WAIT_ANSWERS_TOTAL, OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL
 from utils.observability.reasons import ReasonFamily, reason_label
 from utils.sync.stage import current_stage
+from utils.sync.record_token_lease import handoff_committed
 from utils.sync.legacy_dark import LegacySyncMode
 
 
@@ -133,9 +134,16 @@ async def memoized_record_wait(uid, conversation_id) -> JSONResponse | None:
     """Repeat a recent conversation-level custody wait before any upload work."""
     if not isinstance(conversation_id, str) or not conversation_id:
         return None
+    if record_wal_handoff.handoff_enabled():
+        return None
     cached = await run_blocking(db_executor, cached_record_wait, uid, conversation_id)
     if cached is None:
         return None
+    try:
+        if await run_blocking(db_executor, record_wal_handoff.receipts.has_receipts, uid, conversation_id):
+            return None
+    except Exception:
+        return None  # Unknown receipt state must reach durable discovery, never a stale refusal.
     try:
         reason = RecordUploadWait(cached)
     except ValueError:
@@ -295,6 +303,7 @@ async def registered_record_response(
     policy=None,
     legacy_mode=None,
     evidence: IntakeRouteEvidence | None = None,
+    before_coverage=None,
 ) -> JSONResponse | RecordUploadRoute | None:
     policy = policy or resolve_batch_policy(uid)
     if not conversation_id and not recording_session_id:
@@ -409,6 +418,27 @@ async def registered_record_response(
                 'detail': 'Capture is unavailable for server processing',
             },
         )
+    # A prior native alias already has a proven disposition. New originals need
+    # their own custody/status handle, never that old job's completed status.
+    if not prior and (record_wal_handoff.handoff_enabled() or row.get('record_wal_handoff_present')):
+        try:
+            held = await record_wal_handoff.handoff(
+                store=store,
+                uid=uid,
+                cid=conversation_id,
+                paths=paths,
+                source=source,
+                device=client_device_id,
+            )
+            if held is not None:
+                handoff_committed()
+                return start_response(held)
+        except Exception:
+            record_wal_metrics.answers.labels('refused').inc()
+            return _pending(RecordUploadWait.AUDIO_COVERAGE_UNPROVEN, content)
+
+    if before_coverage is not None:
+        await before_coverage()
     from utils.batch_pipeline.record_lease_append import rearm_partial, retain_upload
 
     coverage_key = None

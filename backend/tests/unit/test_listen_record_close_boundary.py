@@ -21,6 +21,7 @@ from tests.unit.utils.test_listen_pusher_session import FakePusherWebSocket, mak
 @pytest.fixture(params=[False, True], ids=["clockless", "capture-clock"])
 def boundary_receiver(monkeypatch, request):
     monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED', 'true')
+    monkeypatch.setenv('PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT', '100')
     frames = asyncio.Queue()
     state = SimpleNamespace(
         active=True,

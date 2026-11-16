@@ -46,6 +46,7 @@ from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 from config import ladder_v1 as ladder_policy
+from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
@@ -1621,6 +1622,19 @@ def _processing_closed(reason: str) -> ConversationProcessingAllowance:
     return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
 
 
+# Ops kill (default on): once a plan's monthly listening allowance is spent,
+# transcripts made on the phone (on-device / custom STT) still get Omi's
+# summary, memories and tasks. David 2026-11-16: keep summaries on for free
+# users past the cap until free-user cost is re-measured. false/0/off/no
+# restores the cap (`plan_allowance_exhausted` skip).
+PROCESSING_PAST_CAP_ENV = 'CONVERSATION_PROCESSING_PAST_CAP_ENABLED'
+PROCESSING_PAST_CAP_REASON = 'plan_allowance_exhausted_kept_on'
+
+
+def conversation_processing_past_cap_enabled() -> bool:
+    return refactor_default_on(PROCESSING_PAST_CAP_ENV)
+
+
 def _usage_speech_seconds(usage: Any) -> Optional[int]:
     """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
 
@@ -1694,6 +1708,10 @@ def resolve_conversation_processing_allowance(
         if remaining > 0:
             return ConversationProcessingAllowance(
                 CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        if conversation_processing_past_cap_enabled():
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, None, PROCESSING_PAST_CAP_REASON
             )
         return _processing_closed('plan_allowance_exhausted')
     except Exception as exc:

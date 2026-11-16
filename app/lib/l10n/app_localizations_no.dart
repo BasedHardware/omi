@@ -7029,6 +7029,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunne ikke logge inn med Apple, vennligst prøv igjen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Pålogging med Apple fungerte ikke. Prøv igjen, eller fortsett med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunne ikke hente Firebase-token, vennligst prøv igjen.';
 
   @override
@@ -13403,6 +13407,9 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kode? Skriv den inn på neste skjerm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt når som helst. Ingen gebyrer, ingen straff.';
 
   @override
@@ -15457,4 +15464,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price betalt i dag. Fornyes månedlig.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
 }

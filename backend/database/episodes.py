@@ -46,6 +46,7 @@ from database.transcript_pointer import run_preloaded_transactional as run_trans
 from database.conversations import decode_transcript_segments_verified
 from database.conversation_revisions import firestore_revision_datetime
 from utils.encryption import decrypt, encrypt
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 
 CURRENT = 'current'
 LAST_CLOSED = 'last_closed'
@@ -84,13 +85,16 @@ def seal(uid: str, episode: Mapping[str, Any]) -> dict[str, Any]:
     stored = {key: value for key, value in episode.items() if key not in CONTENT_FIELDS}
     content = {key: episode.get(key) for key in CONTENT_FIELDS if key in episode}
     stored['content'] = encrypt(json.dumps(content, ensure_ascii=False, default=_json_default), uid)
+    stored.update(stamp_home_display(uid, episode, 'episode'))
     return stored
 
 
 def unseal(uid: str, raw: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     if not raw:
         return None
-    episode = {key: value for key, value in raw.items() if key != 'content'}
+    # Compact encrypted display belongs to the list projection, never to a
+    # hydrated episode or the next logical-state mutation.
+    episode = {key: value for key, value in raw.items() if key != 'content' and key not in DISPLAY_FIELDS}
     blob = raw.get('content')
     content: dict[str, Any] = {}
     if isinstance(blob, str) and blob:
@@ -949,6 +953,7 @@ def _update(
     # another replica even when it has not updated the episode yet. None means
     # the member was absent; missing revision metadata on an existing row fails
     # closed rather than trusting a client-written updated_at field.
+    home_member_versions = {}
     for cid, revision in (expected_member_revisions or {}).items():
         member = (
             client.collection('users')
@@ -958,12 +963,15 @@ def _update(
             .get(transaction=transaction)
         )
         if member.exists:
+            home_member_versions[cid] = (member.to_dict() or {}).get('home_source_version')
             current_revision = firestore_revision_datetime(getattr(member, 'update_time', None))
             if revision is None or current_revision != revision:
                 raise EpisodeConflict('member_revision_changed')
         elif revision is not None:
             raise EpisodeConflict('member_revision_changed')
     merged = _merge_state(unseal(uid, raw) or {}, updates)
+    if expected_member_revisions is not None:
+        merged['home_content_member_versions'] = home_member_versions
     if retained_bounds_changed(raw, merged):
         merged = retained_bounds(transaction, client, uid, raw, merged)
     _drop_legacy_receipts(merged, segment_receipts)

@@ -17,6 +17,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/wals/ring_custody_export.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -144,6 +145,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final since = extended['counters_since'] as num?;
     final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
     final windowStart = _recentWindowStart(sinceMs);
+    final ringCustody = await exportCurrentRingCustody(widget.deviceId, device?.firmwareRevision);
     return {
       'device_id': widget.deviceId,
       'exported_at': DateTime.now().toUtc().toIso8601String(),
@@ -155,6 +157,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'device_model': device?.modelNumber,
       'hardware_revision': device?.hardwareRevision,
       'firmware': device?.firmwareRevision,
+      'ring_custody': ringCustody,
       'timezone_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
       // Live readings, only valid while the link is up: onDeviceDisconnected() forces
       // isCharging false on link loss, so report null (unknown) instead of a stale snapshot.

@@ -6928,6 +6928,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple로 로그인하지 못했습니다. 다시 시도해 주세요.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple로 로그인하지 못했습니다. 다시 시도하거나 Google로 계속하세요.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.';
 
   @override
@@ -13218,6 +13221,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro 코드가 있나요? 다음 화면에서 입력하세요.';
+
+  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -15233,4 +15239,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '오늘 $price이 결제되었습니다. 매월 갱신됩니다.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
 }

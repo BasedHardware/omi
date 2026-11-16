@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
+import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -48,15 +49,29 @@ class SttModeDecision {
 
 /// Plan-authoritative STT mode. Reads S16's snapshot; does not re-derive it.
 ///
-/// Order (flag on): persisted Custom STT → allowance `managed` → allowance
-/// `on_device` (ready ⇒ synthesize, else block) → allowance `blocked` →
-/// missing snapshot fails closed to on-device (no billed socket).
+/// Order (flag on): persisted Custom STT → allowance `blocked` → allowance `managed` →
+/// allowance `on_device` (ready ⇒ synthesize on-device). Every case where the phone cannot
+/// transcribe yet (no snapshot, a transient server reason, model not ready, unsupported codec,
+/// no config) keeps today's Omi socket: the server still enforces the cap there, so the user is
+/// never worse off than with the flag off. A not-ready phone is asked to prepare its model.
 class SttModeResolver {
   static const freemiumOnDeviceId = 'freemium:on-device';
+
+  /// Reasons the decision routes managed because the phone is not ready yet.
+  static const reasonNotReady = 'on_device_not_ready';
+  static const reasonUnsupportedCodec = 'unsupported_codec_on_device';
+  static const reasonConfigUnavailable = 'on_device_config_unavailable';
+  static const reasonAllowanceUnknown = 'allowance_unknown';
+
+  /// Server reasons that mean "the lookup could not be trusted", not "the minutes are spent".
+  /// Mirrors backend TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS.
+  static const transientAllowanceReasons = {'allowance_unavailable', 'usage_invalid'};
 
   static SttModeResolver instance = SttModeResolver();
 
   final bool Function() flagReader;
+  final Future<bool> Function() killSwitchReader;
+  final void Function({String? language}) prepareOnDevice;
   final TranscriptionAllowanceSnapshot? Function() allowanceReader;
   final Future<FreemiumReadiness> Function({String? language}) readinessReader;
   final CustomSttConfig? Function() onDeviceConfigBuilder;
@@ -66,7 +81,11 @@ class SttModeResolver {
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
     Future<FreemiumReadiness> Function({String? language})? readinessReader,
     CustomSttConfig? Function()? onDeviceConfigBuilder,
+    Future<bool> Function()? killSwitchReader,
+    void Function({String? language})? prepareOnDevice,
   })  : flagReader = flagReader ?? _defaultFlag,
+        killSwitchReader = killSwitchReader ?? FreeTierOnDeviceSttFlag.killed,
+        prepareOnDevice = prepareOnDevice ?? OnDeviceSttPreparer.prepare,
         allowanceReader = allowanceReader ?? _defaultAllowance,
         readinessReader = readinessReader ?? _defaultReadiness,
         onDeviceConfigBuilder = onDeviceConfigBuilder ?? _defaultOnDeviceConfig;
@@ -78,20 +97,32 @@ class SttModeResolver {
 
   static bool _defaultFlag() => FreeTierOnDeviceSttFlag.isEnabled();
 
-  static TranscriptionAllowanceSnapshot? _defaultAllowance() => TranscriptionAllowanceCache.current;
+  /// An at-cap snapshot older than this no longer proves the cap (an upgrade outside the app,
+  /// a new month): the session keeps today's Omi socket until the subscription refreshes.
+  static const onDeviceSnapshotMaxAge = Duration(hours: 24);
+
+  static TranscriptionAllowanceSnapshot? _defaultAllowance() {
+    final snapshot = TranscriptionAllowanceCache.current;
+    if (snapshot == null || !snapshot.isOnDevice) return snapshot;
+    return TranscriptionAllowanceCache.currentWithin(onDeviceSnapshotMaxAge);
+  }
 
   static Future<FreemiumReadiness> _defaultReadiness({String? language}) =>
       FreemiumTranscriptionService().checkReadiness(language: language);
 
   static CustomSttConfig? _defaultOnDeviceConfig() {
-    final config = FreemiumTranscriptionService().getFreemiumConfig();
-    if (config == null) return null;
+    final service = FreemiumTranscriptionService();
+    if (service.readiness != FreemiumReadiness.ready) return null;
+    final config = service.createOnDeviceSttConfig(
+      language: FreemiumTranscriptionService.liveOnDeviceLanguage(),
+      modelPath: service.cachedModelPath,
+    );
     return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
   Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
-    final flag = flagReader();
+    final flag = flagReader() && !persistedCustomStt.isEnabled && !await killSwitchReader();
     final allowance = allowanceReader();
     if ((persistedCustomStt.provider == SttProvider.onDeviceWhisper &&
             !kIsWeb &&
@@ -100,21 +131,30 @@ class SttModeResolver {
       readiness = await readinessReader(
           language: persistedCustomStt.isEnabled && persistedCustomStt.provider == SttProvider.onDeviceWhisper
               ? persistedCustomStt.language
-              : null);
+              : FreemiumTranscriptionService.liveOnDeviceLanguage());
     }
-    return resolve(
+    final decision = resolve(
       flagEnabled: flag,
       persistedCustomStt: persistedCustomStt,
       allowance: allowance,
       readiness: readiness,
       codec: codec,
     );
+    if (decision.reason == reasonNotReady && !persistedCustomStt.isEnabled) {
+      // Fire and forget: the next socket picks the model up once it is ready.
+      prepareOnDevice();
+    }
+    return decision;
   }
 
-  bool _needsOnDeviceReadiness(TranscriptionAllowanceSnapshot? allowance) {
-    if (allowance == null) return true;
-    return allowance.isOnDevice;
+  /// True only for an exact `on_device` answer with a real (not transient) reason. An unknown
+  /// future mode is not proof of the cap and keeps today's socket.
+  static bool wantsOnDevice(TranscriptionAllowanceSnapshot? allowance) {
+    if (allowance == null || !allowance.isOnDevice) return false;
+    return !transientAllowanceReasons.contains(allowance.reason);
   }
+
+  bool _needsOnDeviceReadiness(TranscriptionAllowanceSnapshot? allowance) => wantsOnDevice(allowance);
 
   SttModeDecision resolve({
     required bool flagEnabled,
@@ -139,45 +179,36 @@ class SttModeResolver {
       return const SttModeDecision(path: SttResolvedPath.managed, reason: 'flag_off');
     }
 
-    final effective = allowance ??
-        const TranscriptionAllowanceSnapshot(
-          mode: TranscriptionAllowanceSnapshot.modeOnDevice,
-          reason: 'allowance_unavailable',
-        );
-
-    if (effective.isBlocked) {
-      return SttModeDecision(path: SttResolvedPath.blocked, reason: effective.reason, allowanceOnDevice: false);
+    if (allowance == null) {
+      // No snapshot yet (fresh install, signed-out cache): today's socket; the server enforces the cap.
+      return const SttModeDecision(path: SttResolvedPath.managed, reason: reasonAllowanceUnknown);
     }
 
-    if (effective.isManaged) {
-      return SttModeDecision(path: SttResolvedPath.managed, reason: effective.reason);
+    if (allowance.isBlocked) {
+      return SttModeDecision(path: SttResolvedPath.blocked, reason: allowance.reason, allowanceOnDevice: false);
     }
 
-    // on_device, or any unknown mode — fail closed, never a billed socket.
-    final onDeviceReason = effective.isOnDevice ? effective.reason : 'allowance_unrecognized';
-    if (readiness != FreemiumReadiness.ready) {
-      return const SttModeDecision(
-        path: SttResolvedPath.blocked,
-        reason: 'on_device_not_ready',
-        allowanceOnDevice: true,
+    if (!wantsOnDevice(allowance)) {
+      // managed, an unknown mode, or on_device for a transient lookup failure (not spent minutes).
+      return SttModeDecision(
+        path: SttResolvedPath.managed,
+        reason: allowance.isManaged || allowance.isOnDevice ? allowance.reason : 'allowance_unrecognized',
       );
+    }
+
+    // on_device for spent minutes: the phone transcribes when it can.
+    final onDeviceReason = allowance.reason;
+    if (readiness != FreemiumReadiness.ready) {
+      return const SttModeDecision(path: SttResolvedPath.managed, reason: reasonNotReady);
     }
 
     if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, null, allowanceOnDevice: true)) {
-      return const SttModeDecision(
-        path: SttResolvedPath.blocked,
-        reason: 'unsupported_codec_on_device',
-        allowanceOnDevice: true,
-      );
+      return const SttModeDecision(path: SttResolvedPath.managed, reason: reasonUnsupportedCodec);
     }
 
     final synthesized = onDeviceConfigBuilder();
     if (synthesized == null) {
-      return const SttModeDecision(
-        path: SttResolvedPath.blocked,
-        reason: 'on_device_config_unavailable',
-        allowanceOnDevice: true,
-      );
+      return const SttModeDecision(path: SttResolvedPath.managed, reason: reasonConfigUnavailable);
     }
 
     return SttModeDecision(

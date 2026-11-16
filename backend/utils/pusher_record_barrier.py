@@ -508,10 +508,12 @@ class PusherRecordBarrier:
         self.retire_close(conversation_id)
         return True
 
-    def forget_evicted_tokens(self) -> None:
+    def forget_evicted_tokens(self, recordings: set[str] | None = None) -> None:
         # A reconnect must never recover a token selected for abandonment, even
         # while admission is refused. This is a hint removal, not durable proof.
         for cid, token in self.evicted_tokens():
+            if recordings is not None and cid not in recordings:
+                continue
             _process_record_tokens().forget(self.uid, cid, token)
 
     def evicted_tokens(self) -> set[tuple[str, str]]:
@@ -521,11 +523,13 @@ class PusherRecordBarrier:
         # executor settlement is no authority to attest that producer stopped.
         return set(self.upload_sessions.items())
 
-    async def abandon_recordings(self) -> None:
+    async def abandon_recordings(self, recordings: set[str] | None = None) -> None:
         """Called only after the worker AND its executor futures have settled."""
         self.keep_close_pending = True
-        self.forget_evicted_tokens()
+        self.forget_evicted_tokens(recordings)
         for cid, token in self.evicted_tokens():
+            if recordings is not None and cid not in recordings:
+                continue
             attempts = 0
             while True:
                 try:

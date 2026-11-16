@@ -800,6 +800,17 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if transcribing_hold.retry_pending(conversation):
+        pending = transcribing_hold.retry_wire(conversation)
+        if pending is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    'code': 'transcription_pending',
+                    'message': 'Audio is awaiting transcription; summary retry cannot transcribe it',
+                },
+            )
+        return pending
     from database import processing_attention as attention_db
 
     input_generation = attention_db.generation(conversation)

@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Échec de la connexion avec Google, veuillez réessayer.",
     "authenticationFailed": "Échec de l'authentification. Veuillez réessayer.",
     "authFailedToSignInWithApple": "Échec de la connexion avec Apple, veuillez réessayer.",
+    "authAppleSignInFailedUseGoogle": "La connexion avec Apple n'a pas fonctionné. Réessayez ou continuez avec Google.",
     "authFailedToRetrieveToken": "Échec de la récupération du jeton Firebase, veuillez réessayer.",
     "authUnexpectedErrorFirebase": "Erreur inattendue lors de la connexion, erreur Firebase, veuillez réessayer.",
     "authUnexpectedError": "Erreur inattendue lors de la connexion, veuillez réessayer",
@@ -4143,6 +4144,7 @@
     "paywallTrialBilledYearly": "Facturé(e) annuellement",
     "paywallTrialSaveAmount": "Économisez {amount}",
     "paywallTrialCta": "Commencez pour {price}",
+    "paywallTrialCodeHint": "Vous avez un code Omi Pro ? Saisissez-le à l'écran suivant.",
     "paywallTrialCancelNote": "Annulez à tout moment. Sans frais ni pénalités.",
     "paywallMonthlyFallbackTitle": "Un an, c'est trop pour l'instant ?",
     "paywallMonthlyFallbackTrialBody": "Commence plutôt au mois. Les mêmes {days} jours gratuits, puis {price} par mois. Annulable à tout moment.",
@@ -4688,5 +4690,6 @@
     "monthlySwitchDeclined": "Paiement refusé. Votre forfait n'a pas changé.",
     "monthlySwitchUnavailable": "Le changement n'est pas disponible pour le moment. Mettez plutôt votre carte à jour.",
     "monthlySwitchDoneTitle": "Vous êtes passé au mensuel",
-    "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel."
+    "monthlySwitchDoneBody": "{price} payés aujourd'hui. Renouvellement mensuel.",
+    "processingDeleteScopeChanged": "La liste en cours de traitement a changé. Vérifiez-la et réessayez."
 }

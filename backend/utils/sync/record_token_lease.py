@@ -132,6 +132,18 @@ def stored(paths: Sequence[str], archives: Sequence[str]) -> None:
         state['durable'] = True
 
 
+def handoff_committed() -> None:
+    """A separate all-file protocol owns this 202, its revision and pending work.
+
+    Clear this wrapper's optional fence as unaccepted; it must neither require
+    its cohort archive nor rearm the live partial/provider coordinator.
+    """
+    state = _upload.get()
+    if state is not None:
+        state['no_append'] = True
+        state['durable'] = False
+
+
 async def _renew_after_append(uid: str, cid: str, state: UploadState | None) -> None:
     observed: dict[str, bool] = {}
     await run_blocking(
