@@ -229,3 +229,27 @@ def test_released_capture_poll_keeps_recording_identity(monkeypatch, statuses, c
         assert not db.is_visible_conversation(
             {'id': 'derived', 'v3_derived': True, 'status': 'in_progress'}, include_recordings=True, capture_only=True
         )
+
+
+@pytest.mark.parametrize(
+    'include_recordings,hide_home,expected', [(True, False, 'r'), (False, True, 'good'), (False, False, 'short')]
+)
+def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide_home, expected):
+    from tests.unit.test_sync_donor_tombstone_visibility import _ListingDoc, _ListingQuery
+
+    anchor = _ListingDoc('anchor', {})
+    docs = [anchor] + [
+        _ListingDoc(cid, {'status': 'completed', 'discarded': False, **fields})
+        for cid, fields in [('r', {'recording': True}), ('short', {'home_hidden': True}), ('good', {})]
+    ]
+    rows, last = db._collect_cursor_conversation_page(
+        _ListingQuery(docs),
+        limit=1,
+        include_discarded=False,
+        budget=None,
+        bookmark=anchor,
+        include_recordings=include_recordings,
+        hide_home=hide_home,
+    )
+    assert len(rows) == 1 and rows[0]['id'] == expected
+    assert last.id == expected

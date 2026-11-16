@@ -24,18 +24,19 @@ contracts: 464 passed across 11 files. Its stream file had four passing assertio
 but failed the CPU guard due to a heavy import inside the test; moving that
 import to collection fixed it: the third run passed all 4 with the timing guard.
 
-Combined latest results for the 384-file inventory above: **9,715 passed,
+Combined latest results for the 384-file inventory above: **9,718 passed,
 13 skipped, 6 deselected, no remaining failed file**. This is a composite of
 file-isolated runs, not a single clean run of all files on the final commit.
-The 77 v3-specific tests include transaction leases, concurrent reconcile,
+The 80 v3-specific tests include transaction leases, concurrent reconcile,
 source revisions, ownership/claims, overlap-preserving deletion, merge retries,
 placement/dedup/cuts/resume/cap, switch behavior, reader guards, short paths,
 summary streaming and title stability. Two completed-recording finalizer replay
 regressions also pass in the 222-test finalization file.
 
 Logs are in the user-requested brief directory under TEST-FINAL-V3.log,
-TEST-FINAL-RETRY-V3.log and TEST-STREAM-FINAL2-V3.log. A final 56-test run of the contract/stream/transaction files also passes,
-including three new released-capture poll binding tests (TEST-LAST-V3.log).
+TEST-FINAL-RETRY-V3.log and TEST-STREAM-FINAL2-V3.log. A final 59-test run of the contract/stream/transaction files also passes,
+including three released-capture poll binding tests and three cursor-refill
+visibility contracts (TEST-LAST2-V3.log).
 The inventory is copied
 here so the file selection remains reviewable after scratch cleanup.
 
@@ -85,7 +86,7 @@ omi-heavy run -- env BACKEND_PYTEST_WORKERS=2 BACKEND_UNIT_TEST_FILE_LIST=/Volum
 ```
 
 The focused v3/gateway/finalization rerun passes **315 tests**; the subsequent
-56-test contract/stream/transaction run adds three capture-poll assertions, all
+59-test contract/stream/transaction run adds three capture-poll assertions, all
 passing. Exact final typecheck and preflight receipts are in PR-BODY-V3.md:
 
 ```sh
@@ -98,3 +99,9 @@ omi-heavy run -- env OMI_PR_BODY_FILE=/Volumes/Ephemeral/scratch/episode-daypart
 Pinned Dart formatting was not run: the available Flutter is 3.47.9 while this
 repo pins 3.44.5. The commit uses the hook's documented OMI_SKIP_DART_FORMAT=1
 escape only for the new synthetic test. Generated outputs are generator-owned.
+
+The final full guard also runs the digest-pinned slow query review test. The
+reviewed cursor collector change threads three post-read visibility options;
+query/cursor/limit construction is unchanged. New synthetic tests execute page
+refill past recording and home-hidden documents, with and without opt-ins.
+Only that helper's reviewed AST digest was refreshed.
