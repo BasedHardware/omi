@@ -163,7 +163,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
         for window in windows:
             # An affirmative transcription failure is terminal even before the silence deadline.
             if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
-                window = {**window, 'finished': True}
+                window['finished'] = True
             prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
             if prior:
                 used.add(prior['id'])
