@@ -24,7 +24,7 @@ def superseded_while_locked(payload: dict) -> bool:
             field_paths=['audio_files', 'started_at', 'created_at', 'deleted', 'recording_pieces'],
             timeout=1.0,
         )
-        if has_recording_pieces(conversation):
+        if conversation and has_recording_pieces(conversation):
             from utils.conversations.v3.audio import playback_snapshot
 
             conversation = playback_snapshot(payload['uid'], {**conversation, 'id': payload['conversation_id']})
