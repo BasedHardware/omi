@@ -4856,6 +4856,7 @@ class CaptureController extends ChangeNotifier
 
   CaptureEnvironment _readCaptureEnvironment() => CaptureEnvironment(
         now: _now,
+        accountId: _preferences.uid,
         livenessEpoch: _livenessEpoch,
         appSuspended: _appSuspended,
         appSuspendedAt: _appSuspendedAt,

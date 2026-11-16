@@ -61,9 +61,11 @@ CaptureEnvironment environment(
   DateTime? appResumedAt,
   DateTime Function()? now,
   bool signedIn = true,
+  String? accountId = 'account-1',
 }) =>
     CaptureEnvironment(
       now: now ?? DateTime.now,
+      accountId: accountId,
       livenessEpoch: livenessEpoch,
       appSuspended: appSuspended,
       appSuspendedAt: appSuspendedAt,
@@ -899,6 +901,27 @@ void main() {
       await send(DeviceUpdated(other));
       await send(DeviceStartRequested(device: other));
       expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('account switch while signed in retires the previous account identity', () async {
+      await drop();
+      final result = transitionCapture(coordinator.state, DeviceStartRequested(device: pendant),
+          environment(coordinator.state, accountId: 'account-2', now: () => now));
+      expect(result.effects.whereType<MintRecording>(), hasLength(1));
+      expect(result.state.suspended, isEmpty);
+    });
+    test('mute during a call in the gap changes only the suspended pause intent', () async {
+      final original = await drop();
+      call = true;
+      await send(const CallStateChanged());
+      fake.log.clear();
+      await send(const DevicePauseRequested());
+      expect(coordinator.state.pendantSuspension!.wasPaused, isTrue);
+      expect(fake.log.where((e) => e.startsWith('policy:')), isEmpty);
+      await send(DeviceStartRequested(device: pendant));
+      call = false;
+      await send(const CallStateChanged());
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+      expect(coordinator.state.phase, CapturePhase.pendantPaused);
     });
     test('reconnect during call keeps identity until call ends', () async {
       final original = await drop();
@@ -2188,6 +2211,11 @@ void main() {
       world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
       await world.controller.pendingSourceSwitch;
       expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      // Native can deliver a resubscribed packet before the provider's
+      // debounced connect publishes recordingDevice again.
+      world.deviceConnection!.emitAudio(value: 6);
+      expect(world.wal.syncs.phone.testFrameSynced, isNotEmpty);
+      await world.wal.syncs.phone.finalizeCurrentSession();
       final before = await world.wal.syncs.phone.getAllWals();
       expect(before, isNotEmpty);
       world.scheduler.elapse(const Duration(seconds: 30));

@@ -138,6 +138,7 @@ class SuspendedCapture {
     this.deviceId,
     this.deviceType,
     this.reconnectDeadline,
+    this.accountId,
   });
 
   final CaptureSource source;
@@ -159,8 +160,10 @@ class SuspendedCapture {
 
   /// Process-local identity grace; never proof that gap audio survived.
   final DateTime? reconnectDeadline;
+  final String? accountId;
 
   SuspendedCapture withReason(SuspendReason next) => SuspendedCapture(
+        accountId: accountId,
         source: source,
         reason: next,
         wasPaused: wasPaused,
@@ -175,6 +178,7 @@ class SuspendedCapture {
         'source': source.name,
         'reason': reason.name,
         'reconnectDeadlineMs': reconnectDeadline?.millisecondsSinceEpoch,
+        'accountId': accountId,
         'wasPaused': wasPaused,
         'mode': mode.name,
         'sessionKey': sessionKey,
@@ -187,6 +191,7 @@ class SuspendedCapture {
     return SuspendedCapture(
       source: _parseSource(json['source']),
       reason: _parseSuspendReason(json['reason']),
+      accountId: json['accountId'] as String?,
       reconnectDeadline: json['reconnectDeadlineMs'] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(json['reconnectDeadlineMs'] as int, isUtc: true),
@@ -548,10 +553,12 @@ class CaptureEnvironment {
     this.appSuspendedAt,
     this.appResumedAt,
     this.now = DateTime.now,
+    this.accountId,
   });
 
   /// `_preferences.capturePolicy.muted`.
   final DateTime Function() now;
+  final String? accountId;
 
   final bool policyMuted;
   final bool silencePaused;
@@ -1822,7 +1829,7 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
         event is OnboardingBatchChanged ||
         (event is DeviceUpdated && event.device == null && event.reconnectDeviceId == null) ||
         (nextDeviceId != null && nextDeviceId != grace.deviceId);
-    if (expired || invalidated || !env.signedIn()) {
+    if (expired || invalidated || !env.signedIn() || grace.accountId != env.accountId) {
       state = state.copyWith(suspended: List.of(state.suspended)..remove(grace));
       if (expired) prefix.add(const RunStage(ReconnectObservationStage('reconnect_grace_expired_fresh')));
       prefix.add(const RunStage(DeviceStopTelemetryStage(cleanDevice: true)));
@@ -2350,8 +2357,8 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
 
 CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (state.pendantSuspension?.reason == SuspendReason.reconnect) {
-    return CaptureTransition(
-        state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)), const [PolicyWrite(true)]);
+    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, true)),
+        [if (!state.callActive) const PolicyWrite(true)]);
   }
   if (env.silencePaused) {
     return CaptureTransition(state, [
@@ -2406,8 +2413,8 @@ CaptureTransition _reducePause(CaptureCoordinatorState state, CaptureEnvironment
 
 CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (state.pendantSuspension?.reason == SuspendReason.reconnect) {
-    return CaptureTransition(
-        state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)), const [PolicyWrite(false)]);
+    return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)),
+        [if (!state.callActive) const PolicyWrite(false)]);
   }
   if (env.silencePaused) return _reduceSilenceResume(state, env);
   return switch (state.phase) {
@@ -2469,6 +2476,7 @@ List<SuspendedCapture> _withPendantWasPaused(List<SuspendedCapture> suspended, b
         reason: entry.reason,
         wasPaused: wasPaused,
         reconnectDeadline: entry.reconnectDeadline,
+        accountId: entry.accountId,
         mode: entry.mode,
         sessionKey: entry.sessionKey,
         recordingId: entry.recordingId,
@@ -2701,6 +2709,7 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
             recordingId: session.recordingId,
             deviceId: session.deviceId,
             deviceType: session.deviceType,
+            accountId: env.accountId,
             reconnectDeadline: env.now().add(const Duration(seconds: 120))));
       }
       phase = CapturePhase.idle;
