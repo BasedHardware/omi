@@ -9831,7 +9831,7 @@ storage probes or scheduling changes. [Schema, bounds and readback](listen_pushe
 ### Durable playback projection rebuild debt
 
 `PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
-disables pusher handoff and repair consumption. Pusher receives the flag through
+disables listen original-commit handoff, pusher handoff and repair consumption. Pusher receives the flag through
 its existing `runtimeConfigMapName` `envFrom` binding; no literal env entry
 shadows that ConfigMap key. The repair CronJob declares it independently through
 `recordSealRepair.projectionDebtDurableEnabled` (default `true`). Rollback sets
@@ -9857,7 +9857,7 @@ sanitized logs and `omi_pusher_projection_debt_total` outcomes. Persistent stora
 failure, saturation, or process death before commit can still prevent handoff;
 the marker is not a WAL.
 
-The existing repair CronJob runs a separate 60-second metadata-only pass over
+The existing repair CronJob runs a separate 60-second playback recovery pass over
 at most 128 markers ordered by request time. A bounded collection scan reads at
 most 10,001 markers; the maintenance ceiling is 10,000. A confirmed empty
 inventory retires as `retired_no_objects` after seven days from Firestore document
@@ -9890,6 +9890,34 @@ Successful final rebuild or permanent owner revocation clears only the observed
 marker version; a replacement marker always wins. No PCM or audio-object
 mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
 records scope and verification limits.
+
+Since 2026-11-16, a consented mono listen original pack also awaits a coalesced
+marker write after its immutable media and manifest commit, before releasing its
+retained pack or sending a phone custody receipt. Failure retries that exact
+pack; no successful relay send grants storage coverage. Cold rebuild preflights
+privacy before audio reads, refreshes the raw inventory, and validates only
+uncovered originals through their manifest and decoded frame union. It pins
+media generation/metadata and checks hashes, sample counts, owner and positions;
+real gaps and zero-sample entries never become silence or coverage. Each
+rebuild has a 20-second proof deadline, 4,096 inventory entries, at most 64 new
+pack decodes and 128 MiB decoded input, with each stored pack at most 16 MiB.
+The five-minute proof cache holds at most 1,024 media proofs / 4,096 spans and
+no PCM; current media metadata and manifest must still validate on every hit.
+Bound exhaustion, timeout, deletion, cancellation or ambiguity retains debt.
+The existing transaction still rechecks privacy and the prior audio_files
+revision. Recovery neither dispatches STT nor clears producer fences.
+Archive-required batch intake refreshes the original inventory instead of
+using the 120-second cross-pod cache. Ordinary playback selection is unchanged.
+
+`omi_audio_relay_samples_total{stage="sent|committed|recovered|missing"}` counts
+observations including retries: transport sends, listen original commits,
+validated uncovered candidates after a successful recovery transaction, and candidates whose proof failed, respectively.
+These are native-rate samples at send/commit and 16 kHz samples at recovery;
+do not subtract stages as a loss rate or interpret `missing` as permanent loss.
+No stage is a phone receipt. `omi_audio_raw_pack_exclusions_total{reason}` exposes
+closed inventory exclusion reasons. See the
+[relay recovery note](./listen_pusher_pipeline/changes/2026-11-16-pusher-gap-recovery.md)
+for rollout and local verification.
 
 ### Held staging input expiry
 
@@ -10106,3 +10134,36 @@ No metric label contains an identity. Phase 2 will map source frames, prove
 redundancy/missing intervals, reserve only missing work under the canonical
 owner, and settle status after projection. Custody acceptance alone proves no
 recovered speech.
+
+### Mobile server-batch reconnect grace
+
+For mono mobile `omi`/`phone` server-batch captures with a known device and client
+recording origin, `LISTEN_BATCH_RECONNECT_ENABLED=true` (default false) holds a drained
+producer's conversation `in_progress` after transport loss.
+`LISTEN_BATCH_RECONNECT_GRACE_SECONDS=120` (default, clamped to 1..120) bounds this
+hold. The existing durable quiet-check outbox admits normal finalization at the
+earlier of this fixed deadline and the real quiet/calendar/day/span boundary;
+dispatch and processing retain their existing queue latency. Explicit user/end
+provenance bypasses the grace. Switch-off refuses marked-row resume, ends a drained hold on reconnect and
+rearms its quiet check due now; workers also ignore the stored grace while off.
+Active owners drain and finalize at teardown on upgraded listeners. Unmarked
+sessions retain origin/main behavior while off.
+
+`listen_batch_producer` is server-owned metadata: version, producer token, origin,
+session binding, phase, lease expiry, hard boundary, drain proof, and optional
+fixed deadline. It contains no audio/transcript. Claim, renewal, drain release,
+quiet expiry and normal finalization conflict on the same parent document. Only
+the current token may publish audio bounds, close the archive, or release its
+lease. A new socket never clears `server_batch_audio_closed`, a batch job ID,
+revision, generation or terminal status. Archive capture-session IDs keep each
+socket's packs immutable; custody ACKs still require their committed receipts.
+
+Keep the rollout flag off until readers and every listen pod run the new revision
+and all old sockets have drained. Old listeners can bypass producer tokens; mixed
+active revisions are unsafe. Release enables/expands through its train, Quality
+reviews the clean metrics, with a proposed 2026-11-20 completion/review. Rollback:
+switch off on new binaries, drain their active sockets, wait >120 seconds plus
+one observed reconciler period, verify zero marked in-progress rows, then roll
+back listen. Keep upgraded workers until outstanding finalization work drains.
+Details, aggregate readback query and ramp:
+[change note](listen_pusher_pipeline/changes/2026-11-16-batch-reconnect-grace.md).

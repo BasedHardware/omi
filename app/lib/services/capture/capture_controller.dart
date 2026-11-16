@@ -3437,6 +3437,7 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
+    if (deviceRequested) _commitMutedStartAsPaused();
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
     } else if (deviceRequested) {
@@ -4774,10 +4775,7 @@ class CaptureController extends ChangeNotifier
   }
 
   /// Resume the source [pauseCapture] paused.
-  Future<void> resumeCapture() async {
-    final outcome = await _dispatchWithResumeFence(const ResumeCaptureRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeCapture() => _resumeStartingIdlePendant(const ResumeCaptureRequested());
 
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
@@ -4801,10 +4799,7 @@ class CaptureController extends ChangeNotifier
     outcome.throwIfFailed();
   }
 
-  Future<void> resumeDeviceRecording() async {
-    final outcome = await _dispatchWithResumeFence(const DeviceResumeRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeDeviceRecording() => _resumeStartingIdlePendant(const DeviceResumeRequested());
 
   // -- Capture coordinator wiring -------------------------------------------------------------
 
