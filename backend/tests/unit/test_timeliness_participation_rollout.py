@@ -435,3 +435,138 @@ def test_plan_binds_exactly_the_contracted_field_set(helper, store):
     assert set(plan['fields']) == {'version', 'target_plane', 'created_at', 'suppressed_until', 'operation_id'}
     assert plan['fields']['target_plane'] == {'t': 'str', 'v': 'prod-omi-backend'}
     assert plan['prior']['exists'] is False
+
+
+# --- complete prior capture identity binding --------------------------------------
+
+
+def _state(store):
+    return (store._doc.data, store._doc.update_time)
+
+
+def test_apply_receipt_binds_the_complete_prior_identity(helper, store):
+    store.seed({'kept': 1, 'nested': {'a': True}})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+
+    recorded = applied['prior']
+    assert recorded['namespace'] == prior['namespace']
+    assert recorded['document'] == prior['document']
+    assert recorded['exists'] is True
+    assert recorded['update_time'] == prior['update_time']
+    assert recorded['fields_sha256'] == prior['fields_sha256']
+    assert recorded['identity_sha256'] == prior['identity_sha256']
+    assert recorded['identity_sha256'] == helper.capture_identity(
+        namespace=prior['namespace'],
+        document=prior['document'],
+        exists=prior['exists'],
+        update_time=prior['update_time'],
+        fields_sha256=prior['fields_sha256'],
+    )
+
+
+def test_restore_refuses_a_capture_whose_existence_was_flipped_to_absent(helper, store):
+    """A present prior flipped to absent would select the conditional delete."""
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    # The minimal edit keeps the captured update_time; the identity digest also
+    # refuses the stronger edit that clears it to look like a real absence.
+    for tampered, reason in (
+        (dict(prior, exists=False), 'records an update_time for an absent document'),
+        (dict(prior, exists=False, update_time=None), 'identity does not match its own binding'),
+    ):
+        with pytest.raises(helper.Refused, match=reason):
+            helper.restore_prior(store, tampered, applied, mode='emulator')
+        assert _state(store) == before
+    assert store._doc.data is not None
+
+
+def test_restore_refuses_a_capture_whose_existence_was_flipped_to_present(helper, store):
+    """An absent prior flipped to present would overwrite instead of delete."""
+    prior = _prior(helper, store)
+    assert prior['exists'] is False
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    tampered = dict(prior, exists=True, update_time=applied['applied_update_time'])
+    with pytest.raises(helper.Refused, match='identity does not match its own binding'):
+        helper.restore_prior(store, tampered, applied, mode='emulator')
+
+    assert _state(store) == before
+    assert store._doc.data is not None
+
+
+def test_restore_refuses_a_capture_whose_update_time_was_tampered(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    tampered = dict(prior, update_time=applied['applied_update_time'])
+    with pytest.raises(helper.Refused, match='identity does not match its own binding'):
+        helper.restore_prior(store, tampered, applied, mode='emulator')
+
+    assert _state(store) == before
+
+
+def test_restore_refuses_a_capture_whose_fields_were_tampered(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    tampered = dict(prior, fields={'kept': {'t': 'int', 'v': '2'}})
+    with pytest.raises(helper.Refused, match='fields do not match its digest'):
+        helper.restore_prior(store, tampered, applied, mode='emulator')
+
+    assert _state(store) == before
+
+
+def test_restore_refuses_a_receipt_without_a_prior_binding(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    for stripped in ({k: v for k, v in applied.items() if k != 'prior'}, dict(applied, prior={})):
+        with pytest.raises(helper.Refused, match='no prior capture binding'):
+            helper.restore_prior(store, prior, stripped, mode='emulator')
+        assert _state(store) == before
+
+
+def test_restore_refuses_a_receipt_whose_prior_existence_disagrees(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    before = _state(store)
+
+    tampered = dict(applied, prior=dict(applied['prior'], exists=False))
+    with pytest.raises(helper.Refused, match='prior exists does not match'):
+        helper.restore_prior(store, prior, tampered, mode='emulator')
+
+    assert _state(store) == before
+
+
+def test_plan_refuses_a_tampered_capture_before_any_write(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    before = _state(store)
+
+    with pytest.raises(helper.Refused, match='identity does not match its own binding'):
+        _plan(helper, dict(prior, exists=False, update_time=None))
+
+    assert _state(store) == before
+
+
+def test_verify_restored_refuses_a_tampered_capture(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    before = _state(store)
+
+    with pytest.raises(helper.Refused, match='identity does not match its own binding'):
+        helper.verify_restored(store, dict(prior, exists=False, update_time=None))
+
+    assert _state(store) == before

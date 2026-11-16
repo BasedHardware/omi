@@ -136,6 +136,71 @@ def fields_digest(encoded_fields):
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
 
+def capture_identity(*, namespace, document, exists, update_time, fields_sha256):
+    """One canonical digest over the complete prior capture identity.
+
+    Existence and ``update_time`` are part of the identity, not just the typed
+    fields: a capture whose ``exists`` flag was flipped from true to false would
+    otherwise select the conditional delete and destroy a document that did
+    exist. Every restore compares this digest before it writes anything.
+    """
+    canonical = json.dumps(
+        {
+            'namespace': namespace,
+            'document': document,
+            'exists': exists,
+            'update_time': update_time,
+            'fields_sha256': fields_sha256,
+        },
+        sort_keys=True,
+        separators=(',', ':'),
+    )
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def capture_binding(prior):
+    """The complete prior identity a capture carries, or a refusal.
+
+    A capture is accepted only when it is internally consistent, so a hand-edited
+    file cannot reach a write. Existence and ``update_time`` are part of the
+    identity, not just the typed fields.
+    """
+    if not isinstance(prior, dict):
+        raise Refused('prior capture is invalid')
+    namespace = prior.get('namespace')
+    document = prior.get('document')
+    exists = prior.get('exists')
+    update_time = prior.get('update_time')
+    fields = prior.get('fields')
+    if not isinstance(namespace, str) or not namespace:
+        raise Refused('prior capture has no namespace')
+    if document != participation.DOCUMENT_ID:
+        raise Refused('prior capture document does not match the control document')
+    if type(exists) is not bool:
+        raise Refused('prior capture existence flag is invalid')
+    if not isinstance(fields, dict):
+        raise Refused('prior capture fields are invalid')
+    fields_sha256 = fields_digest(fields)
+    if fields_sha256 != prior.get('fields_sha256'):
+        raise Refused('prior capture fields do not match its digest')
+    if exists and not isinstance(update_time, dict):
+        raise Refused('prior capture is missing its update_time')
+    if not exists and update_time is not None:
+        raise Refused('prior capture records an update_time for an absent document')
+    binding = {
+        'namespace': namespace,
+        'document': document,
+        'exists': exists,
+        'update_time': update_time,
+        'fields_sha256': fields_sha256,
+    }
+    identity = capture_identity(**binding)
+    if prior.get('identity_sha256') != identity:
+        raise Refused('prior capture identity does not match its own binding')
+    binding['identity_sha256'] = identity
+    return binding
+
+
 # --- transport --------------------------------------------------------------------
 
 
@@ -183,6 +248,7 @@ def _read(store):
 def capture(store, *, plane):
     """One read: the complete typed prior state, including arbitrary extra fields."""
     state = _snapshot_state(_read(store))
+    fields_sha256 = fields_digest(state['fields'])
     return {
         'namespace': store.namespace,
         'document': participation.DOCUMENT_ID,
@@ -191,7 +257,14 @@ def capture(store, *, plane):
         'exists': state['exists'],
         'update_time': state['update_time'],
         'fields': state['fields'],
-        'fields_sha256': fields_digest(state['fields']),
+        'fields_sha256': fields_sha256,
+        'identity_sha256': capture_identity(
+            namespace=store.namespace,
+            document=participation.DOCUMENT_ID,
+            exists=state['exists'],
+            update_time=state['update_time'],
+            fields_sha256=fields_sha256,
+        ),
     }
 
 
@@ -215,19 +288,16 @@ def build_plan(prior, *, operation_id, created_at, until):
         'suppressed_until': until,
         'operation_id': operation_id,
     }
+    binding = capture_binding(prior)
     return {
-        'namespace': prior['namespace'],
+        'namespace': binding['namespace'],
         'document': participation.DOCUMENT_ID,
         'target_plane': participation.GKE_PLANE,
         'operation_id': operation_id,
         'created_at': tag(created_at),
         'suppressed_until': tag(until),
         'fields': tag_fields(fields),
-        'prior': {
-            'exists': prior['exists'],
-            'update_time': prior['update_time'],
-            'fields_sha256': prior['fields_sha256'],
-        },
+        'prior': binding,
     }
 
 
@@ -236,6 +306,16 @@ def apply_plan(store, plan, *, mode):
     snapshot = _read(store)
     current = _snapshot_state(snapshot)
     prior = plan['prior']
+    if prior.get('identity_sha256') != capture_identity(
+        namespace=prior.get('namespace'),
+        document=prior.get('document'),
+        exists=prior.get('exists'),
+        update_time=prior.get('update_time'),
+        fields_sha256=prior.get('fields_sha256'),
+    ):
+        raise Refused('plan prior binding is not self-consistent')
+    if plan.get('namespace') != prior['namespace'] or plan.get('document') != participation.DOCUMENT_ID:
+        raise Refused('plan target does not match its prior binding')
     if current['exists'] != prior['exists']:
         raise Refused('control document existence changed since capture')
     if current['exists'] and current['update_time'] != prior['update_time']:
@@ -259,30 +339,35 @@ def apply_plan(store, plan, *, mode):
         'mode': mode,
         'applied_update_time': applied_update_time,
         'applied_fields_sha256': fields_digest(applied['fields']),
-        'prior_fields_sha256': prior['fields_sha256'],
+        # The complete prior capture identity this apply was authorized by. A
+        # restoration may only target a capture that matches every one of these.
+        'prior': dict(prior),
     }
 
 
 def restore_prior(store, prior, applied, *, mode):
     """One read plus one CAS write that restores existence and every typed field."""
-    if not isinstance(prior, dict) or prior.get('namespace') != store.namespace:
+    # The supplied capture must be internally consistent before anything else is
+    # trusted: a flipped existence flag would otherwise select the delete branch.
+    binding = capture_binding(prior)
+    if binding['namespace'] != store.namespace:
         raise Refused('prior capture namespace does not match the target store')
-    if prior.get('document') != participation.DOCUMENT_ID:
-        raise Refused('prior capture document does not match the control document')
-    if type(prior.get('exists')) is not bool:
-        raise Refused('prior capture existence flag is invalid')
-    prior_fields = prior.get('fields')
-    prior_digest = prior.get('fields_sha256')
-    if not isinstance(prior_fields, dict) or fields_digest(prior_fields) != prior_digest:
-        raise Refused('prior capture fields do not match its digest')
     if not isinstance(applied, dict):
         raise Refused('apply receipt is invalid')
     if applied.get('namespace') != store.namespace or applied.get('document') != participation.DOCUMENT_ID:
         raise Refused('apply receipt target does not match the prior capture')
     if applied.get('mode') != mode:
         raise Refused('apply receipt mode does not match the restore transport')
-    if applied.get('prior_fields_sha256') != prior_digest:
-        raise Refused('apply receipt does not match the supplied prior capture')
+    # The receipt must carry the complete prior identity it was issued for, and
+    # it must equal the supplied capture field by field and digest.
+    recorded = applied.get('prior')
+    if not isinstance(recorded, dict) or not recorded.get('identity_sha256'):
+        raise Refused('apply receipt has no prior capture binding; refusing to guess a restoration')
+    for field in ('namespace', 'document', 'exists', 'update_time', 'fields_sha256'):
+        if recorded.get(field) != binding[field]:
+            raise Refused(f'apply receipt prior {field} does not match the supplied prior capture')
+    if recorded['identity_sha256'] != binding['identity_sha256']:
+        raise Refused('apply receipt prior identity does not match the supplied prior capture')
     operation_id = applied.get('operation_id')
     if not isinstance(operation_id, str) or not operation_id:
         raise Refused('apply receipt has no operation id')
@@ -302,7 +387,7 @@ def restore_prior(store, prior, applied, *, mode):
     if current['fields'].get('operation_id') != tag(operation_id):
         raise Refused('control document operation does not match the apply receipt')
     reference = participation.control_document(store)
-    if prior['exists']:
+    if binding['exists']:
         prior_fields = untag_fields(prior['fields'], client=store.client)
         updates = {FieldPath(name).to_api_repr(): value for name, value in prior_fields.items()}
         removals = {
@@ -325,17 +410,22 @@ def restore_prior(store, prior, applied, *, mode):
         'mode': mode,
         'restored_exists': restored['exists'],
         'restored_fields_sha256': fields_digest(restored['fields']),
-        'prior_fields_sha256': prior['fields_sha256'],
-        'exact': restored['exists'] == prior['exists'] and fields_digest(restored['fields']) == prior['fields_sha256'],
+        'prior_fields_sha256': binding['fields_sha256'],
+        'prior_identity_sha256': binding['identity_sha256'],
+        'exact': restored['exists'] == binding['exists']
+        and fields_digest(restored['fields']) == binding['fields_sha256'],
         'restored_update_time': restored['update_time'],
     }
 
 
 def verify_restored(store, prior):
     """One read: existence plus every typed field/value must match the capture."""
+    binding = capture_binding(prior)
+    if binding['namespace'] != store.namespace:
+        raise Refused('prior capture namespace does not match the target store')
     current = _snapshot_state(_read(store))
     differences = []
-    if current['exists'] != prior['exists']:
+    if current['exists'] != binding['exists']:
         differences.append('existence')
     else:
         prior_fields = prior['fields']
@@ -348,7 +438,8 @@ def verify_restored(store, prior):
         'restored': not differences,
         'differences': differences,
         'current_fields_sha256': fields_digest(current['fields']),
-        'prior_fields_sha256': prior['fields_sha256'],
+        'prior_fields_sha256': binding['fields_sha256'],
+        'prior_identity_sha256': binding['identity_sha256'],
         'update_time': current['update_time'],
     }
 

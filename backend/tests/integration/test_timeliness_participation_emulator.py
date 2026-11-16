@@ -182,12 +182,51 @@ def test_restore_refuses_a_stale_apply_receipt(helper, store):
         helper.restore_prior(store, prior, stale, mode='emulator')
 
 
-def test_emulator_transport_refusals(helper):
+def test_restore_refuses_tampered_captures_without_mutating(helper, store):
+    """A flipped existence flag or a rewritten update_time must not delete or overwrite."""
+    _seed(store, {'kept': 1, 'nested': {'a': True}})
+    prior = _prior(helper, store)
+    assert prior['exists'] is True
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    applied_snapshot = _reference(store).get()
+    applied_state = (applied_snapshot.to_dict(), applied_snapshot.update_time)
+
+    tampered_captures = (
+        dict(prior, exists=False),
+        dict(prior, exists=False, update_time=None),
+        dict(prior, update_time=helper.tag(applied_snapshot.update_time)),
+        dict(prior, fields={'kept': {'t': 'int', 'v': '2'}}),
+    )
+    for tampered in tampered_captures:
+        with pytest.raises(helper.Refused):
+            helper.restore_prior(store, tampered, applied, mode='emulator')
+        current = _reference(store).get()
+        assert (current.to_dict(), current.update_time) == applied_state
+
+    # The receipt itself must carry the binding; stripping it refuses too.
+    with pytest.raises(helper.Refused, match='no prior capture binding'):
+        helper.restore_prior(store, prior, {k: v for k, v in applied.items() if k != 'prior'}, mode='emulator')
+    current = _reference(store).get()
+    assert (current.to_dict(), current.update_time) == applied_state
+
+    # The untampered capture still restores exactly, so the refusals were about
+    # the tampering and not about an unrestorable state.
+    assert helper.restore_prior(store, prior, applied, mode='emulator')['exact'] is True
+    assert _read(store) == {'kept': 1, 'nested': {'a': True}}
+
+
+def test_emulator_transport_refusals(helper, monkeypatch):
     with pytest.raises(helper.Refused, match='loopback'):
         helper.resolve_store('batch_pipeline_test_x', emulator_host='10.0.0.5:8085')
     with pytest.raises(helper.Refused, match='batch_pipeline_test_'):
         helper.resolve_store('batch_pipeline_prod', emulator_host='127.0.0.1:8085')
+    # A test namespace with no explicit host is refused either by the ambient
+    # emulator guard or by the missing --dry-run=emulator; both fail closed.
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     with pytest.raises(helper.Refused, match='--dry-run=emulator'):
+        helper.resolve_store('batch_pipeline_test_x')
+    monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:8085')
+    with pytest.raises(helper.Refused, match='ambient FIRESTORE_EMULATOR_HOST'):
         helper.resolve_store('batch_pipeline_test_x')
 
 
