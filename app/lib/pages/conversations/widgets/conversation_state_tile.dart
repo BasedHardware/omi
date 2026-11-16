@@ -43,7 +43,7 @@ class ConversationStateTile extends StatelessWidget {
           Text(
             conversation.structured.getEmoji(),
             key: const Key('conversation_tile_emoji'),
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+            style: OmiType.title3.copyWith(fontWeight: FontWeight.w500),
           ),
           null,
         ),
