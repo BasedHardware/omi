@@ -76,6 +76,9 @@ abstract final class WalWriteIntent {
         final record = jsonDecode(await entry.readAsString()) as Map<String, dynamic>;
         if (record['version'] != 1 || record['bytes'] is! int || record['sha256'] is! String) continue;
         final wal = Wal.fromJson(Map<String, dynamic>.from(record['wal'] as Map));
+        // New transaction metadata cannot use the legacy unowned-row
+        // admission rule: losing its owner must never reassign captured audio.
+        if (wal.ownerUid == null || wal.ownerUid!.isEmpty) continue;
         final name = _name(wal);
         if (entry.path != _intent(documents, wal).path || wal.storage != WalStorage.disk) continue;
         final existing = known[(wal.id, wal.filePath)];

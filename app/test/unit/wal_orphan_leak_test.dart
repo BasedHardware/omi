@@ -400,4 +400,21 @@ void main() {
     expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath), [old.filePath, added.filePath],
         reason: 'later deltas must retain files loaded at startup');
   });
+  test('an intent missing its captured owner cannot become the next account audio', () async {
+    final wal = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_unknown_owner.bin');
+    await WalWriteIntent.write(documents, wal, [1, 2, 3]);
+    final intent = File('${documents.path}/.wal-pending/${wal.filePath}.json');
+    final metadata = jsonDecode(await intent.readAsString());
+    (metadata['wal'] as Map).remove('owner_uid');
+    await intent.writeAsString(jsonEncode(metadata));
+    expect(await WalFileManager.loadWals(), isEmpty);
+    expect(await intent.exists(), isTrue);
+    expect(await File('${documents.path}/${wal.filePath}').readAsBytes(), [1, 2, 3]);
+  });
 }
