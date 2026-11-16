@@ -196,7 +196,7 @@ def test_step_census_refuses_an_unclassified_new_step():
     # A new step requires updating this census with a target-scope disposition.
     assert (
         hashlib.sha256(json.dumps([s['name'] for s in STEPS]).encode()).hexdigest()
-        == "0f93bc0dcfc339f3631cf7deff49439a71b0c98ff1981b6ad38b22b54729957f"
+        == "b054ce3b02fd03145c537914d75e19c88d1f826697f10ef047424700dc01033c"
     )
 
 
@@ -273,3 +273,89 @@ def test_selected_workflow_refuses_lock_or_source_bypass_before_side_effects(tmp
     result = subprocess.run(['bash', '-c', script], env=env, text=True, capture_output=True, timeout=10)
     assert result.returncode != 0
     assert not output.exists()
+
+
+@pytest.mark.parametrize('failure', ['', 'ops', 'project', 'empty-project'])
+def test_selected_sync_routing_uses_control_ops_without_backfill_writes(tmp_path, failure):
+    import shutil
+    import sys
+
+    lifecycle = yaml.safe_load((ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text())
+    routing = step('Resolve selected sync routing')
+    assert routing['with']['mode'] == 'routing'
+    assert routing['uses'].startswith('./.deploy-workflow-source/')
+    assert "inputs.cloud_run_service == 'backend-sync'" in routing['if']
+    deploy = next(s for s in STEPS if s.get('id') == 'deploy-backend-sync')
+    assert '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}' in deploy['with']['env_vars']
+    assert 'steps.sync-backfill.outputs.sync_backfill_env_vars' not in deploy['with']['env_vars']
+    # Evaluate the actual helper mode gates: only its two read-only producers run.
+    active = []
+    for nested in lifecycle['runs']['steps']:
+        condition = nested['if'][3:-2].replace('inputs.mode', repr('routing'))
+        condition = condition.replace('||', 'or').replace('&&', 'and')
+        condition = re.sub(r'inputs\.[a-z_]+', repr('false'), condition)
+        if eval(condition, {'__builtins__': {}}):
+            active.append(nested)
+    assert [s['id'] for s in active] == ['ops-queues', 'backfill-service']
+    controls = tmp_path / 'control' / 'scripts'
+    controls.mkdir(parents=True)
+    shutil.copy(ROOT / 'backend/scripts/ops_train.py', controls / 'ops_train.py')
+    opsdir = controls.parent / 'deploy' / 'ops'
+    opsdir.mkdir(parents=True)
+    ops = yaml.safe_load((ROOT / 'backend/deploy/ops/prod.yaml').read_text())
+    ops['cloud_run']['backend-sync-backfill']['env']['SYNC_BACKFILL_TASKS_QUEUE'] = 'control-current'
+    if failure != 'ops':
+        (opsdir / 'prod.yaml').write_text(yaml.safe_dump(ops))
+    # No network/package operation in the offline probe; execute the REAL copied
+    # ops renderer for every other call, against a deliberately different queue.
+    python = tmp_path / 'python3'
+    python.write_text(
+        '#!/bin/bash\nif [[ "$1 $2" == "-m pip" ]]; then exit 0; fi\nexec ' + str(sys.executable) + ' "$@"\n'
+    )
+    python.chmod(0o700)
+    gcloud = tmp_path / 'gcloud'
+    gcloud.write_text('''#!/bin/bash
+printf '%s\\n' "$*" >> "$CALLS"
+[[ "$*" == "projects describe based-hardware --format=value(projectNumber)" ]] || exit 99
+[[ "$FAILURE" != project ]] || exit 3
+[[ "$FAILURE" != empty-project ]] || exit 0
+echo 123456
+''')
+    gcloud.chmod(0o700)
+    output = tmp_path / 'output'
+    output.touch()
+    calls = tmp_path / 'calls'
+    env = dict(
+        os.environ,
+        PATH=str(tmp_path) + ':' + os.environ['PATH'],
+        GITHUB_OUTPUT=str(output),
+        DEPLOY_CONTROL_SCRIPTS=str(controls),
+        BACKFILL_ENV='SYNC_BACKFILL_TASKS_QUEUE=manifest-retired',
+        FAILURE=failure,
+        CALLS=str(calls),
+    )
+    result = None
+    for nested in active:
+        script = nested['run'].replace('${{ inputs.project_id }}', 'based-hardware')
+        script = script.replace('${{ inputs.service }}', 'backend').replace('${{ inputs.region }}', 'us-central1')
+        result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+        if result.returncode:
+            break
+        if nested['id'] == 'ops-queues':
+            env['BACKFILL_QUEUE'] = next(
+                line.split('=', 1)[1] for line in output.read_text().splitlines() if line.startswith('backfill_queue=')
+            )
+    assert (result.returncode == 0) == (not failure), result.stderr
+    text = output.read_text()
+    if failure:
+        assert 'sync_backfill_env_vars<<' not in text
+    else:
+        assert 'backfill_queue=control-current\n' in text
+        assert 'SYNC_BACKFILL_TASKS_QUEUE=control-current\n' in text
+        assert 'manifest-retired' not in text
+        url = 'https://backend-sync-backfill-123456.us-central1.run.app/v2/sync-jobs/run'
+        assert f'SYNC_BACKFILL_TASKS_HANDLER_URL={url}\n' in text
+        assert f'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE={url}\n' in text
+    assert not calls.exists() or calls.read_text().splitlines() == [
+        'projects describe based-hardware --format=value(projectNumber)'
+    ]

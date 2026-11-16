@@ -352,7 +352,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
         assert 'id: sync-backfill' in workflow
         assert 'mode: worker' in workflow
         assert "'platform' || 'dispatch'" in workflow
-        assert '${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}' in workflow
+        assert '${{ steps.sync-routing.outputs.sync_backfill_env_vars }}' in workflow
         assert '${{ steps.sync-backfill.outputs.revision }}' in workflow
         assert 'provision_sync_ledger_ttl: \'true\'' in workflow
         assert 'firestore_project_id: ${{ inputs.runtime_gcp_project_id }}' in composite

@@ -980,6 +980,19 @@ runs:
         backfill_secrets: ${{ steps.runtime-env.outputs.backend_sync_backfill_secrets }}
         candidate_tag: ${{ inputs.deploy_profile == 'auto-dev' && inputs.candidate_tag || '' }}
 
+    # This read-only producer runs independently of the omitted worker writer.
+    # Its ops file is staged from workflow control, never the application pin.
+    - name: Resolve selected sync routing
+      if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && success()) }}
+      id: sync-routing
+      uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
+      with:
+        mode: routing
+        project_id: ${{ inputs.project_id }}
+        region: ${{ inputs.region }}
+        service: ${{ inputs.service }}
+        backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}
+
     - name: Validate backend-sync memory trial
       if: ${{ (inputs.cloud_run_service == 'all' || inputs.cloud_run_service == 'backend-sync') && (inputs.integration_only != 'true' && (success())) }}
       shell: bash
@@ -1040,7 +1053,7 @@ runs:
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           OMI_BACKEND_RELEASE_SHA=${{ inputs.admitted_sha }}
-          ${{ steps.sync-backfill.outputs.sync_backfill_env_vars }}
+          ${{ steps.sync-routing.outputs.sync_backfill_env_vars }}
         secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
     - name: Capture ${{ inputs.service }}-sync revision
