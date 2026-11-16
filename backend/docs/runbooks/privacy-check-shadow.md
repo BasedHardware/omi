@@ -47,11 +47,12 @@ Batch memo entries belong to one sync/pump attempt, including inline sync, and
 close on every exit. The pull worker opens its attempt before its first await,
 including preflight/convergence/cleanup; the shared coordinator opens a nested
 attempt for both Cloud Tasks and pull execution. The worker supervisor exposes
-all seven privacy counter families at `/metrics`, preserving child counters
+the privacy counter families at `/metrics`, preserving child counters
 across exit/SIGKILL via Prometheus mmap files and removing each child's files
 only after the process group is reaped. The worker chart enables PodMonitoring
 by default. Include that installed worker target in all-plane coverage before
-starting the 14-day window; a missing scrape or denominator blocks qualification.
+satisfying the [evidence gate](#deploy-and-ramp); no 14-day window applies.
+A missing scrape or denominator blocks qualification.
 Transactions reusing a batch memo read the token in their
 conflict set. Existing transactional legal-hold fences retain both live authority
 reads and do not add a privacy-token read. Nontransactional
@@ -183,12 +184,16 @@ Shadow window to run before any owner-memo enforcement admission:
 
 - Before interpreting any match count, read
   `ops_kill_switches/privacy_decision_cache` and require it to be clear. Require
-  a present `privacy_ttl_cache_disabled = 0` series for **each serving service**
-  and positive `candidate_source="owner_hit"` comparisons on each eligible
-  shape. A set switch makes the owner comparison window vacuous even when
+  a present `privacy_ttl_cache_disabled = 0` series and
+  `increase(privacy_ttl_cache_switch_reads_total{result="clear"}[window]) > 0`
+  for **each serving service** over the same observation window, plus positive
+  `candidate_source="owner_hit"` comparisons on each eligible shape. A set switch makes the owner comparison window vacuous even when
   fresh-read comparisons match. The old kill guard left this switch set from
   2026-11-04T22:50:25Z through 2026-11-16 (confirmed by David's ro-prod read);
-  release owns clearing it after old revisions drain. Enforcement stays off.
+  release cleared it at 2026-11-16T23:39Z after old revisions drained (reported
+  by the release lead); owner hits then appeared on every shape and service
+  with zero mismatches. Enforcement stays off. These observations do not replace
+  the qualification gate.
 - Keep `bpp_owner_memo:100` and `bpp_owner_memo_enforce:0`; set
   `privacy_checks_shadow:10`, `privacy_negative_lookup_cache:0`, and `privacy_ttl60:0`.
   This 10% stage is diagnostic; the current qualification policy below requires
@@ -229,10 +234,18 @@ Shadow window to run before any owner-memo enforcement admission:
 
 ### Diagnosing a missing owner-hit denominator
 
-Check `privacy_ttl_cache_disabled` on each Cloud Run service. It must be
-exported by that service's keep-list; a fleet `max=0` from other planes is not
-proof that a Cloud Run worker can read its switch. A switch read failure is
-fail-closed (`1`), just like an explicit disable. Neither shadow candidates nor
+Read `ops_kill_switches/privacy_decision_cache` directly and check both
+`privacy_ttl_cache_disabled = 0` and
+`increase(privacy_ttl_cache_switch_reads_total{result="clear"}[window]) > 0`
+on each serving service over the observation window (for example `[30m]`
+during diagnosis or `[2h]` for live qualification). Both metrics must be
+exported by that service's keep-list. The gauge initializes to zero at import;
+its presence alone proves no switch read. The counter increments only on
+actual polls, with closed outcomes `clear`, `disabled`, or `error`; cached
+lookups do not increment it. Require positive clear reads together with the
+zero gauge, the direct document read and owner-hit comparisons. A fleet
+`max=0` from other planes is not proof that a Cloud Run worker read its switch.
+A switch read failure is fail-closed (`1`), just like an explicit disable. Neither shadow candidates nor
 enforcement may bypass it. An unreadable switch reproduces fresh-read
 candidates on no-attempt/export paths and session hits on attempt paths with
 no owner hits, even with all memo levers on.

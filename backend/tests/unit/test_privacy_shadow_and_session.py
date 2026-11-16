@@ -366,6 +366,9 @@ def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, s
     monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', broken)
     counter = metrics.OWNER_SHADOW_ERRORS.labels(shape, label)
     before = counter._value.get()
+    denominator = metrics.SHADOW_CHECKS.labels('batch', 'error')
+    owners = metrics.OWNER_COMPARISONS.labels(shape, 'error', 'unknown')
+    denominator_before, owners_before = denominator._value.get(), owners._value.get()
     with batch_privacy_attempt() if shape == 'attempt' else nullcontext():
         kwargs = {'snapshots': {}} if shape == 'snapshots' else {}
         assert check(db, **kwargs) == 7
@@ -373,6 +376,38 @@ def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, s
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
             check(db, **kwargs)
     assert counter._value.get() == before + 2
+    assert denominator._value.get() == denominator_before + 2
+    assert owners._value.get() == owners_before + 2
+
+
+@pytest.mark.parametrize('function', ['compare', 'owner_comparison'])
+def test_owner_shadow_metrics_fault_is_not_a_candidate_error_or_live_failure(world, monkeypatch, function):
+    db, _, _, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+    before = sum(
+        sample.value
+        for family in metrics.OWNER_SHADOW_ERRORS.collect()
+        for sample in family.samples
+        if sample.name == 'privacy_owner_shadow_error_total'
+    )
+
+    def broken(*args, **kwargs):
+        raise TimeoutError('synthetic private metrics detail')
+
+    monkeypatch.setattr(metrics, function, broken)
+    assert check(db) == 7
+    db.rows[TOMBSTONE] = {}
+    with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+        check(db)
+    assert (
+        sum(
+            sample.value
+            for family in metrics.OWNER_SHADOW_ERRORS.collect()
+            for sample in family.samples
+            if sample.name == 'privacy_owner_shadow_error_total'
+        )
+        == before
+    )
 
 
 @pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
@@ -404,7 +439,11 @@ def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run(config_name
         for rule in endpoint['metricRelabeling']
         if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
     ]
-    for metric in ('privacy_owner_shadow_error_total', 'privacy_ttl_cache_disabled'):
+    for metric in (
+        'privacy_owner_shadow_error_total',
+        'privacy_ttl_cache_disabled',
+        'privacy_ttl_cache_switch_reads_total',
+    ):
         assert any(re.fullmatch(pattern, metric) for pattern in keeps)
 
 

@@ -170,9 +170,16 @@ def assert_batch_write_allowed(
                 metrics.called('batch')
                 try:
                     _assert_batch_write_allowed_memo(client, transaction, uid, **candidate_kwargs)
-                    candidate = 'allow'
                 except BatchPrivacyBlocked as error:
                     candidate = error.reason.value
+                except Exception as error:
+                    # Only candidate faults enter the error denominator/classifier.
+                    metrics.shadow_error('batch')
+                    metrics.owner_comparison(comparison_shape, 'error', 'unknown')
+                    metrics.owner_shadow_error(comparison_shape, error)
+                    return
+                else:
+                    candidate = 'allow'
                 metrics.decision('batch', candidate)
             metrics.compare(
                 'batch', reason, candidate, live_evidence=live_evidence, candidate_evidence=candidate_evidence
@@ -180,10 +187,8 @@ def assert_batch_write_allowed(
             metrics.owner_comparison(
                 comparison_shape, 'match' if reason == candidate else 'mismatch', candidate_evidence.source
             )
-        except Exception as error:
-            metrics.shadow_error('batch')
-            metrics.owner_comparison(comparison_shape, 'error', 'unknown')
-            metrics.owner_shadow_error(comparison_shape, error)
+        except Exception:
+            pass  # Metrics failures never alter live authority or become candidate errors.
 
     with metrics.evidence_scope(live_evidence):
         if shadow and transaction is not None:

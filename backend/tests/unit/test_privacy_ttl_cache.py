@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import fakeredis
 from google.api_core.exceptions import Aborted
 import pytest
+from prometheus_client import CollectorRegistry, Counter, Gauge
 
 from database import account_deletion_marker as marker
 from database import batch_pipeline_privacy as privacy, conversation_tombstones as tombstones
@@ -383,6 +384,44 @@ def test_unreadable_kill_switch_fails_closed_and_is_polled_at_most_every_interva
     assert ttl_cache.disabled() and ttl_cache.disabled()
     assert len(calls) == 1
     ttl_cache.reset_for_tests()
+
+
+@pytest.mark.parametrize('result', ['clear', 'disabled', 'error'])
+def test_switch_read_counter_distinguishes_actual_polls_from_import_and_cached_values(monkeypatch, result):
+    registry = CollectorRegistry()
+    monkeypatch.setattr(metrics, 'TTL_KILL', Gauge('privacy_ttl_cache_disabled', 'synthetic', registry=registry))
+    monkeypatch.setattr(
+        metrics,
+        'TTL_SWITCH_READS',
+        Counter('privacy_ttl_cache_switch_reads_total', 'synthetic', ['result'], registry=registry),
+    )
+    clock, polls = [100.0], []
+    monkeypatch.setattr(ttl_cache, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+
+    def read():
+        polls.append(1)
+        if result == 'error':
+            raise PermissionError('synthetic private switch detail')
+        return result == 'disabled'
+
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', read)
+    ttl_cache.reset_for_tests()
+    try:
+        assert registry.get_sample_value('privacy_ttl_cache_disabled') == 0
+        assert registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': 'clear'}) is None
+        for _ in range(2):
+            assert ttl_cache.disabled() is (result != 'clear')
+        assert len(polls) == 1
+        assert registry.get_sample_value('privacy_ttl_cache_disabled') == (result != 'clear')
+        for label in ('clear', 'disabled', 'error'):
+            value = registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': label})
+            assert value == (1 if label == result else None)
+        clock[0] += ttl_cache.KILL_POLL_SECONDS
+        assert ttl_cache.disabled() is (result != 'clear')
+        assert len(polls) == 2
+        assert registry.get_sample_value('privacy_ttl_cache_switch_reads_total', {'result': result}) == 2
+    finally:
+        ttl_cache.reset_for_tests()
 
 
 def test_privacy_ttl60_leaves_the_deletion_marker_on_its_shared_redis_cache(world, monkeypatch):
@@ -1244,6 +1283,12 @@ def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(wo
             }
         ),
     )
+    errors_before = sum(
+        sample.value
+        for family in metrics.OWNER_SHADOW_ERRORS.collect()
+        for sample in family.samples
+        if sample.name == 'privacy_owner_shadow_error_total'
+    )
     owner_counter = metrics.OWNER_COMPARISONS.labels(shape, 'match', 'owner_hit')
     owner_before = owner_counter._value.get()
     comparisons = []
@@ -1271,6 +1316,15 @@ def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(wo
                 # Live walk + observation token, followed by ONE candidate token
                 # read; the throwaway evidence/export cannot change the memo key.
                 assert reads == [TOKEN, MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE, TOKEN]
+    assert (
+        sum(
+            sample.value
+            for family in metrics.OWNER_SHADOW_ERRORS.collect()
+            for sample in family.samples
+            if sample.name == 'privacy_owner_shadow_error_total'
+        )
+        == errors_before
+    )
     assert comparisons == ['fresh_read', 'owner_hit']
     assert owner_counter._value.get() == owner_before + 1
     assert reads.count(MARKER) == 1  # live authority still decides the warm call

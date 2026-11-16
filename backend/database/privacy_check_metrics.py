@@ -335,11 +335,22 @@ def called(family):
 
 
 TTL_KILL = Gauge('privacy_ttl_cache_disabled', '1 when the privacy decision cache kill switch is set or unreadable')
+TTL_SWITCH_READS = Counter(
+    'privacy_ttl_cache_switch_reads_total', 'Actual privacy kill-switch polls by closed read outcome', ['result']
+)
 
 
 def ttl_kill_state(disabled):
     try:
         TTL_KILL.set(1 if disabled else 0)
+    except Exception:
+        pass
+
+
+def ttl_switch_read(result):
+    try:
+        result = result if result in {'clear', 'disabled', 'error'} else 'error'
+        TTL_SWITCH_READS.labels(result).inc()
     except Exception:
         pass
 
