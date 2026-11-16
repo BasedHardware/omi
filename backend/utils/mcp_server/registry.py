@@ -28,7 +28,7 @@ from utils.mcp_server.constants import (
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import CONVERSATION_KINDS
 from utils.mcp_server import detail_views, search_views
-from utils.mcp_server.handlers import action_items, conversations, memories, other, profile, transcripts
+from utils.mcp_server.handlers import action_items, conversations, memories, other, profile, sync, transcripts
 
 ToolHandler = Callable[[str, Dict[str, Any], Optional[ProductAuthorizationContext]], Dict[str, Any]]
 
@@ -591,6 +591,25 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=conversations.get_conversations,
+    ),
+    ToolSpec(
+        name="get_deleted_conversations",
+        title="Get deleted conversations",
+        description=(
+            "List conversations the user deleted, oldest deletion first, as id and deleted_at only. For agents that "
+            "keep a copy of the user's conversations: pass the last deleted_at you processed minus one minute as "
+            "deleted_since, remove every listed id from your copy (repeats are harmless), and page with next_cursor "
+            "while has_more is true. Conversations absorbed by a merge are not listed; re-check held ids with "
+            "get_conversations_by_ids, whose not_found lists ids that are gone."
+        ),
+        annotations=_read_annotations("Get deleted conversations"),
+        input_schema=sync.DELETED_CONVERSATIONS_INPUT,
+        output_schema=_output_schema(_object_schema(["deleted", "has_more"], **sync.DELETED_CONVERSATIONS_OUTPUT)),
+        scope="conversations.read",
+        operation="conversation_deletion_list",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=sync.get_deleted_conversations,
     ),
     ToolSpec(
         name="get_conversation_by_id",

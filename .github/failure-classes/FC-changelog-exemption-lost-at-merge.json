@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-changelog-exemption-lost-at-merge",
+  "family": "ci-merge-integrity",
   "violated_contract": "A desktop changelog exemption that makes the PR-run of check-desktop-changelog green must also make the post-merge push run green. GitHub PR labels are not visible on push, so they cannot be the sole exemption for production desktop paths.",
   "canonical_prevention": "Exempt internal-only production desktop changes with an in-repo unreleased fragment of kind none. The no-changelog-needed label is not a skip for paths that require a changelog; PR and push evaluate the same tree/diff evidence.",
   "canonical_prevention_artifact": [

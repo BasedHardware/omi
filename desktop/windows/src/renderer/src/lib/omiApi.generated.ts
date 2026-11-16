@@ -2222,6 +2222,11 @@ export interface DeleteLimitlessConversationsResponse {
   message: string;
 }
 
+export interface DeletedConversation {
+  deleted_at: string;
+  id: string;
+}
+
 export interface DesktopDailyUsageRequest {
   client_device_id: string;
   date: string;
@@ -7013,6 +7018,7 @@ export interface OmiApiSchemas {
   "DeleteImportJobResponse": DeleteImportJobResponse;
   "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
   "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;
+  "DeletedConversation": DeletedConversation;
   "DesktopDailyUsageRequest": DesktopDailyUsageRequest;
   "DesktopDailyUsageResponse": DesktopDailyUsageResponse;
   "DeterministicFacts": DeterministicFacts;
@@ -10417,6 +10423,16 @@ export interface OmiApiPaths {
       operationId: "get_conversations_v1_mcp_conversations_get";
       responses: {
         "200": Array<SimpleConversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/conversations/deleted": {
+    get: {
+      operationId: "get_deleted_conversations_v1_mcp_conversations_deleted_get";
+      responses: {
+        "200": Array<DeletedConversation>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -18705,6 +18721,24 @@ export async function get_conversations_v1_mcp_conversations_get(query: { start_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_deleted_conversations_v1_mcp_conversations_deleted_get(query: { deleted_since?: string | null, limit?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<DeletedConversation>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/conversations/deleted`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function search_conversations_v1_mcp_conversations_search_get(query: { query: string, limit?: number, start_date?: string | null, end_date?: string | null, timezone?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations/search`;
@@ -24164,4 +24198,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 552 client methods generated.
+// Total: 553 client methods generated.
