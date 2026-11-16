@@ -654,7 +654,8 @@ def search_conversation_hits(
     conversations = hydrate(ranked[:limit])
     if len(conversations) < limit and len(ranked) > limit:
         # Stale index ids (deleted or moved records) leave room for the next hits.
-        conversations += hydrate(ranked[limit : limit + limit - len(conversations)])
+        # ranked holds at most 2*limit ids, so this second read stays bounded.
+        conversations += hydrate(ranked[limit:])
     # Degraded when either index could not be asked, or no semantic hit survived hydration.
     if not (vectors_ok and keyword_ok) or not any(str(c.get('id')) in set(vector_ids) for c in conversations):
         record_fallback(
@@ -712,9 +713,8 @@ def search_conversations(
                     [conv],
                     query,
                     max_chars=MCP_CONVERSATION_SEARCH_SNIPPET_CHARS,
-                )[
-                    0
-                ].get("match_snippets")
+                    with_position=True,
+                )[0].get("match_snippets")
                 or []
             )
         search_views.add_segment_indexes(snippets, conv.get("transcript_segments"))

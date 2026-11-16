@@ -128,6 +128,12 @@ def test_keyword_index_down_is_counted_as_a_fallback_even_with_vector_hits(index
     assert len(fallbacks) == 1 and fallbacks[0]['outcome'] == 'degraded'
 
 
+def test_stale_index_ids_never_crowd_out_valid_hits_further_down(indexes):
+    indexes['vector'], indexes['keyword'] = ['v1', 'v2', 'v3'], ['k1', 'k2', 'k3']
+    indexes['rows'] = {cid: conversation(cid) for cid in ('k1', 'k2', 'k3')}
+    assert [c['id'] for c in search(limit=3)['conversations']] == ['k1', 'k2', 'k3']
+
+
 def test_no_hits_with_the_keyword_index_down_is_an_actionable_503(indexes):
     indexes['keyword_error'] = RuntimeError('typesense down')
     with pytest.raises(ToolExecutionError) as error:
@@ -229,6 +235,15 @@ def test_a_one_letter_word_in_the_query_must_be_said(scan):
     assert [m['conversation']['id'] for m in find()['matches']] == ['said']
 
 
+def test_legacy_segments_without_ids_still_get_a_segment_index(scan):
+    row = conversation('legacy', count=30, words={21: 'the series a terms'})
+    for segment in row['transcript_segments']:
+        segment.pop('id')
+    scan['rows'] = [row]
+    (hit,) = find()['matches'][0]['hits']
+    assert hit['segment_index'] == 21 and hit.get('segment_id') is None and '_position' not in hit
+
+
 def test_many_hits_in_one_conversation_are_capped_and_flagged(scan):
     scan['rows'] = [conversation('dense', count=20, words={i: f'series a point {i}' for i in range(0, 20, 2)})]
     (match,) = find()['matches']
@@ -250,9 +265,13 @@ def test_a_page_of_large_hits_stays_inside_the_serialized_budget_and_resumes(sca
 
 def test_transcript_search_in_one_conversation(monkeypatch, scan):
     row = conversation('one', count=400, words={12: 'series a', 300: 'the series a again'})
-    monkeypatch.setattr(
-        transcripts, 'fetch_conversation_for_detail', lambda uid, cid: dict(row) if cid == 'one' else None
-    )
+    projections = []
+
+    def fetch(uid, cid, extra_field_paths=None):
+        projections.append(extra_field_paths)
+        return dict(row) if cid == 'one' else None
+
+    monkeypatch.setattr(transcripts, 'fetch_conversation_for_detail', fetch)
     result = find(conversation_id='one')
     assert [h['segment_index'] for h in result['matches'][0]['hits']] == [12, 300]
     assert result['complete'] is True and result['next_cursor'] is None and scan['calls'] == []
@@ -263,6 +282,11 @@ def test_transcript_search_in_one_conversation(monkeypatch, scan):
     with pytest.raises(ToolExecutionError) as error:
         find(conversation_id='one')
     assert error.value.code == -32002
+    # The scoped read asks for the deferred flag the unscoped scanner excludes on.
+    assert all('processing_deferred' in (paths or []) for paths in projections)
+    row['is_locked'] = False
+    row['processing_deferred'] = True
+    assert find(conversation_id='one')['matches'] == []
 
 
 @pytest.mark.parametrize(

@@ -69,7 +69,9 @@ def add_segment_indexes(snippets: List[Dict[str, Any]], segments: Any) -> List[D
     index_of = {str(s['id']): i for i, s in enumerate(rows) if s.get('id') is not None}
     for snippet in snippets:
         sid = snippet.get('segment_id')
-        snippet['segment_index'] = index_of.get(str(sid)) if sid is not None else None
+        # Legacy segments have no id: fall back to the matcher's position in the same dict list.
+        position = snippet.pop('_position', None)
+        snippet['segment_index'] = index_of.get(str(sid)) if sid is not None else position
     return snippets
 
 

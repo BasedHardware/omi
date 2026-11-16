@@ -229,6 +229,7 @@ def build_transcript_match_snippets(
     max_snippets: int = 3,
     max_chars: int = _MAX_SNIPPET_CHARS,
     center_match: bool = False,
+    with_position: bool = False,
 ) -> List[Dict[str, Any]]:
     """Return grep-style transcript snippets for segments matching ``query``.
 
@@ -333,6 +334,8 @@ def build_transcript_match_snippets(
                 "speaker_id": None,
                 "speaker_key": display.for_segment(hit).key,
                 "speaker_label": display.label(hit),
+                # The hit's list position, for segments stored without an id (opt-in; private key).
+                **({"_position": center} if with_position else {}),
             }
         )
     return snippets
@@ -470,6 +473,7 @@ def attach_match_snippets_to_conversations(
     query: str,
     *,
     max_chars: int = _MAX_SNIPPET_CHARS,
+    with_position: bool = False,
 ) -> List[Dict[str, Any]]:
     """Copy conversations and attach ``match_snippets`` from transcript_segments."""
     enriched: List[Dict[str, Any]] = []
@@ -479,6 +483,8 @@ def attach_match_snippets_to_conversations(
         item = dict(conv)
         segments_raw = item.get("transcript_segments") or []
         segments: List[Any] = segments_raw if isinstance(segments_raw, list) else []
-        item["match_snippets"] = build_transcript_match_snippets(segments, query, max_chars=max_chars)
+        item["match_snippets"] = build_transcript_match_snippets(
+            segments, query, max_chars=max_chars, with_position=with_position
+        )
         enriched.append(item)
     return enriched

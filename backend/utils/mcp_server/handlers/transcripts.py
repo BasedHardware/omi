@@ -64,7 +64,7 @@ def search_transcripts(
     )
 
     if conversation_id:
-        row = fetch_conversation_for_detail(uid, conversation_id)
+        row = fetch_conversation_for_detail(uid, conversation_id, extra_field_paths=['processing_deferred'])
         if row is None:
             raise ToolExecutionError(
                 'Conversation not found. Use the full id from get_conversations or search results.', code=-32001
@@ -173,6 +173,7 @@ def _conversation_match(row: Dict[str, Any], query: str) -> Optional[Dict[str, A
         max_snippets=search_views.TRANSCRIPT_HITS_PER_CONVERSATION + 1,
         max_chars=search_views.TRANSCRIPT_HIT_MAX_CHARS,
         center_match=True,
+        with_position=True,
     )
     if not snippets:
         return None
