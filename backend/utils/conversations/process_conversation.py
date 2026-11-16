@@ -3165,7 +3165,7 @@ def process_conversation(
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = not is_recovery_trigger(trigger)
+        capture_audio = not is_recovery_trigger(trigger) and not getattr(conversation, 'v3_derived', False)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)

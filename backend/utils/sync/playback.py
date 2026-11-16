@@ -158,6 +158,26 @@ def _run_parallel_precache(
 def precache_audio_files(
     uid: str, conversation_id: str, audio_files: list[dict[str, Any]], *, playback_epoch: str | None = None
 ) -> dict[str, Any]:
+    if any(af.get('recording_id') for af in audio_files):
+        from utils.conversations.v3.audio import resolve
+        from database import conversations as conversations_db
+
+        owner = conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted') or owner.get('is_locked'):
+            raise HTTPException(404, 'Conversation not found')
+        for alias in audio_files:
+            rid, original, recording = resolve(uid, owner, alias)
+            precache_audio_files(
+                uid,
+                rid,
+                [original],
+                **(
+                    {'playback_epoch': recording['playback_eager_epoch']}
+                    if recording.get('playback_eager_epoch')
+                    else {}
+                ),
+            )
+        return {'status': 'started', 'audio_file_count': len(audio_files)}
     if not audio_files:
         return {"status": "no_audio", "message": "No audio files in conversation"}
 

@@ -464,13 +464,14 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
                 raise Conflict('merge_recording_unavailable')
         for rid, snapshot in records:
             row = snapshot.to_dict() or {}
-            claims = [c for c in row.get('claims') or [] if c['conversation_id'] not in source_ids | {target['id']}]
+            claims = [c for c in row.get('claims') or [] if c['conversation_id'] not in source_ids]
             claims.extend(
                 {**claim, 'conversation_id': target['id']}
                 for claim in row.get('claims') or []
                 if claim['conversation_id'] in source_ids
             )
-            tx.update(coll.document(rid), {'claims': claims})
+            unique = {(c['conversation_id'], c['start'], c['end']): c for c in claims}
+            tx.update(coll.document(rid), {'claims': list(unique.values())})
         for cid, snapshot in source_rows:
             if snapshot.exists:
                 tx.update(coll.document(cid), {'v3_claims_transferred_to': target['id']})
