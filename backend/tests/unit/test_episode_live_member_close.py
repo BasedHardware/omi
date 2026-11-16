@@ -369,23 +369,32 @@ def test_agreeing_but_future_clocks_cannot_move_membership(timeline_store):
     assert db.rows == before
 
 
-def test_initial_admission_before_first_frame_uses_two_corroborated_stored_clocks(timeline_store):
+@pytest.mark.parametrize('started_at', [True, False])
+def test_initial_admission_uses_row_clocks_without_optional_audio_metadata(timeline_store, started_at):
     db = timeline_store
     seed(db, start=T0 + timedelta(hours=1, seconds=1))
-    db.rows[('users', 'owner', 'conversations', 'live')].pop('server_batch_audio_start')
+    row = db.rows[('users', 'owner', 'conversations', 'live')]
+    for key in ('server_batch_audio_start', 'recorded_start', 'clock'):
+        row.pop(key)
+    row['created_at'] = row['started_at']
+    if not started_at:
+        row.pop('started_at')
     result = place(db)
     assert result['status'] == 'live' and result['id'] != 'old'
     assert not result['_live_member_rehomed']
     assert result['started_at'] == T0 + timedelta(hours=1, seconds=1)
+    before = deepcopy(db.rows)
+    retry = place(db)
+    assert retry['id'] == result['id']
+    assert '_live_member_clock_refusal' not in retry
+    assert db.rows == before
 
 
-@pytest.mark.parametrize('field', ['started_at', 'recorded_start'])
-def test_initial_admission_still_refuses_missing_corroborating_source(timeline_store, field):
+def test_initial_admission_still_refuses_missing_both_row_clocks(timeline_store):
     db = timeline_store
     seed(db)
     row = db.rows[('users', 'owner', 'conversations', 'live')]
-    row.pop('server_batch_audio_start')
-    row[field] = None
+    row['started_at'] = row['created_at'] = None
     before = deepcopy(db.rows)
     with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_missing'):
         place(db)
@@ -434,19 +443,40 @@ def test_recorded_time_rollback_stops_repair_but_keeps_finished_subset_readiness
     assert 'live' not in store.episode['composed_member_ids']
 
 
-@pytest.mark.parametrize('failure', ['future', 'disagreement', 'untrusted'])
-def test_initial_admission_without_batch_stamp_still_rejects_bad_stored_clocks(timeline_store, failure):
+@pytest.mark.parametrize('field', ['started_at', 'created_at'])
+def test_initial_admission_bounds_the_selected_row_clock_against_server_time(timeline_store, field):
     db = timeline_store
     seed(db)
     row = db.rows[('users', 'owner', 'conversations', 'live')]
-    row.pop('server_batch_audio_start')
-    if failure == 'future':
-        row['started_at'] = row['recorded_start'] = datetime.now(timezone.utc) + timedelta(minutes=1)
-    elif failure == 'disagreement':
-        row['recorded_start'] += timedelta(seconds=6)
-    else:
-        row['clock'] = 'estimated_device'
+    row.pop('started_at')
+    row[field] = datetime.now(timezone.utc) + timedelta(minutes=1)
     before = deepcopy(db.rows)
-    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_' + failure):
+    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_future'):
+        place(db)
+    assert db.rows == before
+
+
+def test_initial_admission_does_not_require_optional_audio_clocks_to_agree(timeline_store):
+    db = timeline_store
+    seed(db, start=T0 + timedelta(hours=1, seconds=1))
+    row = db.rows[('users', 'owner', 'conversations', 'live')]
+    row.update(
+        created_at=T0 + timedelta(hours=2),
+        recorded_start=T0,
+        server_batch_audio_start=(datetime.now(timezone.utc) + timedelta(minutes=1)).timestamp(),
+        clock=None,
+    )
+    result = place(db)
+    assert result['status'] == 'live' and result['id'] != 'old'
+    assert result['started_at'] == row['started_at']
+    assert not result['_live_member_rehomed']
+
+
+def test_initial_admission_still_refuses_explicitly_untrusted_capture(timeline_store):
+    db = timeline_store
+    seed(db)
+    db.rows[('users', 'owner', 'conversations', 'live')]['capture_time_trust'] = 'untrusted'
+    before = deepcopy(db.rows)
+    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_untrusted'):
         place(db)
     assert db.rows == before

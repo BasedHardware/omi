@@ -265,10 +265,19 @@ def test_uncertain_clocks_retain_membership_but_real_compose_tick_self_heals(db,
     assert counted == [reason]
 
 
-def test_admission_before_first_frame_opens_live_successor_without_rehoming(db):
+@pytest.mark.parametrize('started_at', [True, False])
+def test_admission_before_first_frame_opens_live_successor_without_rehoming(db, started_at):
     client, uid = db
     root, old, template = seed(client, uid)
-    root.collection('conversations').document('live').update({'server_batch_audio_start': firestore.DELETE_FIELD})
+    root.collection('conversations').document('live').update(
+        {
+            'started_at': template['started_at'] if started_at else firestore.DELETE_FIELD,
+            'created_at': template['started_at'],
+            'server_batch_audio_start': firestore.DELETE_FIELD,
+            'recorded_start': firestore.DELETE_FIELD,
+            'clock': firestore.DELETE_FIELD,
+        }
+    )
     result = placement.place(uid, 'live', template=template, firestore_client=client, admission=True)
     assert result['id'] != 'old' and result['status'] == 'live'
     assert not result['_live_member_rehomed']

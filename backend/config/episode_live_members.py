@@ -49,8 +49,20 @@ def _utc(value: Any) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def capture_start(row: Mapping[str, Any], *, now: datetime, require_batch: bool = True) -> CaptureStart:
-    """Bounded corroboration only; never prefer one clock over conflicting evidence."""
+def admission_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
+    """Unowned live admissions precede audio clocks; use the stored admission clock."""
+    started = _utc(row.get('started_at')) or _utc(row.get('created_at'))
+    if started is None:
+        return CaptureStart(refusal='missing')
+    if row.get('capture_time_trust') == 'untrusted':
+        return CaptureStart(refusal='untrusted')
+    if started > now + timedelta(seconds=CAPTURE_FUTURE_SKEW_SECONDS):
+        return CaptureStart(refusal='future')
+    return CaptureStart(lower=started, upper=started)
+
+
+def capture_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
+    """Changing an owner requires all three trusted clocks to corroborate."""
     value = row.get('server_batch_audio_start')
     batch = None
     if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
@@ -59,13 +71,11 @@ def capture_start(row: Mapping[str, Any], *, now: datetime, require_batch: bool 
         except (OverflowError, OSError, ValueError):
             pass
     started, recorded = _utc(row.get('started_at')), _utc(row.get('recorded_start'))
-    if started is None or recorded is None or (batch is None and (require_batch or value is not None)):
+    if started is None or recorded is None or batch is None:
         return CaptureStart(refusal='missing')
     if row.get('capture_time_trust') == 'untrusted' or row.get('clock') not in {'live_capture', 'frame', 'device'}:
         return CaptureStart(refusal='untrusted')
-    # Initial admission precedes the first frame's batch stamp. It may use the
-    # two corroborated stored clocks; changing an existing owner requires all three.
-    clocks = [started, recorded] + ([batch] if batch is not None else [])
+    clocks = [started, recorded, batch]
     lower, upper = min(clocks), max(clocks)
     if upper > now + timedelta(seconds=CAPTURE_FUTURE_SKEW_SECONDS):
         return CaptureStart(refusal='future')

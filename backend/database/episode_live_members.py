@@ -104,9 +104,16 @@ def place(
         )
         if linked and (not owner or cid not in (owner.get('conversation_ids') or [])):
             raise episodes.EpisodeConflict('live_member_owner_changed')
-        # Re-read all clocks in the ownership transaction, including every retry.
-        capture = live.capture_start(row, now=datetime.now(timezone.utc), require_batch=owner is not None)
         boundary = owner.get('closed_at') if owner else None
+        if owner and (
+            owner.get('status') == 'live'
+            or owner.get('close_reason') not in {'gap', 'idle'}
+            or not isinstance(boundary, datetime)
+        ):
+            return {**owner, '_live_member_rehomed': False}
+        # Re-read all clocks in the ownership transaction, including every retry.
+        clock = live.capture_start if owner is not None else live.admission_start
+        capture = clock(row, now=datetime.now(timezone.utc))
         refusal = capture.refusal
         if (
             not refusal
@@ -123,14 +130,8 @@ def place(
         start = capture.lower
         if start is None:
             raise episodes.EpisodeConflict('live_member_capture_clock_missing')
-        if owner:
-            if (
-                owner.get('status') == 'live'
-                or owner.get('close_reason') not in {'gap', 'idle'}
-                or not isinstance(boundary, datetime)
-                or start < boundary
-            ):
-                return {**owner, '_live_member_rehomed': False}
+        if owner and isinstance(boundary, datetime) and start < boundary:
+            return {**owner, '_live_member_rehomed': False}
         fence = links.document('recorded_timeline')
         fence_row = fence.get(transaction=transaction).to_dict() or {}
         current = links.document('current').get(transaction=transaction).to_dict() or {}
