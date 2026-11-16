@@ -31,7 +31,12 @@ does **not** reuse the advisory maintenance lease, which can fail open.
 Each tick reads `{ns}_leases/backlog_heartbeat` and `{ns}_backlog_release/gate`
 and writes both in **one transaction**. A random process holder plus monotonic
 fence generation owns a 120-second lease. Followers cannot refresh the gate;
-every transaction retry rereads ownership, tokens and the clock. A new holder
+every transaction retry rereads ownership, tokens and the clock. Both reads
+preserve document existence. Initialization is allowed only when **both** lease
+and gate are proven absent. Any existing lease, including an empty document,
+must validate; a missing lease beside an existing gate or a missing gate beside
+an existing lease stops the authority. No repair may reset a fence or budget.
+A new holder
 waits for both lease expiry and the previous gate's 180-second validity to end.
 A resumed former holder cannot write through the new holder's live lease. There
 is no separate unfenced write after acquisition. Any config, clock, store or
@@ -124,12 +129,16 @@ operating alongside a potentially unmetered committer. Never use meter `false`
 plus legacy `true`. A writer config change is effective only on the current
 lease holder; complete a rollout/stop old writers before relying on it.
 
-### Operator runbook: one owner at 60/hour (requires separate production approval)
+### Operator runbook: proposed one-owner 60/hour example (not an approved activation rate)
 
 Do not run production writes merely because this code merged. The implementation
 lane has no authorization to open the gate, deploy, or change flags. Use the
 normal approved release pipeline; production images ship through GitHub Actions.
-The following is the concrete activation configuration, not a change made here.
+**60/hour is a proposed runbook example, not an approved activation rate.**
+Activation, owner cohort and the actual rate remain a separate quality-lead/Release
+decision. This PR does not approve or perform activation and opens no gate;
+the writer stays disabled and gate state closed by default. The configuration
+below may be used only after that separate decision approves its values.
 
 1. **Keep closed and inventory.** With writer disabled, check the traffic-bearing
    Cloud Run revisions (`status.traffic`, not the service template), all GKE
@@ -213,8 +222,9 @@ The following is the concrete activation configuration, not a change made here.
    IDs/content. If that owner's existing projection depth is full, refusal is
    expected: projection must drain first; do not bypass the headroom guard.
    Grants alone are not evidence that Home received the result. The release
-   owner should review the first hour at 60/hour, with no automatic increase.
-   This bounded exclusive cap is deliberate: a support case of about 369 held
+   owner should review the first hour at the separately approved rate, with no
+   automatic increase; the 60/hour example remains a proposal.
+   The proposed bounded exclusive cap is deliberate: a support case of about 369 held
    units would require about 185 grant-hours at 2/hour, versus about 6.2 at
    60/hour, before projection delays, retries and hour boundaries. These are
    planning estimates, not measured delivery. Only one owner is eligible;

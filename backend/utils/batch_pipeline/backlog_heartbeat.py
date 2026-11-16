@@ -48,12 +48,12 @@ class HeartbeatAuthority:
             raise ValueError('heartbeat authority cannot run with legacy unmetered release configured')
 
         def body(tx):
-            lease = tx.get('leases', LEASE_KEY)
+            lease = tx.get_existing('leases', LEASE_KEY)
             row = tx.get_existing('backlog_release', 'gate')
             now = self.clock()  # Resampled on transaction retries.
             if type(now) not in (float, int) or not 0 <= now < float('inf'):
                 raise ValueError('invalid heartbeat clock')
-            if lease:
+            if lease is not None:
                 if (
                     set(lease) != {'holder', 'fence', 'expires_at', 'renewed_at'}
                     or not isinstance(lease['holder'], str)
@@ -65,19 +65,21 @@ class HeartbeatAuthority:
                     or not 0 <= lease['renewed_at'] <= now
                 ):
                     raise ValueError('invalid heartbeat lease or regressing clock')
-                if lease['expires_at'] > now and lease['holder'] != self.holder:
-                    return None
             gate = Gate.parse(row) if row is not None else None
-            if lease and row is None:
+            if lease is not None and row is None:
                 raise ValueError('missing backlog gate after authority initialization')
             if row is not None and gate is None:
                 # A malformed count must never be repaired by resetting the budget.
                 raise ValueError('invalid existing backlog gate')
+            if lease is None and row is not None:
+                raise ValueError('missing heartbeat lease after authority initialization')
             if gate and now < gate.updated_at:
                 raise ValueError('heartbeat clock regressed')
+            if lease is not None and lease['expires_at'] > now and lease['holder'] != self.holder:
+                return None
             # An expired lease cannot introduce a second clock within the old
             # heartbeat's validity. Wait a full gate lifetime on takeover.
-            if lease and lease['holder'] != self.holder and gate and now - gate.updated_at < 180:
+            if lease is not None and lease['holder'] != self.holder and gate and now - gate.updated_at < 180:
                 return None
             window = gate.window if gate else int(now // 3600)
             used = gate.tokens_used if gate else 0
@@ -97,7 +99,7 @@ class HeartbeatAuthority:
                 mode=config.mode,
                 owner_keys=list(config.owner_keys),
             )
-            fence = lease.get('fence', 0) + int(not lease or lease['holder'] != self.holder)
+            fence = 1 if lease is None else lease['fence'] + int(lease['holder'] != self.holder)
             tx.put(
                 'leases',
                 LEASE_KEY,

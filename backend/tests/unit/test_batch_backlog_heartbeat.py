@@ -528,3 +528,67 @@ def test_earlier_projection_sequence_requires_a_distinct_valid_log_tail(tail, al
     )
     assert bool(merge(store)) is allowed
     assert tokens(store) == int(allowed)
+
+
+@pytest.fixture(params=['memory', 'firestore'])
+def authority_store(request, monkeypatch):
+    if request.param == 'memory':
+        return MemoryStore()
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    return FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
+
+
+def control_documents(store):
+    return store.run(
+        lambda tx: {
+            'lease': tx.get_existing('leases', LEASE_KEY),
+            'gate': tx.get_existing('backlog_release', 'gate'),
+        }
+    )
+
+
+@pytest.mark.parametrize('gate_exists', [False, True], ids=['absent-gate', 'fresh-gate'])
+def test_empty_existing_lease_latches_without_initialization_or_takeover(authority_store, gate_exists, monkeypatch):
+    store = authority_store
+    if gate_exists:
+        assert authority(store).tick()
+        store.run(lambda tx: tx.put('backlog_release', 'gate', {**tx.get('backlog_release', 'gate'), 'tokens_used': 1}))
+    store.run(lambda tx: tx.put('leases', LEASE_KEY, {}))
+    before = control_documents(store)
+    run = store.run
+    writes = Mock()
+
+    def observed(body):
+        def check(tx):
+            monkeypatch.setattr(tx, 'put', writes)
+            return body(tx)
+
+        return run(check)
+
+    monkeypatch.setattr(store, 'run', observed)
+    writer = authority(store, now=NOW + 121)  # Fresh gate still forbids a new clock, even after lease TTL.
+    with pytest.raises(ValueError, match='invalid heartbeat lease'):
+        writer.tick()
+    assert writer.failed and not writer.tick()
+    writes.assert_not_called()  # No attempted fence=1 reset or open-gate write, even if rolled back.
+    monkeypatch.setattr(store, 'run', run)
+    assert control_documents(store) == before
+    assert before['lease'] == {}
+    if gate_exists:
+        assert before['gate']['tokens_used'] == 1 and before['gate']['updated_at'] == NOW
+    else:
+        assert before['gate'] is None
+
+
+def test_absent_lease_with_existing_gate_cannot_reinitialize_fence(authority_store):
+    store = authority_store
+    seed = MemoryStore()
+    assert authority(seed).tick()
+    store.run(lambda tx: tx.put('backlog_release', 'gate', row(seed)))
+    before = control_documents(store)
+    writer = authority(store, now=NOW + 121)
+    with pytest.raises(ValueError, match='missing heartbeat lease'):
+        writer.tick()
+    assert writer.failed and not writer.tick()
+    assert control_documents(store) == before
+    assert before['lease'] is None
