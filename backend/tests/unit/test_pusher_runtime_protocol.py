@@ -192,3 +192,46 @@ async def test_private_cloud_shutdown_exhausts_bounded_upload_attempts(runtime, 
     assert websocket.close_code == 1000
     pusher.PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc.assert_called_once_with()
     journey.finish.assert_called_once_with('failure')
+
+
+def test_append_optional_evicts_oldest_and_releases_budget(monkeypatch):
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    budget = pusher_protocol.ByteBudget(100)
+    queue = deque(maxlen=2)
+    for i in range(3):
+        assert budget.reserve(10)
+        evicted = pusher_protocol.append_optional(
+            queue, {'type': 'webhook', 'sample_rate': 8000, 'data': bytes([i]) * 10}, 'audio_bytes', budget
+        )
+        assert evicted == (1 if i == 2 else 0)
+    assert [item['data'][0] for item in queue] == [1, 2]
+    assert budget.used == 20
+    pusher_protocol.PUSHER_QUEUE_DROPS.labels.assert_called_with(queue='audio_bytes')
+
+
+def test_extend_optional_never_raises_and_evicts_stale_items_first(monkeypatch):
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPS', MagicMock())
+    monkeypatch.setattr(pusher_protocol, 'PUSHER_QUEUE_DROPPED_BYTES', MagicMock())
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'true')
+    budget = pusher_protocol.ByteBudget(30)
+    queue = deque(maxlen=5)
+    assert budget.reserve(20)
+    queue.append({'type': 'app', 'sample_rate': 8000, 'data': b'x' * 20})
+    buffer = bytearray()
+    # Needs 20 bytes with only 10 free: the stale queued item is evicted, never AudioBackpressure.
+    assert pusher_protocol.extend_optional(buffer, b'y' * 20, 'audio_app_buffer', budget, queue) is True
+    assert not queue and bytes(buffer) == b'y' * 20 and budget.used == 20
+    # Nothing left to evict: the new optional data is dropped, still without raising.
+    assert pusher_protocol.extend_optional(buffer, b'z' * 20, 'audio_app_buffer', budget, queue) is False
+    assert bytes(buffer) == b'y' * 20 and budget.used == 20
+
+
+def test_optional_audio_never_shares_custody_budget():
+    import inspect
+
+    source = inspect.getsource(pusher)
+    assert "extend_bounded(trigger_audiobuffer" not in source
+    assert "extend_bounded(audiobuffer" not in source
+    assert "append_bounded(\n            audio_bytes_queue" not in source

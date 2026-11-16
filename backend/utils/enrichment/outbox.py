@@ -229,6 +229,11 @@ def _conversation_finished_at(uid: str, conversation_id: str) -> object:
     return data.get('finished_at') if data.get('finished_at') is not None else data.get('created_at')
 
 
+def conversation_finished_at(uid: str, conversation_id: str) -> object:
+    """Public read of the freshness clock (``finished_at``, else ``created_at``) for lane checks."""
+    return _conversation_finished_at(uid, conversation_id)
+
+
 def _recent_conversation(uid: str, conversation_id: str, now: float) -> bool:
     if (
         enrichment_config.route() != 'enrichment_queue'
@@ -973,6 +978,7 @@ def sweep(
                 and fresh_queue
                 and enrichment_config.route() == 'enrichment_queue'
                 and first_summary_pending(row)
+                and not row.get('fresh_demoted')
                 and valid_dispatch_binding(row.get('dispatch'))
                 and row['dispatch']['queue'] == enrichment_config.primary_queue()
             ):

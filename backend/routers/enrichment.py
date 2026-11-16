@@ -64,6 +64,14 @@ def verify_enrichment_task(request: Request) -> int:
     return verify_configured_cloud_tasks_oidc(request, audience=_audience(), invoker_sa=invoker)
 
 
+def _from_fresh_queue(request: Request) -> bool:
+    """Cloud Tasks names the delivering queue; only fresh-queue deliveries pay the demotion read."""
+    from config import enrichment as enrichment_config
+
+    fresh = enrichment_config.fresh_queue()
+    return bool(fresh) and request.headers.get('X-CloudTasks-QueueName', '').strip() == fresh
+
+
 def _task(payload: object) -> tuple[str, str] | None:
     if not isinstance(payload, dict) or set(payload) != {'kind', 'key', 'task_token'}:
         return None
@@ -134,6 +142,20 @@ async def run_enrichment_task(request: Request, _retry_count: int = Depends(veri
         try:
             if await run_blocking(db_executor, park_if_expired, *task):
                 return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'age_gate_72h'})
+        except Exception as error:
+            from utils.enrichment.consumer import transient_dependency
+
+            if not transient_dependency(error):
+                raise
+            return retry_response(RetryReason.DEPENDENCY_WARMING)
+    if _from_fresh_queue(request):
+        # The reserved fresh lane is for fresh work: move an aged first summary to the primary
+        # queue instead of running it on a fresh slot (prod 2026-11-16 fresh backlog).
+        from utils.enrichment.fresh_demotion import demote_if_stale
+
+        try:
+            if await run_blocking(db_executor, demote_if_stale, *task):
+                return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'fresh_demoted'})
         except Exception as error:
             from utils.enrichment.consumer import transient_dependency
 
