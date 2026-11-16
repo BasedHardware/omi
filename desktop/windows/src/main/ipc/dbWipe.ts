@@ -44,6 +44,10 @@ export const USER_DATA_TABLES = [
   // cleared on account switch (drift-guard caught it missing — see dbWipe.test.ts).
   'voice_turn_outbox',
   // --- Track 3 (proactive) ---
+  // Pre-cloud AI-profile history. No longer created (the backend owns the
+  // profile), but an upgraded install keeps it until the AI profile service has
+  // uploaded its newest text (see legacyProfileTable.ts). Clearing it on sign-out
+  // is what keeps that upload to the account that wrote it.
   'ai_user_profiles',
   'focus_sessions',
   // Screen-extracted memories — user data derived from the user's screen; must be
@@ -79,6 +83,13 @@ export interface WipeableDb {
   prepare(sql: string): { run: () => unknown; get: () => unknown }
 }
 
+// Tables that may legitimately be absent: the JIT mirrors (fail-open additive
+// bootstrap) and the legacy AI-profile table (absent on fresh installs, dropped
+// after its one-time upload).
+const OPTIONAL_TABLES = new Set<string>(
+  USER_DATA_TABLES.filter((t) => t.startsWith('jit_') || t === 'ai_user_profiles')
+)
+
 function tableExists(d: WipeableDb, table: (typeof USER_DATA_TABLES)[number]): boolean {
   // USER_DATA_TABLES is a compile-time allowlist, so interpolating its table
   // name is safe and keeps this compatible with both SQLite drivers.
@@ -96,7 +107,7 @@ export function wipeUserDataOn(d: WipeableDb): void {
       // Legacy data bootstrap is additive and deliberately fail-open for the
       // app. If it failed before creating every optional mirror table, account
       // switching must still erase all legacy user data atomically.
-      if (table.startsWith('jit_') && !tableExists(d, table)) continue
+      if (OPTIONAL_TABLES.has(table) && !tableExists(d, table)) continue
       d.prepare(`DELETE FROM ${table}`).run()
     }
     d.exec('COMMIT')

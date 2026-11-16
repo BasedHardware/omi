@@ -135,6 +135,9 @@ class _OwnWrites:
     def get(self, table: str, key: str) -> dict:
         return self._tx.get(table, key)
 
+    def get_existing(self, table: str, key: str) -> dict | None:
+        return self._tx.get_existing(table, key)
+
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'jobs':
             self._jobs.add(key)

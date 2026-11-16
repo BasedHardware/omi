@@ -7,8 +7,8 @@
 // backend as an ordinary memory (category `system`), which is what makes focus
 // history searchable alongside everything else.
 //
-// The epoch guard is the load-bearing safety property, borrowed from
-// aiUserProfile/orchestrate.ts: a verdict formed under user A must never be
+// The epoch guard is the load-bearing safety property (see core/session.ts):
+// a verdict formed under user A must never be
 // written after A signs out and B signs in. The caller pins the epoch BEFORE the
 // (long) Gemini call; here it is re-read immediately before each write with NO
 // await in between, so a session change during the analysis cannot slip a

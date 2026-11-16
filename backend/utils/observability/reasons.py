@@ -52,6 +52,7 @@ class MemoryL1Reason(StrEnum):
 
 
 class ReasonFamily(StrEnum):
+    AUDIO_RAW = 'audio_raw'
     MEMORY_L1 = 'memory_l1'
     PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
@@ -118,6 +119,19 @@ class PusherPcmStage(StrEnum):
     UNKNOWN = 'unknown'
     LIVE = 'live'
     TAIL = 'tail'
+
+
+class RawPackExclusionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ARRIVAL_CLOCK = 'arrival_clock'
+    DISABLED = 'disabled'
+    BOUNDS = 'bounds'
+    CHANNELS = 'channels'
+    CODEC = 'codec'
+    LAYOUT = 'layout'
+    MISSING_MANIFEST = 'missing_manifest'
+    AMBIGUOUS_MANIFEST = 'ambiguous_manifest'
+    INVALID = 'invalid'
 
 
 class PusherPcmErrorReason(StrEnum):

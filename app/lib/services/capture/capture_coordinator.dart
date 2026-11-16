@@ -2632,7 +2632,7 @@ CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvi
   if (state.pendantSuspension != null) {
     return CaptureTransition(state.copyWith(suspended: _withPendantWasPaused(state.suspended, false)), const []);
   }
-  return CaptureTransition(state, const []);
+  return _reduceResume(state, env); // Idle muted pendant: unmute like the app's Resume, never a dead end.
 }
 
 CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment env) {

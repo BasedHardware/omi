@@ -9,6 +9,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from fastapi import WebSocketException
+
+from config import listen_reconnect
+from database import listen_batch_reconnect
 from config.pusher_record import close_notify_enabled
 from config.batch_live_preview import capture_snapshot
 from config.server_batch import owned as server_batch_owned
@@ -60,7 +64,7 @@ from utils.conversations.lifecycle_clocks import speech_clock
 from utils.episodes import boundaries, boundary_runtime
 from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
-from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action
+from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action, merge_permitted
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +97,137 @@ class LiveConversationController:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_recording_session_lease_renewal: datetime | None = None
+        self._batch_producer_tokens: dict[str, str] = {}
+        self._batch_renewed_at: datetime | None = None
 
-    async def _persist_policy_and_arm_quiet_check(self, conversation_id: str) -> None:
+    def batch_producer_token(self, conversation_id: str) -> str | None:
+        return self._batch_producer_tokens.get(conversation_id)
+
+    async def _claim_batch_producer(self, conversation_id: str, row: dict[str, Any]) -> bool:
+        existing_protocol = bool(listen_reconnect.producer(row))
+        if existing_protocol and not listen_reconnect.enabled():
+            ended = await self.host.persistence.call(
+                listen_batch_reconnect.end_disabled_hold,
+                self.host.request.uid,
+                conversation_id,
+                now=self.clock(),
+            )
+            if ended:
+                # No new token or archive binding: the drained owner remains
+                # fenced. The old indexed wake survives a failed rearm.
+                await self.host.persistence.call(
+                    quiet_finalization.arm,
+                    self.host.request.uid,
+                    conversation_id,
+                    self.host.conversation_creation_timeout,
+                )
+            return False
+        mobile = getattr(self.host.client_device_context, 'platform', None) in {'ios', 'android'}
+        if existing_protocol and not mobile:
+            return False
+        eligible = bool(
+            server_batch_owned(row)
+            and mobile
+            and listen_reconnect.enabled()
+            and quiet_finalization.enabled()
+            and not self.host.is_multi_channel
+            and self.host.client_conversation_id
+            and self.host.client_device_context.client_device_id
+            and normalize_listen_source(self.host.request.source) in {'omi', 'phone'}
+        )
+        if not existing_protocol and not eligible:
+            return True
+        if not await merge_permitted(self, row):
+            return False
+        if conversation_id not in self._batch_producer_tokens and len(self._batch_producer_tokens) >= 64:
+            raise WebSocketException(code=1013, reason='Recording session rotation limit; reconnect')
+        token = self._batch_producer_tokens.get(conversation_id) or uuid.uuid4().hex
+        result = await self.host.persistence.call(
+            listen_batch_reconnect.claim,
+            self.host.request.uid,
+            conversation_id,
+            self.host.recording_session_id,
+            token=token,
+            origin_id=self.host.client_conversation_id,
+            source=normalize_listen_source(self.host.request.source),
+            device_id=self.host.client_device_context.client_device_id,
+            now=self.clock(),
+            timeout=self.host.conversation_creation_timeout,
+        )
+        if result == 'busy':
+            # A competing socket gets no ingress binding and cannot finalize the winner.
+            raise WebSocketException(code=1013, reason='Recording producer is still draining; retry')
+        if result != 'claimed':
+            return False
+        self._batch_producer_tokens[conversation_id] = token
+        self._batch_renewed_at = self.clock()
+        return True
+
+    async def disconnect_batch_producer(self, conversation_id: str, *, reason: str | None) -> str:
+        token = self.batch_producer_token(conversation_id)
+        if token is None:
+            return 'legacy'
+        disconnected_at = self.clock()
+        # This flush seals only this producer's immutable packs. Do not publish
+        # the global close barrier or a finalization obligation during the grace.
+        await self.host.receiver.raw_archive.close()
+        outcome = await self.host.persistence.call(
+            listen_batch_reconnect.disconnect,
+            self.host.request.uid,
+            conversation_id,
+            self.host.recording_session_ids_by_conversation[conversation_id],
+            token,
+            disconnected_at=disconnected_at,
+            now=self.clock(),
+            timeout=self.host.conversation_creation_timeout,
+            terminal=(
+                reason in listen_reconnect.TERMINAL_REASONS
+                or not listen_reconnect.enabled()
+                or not quiet_finalization.enabled()
+            ),
+        )
+        if outcome == 'held':
+            try:
+                armed = await self._persist_policy_and_arm_quiet_check(conversation_id)
+            except Exception as error:
+                logger.warning('Reconnect check persistence failed type=%s', type(error).__name__)
+                armed = False
+            if not armed:
+                return await self.host.persistence.call(
+                    listen_batch_reconnect.disconnect,
+                    self.host.request.uid,
+                    conversation_id,
+                    self.host.recording_session_ids_by_conversation[conversation_id],
+                    token,
+                    disconnected_at=disconnected_at,
+                    now=self.clock(),
+                    timeout=self.host.conversation_creation_timeout,
+                    terminal=True,
+                )
+            logger.info('event=listen_batch_reconnect outcome=held')
+        return outcome
+
+    async def _renew_batch_producer(self, conversation_id: str) -> bool:
+        token = self.batch_producer_token(conversation_id)
+        if token is None:
+            return True
+        if (
+            self._batch_renewed_at
+            and (self.clock() - self._batch_renewed_at).total_seconds() < listen_reconnect.RENEW_SECONDS
+        ):
+            return True
+        renewed = await self.host.persistence.call(
+            listen_batch_reconnect.renew,
+            self.host.request.uid,
+            conversation_id,
+            self.host.recording_session_ids_by_conversation[conversation_id],
+            token,
+            now=self.clock(),
+        )
+        self._batch_renewed_at = self.clock()
+        return renewed
+
+    async def _persist_policy_and_arm_quiet_check(self, conversation_id: str) -> bool:
         await persist_conversation_policy(self.host, conversation_id)
         if (
             not getattr(self.host, 'is_multi_channel', False)
@@ -104,19 +237,20 @@ class LiveConversationController:
             # Do not expose a new recording generation to ingress until its
             # durable recovery obligation exists. Enqueue failure is safe: the
             # check remains indexed for the independent reconciler.
-            await self.host.persistence.call(
+            return await self.host.persistence.call(
                 quiet_finalization.arm,
                 self.host.request.uid,
                 conversation_id,
                 self.host.conversation_creation_timeout,
                 requires_byok=bool(get_byok_keys()),
             )
+        return False
 
     def note_audio_activity(self) -> None:
         """Renew the active recording fence at most once per minute."""
         conversation_id = self.host.state.current_conversation_id
         recording_session_id = self.host.recording_session_id
-        if not conversation_id or not recording_session_id:
+        if not conversation_id or not recording_session_id or self.batch_producer_token(conversation_id):
             return
         now = self.clock()
         last = self._last_recording_session_lease_renewal
@@ -186,6 +320,8 @@ class LiveConversationController:
             return False
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.batch_record_capture = capture_snapshot(existing)
+        if not await self._claim_batch_producer(binding['conversation_id'], existing):
+            return False
         await self._persist_policy_and_arm_quiet_check(binding['conversation_id'])
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
@@ -417,6 +553,9 @@ class LiveConversationController:
                 logger.info('Listen finalization skipped conversation=%s outcome=%s', conversation_id, guard)
                 return False
         if server_batch_owned(data):
+            producer = listen_reconnect.producer(data)
+            if producer and producer.get('token') != self.batch_producer_token(conversation_id):
+                return False
             # Commit the silence/partial-window tail before creating a batch obligation.
             data = await close_batch_archive(self.host, conversation_id, data)
             if not data:
@@ -602,6 +741,9 @@ class LiveConversationController:
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
+                if not await self._claim_batch_producer(conversation_id, existing):
+                    await self.create_new_in_progress_conversation(rollover=True)
+                    return
                 await self._persist_policy_and_arm_quiet_check(conversation_id)
                 self.host.state.current_conversation_id = conversation_id
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
@@ -634,7 +776,9 @@ class LiveConversationController:
             'conversation_role': request.conversation_role,
             'recording_session_id': self.host.recording_session_id,
         }
-        if self.host.client_conversation_id and sync_lineage_resolve_enabled():
+        if self.host.client_conversation_id and (
+            sync_lineage_resolve_enabled() or (listen_reconnect.enabled() and server_batch_request_eligible(self.host))
+        ):
             # Every rollover generation names the client's recording, which the
             # phone also stamps on its WALs, so sync can find them all.
             external_data['recording_origin_id'] = self.host.client_conversation_id
@@ -767,6 +911,8 @@ class LiveConversationController:
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
+        if not await self._claim_batch_producer(conversation_id, {**payload, **(self.host.batch_record_capture or {})}):
+            raise WebSocketException(code=1013, reason='Recording ownership changed; retry')
         await self._persist_policy_and_arm_quiet_check(conversation_id)
         self.host.state.current_conversation_id = conversation_id
         # Fresh v2 generation: the origin is pinned by the receiver at the
@@ -907,6 +1053,9 @@ class LiveConversationController:
             await self.create_new_in_progress_conversation(rollover=True)
             return None
         self.host.batch_record_capture = capture_snapshot(existing)
+        if not await self._claim_batch_producer(existing['id'], existing):
+            await self.create_new_in_progress_conversation(rollover=True)
+            return None
         await self._persist_policy_and_arm_quiet_check(existing['id'])
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
@@ -1064,6 +1213,17 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            producer = listen_reconnect.producer(conversation)
+            if self.batch_producer_token(conversation_id) and (
+                producer.get('token') != self.batch_producer_token(conversation_id)
+                or (
+                    conversation.get('status') == ConversationStatus.in_progress
+                    and not await self._renew_batch_producer(conversation_id)
+                )
+            ):
+                self.host.state.active = False
+                self.host.state.close_code = 1013
+                return
             if conversation.get('status') != ConversationStatus.in_progress:
                 # Cloud Tasks has no socket callback. Observe its durable
                 # boundary before calendar/occasion holds or successor awaits.
@@ -1101,6 +1261,12 @@ class LiveConversationController:
             ):
                 # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
+                action = ConversationLifecycleAction.process_and_create_new
+            if (
+                producer
+                and (edge := listen_reconnect.utc(producer.get('boundary_at'))) is not None
+                and self.clock() >= edge
+            ):
                 action = ConversationLifecycleAction.process_and_create_new
             if action == ConversationLifecycleAction.create_new:
                 await self.create_new_in_progress_conversation(rollover=True)

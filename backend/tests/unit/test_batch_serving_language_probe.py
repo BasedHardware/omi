@@ -34,10 +34,13 @@ def world(monkeypatch, tmp_path):
             raise RuntimeError('synthetic privacy read unavailable')
         if state.revoked:
             raise BatchPrivacyBlocked('privacy_generation_changed')
-        snapshots['user'] = {'language': state.language, 'transcription_preferences': {}}
-        snapshots['conversations'] = {
-            'synthetic-conversation': {'language': state.language, 'record_lane_owner': 'batch_sync_v1'}
-        }
+        # The probe guard asks for a decision only (snapshots=None); intake asks
+        # for the row export it consumes.
+        if snapshots is not None:
+            snapshots['user'] = {'language': state.language, 'transcription_preferences': {}}
+            snapshots['conversations'] = {
+                'synthetic-conversation': {'language': state.language, 'record_lane_owner': 'batch_sync_v1'}
+            }
         return ProtectionContext('standard', 0)
 
     def units(*args, **kwargs):

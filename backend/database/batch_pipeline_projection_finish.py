@@ -47,12 +47,12 @@ def projection_finish_state_fields(state: str | None, now: float, *, async_proje
     }
 
 
-def projection_finish_entry_fields(state: str | None, now: float) -> dict:
+def projection_finish_entry_fields(state: str | None, now: float, *, async_projection: bool = False) -> dict:
     """The same fields for a whole-document ``set``, where sentinels are not values."""
     if state not in PROJECTION_FINISH_STATES:
         return {}
     return {
-        PROJECTION_FINISH_DUE_FIELD: now,
+        PROJECTION_FINISH_DUE_FIELD: PROJECTION_FINISH_ASYNC_CLOCK if async_projection else now,
         PROJECTION_FINISH_STEP_FIELD: 0,
         **followup_state_fields(state, now, entry=True),
     }
