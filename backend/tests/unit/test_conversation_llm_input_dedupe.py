@@ -616,7 +616,7 @@ def test_quality_contract_reuses_clean_old_checkpoint_without_a_paid_call(enable
     generate.assert_called_once()
 
 
-@pytest.mark.parametrize('violation', ['mechanics', 'empty_heading'])
+@pytest.mark.parametrize('violation', ['capture_availability', 'empty_heading'])
 @pytest.mark.parametrize('repair_fails', [False, True])
 def test_only_visible_concrete_violations_get_one_reserved_regeneration(enabled, monkeypatch, violation, repair_fails):
     from models.structured import Structured
@@ -657,6 +657,7 @@ def test_only_visible_concrete_violations_get_one_reserved_regeneration(enabled,
             output = dedupe.notes('u', enabled, 'unchanged', generate, current)
             row.update(current, structured=output.model_dump())
     assert generate.call_count == 1 and len(claims) == 1
+    metric.labels.assert_called_once_with(reason=violation)
     metric.labels.return_value.inc.assert_called_once()
 
 

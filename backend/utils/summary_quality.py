@@ -11,8 +11,6 @@ import re
 from copy import deepcopy
 from typing import Any, Mapping
 
-from utils.observability.fallback import record_fallback
-
 NOTE_QUALITY_RULES = """Write concrete notes, not narration about a conversation.
 State the actual proposal, reason, number with its referent, decision or unresolved question.
 Use second person only when the supplied SpeakerRoleMap/owner_attribution authority marks the source as
@@ -138,6 +136,8 @@ def title_or_fallback(value: Any, *, index: int | None = None) -> str:
     title = valid_title(value)
     if title:
         return title
+    from utils.observability.fallback import record_fallback
+
     record_fallback(
         component='conversation_notes',
         from_mode='generated_title',

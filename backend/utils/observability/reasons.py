@@ -51,6 +51,12 @@ class MemoryL1Reason(StrEnum):
     UNKNOWN = 'unknown'
 
 
+class NotesQualityRepairReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CAPTURE_AVAILABILITY = 'capture_availability'
+    EMPTY_HEADING = 'empty_heading'
+
+
 class ReasonFamily(StrEnum):
     AUDIO_RAW = 'audio_raw'
     MEMORY_L1 = 'memory_l1'
@@ -73,6 +79,7 @@ class ReasonFamily(StrEnum):
     SPEAKER_EVIDENCE = 'speaker_evidence'
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'

@@ -40,6 +40,7 @@ from utils.sync.repeat_work_metrics import record_feature
 from utils.task_intelligence import reminder_policy
 from database import notes_quality_repair
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import NotesQualityRepairReason, ReasonFamily, reason_label
 
 SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
@@ -291,7 +292,9 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         if violation and summary_present(saved) and notes_quality_repair.visible(row):
             regenerate = _claim_quality_repair(uid, conversation, row, repair_key)
             if regenerate:
-                QUALITY_REGENERATIONS.labels(reason=violation).inc()
+                QUALITY_REGENERATIONS.labels(
+                    reason=reason_label(ReasonFamily.NOTES_QUALITY_REPAIR, violation, NotesQualityRepairReason)
+                ).inc()
         # Deterministic cleanup always runs, including after a failed/exhausted repair.
         saved = Structured.model_validate(clean_structured(saved.model_dump()))
     if saved is not None and not regenerate:
@@ -311,16 +314,16 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
     return output
 
 
-def _quality_violation(structured: dict[str, Any]) -> str | None:
+def _quality_violation(structured: dict[str, Any]) -> NotesQualityRepairReason | None:
     texts = [structured.get(key) for key in ('title', 'overview', 'gist')]
     sections = [section for section in structured.get('sections') or [] if isinstance(section, dict)]
     texts.extend(text for section in sections for text in (section.get('heading'), section.get('body_markdown')))
     if any(capture_availability(text) for text in texts):
-        return 'capture_availability'
+        return NotesQualityRepairReason.CAPTURE_AVAILABILITY
     if not str(structured.get('title') or '').strip() or any(
         not str(section.get('heading') or '').strip() for section in sections
     ):
-        return 'empty_heading'
+        return NotesQualityRepairReason.EMPTY_HEADING
     return None
 
 
