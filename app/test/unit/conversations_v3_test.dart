@@ -87,6 +87,22 @@ void main() {
       expect(read.conversation?.transcriptSegments, isEmpty);
     });
 
+    test('a failed conversation decodes through the generated wire type', () {
+      final read = ConversationsLiveRead.fromJson({
+        'v3': true,
+        'conversation': {
+          'id': 'c-failed',
+          'structured': {'title': 'Planning', 'emoji': '🗓️'},
+          'started_at': '2026-11-16T09:00:00Z',
+          'created_at': '2026-11-16T09:00:00Z',
+          'finished_at': '2026-11-16T09:20:00Z',
+          'status': 'completed',
+          'tile_state': 'failed',
+        },
+      });
+      expect(read.conversation?.v3?.tileState, ConversationTileState.failed);
+    });
+
     test('an unreadable live row still answers the switch', () {
       final read = ConversationsLiveRead.fromJson({
         'v3': true,
