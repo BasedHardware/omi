@@ -4,6 +4,9 @@ import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+// The free plan's monthly-cap sheet. It owns only the layout and the reader's choice; what each
+// choice opens, and how often the sheet may show, belong to FreemiumSwitchHandler.
+
 enum FreeCapChoice { upgrade, transcribeOnPhone }
 
 /// The free plan's one prompt at the monthly cloud cap (David, 2026-11-16): Omi Pro first and
