@@ -125,6 +125,27 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                         CHECKER.validate(root),
                     )
 
+    def test_control_shaped_comment_cannot_mask_an_additional_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in CHECKER.WORKFLOWS:
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, target)
+            target = root / CHECKER.LISTEN_WORKFLOW
+            text = target.read_text()
+            # A valid multiline job name is data, not an isolated checkout step.
+            fake = '    name: |\n      # ' + CHECKER.CONTROL_CHECKOUT + '\n'
+            text = text.replace('  helm-upgrade:\n', '  helm-upgrade:\n' + fake, 1)
+            text += (
+                '\n      - uses: actions/checkout@' + CHECKER.CHECKOUT_PIN + '\n        with:\n          ref: main\n'
+            )
+            target.write_text(text)
+            self.assertIn(
+                f"{CHECKER.LISTEN_WORKFLOW} must not check out a second source after production admission",
+                CHECKER.validate(root),
+            )
+
     def test_wrong_pin_and_firestore_control_contracts_refuse(self):
         for replacement in ('actions/checkout@' + 'f' * 40, 'actions/checkout@v7x'):
             with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:

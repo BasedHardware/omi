@@ -160,6 +160,11 @@ def checkout_inventory(text: str) -> tuple[str, int, bool]:
     return normalized, count, unknown
 
 
+def isolated_checkout_count(text: str, contract: str) -> int:
+    # A comment or scalar containing the literal contract cannot exempt a source.
+    return len(re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?" + re.escape(contract) + r"[ \t]*(?:#[^\n]*)?$", text))
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     for relative in WORKFLOWS:
@@ -183,13 +188,13 @@ def validate(root: Path) -> list[str]:
         checkout_text, checkout_count, unknown_checkout = checkout_inventory(text)
         if unknown_checkout:
             errors.append(f"{relative} has an unapproved checkout action or version")
-        firestore_controls = checkout_text.count(CONTROL_CHECKOUT)
+        firestore_controls = isolated_checkout_count(checkout_text, CONTROL_CHECKOUT)
         source_checkouts = checkout_count - firestore_controls
         if relative == LISTEN_WORKFLOW:
             # A separate immutable control checkout is not an application source.
             # Recognize only the exact path/ref/nonpersistent-credentials contract.
-            source_checkouts -= checkout_text.count(LISTEN_EVIDENCE_CONTROL)
-            if checkout_text.count(LISTEN_EVIDENCE_CONTROL) != 1:
+            source_checkouts -= isolated_checkout_count(checkout_text, LISTEN_EVIDENCE_CONTROL)
+            if isolated_checkout_count(checkout_text, LISTEN_EVIDENCE_CONTROL) != 1:
                 errors.append(f"{relative} evidence controls must use immutable workflow source in their isolated path")
         expected_checkouts = 2 if relative == LISTEN_WORKFLOW else 1
         if source_checkouts != expected_checkouts:
