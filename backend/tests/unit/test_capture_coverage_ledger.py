@@ -14,6 +14,9 @@ from database import capture_coverage as store
 from models.capture_coverage import CaptureKey, CoverageRecord, FrameRange
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.capture import coverage, sync_coverage, batch_coverage
+from utils.batch_pipeline import projection, context, audio
+from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
+from config.policy import ProjectionPolicy
 
 
 @pytest.fixture
@@ -312,9 +315,6 @@ def test_cap_held_segment_rechecks_before_paid_recovery(ledger, identity, tmp_pa
 def test_provider_manifest_does_not_change_shadow_targeting(identity, monkeypatch):
     from datetime import datetime, timezone
     from unittest.mock import Mock
-    from utils.batch_pipeline import projection, context, audio
-    from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
-    from config.policy import ProjectionPolicy
 
     uid, _ = identity
     monkeypatch.setenv(coverage.FLAG, 'shadow')

@@ -7,7 +7,7 @@ import math
 import os
 import tempfile
 
-from prometheus_client import CollectorRegistry, Gauge, start_http_server
+from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
 
 from database.firestore_document_probe import (
     FIRESTORE_BILLED_READS,
@@ -18,6 +18,14 @@ from database.firestore_document_probe import (
 
 from database import record_token_lease_metrics as lease_metrics
 from config.record_seal_rules import token_lease_mode
+
+from utils.observability.reasons import (
+    ReasonFamily,
+    RecordSealRepairRunOutcome,
+    RecordSealRepairRunStage,
+    reason_label,
+    reason_values,
+)
 
 logger = logging.getLogger(__name__)
 COLLECTORS = (
@@ -59,6 +67,26 @@ REPAIR_OLDEST = Gauge(
 )
 REPAIR_OLDEST.set(float('nan'))
 
+REPAIR_RUN_OUTCOMES = Counter(
+    'omi_record_seal_repair_run_outcomes_total',
+    'Terminal repair coordinator runs by outcome and stopping phase; use terminal logs for scrape gaps',
+    ('outcome', 'phase'),
+    registry=None,
+)
+REPAIR_RUN_PHASES = reason_values(RecordSealRepairRunStage)
+REPAIR_RUN_OUTCOME_VALUES = reason_values(RecordSealRepairRunOutcome)
+
+
+def record_repair_run_outcome(outcome, phase):
+    if outcome not in REPAIR_RUN_OUTCOME_VALUES or phase not in REPAIR_RUN_PHASES:
+        raise ValueError('invalid repair run outcome labels')
+    REPAIR_RUN_OUTCOMES.labels(
+        outcome=reason_label(
+            ReasonFamily.RECORD_SEAL_REPAIR, RecordSealRepairRunOutcome(outcome), RecordSealRepairRunOutcome
+        ),
+        phase=reason_label(ReasonFamily.RECORD_SEAL_REPAIR, RecordSealRepairRunStage(phase), RecordSealRepairRunStage),
+    ).inc()
+
 
 def _emit(payload, level=logging.INFO):
     # Repair suppresses dependency diagnostics with logging.disable(). Like its
@@ -76,6 +104,7 @@ def register_probe_collectors(registry, *, repair_age=False):
         registry.register(collector)
     if repair_age:
         registry.register(REPAIR_OLDEST)
+        registry.register(REPAIR_RUN_OUTCOMES)
 
 
 @contextmanager

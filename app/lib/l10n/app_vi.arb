@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Không thể đăng nhập bằng Google",
     "authenticationFailed": "Xác thực thất bại",
     "authFailedToSignInWithApple": "Không thể đăng nhập bằng Apple",
+    "authAppleSignInFailedUseGoogle": "Không thể đăng nhập bằng Apple. Hãy thử lại hoặc tiếp tục với Google.",
     "authFailedToRetrieveToken": "Không thể lấy mã thông báo",
     "authUnexpectedErrorFirebase": "Đã xảy ra lỗi không mong muốn. Vui lòng thử lại.",
     "authUnexpectedError": "Lỗi không mong muốn",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "Thanh toán hàng năm",
     "paywallTrialSaveAmount": "Tiết kiệm {amount}",
     "paywallTrialCta": "Bắt đầu với {price}",
+    "paywallTrialCodeHint": "Bạn có mã Omi Pro? Hãy nhập ở màn hình tiếp theo.",
     "paywallTrialCancelNote": "Hủy bất cứ lúc nào. Không phí, không phạt.",
     "paywallMonthlyFallbackTitle": "Chưa sẵn sàng cho cả năm?",
     "paywallMonthlyFallbackTrialBody": "Hãy bắt đầu với gói tháng. Vẫn miễn phí {days} ngày, sau đó {price} mỗi tháng. Hủy bất cứ lúc nào.",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "Thanh toán bị từ chối. Gói của bạn không thay đổi.",
     "monthlySwitchUnavailable": "Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.",
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
-    "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng."
+    "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
+    "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại."
 }

@@ -41,6 +41,7 @@ from utils.batch_pipeline.projection import (
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_followup_clock import FollowupClock
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
@@ -94,6 +95,8 @@ class ProjectionFollowups:
         self.owed: dict[str, None] = {}
         self.closed = False
         self.discovery = ProjectionDiscovery(projector.store.store)
+        self.due_clock = FollowupClock(projector)
+        self.due_pass_before: float | None = None
         self.page = 0
         self.pages: dict[str, int] = {}
         self.completion_attempts: set[tuple[int, ProjectionBinding]] = set()
@@ -161,6 +164,19 @@ class ProjectionFollowups:
                 self.backoff.pop(next(iter(self.backoff)))
 
     def discovered(self):
+        due = self.due_clock.before(self.desync and projection_followup_page_enabled())
+        if due is not None:
+            # Durable due selection replaces local sleeping. A row due elsewhere
+            # (or reset by a state move) must not wait on this process's old cache.
+            # Freeze eligibility for this pass. A stream of new due rows must
+            # not extend the tail forever and starve rows behind the cursor.
+            if self.discovery.clock_mode != 'followup' or self.due_pass_before is None:
+                self.due_pass_before = due
+            page = self.discovery.next(limit=100, followup_due_before=self.due_pass_before)
+            if self.discovery.after is None:
+                self.due_pass_before = None
+            return page
+        self.due_pass_before = None
         page = None
         if not self.seeded:
             held = self.discovery.after
@@ -371,9 +387,19 @@ class ProjectionFollowups:
             # after a side effect committed. Receipt transactions fence retries.
             async with asyncio.timeout(FOLLOWUP_TIMEOUT_SECONDS):
                 outcome = await self._run(segment)
+                # Hint persistence shares the attempt's original deadline. A
+                # slow DB must not pin a follow-up slot after useful work ended.
+                if outcome == 'incomplete' and segment in self.due_clock.entries:
+                    deferred = await run_blocking(
+                        db_executor, self.due_clock.settle, segment, outcome, projection_followup_backoff_seconds()
+                    )
+                    if deferred:
+                        OUTCOMES.labels('durable_deferred').inc()
         except TimeoutError:
             logger.warning('event=batch_projection_followup outcome=timeout unit=%s', self.unit_key(segment))
             outcome = 'timeout'
+        finally:
+            self.due_clock.entries.pop(segment, None)
         self.note(segment, outcome)
 
     @staticmethod
@@ -399,6 +425,7 @@ class ProjectionFollowups:
                 policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
                 if not policy.async_projection:
                     return 'sync_owned'  # The synchronous sweep owns these receipts.
+            self.due_clock.observe(segment, entry)
             was_ready = entry['projection']['state'] == 'ready' and all(
                 part.get('state') == 'ready' for part in (entry.get('projection_parts') or {}).values()
             )
@@ -464,9 +491,9 @@ class ProjectionFollowups:
             return await run_blocking(executor, function, *args, **kwargs)
 
     async def finish_part(self, item, binding, receipt, index):
-        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt['state'] in {'ready', 'quarantined'}:
             return
+        policy = await run_blocking(db_executor, self.projector.store.policy, item.segment_id)
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges
 

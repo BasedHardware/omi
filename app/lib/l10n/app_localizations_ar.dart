@@ -6978,6 +6978,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'فشل تسجيل الدخول باستخدام Apple، يرجى المحاولة مرة أخرى.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'لم ينجح تسجيل الدخول باستخدام Apple. حاول مرة أخرى أو تابع باستخدام Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'فشل استرداد رمز Firebase، يرجى المحاولة مرة أخرى.';
 
   @override
@@ -13326,6 +13330,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'لديك رمز Omi Pro؟ أدخله في الشاشة التالية.';
+
+  @override
   String get paywallTrialCancelNote => 'يمكنك الإلغاء في أي وقت. لا توجد رسوم أو غرامات.';
 
   @override
@@ -15365,4 +15372,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'تم دفع $price اليوم. يتجدد شهريًا.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
 }

@@ -737,6 +737,7 @@ def test_terminal_poll_filter_preserves_nonterminal_heads_and_fresh_wait(h, monk
 
 @pytest.mark.parametrize('enabled', [False, True])
 def test_poll_filter_never_skips_recovery_or_durable_terminal_transitions(h, monkeypatch, enabled):
+    monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')  # Legacy retry behavior under rollback.
     from utils.batch_pipeline.contracts import WorkResult
     from utils.batch_pipeline.merge import OrderedMerge
     from utils.batch_pipeline.retry_policy import quarantine_job
@@ -1360,3 +1361,49 @@ def test_ready_owners_skips_an_owner_block_and_ignores_nonpending_or_unready(h):
 
     assert h.store.ready_owners(None, 1, descending=True) == expected[-1:]
     assert h.store.ready_owners(None, 2, ceiling_owner_key=expected[0][0]) == expected[:1]
+
+
+def test_owner_serialization_prevents_a_pending_head_phantom(h):
+    """Admission and merge take the same owner row before querying the head."""
+    need(h, 'sim')
+    import threading
+    from concurrent.futures import TimeoutError as FutureTimeout
+
+    key = owner_key(h.uid('o'))
+    put_all(h, [('owners', key, {'revision': 0})])
+    queried, attempted, release = threading.Event(), threading.Event(), threading.Event()
+
+    def reader():
+        def body(tx):
+            owner = tx.get('owners', key)
+            assert tx.first_pending(key) is None
+            queried.set()
+            assert release.wait(10)
+            assert tx.first_pending(key) is None
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+
+        h.store.run(body)
+
+    def admitter():
+        def body(tx):
+            attempted.set()
+            owner = tx.get('owners', key)
+            tx.put('owners', key, {'revision': owner['revision'] + 1})
+            tx.put('jobs', 'phantom', job(h, 'phantom', merge_pending=True))
+
+        h.store.run(body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        held = pool.submit(reader)
+        try:
+            assert queried.wait(10)
+            inserted = pool.submit(admitter)
+            assert attempted.wait(10)
+            with pytest.raises(FutureTimeout):
+                inserted.result(timeout=0.2)
+        finally:
+            release.set()
+        held.result(timeout=30)
+        inserted.result(timeout=30)
+    assert h.store.run(lambda tx: tx.first_pending(key))['segment_id'] == 'phantom'
+    assert h.store.run(lambda tx: tx.get('owners', key))['revision'] == 2

@@ -2240,6 +2240,7 @@
     "authFailedToSignInWithGoogle": "Googleでのサインインに失敗しました。もう一度お試しください。",
     "authenticationFailed": "認証に失敗しました。もう一度お試しください。",
     "authFailedToSignInWithApple": "Appleでのサインインに失敗しました。もう一度お試しください。",
+    "authAppleSignInFailedUseGoogle": "Appleでサインインできませんでした。もう一度お試しいただくか、Googleで続行してください。",
     "authFailedToRetrieveToken": "Firebaseトークンの取得に失敗しました。もう一度お試しください。",
     "authUnexpectedErrorFirebase": "サインイン中に予期しないエラーが発生しました。Firebaseエラー、もう一度お試しください。",
     "authUnexpectedError": "サインイン中に予期しないエラーが発生しました。もう一度お試しください",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "年額課金",
     "paywallTrialSaveAmount": "{amount}お得",
     "paywallTrialCta": "{price}で始める",
+    "paywallTrialCodeHint": "Omi Pro のコードをお持ちですか？次の画面で入力してください。",
     "paywallTrialCancelNote": "いつでもキャンセル可能。手数料や違約金なし。",
     "paywallMonthlyFallbackTitle": "1年はまだ早いですか？",
     "paywallMonthlyFallbackTrialBody": "代わりに月額プランで始めましょう。同じく{days}日間無料、その後は月額{price}。いつでもキャンセルできます。",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "お支払いが拒否されました。プランは変更されていません。",
     "monthlySwitchUnavailable": "現在は切り替えできません。カードを更新してください。",
     "monthlySwitchDoneTitle": "月払いに切り替わりました",
-    "monthlySwitchDoneBody": "本日{price}をお支払いいただきました。毎月更新されます。"
+    "monthlySwitchDoneBody": "本日{price}をお支払いいただきました。毎月更新されます。",
+    "processingDeleteScopeChanged": "処理中の一覧が変更されました。一覧を確認してもう一度お試しください。"
 }

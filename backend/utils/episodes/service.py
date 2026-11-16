@@ -1248,6 +1248,8 @@ def on_conversation_finalized(
     collaborators: Optional[Collaborators] = None,
 ) -> str:
     """After the conversation's normal processing. Returns an outcome label; never raises."""
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or trigger not in RECONCILE_TRIGGERS:
         return 'skipped'
@@ -1780,6 +1782,8 @@ def attach_synced_intake(
     episode (live or closed) never moves.
     Fail-open; returns a bounded outcome label; never raises.
     """
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     c = collaborators or Collaborators()
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
@@ -1833,6 +1837,8 @@ def _on_finalized(
     absorbed_from: Optional[str],
     c: Collaborators,
 ) -> str:
+    if row.get('capture_time_trust') == 'untrusted':
+        return 'skipped_unknown_date'
     if row.get('deleted') or is_relevance_discarded(row):
         _end_discarded(uid, conversation_id, row, trigger, c)
         return 'skipped_discarded'

@@ -12,6 +12,7 @@ from database.mcp_read_queries import (
     MCP_CONVERSATION_CARD_QUERY_SPECS,
 )
 from database.review_queries import REVIEW_QUERY_SPECS
+from database.home_feed_queries import HOME_FEED_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.batch_pipeline_indexes import BATCH_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
@@ -2036,6 +2037,7 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    *HOME_FEED_QUERY_SPECS,
     MCP_DAILY_RECORDINGS_QUERY,
     *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,
@@ -2245,6 +2247,9 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
         'conversations_summary_due_group_ascending', 'conversations', 'summary_due_at', ('ASCENDING',)
     ),
     FieldIndexRequirement('pipeline_ledger_admitted_group_ascending', 'pipeline_ledger', 'admitted_at', ('ASCENDING',)),
+    # Census stock: stage equality over the collection group needs its own
+    # group-scoped single-field index; automatic indexes are collection-scoped.
+    FieldIndexRequirement('pipeline_ledger_stage_group_ascending', 'pipeline_ledger', 'stage', ('ASCENDING',)),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),

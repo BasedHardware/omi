@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Apple کے ساتھ سائن ان نہیں ہو سکا۔ دوبارہ کوشش کریں یا Google کے ساتھ جاری رکھیں۔",
     "authFailedToRetrieveToken": "Firebase ٹوکن حاصل کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11529,7 @@
     "paywallTrialBilledYearly": "سالانہ بل کیا جائے گا",
     "paywallTrialSaveAmount": "{amount} بچائیں",
     "paywallTrialCta": "{price} میں شروع کریں",
+    "paywallTrialCodeHint": "Omi Pro کوڈ ہے؟ اسے اگلی اسکرین پر درج کریں۔",
     "paywallTrialCancelNote": "کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔",
     "paywallMonthlyFallbackTitle": "پورے سال کے لیے ابھی تیار نہیں؟",
     "paywallMonthlyFallbackTrialBody": "اس کے بجائے ماہانہ سے شروع کریں۔ وہی {days} دن مفت، پھر {price} ماہانہ۔ کسی بھی وقت منسوخ کریں۔",
@@ -12210,5 +12212,6 @@
     "monthlySwitchDeclined": "ادائیگی مسترد ہو گئی۔ آپ کا پلان تبدیل نہیں ہوا۔",
     "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
-    "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔"
+    "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
+    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔"
 }

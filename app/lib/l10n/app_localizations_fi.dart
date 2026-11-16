@@ -7032,6 +7032,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kirjautuminen Applella epäonnistui, yritä uudelleen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.';
 
   @override
@@ -13406,6 +13410,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Onko sinulla Omi Pro -koodi? Syötä se seuraavalla näytöllä.';
+
+  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override
@@ -15458,4 +15465,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price maksettu tänään. Uusiutuu kuukausittain.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
 }

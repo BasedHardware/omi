@@ -7055,6 +7055,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешно влизане с Apple, моля опитайте отново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Влизането с Apple не успя. Опитайте отново или продължете с Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно извличане на Firebase токен, моля опитайте отново.';
 
   @override
@@ -13450,6 +13453,9 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате код за Omi Pro? Въведете го на следващия екран.';
+
+  @override
   String get paywallTrialCancelNote => 'Анулирайте по всяко време. Без такси, без неустойки.';
 
   @override
@@ -15505,4 +15511,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Днес са платени $price. Подновява се всеки месец.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
 }

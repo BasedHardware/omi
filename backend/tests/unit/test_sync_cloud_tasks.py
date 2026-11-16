@@ -1575,6 +1575,9 @@ def _load_sync_router_for_fast_path():
 
     module.run_blocking = _passthrough_run_blocking
     module._retrieve_file_paths_v2 = MagicMock(return_value=['syncing/test-uid/job-1/file.bin'])
+    # This route harness uses synthetic paths without source bytes or metadata.
+    # Real retained-anchor classification is covered by recovery admission tests.
+    module.retained_source_offsets = MagicMock(return_value={})
     module._capture_matches_server_conversation = MagicMock(return_value=True)
     module._stage_files_to_gcs = MagicMock()
     module._cleanup_files = MagicMock()

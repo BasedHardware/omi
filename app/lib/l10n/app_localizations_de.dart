@@ -7083,6 +7083,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Anmeldung mit Apple fehlgeschlagen, bitte versuchen Sie es erneut.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Die Anmeldung mit Apple hat nicht geklappt. Versuche es erneut oder fahre mit Google fort.';
+
+  @override
   String get authFailedToRetrieveToken =>
       'Firebase-Token konnte nicht abgerufen werden, bitte versuchen Sie es erneut.';
 
@@ -13503,6 +13507,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Du hast einen Omi Pro-Code? Gib ihn auf dem nächsten Bildschirm ein.';
+
+  @override
   String get paywallTrialCancelNote => 'Jederzeit kündbar. Keine Gebühren, keine Strafen.';
 
   @override
@@ -15567,4 +15574,8 @@ class AppLocalizationsDe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price heute bezahlt. Verlängert sich monatlich.';
   }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut.';
 }

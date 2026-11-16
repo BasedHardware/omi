@@ -2215,6 +2215,7 @@
     "authFailedToSignInWithGoogle": "Google से साइन इन विफल, कृपया पुनः प्रयास करें।",
     "authenticationFailed": "प्रमाणीकरण विफल। कृपया पुनः प्रयास करें।",
     "authFailedToSignInWithApple": "Apple से साइन इन विफल, कृपया पुनः प्रयास करें।",
+    "authAppleSignInFailedUseGoogle": "Apple से साइन इन नहीं हो पाया। फिर से कोशिश करें या Google के साथ जारी रखें।",
     "authFailedToRetrieveToken": "Firebase टोकन प्राप्त करने में विफल, कृपया पुनः प्रयास करें।",
     "authUnexpectedErrorFirebase": "साइन इन करते समय अप्रत्याशित त्रुटि, Firebase त्रुटि, कृपया पुनः प्रयास करें।",
     "authUnexpectedError": "साइन इन करते समय अप्रत्याशित त्रुटि, कृपया पुनः प्रयास करें",
@@ -4108,6 +4109,7 @@
     "paywallTrialBilledYearly": "वार्षिक बिलिंग",
     "paywallTrialSaveAmount": "{amount} बचाएं",
     "paywallTrialCta": "{price} में शुरू करें",
+    "paywallTrialCodeHint": "Omi Pro कोड है? अगली स्क्रीन पर उसे डालें।",
     "paywallTrialCancelNote": "कभी भी रद्द करें। कोई शुल्क नहीं, कोई जुर्माना नहीं।",
     "paywallMonthlyFallbackTitle": "पूरे साल के लिए अभी तैयार नहीं?",
     "paywallMonthlyFallbackTrialBody": "इसके बजाय मासिक से शुरू करें। वही {days} दिन मुफ़्त, फिर {price} प्रति माह। कभी भी रद्द करें।",
@@ -4653,5 +4655,6 @@
     "monthlySwitchDeclined": "भुगतान अस्वीकार हुआ। आपका प्लान नहीं बदला।",
     "monthlySwitchUnavailable": "अभी स्विच उपलब्ध नहीं है। इसके बजाय कार्ड अपडेट करें।",
     "monthlySwitchDoneTitle": "अब आप मासिक प्लान पर हैं",
-    "monthlySwitchDoneBody": "आज {price} का भुगतान हुआ। हर महीने रिन्यू होता है।"
+    "monthlySwitchDoneBody": "आज {price} का भुगतान हुआ। हर महीने रिन्यू होता है।",
+    "processingDeleteScopeChanged": "प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।"
 }

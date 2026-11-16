@@ -2070,6 +2070,7 @@ def _composite_control_root(tmp_path: Path) -> Path:
         '__init__.py',
         'firestore_index_registry.py',
         'firestore_query_types.py',
+        'home_feed_queries.py',
         'mcp_read_queries.py',
         'review_queries.py',
         'messaging_queries.py',
@@ -2320,7 +2321,11 @@ def test_backend_prod_boundary_rejects_dispatches_without_a_requester(tmp_path):
             'DEPLOY_TARGETS': 'cloud-run-only',
             'WORKFLOW_MODE': 'deploy',
             'SERVICE_IMAGES': '',
+            'GITHUB_OUTPUT': str(tmp_path / 'boundary-output'),
             'REQUESTED_BY': requested_by,
+            'RELEASE_SHA': '',
+            'SKIP_ELIGIBILITY': 'false',
+            'BREAK_GLASS_LOCK': 'false',
         }
         return subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
 

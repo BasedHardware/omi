@@ -7063,6 +7063,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Conectarea cu Apple nu a reușit. Încearcă din nou sau continuă cu Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
 
   @override
@@ -13459,6 +13463,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ai un cod Omi Pro? Introdu-l pe ecranul următor.';
+
+  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
@@ -15518,4 +15525,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price plătiți azi. Se reînnoiește lunar.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
 }

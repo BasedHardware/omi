@@ -7073,6 +7073,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple సాથে సైన్ ఇన్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.';
+
+  @override
   String get authFailedToRetrieveToken => 'firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
@@ -13455,6 +13459,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro కోడ్ ఉందా? తదుపరి స్క్రీన్‌లో దాన్ని నమోదు చేయండి.';
+
+  @override
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
@@ -15516,4 +15523,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'ఈరోజు $price చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
 }

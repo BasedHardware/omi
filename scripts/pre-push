@@ -635,7 +635,8 @@ check_backend_unit_tests_if_needed() {
   "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
     --changed-files "$CHANGED_FILES_LIST" \
     --output "$SELECTED_BACKEND_TESTS" \
-    --reason-output "$SELECTED_BACKEND_TESTS_REASON"
+    --reason-output "$SELECTED_BACKEND_TESTS_REASON" \
+    --focused-output "$FAST_BACKEND_TESTS"
 
   selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
   original_selected_count="$selected_count"
@@ -649,41 +650,18 @@ check_backend_unit_tests_if_needed() {
   # Keep this cap: a broad selector must not turn ordinary pushes into the full suite.
   max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
   if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
-    : > "$FAST_BACKEND_TESTS"
-    for file in "${CHANGED_FILES[@]}"; do
-      case "$file" in
-        backend/tests/*.py|backend/tests/**/*.py)
-          # Helpers and conftest are dependencies, not standalone pytest files.
-          # Keep the cap; running a helper directly would collect nothing (exit 5).
-          case "${file##*/}" in
-            test_*.py|*_test.py) ;;
-            *) continue ;;
-          esac
-          if [ -f "$file" ]; then
-            printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
-          fi
-          ;;
-      esac
-    done
-    if [ -s "$FAST_BACKEND_TESTS" ]; then
-      sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
-      changed_test_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
-      if [ "$changed_test_count" -gt "$max_pre_push_tests" ]; then
-        head -n "$max_pre_push_tests" "$FAST_BACKEND_TESTS" > "$FAST_BACKEND_TESTS.capped"
-        mv "$FAST_BACKEND_TESTS.capped" "$FAST_BACKEND_TESTS"
-        selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
-        echo "Selector requested $reason ($original_selected_count files); the diff changes $changed_test_count backend test file(s), also over the cap of $max_pre_push_tests."
-        echo "Running the first $selected_count in sorted order; run cd backend && bash test.sh for the rest, or rely on CI."
-      else
-        selected_count="$changed_test_count"
-        echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
-      fi
-      cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
-    else
+    focused_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+    if [ "$focused_count" -eq 0 ]; then
       echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."
-      echo "Run cd backend && bash test.sh for the full suite, or rely on CI."
+      echo "No known affected contracts or changed tests; full coverage is deferred to CI."
       return
     fi
+    # The selector orders affected contracts before changed tests. Preserve that
+    # priority when the known affected set itself exceeds the unchanged cap.
+    head -n "$max_pre_push_tests" "$FAST_BACKEND_TESTS" > "$SELECTED_BACKEND_TESTS"
+    selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
+    echo "Selector requested $reason ($original_selected_count files); running $selected_count of $focused_count affected contracts/changed tests (cap $max_pre_push_tests)."
+    echo "Full selector coverage is deferred to CI; $((focused_count - selected_count)) focused file(s) also deferred."
   fi
 
   echo "Selected $selected_count backend unit test file(s): $reason"

@@ -199,5 +199,6 @@ def test_a_recovered_provider_backlog_row_is_held_until_backlog_release(monkeypa
     assert merge.commit_next('heavy', 501, release=merge.release_set('b')) is None
     assert store.rows['jobs', 'b']['merge_pending'] is True and store.rows['jobs', 'b']['state'] == 'result_ready'
     monkeypatch.setenv('BATCH_PIPELINE_PROVIDER_BACKLOG_RELEASE_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', 'false')  # the legacy unmetered release
     entry = merge.commit_next('heavy', 502, release=merge.release_set('b'))
     assert entry['segment_id'] == 'b' and entry['recovered_release'] is True
