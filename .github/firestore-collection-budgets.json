@@ -241,6 +241,18 @@
       "basis": "planning-bound",
       "source": "backend/docs/runbooks/projection-followup-due-clock.md: 10000 admitted pages/day x 200 rows/page x 6 reads/row, allowing discovery plus transactional fence plus optional shadow refresh and one retry. Operator-only bounded migration, not recurring serving or measured population. Repeated passes, higher page volume or more retries require remeasurement/rebudgeting.",
       "reviewed": "2026-11-15"
+    },
+    {
+      "site": "backend/utils/batch_pipeline/timeliness_participation.py",
+      "expression": "f'{store.namespace}{CONTROL_COLLECTION_SUFFIX}'",
+      "collection_pattern": "batch_pipeline_*_control",
+      "owner": "SCA-1649 timeliness participation control (Release executes, Omi Control verifies)",
+      "unit": "one sampler process-day (standing 60s poll plus one bounded operation window)",
+      "reads_per_unit_budget": 1486,
+      "reads_per_day_budget": 150000,
+      "basis": "planning-bound",
+      "source": "Contract sampler-control-design-amended.md: at most one cold-start point read per process, then one attempt per process per 60s, coalesced and never retried. Standing envelope is 1440 attempts/process/day; one operation window adds at most 46 (N*(1+ceil(1800/60)) for the bounded 1800s suppression plus the 900s restore-verification allowance) => 1486 per process-day. The 150,000/day family envelope is a conservative pre-activation bound for ~100 concurrent eligible processes across GKE and Cloud Run; activation must enumerate N_GKE/N_CR, quote this standing cost in the read budget and measure actual attempts before booking any spend. Only the single point document timeliness_metrics_participation is read; no query, list, watch or runtime write.",
+      "reviewed": "2026-11-16"
     }
   ],
   "exempt": [
