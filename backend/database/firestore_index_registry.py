@@ -6,6 +6,7 @@ Index-only requirements stay explicit until callers migrate to query specs.
 from __future__ import annotations
 
 from typing import Any
+from database.conversations_v3_indexes import layer_count_indexes
 from database.mcp_read_queries import (
     MCP_DAILY_RECORDINGS_QUERY,
     MCP_MEMORY_FILTER_QUERIES,
@@ -41,6 +42,19 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
+    *layer_count_indexes(),
+    FirestoreIndexRequirement(
+        'conversations_v3_pending_oldest_page',
+        'conversations',
+        'COLLECTION',
+        (_asc('v3_pending'), _asc('v3_pending_since')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_v3_pending_age_sweep',
+        'conversations',
+        'COLLECTION_GROUP',
+        (_asc('v3_pending'), _asc('v3_pending_since'), _asc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'conversations_v3_active_legacy_meter',
         'conversations',

@@ -473,3 +473,12 @@ def test_ready_member_policy_rollback_requires_fully_prepared_replacement(store,
         home_feed.feed('u', firestore_client=store)
     drain(store)
     assert home_feed.feed('u', firestore_client=store)['items'][0]['kind'] == 'episode'
+
+
+@pytest.mark.parametrize('hidden_field', ['recording', 'home_hidden'])
+def test_prepare_excludes_recordings_and_home_hidden_rows(store, hidden_field):
+    store.put('users/u/conversations/visible', conversation())
+    store.put('users/u/conversations/hidden', conversation(**{hidden_field: True}))
+    drain(store)
+    result = home_feed.feed('u', firestore_client=store, episodes_admitted=False)
+    assert [item['detail_id'] for item in result['items']] == ['visible']

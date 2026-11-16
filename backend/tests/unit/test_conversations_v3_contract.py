@@ -27,7 +27,7 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 def test_switch_is_per_owner_not_device(monkeypatch, stage, seen, cohort, expected):
     monkeypatch.setenv('CONVERSATIONS_V3_STAGE', stage)
     monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
-    monkeypatch.setattr(switch.client_gate, 'client_seen', lambda uid: seen)
+    monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: seen)
     monkeypatch.setattr(switch, 'in_rollout_cohort', lambda uid, key: cohort)
     assert switch.conversations_v3_enabled('synthetic') is expected
     monkeypatch.setenv('CONVERSATIONS_V3', 'off')
@@ -125,13 +125,17 @@ def test_audio_alias_is_owner_checked(monkeypatch):
 
     def load(uid, cid):
         calls.append((uid, cid))
+        if cid == 'c':
+            return {'id': 'c'}
+        if cid != 'r':
+            return None
         return {'recording': True, 'claims': [{'conversation_id': 'c'}], 'audio_files': [{'id': 'file'}]}
 
     monkeypatch.setattr(db, 'get_conversation', load)
     assert audio.resolve('synthetic', {'id': 'c'}, {'id': 'alias', 'recording_id': 'r', 'recording_file_id': 'file'})[
         :2
     ] == ('r', {'id': 'file'})
-    assert calls == [('synthetic', 'r')]
+    assert calls == [('synthetic', 'c'), ('synthetic', 'r')]
     with pytest.raises(HTTPException):
         audio.resolve('synthetic', {'id': 'different'}, {'id': 'file', 'recording_id': 'r'})
 
@@ -253,3 +257,124 @@ def test_cursor_refills_after_recording_and_hidden_rows(include_recordings, hide
     )
     assert len(rows) == 1 and rows[0]['id'] == expected
     assert last.id == expected
+
+
+@pytest.mark.parametrize('recording', [False, True])
+def test_live_response_is_compact_and_never_a_recording(monkeypatch, recording):
+    monkeypatch.setattr(routes, 'conversations_v3_enabled', lambda uid: True)
+    monkeypatch.setattr(
+        db,
+        'get_conversations_without_photos',
+        lambda *a, **kw: [
+            {
+                'id': 'c',
+                'started_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'status': 'in_progress',
+                'created_at': datetime(2026, 11, 16, tzinfo=timezone.utc),
+                'recording': recording,
+                'transcript_segments': [{'text': 'private capture'}],
+                'structured': {'title': 'Plan', 'emoji': '🌳', 'overview': 'omit'},
+            }
+        ],
+    )
+    result = routes.get_live_conversation('u', 'store')
+    if recording:
+        assert result['conversation'] is None
+    else:
+        from models.conversation import ConversationsLiveResponse
+
+        wire = ConversationsLiveResponse(**result).model_dump(exclude_unset=True)
+        assert 'transcript_segments' not in wire['conversation']
+        assert wire['conversation']['structured'] == {'title': 'Plan', 'emoji': '🌳'}
+
+
+def test_merge_rejects_recording_before_admission(monkeypatch):
+    from fastapi import BackgroundTasks
+    from models.conversation import MergeConversationsRequest
+
+    monkeypatch.setattr(db, 'get_conversation', lambda *a, **kw: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    with pytest.raises(HTTPException) as error:
+        routes.merge_conversations(MergeConversationsRequest(conversation_ids=['r', 'c']), BackgroundTasks(), 'u')
+    assert error.value.status_code == 404
+
+
+def test_reprocess_rejects_recording_before_processing(monkeypatch):
+    monkeypatch.setattr(db, 'get_conversation', lambda *a, **kw: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(routes, '_heal_locked_conversations_if_eligible', lambda *a: None)
+    with pytest.raises(HTTPException) as error:
+        routes.reprocess_conversation('r', uid='u')
+    assert error.value.status_code == 404
+
+
+def test_joan_rejects_recording_before_prompt(monkeypatch):
+    from routers import users
+
+    monkeypatch.setattr(users, 'get_conversation', lambda *a: {'id': 'r', 'recording': True})
+    monkeypatch.setattr(users, 'followup_question_prompt', lambda *a: pytest.fail('raw capture sent to prompt'))
+    with pytest.raises(HTTPException) as error:
+        users.delete_followup_question_endpoint('r', 'u')
+    assert error.value.status_code == 404
+
+
+def test_lapsed_beta_marker_restores_legacy_capture_and_episode_admission(monkeypatch):
+    monkeypatch.setenv('CONVERSATIONS_V3_STAGE', 'beta')
+    monkeypatch.delenv('CONVERSATIONS_V3', raising=False)
+    monkeypatch.setattr(switch, 'in_rollout_cohort', lambda *a: False)
+    monkeypatch.setattr(switch.client_gate, 'client_seen_cached', lambda uid: False)
+    monkeypatch.setattr(triggers, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    row = {'source': 'omi', 'data_protection_level': 'standard'}
+    triggers.mark_new('u', row)
+    assert 'recording' not in row and 'v3_pending' not in row
+    monkeypatch.setattr(episodes, 'conversations_v3_enabled', switch.conversations_v3_enabled)
+    monkeypatch.setattr(episodes, 'episodes_enabled_for', lambda *a: True)
+    monkeypatch.setattr(episodes, 'client_channel_admitted', lambda *a: True)
+    assert episodes._admitted('u', 'store') is True
+
+
+def test_episode_admission_is_cached_once_per_request(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    calls = []
+    monkeypatch.setattr(episodes, 'conversations_v3_enabled', lambda uid: calls.append(uid) or True)
+    monkeypatch.setattr(episodes.client_gate, 'note_client_seen', lambda *a: None)
+    app = FastAPI()
+    app.include_router(episodes.router)
+    app.dependency_overrides[episodes.auth.get_current_user_uid] = lambda: 'u'
+    assert TestClient(app).get('/v1/episodes/live', headers={'X-Omi-App-Channel': 'beta'}).status_code == 200
+    assert calls == ['u']
+
+
+@pytest.mark.parametrize(
+    'raw,expected',
+    [
+        ('992', 'pre_v3'),
+        ('993', 'v3_capable'),
+        ('1200', 'v3_capable'),
+        ('', 'unknown'),
+        ('1.0.599', 'unknown'),
+        ('-1', 'unknown'),
+    ],
+)
+def test_episode_build_bucket_uses_first_v3_build(monkeypatch, raw, expected):
+    monkeypatch.setenv('CONVERSATIONS_V3_FIRST_APP_BUILD', '993')  # synthetic boundary, not a release assertion
+    assert switch.episode_build_bucket(raw) == expected
+
+
+def test_episode_request_uses_build_header_not_marketing_version(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    meter = MagicMock()
+    monkeypatch.setenv('CONVERSATIONS_V3_FIRST_APP_BUILD', '993')
+    monkeypatch.setattr(episodes.v3_metrics, 'EPISODE_CALLS', meter)
+    request = SimpleNamespace(
+        url=SimpleNamespace(path='/v1/episodes/live'),
+        headers={'X-App-Version': '1.0.599', 'X-App-Build': '992'},
+        scope={'route': SimpleNamespace(path='/v1/episodes/live')},
+    )
+    episodes._record_episode_request(request, 'u', 'store', False)
+    meter.labels.assert_called_once_with('/v1/episodes/live', 'store', 'pre_v3', 'false')
+    monkeypatch.delenv('CONVERSATIONS_V3_FIRST_APP_BUILD')
+    assert switch.episode_build_bucket('992') == 'unknown'

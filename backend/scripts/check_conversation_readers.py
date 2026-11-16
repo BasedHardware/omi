@@ -22,6 +22,7 @@ OPERATIONS = {
     'iter_all_conversations',
     'get_in_progress_conversation',
     'get_processing_conversations',
+    'user_conversations',
 }
 
 
@@ -79,6 +80,8 @@ def references(root=ROOT):
                         (isinstance(arg, ast.Constant) and arg.value == 'conversations')
                         or isinstance(arg, ast.Name)
                         and (arg.id == 'conversations_collection' or arg.id in constants)
+                        or isinstance(arg, ast.Attribute)
+                        and arg.attr == 'CONVERSATIONS_COLLECTION'
                     ):
                         continue
                 yield str(path.relative_to(root)), name, node.lineno

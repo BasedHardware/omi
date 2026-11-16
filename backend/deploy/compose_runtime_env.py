@@ -152,6 +152,36 @@ def _compose_environment(
         raise ValueError(f'composed environment {env} must be a mapping')
 
     env_config = cast(ConfigDict, merged)
+    # A single stage source moves API, capture, finalizers and jobs together.
+    stage = env_config.pop('conversations_v3_stage', None)
+    if stage is not None:
+        descriptor = {'value': str(stage), 'category': 'rollout'}
+        first_build = env_config.pop('conversations_v3_first_app_build', '')
+        build_descriptor = {'value': str(first_build), 'category': 'config'}
+        for service in env_config.get('cloud_run', {}).get('services', {}).values():
+            service.setdefault('env', {})['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+            service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
+        if isinstance(env_config.get('desktop_backend'), dict):
+            env_config['desktop_backend'].setdefault('env', {})['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+            env_config['desktop_backend']['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
+        gke = env_config.get('gke', {})
+        config_map = gke.get('config_map')
+        if isinstance(config_map, dict):
+            config_map.setdefault('entries', {}).update(
+                CONVERSATIONS_V3_STAGE={'source': 'literal', 'value': str(stage)},
+                CONVERSATIONS_V3_FIRST_APP_BUILD={'source': 'literal', 'value': str(first_build)},
+            )
+            for name, service in gke.items():
+                if name in {'backend-listen', 'pusher'} and isinstance(service, dict):
+                    for key in ('CONVERSATIONS_V3_STAGE', 'CONVERSATIONS_V3_FIRST_APP_BUILD'):
+                        service.setdefault('env', {})[key] = {
+                            'config_map': {'name': config_map['name'], 'key': key},
+                            'category': 'rollout',
+                        }
+        for service in env_config.get('cloud_run', {}).get('jobs', {}).values():
+            if isinstance(service, dict):
+                service.setdefault('env', {})['CONVERSATIONS_V3_STAGE'] = deepcopy(descriptor)
+                service['env']['CONVERSATIONS_V3_FIRST_APP_BUILD'] = deepcopy(build_descriptor)
     env_config['compute_project'] = compute_project
     env_config['data_plane_project'] = data_plane_project
     # Legacy aliases consumed by deploy scripts and validators.

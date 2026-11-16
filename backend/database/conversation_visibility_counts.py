@@ -65,27 +65,51 @@ def count_hidden(
     """
     matching = 0
     now = bridge_pending.current_time()
-    queries = (collection.where(filter=FieldFilter('deleted', '==', True)),)
+
+    def count_layer(*fields):
+        query = collection
+        for field in fields:
+            query = query.where(filter=FieldFilter(field, '==', True))
+        if not include_discarded:
+            query = query.where(filter=FieldFilter('discarded', '==', False))
+        for field, values in (('status', statuses), ('source', sources), ('structured.category', categories)):
+            if values:
+                query = query.where(filter=FieldFilter(field, 'in', values))
+        for field, value in (('folder_id', folder_id), ('starred', starred)):
+            if value is not None:
+                query = query.where(filter=FieldFilter(field, '==', value))
+        for op, value in (('>=', start_date), ('<=', end_date)):
+            if value is not None:
+                query = query.where(filter=FieldFilter('created_at', op, value))
+        return int(query.count().get()[0][0].value)
+
+    if not include_recordings:
+        matching += count_layer('recording')
+    if hide_home:
+        matching += count_layer('home_hidden')
+        if not include_recordings:
+            matching -= count_layer('recording', 'home_hidden')
+    queries = [(collection.where(filter=FieldFilter('deleted', '==', True)), False)]
     if not include_discarded:
-        queries += (collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),)
+        queries.append((collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')), False))
     # Most users have no active bridge holds. Pay one bounded probe
     # rather than opening a second full document stream on every count call.
     if not include_discarded:
         pending = collection.where(filter=FieldFilter('sync_bridge_pending.expires_at', '>', now))
         if next(iter(pending.limit(1).stream()), None) is not None:
-            queries += (pending,)
-    if not include_recordings:
-        queries += (collection.where(filter=FieldFilter('recording', '==', True)),)
-    if hide_home:
-        queries += (collection.where(filter=FieldFilter('home_hidden', '==', True)),)
+            queries.append((pending, True))
     seen = set()
-    for query in queries:
+    for query, pending_only in queries:
         for doc in query.stream():
             data = doc.to_dict() or {}
             identity = doc.id
             if identity in seen:
                 continue
+            if pending_only and not bridge_pending.hidden(data, now=now):
+                continue
             seen.add(identity)
+            if (not include_recordings and data.get('recording')) or (hide_home and data.get('home_hidden')):
+                continue
             if matches_list_predicates(
                 data,
                 include_discarded=include_discarded,

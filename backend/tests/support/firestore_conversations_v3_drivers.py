@@ -6,6 +6,8 @@ from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN
 
 
 def _pending_source(client, combo, trial):
+    if combo.get('conversation_id'):
+        return
     client.queue_results(
         [
             client.snapshot(
@@ -29,7 +31,11 @@ def _decode(client):
 def entries():
     return (
         DriverEntry(
-            'database.conversations_v3.load', base={'uid': SHAPE_UID}, setup=_pending_source, patchers=(_decode,)
+            'database.conversations_v3.load',
+            base={'uid': SHAPE_UID},
+            domains={'conversation_id': [None, 'source']},
+            setup=_pending_source,
+            patchers=(_decode,),
         ),
         DriverEntry('database.conversations_v3.load_derive', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.has_pending', base={'uid': SHAPE_UID}),

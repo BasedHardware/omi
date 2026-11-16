@@ -1904,7 +1904,7 @@ export interface ConversationsCountResponse {
 }
 
 export interface ConversationsLiveResponse {
-  conversation?: Conversation | null;
+  conversation?: LiveConversation | null;
   v3: boolean;
 }
 
@@ -3434,6 +3434,15 @@ export interface LegacyProactiveIntent {
 
 export interface LinkCalendarEventRequest {
   event_id: string;
+}
+
+export interface LiveConversation {
+  created_at: string;
+  id: string;
+  started_at: string;
+  status: ConversationStatus;
+  structured: Structured;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | null;
 }
 
 export interface LlmTotalCostResponse {
@@ -7202,6 +7211,7 @@ export interface OmiApiSchemas {
   "LegacyMaterializePromptsResponse": LegacyMaterializePromptsResponse;
   "LegacyProactiveIntent": LegacyProactiveIntent;
   "LinkCalendarEventRequest": LinkCalendarEventRequest;
+  "LiveConversation": LiveConversation;
   "LlmTotalCostResponse": LlmTotalCostResponse;
   "LlmUsageFeatureResponse": LlmUsageFeatureResponse;
   "LlmUsageRecordResponse": LlmUsageRecordResponse;
@@ -9226,6 +9236,9 @@ export interface OmiApiPaths {
         "200": unknown;
         "401": void;
         "404": void;
+        "409": {
+  detail: "summary_in_progress";
+};
         "422": HTTPValidationError;
       };
     };

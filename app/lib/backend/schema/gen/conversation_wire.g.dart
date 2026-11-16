@@ -1450,8 +1450,48 @@ class GeneratedRecordingPiece {
   }
 }
 
+class GeneratedLiveConversation {
+  final DateTime createdAt;
+  final String id;
+  final DateTime startedAt;
+  final String status;
+  final GeneratedStructured structured;
+  final String? tileState;
+
+  const GeneratedLiveConversation({
+    required this.createdAt,
+    required this.id,
+    required this.startedAt,
+    required this.status,
+    required this.structured,
+    this.tileState,
+  });
+
+  factory GeneratedLiveConversation.fromJson(Map<String, dynamic> json) {
+    return GeneratedLiveConversation(
+      createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      startedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: false), "started_at"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      structured: _required(_readFieldValue<GeneratedStructured>(_readField(json, const ["structured"]), "structured", (value) => _readObject(value, GeneratedStructured.fromJson), requiredField: true, nullable: false), "structured"),
+      tileState: _readFieldValue<String>(_readField(json, const ["tile_state"]), "tile_state", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'id': id,
+      'started_at': startedAt.toUtc().toIso8601String(),
+      'status': status,
+      'structured': structured.toJson(),
+      'tile_state': tileState,
+    };
+  }
+}
+
 class GeneratedConversationsLiveResponse {
-  final GeneratedConversation? conversation;
+  final GeneratedLiveConversation? conversation;
   final bool v3;
 
   const GeneratedConversationsLiveResponse({
@@ -1461,7 +1501,7 @@ class GeneratedConversationsLiveResponse {
 
   factory GeneratedConversationsLiveResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedConversationsLiveResponse(
-      conversation: _readFieldValue<GeneratedConversation>(_readField(json, const ["conversation"]), "conversation", (value) => _readObject(value, GeneratedConversation.fromJson), requiredField: false, nullable: true),
+      conversation: _readFieldValue<GeneratedLiveConversation>(_readField(json, const ["conversation"]), "conversation", (value) => _readObject(value, GeneratedLiveConversation.fromJson), requiredField: false, nullable: true),
       v3: _required(_readFieldValue<bool>(_readField(json, const ["v3"]), "v3", _readBool, requiredField: true, nullable: false), "v3"),
     );
   }

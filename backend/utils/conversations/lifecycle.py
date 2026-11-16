@@ -1447,8 +1447,10 @@ def close_no_speech_capture(
     return committed
 
 
-def commit_v3_projection(uid, token, recordings, existing, rows, cache):
+def commit_v3_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
     """The lifecycle owner delegates the atomic derived-row/claim transaction."""
     from database import conversations_v3
 
-    return conversations_v3.commit_projection(uid, token, recordings, existing, rows, cache)
+    return conversations_v3.commit_projection(
+        uid, token, recordings, existing, rows, cache, clear_pending=clear_pending
+    )

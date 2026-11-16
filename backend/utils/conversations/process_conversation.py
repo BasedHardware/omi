@@ -386,13 +386,6 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
-        if getattr(conversation, 'v3_derived', False):
-            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            covers = getattr(conversation, 'summary_covers_through', None)
-            if words < 600:
-                return v3_service.models.short_tasks(uid, conversation), False
-            if covers and conversation.finished_at and covers >= conversation.finished_at:
-                return conversation.structured, False
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -431,6 +424,20 @@ def _get_structured(
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
+        if getattr(conversation, 'v3_derived', False):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            if conversation.kind in {'media', 'background'} or words < 20:
+                return conversation.structured, True
+            if words < 300:
+                return v3_service.models.short_tasks(uid, conversation), False
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if (
+                not v3_service.models.foreground()
+                and covers
+                and conversation.finished_at
+                and covers >= conversation.finished_at
+            ):
+                return conversation.structured, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -734,10 +741,11 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
+    # Apply the durable v3 lock after generated-title cleanup and salience projection.
     if getattr(conversation, 'title_locked', False):
         structured.title = conversation.structured.title
         structured.emoji = conversation.structured.emoji
-    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(

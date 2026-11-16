@@ -12,10 +12,17 @@ def conversations_v3_enabled(uid: str) -> bool:
     stage = os.getenv('CONVERSATIONS_V3_STAGE', 'beta').strip().lower()
     return (
         stage == 'all'
-        or (stage == 'beta' and client_gate.client_seen(uid))
+        or (stage == 'beta' and client_gate.client_seen_cached(uid))
         or in_rollout_cohort(uid, 'conversations-v3')
     )
 
 
 def backfill_enabled() -> bool:
     return os.getenv('CONVERSATIONS_V3_BACKFILL', 'off').strip().lower() == 'on'
+
+
+def episode_build_bucket(raw: str) -> str:
+    boundary = os.getenv('CONVERSATIONS_V3_FIRST_APP_BUILD', '').strip()
+    if not boundary.isdecimal() or not raw.isdecimal() or int(boundary) <= 0 or int(raw) <= 0:
+        return 'unknown'
+    return 'v3_capable' if int(raw) >= int(boundary) else 'pre_v3'

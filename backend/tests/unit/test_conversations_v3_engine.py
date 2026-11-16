@@ -143,3 +143,38 @@ def test_manual_end_prevents_a_short_gap_resume():
     assert len(windows) == 2
     assert windows[0]['finished'] is True
     assert windows[1]['finished'] is False
+
+
+def test_rebuild_preserves_discard_lock_and_user_title():
+    row = recording()
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    prior = {
+        'id': 'c',
+        'status': 'in_progress',
+        'discarded': True,
+        'is_locked': True,
+        'title_locked': True,
+        'user_title': 'My edit',
+        'structured': {'title': 'Kept title', 'emoji': '🌳'},
+    }
+    result = planner.build('u', window, {'r': row}, prior)
+    assert result['discarded'] and result['is_locked'] and result['title_locked']
+    assert result['user_title'] == 'My edit' and result['structured']['title'] == 'Kept title'
+    # A paid-plan unlock already applied to the conversation must also survive.
+    prior['is_locked'] = False
+    row['is_locked'] = True
+    assert planner.build('u', window, {'r': row}, prior)['is_locked'] is False
+
+
+def test_manual_end_after_last_speech_closes_preceding_stretch():
+    row = recording(finished_at=NOW + timedelta(seconds=25), v3_manual_end=True)
+    group = outline.stretches([row], NOW + timedelta(seconds=30))[0]
+    assert group['finished'] and group['manual_end']
+
+
+def test_outline_fallback_is_valid_and_deterministic():
+    group = outline.stretches([recording()], NOW + timedelta(hours=1))[0]
+    entries = outline.fallback(group)
+    assert entries == outline.fallback(group)
+    assert outline.parse(json.dumps({'conversations': entries}), group)

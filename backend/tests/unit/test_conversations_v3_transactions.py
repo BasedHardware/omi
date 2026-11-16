@@ -1,5 +1,9 @@
 """Strict read-before-write contracts using synthetic document boundaries."""
 
+from database import conversations_v3_leases as leases
+
+from database import conversations_v3_processing as writers
+
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from database import conversations_v3 as store
+from utils.conversations.v3 import service, summary
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 AT = datetime.now(timezone.utc)
@@ -17,11 +22,12 @@ L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
 @pytest.fixture
 def strict(monkeypatch):
     client = StrictFirestore()
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
 
     def transactional(body):
-        def run(tx):
+        def run(tx, *args, **kwargs):
             with client.lock:
-                return body(tx)
+                return body(tx, *args, **kwargs)
 
         return run
 
@@ -39,20 +45,20 @@ def strict(monkeypatch):
 
 def test_two_workers_get_one_lease(strict):
     with ThreadPoolExecutor(max_workers=2) as pool:
-        tokens = list(pool.map(lambda _: store.acquire('synthetic', 'builder', firestore_client=strict), range(2)))
+        tokens = list(pool.map(lambda _: leases.acquire('synthetic', 'builder', firestore_client=strict), range(2)))
     assert sum(token is not None for token in tokens) == 1
 
 
 def test_expired_worker_cannot_release_successor(strict):
-    old = store.acquire('synthetic', 'builder', now=AT - timedelta(hours=1), firestore_client=strict)
-    new = store.acquire('synthetic', 'builder', now=AT, firestore_client=strict)
-    store.release('synthetic', 'builder', old, firestore_client=strict)
+    old = leases.acquire('synthetic', 'builder', now=AT - timedelta(hours=1), firestore_client=strict)
+    new = leases.acquire('synthetic', 'builder', now=AT, firestore_client=strict)
+    leases.release('synthetic', 'builder', old, firestore_client=strict)
     assert strict.rows[L]['token'] == new
 
 
 def test_atomic_projection_and_claim(strict):
     strict.rows[R] = {'recording': True, 'v3_pending': True}
-    token = store.acquire('synthetic', 'builder', firestore_client=strict)
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     source = {'id': 'r', 'recording': True, '_v3_revision': 1}
     row = {
         'id': 'c',
@@ -71,7 +77,7 @@ def test_atomic_projection_and_claim(strict):
 
 def test_new_speech_preserves_pending_on_conflict(strict):
     strict.rows[R] = {'recording': True, 'v3_pending': True, '_test_revision': 2}
-    token = store.acquire('synthetic', 'builder', firestore_client=strict)
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
     with pytest.raises(store.Conflict, match='source_changed'):
         store.commit_projection('synthetic', token, {'r': {'_v3_revision': 1}}, {}, [], [], firestore_client=strict)
     assert strict.rows[R]['v3_pending'] is True
@@ -230,3 +236,178 @@ async def test_two_concurrent_reconciles_publish_one_copy(strict, monkeypatch):
     copies = [r for path, r in strict.rows.items() if path[2] == 'conversations' and r.get('v3_derived')]
     assert len(copies) == 1 and len(strict.rows[R]['claims']) == 1
     assert calls == ['synthetic']
+
+
+def test_delete_during_capture_rearms_purge_at_settlement(strict, monkeypatch):
+    row = {'id': 'c', 'v3_derived': True, 'v3_recording_ids': ['r'], 'started_at': AT, 'finished_at': AT}
+    strict.rows[('users', 'synthetic', 'deleted_conversations', 'c')] = {'conversation_id': 'c'}
+    strict.rows[R] = {
+        'id': 'r',
+        'recording': True,
+        'status': 'in_progress',
+        'v3_pending': True,
+        'claims': [{'conversation_id': 'c', 'start': AT, 'end': AT}],
+    }
+    store.release_claims('synthetic', row, firestore_client=strict)
+    assert strict.rows[R]['v3_audio_purge_pending'] is False
+    strict.rows[R]['status'] = 'completed'
+    source = {**strict.rows[R], '_v3_revision': 1}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    store.commit_projection('synthetic', token, {'r': source}, {}, [], [], firestore_client=strict)
+    assert strict.rows[R]['v3_audio_purge_pending'] is True
+    from utils.other import storage
+
+    erased = []
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(storage, 'delete_privacy_conversation_audio', lambda *a: erased.append(a))
+    monkeypatch.setattr(
+        service.conversations_db, 'update_conversation', lambda uid, cid, patch: strict.rows[R].update(patch)
+    )
+    service.purge_audio('synthetic', 'r')
+    assert erased == [('synthetic', 'r')]
+    assert strict.rows[R]['v3_audio_erased'] is True
+    assert strict.rows[R]['v3_audio_purge_pending'] is False
+
+
+@pytest.mark.parametrize('state', ['deleted', 'is_locked'])
+def test_terminal_processing_settles_pending(strict, state):
+    cid = ('users', 'synthetic', 'conversations', 'c')
+    strict.rows[cid] = {'id': 'c', state: True, 'v3_process_pending': True}
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    writers.settle_processing('synthetic', 'c', token, None, None, skipped=True, firestore_client=strict)
+    assert strict.rows[cid]['v3_process_pending'] is False
+    assert strict.rows[cid]['tile_state'] == 'done'
+    assert 'summary_covers_through' not in strict.rows[cid]
+
+
+def test_paid_processing_and_outline_retries_are_content_bounded(strict):
+    cid = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'transcript_segments': [{'text': 'synthetic content'}]}
+    strict.rows[cid] = dict(row, v3_process_pending=True)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    assert not writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    assert strict.rows[cid]['v3_process_pending'] is False
+    row['transcript_segments'].append({'text': 'changed content'})
+    assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    builder = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    assert store.outline_attempt('synthetic', builder, 'fp', firestore_client=strict)
+    assert store.outline_attempt('synthetic', builder, 'fp', firestore_client=strict)
+    assert not store.outline_attempt('synthetic', builder, 'fp', firestore_client=strict)
+    assert store.outline_attempt('synthetic', builder, 'new-fp', firestore_client=strict)
+
+
+def test_projection_allows_transcript_offload(strict, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        store.conversations, '_prepare_conversation_for_write', lambda row, *a, **kw: calls.append(kw) or dict(row)
+    )
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    store.commit_projection(
+        'synthetic', token, {}, {}, [{'id': 'c', 'status': 'completed'}], [], firestore_client=strict
+    )
+    assert calls[0]['allow_offload'] is True
+
+
+def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, monkeypatch):
+    strict.rows[R] = {'id': 'r', 'recording': True, 'v3_pending': True, 'status': 'completed'}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    original = store.firestore.transactional
+    observations = []
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            result = wrapped(tx, *args)
+            observations.append(strict.rows[R]['v3_pending'])
+            return result
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    rows = [
+        {
+            'id': f'c{i}',
+            'status': 'processing',
+            'started_at': AT,
+            'finished_at': AT,
+            'v3_recording_ids': ['r'],
+            'transcript_segments': [{'text': 'x' * 60000}],
+        }
+        for i in range(128)
+    ]
+    store.commit_projection(
+        'synthetic', token, {'r': {**strict.rows[R], '_v3_revision': 1}}, {}, rows, [], firestore_client=strict
+    )
+    assert len(observations) >= 4
+    assert all(observations[:-1]) and observations[-1] is False
+    assert len(strict.rows[R]['claims']) == 128
+
+
+def test_metadata_revision_change_does_not_rebill_unchanged_content(strict, monkeypatch):
+    cid = ('users', 'synthetic', 'conversations', 'c')
+    original = {'id': 'c', 'transcript_segments': [{'text': 'same real content'}], 'sync_content_revision': 1}
+    strict.rows[cid] = dict(original, v3_process_pending=True, sync_content_revision=2)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    writers.settle_processing(
+        'synthetic', 'c', token, 1, AT, content_hash=writers.processing_hash(original), firestore_client=strict
+    )
+    assert strict.rows[cid]['v3_process_pending'] is False
+    strict.rows[cid]['transcript_segments'] = [{'text': 'actually changed content'}]
+    with pytest.raises(store.Conflict, match='processing_source_changed'):
+        writers.settle_processing(
+            'synthetic', 'c', token, 1, AT, content_hash=writers.processing_hash(original), firestore_client=strict
+        )
+
+
+@pytest.mark.asyncio
+async def test_summary_holder_stores_before_releasing_lease_and_detail_sees_result(strict, monkeypatch):
+    from utils.conversations.v3 import summary
+
+    cid = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'created_at': AT, 'started_at': AT, 'finished_at': AT, 'structured': {'title': 'Stable'}}
+    strict.rows[cid] = row
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: strict)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snap: snap.to_dict())
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(
+        summary,
+        'write',
+        lambda *a: {'title': 'Stable', 'sections': [{'heading': 'Plan', 'body_markdown': 'Full notes.'}]},
+    )
+    original = writers.store_summary
+
+    def persist(*args):
+        assert leases.acquire('synthetic', 'summary-c', firestore_client=strict) is None
+        return original(*args)
+
+    monkeypatch.setattr(writers, 'store_summary', persist)
+    token = await summary.prepare('synthetic', row)
+    frames = [frame async for frame in summary.stream('synthetic', row, token=token)]
+    assert frames[-1].startswith('done: ')
+    assert strict.rows[cid]['structured']['sections'][0]['body_markdown'] == 'Full notes.'
+    assert strict.rows[cid]['summary_covers_through'] == AT
+    assert leases.acquire('synthetic', 'summary-c', firestore_client=strict) is not None
+
+
+def test_on_open_projection_keeps_background_pending_obligation(strict):
+    strict.rows[R] = {'recording': True, 'v3_pending': True, 'v3_pending_since': AT}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    store.commit_projection(
+        'synthetic',
+        token,
+        {'r': {**strict.rows[R], '_v3_revision': 1}},
+        {},
+        [],
+        [],
+        clear_pending=False,
+        firestore_client=strict,
+    )
+    assert strict.rows[R]['v3_pending'] is True and strict.rows[R]['v3_pending_since'] == AT

@@ -6,60 +6,23 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 
 import json
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 from typing import Any
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
-from database import conversations
+from database import conversations, conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
 from utils.conversations.v3.errors import Conflict
 
 LIMIT = 128
-LEASE_SECONDS = 240
 
 
 def user_conversations(client, uid):
     return client.collection('users').document(uid).collection('conversations')
-
-
-def lease_ref(client, uid, key):
-    return client.collection('users').document(uid).collection('conversation_v3_leases').document(key)
-
-
-def acquire(uid, key, *, now=None, firestore_client=None):
-    client = firestore_client or get_firestore_client()
-    now = now or datetime.now(timezone.utc)
-    token = uuid4().hex
-    ref = lease_ref(client, uid, key)
-
-    @firestore.transactional
-    def claim(tx):
-        snapshot = ref.get(transaction=tx)
-        row = snapshot.to_dict() or {}
-        if row.get('until') and row['until'] > now:
-            return None
-        tx.set(ref, {**row, 'token': token, 'until': now + timedelta(seconds=LEASE_SECONDS)})
-        return token
-
-    return claim(client.transaction())
-
-
-def release(uid, key, token, *, firestore_client=None):
-    client = firestore_client or get_firestore_client()
-    ref = lease_ref(client, uid, key)
-
-    @firestore.transactional
-    def finish(tx):
-        row = ref.get(transaction=tx).to_dict() or {}
-        if row.get('token') == token:
-            tx.update(ref, {'until': datetime.now(timezone.utc), 'token': None})
-
-    finish(client.transaction())
 
 
 def decode_row(uid, snapshot) -> dict[str, Any] | None:
@@ -79,19 +42,42 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     return data
 
 
-def load(uid, *, firestore_client=None):
+def load(uid, *, conversation_id=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     if account_deletion_blocks_user_work(uid):
         raise Conflict('account_deletion')
     coll = user_conversations(client, uid)
-    pending = list(coll.where(filter=FieldFilter('v3_pending', '==', True)).limit(LIMIT + 1).stream())
-    if len(pending) > LIMIT:
-        raise Conflict('v3_pending_budget')
-    recordings = {doc.id: decode_row(uid, doc) for doc in pending}
+    opened = decode_row(uid, coll.document(conversation_id).get()) if conversation_id else None
+    if conversation_id:
+        ids = (opened or {}).get('v3_recording_ids') or []
+        pending = [coll.document(rid).get() for rid in ids]
+    else:
+        pending = list(
+            coll.where(filter=FieldFilter('v3_pending', '==', True)).order_by('v3_pending_since').limit(33).stream()
+        )
+    continued_id = None
+    if not conversation_id and len(pending) > 32:
+        last, following = pending[31].to_dict() or {}, pending[32].to_dict() or {}
+        if (
+            last.get('finished_at')
+            and following.get('started_at')
+            and following['started_at'] - last['finished_at'] < timedelta(minutes=5)
+        ):
+            continued_id = pending[31].id
+        pending = pending[:32]
+    recordings = {}
+    unreadable = {}
+    for doc in pending:
+        raw = doc.to_dict() or {}
+        if raw.get('data_protection_level') == 'private' or not raw.get('started_at'):
+            unreadable[doc.id] = {**raw, 'id': doc.id, '_v3_revision': doc.update_time}
+        else:
+            recordings[doc.id] = decode_row(uid, doc)
+            if doc.id == continued_id:
+                recordings[doc.id]['_v3_page_continues'] = True
     if recordings:
         eligible = [r for r in recordings.values() if r and r.get('started_at')]
-        active = [r for r in eligible if r.get('status') == 'in_progress']
-        anchor = min(active or eligible, key=lambda r: r['started_at']) if eligible else None
+        anchor = min(eligible, key=lambda r: r['started_at']) if eligible else None
         if anchor:
             start = anchor['started_at'] - timedelta(minutes=20)
             end = (anchor.get('finished_at') or anchor['started_at']) + timedelta(minutes=20)
@@ -103,12 +89,14 @@ def load(uid, *, firestore_client=None):
                 and r['started_at'] <= end
                 and (r.get('finished_at') or r['started_at']) >= start
             }
-    state = lease_ref(client, uid, 'builder').get().to_dict() or {}
+    state = leases.lease_ref(client, uid, 'builder').get().to_dict() or {}
     cache = json.loads(decrypt(state['outline_cache'], uid)) if state.get('outline_cache') else []
-    if not recordings and not state.get('open_id'):
-        return {}, {}, cache
+    if not recordings and not state.get('open_id') and not opened:
+        return unreadable, {}, cache
     existing = {}
-    if state.get('open_id'):
+    if opened:
+        existing[opened['id']] = opened
+    elif state.get('open_id') and not conversation_id:
         opened = decode_row(uid, coll.document(state['open_id']).get())
         if opened:
             existing[opened['id']] = opened
@@ -121,8 +109,6 @@ def load(uid, *, firestore_client=None):
             for p in row.get('recording_pieces') or []
             if p['recording_id'] != row['id']
         )
-        if len(ids | recordings.keys()) > LIMIT:
-            raise Conflict('v3_recording_budget')
         for rid in ids - recordings.keys():
             row = decode_row(uid, coll.document(rid).get())
             if row:
@@ -157,7 +143,7 @@ def load(uid, *, firestore_client=None):
         queried.update(row['id'] for row in fresh)
     else:
         raise Conflict('v3_source_closure_budget')
-    return recordings, existing, cache
+    return {**recordings, **unreadable}, existing, cache
 
 
 def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
@@ -178,22 +164,23 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
     return mark(client.transaction())
 
 
-def commit_projection(uid, token, recordings, existing, rows, cache, *, firestore_client=None):
+def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True, firestore_client=None):
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
-    held = lease_ref(client, uid, 'builder')
+    held = leases.lease_ref(client, uid, 'builder')
     prepared = []
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
         prepared.append(
             conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-                clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=False
+                clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=True
             )
         )
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
 
     @firestore.transactional
-    def commit(tx):
+    def commit(tx, batch_rows, batch_prepared, final):
+        observed = {}
         now = datetime.now(timezone.utc)
         lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
@@ -208,7 +195,8 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
             snapshot = coll.document(rid).get(transaction=tx)
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 raise Conflict('source_changed')
-        for row in rows:
+            observed[rid] = snapshot.to_dict() or {}
+        for row in batch_rows:
             tombstone = (
                 client.collection('users')
                 .document(uid)
@@ -218,16 +206,16 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
             )
             if tombstone.exists:
                 raise Conflict('target_deleted')
-        new_ids = {r['id'] for r in rows} - existing.keys()
+        new_ids = {r['id'] for r in batch_rows} - existing.keys()
         for cid in new_ids:
             if coll.document(cid).get(transaction=tx).exists:
                 raise Conflict('target_exists')
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
-        for row in prepared:
+        for row in batch_prepared:
             filter_processing_write(tx, user, row)
-        for raw, row in zip(rows, prepared):
+        for raw, row in zip(batch_rows, batch_prepared):
             if raw.get('deleted'):
                 continue
             tx.set(coll.document(row['id']), row)
@@ -235,8 +223,9 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
                 continue
-            claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in existing]
-            for row in rows:
+            replaced = {r['id'] for r in batch_rows}
+            claims = [c for c in recording.get('claims') or [] if c['conversation_id'] not in replaced]
+            for row in batch_rows:
                 if rid not in row.get('v3_recording_ids', []) or row.get('deleted'):
                     continue
                 spans = row.get('_v3_claims', {}).get(rid, [{'start': row['started_at'], 'end': row['finished_at']}])
@@ -245,8 +234,13 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
                 coll.document(rid),
                 {
                     'claims': claims,
-                    'v3_pending': False,
-                    'v3_pending_since': None,
+                    'v3_pending': False if final and clear_pending else recording.get('v3_pending', False),
+                    'v3_pending_since': None if final and clear_pending else recording.get('v3_pending_since'),
+                    'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
+                    and final
+                    and clear_pending
+                    and not claims
+                    and recording.get('status') == 'completed',
                     **(
                         {'recording': True, 'structured': {}, 'backfill_superseded': True}
                         if recording.get('_v3_derive')
@@ -268,54 +262,44 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, firestor
                 ),
             },
         )
+        return observed
 
-    commit(client.transaction())
-
-
-def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):
-    client = firestore_client or get_firestore_client()
-    ref, held = user_conversations(client, uid).document(cid), lease_ref(client, uid, 'summary-' + cid)
-    patch = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-        {'structured': structured}, uid, 'enhanced', allow_offload=False
-    )
-
-    @firestore.transactional
-    def store(tx):
-        snapshot = ref.get(transaction=tx)
-        deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
-        if account_deletion_marker_blocks_access(
-            marker_exists=deletion.exists, raw_status=(deletion.to_dict() or {}).get('status')
-        ):
-            raise Conflict('account_deletion')
-        lease = held.get(transaction=tx).to_dict() or {}
-        current = snapshot.to_dict() or {}
-        if (
-            not snapshot.exists
-            or current.get('deleted')
-            or current.get('is_locked')
-            or snapshot.update_time != revision
-            or lease.get('token') != token
-            or not lease.get('until')
-            or lease['until'] <= datetime.now(timezone.utc)
-        ):
-            raise Conflict('summary_source_changed')
-        if current.get('title_locked'):
-            patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
-            patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
-        tx.update(
-            ref,
-            {
-                **patch,
-                'summary_covers_through': covers,
-                **(
-                    {'title_locked': True}
-                    if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
-                    else {}
-                ),
-            },
-        )
-
-    store(client.transaction())
+    batches, current, size = [], [], 0
+    for raw, encoded in zip(rows, prepared):
+        amount = len(json.dumps(encoded, default=str).encode())
+        if current and size + amount > 2 * 1024 * 1024:
+            batches.append(current)
+            current, size = [], 0
+        current.append((raw, encoded))
+        size += amount
+    if current or not batches:
+        batches.append(current)
+    for index, batch in enumerate(batches):
+        observed = commit(client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1)
+        if index != len(batches) - 1:
+            # Read back only after our commit; any external race is checked
+            # again by the next transaction's revision fence. Pending stays
+            # set until the final batch, so an interrupted prefix self-heals.
+            for rid in recordings:
+                snapshot = coll.document(rid).get()
+                current = snapshot.to_dict() or {}
+                owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
+                if {k: v for k, v in current.items() if k not in owned} != {
+                    k: v for k, v in observed[rid].items() if k not in owned
+                }:
+                    raise Conflict('source_changed')
+                recordings[rid] = {
+                    **recordings[rid],
+                    'claims': current.get('claims') or [],
+                    '_v3_revision': snapshot.update_time,
+                }
+            for raw, encoded in batch:
+                snapshot = coll.document(raw['id']).get()
+                if snapshot.exists:
+                    current = snapshot.to_dict() or {}
+                    if any(current.get(k) != value for k, value in encoded.items()):
+                        raise Conflict('source_changed')
+                    existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
 
 
 def release_claims(uid, row, *, firestore_client=None):
@@ -476,39 +460,23 @@ def transfer_claims(uid, sources, target, *, firestore_client=None):
     transfer(client.transaction())
 
 
-def settle_processing(uid, cid, token, revision, covers, *, firestore_client=None):
+def outline_attempt(uid, token, fingerprint, *, firestore_client=None):
     client = firestore_client or get_firestore_client()
-    ref = user_conversations(client, uid).document(cid)
-    held = lease_ref(client, uid, 'summary-' + cid)
+    ref = leases.lease_ref(client, uid, 'builder')
 
     @firestore.transactional
-    def settle(tx):
+    def begin(tx):
         row = ref.get(transaction=tx).to_dict() or {}
-        lease = held.get(transaction=tx).to_dict() or {}
-        if (
-            not row
-            or row.get('deleted')
-            or row.get('sync_content_revision') != revision
-            or lease.get('token') != token
-            or not lease.get('until')
-            or lease['until'] <= datetime.now(timezone.utc)
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= datetime.now(
+            timezone.utc
         ):
-            raise Conflict('processing_source_changed')
-        tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'summary_covers_through': covers})
-
-    settle(client.transaction())
-
-
-def renew(uid, key, token, *, firestore_client=None):
-    client = firestore_client or get_firestore_client()
-    ref = lease_ref(client, uid, key)
-
-    @firestore.transactional
-    def extend(tx):
-        row = ref.get(transaction=tx).to_dict() or {}
-        now = datetime.now(timezone.utc)
-        if row.get('token') != token or not row.get('until') or row['until'] <= now:
             raise Conflict('lease_lost')
-        tx.update(ref, {'until': now + timedelta(seconds=LEASE_SECONDS)})
+        attempts = dict(row.get('outline_attempts') or {})
+        count = attempts.get(fingerprint, 0)
+        if count >= 2:
+            return False
+        attempts[fingerprint] = count + 1
+        tx.update(ref, {'outline_attempts': dict(list(attempts.items())[-128:])})
+        return True
 
-    extend(client.transaction())
+    return begin(client.transaction())

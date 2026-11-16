@@ -56,6 +56,8 @@ FEED_FIELDS = [
     'home_started_at',
 ]
 CONVERSATION_FIELDS = [
+    'recording',
+    'home_hidden',
     'id',
     'started_at',
     'created_at',

@@ -63,6 +63,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/conversation_processing_recovery.py:collection": {
+    "policy": "both",
+    "reason": "Owner-scoped orphan/finalization recovery metadata; terminalize capture rows without product reads or model work."
+  },
   "backend/database/conversation_quiet_checks.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
@@ -98,6 +102,10 @@
   "backend/database/conversations_v3.py:collection": {
     "policy": "storage",
     "reason": "Transaction-fenced builder, summary and recording claims; all data is owner scoped."
+  },
+  "backend/database/conversations_v3_processing.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
   },
   "backend/database/daily_summaries.py:collection": {
     "policy": "storage",
@@ -176,10 +184,6 @@
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
   "backend/database/pipeline_ledger_census.py:get_conversation_raw_snapshot": {
-    "policy": "storage",
-    "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
-  },
-  "backend/database/pipeline_ledger_census.py:get_visible_conversation_raw_snapshot": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
@@ -335,15 +339,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/routers/action_items.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/routers/chat_first.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/routers/chat_first.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -355,14 +351,6 @@
     "policy": "both",
     "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
   },
-  "backend/routers/conversations.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
-  },
-  "backend/routers/conversations.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
-  },
   "backend/routers/developer.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
@@ -371,15 +359,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/routers/developer.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/routers/folders.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/routers/folders.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -415,19 +395,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/routers/mobile_feedback.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/routers/pending_work.py:collection": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/routers/pending_work.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/routers/pending_work.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -439,23 +411,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/routers/screen_frames.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/routers/speaker_tag_prompts.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/routers/speaker_tag_prompts.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/routers/sync.py:get_conversation": {
-    "policy": "both",
-    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
-  },
-  "backend/routers/sync.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
   },
@@ -487,19 +447,11 @@
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
-  "backend/scripts/backfill_summary_vectors.py:get_visible_conversation": {
-    "policy": "operator",
-    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
-  },
   "backend/scripts/backfill_sync_donor_tombstone_discarded.py:collection": {
     "policy": "operator",
     "reason": "Explicit offline repair/operator tool; no product read surface."
   },
   "backend/scripts/backfill_transcript_chunk_vectors.py:get_conversation": {
-    "policy": "operator",
-    "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
-  },
-  "backend/scripts/backfill_transcript_chunk_vectors.py:get_visible_conversation": {
     "policy": "operator",
     "reason": "Offline operator utility; explicit raw ownership/recovery inspection, never a product read."
   },
@@ -595,21 +547,9 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/services/conversation_frame_evidence.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/services/conversation_frame_evidence.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/services/conversation_selfheal.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
-  },
-  "backend/services/conversation_selfheal.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/services/summary_debt_repair.py:collection": {
     "policy": "conversations",
@@ -620,10 +560,6 @@
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
   "backend/utils/agent_capabilities/reads.py:get_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/agent_capabilities/reads.py:get_visible_conversation_raw_snapshot": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -671,10 +607,6 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/batch_pipeline/record_projection_rebuild.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/batch_pipeline/record_seal_cluster_repair.py:collection_group": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -703,10 +635,6 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/conversations/capture_group_meeting_context.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/conversations/capture_group_notes_refresh.py:get_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -715,21 +643,9 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/conversations/capture_group_notes_refresh.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/conversations/capture_group_notes_refresh.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/conversations/final_pass_retry.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
-  },
-  "backend/utils/conversations/final_pass_retry.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/utils/conversations/finalizer.py:get_conversation": {
     "policy": "both",
@@ -747,19 +663,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/conversations/lazy_enrichment.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/lifecycle.py:collection": {
     "policy": "both",
     "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
   },
   "backend/utils/conversations/lifecycle.py:get_conversation": {
-    "policy": "both",
-    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
-  },
-  "backend/utils/conversations/lifecycle.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
   },
@@ -775,19 +683,7 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/conversations/llm_input_dedupe.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/conversations/llm_input_dedupe.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/merge_conversations.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/conversations/merge_conversations.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -799,19 +695,11 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/conversations/merge_conversations_job.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/process_conversation.py:get_conversation": {
     "policy": "both",
     "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
   },
   "backend/utils/conversations/process_conversation.py:get_in_progress_conversation": {
-    "policy": "both",
-    "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
-  },
-  "backend/utils/conversations/process_conversation.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Mixed boundary: capture/finalize/audio opt in; product operations reject recordings. The processor has a no-model recording guard."
   },
@@ -823,15 +711,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/conversations/relevance_io.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/screen_frame_evidence.py:get_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/conversations/screen_frame_evidence.py:get_visible_conversation_raw_snapshot": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -839,31 +719,15 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/conversations/smart_merge.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/speaker_identity_retry.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
-  },
-  "backend/utils/conversations/speaker_identity_retry.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/utils/conversations/speaker_resolution.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/conversations/speaker_resolution.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/sync_hold_completion.py:get_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/conversations/sync_hold_completion.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
@@ -879,19 +743,11 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/conversations/transcription_shadow.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/conversations/typesense_index.py:collection": {
     "policy": "both",
     "reason": "Index projection reads the recording marker and deletes recording documents from the first-party index."
   },
   "backend/utils/conversations/v3/audio.py:get_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/conversations/v3/audio.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
@@ -903,15 +759,15 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/conversations/v3/service.py:get_visible_conversation": {
+  "backend/utils/conversations/v3/service.py:user_conversations": {
     "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
+  },
+  "backend/utils/conversations/v3/summary.py:user_conversations": {
+    "policy": "both",
+    "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."
   },
   "backend/utils/developer_item_reads.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/developer_item_reads.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -935,25 +791,13 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/enrichment/callback.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/enrichment/consumer.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/enrichment/consumer.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/enrichment/early_abort.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
-  },
-  "backend/utils/enrichment/early_abort.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/utils/enrichment/outbox.py:document_path": {
     "policy": "both",
@@ -971,23 +815,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/entity_pages.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/episodes/capture_groups.py:get_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/episodes/capture_groups.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/episodes/composer.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/episodes/composer.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -999,23 +831,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/episodes/f_join.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/episodes/finalize.py:get_conversation": {
     "policy": "both",
     "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
   },
   "backend/utils/episodes/finalize.py:get_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
-  },
-  "backend/utils/episodes/finalize.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
-  },
-  "backend/utils/episodes/finalize.py:get_visible_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Lifecycle/capture/finalization raw metadata exception; downstream recording guards suppress all paid/derived work."
   },
@@ -1031,10 +851,6 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/episodes/output_language.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/episodes/service.py:get_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
@@ -1043,19 +859,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/episodes/service.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/episodes/service.py:get_visible_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/episodes/visibility.py:get_conversation_raw_snapshot": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/episodes/visibility.py:get_visible_conversation_raw_snapshot": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -1079,23 +883,11 @@
     "policy": "both",
     "reason": "Explicit recording-layer pipeline/finalization/recovery exception. Reads persisted ownership; recording processing exits before model calls."
   },
-  "backend/utils/processing_backlog_worker.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/pusher_audio_projection.py:get_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/pusher_audio_projection.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/recording_speakers.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/recording_speakers.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -1107,19 +899,11 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/retrieval/tool_services/action_items.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/retrieval/tool_services/conversations.py:get_conversations_by_id": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/utils/retrieval/tools/action_item_tools.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/retrieval/tools/action_item_tools.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -1131,15 +915,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/retrieval/tools/edit_tools.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/review.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/review.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -1151,10 +927,6 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/speaker_auto_enroll.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/speaker_identification.py:get_conversation": {
     "policy": "both",
     "reason": "Explicit capture, audio, recording, sync or finalization metadata exception; recording processing has a no-model exit."
@@ -1163,15 +935,7 @@
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
-  "backend/utils/speaker_tag_prompts/embedding_cache.py:get_visible_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
   "backend/utils/speaker_tag_prompts/service.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/speaker_tag_prompts/service.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
@@ -1183,10 +947,6 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/sync/bridge.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/sync/fsr_metadata.py:get_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
@@ -1195,19 +955,7 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/sync/fsr_metadata.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/sync/fsr_metadata.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/sync/minimal_redrive.py:get_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/sync/minimal_redrive.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
@@ -1215,15 +963,7 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/sync/pipeline.py:get_visible_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/sync/playback.py:get_conversation": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/sync/playback.py:get_visible_conversation": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
@@ -1231,15 +971,7 @@
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
-  "backend/utils/sync/playback_build.py:get_visible_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
   "backend/utils/sync/playback_metadata.py:get_conversation_raw_snapshot": {
-    "policy": "both",
-    "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
-  },
-  "backend/utils/sync/playback_metadata.py:get_visible_conversation_raw_snapshot": {
     "policy": "both",
     "reason": "Capture, audio, sync, custody, retention, export, deletion or v3 construction owns recording-layer access; all lookups remain scoped to their owner."
   },
@@ -1256,10 +988,6 @@
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   },
   "backend/utils/task_intelligence/task_source_validation.py:get_conversation": {
-    "policy": "conversations",
-    "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
-  },
-  "backend/utils/task_intelligence/task_source_validation.py:get_visible_conversation": {
     "policy": "conversations",
     "reason": "Product and derived readers must apply is_visible_conversation or the validated by-id boundary; home_hidden is not a general visibility filter."
   }
