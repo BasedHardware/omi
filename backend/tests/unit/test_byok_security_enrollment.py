@@ -5,6 +5,7 @@ Covers: Enrollment, subscription entitlements, middleware validation, cache rout
 
 import hashlib
 from typing import Dict
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -477,21 +478,34 @@ class TestCacheRouting:
         assert inst1 is inst2
         constructor.assert_called_once_with(model='gpt-4.1-mini', api_key=api_key)
 
-    def test_cached_anthropic_no_raw_key_in_cache(self):
-        from utils.llm.clients import _anthropic_cache, _cached_anthropic
+    @staticmethod
+    def _stub_anthropic_constructor(monkeypatch):
+        from utils.llm import clients
 
+        # Cache/hash behavior is ours; importing/constructing the provider SDK is
+        # not. Keep the real cache functions and key derivation under test.
+        constructor = MagicMock(return_value=object())
+        clients._anthropic_cache.clear()
+        monkeypatch.setattr(clients, '_anthropic_module', lambda: SimpleNamespace(AsyncAnthropic=constructor))
+        return clients, constructor
+
+    def test_cached_anthropic_no_raw_key_in_cache(self, monkeypatch):
+        clients, constructor = self._stub_anthropic_constructor(monkeypatch)
         api_key = 'sk-ant-secret-key-for-cache-test'
-        _cached_anthropic(api_key)
-        for k in _anthropic_cache.keys():
+        client = clients._cached_anthropic(api_key)
+        for k in clients._anthropic_cache.keys():
             assert api_key not in k, f"Raw API key found in cache key: {k}"
+        assert list(clients._anthropic_cache) == [hashlib.sha256(api_key.encode()).hexdigest()]
+        assert clients._anthropic_cache[hashlib.sha256(api_key.encode()).hexdigest()] is client
+        constructor.assert_called_once_with(api_key=api_key, timeout=120.0, max_retries=1)
 
-    def test_cached_anthropic_returns_same_instance(self):
-        from utils.llm.clients import _cached_anthropic
-
+    def test_cached_anthropic_returns_same_instance(self, monkeypatch):
+        clients, constructor = self._stub_anthropic_constructor(monkeypatch)
         api_key = 'sk-ant-deterministic-key'
-        inst1 = _cached_anthropic(api_key)
-        inst2 = _cached_anthropic(api_key)
+        inst1 = clients._cached_anthropic(api_key)
+        inst2 = clients._cached_anthropic(api_key)
         assert inst1 is inst2
+        constructor.assert_called_once_with(api_key=api_key, timeout=120.0, max_retries=1)
 
     def test_gemini_byok_routes_to_gemini_endpoint(self, monkeypatch):
         from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
