@@ -1,0 +1,157 @@
+"""Strict, transactional heartbeat authority hosted by the existing serving supervisor.
+
+The advisory maintenance lease is deliberately not used: ownership and the gate
+write share a transaction, and any error latches this process off until restart.
+"""
+
+import os
+import time
+import uuid
+from dataclasses import dataclass
+from threading import Lock
+
+from prometheus_client import Gauge
+
+from config.batch_pipeline import provider_backlog_release_closed, provider_backlog_release_enabled
+from config.policy.kill_switches import kill_switch
+from utils.batch_pipeline.backlog_release import Gate, MIN_REACH_SECONDS, TOKENS_USED, WINDOW, valid_owner_keys
+
+PREFIX = 'BATCH_PIPELINE_BACKLOG_RELEASE_'
+LEASE_KEY = 'backlog_heartbeat'
+LEASE_SECONDS = 120
+TICK_SECONDS = 20
+LAST_HEARTBEAT = Gauge('omi_batch_pipeline_backlog_heartbeat_timestamp_seconds', 'Last durable writer heartbeat')
+
+
+@dataclass(frozen=True)
+class WriterConfig:
+    enabled: bool = False
+    state: str = 'closed'
+    rate_per_hour: int = 0
+    reach_seconds: int = 0
+    mode: str = 'allowlist_only'
+    owner_keys: tuple[str, ...] = ()
+
+    def validate(self):
+        if (
+            type(self.enabled) is not bool
+            or self.state not in ('open', 'closed')
+            or self.mode not in ('all', 'allowlist_only')
+            or type(self.rate_per_hour) is not int
+            or self.rate_per_hour < 0
+            or type(self.reach_seconds) is not int
+            or (self.reach_seconds != 0 and self.reach_seconds < MIN_REACH_SECONDS)
+            or not valid_owner_keys(self.owner_keys)
+        ):
+            raise ValueError('invalid backlog heartbeat configuration')
+        return self
+
+    @classmethod
+    def from_env(cls):
+        writer = os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_WRITER', 'disabled').strip().lower()
+        if writer not in ('enabled', 'disabled'):
+            raise ValueError('backlog writer must be enabled or disabled')
+        return cls(
+            enabled=writer == 'enabled',
+            state=os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_STATE', 'closed').strip().lower(),
+            rate_per_hour=int(os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR', '0')),
+            reach_seconds=int(os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS', '0')),
+            mode=os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_MODE', 'allowlist_only').strip().lower(),
+            owner_keys=tuple(
+                filter(None, os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS', '').strip().split(','))
+            ),
+        ).validate()
+
+
+class HeartbeatAuthority:
+    def __init__(self, store, *, clock=time.time, config=WriterConfig.from_env):
+        self.store, self.clock, self.config = store, clock, config
+        self.holder = uuid.uuid4().hex  # Process identity, never an owner identifier.
+        self.failed = False
+        self.lock = Lock()
+
+    def tick(self) -> bool:
+        with self.lock:
+            if self.failed:
+                return False
+            try:
+                return self._tick()
+            except Exception:
+                # Even an ambiguous acknowledgement stops refresh. A replacement must
+                # wait for the durable lease; the gate expires independently in 180s.
+                self.failed = True
+                raise
+
+    def _tick(self) -> bool:
+        config = self.config().validate()
+        if not config.enabled:
+            return False
+        if provider_backlog_release_enabled():
+            raise ValueError('heartbeat authority cannot run with legacy unmetered release configured')
+
+        def body(tx):
+            lease = tx.get('leases', LEASE_KEY)
+            row = tx.get('backlog_release', 'gate')
+            now = self.clock()  # Resampled on transaction retries.
+            if type(now) not in (float, int) or not 0 <= now < float('inf'):
+                raise ValueError('invalid heartbeat clock')
+            if lease:
+                if (
+                    set(lease) != {'holder', 'fence', 'expires_at', 'renewed_at'}
+                    or not isinstance(lease['holder'], str)
+                    or type(lease['fence']) is not int
+                    or lease['fence'] < 1
+                    or type(lease['expires_at']) not in (int, float)
+                    or not 0 <= lease['expires_at'] < float('inf')
+                    or type(lease['renewed_at']) not in (int, float)
+                    or not 0 <= lease['renewed_at'] <= now
+                ):
+                    raise ValueError('invalid heartbeat lease or regressing clock')
+                if lease['expires_at'] > now and lease['holder'] != self.holder:
+                    return None
+            gate = Gate.parse(row) if row else None
+            if lease and not row:
+                raise ValueError('missing backlog gate after authority initialization')
+            if row and gate is None:
+                # A malformed count must never be repaired by resetting the budget.
+                raise ValueError('invalid existing backlog gate')
+            if gate and now < gate.updated_at:
+                raise ValueError('heartbeat clock regressed')
+            # An expired lease cannot introduce a second clock within the old
+            # heartbeat's validity. Wait a full gate lifetime on takeover.
+            if lease and lease['holder'] != self.holder and gate and now - gate.updated_at < 180:
+                return None
+            window = gate.window if gate else int(now // 3600)
+            used = gate.tokens_used if gate else 0
+            state = config.state
+            if provider_backlog_release_closed() or not kill_switch(
+                'BATCH_PIPELINE_BACKLOG_RELEASE_METER_ENABLED', log=False
+            ):
+                state = 'closed'
+            new_gate = dict(
+                state=state,
+                rate_per_hour=config.rate_per_hour,
+                reach_seconds=config.reach_seconds,
+                window=window,
+                tokens_used=used,
+                updated_at=now,
+                schema_version=2,
+                mode=config.mode,
+                owner_keys=list(config.owner_keys),
+            )
+            fence = lease.get('fence', 0) + int(not lease or lease['holder'] != self.holder)
+            tx.put(
+                'leases',
+                LEASE_KEY,
+                dict(holder=self.holder, fence=fence, expires_at=now + LEASE_SECONDS, renewed_at=now),
+            )
+            tx.put('backlog_release', 'gate', new_gate)
+            return new_gate
+
+        row = self.store.run(body)
+        if row is None:
+            return False
+        LAST_HEARTBEAT.set(row['updated_at'])
+        TOKENS_USED.set(row['tokens_used'])
+        WINDOW.set(row['window'])
+        return True

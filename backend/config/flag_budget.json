@@ -77,6 +77,30 @@
       "review_by": "2026-12-14",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_MODE": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_STATE": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
+    "BATCH_PIPELINE_BACKLOG_RELEASE_WRITER": {
+      "owner": "quality-12h/Q12-BB",
+      "review_by": "2026-12-16"
+    },
     "BATCH_PIPELINE_CONTENTION_RETRY_ENABLED": {
       "owner": "batch record lane / rollout lead",
       "review_by": "2026-11-28"

@@ -441,7 +441,8 @@ class OrderedMerge:
                 if reason:
                     backlog['refusal'] = reason
                     return None
-                if over_cap:
+                if backlog_release.projection_refusal(tx, owner, depth):
+                    backlog['refusal'] = 'projection'
                     return None
                 backlog['token'] = token
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
@@ -749,6 +750,11 @@ class OrderedMerge:
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):
             backlog_release.COMMITTED.inc()
+            backlog_release.TOKENS_GRANTED.inc()
+            backlog_release.TOKENS_USED.set(backlog['token']['tokens_used'])
+            backlog_release.WINDOW.set(backlog['token']['window'])
+            if owner_key(entry['owner_id']) in backlog['token'].get('owner_keys', ()):
+                backlog_release.ALLOWLIST_HITS.inc()
         if entry:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:
