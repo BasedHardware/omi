@@ -26,9 +26,10 @@ def late_rewrite(*, previous_words, new_words, ended_at, now, rewrites):
 
 
 def _capped(lines, sections):
-    if lines[-1]['end'] - lines[0]['start'] <= CAP:
+    end = max(line['end'] for line in lines)
+    if end - lines[0]['start'] <= CAP:
         return [lines]
-    middle = lines[0]['start'] + (lines[-1]['end'] - lines[0]['start']) / 2
+    middle = lines[0]['start'] + (end - lines[0]['start']) / 2
     candidates = [i for i in sections if 0 < i < len(lines)] or list(range(1, len(lines)))
     if not candidates:
         raise ValueError('single_transcript_segment_exceeds_two_hours')
@@ -63,7 +64,9 @@ def windows(groups, outlines):
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
                     and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
-                    and part[-1]['end'] - prior['lines'][0]['start'] <= CAP
+                    and max(max(line['end'] for line in prior['lines']), max(line['end'] for line in part))
+                    - prior['lines'][0]['start']
+                    <= CAP
                 ):
                     prior['lines'].extend(part)
                     prior['finished'] = candidate['finished']

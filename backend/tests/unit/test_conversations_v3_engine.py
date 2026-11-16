@@ -95,7 +95,7 @@ def test_two_hour_cap_at_nearest_middle_section():
     windows = planner.windows(groups, [[entry(sections=[{'first_line': 91, 'title': 'Next subject'}])]])
     assert len(windows) == 2
     assert windows[1]['lines'][0]['start'] == NOW + timedelta(minutes=90)
-    assert all(w['lines'][-1]['end'] - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
+    assert all(max(line['end'] for line in w['lines']) - w['lines'][0]['start'] <= timedelta(hours=2) for w in windows)
 
 
 @pytest.mark.parametrize('gap', [5, 15.056, 20])
@@ -132,6 +132,23 @@ def test_model_resume_keeps_overlapping_speech_in_one_window():
         (10, 15),
         (20, 40),
     ]
+
+
+@pytest.mark.parametrize('resume', [False, True])
+def test_overlapping_turns_cannot_hide_a_window_end_beyond_the_cap(resume):
+    segments = [{'text': f'turn {i}', 'start': i * 60, 'end': i * 60 + 55} for i in range(120)]
+    segments.extend(
+        {'text': f'overlapping turn {i}', 'start': start, 'end': end}
+        for i, (start, end) in enumerate([(7188, 7198), (7190, 7195), (7192, 7204), (7193, 7199)])
+    )
+    row = recording(segments=segments)
+    groups = outline.stretches([row], NOW + timedelta(hours=4))
+    entries = [entry(), entry(123, resumes_previous=True)] if resume else [entry()]
+    windows = planner.windows(groups, [entries])
+    built = [planner.build('synthetic', window, {'r': row}) for window in windows]
+    assert len(built) == 2
+    assert all(window['finished_at'] - window['started_at'] <= timedelta(hours=2) for window in built)
+    assert sum(len(window['transcript_segments']) for window in built) == len(segments)
 
 
 @pytest.mark.parametrize('order', ['in_order', 'reversed', 'reconnect_first'])
