@@ -495,8 +495,11 @@ class TestCacheRouting:
         client = clients._cached_anthropic(api_key)
         for k in clients._anthropic_cache.keys():
             assert api_key not in k, f"Raw API key found in cache key: {k}"
-        assert list(clients._anthropic_cache) == [hashlib.sha256(api_key.encode()).hexdigest()]
-        assert clients._anthropic_cache[hashlib.sha256(api_key.encode()).hexdigest()] is client
+        # Fixed SHA-256 of the public fixture above: this verifies cache indexing,
+        # not password storage. Keep the exact digest and cached-object checks.
+        expected_cache_key = '556b1dd19cbebf91a8551fd2008123805d81f76534d8ef0a38c847ef15d090cd'
+        assert list(clients._anthropic_cache) == [expected_cache_key]
+        assert clients._anthropic_cache[expected_cache_key] is client
         constructor.assert_called_once_with(api_key=api_key, timeout=120.0, max_retries=1)
 
     def test_cached_anthropic_returns_same_instance(self, monkeypatch):
