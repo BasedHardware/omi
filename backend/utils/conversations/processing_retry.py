@@ -58,3 +58,33 @@ def processing_failure_code(error: BaseException) -> str:
             continue
         return DETERMINISTIC_PROCESSING_FAILURE
     return DETERMINISTIC_PROCESSING_FAILURE
+
+
+def retryable_provider_failure_class(error: BaseException) -> str | None:
+    """Return a bounded provider/transport class for synchronous HTTP recovery.
+
+    The durable finalization lane deliberately has a broader classifier because
+    it can retry transient Firestore failures too. The request/response boundary
+    only turns provider or HTTP transport failures into the caller's retryable
+    contract; local database faults stay on the generic processing error path.
+    """
+    seen: set[int] = set()
+    current = error
+    while id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(
+            current,
+            (TimeoutError, httpx.TimeoutException, anthropic.APITimeoutError, openai.APITimeoutError),
+        ):
+            return 'timeout'
+        if isinstance(current, (httpx.NetworkError, anthropic.APIConnectionError, openai.APIConnectionError)):
+            return 'transport'
+        if isinstance(current, (anthropic.APIStatusError, openai.APIStatusError, httpx.HTTPStatusError)):
+            status = current.response.status_code
+            if status == 429 or status >= 500:
+                return 'provider_status'
+        cause = current.__cause__ or current.__context__
+        if cause is None or id(cause) in seen:
+            return None
+        current = cause
+    return None

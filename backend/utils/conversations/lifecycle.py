@@ -555,14 +555,18 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception as error:
+    except BaseException as error:
         # The composition boundary already logged a typed BYOK account-state halt
         # or a retryable transient provider halt by its bounded class; a
         # traceback here would re-emit the chained provider error body for a
         # fault the caller is expected to retry.
         log_failure = (
             logger.warning
-            if is_byok_account_state_http_exception(error) or is_retryable_processing_http_exception(error)
+            if (
+                not isinstance(error, Exception)
+                or is_byok_account_state_http_exception(error)
+                or is_retryable_processing_http_exception(error)
+            )
             else logger.exception
         )
         if rollback_on_failure:

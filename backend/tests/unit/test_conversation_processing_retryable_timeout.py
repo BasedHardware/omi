@@ -9,15 +9,15 @@ Live prod signature (ro-prod, 2026-11-16, group ``CNjqnsKjnOK17wE``, 771 events/
     anthropic.APITimeoutError: Request timed out or interrupted.
 
 The timeout is a transient provider fault, not an Omi-side processing bug and not
-a terminal answer. The composition boundary now answers the explicit retryable
-contract (503 + ``Retry-After`` + a typed detail code) instead of the generic 500,
-so the client's existing transient-retry path runs and the conversation stays
-recoverable. The durable finalization lane keeps its own bounded retry and
-dead-letter terminal; this module pins that the new 503 does not change its
-failure classification.
+a terminal answer. The composition boundary answers the explicit retryable
+contract (503 + ``Retry-After`` + a typed detail code) instead of the generic 500.
+The mobile caller honors that contract with one delayed replay of the identical
+in-progress request. The durable finalization lane keeps its own bounded retry
+and dead-letter terminal.
 
-Covered here: provider timeout, interrupted request, retry success, retry
-exhaustion and cancellation, with no duplicate conversation or derived effects.
+This module covers backend classification, rollback and safe mapping. Mobile
+tests cover retry success and bounded exhaustion; the existing conversation row
+is re-admitted after a failed attempt.
 """
 
 import asyncio
@@ -32,9 +32,11 @@ import httpx  # noqa: E402
 import openai  # noqa: E402
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
+from google.api_core.exceptions import ServiceUnavailable  # noqa: E402
 
 from database import conversation_finalization_jobs as jobs_db  # noqa: E402
 from utils.conversations import lifecycle as lifecycle_service  # noqa: E402
+from utils.conversations.processing_metrics import RETRYABLE_PROCESSING_RESPONSES_TOTAL  # noqa: E402
 from utils.conversations.processing_retry import (  # noqa: E402
     DETERMINISTIC_PROCESSING_FAILURE,
     TRANSIENT_PROCESSING_FAILURE,
@@ -44,11 +46,11 @@ from utils.llm.gateway_error_contract import (  # noqa: E402
     GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL,
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
     RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL,
-    RETRYABLE_TIMEOUT_SWITCH,
+    RETRYABLE_PROVIDER_FAILURE_SWITCH,
     conversation_processing_http_exception,
     is_retryable_processing_http_exception,
-    is_transient_processing_failure,
-    retryable_timeout_answer_enabled,
+    is_retryable_provider_failure,
+    retryable_provider_failure_answer_enabled,
 )
 from utils.observability.finalization import (  # noqa: E402
     FinalizationFailureReason,
@@ -100,6 +102,16 @@ def test_transient_provider_failure_answers_the_retryable_contract(failure):
     # The generic 500 detail is what the prod error group counts; it must be gone.
     assert mapped.detail != GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
     assert is_retryable_processing_http_exception(mapped)
+
+
+def test_retryable_provider_answer_increments_the_bounded_response_metric():
+    metric = RETRYABLE_PROCESSING_RESPONSES_TOTAL.labels(failure_class='timeout', route='conversation_processing')
+    before = metric._value.get()
+
+    mapped = conversation_processing_http_exception(anthropic_timeout())
+
+    assert mapped.status_code == 503
+    assert metric._value.get() == before + 1
 
 
 def test_interrupted_request_is_the_same_retryable_class():
@@ -163,30 +175,32 @@ def test_byok_account_state_keeps_its_typed_429():
 def test_kill_switch_defaults_on(monkeypatch, raw):
     """Unset, blank and unknown values keep the reviewed retryable answer."""
     if raw is None:
-        monkeypatch.delenv(RETRYABLE_TIMEOUT_SWITCH, raising=False)
+        monkeypatch.delenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, raising=False)
     else:
-        monkeypatch.setenv(RETRYABLE_TIMEOUT_SWITCH, raw)
+        monkeypatch.setenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, raw)
 
-    assert retryable_timeout_answer_enabled()
+    assert retryable_provider_failure_answer_enabled()
     assert conversation_processing_http_exception(anthropic_timeout()).status_code == 503
 
 
 @pytest.mark.parametrize('raw', ['0', 'false', 'FALSE', 'no', 'off'])
 def test_kill_switch_restores_the_previous_500(monkeypatch, raw):
     """Off restores the exact pre-fix answer; the conversation stays recoverable."""
-    monkeypatch.setenv(RETRYABLE_TIMEOUT_SWITCH, raw)
+    monkeypatch.setenv(RETRYABLE_PROVIDER_FAILURE_SWITCH, raw)
 
-    assert not retryable_timeout_answer_enabled()
+    assert not retryable_provider_failure_answer_enabled()
     mapped = conversation_processing_http_exception(anthropic_timeout())
     assert mapped.status_code == 500
     assert mapped.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 
 
-def test_transient_classifier_matches_the_durable_lane():
-    """One classifier: the sync boundary and the finalization worker cannot disagree."""
-    assert is_transient_processing_failure(anthropic_timeout())
+def test_sync_boundary_retries_provider_failures_but_not_local_database_faults():
+    """The durable lane may retry local faults; the synchronous provider contract may not."""
+    assert is_retryable_provider_failure(anthropic_timeout())
     assert processing_failure_code(anthropic_timeout()) == TRANSIENT_PROCESSING_FAILURE
-    assert not is_transient_processing_failure(AttributeError('synthetic'))
+    assert not is_retryable_provider_failure(ServiceUnavailable('synthetic database outage'))
+    assert processing_failure_code(ServiceUnavailable('synthetic database outage')) == TRANSIENT_PROCESSING_FAILURE
+    assert not is_retryable_provider_failure(ConnectionError('synthetic local connection failure'))
     assert processing_failure_code(AttributeError('synthetic')) == DETERMINISTIC_PROCESSING_FAILURE
 
 
@@ -274,7 +288,7 @@ def test_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, cap
 
 
 # ---------------------------------------------------------------------------
-# Retry success, retry exhaustion and cancellation at the structuring seam.
+# One structuring request: a typed timeout remains recoverable for the caller.
 # ---------------------------------------------------------------------------
 
 
@@ -282,9 +296,9 @@ def test_guard_keeps_the_traceback_for_a_generic_processing_500(monkeypatch, cap
 def structuring_seam(monkeypatch):
     """Drive ``_get_structured`` to the notes call with everything else stubbed.
 
-    Returns a callable that runs one structuring attempt and a list of the
-    attempts the notes seam actually saw, so a test can prove a retry happened
-    (or did not) and that no second conversation was created.
+    Returns a callable that runs one structuring request and the notes-call
+    counter, so these backend tests do not pretend to exercise the caller's
+    separate bounded HTTP retry.
     """
     from datetime import datetime, timezone
 
@@ -336,37 +350,8 @@ def structuring_seam(monkeypatch):
     return run, attempts, conversation
 
 
-def test_retry_success_completes_the_conversation(structuring_seam):
-    """A retry after the timeout produces the summary; the user never sees a 500."""
-    from models.structured import Structured
-
-    run, attempts, _ = structuring_seam
-
-    def notes(*args, **kwargs):
-        attempts.append(1)
-        if len(attempts) == 1:
-            raise anthropic_timeout()
-        return Structured(title='Budget Review', overview='The team agreed on the Q2 budget.')
-
-    with pytest.raises(HTTPException) as first:
-        run(notes)
-    assert first.value.status_code == 503
-    assert is_retryable_processing_http_exception(first.value)
-
-    structured, discarded = run(notes)
-
-    assert len(attempts) == 2
-    assert structured.title == 'Budget Review'
-    assert discarded is False
-
-
-def test_retry_exhaustion_stays_retryable_and_creates_no_second_conversation(structuring_seam):
-    """Every attempt times out: the answer stays retryable and the row is untouched.
-
-    ``_get_structured`` runs before any persist, so an exhausted retry leaves the
-    caller's single conversation row exactly as it was — no duplicate row, no
-    derived effects, and a state the client can retry.
-    """
+def test_structuring_timeout_returns_a_typed_retryable_answer_without_persisting(structuring_seam):
+    """The failed request leaves the existing row intact for the mobile retry."""
     run, attempts, conversation = structuring_seam
     before = conversation.model_dump()
 
@@ -374,25 +359,18 @@ def test_retry_exhaustion_stays_retryable_and_creates_no_second_conversation(str
         attempts.append(1)
         raise anthropic_timeout()
 
-    for _ in range(3):
-        with pytest.raises(HTTPException) as raised:
-            run(notes)
-        assert raised.value.status_code == 503
-        assert is_retryable_processing_http_exception(raised.value)
+    with pytest.raises(HTTPException) as raised:
+        run(notes)
 
-    assert len(attempts) == 3
-    # No persist happened: the in-memory row is byte-identical, so a retry
-    # re-processes the same conversation instead of creating another one.
+    assert raised.value.status_code == 503
+    assert is_retryable_processing_http_exception(raised.value)
+    assert len(attempts) == 1
     assert conversation.model_dump() == before
     assert conversation.status == 'processing'
 
 
-def test_cancellation_is_not_converted_into_a_processing_answer(structuring_seam):
-    """A cancelled request must propagate, not become a 500 or a retryable 503.
-
-    Converting cancellation into an HTTP answer would let a cancelled attempt
-    look like a completed one; the admission guard owns the rollback instead.
-    """
+def test_cancellation_propagates_from_the_structuring_call(structuring_seam):
+    """A cancelled request is not remapped to an HTTP processing response."""
     run, attempts, conversation = structuring_seam
     before = conversation.model_dump()
 
@@ -405,3 +383,15 @@ def test_cancellation_is_not_converted_into_a_processing_answer(structuring_seam
 
     assert len(attempts) == 1
     assert conversation.model_dump() == before
+
+
+@pytest.mark.parametrize('path', ['/v1/conversations', '/v1/conversations/{conversation_id}/reprocess'])
+def test_processing_routes_openapi_declare_the_typed_retryable_response(path):
+    from routers.conversations import router
+
+    route = next(route for route in router.routes if getattr(route, 'path', None) == path)
+    responses = route.responses
+    retryable_detail = responses[503]['content']['application/json']['schema']['properties']['detail']
+
+    assert 500 in responses
+    assert retryable_detail['properties']['code']['enum'] == ['conversation_processing_retryable']

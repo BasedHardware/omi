@@ -10,9 +10,9 @@ from typing import NamedTuple
 
 from fastapi import HTTPException
 
-from config.conversation_processing_retry import TRANSIENT_PROCESSING_FAILURE
 from utils.byok import get_byok_key, has_validated_byok_keys
-from utils.conversations.processing_retry import processing_failure_code
+from utils.conversations.processing_metrics import record_retryable_processing_response
+from utils.conversations.processing_retry import retryable_provider_failure_class
 
 BYOK_RATE_LIMIT_FAILURE_CLASS = 'byok_rate_limit'
 BYOK_QUOTA_FAILURE_CLASS = 'byok_quota'
@@ -71,19 +71,18 @@ GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, p
 # A provider/transport fault another attempt can clear is not a server fault and
 # not a terminal answer: the conversation is preserved and the caller can retry.
 # Answering the explicit retryable contract (503 + Retry-After) instead of the
-# generic 500 keeps the client's existing transient-retry path and stops the
-# timeout class from counting as a user-visible processing 500 (SCA-2521).
+# generic 500 lets the mobile caller make one delayed same-request retry and
+# stops provider timeouts from counting as user-visible processing 500s.
 RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE = 'conversation_processing_retryable'
 RETRYABLE_CONVERSATION_PROCESSING_ERROR_DETAIL = {
     'code': RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE,
     'message': 'Conversation processing is temporarily unavailable. Please retry.',
 }
 RETRYABLE_CONVERSATION_PROCESSING_RETRY_AFTER_SECONDS = '2'
-# Kill switch (default on). Off restores the exact pre-SCA-2521 answer — the
-# generic 500 — while keeping the conversation recoverable: the admission guard
-# still rolls the row back to ``in_progress``, so a queued conversation is never
-# lost and the client's retry re-admits it. No schema or state migration.
-RETRYABLE_TIMEOUT_SWITCH = 'CONVERSATION_PROCESSING_RETRYABLE_TIMEOUT_ENABLED'
+# Kill switch (default on). Off restores the generic 500 for transient
+# provider/transport failures while keeping the conversation recoverable: the
+# admission guard rolls the row back to ``in_progress``. No schema or migration.
+RETRYABLE_PROVIDER_FAILURE_SWITCH = 'CONVERSATION_PROCESSING_RETRYABLE_PROVIDER_FAILURE_ENABLED'
 
 
 logger = logging.getLogger(__name__)
@@ -347,25 +346,19 @@ def is_retryable_processing_http_exception(error: BaseException) -> bool:
     return _string_value(detail.get('code')) == RETRYABLE_CONVERSATION_PROCESSING_ERROR_CODE
 
 
-def is_transient_processing_failure(error: BaseException) -> bool:
-    """Whether ``error`` is a provider/transport fault another attempt can clear.
-
-    Reuses the durable lane's classifier (``processing_failure_code``) so the
-    synchronous composition boundary and the finalization worker cannot disagree
-    about what is retryable. A generic processing 500 with no provider cause, a
-    programming error and a parser failure all stay deterministic.
-    """
-    return processing_failure_code(error) == TRANSIENT_PROCESSING_FAILURE
+def is_retryable_provider_failure(error: BaseException) -> bool:
+    """Whether a provider/transport failure can use the synchronous retry contract."""
+    return retryable_provider_failure_class(error) is not None
 
 
-def retryable_timeout_answer_enabled() -> bool:
-    """Kill switch for the retryable timeout answer. Default on.
+def retryable_provider_failure_answer_enabled() -> bool:
+    """Kill switch for the retryable provider-failure answer. Default on.
 
     Unset, blank and unknown values keep the reviewed behavior; only an explicit
     false token restores the previous generic 500. The conversation stays
     recoverable either way — the admission guard owns the rollback.
     """
-    raw = os.getenv(RETRYABLE_TIMEOUT_SWITCH)
+    raw = os.getenv(RETRYABLE_PROVIDER_FAILURE_SWITCH)
     if raw is None:
         return True
     return raw.strip().lower() not in {'0', 'false', 'no', 'off'}
@@ -395,14 +388,16 @@ def conversation_processing_http_exception(
         if failure.failure_class == BYOK_INVALID_KEY_FAILURE_CLASS:
             return HTTPException(status_code=429, detail=BYOK_INVALID_KEY_ERROR_DETAIL)
         return HTTPException(status_code=429, detail=BYOK_QUOTA_ERROR_DETAIL)
-    if is_transient_processing_failure(error) and retryable_timeout_answer_enabled():
+    failure_class = retryable_provider_failure_class(error)
+    if failure_class is not None and retryable_provider_failure_answer_enabled():
+        record_retryable_processing_response(failure_class, route)
         # Class name only: never the provider message, which can carry request
         # content. WARNING, not ERROR, because this is a retryable provider
         # fault, not an Omi-side processing bug.
         logger.warning(
             'conversation processing hit a transient provider failure; answering retryable: '
             'failure_class=%s route=%s',
-            type(error).__name__,
+            failure_class,
             route,
         )
         return HTTPException(
