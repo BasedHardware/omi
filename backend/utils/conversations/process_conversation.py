@@ -392,7 +392,7 @@ def _get_structured(
     recovery_minimum_fallback_observer: Optional[Callable[[], None]] = None,
     llm_hashes: dict[str, str] | None = None,
     open_loop_out: Optional[dict[str, Any]] = None,
-    meeting_context_override: Optional[CalendarMeetingContext] = None,
+    meeting_context_override: Optional[CalendarMeetingContext | str] = None,
     finalization_fence: tuple[str, int, int] | None = None,
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
@@ -467,7 +467,7 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        calendar_context = meeting_context_override
+        calendar_context = None if isinstance(meeting_context_override, str) else meeting_context_override
         if calendar_context is None:
             direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
             calendar_context = (
@@ -698,9 +698,18 @@ def _get_structured(
             main_conv,
             calendar_context,
             tz_str,
-            include_background=True,
+            include_background=not getattr(conversation, 'v3_derived', False),
             include_screen_text=True,
         )
+        if getattr(conversation, 'v3_derived', False):
+            from utils.conversations.v3 import context as v3_context
+
+            corrections_block = meeting_context_block or ''
+            meeting_context_block = (
+                meeting_context_override
+                if isinstance(meeting_context_override, str)
+                else v3_context.summary(uid, conversation, user_language, tz_str)
+            ) + corrections_block
         prefix = build_conversation_prompt_prefix(
             known_spellings=conversation_known_spellings(uid),
             uid=uid,

@@ -2,7 +2,8 @@
 
 from unittest.mock import patch
 
-from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW
+from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID, FROZEN_NOW, FROZEN_LATER
+from utils.other.list_budget import ListReadBudget
 
 
 def _pending_source(client, combo, trial):
@@ -30,6 +31,11 @@ def _decode(client):
 
 def entries():
     return (
+        DriverEntry(
+            'database.conversations_v3_context.earlier_titles',
+            base={'uid': SHAPE_UID, 'start': FROZEN_NOW, 'end': FROZEN_LATER},
+            neutrals={'budget': (ListReadBudget(deadline_monotonic=10**30, max_documents=53), 'RPC/read budget only')},
+        ),
         DriverEntry(
             'database.conversations_v3.load',
             base={'uid': SHAPE_UID},

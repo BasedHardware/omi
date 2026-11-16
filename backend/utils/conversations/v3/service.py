@@ -20,7 +20,7 @@ from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import outline, planner, models, metrics, policy, visibility
+from utils.conversations.v3 import outline, planner, models, metrics, policy, visibility, context
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -121,17 +121,28 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
         # Keep a bounded cache; every fingerprint is checked even for finished stretches.
         saved = {row['fingerprint']: row for row in cached}
         outlines, cache = [], []
+        background = await run_blocking(db_executor, context.outline_sources, uid, groups)
         for group in groups:
             await run_blocking(db_executor, leases.renew, uid, 'builder', token)
-            hit = saved.get(group['fingerprint'])
+            messages = outline.messages(group, timezone.utc)
+            messages.append(
+                (
+                    'human',
+                    context.outline_block(
+                        group, background, [entry['title'] for entries in outlines for entry in entries]
+                    ),
+                )
+            )
+            # Resume evidence is part of the cache key too.
+            if outlines:
+                previous = outlines[-1][-1]
+                messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
+            fingerprint = context.cache_key(group, messages)
+            hit = saved.get(fingerprint)
             if hit:
                 entries = hit['entries']
             elif group['finished'] or on_open:
-                messages = outline.messages(group, timezone.utc)
-                if outlines:
-                    previous = outlines[-1][-1]
-                    messages.append(('human', 'Preceding conversation: ' + previous['title'] + '\n' + previous['line']))
-                if await run_blocking(db_executor, store.outline_attempt, uid, token, group['fingerprint']):
+                if await run_blocking(db_executor, store.outline_attempt, uid, token, fingerprint):
                     metrics.MODEL_CALLS.labels('outline').inc()
                     content = await leased_work(uid, 'builder', token, llm_executor, models.outline, uid, messages)
                     try:
@@ -158,7 +169,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                 ]
             outlines.append(entries)
             if group['finished'] or on_open:
-                cache.append({'fingerprint': group['fingerprint'], 'entries': entries})
+                cache.append({'fingerprint': fingerprint, 'entries': entries})
         rows, used = [], set()
         windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
         await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
