@@ -308,6 +308,7 @@ class CaptureEndProofOutcome(StrEnum):
     NO_SPEECH_CLOCK = 'no_speech_clock'
     RESUMED = 'resumed'
     CLOCK_UNKNOWN = 'clock_unknown'
+    SEALED = 'sealed'
 
 
 class UploadTraceGateReason(StrEnum):

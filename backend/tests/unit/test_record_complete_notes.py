@@ -14,7 +14,7 @@ from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, Priority
 from utils.batch_pipeline.scheduler import owner_key
-from utils.sync import reprocess
+from utils.sync import capture_end, reprocess
 
 NOW = 100_000.0
 POLICY = ProjectionPolicy()
@@ -364,6 +364,31 @@ def test_complete_record_uses_processing_hold_deadline_without_another_settle(re
     assert row.get().to_dict()['version'] == 2
     f.store.complete('first', f.binding, NOW + remaining + 1, f.accounting, policy=POLICY)
     assert row.get().to_dict()['version'] == 2
+
+
+@pytest.mark.parametrize('notes_written', [False, True])
+def test_sealed_live_record_completion_is_due_now_until_its_first_notes(recording, monkeypatch, notes_written):
+    f = recording
+    monkeypatch.setenv('SYNC_PROCESSING_QUIET_SECONDS', '600')
+    f.client.rows[f.conversation.path].update(
+        record_lane_owner='batch_live_v1',
+        private_cloud_sync_enabled=True,
+        record_projection_revision=1,
+        sync_processing_hold={'held': True, 'pending_since': NOW - 30, 'last_content_at': NOW - 20},
+        **({'summary_completed_at': NOW - 60} if notes_written else {}),
+    )
+    row = f.client.collection(reprocess.COLLECTION).document(reprocess.key(f.binding.owner_id, 'capture'))
+    # Unit 1 projected, its sibling still pending: completion cannot run, nothing is due now.
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
+    assert row.get().to_dict()['due_at'] == NOW + 120
+    f.store.mark_enrichment('last', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    counted = Mock()
+    monkeypatch.setattr(capture_end, 'record_proof', counted)
+    assert f.store.complete('last', f.binding, NOW, f.accounting, policy=POLICY)
+    # Every unit landed: no quiet wait. After notes, a phone copy keeps it.
+    assert row.get().to_dict()['due_at'] == (NOW + 120 if notes_written else NOW)
+    assert counted.call_args_list == ([] if notes_written else [(('sealed',),)])
 
 
 @pytest.mark.parametrize('hold', ['sync_hold', 'merge_hold'])
