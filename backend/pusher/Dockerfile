@@ -43,7 +43,6 @@ ENV LD_PRELOAD=libjemalloc.so.2
 COPY --from=builder /opt/venv /opt/venv
 
 # Whitelist-copy only the modules pusher reaches
-COPY backend/deploy/storage-lifecycle/retention_contract.json ./deploy/storage-lifecycle/retention_contract.json
 COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/models/ ./models/

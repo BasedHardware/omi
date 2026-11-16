@@ -287,10 +287,6 @@
       "owner": "provider-stt drain",
       "review_by": "2026-12-12"
     },
-    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
-      "owner": "omi-pipeline",
-      "review_by": "2026-11-30"
-    },
     "BATCH_PIPELINE_PUBLISH_CONCURRENCY": {
       "seeded": "2026-10-25"
     },
@@ -1249,6 +1245,10 @@
     },
     "MENTOR_PIPELINE": {
       "on": "2026-10-26",
+      "replaced_by": null
+    },
+    "BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS": {
+      "on": "2026-11-16",
       "replaced_by": null
     }
   }

@@ -29,7 +29,8 @@ Audio custody, expiry predicates, lifecycle and deployment bindings are unchange
 ## 2026-11-16 lifecycle alignment
 
 The production staging lifecycle was extended to 60 days. Urgency now imports
-its cutoff from the retention contract through `input_retention.TERMINAL_SECONDS`:
+its cutoff from `config/batch_pipeline_retention.py` through
+`input_retention.TERMINAL_SECONDS`, with JSON contract consistency checked in tests:
 59 days, with a warning at 51 days. The one-day margin, clocks, indexed streams,
 page sizes, cadence and all transaction fences remain unchanged. See the
 [configuration and deployment coupling](../../runbooks/held-staging-inputs.md#lifecycle-configuration-and-deployment-coupling).

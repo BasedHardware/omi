@@ -1,6 +1,6 @@
 # Held staging inputs approaching expiry
 
-The reviewed `deploy/storage-lifecycle/retention_contract.json` configures the staging
+The reviewed `deploy/storage-lifecycle/retention_contract.json` declares the staging
 bucket lifecycle at **60 days** (production extended on 2026-11-16). It supersedes
 the former 30-day lead2 ruling `9a5190` for this bucket.
 This change does not alter or apply a bucket lifecycle. Audio is never deleted
@@ -179,12 +179,21 @@ no implicit loop, no lifecycle/IAM writes and no provider execution.
 
 ## Lifecycle configuration and deployment coupling
 
-`batch_staging_delete_age_days` in `deploy/storage-lifecycle/retention_contract.json`
-is the runtime source, read by `utils/batch_pipeline/input_retention.py` at startup.
-There is no environment override. Warning is lifecycle minus nine days (51 days),
+`config/batch_pipeline_retention.py` is the runtime lifecycle source, already
+inside every consuming image's existing source closure. A unit contract requires
+its value to equal `batch_staging_delete_age_days` in
+`deploy/storage-lifecycle/retention_contract.json` and the production ceiling.
+The JSON is used by operator tools and is not copied into images or read on runtime
+import. Update the Python value and JSON declaration together. There is no
+environment override. Warning is lifecycle minus nine days (51 days),
 terminal is lifecycle minus one day (59 days). Sweep discovery, transactional
 expiry, provider hold recheck timing and manual redrive selection import these
-thresholds. The warning alert artifact is checked against the same value in tests.
+thresholds. The provider-STT lost-wake sweep window also derives from this lifecycle, covering
+the last 59-day + 2-hour recheck and refusing candidates older than the 60-day lifecycle.
+The retired `BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS` override is ignored,
+so a stale 30-day deployment binding cannot strand live work. The enrichment
+sweep window and the existing sweep-age kill remain unchanged.
+The warning alert artifact is checked against the same value in tests.
 The production ceiling declaration must match; the separately declared development
 bucket ceiling is unchanged, and this input-expiry path matches the production
 bucket URI only.
