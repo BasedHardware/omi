@@ -151,6 +151,47 @@ def test_quiet_names_are_separate_from_manual_end_and_distinct_within_a_minute(m
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('exhausted', [False, True])
+async def test_quiet_reuses_custom_stt_allowance_before_lease_permit_or_paid_work(monkeypatch, exhausted):
+    original = row(uses_custom_stt=True, source='omi', _v3_revision=1)
+    calls = []
+
+    async def blocking(pool, fn, *a, **kw):
+        if fn is summary.paid_notes_refused:
+            assert pool is quiet.db_executor
+        return fn(*a, **kw)
+
+    def allowance(uid, **kw):
+        assert uid == 'u' and kw == {'uses_custom_stt': True, 'source': 'omi'}
+        calls.append('allowance')
+        return exhausted
+
+    monkeypatch.setattr(quiet, 'run_blocking', blocking)
+    monkeypatch.setattr(renewal, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', allowance)
+    monkeypatch.setattr(quiet.leases, 'acquire', lambda *a: calls.append('lease') or 'token')
+    monkeypatch.setattr(quiet.leases, 'release', lambda *a: calls.append('release'))
+    monkeypatch.setattr(quiet, 'require_generated_compute', lambda *a, **kw: calls.append('admission'))
+    monkeypatch.setattr(
+        attempts,
+        'reserve',
+        lambda *a, **kw: calls.append('permit')
+        or {
+            'row': original,
+            'revision': 1,
+            'sources': {},
+            'input_hash': 'h',
+        },
+    )
+    monkeypatch.setattr(summary, 'write', lambda *a: calls.append('writer') or {'sections': []})
+    monkeypatch.setattr(summary.writers, 'store_summary', lambda *a, **kw: calls.append('store'))
+    assert await quiet.snapshot('u', original) == ('skipped' if exhausted else 'stored')
+    assert calls == (
+        ['allowance'] if exhausted else ['allowance', 'lease', 'admission', 'permit', 'writer', 'store', 'release']
+    )
+
+
+@pytest.mark.asyncio
 async def test_old_quiet_delivery_does_no_reconcile_or_paid_work(monkeypatch):
     monkeypatch.setattr(attempts, 'obligation', lambda *a: None)
     monkeypatch.setattr(attempts, 'settle', lambda *a: None)

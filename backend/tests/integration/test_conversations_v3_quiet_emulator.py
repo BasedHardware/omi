@@ -809,6 +809,41 @@ async def test_real_builder_quiet_snapshot_then_normal_close_runs_final_work_onc
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('exhausted', [False, True])
+async def test_custom_stt_quiet_allowance_matches_foreground_and_settles_once(seeded, monkeypatch, exhausted):
+    client, uid, cid, rid, coll = seeded
+    coll.document(cid).update({'uses_custom_stt': True})
+    coll.document(rid).update({'uses_custom_stt': True})
+    monkeypatch.setattr(service, 'reconcile', _noop_reconcile)
+    checked, admitted, paid = [], [], []
+
+    def allowance(owner, **kw):
+        checked.append((owner, kw))
+        return exhausted
+
+    monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', allowance)
+    monkeypatch.setattr(quiet, 'require_generated_compute', lambda *a, **kw: admitted.append(a))
+
+    def write(*a):
+        paid.append(cid)
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'Allowed custom-STT notes.'}]}
+
+    monkeypatch.setattr(summary, 'write', write)
+    generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
+    assert await quiet.run(uid, rid, generation) == 'settled'
+    assert checked == [(uid, {'uses_custom_stt': True, 'source': 'omi'})]
+    assert await quiet.run(uid, rid, generation) == 'superseded'
+    assert not coll.document(rid).get().to_dict()['v3_quiet_pending']
+    current = store.decode_row(uid, coll.document(cid).get())
+    spent = (leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict() or {}).get('snapshot_inputs') or []
+    assert len(spent) == len(admitted) == len(paid) == (0 if exhausted else 1)
+    assert summary.fresh(current) is (not exhausted)
+    frames = [frame async for frame in summary.stream(uid, current)]
+    assert len(frames) == 1 and frames[0].startswith('done: ')
+    assert len(paid) == (0 if exhausted else 1)
+
+
+@pytest.mark.asyncio
 async def test_budget_denial_settles_quiet_obligation_without_spending_or_repeating(seeded, monkeypatch):
     from fastapi import HTTPException
 

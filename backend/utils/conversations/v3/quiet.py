@@ -47,6 +47,8 @@ def _open_row(uid):
 
 
 async def snapshot(uid, row):
+    if await run_blocking(db_executor, summary.paid_notes_refused, uid, row):
+        return 'skipped'
     cid, key = row['id'], 'summary-' + row['id']
     token = await run_blocking(db_executor, leases.acquire, uid, key)
     if token is None:
