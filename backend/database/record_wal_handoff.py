@@ -15,6 +15,7 @@ from database._client import run_transactional, get_data_plane_firestore_client
 from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyBlocked, privacy_owner_key
 from database.firestore_read_origin import read_origin
 from database.batch_pipeline_store import FirestoreTransaction
+from database import record_wal_capacity as capacity
 
 SCHEMA = 'record_wal_handoff_v1'
 VERSION = 1
@@ -95,10 +96,13 @@ def begin(client, namespace, uid, cid, files, source, device):
         if previous.get('state') == 'accepted':
             return previous
         file_rows = []
+        new_files = []
         for entry in files:
             file_id = identity([SCHEMA, uid, cid, generation, entry])
             prior = _file_ref(client, namespace, file_id).get(transaction=tx).to_dict() or {}
             file_rows.append({'file_id': file_id, **entry, 'receipt': prior.get('receipt')})
+            if not prior:
+                new_files.append((file_id, entry))
         fence = {
             'schema': SCHEMA,
             'version': VERSION,
@@ -119,6 +123,23 @@ def begin(client, namespace, uid, cid, files, source, device):
         }
         # A fresh request may supersede an interrupted one. Only its exact token
         # may commit; concurrent writers share create-only media, never paid work.
+        capacity.reserve(client, tx, uid, [entry for _, entry in new_files])
+        for file_id, entry in new_files:
+            tx.set(
+                _file_ref(client, namespace, file_id),
+                {
+                    'schema': SCHEMA,
+                    'version': VERSION,
+                    'kind': capacity.RESERVATION_KIND,
+                    'owner_id': uid,
+                    'owner_key': privacy_owner_key(uid),
+                    'conversation_id': cid,
+                    'privacy_generation': generation,
+                    'file_id': file_id,
+                    'quota_bytes': entry['size'] + capacity.ENCRYPTION_OVERHEAD,
+                    'wal_pending_since': time.time(),
+                },
+            )
         tx.set(ref, fence)
         return fence
 
@@ -160,7 +181,7 @@ def commit(client, namespace, fence, receipts):
                 raise HandoffConflict('unverified original file')
             file_ref = _file_ref(client, namespace, entry['file_id'])
             prior = file_ref.get(transaction=tx).to_dict() or {}
-            if prior and prior.get('receipt') != receipt:
+            if prior.get('receipt') and prior['receipt'] != receipt:
                 raise HandoffConflict('immutable file receipt conflict')
             entries.append((entry, receipt, file_ref, prior))
         now = time.time()
@@ -175,7 +196,7 @@ def commit(client, namespace, fence, receipts):
         }
         # All reads above, all writes below (including on retries).
         for entry, receipt, file_ref, prior in entries:
-            if prior:
+            if prior.get('receipt'):
                 continue  # A rebundled file keeps its one obligation and wake.
             file_id = entry['file_id']
             work = {
@@ -197,7 +218,8 @@ def commit(client, namespace, fence, receipts):
                     'uri': receipt['uri'],
                     'obligation': work,
                     'outbox': work,
-                    'wal_pending_since': now,
+                    'wal_pending_since': prior.get('wal_pending_since', now),
+                    **({'quota_bytes': prior['quota_bytes']} if 'quota_bytes' in prior else {}),
                 },
             )
         accepted = {

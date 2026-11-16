@@ -6,6 +6,7 @@ from pathlib import Path
 
 from config.batch_pipeline_record_wal_handoff import handoff_enabled
 from database import record_wal_handoff as receipts
+from database.record_wal_capacity import CapacityExceeded
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.raw_audio import filename_provenance, wal_packets
@@ -107,9 +108,13 @@ async def handoff(*, store, uid, cid, paths, source, device):
         return old
     if not handoff_enabled():
         return None
-    fence = await run_blocking(
-        db_executor, receipts.begin, store.client, store.namespace, uid, cid, files, source, device
-    )
+    try:
+        fence = await run_blocking(
+            db_executor, receipts.begin, store.client, store.namespace, uid, cid, files, source, device
+        )
+    except CapacityExceeded as error:
+        metrics.capacity_refusals.labels(error.scope).inc()
+        raise
     if fence['state'] == 'accepted':
         metrics.answers.labels('replayed').inc()
         return await run_blocking(db_executor, receipts.status, fence)

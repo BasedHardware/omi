@@ -78,3 +78,54 @@ def test_pending_originals_cannot_age_out_under_bucket_lifecycle(condition):
     contract = retention_contract.load()
     policy = {'rule': [{'action': {'type': 'Delete'}, 'condition': condition}]}
     assert retention_contract.floor_violations(contract, 'omi-private-cloud-sync', policy)
+
+
+@pytest.mark.parametrize('bucket_name', ['private-primary', 'private-alternate'])
+def test_conversation_orphan_sweep_erases_all_generations_and_only_exact_prefix(monkeypatch, bucket_name):
+    rows = {
+        ('record-wal/synthetic/record/receipted.enc', 1),
+        ('record-wal/synthetic/record/receipted.enc', 2),
+        ('record-wal/synthetic/record/crash-orphan.enc', 3),
+        ('record-wal/synthetic/record-other/keep.enc', 4),
+        ('record-wal/other/record/keep.enc', 5),
+    }
+
+    # Bind name in each delete callback; every generation must be removed.
+    def listing(**kwargs):
+        assert kwargs['versions'] is True
+        return [
+            SimpleNamespace(
+                name=name,
+                generation=generation,
+                delete=lambda _name=name, **opts: rows.remove((_name, opts['if_generation_match'])),
+            )
+            for name, generation in list(rows)
+            if name.startswith(kwargs['prefix'])
+        ]
+
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', bucket_name)
+    monkeypatch.setattr(
+        record_wal_erasure,
+        'create_storage_client',
+        lambda: SimpleNamespace(
+            bucket=lambda name: SimpleNamespace(list_blobs=listing) if name == bucket_name else None
+        ),
+    )
+    page = record_wal_erasure.conversation_objects('synthetic', 'record', limit=2)
+    assert len(page) == 2 and all(uri.startswith(f'gs://{bucket_name}/record-wal/synthetic/record/') for uri in page)
+    record_wal_erasure.purge_record_wal_owner('synthetic', 'record')
+    assert rows == {('record-wal/synthetic/record-other/keep.enc', 4), ('record-wal/other/record/keep.enc', 5)}
+
+
+def test_conversation_orphan_failure_does_not_ack_erasure(monkeypatch):
+    blob = SimpleNamespace(generation=17, delete=Mock(side_effect=OSError('synthetic unavailable')))
+    bucket = SimpleNamespace(list_blobs=lambda **_: [blob])
+    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: SimpleNamespace(bucket=lambda _: bucket))
+    with pytest.raises(OSError, match='synthetic unavailable'):
+        record_wal_erasure.purge_record_wal_owner('synthetic', 'record')
+
+
+@pytest.mark.parametrize('uid,cid', [('synthetic', '../record'), ('../synthetic', 'record'), ('synthetic', '')])
+def test_orphan_sweep_rejects_unbounded_scope(uid, cid):
+    with pytest.raises(ValueError):
+        record_wal_erasure.purge_record_wal_owner(uid, cid)

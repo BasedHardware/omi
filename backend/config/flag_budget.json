@@ -868,10 +868,6 @@
       "review_by": "2026-12-14",
       "registry": "config/feature-flags.yaml"
     },
-    "RECORD_WAL_HANDOFF_ENABLED": {
-      "owner": "quality WAL custody",
-      "review_by": "2026-12-15"
-    },
     "RECORD_FRESH_MERGE_ENABLED": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-14",
@@ -885,6 +881,30 @@
     "RECORD_SEAL_WAKE_PRESERVED_ENABLED": {
       "owner": "q12-post-seal",
       "review_by": "2026-12-14",
+      "registry": "config/feature-flags.yaml"
+    },
+    "RECORD_WAL_HANDOFF_ENABLED": {
+      "owner": "quality WAL custody",
+      "review_by": "2026-12-15"
+    },
+    "RECORD_WAL_PENDING_GLOBAL_BYTES": {
+      "owner": "quality / existing release owner",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "RECORD_WAL_PENDING_GLOBAL_FILES": {
+      "owner": "quality / existing release owner",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "RECORD_WAL_PENDING_OWNER_BYTES": {
+      "owner": "quality / existing release owner",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
+    "RECORD_WAL_PENDING_OWNER_FILES": {
+      "owner": "quality / existing release owner",
+      "review_by": "2026-12-15",
       "registry": "config/feature-flags.yaml"
     },
     "REDIS_DB_HOST": {

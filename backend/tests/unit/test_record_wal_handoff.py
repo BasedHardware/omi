@@ -17,6 +17,9 @@ import pytest
 
 from config import batch_pipeline_record_wal_handoff as config
 from database import record_wal_handoff as database
+from database import record_wal_capacity as capacity
+from utils.batch_pipeline import intake
+from utils.other import audio_opus
 from database.batch_pipeline_privacy import privacy_owner_key, BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
 from models.sync_job_status import SyncJobStartResponse, SyncJobStatusResponse
@@ -101,7 +104,7 @@ def make_wal(tmp_path, ordinal, codec='pcm16', payload=None):
 def world(monkeypatch, tmp_path):
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-wal-handoff-test-secret')
-    monkeypatch.delenv('RECORD_WAL_HANDOFF_ENABLED', raising=False)
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'true')
     monkeypatch.setenv('RECORD_TOKEN_LEASE_MODE', 'off')
     client = StrictFirestore({('users', UID): {'private_cloud_sync_enabled': True}, ROW_PATH: ROW})
     store = FirestoreStore(NS, firestore_client=client)
@@ -442,13 +445,16 @@ async def test_admission_and_accepted_marker_bypass_conversation_memo(world, mon
 
 def test_pending_metrics_publish_durable_count_age_and_unknown_on_failure(monkeypatch):
     monkeypatch.setattr(metrics, 'pending_sample', lambda *_: (4, 100.0))
+    monkeypatch.setattr(metrics, 'capacity_sample', lambda *_: {'bytes': 400, 'files': 4})
     metrics.refresh(SimpleNamespace(client=None, namespace=NS), 200.0)
     assert metrics.pending._value.get() == 4
+    assert metrics.pending_bytes._value.get() == 400
     assert metrics.age._value.get() == 100
     assert metrics.sampled_at._value.get() == 200
     monkeypatch.setattr(metrics, 'pending_sample', Mock(side_effect=OSError('synthetic unavailable')))
     metrics.refresh(SimpleNamespace(client=None, namespace=NS), 300.0)
     assert math.isnan(metrics.pending._value.get()) and math.isnan(metrics.age._value.get())
+    assert math.isnan(metrics.pending_bytes._value.get())
     assert metrics.sampled_at._value.get() == 200
 
 
@@ -464,3 +470,124 @@ async def test_local_storage_adapter_retains_verified_originals_across_restart(w
     assert blob.size == receipt['stored_size'] and blob.crc32c == receipt['crc32c']
     assert blob.download_as_bytes(if_generation_match=int(receipt['generation']))
     assert (await world.upload()).status_code == 202
+
+
+def test_unset_admission_is_off_for_reader_first_deployment(monkeypatch):
+    monkeypatch.delenv('RECORD_WAL_HANDOFF_ENABLED', raising=False)
+    assert config.handoff_enabled() is False
+
+
+async def test_plain_status_lookup_is_receipt_capable_even_with_admission_unset(world, monkeypatch):
+    accepted = json.loads((await world.upload()).body)
+    monkeypatch.delenv('RECORD_WAL_HANDOFF_ENABLED', raising=False)
+    monkeypatch.setattr(intake, 'FirestoreStore', lambda *_: world.store)
+    monkeypatch.setattr(
+        intake, 'shadow_from_env', Mock(side_effect=AssertionError('WAL status used ordinary jobstore'))
+    )
+    assert intake.get_durable_job_status(accepted['job_id'], UID)['status'] == 'processing'
+    assert (await world.upload()).status_code == 202
+    assert world.bucket.attempts == 2
+
+
+@pytest.mark.parametrize('scope', ['owner', 'global'])
+@pytest.mark.parametrize('dimension,limit', [('FILES', '1'), ('BYTES', '355')])
+async def test_pending_capacity_refuses_before_any_object_write(world, monkeypatch, scope, dimension, limit):
+    monkeypatch.setenv(f'RECORD_WAL_PENDING_{scope.upper()}_{dimension}', limit)
+    counter = metrics.capacity_refusals.labels(scope)
+    before = counter._value.get()
+    response = await world.upload()
+    assert response.status_code == 503
+    body = json.loads(response.body)
+    assert body['code'] == 'record_capture_pending'
+    assert counter._value.get() == before + 1
+    assert not world.bucket.rows and not world.rows('wal_handoffs')
+    assert capacity.sample(world.client) == {'bytes': 0, 'files': 0}
+    assert all(path.exists() for path in world.paths)
+
+
+async def test_crash_reservations_are_charged_once_and_block_distinct_uploads(world, monkeypatch, tmp_path):
+    monkeypatch.setenv('RECORD_WAL_PENDING_OWNER_FILES', '2')
+    world.bucket.fail_at = 2
+    assert (await world.upload()).status_code == 503
+    charge = capacity.sample(world.client)
+    assert charge == {'bytes': sum(path.stat().st_size + 32 for path in world.paths), 'files': 2}
+    assert (await world.upload([make_wal(tmp_path, 2)])).status_code == 503
+    assert len(world.bucket.rows) == 1
+    world.bucket.fail_at = None
+    assert (await world.upload()).status_code == 202
+    assert capacity.sample(world.client) == charge
+    monkeypatch.setenv('RECORD_WAL_PENDING_OWNER_FILES', '0')
+    assert (await world.upload()).status_code == 202
+    assert capacity.sample(world.client) == charge
+
+
+async def test_global_pending_budget_is_shared_between_owners_and_stage_namespaces(world, monkeypatch):
+    monkeypatch.setenv('RECORD_WAL_PENDING_GLOBAL_FILES', '2')
+    assert (await world.upload()).status_code == 202
+    uid = 'synthetic-second-owner'
+    world.client.rows[('users', uid)] = {'private_cloud_sync_enabled': True}
+    world.client.rows[('users', uid, 'conversations', CID)] = deepcopy(ROW)
+    files = handoff.inspect_files(world.paths[:1])
+    with pytest.raises(capacity.CapacityExceeded) as error:
+        database.begin(world.client, 'batch_pipeline_prod', uid, CID, files, 'omi', 'synthetic-device')
+    assert error.value.scope == 'global'
+    assert capacity.sample(world.client)['files'] == 2
+
+
+@pytest.mark.parametrize('name,value', [('OWNER_BYTES', 'bad'), ('GLOBAL_FILES', '-1')])
+async def test_invalid_or_closed_capacity_configuration_keeps_phone_custody(world, monkeypatch, name, value):
+    monkeypatch.setenv('RECORD_WAL_PENDING_' + name, value)
+    assert (await world.upload()).status_code == 503
+    assert not world.bucket.rows
+
+
+@pytest.mark.parametrize(
+    'toc,frames,samples',
+    [
+        (0x00, None, 160),
+        (0x18, None, 960),
+        (0x60, None, 160),
+        (0x68, None, 320),
+        (0x80, None, 40),
+        (0x88, None, 80),
+        (0x90, None, 160),
+        (0x98, None, 320),
+        (0x99, None, 640),
+        (0x9B, 6, 1920),
+    ],
+)
+def test_opus_duration_headers_need_no_native_library(monkeypatch, toc, frames, samples):
+    monkeypatch.setattr(audio_opus, 'opuslib', None)
+    packet = bytes([toc]) + (bytes([frames]) if frames is not None else b'')
+    assert audio_opus.opus_packet_samples(packet, 16000) == samples
+
+
+@pytest.mark.parametrize('packet', [b'', b'\x9b', b'\x9b\x00', b'\x9b\x07'])
+def test_invalid_opus_duration_headers_fail_closed_without_native_library(monkeypatch, packet):
+    monkeypatch.setattr(audio_opus, 'opuslib', None)
+    with pytest.raises(ValueError):
+        audio_opus.opus_packet_samples(packet, 16000)
+
+
+async def test_quota_release_is_exactly_once_and_preserves_other_files(world):
+    assert (await world.upload()).status_code == 202
+    files = list(world.rows('wal_files'))
+    reference = world.client.collection(NS + '_intakes').document(files[0])
+    # Privacy erasure's caller first removes the exact stored generation.
+    receipt = world.rows('wal_files')[files[0]]['receipt']
+    storage.delete_record_wal_original(UID, receipt)
+    capacity.erase_file(world.client, reference, UID)
+    capacity.erase_file(world.client, reference, UID)
+    assert capacity.sample(world.client) == {'bytes': 356, 'files': 1}
+    assert len(world.rows('wal_files')) == len(world.bucket.rows) == 1
+
+
+async def test_quota_release_reproves_erase_authority_before_counters_change(world):
+    assert (await world.upload()).status_code == 202
+    file_id = next(iter(world.rows('wal_files')))
+    reference = world.client.collection(NS + '_intakes').document(file_id)
+    before = capacity.sample(world.client)
+    fence = Mock(side_effect=BatchPrivacyBlocked('synthetic erase authority lost'))
+    with pytest.raises(BatchPrivacyBlocked):
+        capacity.erase_file(world.client, reference, UID, fence=fence)
+    assert capacity.sample(world.client) == before and len(world.rows('wal_files')) == 2

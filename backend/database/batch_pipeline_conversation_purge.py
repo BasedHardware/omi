@@ -32,6 +32,8 @@ from google.cloud import firestore
 from database import rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
+from database import record_wal_capacity
+from utils.batch_pipeline.record_wal_erasure import conversation_objects
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_purge import NAMESPACES
 from database.batch_pipeline_purge import delete_job as _delete_job
@@ -169,6 +171,7 @@ def purge_conversation(
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
+    default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
         from utils.other.local_storage import create_storage_client
@@ -225,11 +228,24 @@ def purge_conversation(
                 return
             for uri in _references(data):
                 remote_delete(authority)(uid, uri)
-            _fenced_delete(client, snapshot.reference, authority.fence)
+            if table == 'intakes' and data.get('kind') in {'record_wal_file', 'record_wal_reservation'}:
+                record_wal_capacity.erase_file(client, snapshot.reference, uid, fence=authority.fence)
+            else:
+                _fenced_delete(client, snapshot.reference, authority.fence)
             mirror_refresh(namespace, [(table, snapshot.id)])
 
         return erase
 
+    # Re-list before metadata on every run, including a checkpoint from an old
+    # reader already past the last namespace. Deleted generations are their
+    # own cursor: a crash/budget handoff resumes with the remaining first page.
+    if default_storage_cleanup:
+        while True:
+            _ensure_budget(progress)
+            originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
+            if not originals:
+                break
+            _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
     for ns_index in range(start_ns, len(NAMESPACES)):
         namespace = NAMESPACES[ns_index]
         resuming = ns_index == start_ns and start.get('phase') in PHASES

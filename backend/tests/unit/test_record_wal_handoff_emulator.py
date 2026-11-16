@@ -7,6 +7,7 @@ import json
 import struct
 from types import SimpleNamespace
 from uuid import uuid4
+from unittest.mock import Mock
 
 from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
@@ -15,6 +16,9 @@ import pytest
 
 from database import record_wal_handoff as handoff
 from database import batch_pipeline_purge as purge
+from database import batch_pipeline_conversation_purge as conversation_purge
+from database import record_wal_capacity as capacity
+from contextlib import contextmanager
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, privacy_owner_key
 from database.batch_pipeline_store import FirestoreStore
 from utils.batch_pipeline import live_upload, intake, record_wal_erasure
@@ -85,8 +89,9 @@ def world(monkeypatch):
 
     monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *_: 0)
     yield client, namespace, uid, cid, conversation, files, begin, originals
-    for doc in handoff.intake_collection(client, namespace).stream():
-        doc.reference.delete()
+    for stage in (namespace, capacity.NAMESPACE):
+        for doc in handoff.intake_collection(client, stage).stream():
+            doc.reference.delete()
     client.recursive_delete(user)
     # The disposable emulator owns this authority marker; production's write
     # fence correctly forbids deleting privacy generations.
@@ -115,7 +120,7 @@ def test_committed_reply_loss_replays_one_revision_and_one_outbox(world, monkeyp
         len([row for row in handoff.intake_collection(client, namespace).stream() if row.to_dict().get('outbox')]) == 2
     )
     count, oldest = handoff.pending_sample(client, namespace)
-    assert count == 2 and oldest == accepted['accepted_at']
+    assert count == 2 and 0 < oldest <= accepted['accepted_at']
     # Restarted reader/producer with phone offline: no local bytes or old process state.
     monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
     restarted = firestore.Client(project=client.project, credentials=AnonymousCredentials())
@@ -178,13 +183,14 @@ def test_privacy_generation_change_cannot_commit_and_erasure_finds_all_receipts(
     assert handoff.read_status(client, namespace, uid, accepted['job_id']) is None
 
 
-async def test_registered_handoff_status_restart_and_actual_original_erasure(world, monkeypatch, tmp_path):
+@pytest.mark.parametrize('erasure', ['account', 'conversation', 'resumable'])
+async def test_registered_handoff_status_restart_and_actual_original_erasure(world, monkeypatch, tmp_path, erasure):
     client, namespace, uid, cid, conversation, files, begin, originals = world
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('ENCRYPTION_SECRET', 'synthetic-wal-combined-emulator-secret')
     monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', 'synthetic-wal-private')
     monkeypatch.delenv('BUCKET_BATCH_PIPELINE', raising=False)
-    monkeypatch.delenv('RECORD_WAL_HANDOFF_ENABLED', raising=False)
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'true')
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'synthetic-wal-private')
     objects = LocalStorageClient(tmp_path / 'durable-storage')
     monkeypatch.setattr(storage, '_get_storage_client', lambda: objects)
@@ -230,7 +236,112 @@ async def test_registered_handoff_status_restart_and_actual_original_erasure(wor
     # also find media which no committed file receipt can reference yet.
     orphan = objects.bucket('synthetic-wal-private').blob(f'record-wal/{uid}/{cid}/orphan.bin')
     orphan.upload_from_string(b'synthetic crash orphan', if_generation_match=0)
-    purge.purge_batch_owner(uid, namespaces=(namespace,), firestore_client=client)
+    if erasure == 'account':
+        purge.purge_batch_owner(uid, namespaces=(namespace,), firestore_client=client)
+    else:
+        client.collection('users').document(uid).collection('deleted_conversations').document(cid).set(
+            {'deleted': True}
+        )
+        if erasure == 'conversation':
+            sweep = purge.purge_record_wal_owner
+            monkeypatch.setattr(
+                purge,
+                'purge_record_wal_owner',
+                Mock(side_effect=OSError('synthetic prefix failure')),
+            )
+            with pytest.raises(OSError, match='synthetic prefix failure'):
+                purge.purge_batch_owner(uid, conversation_id=cid, namespaces=(namespace,), firestore_client=client)
+            assert capacity.sample(client)['files'] == 2
+            assert any(row.to_dict().get('receipt') for row in handoff.intake_collection(client, namespace).stream())
+            assert len(list(objects.bucket('synthetic-wal-private').list_blobs(prefix=f'record-wal/{uid}/'))) == 3
+            monkeypatch.setattr(purge, 'purge_record_wal_owner', sweep)
+            release = capacity.erase_file
+            monkeypatch.setattr(
+                capacity,
+                'erase_file',
+                Mock(side_effect=OSError('synthetic post-sweep crash')),
+            )
+            with pytest.raises(OSError, match='synthetic post-sweep crash'):
+                purge.purge_batch_owner(uid, conversation_id=cid, namespaces=(namespace,), firestore_client=client)
+            assert capacity.sample(client)['files'] == 2  # Missing reply cannot undercharge.
+            assert not list(objects.bucket('synthetic-wal-private').list_blobs(prefix=f'record-wal/{uid}/'))
+            monkeypatch.setattr(capacity, 'erase_file', release)
+            purge.purge_batch_owner(uid, conversation_id=cid, namespaces=(namespace,), firestore_client=client)
+        else:
+            monkeypatch.setattr(conversation_purge, 'NAMESPACES', (namespace,))
+            monkeypatch.setattr(conversation_purge, 'purge_jobstore_owner', lambda *_: None)
+            conversation_purge.purge_conversation(uid, cid, SyntheticProgress(), firestore_client=client)
+    assert capacity.sample(client) == {'bytes': 0, 'files': 0}
     assert not list(objects.bucket('synthetic-wal-private').list_blobs(prefix=f'record-wal/{uid}/'))
     assert not list(handoff.intake_collection(client, namespace).stream())
     assert all(path.exists() for path in paths)  # 202 never released the phone copies.
+
+
+class SyntheticProgress:
+    """No production gate claim; real erasing transactions still execute on the emulator."""
+
+    position = {}
+
+    def checkpoint(self, position, **kwargs):
+        self.position = position
+
+    def segments(self, namespace):
+        return set()
+
+    def pending_segments(self, namespace, limit):
+        return []
+
+    def expired(self):
+        return False
+
+    def settle_stuck(self, resolve):
+        pass
+
+    @contextmanager
+    def unit(self):
+        yield SimpleNamespace(fence=lambda tx: None, remote=lambda action, target: action())
+
+
+def test_global_capacity_serializes_concurrent_admission_across_namespaces(world, monkeypatch):
+    client, namespace, uid, cid, conversation, files, begin, originals = world
+    monkeypatch.setenv('RECORD_WAL_PENDING_GLOBAL_FILES', '1')
+    other = client.collection('users').document('synthetic-second-owner')
+    other.set({'private_cloud_sync_enabled': True})
+    other.collection('conversations').document(cid).set(conversation.get().to_dict())
+
+    def admit(owner, stage, entries):
+        try:
+            handoff.begin(client, stage, owner, cid, entries, 'omi', 'synthetic-device')
+            return 'reserved'
+        except capacity.CapacityExceeded:
+            return 'capacity'
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(admit, uid, namespace, files[:1]),
+                pool.submit(admit, 'synthetic-second-owner', capacity.NAMESPACE, files[1:]),
+            ]
+            assert sorted(future.result(timeout=30) for future in futures) == ['capacity', 'reserved']
+        assert capacity.sample(client) == {'bytes': 356, 'files': 1}
+    finally:
+        client.recursive_delete(other)
+
+
+def test_completed_legacy_purge_checkpoint_still_sweeps_crash_orphans(world, monkeypatch, tmp_path):
+    client, namespace, uid, cid, conversation, files, begin, originals = world
+    objects = LocalStorageClient(tmp_path)
+    monkeypatch.setenv('BUCKET_PRIVATE_CLOUD_SYNC', 'synthetic-wal-private')
+    monkeypatch.setattr(record_wal_erasure, 'create_storage_client', lambda: objects)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: objects)
+    monkeypatch.setattr(conversation_purge, 'NAMESPACES', (namespace,))
+    client.collection('users').document(uid).collection('deleted_conversations').document(cid).set({'deleted': True})
+    bucket = objects.bucket('synthetic-wal-private')
+    bucket.blob(f'record-wal/{uid}/{cid}/orphan.bin').upload_from_string(b'synthetic crash orphan')
+    bucket.blob(f'record-wal/{uid}/other/keep.bin').upload_from_string(b'synthetic other conversation')
+    progress = SyntheticProgress()
+    progress.position = {'ns': 1, 'phase': 'discover'}
+    conversation_purge.purge_conversation(uid, cid, progress, firestore_client=client)
+    assert [blob.name for blob in bucket.list_blobs(prefix=f'record-wal/{uid}/')] == [
+        f'record-wal/{uid}/other/keep.bin'
+    ]

@@ -10032,7 +10032,7 @@ Prepared EOF/deadline recovery still blocks default-on admission. See the
 
 ### Native record WAL custody handoff (phase 1)
 
-`RECORD_WAL_HANDOFF_ENABLED` defaults **on**; false/0/off/no (or an unknown value)
+`RECORD_WAL_HANDOFF_ENABLED` defaults **off** (`config_switch`); unset, false/0/off/no (or an unknown value)
 refuses new handoffs through the existing strict coverage path. Admission is
 limited to consented `batch_live_v1` owners with matching source/device and a
 fresh privacy/deletion fence. It does not enable token leases or provider work.
@@ -10060,6 +10060,18 @@ The existing fleet timeliness sampler exports
 lower bound), `omi_record_wal_handoff_oldest_age_seconds`, and the last successful
 sample timestamp. An unavailable sample exports unknown values, never a healthy
 zero. Answer counters have only `accepted`, `replayed`, and `refused` outcomes.
+The exact `omi_record_wal_handoff_pending_bytes` gauge includes conservative
+storage reservations and crash-orphan attempts across both stage namespaces.
+`omi_record_wal_handoff_capacity_refusals_total` has only `owner`/`global` scope
+labels. New files reserve capacity before object writes: defaults 256 MiB/200
+files per owner and 4 GiB/10,000 files globally, configurable via
+`RECORD_WAL_PENDING_OWNER_BYTES`, `RECORD_WAL_PENDING_OWNER_FILES`,
+`RECORD_WAL_PENDING_GLOBAL_BYTES`, `RECORD_WAL_PENDING_GLOBAL_FILES`. Quota
+exhaustion returns the original strict 503; retries reuse reservations, and only
+completed privacy erasure releases phase-1 capacity. Both purge flows sweep all
+conversation-prefix generations and crash orphans in the configured private
+archive bucket before releasing metadata/quota. See the [dated rollout and
+capacity contract](listen_pusher_pipeline/changes/2026-11-15-record-wal-handoff.md).
 No metric label contains an identity. Phase 2 will map source frames, prove
 redundancy/missing intervals, reserve only missing work under the canonical
 owner, and settle status after projection. Custody acceptance alone proves no

@@ -26,13 +26,31 @@ def _get_opuslib() -> Any:
 
 
 def opus_packet_samples(packet: bytes, sample_rate: int) -> int:
-    """Read packet geometry without creating or advancing a decoder.
+    """Count samples from RFC 6716 TOC/framing bytes; no native decoder needed.
 
-    opuslib 3.x's Python samples-per-frame wrapper calls the wrong C symbol;
-    use its correctly typed native binding for this header-only operation.
+    This proves duration geometry only, not successful decoding of the payload.
     """
-    api = _get_opuslib().api.decoder
-    return int(api.packet_get_nb_frames(packet) * api.libopus_packet_get_samples_per_frame(packet, sample_rate))
+    if not packet or sample_rate not in {8000, 12000, 16000, 24000, 48000}:
+        raise ValueError('invalid Opus packet header')
+    config, code = packet[0] >> 3, packet[0] & 3
+    if config >= 16:  # CELT: 2.5, 5, 10, 20 ms.
+        per_frame = (sample_rate << (config & 3)) // 400
+    elif config >= 12:  # Hybrid: 10, 20 ms.
+        per_frame = (sample_rate << (config & 1)) // 100
+    elif config & 3 == 3:  # SILK: 60 ms.
+        per_frame = sample_rate * 60 // 1000
+    else:  # SILK: 10, 20, 40 ms.
+        per_frame = (sample_rate << (config & 3)) // 100
+    if code == 3:
+        if len(packet) < 2:
+            raise ValueError('truncated Opus frame-count header')
+        frames = packet[1] & 0x3F
+    else:
+        frames = 1 if code == 0 else 2
+    samples = frames * per_frame
+    if not frames or samples > sample_rate * 120 // 1000:
+        raise ValueError('invalid Opus packet duration')
+    return samples
 
 
 def encode_pcm_to_opus(pcm_data: bytes, sample_rate: int = OPUS_SAMPLE_RATE, channels: int = OPUS_CHANNELS) -> bytes:
