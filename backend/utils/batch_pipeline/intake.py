@@ -21,7 +21,11 @@ from config.batch_pipeline_language import (
     admission_language_sample_enabled,
     batch_admission_language,
 )
-from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
+from config.batch_pipeline_vendor_overflow import (
+    legacy_capacity_fallback_enabled,
+    overflow_enabled,
+    overflow_priorities,
+)
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
@@ -775,15 +779,19 @@ async def accept_upload(
         if inherited:
             input_language = inherited
         # All-vendor routing: outside its cohort, with its kill switch off, or while this
-        # owner's legacy is on, this is resolve_route exactly (today's routing). Only fresh
-        # units may overflow to a vendor when the GPU ring is past its SLO; backfill waits.
+        # owner's legacy is on, this is resolve_route exactly (today's routing). Configured
+        # priorities may overflow only when their own GPU backlog is past its SLO.
         route = select_route(
             language,
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
             vendor_eligible=vendor_table and mode is not LegacySyncMode.ON,
-            gpu_saturated=(lambda: overflow_enabled() and gpu_overflow.saturated(store)) if fresh else None,
+            gpu_saturated=(
+                (lambda: overflow_enabled() and gpu_overflow.saturated(store, int(seed.priority)))
+                if int(seed.priority) in overflow_priorities()
+                else None
+            ),
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback; inside the

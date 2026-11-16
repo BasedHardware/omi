@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "table_version": "en-overflow-1104b",
+  "table_version": "en-overflow-1116",
   "selection": "ordered",
   "gpu_floor_percent": 0.0,
   "routes": {
@@ -13,7 +13,7 @@
     },
     "modulate": {
       "price_usd_per_audio_hour": 0.06,
-      "daily_audio_hours_cap": 3000.0,
+      "daily_audio_hours_cap": 5000.0,
       "monthly_budget_usd": null,
       "failover_only": false,
       "speaker_turns": "discard"
