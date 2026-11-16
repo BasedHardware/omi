@@ -6,6 +6,17 @@ part of 'local_wal_sync.dart';
 /// New default collision names keep the capture timestamp as the last token,
 /// which is the server's filename wire contract. Existing files are untouched.
 extension DeviceChunkPersistence on LocalWalSync {
+  Future<bool> _deviceNameOccupied(Directory directory, String name) async {
+    final ledger = this;
+    if (ledger is LocalWalSyncImpl) {
+      // Only the concrete custody owner has the device-wide hidden buckets.
+      // Wait for admission before consulting its incremental name inventory.
+      await ledger._indexLoadInFlight;
+      if (ledger._indexInventory.referencesFile(name)) return true;
+    }
+    return await File('${directory.path}/$name').exists() || await WalWriteIntent.exists(directory, name);
+  }
+
   Future<Wal> persistEmptyRingRecords(
       {required Wal source,
       required int ringId,
@@ -88,10 +99,10 @@ extension DeviceChunkPersistence on LocalWalSync {
       final dir = await getApplicationDocumentsDirectory();
       var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
       if (fileName != null) {
-        while (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name)) {
+        while (await _deviceNameOccupied(dir, name)) {
           name = fileName();
         }
-      } else if (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name)) {
+      } else if (await _deviceNameOccupied(dir, name)) {
         final dot = name.lastIndexOf('.');
         final stem = dot > 0 ? name.substring(0, dot) : name;
         final ext = dot > 0 ? name.substring(dot) : '';
@@ -103,7 +114,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
               ? '${stem}_u$nonce$ext'
               : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
-        } while (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name));
+        } while (await _deviceNameOccupied(dir, name));
       }
       final fps = source.codec.getFramesPerSecond();
       final wal = Wal(

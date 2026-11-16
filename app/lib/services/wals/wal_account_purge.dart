@@ -5,9 +5,9 @@ part of 'local_wal_sync.dart';
 extension _WalAccountPurge on LocalWalSyncImpl {
   bool _fileReferencedByOtherWal(Wal wal, String fileName) => _otherWalReferencingFile(wal, fileName) != null;
 
-  Wal? _otherWalReferencingFile(Wal wal, String fileName) {
+  Wal? _otherWalReferencingFile(Wal wal, String fileName, {bool diskOnly = false}) {
     for (final other in [..._retiredWals, ..._foreignWals, ..._wals]) {
-      if (identical(other, wal)) continue;
+      if (identical(other, wal) || (diskOnly && other.storage != WalStorage.disk)) continue;
       final otherPath = other.filePath;
       final otherName = (otherPath != null && otherPath.isNotEmpty) ? otherPath.split('/').last : other.getFileName();
       if (otherName == fileName) return other;

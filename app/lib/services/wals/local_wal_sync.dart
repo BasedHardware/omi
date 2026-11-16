@@ -1585,14 +1585,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<bool> _deleteWal(Wal wal, {required int generation}) async {
     if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
     final filePath = wal.filePath;
-    if (filePath != null && filePath.isNotEmpty) {
+    if (wal.storage == WalStorage.disk && filePath != null && filePath.isNotEmpty) {
       try {
         final fullPath = await Wal.getFilePath(filePath);
         if (fullPath == null) return false;
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         final deleted = await WalWriteIntent.deleteAudio(File(fullPath).parent, fullPath.split('/').last,
             stillOwned: () => _isCurrent(generation) && _isTrackedWal(wal),
-            sharedWith: () => _otherWalReferencingFile(wal, fullPath.split('/').last),
+            sharedWith: () => _otherWalReferencingFile(wal, fullPath.split('/').last, diskOnly: true),
             transactionId: wal.fileWriteId,
             deletedWal: wal,
             sidecarPath: nativeBatchGeolocationSidecarPath(fullPath));
