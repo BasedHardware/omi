@@ -207,3 +207,19 @@ def test_user_title_remains_authoritative_even_if_it_mentions_mechanics(writer):
     writer.document.update(user_title='Missing transcript', structured={'title': 'Earlier generated title'})
     assert db.persist_processing_result_with_lifecycle('u', payload())
     assert writer.commits[0]['structured']['title'] == 'Missing transcript'
+
+
+def test_preserved_title_checkpoints_and_home_projection_match_the_committed_output(writer):
+    from datetime import datetime, timezone
+    from models.structured import Structured
+    from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
+    from utils.home_feed.projection import DISPLAY, reveal_display
+
+    writer.document.update(structured={'title': 'Pilot budget'}, started_at=datetime.now(timezone.utc))
+    notes = payload('Approval is due Friday.')
+    notes['structured']['title'] = 'Rephrased pilot budget'
+    notes[NOTES_OUTPUT_HASH] = output_fingerprint(Structured.model_validate(notes['structured']))
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    written = writer.commits[0]
+    assert written[NOTES_OUTPUT_HASH] == output_fingerprint(Structured.model_validate(written['structured']))
+    assert reveal_display('u', written[DISPLAY])['title'] == 'Pilot budget'

@@ -22,7 +22,7 @@ def load_contract_dependencies():
     from utils.llm import notes_output  # noqa: F401
 
 
-@pytest.mark.parametrize('title', ['', '  ', None, '—', 'New moment', 'Fundraising missing from transcript'])
+@pytest.mark.parametrize('title', ['', '  ', None, '—', 'New moment', 'Launch plan missing from transcript'])
 def test_missing_and_unsafe_titles_have_deterministic_nonempty_labels(title):
     assert title_or_fallback(title) == 'Discussion notes'
     assert title_or_fallback(title, index=3) == 'Discussion 3'
