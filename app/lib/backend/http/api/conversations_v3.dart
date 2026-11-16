@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/backend/http/streaming_error.dart';
@@ -20,10 +21,17 @@ class ConversationsLiveRead {
   static ConversationsLiveRead fromJson(Map<String, dynamic> json) {
     final v3 = json['v3'] == true;
     final conversation = json['conversation'];
-    return ConversationsLiveRead(
-      v3: v3,
-      conversation: v3 && conversation is Map<String, dynamic> ? ServerConversation.fromJson(conversation) : null,
-    );
+    ServerConversation? live;
+    if (v3 && conversation is Map<String, dynamic>) {
+      // The switch must resolve even when the live row cannot be read: an unreadable row is no live row,
+      // never an unanswered switch (which would hold back both Homes).
+      try {
+        live = ServerConversation.fromJson(conversation);
+      } catch (e) {
+        Logger.debug('conversations/live: unreadable live row: $e');
+      }
+    }
+    return ConversationsLiveRead(v3: v3, conversation: live);
   }
 }
 

@@ -67,6 +67,35 @@ void main() {
       expect(RecordingPiece.fromJson({'recording_id': 'r', 'audio_file_id': 'a', 'start': 5, 'end': 1}), isNull);
     });
 
+    test('the compact live row the server sends decodes', () {
+      final read = ConversationsLiveRead.fromJson({
+        'v3': true,
+        'conversation': {
+          'id': 'c-live',
+          'structured': {'title': 'Standup', 'emoji': '🗣️'},
+          'started_at': '2026-11-16T09:00:00Z',
+          'created_at': '2026-11-16T09:00:00Z',
+          'finished_at': null,
+          'status': 'in_progress',
+          'tile_state': 'live',
+        },
+      });
+      expect(read.v3, isTrue);
+      expect(read.conversation?.id, 'c-live');
+      expect(read.conversation?.structured.title, 'Standup');
+      expect(read.conversation?.v3?.tileState, ConversationTileState.live);
+      expect(read.conversation?.transcriptSegments, isEmpty);
+    });
+
+    test('an unreadable live row still answers the switch', () {
+      final read = ConversationsLiveRead.fromJson({
+        'v3': true,
+        'conversation': {'id': 'c-live', 'status': 'in_progress'},
+      });
+      expect(read.v3, isTrue);
+      expect(read.conversation, isNull);
+    });
+
     test('every tile state the server sends parses, failed included', () {
       expect(ConversationTileState.parse('failed'), ConversationTileState.failed);
       expect(ConversationTileState.parse('done'), ConversationTileState.done);
