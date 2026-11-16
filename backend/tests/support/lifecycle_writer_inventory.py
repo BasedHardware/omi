@@ -1,6 +1,26 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Client polling adapter only; never writes conversation lifecycle status.
+    'database/record_wal_handoff.py': [
+        (
+            'status',
+            'status',
+            "'processing'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     # Reviewed v3 lease-fenced projection/processing payloads; no test-time refresh.
     'database/conversations_v3_processing.py': [
         (
@@ -68,26 +88,6 @@ FIELD_SITES = {
     'utils/conversations/v3/service.py': [
         ('reconcile', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
-    ],
-    # Client polling adapter only; never writes conversation lifecycle status.
-    'database/record_wal_handoff.py': [
-        (
-            'status',
-            'status',
-            "'processing'",
-            (
-                'failed_segments',
-                'job_id',
-                'lane',
-                'poll_after_ms',
-                'processed_segments',
-                'reason_code',
-                'status',
-                'successful_segments',
-                'total_files',
-                'total_segments',
-            ),
-        ),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
         (
