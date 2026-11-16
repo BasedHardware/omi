@@ -473,7 +473,11 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     assert "provision_budget_alerts == 'true'" in abort['if']
 
     resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
-    assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
+    # Platform/dispatch retain their existing scaling read; the new read-only
+    # routing producer must not inspect or configure the omitted worker.
+    assert resolver['if'] == (
+        "${{ inputs.mode == 'worker' || inputs.mode == 'platform' || inputs.mode == 'dispatch' }}"
+    )
     assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
     assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
         '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'

@@ -191,7 +191,7 @@ runs:
         fi
 
     - name: Resolve live sync-backfill maxScale
-      if: ${{ inputs.mode == 'worker' }}
+      if: ${{ inputs.mode == 'worker' || inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       id: live-max-scale
       shell: bash
       env:
