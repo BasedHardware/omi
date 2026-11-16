@@ -291,6 +291,12 @@ def test_list_cards_without_a_transcript_do_not_guess_duration_from_the_wall_win
     assert conversation_card(row)['duration_seconds'] is None
 
 
+def test_a_loaded_transcript_free_record_keeps_its_wall_window_duration():
+    photo_only = long_conversation(count=0)
+    photo_only['finished_at'] = NOW + timedelta(seconds=45)
+    assert conversation_card(photo_only)['duration_seconds'] == 45
+
+
 def test_summary_coverage_is_localized_like_the_other_card_timestamps():
     card = {'started_at': NOW, 'summary_covers_through': NOW}
     local = localize_timestamps(card, ZoneInfo('America/Los_Angeles'))
