@@ -215,8 +215,8 @@ def qualify(contract, archive, fixtures, output):
                 ]
             )
             count = re.search(r'^Ran (\d+) tests? in ', tests, re.MULTILINE)
-            if not count or int(count.group(1)) != 56 or tests.strip().splitlines()[-1] != 'OK':
-                raise ValueError('ALL_56_NATIVE_CASES_WITHOUT_SKIPS_REQUIRED')
+            if not count or int(count.group(1)) != 58 or tests.strip().splitlines()[-1] != 'OK':
+                raise ValueError('ALL_58_NATIVE_CASES_WITHOUT_SKIPS_REQUIRED')
         smoke += image_smoke.run_container([image_id], hold=True)
         receipt = {
             'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
@@ -230,7 +230,7 @@ def qualify(contract, archive, fixtures, output):
             'loaded_image_id': image_id,
             'loaded_identity_binding': binding,
             'config_digest': checked['config_digest'],
-            'tests_run': 56,
+            'tests_run': 58,
             'resource_bound_source_refusal': source_refusal,
             'tests_skipped': 0,
             'uid': 1000,

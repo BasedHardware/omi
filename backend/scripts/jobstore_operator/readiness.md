@@ -168,3 +168,8 @@ needs its own readiness and retained-state first-install/fencing acceptance.
 No state adoption, copy, index serving, schema grant, authority flip or savings
 claim follows. Fleet writer/deletion coverage, erasure reserves, privacy/restore,
 cohort and absolute operating limits remain separate gates.
+# Source and failure receipt details
+
+The runner explicitly requests all nonignored untracked files from Git, so a local or global `status.showUntrackedFiles=no` setting cannot hide them. SQL-stage failures, including rollback and close failures, emit the same bounded HOLD fields as pre-SQL failures; successful metadata receipts retain their exact schema.
+
+Native source qualification uses the probe's shared environment values, captures stdout separately from stderr, and requires stdout to contain exactly one JSON proof. Additional stdout is refused rather than discarded. Missing or malformed runner hashes refuse in preflight, qualification and publication.

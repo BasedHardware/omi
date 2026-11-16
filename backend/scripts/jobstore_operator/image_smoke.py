@@ -7,6 +7,7 @@ import re
 import subprocess
 import time
 from datetime import datetime, timezone
+from readiness_contract import READINESS_ENV
 
 PROGRAM = r'''
 import hashlib,json,os,pathlib,platform,subprocess,sys
@@ -82,6 +83,7 @@ def source_refusal_program(expected_sha):
 
 
 def validate_source_refusal(report, expected_sha):
+    source_refusal_program(expected_sha)
     expected = {
         'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
         'readiness_sha256': expected_sha,
@@ -114,7 +116,11 @@ def run_container(arguments, *, hold=False, readiness=False):
             '--cap-drop=ALL',
             '--security-opt=no-new-privileges',
             '--cpus=0.5' if readiness else '--cpus=2',
-            *(['--hostname=jobstore-reconcile-0', '--env=GIT_OPTIONAL_LOCKS=0'] if readiness else []),
+            *(
+                ['--hostname=jobstore-reconcile-0', *[f'--env={k}={v}' for k, v in READINESS_ENV.items()]]
+                if readiness
+                else []
+            ),
             '--memory=512m',
             '--pids-limit=128',
             *arguments,
@@ -125,7 +131,11 @@ def run_container(arguments, *, hold=False, readiness=False):
     try:
         if not hold:
             result = subprocess.run(
-                ['docker', 'start', '-a', cid], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=240
+                ['docker', 'start', '-a', cid],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE if readiness else subprocess.STDOUT,
+                text=True,
+                timeout=240,
             )
             if result.returncode:
                 raise RuntimeError(result.stdout)

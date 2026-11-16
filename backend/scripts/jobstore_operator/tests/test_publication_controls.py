@@ -50,6 +50,26 @@ class ControlTests(unittest.TestCase):
             )
             for flag in ('--hostname=jobstore-reconcile-0', '--env=GIT_OPTIONAL_LOCKS=0'):
                 self.assertEqual(argv.count(flag), int(readiness))
+            self.assertEqual(
+                [arg for arg in argv if arg.startswith('--env=')],
+                (
+                    [
+                        '--env=HOME=/home/ubuntu',
+                        '--env=PYTHONDONTWRITEBYTECODE=1',
+                        '--env=GIT_OPTIONAL_LOCKS=0',
+                        '--env=BATCH_JOBSTORE_MODE=firestore',
+                        '--env=JOBSTORE_SHADOW_WRITES=off',
+                        '--env=JOBSTORE_PRODUCTION_MIRROR=off',
+                        '--env=JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS=0',
+                        '--env=JOBSTORE_INDEX_READS=off',
+                    ]
+                    if readiness
+                    else []
+                ),
+            )
+            self.assertEqual(
+                run.call_args_list[0].kwargs['stderr'], subprocess.PIPE if readiness else subprocess.STDOUT
+            )
             self.assertEqual(argv[-2:], ['image', 'program'])
             self.assertEqual(
                 [call.args[0] for call in run.call_args_list],
@@ -79,6 +99,49 @@ sys.modules['process_guard']=guard
             ):
                 with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
                     qualify_operator.qualify({'readiness_sha256': value}, None, None, None)
+                c, e, receipt = self.prepared()
+                c['readiness_sha256'] = value
+                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                    preflight.check(c, e, 100)
+                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                    publish_operator.validate_qualification(c, receipt)
+                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                    image_smoke.validate_source_refusal(receipt['resource_bound_source_refusal'], value)
+
+    def test_optimized_python_still_enforces_source_proof_after_optimization_gate(self):
+        runner = b'fixture'
+        digest = hashlib.sha256(runner).hexdigest()
+        good = {
+            'result': 'HOLD',
+            'failure_class': 'DefaultCredentialsError',
+            'failure_stage': 'credentials',
+            'failure_stage_elapsed_ms': 1,
+            'write_attempted': False,
+            'state_initialized': False,
+            'customer_rows_read': False,
+        }
+        program = image_smoke.source_refusal_program(digest).replace(
+            "require(sys.flags.optimize==0, 'SOURCE_REFUSAL_OPTIMIZATION_REFUSED')", ''
+        )
+        for guard, report in [
+            ({'result': 'PROCESS_DEADLINE', 'exit_code': 2}, good),
+            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, failure_stage='source_clean')),
+            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, sql_called=True)),
+            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, write_attempted=True)),
+        ]:
+            bootstrap = (
+                'import sys,types,os,pathlib\n'
+                'os.getuid=lambda:1000\npathlib.Path.read_bytes=lambda _:b"fixture"\n'
+                'guard=types.ModuleType("process_guard")\n'
+                f'guard.run_group=lambda *a,**kw: ({guard!r}, {json.dumps(report)!r})\n'
+                'sys.modules["process_guard"]=guard\n'
+            )
+            with self.subTest(guard=guard, report=report):
+                result = subprocess.run(
+                    [sys.executable, '-O', '-c', bootstrap + program], capture_output=True, text=True, timeout=10
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn('SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
 
     def prepared(self):
         c, _, _ = inputs()
@@ -122,7 +185,7 @@ sys.modules['process_guard']=guard
                     'supervisor_sha256',
                 )
             },
-            'tests_run': 56,
+            'tests_run': 58,
             'resource_bound_source_refusal': {
                 'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
                 'readiness_sha256': c['readiness_sha256'],

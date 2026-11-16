@@ -17,6 +17,7 @@ DESTINATION = 'gcr.io/based-hardware/jobstore-reconcile-operator'
 
 
 def validate_qualification(contract, receipt):
+    image_smoke.source_refusal_program(contract.get('readiness_sha256'))
     expected = {
         'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
         'source_sha': contract['source_sha'],
@@ -25,7 +26,7 @@ def validate_qualification(contract, receipt):
         'oci_manifest_digest': contract['oci_manifest_digest'],
         'build_inputs_sha256': contract['build_inputs_sha256'],
         'supervisor_sha256': contract['supervisor_sha256'],
-        'tests_run': 56,
+        'tests_run': 58,
         'tests_skipped': 0,
         'uid': 1000,
         'container_network': 'none',

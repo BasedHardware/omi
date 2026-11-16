@@ -47,6 +47,15 @@ with patch.dict(sys.modules, SDK_MODULES):
     RUNNER_SPEC.loader.exec_module(readiness)
 
 EXPECTED = CONTRACT['migrations']
+HOLD_KEYS = {
+    'result',
+    'failure_class',
+    'failure_stage',
+    'failure_stage_elapsed_ms',
+    'customer_rows_read',
+    'state_initialized',
+    'write_attempted',
+}
 
 
 class Cursor:
@@ -84,6 +93,8 @@ class FakeConnection:
 
     def close(self):
         self.closed = True
+        if self.failure == 'close':
+            raise RuntimeError('synthetic-sensitive')
 
 
 class SourceTests(unittest.TestCase):
@@ -138,6 +149,14 @@ class SourceTests(unittest.TestCase):
             self.verify()
         self.assertEqual(caught.exception.fields['failure_stage'], 'source_root')
 
+    def test_git_configuration_cannot_hide_untracked_source(self):
+        self.git('config', 'status.showUntrackedFiles', 'no')
+        (self.root / 'shadow.py').write_text('untracked = True\n')
+        self.assertEqual(self.git('status', '--porcelain'), '')
+        with self.assertRaises(readiness.SourceFailure) as caught:
+            self.verify()
+        self.assertEqual(caught.exception.fields['failure_stage'], 'source_clean')
+
     def test_timeout_stage_is_distinct_and_has_no_command_or_output(self):
         for stage, prefix in [('source_head', []), ('source_clean', [self.head])]:
             error = subprocess.TimeoutExpired('SECRET_COMMAND', 5, output='SECRET_OUTPUT')
@@ -189,12 +208,14 @@ class ReportTests(unittest.TestCase):
             ('schema', 'migrations'),
             ('index', 'indexes'),
             ('rollback', 'rollback'),
+            ('close', 'close'),
         ]:
             conn = FakeConnection(failure)
             report = readiness.read_metadata(lambda: conn, EXPECTED)
             self.assertEqual(report['failure_stage'], stage)
             self.assertEqual(report['result'], 'HOLD')
             self.assertTrue(conn.closed)
+            self.assertEqual(set(report), HOLD_KEYS)
             self.assertNotIn('synthetic-sensitive', json.dumps(report))
 
     def test_unknown_exception_names_and_messages_are_not_exported(self):
@@ -223,6 +244,43 @@ class ReportTests(unittest.TestCase):
         self.assertFalse(report['customer_rows_read'])
         self.assertFalse(report['state_initialized'])
         self.assertFalse(report['write_attempted'])
+        self.assertEqual(set(report), HOLD_KEYS)
+
+    def test_main_metadata_hold_has_exact_failure_shape_without_success_provenance(self):
+        conn = types.SimpleNamespace(iam_connector=lambda *args: lambda: FakeConnection('tls'))
+        migrations = [types.SimpleNamespace(version=v, name=n, checksum=c) for v, n, c in EXPECTED]
+        migrate = types.SimpleNamespace(load=lambda: migrations)
+        supervisor = types.SimpleNamespace(hexdigest=lambda: CONTRACT['supervisor_sha256'])
+        output = io.StringIO()
+        with patch.object(readiness.os, 'getuid', return_value=1000), patch.object(
+            readiness.socket, 'gethostname', return_value='jobstore-reconcile-0'
+        ), patch.object(readiness, 'verify_source'), patch.object(
+            readiness.Path, 'read_bytes', return_value=b'fixture'
+        ), patch.object(
+            readiness.hashlib, 'sha256', return_value=supervisor
+        ), patch.object(
+            readiness.Path, 'exists', return_value=False
+        ), patch.object(
+            readiness.Path, 'home', return_value=Path('/synthetic-home')
+        ), patch.dict(
+            readiness.os.environ, {}, clear=True
+        ), patch.object(
+            readiness.google.auth, 'default', return_value=(object(), None)
+        ), patch.object(
+            readiness, 'Credentials', object
+        ), patch.object(
+            readiness.sys, 'version', '3.11.15 fixture'
+        ), patch.object(
+            readiness.psycopg, '__version__', '3.2.10', create=True
+        ), patch.object(
+            readiness, 'load_module', side_effect=[conn, migrate]
+        ), redirect_stdout(
+            output
+        ):
+            self.assertEqual(readiness.main(), 2)
+        report = json.loads(output.getvalue())
+        self.assertEqual(set(report), HOLD_KEYS)
+        self.assertEqual(report['failure_stage'], 'tls')
 
 
 if __name__ == '__main__':

@@ -69,7 +69,7 @@ def verify_source(root, deadline):
             raise ValueError('STANDALONE_SOURCE')
         for stage, args, cap in (
             ('source_head', ['rev-parse', 'HEAD'], HEAD_SECONDS),
-            ('source_clean', ['status', '--porcelain'], STATUS_SECONDS),
+            ('source_clean', ['status', '--porcelain', '--untracked-files=all'], STATUS_SECONDS),
         ):
             started = time.monotonic()
             remaining = deadline - started
@@ -141,6 +141,19 @@ def read_metadata(connect, expected):
                 conn.close()
             except Exception as error:
                 report.update(result='HOLD', **failure_fields('close', error, started))
+    if report['result'] == 'HOLD':
+        return {
+            key: report[key]
+            for key in (
+                'result',
+                'failure_class',
+                'failure_stage',
+                'failure_stage_elapsed_ms',
+                'write_attempted',
+                'state_initialized',
+                'customer_rows_read',
+            )
+        }
     return report
 
 
@@ -196,12 +209,13 @@ def main():
         if [r[0] for r in expected] != list(range(1, 9)):
             raise ValueError('SOURCE_VECTOR')
         report = read_metadata(connection.iam_connector(TARGET[2], TARGET[0], TARGET[1]), expected)
-        report.update(
-            source_sha=SOURCE,
-            supervisor_sha256=supervisor_sha,
-            python=sys.version.split()[0],
-            psycopg=psycopg.__version__,
-        )
+        if report['result'] == 'METADATA_READY_ONLY':
+            report.update(
+                source_sha=SOURCE,
+                supervisor_sha256=supervisor_sha,
+                python=sys.version.split()[0],
+                psycopg=psycopg.__version__,
+            )
     except Exception as error:
         fields = error.fields if isinstance(error, SourceFailure) else failure_fields(stage, error, started)
         report = {

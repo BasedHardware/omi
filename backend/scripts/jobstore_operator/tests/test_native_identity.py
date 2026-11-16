@@ -237,14 +237,24 @@ class NativeIdentityTests(unittest.TestCase):
                         }
                     ),
                     'smoke',
-                    'Ran 56 tests in 1.0s\n\nOK\n',
+                    'Ran 58 tests in 1.0s\n\nOK\n',
                     'hold',
                 ],
-            ), patch.dict(
+            ) as containers, patch.dict(
                 os.environ, {'GITHUB_WORKFLOW_SHA': 'w', 'GITHUB_RUN_ID': '1'}
             ):
                 with self.assertRaises(subprocess.CalledProcessError):
                     qualify.qualify(contract, archive, fixtures, output)
+                self.assertEqual(containers.call_args_list[0].kwargs, {'readiness': True})
+                self.assertEqual(
+                    containers.call_args_list[0].args[0],
+                    [
+                        '--entrypoint=/opt/operator-venv/bin/python',
+                        checked['config_digest'],
+                        '-c',
+                        qualify.image_smoke.source_refusal_program(contract['readiness_sha256']),
+                    ],
+                )
                 self.assertFalse(output.exists())
                 self.assertEqual(
                     json.loads(output.with_suffix('.cleanup.json').read_text())['result'], 'CLEANUP_OUTCOME_UNKNOWN'
