@@ -9,6 +9,6 @@
     "backend/testing/e2e/test_desktop_batch_only.py"
   ],
   "evidence_prs": [],
-  "scope_hints": ["backend/routers/listen/visible_restore.py"],
+  "scope_hints": ["backend/tests/unit/test_visible_restore.py"],
   "status": "open"
 }

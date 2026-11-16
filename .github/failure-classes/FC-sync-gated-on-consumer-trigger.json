@@ -9,8 +9,7 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "desktop/macos/Desktop/Sources/ProactiveAssistants/**",
-    "desktop/windows/src/main/jit/**"
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**"
   ],
   "status": "open"
 }

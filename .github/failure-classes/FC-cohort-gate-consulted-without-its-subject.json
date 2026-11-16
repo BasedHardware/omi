@@ -9,9 +9,7 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "backend/utils/free_tier_cohort.py",
     "backend/utils/free_tier_processing_policy.py",
-    "backend/utils/free_tier_memory_policy.py",
     "backend/utils/conversations/process_conversation.py"
   ],
   "status": "open"

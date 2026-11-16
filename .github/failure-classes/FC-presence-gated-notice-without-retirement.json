@@ -11,8 +11,7 @@
   "evidence_prs": [],
   "scope_hints": [
     "backend/database/chat_first_intents.py",
-    "backend/routers/chat_first.py",
-    "backend/utils/task_intelligence/proactive_engine.py"
+    "backend/routers/chat_first.py"
   ],
   "status": "open"
 }
