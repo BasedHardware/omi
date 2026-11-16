@@ -4,63 +4,21 @@ The advisory maintenance lease is deliberately not used: ownership and the gate
 write share a transaction, and any error latches this process off until restart.
 """
 
-import os
 import time
 import uuid
-from dataclasses import dataclass
 from threading import Lock
 
 from prometheus_client import Gauge
 
 from config.batch_pipeline import provider_backlog_release_closed, provider_backlog_release_enabled
 from config.policy.kill_switches import kill_switch
-from utils.batch_pipeline.backlog_release import Gate, MIN_REACH_SECONDS, TOKENS_USED, WINDOW, valid_owner_keys
+from config.batch_pipeline_backlog_release import WriterConfig
+from utils.batch_pipeline.backlog_release import Gate, TOKENS_USED, WINDOW
 
-PREFIX = 'BATCH_PIPELINE_BACKLOG_RELEASE_'
 LEASE_KEY = 'backlog_heartbeat'
 LEASE_SECONDS = 120
 TICK_SECONDS = 20
 LAST_HEARTBEAT = Gauge('omi_batch_pipeline_backlog_heartbeat_timestamp_seconds', 'Last durable writer heartbeat')
-
-
-@dataclass(frozen=True)
-class WriterConfig:
-    enabled: bool = False
-    state: str = 'closed'
-    rate_per_hour: int = 0
-    reach_seconds: int = 0
-    mode: str = 'allowlist_only'
-    owner_keys: tuple[str, ...] = ()
-
-    def validate(self):
-        if (
-            type(self.enabled) is not bool
-            or self.state not in ('open', 'closed')
-            or self.mode not in ('all', 'allowlist_only')
-            or type(self.rate_per_hour) is not int
-            or self.rate_per_hour < 0
-            or type(self.reach_seconds) is not int
-            or (self.reach_seconds != 0 and self.reach_seconds < MIN_REACH_SECONDS)
-            or not valid_owner_keys(self.owner_keys)
-        ):
-            raise ValueError('invalid backlog heartbeat configuration')
-        return self
-
-    @classmethod
-    def from_env(cls):
-        writer = os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_WRITER', 'disabled').strip().lower()
-        if writer not in ('enabled', 'disabled'):
-            raise ValueError('backlog writer must be enabled or disabled')
-        return cls(
-            enabled=writer == 'enabled',
-            state=os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_STATE', 'closed').strip().lower(),
-            rate_per_hour=int(os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR', '0')),
-            reach_seconds=int(os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS', '0')),
-            mode=os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_MODE', 'allowlist_only').strip().lower(),
-            owner_keys=tuple(
-                filter(None, os.getenv('BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS', '').strip().split(','))
-            ),
-        ).validate()
 
 
 class HeartbeatAuthority:

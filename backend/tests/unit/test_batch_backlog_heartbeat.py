@@ -12,8 +12,9 @@ from database.batch_pipeline_store import FirestoreStore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_batch_backlog_release import METER, RELEASE, NOW, merge, put, ready, tokens
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
-from utils.batch_pipeline import backlog_release as gate
-from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, WriterConfig, LEASE_KEY, PREFIX
+from utils.batch_pipeline import backlog_release as gate, serving
+from config.batch_pipeline_backlog_release import WriterConfig, PREFIX
+from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, LEASE_KEY
 from utils.batch_pipeline.scheduler import owner_key
 
 
@@ -331,7 +332,6 @@ def test_malformed_versioned_document_closes(fields):
 async def test_supervisor_exits_on_error_and_never_retries(monkeypatch):
     import asyncio
     from types import SimpleNamespace
-    from utils.batch_pipeline import serving
 
     async def immediate(executor, fn, *args):
         return fn(*args)

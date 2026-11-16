@@ -2,7 +2,6 @@
 
 import logging
 import math
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TypeGuard, cast
@@ -11,6 +10,7 @@ from google.api_core.exceptions import Aborted
 from prometheus_client import Counter, Gauge
 
 from config.batch_pipeline import provider_backlog_release_closed
+from config.batch_pipeline_backlog_release import MIN_REACH_SECONDS, valid_owner_keys
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -20,22 +20,11 @@ REFUSED = Counter('omi_batch_pipeline_backlog_refused_total', 'Backlog gate refu
 
 FIELDS = ('state', 'rate_per_hour', 'reach_seconds', 'window', 'tokens_used', 'updated_at')
 POLICY_FIELDS = ('schema_version', 'mode', 'owner_keys')
-MIN_REACH_SECONDS = 30 * 86400
-MAX_OWNER_KEYS = 100
 HEARTBEAT_AGE = Gauge('omi_batch_pipeline_backlog_heartbeat_age_seconds', 'Age at last gate observation')
 TOKENS_GRANTED = Counter('omi_batch_pipeline_backlog_tokens_granted_total', 'Observed durable token grants')
 ALLOWLIST_HITS = Counter('omi_batch_pipeline_backlog_allowlist_hits_total', 'Observed commits for allowlisted owners')
 TOKENS_USED = Gauge('omi_batch_pipeline_backlog_window_tokens_used', 'Durable usage at last heartbeat or commit')
 WINDOW = Gauge('omi_batch_pipeline_backlog_token_window', 'Epoch hour of observed durable usage')
-
-
-def valid_owner_keys(keys: object) -> bool:
-    return (
-        isinstance(keys, (list, tuple))
-        and len(keys) <= MAX_OWNER_KEYS
-        and all(isinstance(key, str) and re.fullmatch('[0-9a-f]{64}', key) for key in keys)
-        and len(set(keys)) == len(keys)
-    )
 
 
 def _number(value: object) -> TypeGuard[float]:
