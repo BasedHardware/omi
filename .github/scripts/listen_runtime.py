@@ -437,61 +437,9 @@ def running(raw, root):
     return result
 
 
-def classify(event, changed):
-    if event == 'workflow_dispatch':
-        return {'deploy': True, 'runtime': False}
-    require(event in {'pull_request', 'push'} and 0 < len(changed) <= 2000, 'runtime_paths_unknown')
-    require(
-        all(
-            isinstance(p, str)
-            and 0 < len(p) <= 512
-            and not p.startswith('/')
-            and '..' not in PurePosixPath(p).parts
-            and not any(c in p for c in '\n\r\0')
-            for p in changed
-        ),
-        'runtime_paths_unknown',
-    )
-    runtime = any(
-        p
-        in {
-            MANIFEST,
-            BOOTSTRAP,
-            '.github/scripts/listen_overlay_evidence.py',
-            '.github/scripts/listen_helm_env_overrides.py',
-            '.github/workflows/gcp_backend_listen_helm.yml',
-        }
-        or p.startswith('backend/tests/unit/test_listen_')
-        for p in changed
-    )
-    chart = any(p.startswith(('backend/charts/backend-listen/', 'backend/charts/backend-secrets/')) for p in changed)
-    return {'deploy': event == 'push' and chart, 'runtime': runtime}
-
-
-def changed_paths(event_path, repo):
-    event = json.loads(event_path.read_bytes())
-    name = os.environ['GITHUB_EVENT_NAME']
-    if name == 'workflow_dispatch':
-        return []
-    before, after = (
-        (event.get('before'), event.get('after'))
-        if name == 'push'
-        else (event['pull_request']['base']['sha'], event['pull_request']['head']['sha'])
-    )
-    require(
-        all(isinstance(x, str) and SHA.fullmatch(x) and x != '0' * 40 for x in (before, after)), 'runtime_source_range'
-    )
-    # Existing local immutable commit objects only; no API truncation/fetch fallback.
-    out = run(
-        ['git', '-C', str(repo), 'diff', '--name-only', '-z', before, after, '--'], environment(Path('/nonexistent'))
-    )
-    require(out.endswith(b'\0') and len(out) <= 16384, 'runtime_paths_unknown')
-    return out[:-1].decode().split('\0')
-
-
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('mode', choices=['classify', 'reconstruct', 'measure', '_probe'])
+    p.add_argument('mode', choices=['reconstruct', 'measure', '_probe'])
     p.add_argument('--manifest', type=Path, default=Path(__file__).with_name('listen_runtime_manifest.json'))
     p.add_argument('--root', type=Path)
     a = p.parse_args()
@@ -503,18 +451,11 @@ def main():
         signal.signal(sig, interrupted)
     signal.alarm(SECONDS)
     try:
-        if a.mode == 'classify':
-            name = os.environ['GITHUB_EVENT_NAME']
-            result = classify(name, changed_paths(Path(os.environ['GITHUB_EVENT_PATH']), Path.cwd()))
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
-                for key, value in result.items():
-                    stream.write(key + '=' + str(value).lower() + '\n')
-        else:
-            raw = a.manifest.read_bytes()
-            require(a.root is not None and a.root.is_absolute(), 'runtime_root')
-            if a.mode == 'reconstruct':
-                stage(raw, a.root)
-            print(json.dumps(running(raw, a.root) if a.mode == '_probe' else measured(raw, a.root), sort_keys=True))
+        raw = a.manifest.read_bytes()
+        require(a.root is not None and a.root.is_absolute(), 'runtime_root')
+        if a.mode == 'reconstruct':
+            stage(raw, a.root)
+        print(json.dumps(running(raw, a.root) if a.mode == '_probe' else measured(raw, a.root), sort_keys=True))
     except (Exception, KeyboardInterrupt):
         print('LISTEN_RUNTIME_UNKNOWN', file=__import__('sys').stderr)
         return 2

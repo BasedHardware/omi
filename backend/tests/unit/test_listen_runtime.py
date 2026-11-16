@@ -111,27 +111,6 @@ def test_host_failure_cannot_download_or_execute(tmp_path):
     execute.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    'event,paths,expected',
-    [
-        ('workflow_dispatch', [], {'runtime': False, 'deploy': True}),
-        ('pull_request', ['backend/charts/backend-listen/x'], {'runtime': False, 'deploy': False}),
-        ('push', ['backend/charts/backend-listen/x'], {'runtime': False, 'deploy': True}),
-        ('push', [runtime.MANIFEST], {'runtime': True, 'deploy': False}),
-        ('pull_request', [runtime.BOOTSTRAP], {'runtime': True, 'deploy': False}),
-        ('push', [runtime.MANIFEST, 'backend/charts/backend-secrets/x'], {'runtime': True, 'deploy': True}),
-    ],
-)
-def test_event_and_exact_path_matrix_preserves_normal_chart_deploy(event, paths, expected):
-    assert runtime.classify(event, paths) == expected
-
-
-@pytest.mark.parametrize('paths', [[], ['../escape'], ['/x'], ['a\nb'], ['x'] * 2001])
-def test_ambiguous_or_beyond_bound_classification_never_grants_writers(paths):
-    with pytest.raises(runtime.Refused):
-        runtime.classify('push', paths)
-
-
 def test_actual_child_output_bound_and_timeout_reap_children_without_stderr():
     for code, timeout in [('print("x"*20000)', 2), ('import time;time.sleep(20)', 0.05)]:
         children, real = [], subprocess.Popen

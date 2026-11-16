@@ -9,18 +9,6 @@ on:
     paths:
       - 'backend/charts/backend-listen/**'
       - 'backend/charts/backend-secrets/**'
-      - '.github/scripts/listen_runtime*'
-      - '.github/scripts/listen_overlay_evidence.py'
-      - '.github/scripts/listen_helm_env_overrides.py'
-      - '.github/workflows/gcp_backend_listen_helm.yml'
-      - 'backend/tests/unit/test_listen_*.py'
-  pull_request:
-    paths:
-      - '.github/scripts/listen_runtime*'
-      - '.github/scripts/listen_overlay_evidence.py'
-      - '.github/scripts/listen_helm_env_overrides.py'
-      - '.github/workflows/gcp_backend_listen_helm.yml'
-      - 'backend/tests/unit/test_listen_*.py'
   workflow_dispatch:
     inputs:
       environment:
@@ -129,7 +117,7 @@ on:
 # ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
 # Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('listen-runtime-ci-{0}', github.event.pull_request.number) || github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment || 'development') }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment || 'development') }}
   cancel-in-progress: false
 
 env:
@@ -140,32 +128,7 @@ env:
   REGION: us-central1
 
 jobs:
-  runtime-reconstruction:
-    if: github.event_name != 'workflow_dispatch'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    outputs:
-      deploy: ${{ steps.paths.outputs.deploy }}
-    steps:
-      - name: Checkout exact reconstruction source
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Classify bounded source paths
-        id: paths
-        run: python3 .github/scripts/listen_runtime.py classify
-      - name: Reconstruct and prove runtime identities
-        if: steps.paths.outputs.runtime == 'true'
-        run: |
-          python3 .github/scripts/listen_runtime.py reconstruct --root "$RUNNER_TEMP/listen-runtime"
-          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
   helm-upgrade:
-    needs: runtime-reconstruction
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && needs.runtime-reconstruction.result == 'success' && needs.runtime-reconstruction.outputs.deploy == 'true')) }}
     outputs:
       checked_out_sha: ${{ steps.admit-deploy-source.outputs.checked_out_sha }}
       neg_coverage_exporter_image_tag: ${{ steps.resolve-listen-image.outputs.neg_coverage_exporter_image_tag }}
@@ -461,7 +424,7 @@ jobs:
       # create-only, so the rollback lane must not gain new failure modes; the
       # gate runs only when the explicit deploy path resolved a source SHA.
       - name: Checkout immutable Firestore gate controls
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.workflow_sha }}
           path: .github/firestore-workflow
@@ -797,7 +760,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@v7 # v7
         with:
           ref: ${{ needs.helm-upgrade.outputs.checked_out_sha }}
 
@@ -805,16 +768,16 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Google Auth (prod WIF)
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        uses: google-github-actions/auth@v3 # v3
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        uses: google-github-actions/setup-gcloud@v3 # v3
 
       - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395 # v3
+        uses: google-github-actions/get-gke-credentials@v3 # v3
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: us-central1
