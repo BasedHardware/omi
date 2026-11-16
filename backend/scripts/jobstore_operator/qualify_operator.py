@@ -163,6 +163,7 @@ def fixture_files(archive_path, target):
 
 
 def qualify(contract, archive, fixtures, output):
+    source_program = image_smoke.source_refusal_program(contract.get('readiness_sha256'))
     host = native_host()
     if (
         archive.stat().st_size != contract['archive_bytes']
@@ -177,6 +178,18 @@ def qualify(contract, archive, fixtures, output):
     tag = contract['loaded_tag']
     # This proposal intentionally requires an isolated existing CI runner.
     with owned_loaded_image(archive, tag, checked, host, output.with_suffix('.cleanup.json')) as (image_id, binding):
+        source_refusal = json.loads(
+            image_smoke.run_container(
+                [
+                    '--entrypoint=/opt/operator-venv/bin/python',
+                    image_id,
+                    '-c',
+                    source_program,
+                ],
+                readiness=True,
+            )
+        )
+        image_smoke.validate_source_refusal(source_refusal, contract['readiness_sha256'])
         smoke = image_smoke.run_container(
             ['--entrypoint=/opt/operator-venv/bin/python', image_id, '-c', image_smoke.PROGRAM]
         )
@@ -202,8 +215,8 @@ def qualify(contract, archive, fixtures, output):
                 ]
             )
             count = re.search(r'^Ran (\d+) tests? in ', tests, re.MULTILINE)
-            if not count or int(count.group(1)) != 49 or tests.strip().splitlines()[-1] != 'OK':
-                raise ValueError('ALL_49_NATIVE_CASES_WITHOUT_SKIPS_REQUIRED')
+            if not count or int(count.group(1)) != 58 or tests.strip().splitlines()[-1] != 'OK':
+                raise ValueError('ALL_58_NATIVE_CASES_WITHOUT_SKIPS_REQUIRED')
         smoke += image_smoke.run_container([image_id], hold=True)
         receipt = {
             'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
@@ -217,7 +230,8 @@ def qualify(contract, archive, fixtures, output):
             'loaded_image_id': image_id,
             'loaded_identity_binding': binding,
             'config_digest': checked['config_digest'],
-            'tests_run': 49,
+            'tests_run': 58,
+            'resource_bound_source_refusal': source_refusal,
             'tests_skipped': 0,
             'uid': 1000,
             'container_network': 'none',
