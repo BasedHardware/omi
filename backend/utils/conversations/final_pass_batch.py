@@ -153,6 +153,10 @@ class FinalPassResult(TypedDict, total=False):
 
 
 def record_final_pass_failure(outcome: str, **details) -> FinalPassResult:
+    if details.get('reason') == 'diarizer_unconfigured':
+        from utils.observability.owner_recognition_diagnostics import final_pass_availability
+
+        final_pass_availability('dependency_unavailable')
     count_terminal(outcome)
     logger.info(
         'event=batch_final_pass outcome=%s exception_type=%s reason=%s location=%s',
@@ -479,7 +483,7 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     try:
         return _run(uid, conversation, receipt, load_prints, apply, failure_context)
     except Exception as error:
-        if error_details(error.__cause__ or error)['reason'] == 'diarizer_unconfigured' or transient_cause(error):
+        if transient_cause(error) is not None:
             final_pass_availability('dependency_unavailable')
         transient = transient_cause(error)
         if transient is not None:

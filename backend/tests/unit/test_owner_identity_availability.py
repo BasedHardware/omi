@@ -185,3 +185,28 @@ def original_lane(lane):
 
 
 from tests.unit.test_batch_final_pass import lane
+
+
+def test_returned_final_pass_dependency_failure_is_observed(original_lane, monkeypatch):
+    from utils.conversations import final_pass_batch as batch
+
+    lane = original_lane
+    monkeypatch.setattr(batch, 'recurring_enabled_for', lambda *a: False)
+    monkeypatch.setattr(
+        batch,
+        'run_final_pass',
+        lambda *a, **kw: (
+            None,
+            {
+                'outcome': 'failed:service',
+                'reason': 'diarizer_unconfigured',
+            },
+        ),
+    )
+    counter = diagnostics.FINAL_PASS_AVAILABILITY.labels(outcome='dependency_unavailable')
+    before = counter._value.get()
+    result = batch.run_batch_final_pass(
+        'synthetic', lane.conversation, {}, load_prints=lambda *a, **kw: {}, apply=lambda *a, **kw: None, requeue=None
+    )
+    assert result['outcome'] == 'failed_batch_audio'
+    assert counter._value.get() == before + 1
