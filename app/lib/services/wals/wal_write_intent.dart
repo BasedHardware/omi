@@ -166,25 +166,9 @@ abstract final class WalWriteIntent {
       });
 
   static Future<String> _hashAudio(File audio) async {
-    final path = audio.path;
-    return offUiIsolate(() {
-      late Digest digest;
-      final sink = sha256.startChunkedConversion(ChunkedConversionSink<Digest>.withCallback((values) {
-        digest = values.single;
-      }));
-      final input = File(path).openSync();
-      try {
-        for (;;) {
-          final bytes = input.readSync(64 * 1024);
-          if (bytes.isEmpty) break;
-          sink.add(bytes);
-        }
-        sink.close();
-        return digest.toString();
-      } finally {
-        input.closeSync();
-      }
-    }, size: await audio.length(), threshold: 0, debugName: 'wal_intent_hash');
+    final bytes = await audio.readAsBytes();
+    return offUiIsolate(() => sha256.convert(bytes).toString(),
+        size: bytes.length, threshold: 0, debugName: 'wal_intent_hash');
   }
 
   // An explicit deletion also retires the exact legacy unowned disk row

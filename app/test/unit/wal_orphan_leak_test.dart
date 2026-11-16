@@ -13,6 +13,7 @@ import 'package:omi/services/wals/wal_write_intent.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 
 class _UnwritableArchive implements File {
   @override
@@ -112,6 +113,22 @@ void main() {
     // Discovery is not index durability and must never authorize device ACK.
     expect(await restarted.hasDurableWal(recovered, admittedGeneration: restarted.sessionGeneration), isFalse);
   }
+
+  test('intent replay hashes on a worker without an inline fallback', () async {
+    final wal = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_hash_worker.bin');
+    await WalWriteIntent.write(documents, wal, [1, 2]);
+    final completed = offUiIsolateWorkerCompletions;
+    final fallbacks = offUiIsolateFallbacks;
+    expect(await WalWriteIntent.recover(documents, []), hasLength(1));
+    expect(offUiIsolateWorkerCompletions, completed + 1);
+    expect(offUiIsolateFallbacks, fallbacks);
+  });
 
   test('live fsync followed by failed index save survives a fresh ledger', () async {
     final sync = failingLedger();
