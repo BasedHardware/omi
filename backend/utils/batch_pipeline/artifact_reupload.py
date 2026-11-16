@@ -146,6 +146,24 @@ async def restore_upload(
                 retained_offsets_by_name=context.get('retained_capture_offsets_by_name'),
             ),
         )
+    elif any(job.get('source_reuse_key') for job in jobs):
+        from utils.batch_pipeline.source_reuse import decode_sources
+
+        # Accepted units pin per-file packing, even when new reuse is OFF.
+        # The original content HMAC already proves the complete bytes/names;
+        # _original_unit rechecks every original unit boundary before the CAS.
+        iterator = decode_sources(
+            paths,
+            uid=uid,
+            max_seconds=ceiling,
+            decoder=decode_units,
+            context={
+                **context,
+                'client_device_id': binding.client_device_id,
+                'source': binding.source,
+                'should_lock': binding.is_locked,
+            },
+        )
     else:
         iterator = decode_units(paths, max_seconds=ceiling)
     uris, count = {}, 0

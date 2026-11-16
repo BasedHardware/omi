@@ -594,3 +594,116 @@ def test_overlapping_files_with_different_bytes_both_survive_inside_bundle(tmp_p
     units = decoded([raw_file(tmp_path, name='a'), raw_file(tmp_path, name='b', sample=2)])
     assert len(units) == 2
     assert units[0].source_reuse_key != units[1].source_reuse_key
+
+
+def test_bundle_order_does_not_change_source_unit_order(tmp_path):
+    first = decoded([raw_file(tmp_path, at=1750000101, name='a'), raw_file(tmp_path, name='b')])
+    second = decoded([raw_file(tmp_path, name='c'), raw_file(tmp_path, at=1750000101, name='d')])
+    assert [unit.source_reuse_key for unit in first] == [unit.source_reuse_key for unit in second]
+
+
+@pytest.mark.asyncio
+async def test_missing_input_repair_preserves_accepted_file_boundaries_after_off(tmp_path, monkeypatch):
+    from utils.batch_pipeline import artifact_reupload as repair
+
+    paths = [raw_file(tmp_path, name='a'), raw_file(tmp_path, name='b', at=1750000101)]
+    # Original admission has two source files even though they touch in time.
+    units = decoded(paths)
+    jobs = [
+        WorkItem(
+            hashlib.sha256(str(index).encode()).hexdigest(),
+            UID,
+            unit.capture_at,
+            f'gs://synthetic/{index}#1',
+            unit.duration_seconds,
+            Priority.FRESH,
+            conversation_id=f'input-{index}',
+            privacy_generation=0,
+            source_reuse_key=unit.source_reuse_key,
+        ).to_dict()
+        for index, unit in enumerate(units)
+    ]
+    paths = [raw_file(tmp_path, name='retry-b', at=1750000101), raw_file(tmp_path, name='retry-a')]
+    binding = ProjectionBinding(
+        UID, 'job', 'content', tuple(job['segment_id'] for job in jobs), client_device_id='device', privacy_generation=0
+    )
+    snapshots = {job['segment_id']: job for job in jobs}
+    protocol = SimpleNamespace(restore_reupload=Mock(return_value='job'))
+    monkeypatch.setattr(repair, '_repair_plan', lambda *a: (protocol, (binding, jobs, snapshots)))
+    monkeypatch.setattr(repair, '_repair_evidence', lambda *a: ({}, {sid: {'stt_language': 'en'} for sid in snapshots}))
+    monkeypatch.setenv('BATCH_SOURCE_REUSE_ENABLED', 'false')
+    artifacts = SimpleNamespace(stage_audio=Mock(return_value='gs://synthetic/repaired#1'))
+    assert (
+        await repair.restore_upload(
+            None,
+            UID,
+            'content',
+            paths,
+            source='omi',
+            should_lock=False,
+            conversation_id=None,
+            client_device_id='device',
+            client_platform=None,
+            intake_context={},
+            artifacts=artifacts,
+        )
+        == 'job'
+    )
+    assert artifacts.stage_audio.call_count == 2
+    protocol.restore_reupload.assert_called_once()
+    assert set(protocol.restore_reupload.call_args.args[3]) == set(snapshots)
+
+
+def test_mixed_bundle_admits_only_the_new_tail_as_paid_work():
+    from database.batch_pipeline_intake import admit
+    from utils.batch_pipeline.scheduler import Scheduler
+
+    store, original = setup_store()
+    copy = replace(
+        original,
+        segment_id=COPY,
+        audio_uri='gs://synthetic/copy#1',
+        source_alias_of=SOURCE,
+        source_conversation_ids=('input', 'visible'),
+        requires_compute_admission=False,
+    )
+    tail_id = hashlib.sha256(b'new-tail').hexdigest()
+    tail = replace(
+        original,
+        segment_id=tail_id,
+        capture_at=original.capture_at + 1,
+        audio_uri='gs://synthetic/tail#1',
+        source_reuse_key='b' * 64,
+        conversation_id='tail-input',
+        requires_compute_admission=True,
+    )
+    binding = ProjectionBinding(UID, 'mixed-job', 'mixed-content', (COPY, tail_id), privacy_generation=0)
+    marker = 'gs://synthetic/copy-result#1'
+    for item, uri in ((copy, copy.audio_uri), (copy, marker), (tail, tail.audio_uri)):
+        store.ref('artifacts', artifact_id(item.segment_id, uri)).create({'owner_id': UID, 'privacy_generation': 0})
+
+    def run(body):
+        tx = FirestoreTransaction(store.client, NS, store.client.transaction())
+        answer = body(tx)
+        tx.flush()
+        return answer
+
+    paid = Mock(wraps=Scheduler.enqueue_in_transaction)
+    adapter = SimpleNamespace(run=run, namespace=NS)
+    assert (
+        admit(
+            adapter,
+            [copy, tail],
+            binding,
+            NOW,
+            namespace=NS,
+            require_artifacts=True,
+            policy=replace(BatchUnitPolicy(), batch_enabled=True),
+            enqueue=paid,
+            source_aliases={COPY: {'segment_id': SOURCE, 'result_uri': marker}},
+        )['outcome']
+        == 'batch'
+    )
+    assert paid.call_count == 1 and paid.call_args.args[1].segment_id == tail_id
+    assert store.ref('jobs', COPY).get().to_dict()['state'] == 'result_ready'
+    assert store.ref('jobs', tail_id).get().to_dict()['state'] == 'ready'

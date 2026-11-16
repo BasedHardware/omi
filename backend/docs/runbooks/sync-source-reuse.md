@@ -73,7 +73,9 @@ private content outside erasure discovery. Receipts expire at the ordinary
 packing and admission aliases. Malformed explicit values also stop new
 admission. Previously accepted source-key jobs retain their projection fence;
 accepted aliases remain non-runnable paid work and finish through the same
-pointer path. The switch never erases custody receipts or rewrites charges.
+pointer path. Missing-input repair also keeps the accepted per-file packing
+after OFF, under the original full-bundle byte HMAC and boundary CAS. The switch
+never erases custody receipts or rewrites charges.
 
 Counters have a closed `event` label and no owner/source/content identifiers:
 

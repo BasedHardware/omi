@@ -70,7 +70,10 @@ def decode_sources(paths, *, uid, context, decoder, max_seconds, received_at=Non
         sort_keys=True,
         separators=(',', ':'),
     )
-    sources = [(path, compute_sync_segment_id(uid, path)) for path in paths]
+    sources = sorted(
+        [(path, compute_sync_segment_id(uid, path)) for path in paths],
+        key=lambda value: (get_timestamp_from_path(value[0]), os.path.basename(value[0]), value[1]),
+    )
     seen = set()
     for path, original in sources:
         if original in seen:
