@@ -147,7 +147,7 @@ async def restore_upload(
             ),
         )
     elif any(job.get('source_reuse_key') for job in jobs):
-        from utils.batch_pipeline.source_reuse import decode_sources
+        from utils.sync.source_reuse_decode import decode_sources
 
         # Accepted units pin per-file packing, even when new reuse is OFF.
         # The original content HMAC already proves the complete bytes/names;

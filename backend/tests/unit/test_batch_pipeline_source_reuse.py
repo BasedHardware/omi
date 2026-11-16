@@ -20,6 +20,7 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.sync_ledger import sync_content_ledger_ref
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.batch_pipeline import source_reuse
+from utils.sync import source_reuse_decode
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
 from utils.batch_pipeline.scheduler import owner_key
@@ -106,7 +107,7 @@ def test_partial_file_is_not_whole_file_proof_and_split_tail_survives(tmp_path):
     ],
 )
 def test_unsupported_source_context_abstains(tmp_path, context):
-    assert not source_reuse.eligible([raw_file(tmp_path)], context)
+    assert not source_reuse_decode.eligible([raw_file(tmp_path)], context)
 
 
 def test_kill_switch_restores_packing_and_unknown_clocks_abstain(tmp_path, monkeypatch):
@@ -114,7 +115,7 @@ def test_kill_switch_restores_packing_and_unknown_clocks_abstain(tmp_path, monke
     units = decoded([raw_file(tmp_path, name='a'), raw_file(tmp_path, at=1750000101, name='b')])
     assert len(units) == 1 and units[0].source_reuse_key is None
     monkeypatch.delenv('BATCH_SOURCE_REUSE_ENABLED')
-    assert not source_reuse.eligible([raw_file(tmp_path, at=788918400, name='early')], {'client_device_id': 'd'})
+    assert not source_reuse_decode.eligible([raw_file(tmp_path, at=788918400, name='early')], {'client_device_id': 'd'})
 
 
 def setup_store(*, outcome='success', corrected=False):

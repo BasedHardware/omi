@@ -1,6 +1,34 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Source aliases bypass paid work and enter the existing ordered result log.
+    'database/batch_pipeline_source_reuse.py': [
+        (
+            'enqueue_alias',
+            'state',
+            "'result_ready'",
+            (
+                'attempt',
+                'available_at',
+                'enqueued_at',
+                'fresh_capture',
+                'lease_until',
+                'merge_pending',
+                'owner_key',
+                'policy',
+                'policy_source',
+                'priority',
+                'protocol_version',
+                'ready_at',
+                'result',
+                'source_alias',
+                'source_alias_version',
+                'source_conversation_ids',
+                'state',
+                'token',
+            ),
+        ),
+    ],
     # Fenced control gate only, never a batch job state. Validated open/closed
     # config governs spending; absent/stale heartbeat closes within 180s.
     'utils/batch_pipeline/backlog_heartbeat.py': [

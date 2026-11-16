@@ -6,13 +6,13 @@ marker; it can never re-enter a paid queue, including after rollback.
 """
 
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
-from database.sync_ledger import LEDGER_RETENTION_DAYS
+from utils.batch_pipeline.retention import RECEIPT_RETENTION
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline import source_reuse
@@ -206,7 +206,7 @@ def claim(session, transaction, receipt):
             'source_conversation_ids': ids,
             # Only the whole unit's ready summary may license an admission alias.
             'complete': receipt.get('state') == 'ready',
-            'expires_at': datetime.fromtimestamp(session.now, timezone.utc) + timedelta(days=LEDGER_RETENTION_DAYS),
+            'expires_at': datetime.fromtimestamp(session.now, timezone.utc) + RECEIPT_RETENTION,
         },
     )
 

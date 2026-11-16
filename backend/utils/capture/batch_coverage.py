@@ -68,11 +68,11 @@ def provenance_unit(unit, runs):
 
 
 def decode_for_intake(paths, max_seconds, uid, context, *, decoder):
-    from utils.batch_pipeline import source_reuse
+    from utils.sync import source_reuse_decode
 
     receipt = (context or {}).get('capture_received_at')
-    if source_reuse.eligible(paths, context):
-        return source_reuse.decode_sources(
+    if source_reuse_decode.eligible(paths, context):
+        return source_reuse_decode.decode_sources(
             paths, uid=uid, context=context, decoder=decoder, max_seconds=max_seconds, received_at=receipt
         )
     clock_kwargs = {'received_at': receipt} if receipt is not None else {}
