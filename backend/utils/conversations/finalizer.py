@@ -66,7 +66,10 @@ from utils.episodes.finalize import skip_unchanged_schedule
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
-from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+from utils.llm.gateway_error_contract import (
+    GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL,
+    is_retryable_processing_http_exception,
+)
 from utils.observability.finalization import (
     RECORD_REGISTER_REFUSED,
     classify_finalization_failure,
@@ -773,11 +776,16 @@ async def finalize_persisted_conversation(
         # _get_structured wraps provider/parser errors in a safe HTTPException.
         # Its cause retains the original class, but neither message nor
         # traceback is safe to emit because either can contain transcript text.
+        # A transient provider fault is answered as the typed retryable 503
+        # (SCA-2521); unwrap it the same way so the durable lane keeps
+        # classifying it as a provider failure, not a processing bug.
         source_error = (
             error.__cause__
             if isinstance(error, HTTPException)
-            and error.status_code == 500
-            and error.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
+            and (
+                (error.status_code == 500 and error.detail == GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL)
+                or is_retryable_processing_http_exception(error)
+            )
             and isinstance(error.__cause__, Exception)
             else error
         )
