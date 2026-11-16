@@ -308,3 +308,19 @@ def test_copy_keeps_strongest_protection_and_custom_stt_provenance():
         },
     )
     assert rebuilt['data_protection_level'] == 'enhanced' and rebuilt['uses_custom_stt'] is False
+
+
+def test_late_merge_keeps_a_repeated_sentence_but_not_a_recaptured_one():
+    said = 'Can you hear me now over there?'
+    row = recording(segments=[{'text': said, 'start': 0, 'end': 2}, {'text': said, 'start': 10, 'end': 12}])
+    window = planner.windows([outline.stretches([row], NOW + timedelta(hours=1))[0]], [[entry()]])[0]
+    prior = {
+        'id': 'c',
+        'status': 'completed',
+        'started_at': NOW,
+        'finished_at': NOW + timedelta(seconds=12),
+        # The stored copy already has the first utterance (another id, overlapping time).
+        'transcript_segments': [{'id': 'stored', 'text': said, 'start': 0.5, 'end': 2.5}],
+    }
+    built = planner.build('u', window, {'r': row}, prior)
+    assert [s['start'] for s in built['transcript_segments']] == [0.5, 10.0]

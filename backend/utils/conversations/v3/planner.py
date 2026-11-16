@@ -114,8 +114,11 @@ def build(uid, window, recordings, existing=None):
             if (segment.get('id'), segment.get('start'), segment.get('end')) in keys:
                 return True
             text = ' '.join(segment.get('text', '').casefold().split())
+            # Same words are a duplicate only when they overlap the stored line in time; a speaker
+            # repeating a sentence a few seconds later is new speech.
             return any(
-                abs(segment['start'] - old['start']) <= 20
+                segment['start'] <= old.get('end', old['start']) + 2
+                and segment.get('end', segment['start']) >= old['start'] - 2
                 and (
                     text == ' '.join(old.get('text', '').casefold().split())
                     or (

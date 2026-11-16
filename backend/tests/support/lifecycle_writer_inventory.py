@@ -158,6 +158,7 @@ FIELD_SITES = {
                 'tile_state',
                 'title_locked',
                 'transcript_segments',
+                'uses_custom_stt',
                 'v3_derived',
                 'v3_recording_ids',
             ),

@@ -192,6 +192,19 @@ def test_urls_conversation_audio_cached(monkeypatch):
     assert enqueues == []
 
 
+def test_null_recording_pieces_stay_on_the_legacy_playback_path(monkeypatch):
+    # Rows written through the Conversation model carry recording_pieces: None; they are not v3.
+    from utils.conversations.v3 import audio
+
+    stamp = {'audio_files_fingerprint': 'fp-current', 'duration': 1.0, 'captured_duration': 1.0, 'spans': []}
+    conversation, enqueues = _urls_setup(monkeypatch, stamp=stamp, signed_url='https://conv-mp3')
+    conversation['recording_pieces'] = None
+    monkeypatch.setattr(audio, 'playback_snapshot', lambda *a: pytest.fail('ordinary row took the v3 path'))
+    result = playback.get_audio_signed_urls('u', 'c', _AUDIO_FILES, conversation=conversation)
+    assert result['conversation_audio']['status'] == 'cached'
+    assert enqueues == []
+
+
 def test_urls_conversation_audio_stale_fingerprint_pending_and_reenqueued(monkeypatch):
     stamp = {'audio_files_fingerprint': 'fp-old', 'duration': 1.0, 'captured_duration': 1.0, 'spans': []}
     conversation, enqueues = _urls_setup(monkeypatch, stamp=stamp, signed_url='https://conv-mp3')

@@ -2525,6 +2525,21 @@ def update_conversation(
     invalidate_people_stats_cache(uid)
     if _SEARCH_INDEXED_FIELD_ROOTS.intersection(str(key).split('.', 1)[0] for key in update_data):
         _sync_conversation_search_index(uid, conversation_id)
+    before = doc_snapshot.to_dict() or {}
+    if (
+        update_data.get('audio_files')
+        and before.get('recording') is True
+        and not before.get('deleted')
+        and not before.get('v3_pending')
+    ):
+        # Audio metadata can land after a v3 recording was reconciled (sync finalize, merges,
+        # projection repair). Re-arm the builder so its conversation gains the recording pieces.
+        from utils.conversations.v3.triggers import changed
+
+        try:
+            changed(uid, conversation_id)
+        except Exception as error:  # the write committed; opening the conversation rebuilds its pieces
+            logger.warning('v3 audio re-arm deferred exception_type=%s', type(error).__name__)
     return True
 
 

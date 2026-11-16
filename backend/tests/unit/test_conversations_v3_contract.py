@@ -468,3 +468,32 @@ def test_attribute_collection_constant_is_detected(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_text('def read(db):\n    return db.collection(jobs.CONVERSATIONS_COLLECTION).stream()\n')
     assert list(load_reader_guard().references(tmp_path)) == [('backend/database/recovery.py', 'collection', 2)]
+
+
+@pytest.mark.parametrize(
+    'before, update, rearmed',
+    [
+        ({'recording': True}, {'audio_files': [{'id': 'f'}]}, True),
+        ({'recording': True, 'v3_pending': True}, {'audio_files': [{'id': 'f'}]}, False),
+        ({'recording': True}, {'audio_files': []}, False),
+        ({}, {'audio_files': [{'id': 'f'}]}, False),
+        ({'recording': True, 'deleted': True}, {'audio_files': [{'id': 'f'}]}, False),
+    ],
+)
+def test_late_audio_on_a_settled_recording_rearms_the_builder(monkeypatch, before, update, rearmed):
+    from utils.conversations.v3 import triggers as v3_triggers
+
+    snapshot = MagicMock(exists=True, update_time=1)
+    snapshot.to_dict.return_value = before
+    ref = MagicMock()
+    ref.get.return_value = snapshot
+    monkeypatch.setattr(db, 'db', MagicMock())
+    db.db.collection.return_value.document.return_value.collection.return_value.document.return_value = ref
+    monkeypatch.setattr(db, '_prepare_conversation_for_write', lambda data, *a, **k: data)
+    monkeypatch.setattr(db, 'retain_aliases', lambda files, _old: files)
+    monkeypatch.setattr(db, 'guard_match_score_size', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    calls = []
+    monkeypatch.setattr(v3_triggers, 'changed', lambda uid, cid: calls.append((uid, cid)))
+    assert db.update_conversation('u', 'r', update) is True
+    assert calls == ([('u', 'r')] if rearmed else [])

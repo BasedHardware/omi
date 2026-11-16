@@ -239,3 +239,32 @@ async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypat
     rebuilt = committed[-1][4][0]
     assert rebuilt['v3_rewrites'] == 1 and rebuilt['v3_process_pending'] is True
     assert rebuilt['summary_covers_through'] is None
+
+
+@pytest.mark.asyncio
+async def test_late_audio_metadata_gives_a_finished_conversation_its_pieces(builder, monkeypatch):
+    from datetime import datetime
+
+    committed, _calls = builder
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return AT + timedelta(minutes=10)
+
+    monkeypatch.setattr(service, 'datetime', Clock)
+    existing, cache = {}, []
+    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
+    await service.reconcile('u')
+    row = committed[-1][4][0]
+    assert row['recording_pieces'] == []
+    row.update(status='completed', tile_state='done', v3_process_pending=False)
+    existing[row['id']] = row
+    cache[:] = committed[-1][5]
+    # The sync pipeline writes audio metadata after the window was already reconciled.
+    recording['audio_files'] = [{'id': 'f', 'duration': 10, 'chunk_timestamps': [AT.timestamp()]}]
+    await service.reconcile('u')
+    rebuilt = committed[-1][4][0]
+    assert rebuilt['id'] == row['id']
+    assert rebuilt['recording_pieces'] == [{'recording_id': 'r', 'audio_file_id': 'f', 'start': 0.0, 'end': 10.0}]

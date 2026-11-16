@@ -32,6 +32,7 @@ from utils.other.storage import (
     is_playback_unavailable,
     list_audio_chunks,
 )
+from utils.conversations.layer import has_recording_pieces
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,7 @@ def _conversation_audio_urls_entry(
     lifecycle) falls through to pending + re-enqueue under a fingerprint-named
     task, making staleness self-healing.
     """
-    v3 = bool(conversation and 'recording_pieces' in conversation)
+    v3 = has_recording_pieces(conversation)
     if v3:
         fingerprint = conversation_merge_fingerprint(conversation or {}, demand=True)
     elif playback_on_demand():
@@ -443,7 +444,7 @@ def get_audio_signed_urls(
     audio_files: list[dict[str, Any]],
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if (conversation and 'recording_pieces' in conversation) or any(af.get('recording_id') for af in audio_files):
+    if has_recording_pieces(conversation) or any(af.get('recording_id') for af in audio_files):
         from utils.conversations.v3.audio import playback_snapshot
         from database import conversations as conversations_db
 
