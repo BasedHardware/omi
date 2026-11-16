@@ -71,7 +71,7 @@ emulator_args=(
   --readiness-timeout "${OMI_STACK_EMULATOR_READINESS_TIMEOUT:-120}"
 )
 if [[ -n "$lifecycle_state" ]]; then
-  emulator_args+=(--log-dir "$lifecycle_state/emulator")
+  emulator_args+=(--log-dir "$lifecycle_state/emulator" --state-dir "$lifecycle_state")
 fi
 
 if [[ "$lifecycle_only" == true ]]; then

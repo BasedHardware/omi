@@ -17,6 +17,7 @@ from __future__ import annotations
 import socket
 import stat
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -251,3 +252,65 @@ def test_generated_inner_script_probes_before_it_runs_the_gauntlet(tmp_path: Pat
     assert emulator_supervisor.MARKER_READINESS_FAILED in script
     assert emulator_supervisor.MARKER_STARTED in script
     assert emulator_supervisor.MARKER_INNER_PREFIX in script
+
+
+def test_each_attempt_gets_a_fresh_scenario_state_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A retry must not inherit the previous attempt's half-run state.
+
+    The inner command is retried with the same `--state-dir` value, so the
+    supervisor rewrites it per attempt. A retry that reused the failed attempt's
+    ledger/cursor/evidence files could turn a transient startup failure into a
+    false assertion failure.
+    """
+    state = tmp_path / 'state'
+    record = tmp_path / 'args.txt'
+    inner = _write_executable(
+        tmp_path / 'inner.sh',
+        f'#!/usr/bin/env bash\necho "$@" >> {record}\necho "httpx.ReadTimeout" >&2\nexit 1\n',
+    )
+    counter = tmp_path / 'attempts.txt'
+    counter.touch()
+    monkeypatch.setenv('FAKE_ATTEMPT_COUNTER', str(counter))
+    monkeypatch.setenv('FAKE_FIREBASE_MODE', 'pass')
+    returncode = emulator_supervisor.run_supervisor(
+        inner_command=f'bash {inner} --state-dir {state}',
+        repo_root=tmp_path,
+        log_dir=tmp_path / 'logs',
+        readiness_command=['true'],
+        firebase_command=[str(_write_executable(tmp_path / 'firebase', _FAKE_FIREBASE))],
+        max_attempts=2,
+        state_dir=str(state),
+    )
+    assert returncode != 0
+    lines = record.read_text().splitlines()
+    assert len(lines) == 2, lines
+    assert f'--state-dir {state}/attempt-1' in lines[0]
+    assert f'--state-dir {state}/attempt-2' in lines[1]
+    assert (state / 'attempt-1').is_dir() and (state / 'attempt-2').is_dir()
+
+
+def test_wall_clock_budget_kills_a_hung_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hung attempt is terminated inside the budget, not just between attempts.
+
+    Checking the budget only before each attempt lets a hung Firebase startup or
+    inner command run past it until the CI job ceiling cancels the job, which
+    hides the real cause.
+    """
+    inner = _write_executable(tmp_path / 'inner.sh', '#!/usr/bin/env bash\nsleep 120\n')
+    counter = tmp_path / 'attempts.txt'
+    counter.touch()
+    monkeypatch.setenv('FAKE_ATTEMPT_COUNTER', str(counter))
+    monkeypatch.setenv('FAKE_FIREBASE_MODE', 'pass')
+    started = time.monotonic()
+    returncode = emulator_supervisor.run_supervisor(
+        inner_command=f'bash {inner}',
+        repo_root=tmp_path,
+        log_dir=tmp_path / 'logs',
+        readiness_command=['true'],
+        firebase_command=[str(_write_executable(tmp_path / 'firebase', _FAKE_FIREBASE))],
+        max_attempts=3,
+        max_total_seconds=2.0,
+    )
+    elapsed = time.monotonic() - started
+    assert returncode != 0
+    assert elapsed < 45.0, f'budget was not enforced mid-attempt: {elapsed:.1f}s'

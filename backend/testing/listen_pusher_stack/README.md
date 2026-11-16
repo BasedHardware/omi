@@ -33,7 +33,11 @@ nothing. Each attempt therefore:
 * proves the emulator answers a real Firestore RPC (`emulator_readiness.py`)
   before any scenario starts;
 * retries only emulator/connection/protocol startup failures, capped at three
-  attempts and `OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS` (default 900s);
+  attempts and `OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS` (default 900s); the budget
+  is enforced *inside* an attempt too, so a hung Firebase startup is killed at
+  the deadline instead of running until the CI job ceiling cancels the job;
+* gives every attempt its own `<state-dir>/attempt-<n>` scenario state, so a
+  retry never inherits a half-run ledger, cursor or evidence set;
 * never retries a scenario assertion, a pytest failure, or any other non-zero
   exit from the gauntlet itself, so a real regression stays red;
 * prints the emulator log tail and the loopback listeners in use when every

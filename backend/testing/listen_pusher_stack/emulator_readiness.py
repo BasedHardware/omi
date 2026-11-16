@@ -21,6 +21,8 @@ import os
 import sys
 import time
 
+from google.cloud import firestore
+
 DEFAULT_PROJECT = 'demo-omi-listen-stack'
 DEFAULT_TIMEOUT_SECONDS = 120.0
 DEFAULT_RPC_TIMEOUT_SECONDS = 5.0
@@ -55,8 +57,6 @@ def probe_once(*, rpc_timeout: float = DEFAULT_RPC_TIMEOUT_SECONDS, project: str
     exists to replace. A document that does not exist is a successful probe:
     the call returns ``None`` once the service answered.
     """
-    from google.cloud import firestore
-
     client = firestore.Client(project=project)
     client.collection(READINESS_COLLECTION).document('probe').get(timeout=rpc_timeout, retry=None)
 

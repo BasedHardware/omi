@@ -32,12 +32,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -206,6 +209,24 @@ def _read_marker(marker: Path) -> str:
         return ''
 
 
+def _terminate(process: subprocess.Popen) -> None:
+    """Stop an attempt, preferring its whole process group.
+
+    The attempt runs Firebase in its own session, so the emulator JVM and the
+    inner gauntlet are in the same group. A plain ``process.kill()`` would leave
+    the JVM behind and keep the log pipe open.
+    """
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+    except OSError:
+        return
+    time.sleep(5.0)
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except OSError:
+        pass
+
+
 def _run_attempt(
     *,
     index: int,
@@ -215,12 +236,22 @@ def _run_attempt(
     log_dir: Path,
     readiness_command: Sequence[str],
     firebase_command: Sequence[str],
+    state_dir: str = '',
+    budget_seconds: float | None = None,
 ) -> Attempt:
     port = _free_port()
     print(f'[emulator] attempt {index}: Firestore on 127.0.0.1:{port}', flush=True)
     work_dir = Path(tempfile.mkdtemp(prefix=f'omi-listen-pusher-emulator-{index}-'))
     marker = work_dir / 'attempt-marker'
     log_path = log_dir / f'emulator-attempt-{index}.log'
+    # A retry must not inherit the previous attempt's scenario state: a half-run
+    # leaves ledgers, cursors and evidence files that make the next attempt
+    # non-deterministic and can turn a transient startup failure into a false
+    # assertion failure.
+    if state_dir:
+        attempt_state = Path(state_dir) / f'attempt-{index}'
+        attempt_state.mkdir(parents=True, exist_ok=True)
+        inner_command = inner_command.replace(state_dir, str(attempt_state))
     try:
         config = work_dir / 'firebase.json'
         config.write_text(
@@ -244,6 +275,7 @@ def _run_attempt(
             f'bash {_quote(str(script))}',
         ]
         tail: deque[str] = deque(maxlen=_LOG_SCAN_LINES)
+        budget_hit = threading.Event()
         with log_path.open('w', encoding='utf-8') as log_file:
             process = subprocess.Popen(
                 command,
@@ -252,15 +284,41 @@ def _run_attempt(
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                start_new_session=True,
             )
-            assert process.stdout is not None
-            for line in process.stdout:
-                log_file.write(line)
-                log_file.flush()
-                tail.append(line.rstrip('\n'))
-                sys.stdout.write(line)
-                sys.stdout.flush()
-            returncode = process.wait()
+            timer: threading.Timer | None = None
+            if budget_seconds is not None:
+
+                def _on_timeout() -> None:
+                    budget_hit.set()
+                    _terminate(process)
+
+                timer = threading.Timer(max(0.0, budget_seconds), _on_timeout)
+                timer.daemon = True
+                timer.start()
+            try:
+                assert process.stdout is not None
+                for line in process.stdout:
+                    log_file.write(line)
+                    log_file.flush()
+                    tail.append(line.rstrip('\n'))
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                returncode = process.wait()
+            finally:
+                if timer is not None:
+                    timer.cancel()
+        if budget_hit.is_set():
+            return Attempt(
+                index=index,
+                port=port,
+                returncode=returncode,
+                marker=_read_marker(marker),
+                outcome=Outcome.TRANSIENT,
+                reason='wall-clock budget exhausted mid-attempt',
+                log_path=log_path,
+                tail=list(tail)[-_REPORT_TAIL_LINES:],
+            )
         marker_value = _read_marker(marker)
         outcome, reason = classify_attempt(returncode=returncode, marker=marker_value, output='\n'.join(tail))
         return Attempt(
@@ -326,6 +384,7 @@ def run_supervisor(
     readiness_timeout: float = DEFAULT_READINESS_TIMEOUT_SECONDS,
     readiness_command: Sequence[str] | None = None,
     firebase_command: Sequence[str] = FIREBASE_COMMAND,
+    state_dir: str = '',
     monotonic: Callable[[], float] = time.monotonic,
 ) -> int:
     if not 1 <= max_attempts <= MAX_ATTEMPTS_CEILING:
@@ -361,6 +420,8 @@ def run_supervisor(
             log_dir=log_dir,
             readiness_command=readiness_command,
             firebase_command=firebase_command,
+            state_dir=state_dir,
+            budget_seconds=max(0.0, max_total_seconds - elapsed),
         )
         attempts.append(attempt)
         if attempt.outcome is Outcome.SUCCESS:
@@ -394,6 +455,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--max-attempts', type=int, default=DEFAULT_MAX_ATTEMPTS)
     parser.add_argument('--max-total-seconds', type=float, default=DEFAULT_MAX_TOTAL_SECONDS)
     parser.add_argument('--readiness-timeout', type=float, default=DEFAULT_READINESS_TIMEOUT_SECONDS)
+    parser.add_argument(
+        '--state-dir',
+        default='',
+        help=(
+            'scenario state root passed to the inner command; each attempt gets '
+            '<root>/attempt-<n> so a retry never inherits a half-run state'
+        ),
+    )
     args = parser.parse_args(argv)
     if not 1 <= args.max_attempts <= MAX_ATTEMPTS_CEILING:
         parser.error(f'--max-attempts must be between 1 and {MAX_ATTEMPTS_CEILING}')
@@ -406,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
         project=args.project,
         log_dir=args.log_dir,
         max_attempts=args.max_attempts,
+        state_dir=args.state_dir,
         max_total_seconds=args.max_total_seconds,
         readiness_timeout=args.readiness_timeout,
     )
