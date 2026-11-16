@@ -753,7 +753,7 @@ class OrderedMerge:
             backlog_release.TOKENS_GRANTED.inc()
             backlog_release.TOKENS_USED.set(backlog['token']['tokens_used'])
             backlog_release.WINDOW.set(backlog['token']['window'])
-            if owner_key(entry['owner_id']) in backlog['token'].get('owner_keys', ()):
+            if key in backlog['token'].get('owner_keys', ()):
                 backlog_release.ALLOWLIST_HITS.inc()
         if entry:
             record_correctness('committed', source=self.commit_source)

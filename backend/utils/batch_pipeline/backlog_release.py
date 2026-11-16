@@ -67,7 +67,17 @@ class Gate:
             or not valid_owner_keys(row['owner_keys'])
         ):
             return None
-        gate = cls(**{**row, **({'owner_keys': tuple(row['owner_keys'])} if versioned else {})})
+        gate = cls(
+            state=row['state'],
+            rate_per_hour=row['rate_per_hour'],
+            reach_seconds=row['reach_seconds'],
+            window=row['window'],
+            tokens_used=row['tokens_used'],
+            updated_at=row['updated_at'],
+            schema_version=2 if versioned else 1,
+            mode=row['mode'] if versioned else 'all',
+            owner_keys=tuple(row['owner_keys']) if versioned else (),
+        )
         counts = (gate.rate_per_hour, gate.reach_seconds, gate.window, gate.tokens_used)
         if any(type(value) is not int or value < 0 for value in counts):
             return None
