@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-clang-format-runner-image-drift",
+  "violated_contract": "The firmware C/C++ Formatting check in Repo Checks must use the same clang-format version as the local pre-commit hook. When the hosted runner image changes its system clang-format, a clean firmware file can fail the hosted check even though pre-commit accepted it.",
+  "canonical_prevention": "The Formatting job installs clang-format==18.1.8 into a dedicated venv and runs that binary, not the runner's system clang-format. scripts/pre-commit refuses to reformat firmware C unless clang-format 18 is on PATH, so the local and hosted versions match.",
+  "canonical_prevention_artifact": [
+    ".github/workflows/repo-checks.yml",
+    "scripts/pre-commit"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    ".github/workflows/repo-checks.yml",
+    "scripts/pre-commit",
+    "scripts/pre-push"
+  ],
+  "status": "open"
+}

@@ -11,6 +11,7 @@ from config.account_cutover import (
 )
 from models.account_cutover import (
     AccountCutoverClientAction,
+    AccountCutoverClientState,
     AccountCutoverControl,
     AccountCutoverManifestSummary,
     AccountCutoverRecord,
@@ -139,8 +140,15 @@ def build_account_cutover_control(
         # quarantined. Rollback reopens new legacy traffic, not stale outboxes.
         offline = OfflineQueueInstruction.quarantine
 
+    if record.state == AccountCutoverState.migrated:
+        # Cell routing is server-side; released clients keep their legacy behavior.
+        client_state = AccountCutoverClientState.legacy
+        legacy_writes = action == AccountCutoverClientAction.none
+    else:
+        client_state = AccountCutoverClientState(record.state.value)
+
     return AccountCutoverControl(
-        state=record.state,
+        state=client_state,
         account_generation=record.account_generation,
         ui_generation=ui_generation,
         api_generation=api_generation,

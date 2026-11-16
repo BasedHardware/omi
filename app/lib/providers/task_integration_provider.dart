@@ -16,11 +16,14 @@ import 'package:omi/utils/platform/platform_service.dart';
 class TaskIntegrationProvider extends ChangeNotifier {
   final Future<bool> Function(String appKey) _setDefaultTaskIntegration;
   final Future<TaskIntegrationsResponse?> Function() _fetchStatus;
+  final bool _supportsAppleReminders;
+  final Future<bool> Function() _readApplePermission;
   final Duration statusTimeout;
   Future<void>? _inFlightLoad;
   int _readGeneration = 0;
   final _activeReads = <ConnectionRead<Object?>>{};
   bool _hasLoadError = false;
+  bool _hasConfirmedDefault = false;
   TaskIntegrationApp _selectedApp;
   Map<String, dynamic> _connectionDetails = {};
   bool _isLoading = false;
@@ -32,10 +35,16 @@ class TaskIntegrationProvider extends ChangeNotifier {
   TaskIntegrationProvider({
     Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn,
     Future<TaskIntegrationsResponse?> Function()? fetchStatus,
+    bool? supportsAppleReminders,
+    Future<bool> Function()? readApplePermission,
     this.statusTimeout = const Duration(seconds: 45),
   })  : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
         _fetchStatus = fetchStatus ?? getTaskIntegrations,
-        _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+        _supportsAppleReminders = supportsAppleReminders ?? PlatformService.isApple,
+        _readApplePermission = readApplePermission ?? (() => AppleRemindersService().hasPermission()),
+        _selectedApp = (supportsAppleReminders ?? PlatformService.isApple)
+            ? TaskIntegrationApp.appleReminders
+            : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
@@ -44,18 +53,20 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool get hasLoadError => _hasLoadError;
 
   /// Load default app and connection details from backend
-  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false}) {
+  Future<void> loadFromBackend({bool forceRefresh = false, bool silent = false, bool refreshApplePermission = true}) {
     final existing = _inFlightLoad;
     if (existing != null && !forceRefresh) return existing;
     late final Future<void> started;
-    started = _loadFromBackendBody(++_readGeneration, silent: silent).whenComplete(() {
+    started = _loadFromBackendBody(++_readGeneration, silent: silent, refreshApplePermission: refreshApplePermission)
+        .whenComplete(() {
       if (identical(_inFlightLoad, started)) _inFlightLoad = null;
     });
     _inFlightLoad = started;
     return started;
   }
 
-  Future<void> _loadFromBackendBody(int readGeneration, {required bool silent}) async {
+  Future<void> _loadFromBackendBody(int readGeneration,
+      {required bool silent, required bool refreshApplePermission}) async {
     final generation = _sessionGeneration;
     bool isCurrent() => generation == _sessionGeneration && readGeneration == _readGeneration;
     if (!silent) {
@@ -105,22 +116,29 @@ class TaskIntegrationProvider extends ChangeNotifier {
         userId: _connectionDetails['clickup']?['user_id'],
       );
 
-      if (PlatformService.isApple && !_appleRemindersPermissionManuallySet) {
-        final permission = await AppleRemindersService().hasPermission();
+      // Resolving a cloud export needs the server's saved destination, not
+      // EventKit. Apple exports still require a fresh native permission check;
+      // ordinary Settings loads continue refreshing all connected apps.
+      if (_supportsAppleReminders &&
+          !_appleRemindersPermissionManuallySet &&
+          (refreshApplePermission || response.defaultApp == 'apple_reminders')) {
+        final permission = await _readApplePermission();
         if (!isCurrent()) return;
         _appleRemindersPermission = permission;
         // Ensure backend has connected status for Apple Reminders if permission is granted
         if (_appleRemindersPermission && _connectionDetails['apple_reminders']?['connected'] != true) {
           await saveConnectionDetails('apple_reminders', {'connected': true});
+          if (!isCurrent()) return;
         }
       }
       _appleRemindersPermissionManuallySet = false;
 
       final defaultApp = response.defaultApp;
+      _hasConfirmedDefault = TaskIntegrationApp.values.any((app) => app.key == defaultApp);
       if (defaultApp != null && defaultApp.isNotEmpty) {
         _selectedApp = TaskIntegrationApp.values.firstWhere(
           (app) => app.key == defaultApp,
-          orElse: () => PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
+          orElse: () => _supportsAppleReminders ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks,
         );
       }
     } catch (e) {
@@ -171,6 +189,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
       _inFlightLoad = null;
       _isLoading = false;
       _selectedApp = app;
+      _hasConfirmedDefault = true;
       notifyListeners();
       return true;
     } catch (e) {
@@ -179,6 +198,43 @@ class TaskIntegrationProvider extends ChangeNotifier {
     } finally {
       written.complete();
     }
+  }
+
+  /// Resolve the saved choice before a bulk export. A platform default or the
+  /// first connected app is presentation state, never export authorization.
+  Future<TaskIntegrationApp?> resolveExportTarget() async {
+    final generation = _sessionGeneration;
+    final writes = _defaultWrites;
+    await writes;
+    if (generation != _sessionGeneration || !identical(writes, _defaultWrites)) return null;
+    final choice = _defaultChoice;
+    final loading = loadFromBackend(forceRefresh: true, silent: true, refreshApplePermission: false);
+    final readGeneration = _readGeneration;
+    // Native permission/status repair is also asynchronous. A stalled refresh
+    // must release the Export button without authorizing a cached destination.
+    final read = ConnectionRead<Object?>(() async {
+      await loading;
+      return null;
+    }, statusTimeout);
+    _activeReads.add(read);
+    try {
+      await read.future;
+    } catch (_) {
+      if (generation == _sessionGeneration && readGeneration == _readGeneration) {
+        _hasLoadError = true;
+      }
+      return null;
+    } finally {
+      _activeReads.remove(read);
+    }
+    if (generation != _sessionGeneration ||
+        choice != _defaultChoice ||
+        readGeneration != _readGeneration ||
+        _hasLoadError ||
+        !_hasConfirmedDefault) {
+      return null;
+    }
+    return isAppConnected(_selectedApp) ? _selectedApp : null;
   }
 
   /// Save connection details to backend
@@ -237,7 +293,7 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
   Future<void> updateAppleRemindersPermission({bool? granted}) async {
     final generation = _sessionGeneration;
-    if (PlatformService.isApple) {
+    if (_supportsAppleReminders) {
       if (granted != null) {
         _appleRemindersPermission = granted;
         _appleRemindersPermissionManuallySet = true;
@@ -269,7 +325,8 @@ class TaskIntegrationProvider extends ChangeNotifier {
     _activeReads.clear();
     _inFlightLoad = null;
     _hasLoadError = false;
-    _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+    _selectedApp = _supportsAppleReminders ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+    _hasConfirmedDefault = false;
     _connectionDetails = {};
     _isLoading = false;
     _hasLoaded = false;

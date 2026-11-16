@@ -377,15 +377,6 @@ def test_funded_request_cannot_use_deepgram_key_for_another_provider(sub, monkey
     assert sub.resolve_transcription_allowance('uid', omi_funded=True).reason == 'plan_allowance_exhausted'
 
 
-def test_ladder_only_cohort_does_not_activate_legacy_launch_validation(sub, monkeypatch):
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
-    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
-    monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
-    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
-    monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
-    assert sub.get_monthly_usage_for_subscription('synthetic') == {}
-
-
 def test_noncohort_owner_keeps_legacy_launch_parity(sub, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:other')

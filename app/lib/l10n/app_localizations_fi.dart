@@ -1991,6 +1991,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
+  String get recordingWithYourPhone => 'Tallennetaan puhelimella';
+
+  @override
+  String get wrapUp => 'Päätä';
+
+  @override
+  String get recordingDiscarded => 'Tallenne hylätty';
+
+  @override
   String get undo => 'Kumoa';
 
   @override
@@ -7032,6 +7041,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kirjautuminen Applella epäonnistui, yritä uudelleen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Kirjautuminen Applella ei onnistunut. Yritä uudelleen tai jatka Googlella.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase-tunnuksen hakeminen epäonnistui, yritä uudelleen.';
 
   @override
@@ -9172,6 +9185,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nykyistä laiteohjelmistoversiota ei voida määrittää';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Käytä nykyiseen tilaukseen';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koodi käytettiin nykyiseen tilaukseesi.',
+        'refused': 'Koodia ei voi käyttää. Tarkista koodi ja vaadittu tilaus.',
+        'conflict': 'Koodi on jo käytetty tai tilauksessasi on jo alennus.',
+        'rateLimited': 'Liian monta yritystä. Odota ja yritä myöhemmin uudelleen.',
+        'other': 'Koodia ei voitu käyttää. Yritä uudelleen.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Tarjouskoodi';
@@ -13388,6 +13419,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Onko sinulla Omi Pro -koodi? Syötä se seuraavalla näytöllä.';
+
+  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override
@@ -13655,6 +13689,9 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Luo muistiinpanot uudelleen';
 
   @override
   String get attentionSummaryFailed => 'Tätä keskustelua ei voitu tiivistää';
@@ -14825,6 +14862,20 @@ class AppLocalizationsFi extends AppLocalizations {
   String get episodeWritingNotes => 'Kirjoitetaan muistiinpanoja…';
 
   @override
+  String get homeStepTranscribing => 'Litteroidaan…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tallennetta',
+      one: '$count tallenne',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Viimeistelemme ensin litteroinnin. Voit poistua tältä sivulta.';
 
   @override
@@ -15367,7 +15418,140 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paymentDeclinedTitle => 'Korttisi hylättiin';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Päivitä kortti tai saa $plan takaisin hintaan $price kuukaudessa';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Päivitä kortti saadaksesi $plan takaisin';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Sisältää liitettyjä tehtäviä';
+
+  @override
+  String get hasTasksFilter => 'Tehtäviä sisältävät';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Vaihda kuukausimaksuun';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price kuukaudessa';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Korvaa maksamattoman $yearly vuosimaksun. Uusiutuu kuukausittain. Peru milloin tahansa.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksu hylättiin. Tilauksesi ei muuttunut.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Vaihto ei ole juuri nyt saatavilla. Päivitä kortti sen sijaan.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Maksat nyt kuukausittain';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price maksettu tänään. Uusiutuu kuukausittain.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Olet käyttänyt tämän kuun $minutes minuuttia';
+  }
+
+  @override
+  String get freeCapBody => 'Omi tallentaa yhä. Valitse, miten litterointi jatkuu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Rajaton pilvilitterointi';
+
+  @override
+  String get freeCapProAccuracy => 'Paras tarkkuus';
+
+  @override
+  String get freeCapProWaiting => 'Litteroi odottavat tallenteesi';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ilmainen. Pysyy päällä, kunnes vaihdat takaisin.';
+
+  @override
+  String get transcribingOnThisPhone => 'Litteroidaan tällä puhelimella';
+
+  @override
+  String get getPro => 'Hanki Pro';
+
+  @override
+  String get unlock => 'Avaa';
+
+  @override
+  String get transcribeWith => 'Litteroi käyttäen';
+
+  @override
+  String get omiCloud => 'Omi-pilvi';
+
+  @override
+  String get thisPhone => 'Tämä puhelin';
+
+  @override
+  String get onDeviceReady => 'Valmis';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit min jäljellä · nollautuu $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes pilviminuuttia käytettävissä';
+  }
+
+  @override
+  String get switchBack => 'Vaihda takaisin';
+
+  @override
+  String get setUpThisPhone => 'Määritä tämä puhelin';
+
+  @override
+  String get speechRecognition => 'Puheentunnistus';
+
+  @override
+  String get audioStaysOnPhone => 'Ääni pysyy puhelimessasi';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size Mt:n lataus';
+  }
+
+  @override
+  String get downloadNow => 'Lataa nyt';
+
+  @override
+  String get onWifiLater => 'Myöhemmin Wi-Fillä';
 }

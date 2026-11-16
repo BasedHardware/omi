@@ -8,6 +8,7 @@ import 'package:omi/ui/ui.dart';
 class DateListItem extends StatelessWidget {
   final bool isFirst;
   final DateTime date;
+  final String? label;
   final bool collapsed;
   final VoidCallback? onToggle;
 
@@ -15,6 +16,7 @@ class DateListItem extends StatelessWidget {
     super.key,
     required this.date,
     required this.isFirst,
+    this.label,
     this.collapsed = false,
     this.onToggle,
   });
@@ -30,7 +32,7 @@ class DateListItem extends StatelessWidget {
               child: Semantics(
                 header: true,
                 child: Text(
-                  OmiDateFormat.of(context).dayHeader(date),
+                  label ?? OmiDateFormat.of(context).dayHeader(date),
                   style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),

@@ -9,7 +9,7 @@ Capture timestamps are client assertions, so a well-formed device header alone n
 
 A signed fresh manifest covers at most 20 files. Mobile detects a conversation with more than 20 pending fresh WALs before requesting a manifest and routes the whole conversation through backfill in three-file batches. It never claims one immutable fresh content set and strands the remainder behind a conflicting manifest.
 
-Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT=false` is retired for v2: no Redis per-UID admission slot is acquired even if that setting changes. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
+Historical recovery defaults are a 30-day lookback and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. The processed-speech daily accounting caps remain available, but `SYNC_BACKFILL_ADMISSION_LIMITS=false` leaves them unenforced at upload admission. `SYNC_BACKFILL_INFLIGHT_LIMIT` and its unused admission primitive are retired after C6: no Redis per-UID admission slot is acquired. Token-fenced release remains for slots left by older revisions. `SYNC_BACKFILL_UID_SEQUENCER=on` in dev/prod is the phase-two setting (2026-09-28); `off` is the kill switch, under which eligible uploads still receive 202 and newly accepted jobs dispatch directly through Cloud Tasks as after #19352. The new admission path writes a bounded per-UID direct-job marker before enqueue, and the new worker refreshes it when direct work starts. A later config PR turns the sequencer on after the phase-one drain gate. On mode persists each accepted job in Firestore and dispatches at most one worker job per UID. Queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite.
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
@@ -215,6 +215,12 @@ site names its reason (`failure_subtype`). Structural reasons
 Reasons that wait on another writer (`live_target_not_persisted`,
 `lineage_ownership_ambiguous`, `record_target_missing`,
 `record_finalize_pending`) strike only on backfill, whose capture is hours old.
+Projection owner drains making no progress on `live_target_not_persisted` are held
+out of admission for 30, 60, 120, 240, then at most 300 seconds. Expiry only
+re-admits the owner for its next sweep request, never wakes it; any progress or other stop resets
+the attempt count, without changing the existing hold deadline or dispositions.
+Set `PROJECTION_DRAIN_LIVE_TARGET_BACKOFF=off` to restore ordinary `head_error`
+retries; `omi_batch_projection_live_target_backoffs_total` counts applied delays.
 One classified segment failure is enough for the batch to
 earn the strike, even beside successful siblings; differing fingerprints in one
 batch share `persistence:mixed`. Unknown exceptions, provider invalid-input

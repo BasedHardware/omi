@@ -271,6 +271,20 @@ def test_a_failed_refresh_marks_the_attempt_failed_and_never_raises(store, monke
     assert store.calls['finish'] == ['failed']
 
 
+def test_live_member_wait_releases_optional_refresh_claims(store, monkeypatch, caplog):
+    store.rows['pendant'] = store_row('pendant', group=GROUP)
+    store.rows['half-b'] = store_row('half-b', group=GROUP, context=MEMBER_CONTEXT)
+
+    def wait(*args, **kwargs):
+        raise refresh.member_notes.LiveMemberNotesDeferred('live_episode_notes', 123)
+
+    monkeypatch.setattr(refresh, 'process_conversation', wait)
+    assert refresh.refresh_primary_notes(UID, 'pendant') is False
+    assert store.calls['finish'] == ['failed']
+    assert all(not state.get('in_progress') for state in store.states.values())
+    assert 'outcome=error' not in caplog.text
+
+
 def test_a_fenced_persistence_marks_the_attempt_failed(store, monkeypatch):
     store.rows['pendant'] = store_row('pendant', group=GROUP)
     store.rows['half-b'] = store_row('half-b', group=GROUP, context=MEMBER_CONTEXT)

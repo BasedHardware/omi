@@ -73,7 +73,6 @@ def test_resolver_equals_unpinned_getters(monkeypatch, mode, percent):
         'STT_NO_TEXT_RESCUE_SECONDS': '100',
         'STT_SERVICE_MODELS': 'parakeet-window,modulate-velma-2,soniox',
         'STT_LEARNED_LANGUAGE_PROFILE': 'true',
-        'STT_MULTI_LANGUAGE_HINTS': 'false',
         'STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT': percent,
         'STT_LIVE_DEMAND_ENABLED': 'true',
         'STT_LIVE_DEMAND_PERCENT': percent,
@@ -99,7 +98,7 @@ def test_resolver_equals_unpinned_getters(monkeypatch, mode, percent):
         12,
         100,
     )
-    assert policy.learned_language_profile and not policy.multi_language_hints
+    assert policy.learned_language_profile
 
 
 @pytest.mark.parametrize('raw', ['-1', '101', 'nan', 'inf', 'bad'])

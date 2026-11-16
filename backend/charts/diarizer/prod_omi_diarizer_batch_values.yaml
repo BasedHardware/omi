@@ -1,6 +1,6 @@
 # Autoscaled burst plus one fixed warm Deployment in the same Helm release.
-# The burst HPA keeps main's decided maxReplicas 18; the warm fallback is
-# additive (maxTotalReplicas 19), and rollout surge is allowed.
+# C031 caps the burst HPA at 5 plus one additive warm pod (ceiling 6);
+# rollout surge is allowed.
 # Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
 # Lead-owned opt-in deployment; never install over prod-omi-diarizer.
 fullnameOverride: prod-omi-diarizer-batch
@@ -52,9 +52,8 @@ strategy:
     maxSurge: 1
 warmFallback:
   enabled: true
-  # The burst HPA holds main's 18; one additive warm pod lifts the render
-  # guard's combined ceiling to 19.
-  maxTotalReplicas: 19
+  # Keep the combined ceiling at the burst HPA max + one warm pod.
+  maxTotalReplicas: 6
   nodeSelector:
     service: diarizer-batch
     env: prod
@@ -90,7 +89,13 @@ podMonitoring:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 18
+  # C031 measurement: T4 DCGM 1.0% over 24h to 2026-11-09 05:33Z,
+  # HPA pinned at min 1; peak hour ~0.52 GPU-h.
+  # Gate: omi_diarization_v2_queue_depth p95 < 2, oldest queued < 300 s,
+  # 0 rejected/429, DCGM T4 < 60%, first-summary p95 unchanged.
+  # Hold 24h, then watch 7 days; any gate miss rolls back to HPA max 18 /
+  # warmFallback.maxTotalReplicas 19.
+  maxReplicas: 5
   requestLatencyP99: null
   # 2026-11-01 (marginfleet): raised 1 -> 2. Target 1 provisioned one T4 node
   # per queued item while the 7d queue was p50=0, max=4, fleet avg 0.53 and the
@@ -104,7 +109,7 @@ autoscaling:
   # saturated pod reads exactly at target and the HPA never scales out while
   # CapacityExceeded (429s) rejects further uploads. At target 2, saturation
   # reads 1.5x target and always triggers scale-out (0s stabilization,
-  # +3 pods/60s, max 18); scale-down keeps the 900s window.
+  # +3 pods/60s, max 5); scale-down keeps the 900s window.
   queueDepthAverageValue: 2
   behavior:
     scaleUp:

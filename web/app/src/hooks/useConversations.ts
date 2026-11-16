@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getConversations, GetConversationsParams } from '@/lib/api';
 import type { Conversation, GroupedConversations } from '@/types/conversation';
 import { formatRelativeDate } from '@/lib/utils';
+import { isConversationProcessing } from '@/lib/conversationHome';
 import {
   getCache,
   setCache,
@@ -20,12 +21,17 @@ interface CacheEntry {
   hasMore: boolean;
 }
 
-function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date, starred?: boolean): string {
+function getCacheKey(
+  folderId?: string,
+  startDate?: Date,
+  endDate?: Date,
+  starred?: boolean,
+): string {
   return cacheKeys.conversations(
     folderId,
     startDate?.toISOString().split('T')[0],
     endDate?.toISOString().split('T')[0],
-    starred
+    starred,
   );
 }
 
@@ -39,7 +45,12 @@ function isCacheStale(key: string): boolean {
   return cached ? cached.isStale : true;
 }
 
-function setToCache(key: string, conversations: Conversation[], offset: number, hasMore: boolean): void {
+function setToCache(
+  key: string,
+  conversations: Conversation[],
+  offset: number,
+  hasMore: boolean,
+): void {
   setCache<CacheEntry>(key, { conversations, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
@@ -55,21 +66,29 @@ interface UseConversationsReturn {
   hasMore: boolean;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
+  replaceConversation: (conversation: Conversation) => void;
 }
 
 /**
  * Hook to fetch and manage conversations
  */
 export function useConversations(
-  options: UseConversationsOptions = {}
+  options: UseConversationsOptions = {},
 ): UseConversationsReturn {
   const { enabled = true, limit = 50, ...params } = options;
 
   // Get cache key and check for cached data
-  const cacheKey = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
+  const cacheKey = getCacheKey(
+    params.folderId,
+    params.startDate,
+    params.endDate,
+    params.starred,
+  );
   const cachedEntry = getFromCache(cacheKey);
 
-  const [conversations, setConversations] = useState<Conversation[]>(cachedEntry?.conversations || []);
+  const [conversations, setConversations] = useState<Conversation[]>(
+    cachedEntry?.conversations || [],
+  );
   const [loading, setLoading] = useState(!cachedEntry); // Only show loading if no cache
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(cachedEntry?.offset || 0);
@@ -84,38 +103,45 @@ export function useConversations(
 
   // Track if a fetch is in progress to prevent concurrent fetches
   const fetchingRef = useRef(false);
+  const replacementGeneration = useRef(0);
   // Cache key of the filters the list belongs to. A fetch that returns after the
   // filters changed was for another list, so its response is dropped.
   const activeKeyRef = useRef(cacheKey);
 
   // Group conversations by date - memoized for performance
   const groupedConversations = useMemo<GroupedConversations>(() => {
-    return conversations.reduce(
-      (groups, conversation) => {
-        const date = new Date(conversation.started_at || conversation.created_at);
-        const dateKey = formatRelativeDate(date);
+    return conversations.reduce((groups, conversation) => {
+      const date = new Date(conversation.started_at || conversation.created_at);
+      const dateKey = formatRelativeDate(date);
 
-        if (!groups[dateKey]) {
-          groups[dateKey] = [];
-        }
-        groups[dateKey].push(conversation);
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(conversation);
 
-        return groups;
-      },
-      {} as GroupedConversations
-    );
+      return groups;
+    }, {} as GroupedConversations);
   }, [conversations]);
 
   // Fetch conversations
   const fetchConversations = useCallback(
-    async (currentOffset: number, append: boolean = false, backgroundRefresh: boolean = false) => {
+    async (
+      currentOffset: number,
+      append: boolean = false,
+      backgroundRefresh: boolean = false,
+    ) => {
       if (!enabled) return;
 
       // Prevent concurrent fetches
       if (fetchingRef.current) return;
       fetchingRef.current = true;
 
-      const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
+      const key = getCacheKey(
+        params.folderId,
+        params.startDate,
+        params.endDate,
+        params.starred,
+      );
 
       // A callback from before the filters changed (a refresh after an await) must not
       // load the old filters' list into the new one
@@ -124,6 +150,7 @@ export function useConversations(
         return;
       }
 
+      const generation = replacementGeneration.current;
       try {
         // Only show loading spinner if not a background refresh and no cached data
         if (!backgroundRefresh) {
@@ -143,7 +170,8 @@ export function useConversations(
         });
 
         // The filters changed while this fetch was in flight
-        if (key !== activeKeyRef.current) return;
+        if (key !== activeKeyRef.current || generation !== replacementGeneration.current)
+          return;
 
         // Sort by date descending
         const sorted = data.sort((a, b) => {
@@ -157,7 +185,7 @@ export function useConversations(
         setHasMore(hasMoreData);
         setOffset(currentOffset);
 
-        setConversations(prev => {
+        setConversations((prev) => {
           const newConversations = append ? [...prev, ...sorted] : sorted;
           // Save to cache
           setToCache(key, newConversations, currentOffset, hasMoreData);
@@ -176,7 +204,16 @@ export function useConversations(
       }
     },
     // Only depend on primitive values, not objects
-    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId, params.starred]
+    [
+      enabled,
+      limit,
+      params.statuses,
+      params.includeDiscarded,
+      params.startDate,
+      params.endDate,
+      params.folderId,
+      params.starred,
+    ],
   );
 
   // Initial fetch and refetch when filter params change
@@ -192,7 +229,12 @@ export function useConversations(
     prevFolderId.current = params.folderId;
     prevStarred.current = params.starred;
 
-    const key = getCacheKey(params.folderId, params.startDate, params.endDate, params.starred);
+    const key = getCacheKey(
+      params.folderId,
+      params.startDate,
+      params.endDate,
+      params.starred,
+    );
     const cached = getFromCache(key);
 
     // The list now belongs to the new filters. A fetch still in flight for the old
@@ -233,7 +275,13 @@ export function useConversations(
       // Have cached data but it's stale, do background refresh
       fetchConversations(0, false, true);
     }
-  }, [params.startDate, params.endDate, params.folderId, params.starred, fetchConversations]);
+  }, [
+    params.startDate,
+    params.endDate,
+    params.folderId,
+    params.starred,
+    fetchConversations,
+  ]);
 
   // Subscribe to cache invalidation - refetch when conversations are modified
   useEffect(() => {
@@ -248,7 +296,7 @@ export function useConversations(
 
   // Track if any conversations are processing
   useEffect(() => {
-    const processing = conversations.some(c => c.status === 'processing');
+    const processing = conversations.some(isConversationProcessing);
     setHasProcessing(processing);
   }, [conversations]);
 
@@ -288,6 +336,27 @@ export function useConversations(
     await fetchConversations(0, false);
   }, [fetchConversations]);
 
+  // Retry's response is authoritative even if the subsequent refresh fails.
+  // Replace only known rows; a late result cannot insert into another folder.
+  const replaceConversation = useCallback(
+    (updated: Conversation) => {
+      if (activeKeyRef.current !== cacheKey) return;
+      replacementGeneration.current += 1;
+      setConversations((rows) =>
+        rows.map((row) => (row.id === updated.id ? updated : row)),
+      );
+      const cached = getFromCache(cacheKey);
+      if (cached)
+        setToCache(
+          cacheKey,
+          cached.conversations.map((row) => (row.id === updated.id ? updated : row)),
+          cached.offset,
+          cached.hasMore,
+        );
+    },
+    [cacheKey],
+  );
+
   return {
     conversations,
     groupedConversations,
@@ -296,5 +365,6 @@ export function useConversations(
     hasMore,
     loadMore,
     refresh,
+    replaceConversation,
   };
 }

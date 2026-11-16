@@ -231,7 +231,7 @@ class HeavyConnectedDevice extends ChangeNotifier implements DeviceProvider {
   @override
   Map<String, dynamic> get latestOmiGlassFirmwareDetails => const {};
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   Future<List<BleDisconnectEvent>> disconnectHistory() async => const [];
   @override

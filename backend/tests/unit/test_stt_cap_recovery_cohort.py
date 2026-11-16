@@ -68,11 +68,11 @@ def consent(monkeypatch):
 def test_recovery_policy_preserves_listen_admission(admission, monkeypatch, legacy, ladder):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(legacy).lower())
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
-    uid, allowed = admission.uid, admission.allowed and (legacy or ladder)
+    uid, allowed = admission.uid, admission.allowed and legacy
     assert policy.any_recovery_admission_enabled(uid) is allowed
     assert policy.recovery_admission_enabled(uid, 'live') is allowed
     assert not policy.recovery_admission_enabled(uid, 'sync')
-    assert policy.execution_admission_enabled(uid, 'live') is (uid != 'outside' and (legacy or ladder))
+    assert policy.execution_admission_enabled(uid, 'live') is (uid != 'outside' and legacy)
     assert policy.enabled_for(uid, 'live') is (uid != 'outside' and legacy)
 
 

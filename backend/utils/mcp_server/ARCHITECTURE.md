@@ -54,6 +54,15 @@ array bodies, status codes, and rate buckets.
   without reducing requested transcript limits; each successful item has one nested
   `conversation`, while locked items have `id` and `error` instead.
   `include_participants=false` omits roster metadata.
+  Hosted detail pages return `total_segments`, `truncated` and nullable
+  `next_cursor`; batch items return the same detail cursor, resumed through
+  `get_conversation_by_id` with identical options. Each page reuses one
+  owner-scoped detail read, without an additional query. Transcript cursors
+  use domain-separated AES-GCM with owner/view as associated data and carry
+  only segment/character positions. Oversized segments continue with explicit
+  field offsets; no text is discarded at page boundaries. The segment default
+  is request-time env `MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS` (500;
+  rollback 120). Text defaults stay 24k and the serialized cap stays 120k.
   List tools offer cursors;
   `get_action_items` also supports `updated_since`.
 - Scope challenges stay protocol errors (`-32003` with `mcp/www_authenticate`);

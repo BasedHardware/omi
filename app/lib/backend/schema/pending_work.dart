@@ -14,6 +14,8 @@ class PendingWorkItem {
     required this.kind,
     required this.state,
     required this.conversationIds,
+    this.homeStep,
+    this.recordingCount = 1,
     this.startedAt,
     this.durationSeconds,
   });
@@ -26,7 +28,9 @@ class PendingWorkItem {
 
   /// `queued`, `transcribing` or `summarizing`.
   final String state;
+  final String? homeStep;
   final List<String> conversationIds;
+  final int recordingCount;
   final DateTime? startedAt;
   final int? durationSeconds;
 
@@ -41,12 +45,14 @@ class PendingWorkItem {
       id: id,
       kind: kind,
       state: state,
+      homeStep: json['home_step'] is String ? json['home_step'] as String : null,
       conversationIds: ids is List
           ? [
               for (final c in ids)
                 if (c is String) c,
             ]
           : const [],
+      recordingCount: _int(json['recording_count']) ?? 1,
       startedAt: _date(json['started_at']),
       durationSeconds: _int(json['duration_seconds']),
     );
@@ -54,11 +60,16 @@ class PendingWorkItem {
 }
 
 class PendingWorkSnapshot {
-  const PendingWorkSnapshot({required this.enabled, required this.items, required this.attentionUnseenCount});
+  const PendingWorkSnapshot(
+      {required this.enabled,
+      required this.items,
+      required this.attentionUnseenCount,
+      this.homeProcessingToday = false});
 
   static const disabled = PendingWorkSnapshot(enabled: false, items: [], attentionUnseenCount: 0);
 
   final bool enabled;
+  final bool homeProcessingToday;
   final List<PendingWorkItem> items;
   final int attentionUnseenCount;
 
@@ -69,6 +80,7 @@ class PendingWorkSnapshot {
     final rows = json['items'];
     return PendingWorkSnapshot(
       enabled: json['enabled'] == true,
+      homeProcessingToday: json['home_processing_today'] == true,
       items: rows is List
           ? [
               for (final r in rows)
@@ -101,11 +113,12 @@ class AttentionItem {
     this.startedAt,
     this.durationSeconds,
     this.createdAt,
+    this.operationId,
   });
 
   final String id;
 
-  /// `conversation_summary_failed` in v1.
+  /// Server kind; unknown values remain display-only.
   final String kind;
   final String? conversationId;
   final String? title;
@@ -115,6 +128,14 @@ class AttentionItem {
   final bool retryable;
   final bool seen;
   final AttentionRetryState retryState;
+  final String? operationId;
+
+  bool get notesOnly => kind == 'conversation_notes_failed_with_outputs';
+  bool get canRetry =>
+      retryable &&
+      (notesOnly || kind == 'conversation_summary_failed') &&
+      retryState != AttentionRetryState.inProgress &&
+      retryState != AttentionRetryState.succeeded;
 
   AttentionItem copyWith({AttentionRetryState? retryState, bool? seen}) => AttentionItem(
         id: id,
@@ -127,6 +148,7 @@ class AttentionItem {
         startedAt: startedAt,
         durationSeconds: durationSeconds,
         createdAt: createdAt,
+        operationId: operationId,
       );
 
   static AttentionItem? fromJson(Object? json) {
@@ -148,6 +170,7 @@ class AttentionItem {
       retryable: json['retryable'] == true,
       seen: json['seen'] == true,
       retryState: retry is Map ? _retryState(retry['state']) : AttentionRetryState.none,
+      operationId: retry is Map && retry['operation_id'] is String ? retry['operation_id'] as String : null,
     );
   }
 }

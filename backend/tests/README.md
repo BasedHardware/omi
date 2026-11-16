@@ -9,6 +9,12 @@
 - `tests/services/**/test_*.py`
 - `tests/routers/**/test_*.py`
 - top-level `tests/test_*.py` files that are still part of the unit suite
+- `scripts/jobstore_operator/tests/test_*.py` (portable offline controls)
+
+Any source, test or fixture change under `scripts/jobstore_operator/` selects
+the portable operator files through the existing CI runner, one pytest process
+per file. These fake-based tests do not execute Docker, Kubernetes or SQL and
+do not establish native-image qualification, production readiness or serving.
 
 For changed-file runs, use:
 
@@ -88,6 +94,15 @@ an exact-set pin — add its file to `tests/slow_guardrail_manifest.txt` so
 `scripts/run-slow-guardrails-ci.sh` runs it. That lane is unselected and unconditional by design: a check
 whose job is to notice a change nobody anticipated cannot be gated on the change set that triggered the run.
 Stress and network tests still belong in `slow` with no manifest entry.
+
+The timing-sensitive `test_soniox_recovery_retry.py` and
+`test_live_replay_provider_pairs.py` files use that same `slow` marker while
+SCA-1998 and SCA-1999 track deterministic rewrites. `Backend slow timing tests`
+executes both files in separate jobs on every main push, without path filtering
+or concurrency coalescing. Its failures are visible as red checks with JUnit
+artifacts; it is independent of the required `Backend unit suite` PR check.
+Keep these files out of the blocking slow-guardrail manifest. When restoring
+their PR coverage, remove each marker and its workflow matrix entry together.
 
 ## Asana project chooser regression
 

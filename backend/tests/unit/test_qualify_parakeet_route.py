@@ -516,7 +516,14 @@ async def test_bounded_production_cleanup_cancellation_is_reported(monkeypatch, 
     original_wait = asyncio.wait_for
 
     async def short_wait(awaitable, timeout):
-        return await original_wait(awaitable, 0.01 if timeout == 10 else timeout)
+        # Startup/readiness also use 10s waits. Only accelerate receiver cleanup;
+        # shortening those unrelated waits makes connection setup load-sensitive.
+        if (
+            isinstance(awaitable, asyncio.Task)
+            and awaitable.get_coro().cr_code is streaming.ParakeetWebSocketSocket._receive_loop.__code__
+        ):
+            timeout = 0.01
+        return await original_wait(awaitable, timeout)
 
     monkeypatch.setattr(asyncio, 'wait_for', short_wait)
 

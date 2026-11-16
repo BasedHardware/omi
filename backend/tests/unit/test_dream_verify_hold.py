@@ -135,7 +135,6 @@ def test_verify_hold_serves_by_default_and_verifies_budget_stopped_work(runtime,
 
 def test_without_the_hold_budget_stopped_work_is_dropped_with_a_reason(runtime, monkeypatch):
     monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, verified = _spender()
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
@@ -147,7 +146,6 @@ def test_without_the_hold_budget_stopped_work_is_dropped_with_a_reason(runtime, 
 
 def test_verify_hold_shadow_measures_without_changing_the_budget(runtime, monkeypatch):
     monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'shadow')
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, verified = _spender()
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
@@ -165,7 +163,6 @@ def test_hold_covers_a_proposal_staged_with_finish_at_the_budget_edge(runtime, m
 
 def test_served_hold_still_verifies_after_a_main_turn_overshoots_the_pass(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, verified = _spender(overshoot=200000)
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
@@ -176,7 +173,6 @@ def test_served_hold_still_verifies_after_a_main_turn_overshoots_the_pass(runtim
 
 def test_allowance_survives_a_first_verifier_call_that_spends_past_its_estimate(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, verified = _spender(overshoot=200000, first_verify_tokens=9000)
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
@@ -187,7 +183,6 @@ def test_allowance_survives_a_first_verifier_call_that_spends_past_its_estimate(
 
 def test_a_large_reserve_is_still_paid_twice_after_an_overshoot(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     monkeypatch.setattr(dream_agent, 'verification_reserve_tokens', lambda staged, **_: 150000)
     offered = []
@@ -207,7 +202,6 @@ def test_a_large_reserve_is_still_paid_twice_after_an_overshoot(runtime, monkeyp
 
 def test_verify_allowance_never_funds_the_judge_after_an_overshoot(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     monkeypatch.setenv(dream_judge.COMMON_PERCENT_ENV, '100')
     monkeypatch.setenv(dream_judge.TOKENS_ENV, '20000')
     monkeypatch.setattr(dream_judge, 'record', lambda kind, label, judgment: None)
@@ -221,49 +215,11 @@ def test_verify_allowance_never_funds_the_judge_after_an_overshoot(runtime, monk
 
 def test_shadow_hold_grants_no_allowance_after_an_overshoot(runtime, monkeypatch):
     monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'shadow')
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, verified = _spender(overshoot=200000)
     report = asyncio.run(dream_agent.run_pass(UID, turn=model))
     assert not verified and _status(report) == ['verifier_unverified']
     assert 'allowance' not in report['levers']['verify_hold']
-
-
-@pytest.mark.parametrize('arm,status', [('shadow', 'verifier_unverified'), ('serve', 'applied')])
-def test_liberal_verifier_applies_one_agree_and_one_failed_call_only_in_serve(runtime, monkeypatch, arm, status):
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, arm)
-    _limited(runtime, monkeypatch)
-    model, _ = _spender(votes=(True, None))
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
-    assert _status(report) == [status] and report['verify_reasons'] == {'call_failed': 1}
-    lever = report['levers']['liberal_verifier']
-    assert lever['would_apply'] == 1 and lever['applied'] == (1 if arm == 'serve' else 0)
-
-
-@pytest.mark.parametrize('votes', [(False, None), (None, None)])
-def test_liberal_verifier_never_applies_without_an_agree_or_after_a_disagree(runtime, monkeypatch, votes):
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'serve')
-    _limited(runtime, monkeypatch)
-    model, _ = _spender(votes=votes)
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
-    assert _status(report) == ['verifier_unverified']
-    assert report['levers']['liberal_verifier']['would_apply'] == 0
-
-
-def test_liberal_verifier_never_applies_zero_vote_budget_items(runtime, monkeypatch):
-    monkeypatch.setenv(dream_levers.VERIFY_HOLD_MODE_ENV, 'off')
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'serve')
-    _limited(runtime, monkeypatch)
-    model, verified = _spender()
-    report = asyncio.run(dream_agent.run_pass(UID, turn=model))
-    assert not verified and _status(report) == ['verifier_unverified']
-    assert report['verify_reasons'] == {'budget_tokens': 1}
-
-
-def test_liberal_verifier_defaults_to_shadow(monkeypatch):
-    monkeypatch.delenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, raising=False)
-    assert dream_levers.arm(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'synthetic-owner') == 'shadow'
-    assert dream_levers.arm(dream_levers.VERIFY_HOLD_MODE_ENV, 'synthetic-owner') == 'serve'
 
 
 # --- per-item unverified reasons ---------------------------------------------------------------
@@ -420,7 +376,6 @@ def test_small_verify_budget_still_batches_ordinary_evidence():
 
 def test_a_finished_pass_marks_its_notes_as_written_after_voice_narrowing(runtime, monkeypatch):
     monkeypatch.delenv(dream_levers.VERIFY_HOLD_MODE_ENV, raising=False)
-    monkeypatch.setenv(dream_levers.LIBERAL_VERIFIER_MODE_ENV, 'off')
     _limited(runtime, monkeypatch)
     model, _verified = _spender()
 

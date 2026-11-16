@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -22,6 +24,9 @@ from scripts.runtime_env_capability_contracts import (
     validate_voice_transcription_storage,
 )  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
+from scripts.sync_backfill_routing import compose_expected_routing, read_routing
+from scripts.runtime_env_canary_ops import compose  # noqa: E402
+from scripts.validate_object_lake_bucket_contract import validate_write_admission  # noqa: E402
 from scripts.render_backend_runtime_env import validate_sync_lineage_rollout  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -56,6 +61,7 @@ from scripts.runtime_env_validation.common import (
 )
 
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
+from utils.pusher_storage_budget import MIN_STORAGE_PCM_BUDGET_MB
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -167,6 +173,20 @@ def _validate_manifest_shape(env_config: ConfigDict, env: str) -> list[Validatio
     errors = validate_retired_memory_manifest(env, env_config)
     errors.extend(validate_batch_final_pass_hosts(env, env_config))
     errors.extend(_validate_redis_ports(env_config, env))
+    pusher = _as_config_dict((_as_config_dict(env_config.get('gke')) or {}).get('pusher')) or {}
+    value = _manifest_literal_env_value(pusher.get('env'), 'PUSHER_STORAGE_PCM_BUDGET_MB')
+    try:
+        valid = value is not None and (int(value) == 0 or int(value) >= MIN_STORAGE_PCM_BUDGET_MB)
+    except ValueError:
+        valid = False
+    if not valid:
+        errors.append(
+            ValidationError(
+                f'{env}/gke/pusher',
+                'PUSHER_STORAGE_PCM_BUDGET_MB must be 0 (off) or at least 27 MiB to admit a full socket window',
+            )
+        )
+
     errors.extend(
         ValidationError('sync_lineage_rollout', message) for message in validate_sync_lineage_rollout(env, env_config)
     )
@@ -562,6 +582,84 @@ def _validate_proactivity_v2_flag_hosts(env: str, env_config: ConfigDict) -> lis
     return errors
 
 
+def _validate_directory_routing_bindings(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """B2 ships dark; provisioning must bind the whole serving fleet before enablement."""
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    services = _as_config_dict(cloud_run.get('services')) or {}
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    config_map = _as_config_dict(gke.get('config_map')) or {}
+    config_values = _as_config_dict(config_map.get('entries')) or {}
+    hosts = [(f'cloud_run/{name}', services.get(name)) for name in ('backend', 'backend-sync', 'backend-sync-backfill')]
+    hosts.extend((f'gke/{name}', gke.get(name)) for name in ('backend-listen', 'pusher'))
+
+    def value(scope: str, entries: ConfigDict, key: str) -> str | None:
+        entry = _as_config_dict(entries.get(key)) or {}
+        # GKE's envFrom imports the shared ConfigMap even without a per-key
+        # service declaration. An explicit env entry still takes precedence.
+        raw = config_values.get(key) if scope.startswith('gke/') and key not in entries else entry.get('value')
+        if 'config_map' in entry and scope.startswith('gke/'):
+            binding = _as_config_dict(entry['config_map']) or {}
+            binding_key = binding.get('key')
+            if binding.get('name') == config_map.get('name') and isinstance(binding_key, str):
+                raw = config_values.get(binding_key)
+        elif 'env_var' in entry:
+            raw = os.getenv(str(entry['env_var']), entry.get('default'))
+        return str(raw).strip() if raw is not None else None
+
+    entries = {scope: _as_config_dict((_as_config_dict(host) or {}).get('env')) or {} for scope, host in hosts}
+    modes = {
+        scope: (
+            value(scope, bindings, 'DIRECTORY_ROUTING_MODE')
+            if 'DIRECTORY_ROUTING_MODE' in bindings
+            or (scope.startswith('gke/') and 'DIRECTORY_ROUTING_MODE' in config_values)
+            else 'off'
+        )
+        for scope, bindings in entries.items()
+    }
+
+    def any_declared_activation(node: object, scope: str = '') -> bool:
+        mapping = _as_config_dict(node)
+        if mapping is not None:
+            if 'DIRECTORY_ROUTING_MODE' in mapping:
+                entry = mapping['DIRECTORY_ROUTING_MODE']
+                mode = (
+                    value(scope, mapping, 'DIRECTORY_ROUTING_MODE') if isinstance(entry, dict) else str(entry).strip()
+                )
+                if mode != 'off':
+                    return True
+            return any(any_declared_activation(child, f'{scope}/{name}'.lstrip('/')) for name, child in mapping.items())
+        return any(any_declared_activation(child, scope) for child in (_as_config_list(node) or []))
+
+    # A job or integration cohost must not bypass admission for the five
+    # required surfaces by declaring its mode elsewhere in the environment.
+    if all(mode == 'off' for mode in modes.values()) and not any_declared_activation(env_config):
+        return []
+
+    errors: list[ValidationError] = []
+    for scope, bindings in entries.items():
+        if modes[scope] != 'new_owners':
+            errors.append(
+                ValidationError(
+                    f'{env}/{scope}', 'DIRECTORY_ROUTING_MODE must be new_owners on all five serving surfaces'
+                )
+            )
+        # Every auth surface can enroll a cell head; backend also runs the wipe.
+        for prefix in ('DIRECTORY', 'CELLS'):
+            dsn = value(scope, bindings, f'{prefix}_PG_DSN')
+            iam = all(value(scope, bindings, f'{prefix}_PG_{suffix}') for suffix in ('HOST', 'DATABASE', 'USER'))
+            if not dsn and not iam:
+                errors.append(
+                    ValidationError(
+                        f'{env}/{scope}',
+                        f'{prefix}_PG_* requires a non-empty DSN or all HOST, DATABASE, USER bindings before routing',
+                    )
+                )
+            size = value(scope, bindings, f'{prefix}_PG_POOL_SIZE')
+            if size not in ('1', '2'):
+                errors.append(ValidationError(f'{env}/{scope}', f'{prefix}_PG_POOL_SIZE must be explicitly 1 or 2'))
+    return errors
+
+
 def validate_runtime_env(
     *,
     env: str,
@@ -571,14 +669,34 @@ def validate_runtime_env(
     check_workflows: bool = False,
     workflow_root: Path | None = None,
     strict_provisional: bool = False,
+    integration_canary_state: Path | None = None,
+    integration_canary_source: str | None = None,
+    cloud_run_service: str = 'all',
+    sync_routing_env_path: Path | None = None,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
     env_config = _get_env_config(manifest, env)
+    integration_only = False
+    if integration_canary_state or integration_canary_source:
+        if env != 'prod' or not (integration_canary_state and integration_canary_source):
+            return [ValidationError(env, 'integration canary requires bound prod source/state')]
+        try:
+            snapshot = json.loads(integration_canary_state.read_text())
+            integration_only = snapshot.get('profile') == 'integration-only'
+            env_config = compose(env_config, snapshot, integration_canary_source)
+            # Workflow reconstruction must validate the same effective manifest
+            # as the rendered candidate, including serving-ops composition.
+            manifest = deepcopy(manifest)
+            manifest['environments'][env] = env_config
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'integration canary ops evidence invalid')]
     errors = _validate_manifest_shape(env_config, env)
+    errors.extend(_validate_directory_routing_bindings(env, env_config))
     errors.extend(validate_mentor_pipeline(scope=env, config=env_config))
     if errors:
         return errors
 
+    errors.extend(ValidationError(env, error) for error in validate_write_admission(env, env_config))
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_proactivity_v2_flag_hosts(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
@@ -600,16 +718,49 @@ def validate_runtime_env(
                 manifest_path=manifest_path,
                 manifest=manifest,
                 workflow_root=workflow_root,
+                integration_canary_source=integration_canary_source,
             )
         )
 
     cloud_run_state = None
+    live_config = env_config
+    from scripts.cloud_run_scope import selected
+
+    try:
+        service_scope = selected(cloud_run_service)
+    except ValueError:
+        return [ValidationError(env, 'invalid Cloud Run selector')]
+    if integration_only and cloud_run_service not in ('all', 'backend-integration'):
+        return [ValidationError(env, 'integration-only selector mismatch')]
+    if cloud_run_service != 'all':
+        if any(name not in env_config['cloud_run']['services'] for name in service_scope):
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            name: env_config['cloud_run']['services'][name] for name in service_scope
+        }
+    if integration_only:
+        if 'backend-integration' not in env_config['cloud_run']['services']:
+            return [ValidationError(env, 'manifest lacks selected Cloud Run service')]
+        # Static source/workflow contracts above stay full-manifest. Live
+        # comparison follows the sole service this protected profile mutates.
+        live_config = deepcopy(env_config)
+        live_config['cloud_run']['services'] = {
+            'backend-integration': env_config['cloud_run']['services']['backend-integration']
+        }
+    if sync_routing_env_path is not None:
+        if 'backend-sync' not in service_scope or integration_only:
+            return [ValidationError(env, 'sync routing overlay outside selected service scope')]
+        try:
+            live_config = compose_expected_routing(live_config, read_routing(sync_routing_env_path))
+        except (ValueError, KeyError, TypeError, OSError):
+            return [ValidationError(env, 'invalid sync routing overlay')]
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
     elif check_live_cloud_run:
-        cloud_run_state = _fetch_live_cloud_run_state(env_config)
+        cloud_run_state = _fetch_live_cloud_run_state(live_config)
 
     if cloud_run_state is not None:
-        errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
-        errors.extend(_validate_sync_ledger_fence_mode(env_config, cloud_run_state))
+        errors.extend(_validate_cloud_run(live_config, cloud_run_state, strict_provisional=strict_provisional))
+        errors.extend(_validate_sync_ledger_fence_mode(live_config, cloud_run_state))
     return errors

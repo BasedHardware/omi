@@ -1991,6 +1991,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
+  String get recordingWithYourPhone => 'तुमच्या फोनवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get wrapUp => 'पूर्ण करा';
+
+  @override
+  String get recordingDiscarded => 'रेकॉर्डिंग रद्द केले';
+
+  @override
   String get undo => 'पूर्ववत् करा';
 
   @override
@@ -7041,6 +7050,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple सह साइन इन करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple ने साइन इन झाले नाही. पुन्हा प्रयत्न करा किंवा Google सह सुरू ठेवा.';
+
+  @override
   String get authFailedToRetrieveToken => 'firebase टोकन प्राप्त करण्यात अयशस्वी, कृपया पुन्हा प्रयत्न करा.';
 
   @override
@@ -9181,6 +9194,24 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'सद्य फर्मवेअर आवृत्ती निर्धारित करता आली नाही';
+
+  @override
+  String get applyCodeToCurrentPlan => 'सध्याच्या योजनेवर लागू करा';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'कोड तुमच्या सध्याच्या योजनेवर लागू झाला.',
+        'refused': 'हा कोड लागू होऊ शकत नाही. कोड आणि आवश्यक योजना तपासा.',
+        'conflict': 'कोड आधीच वापरला आहे किंवा तुमच्या योजनेवर आधीच सवलत आहे.',
+        'rateLimited': 'खूप प्रयत्न झाले. थांबा आणि नंतर पुन्हा प्रयत्न करा.',
+        'other': 'कोड लागू झाला नाही. पुन्हा प्रयत्न करा.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'प्रोमो कोड';
@@ -13389,6 +13420,9 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro कोड आहे? पुढील स्क्रीनवर तो टाका.';
+
+  @override
   String get paywallTrialCancelNote => 'कधीही रद्द करा. कोणतेही शुल्क नाही, कोणतीही दंडात्मक कारवाई नाही.';
 
   @override
@@ -13656,6 +13690,9 @@ class AppLocalizationsMr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'नोट्स पुन्हा तयार करा';
 
   @override
   String get attentionSummaryFailed => 'या संभाषणाचा सारांश तयार करता आला नाही';
@@ -14829,6 +14866,20 @@ class AppLocalizationsMr extends AppLocalizations {
   String get episodeWritingNotes => 'नोट्स लिहीत आहे…';
 
   @override
+  String get homeStepTranscribing => 'ट्रान्सक्राइब होत आहे…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count रेकॉर्डिंग',
+      one: '1 रेकॉर्डिंग',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'आधी ट्रान्सक्रिप्ट पूर्ण करत आहोत. तुम्ही हे पेज सोडू शकता.';
 
   @override
@@ -15370,7 +15421,140 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paymentDeclinedTitle => 'तुमचे कार्ड नाकारले गेले';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'कार्ड अपडेट करा, किंवा $plan महिन्याला $price मध्ये परत मिळवा';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan परत मिळवण्यासाठी कार्ड अपडेट करा';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'जोडलेली कार्ये आहेत';
+
+  @override
+  String get hasTasksFilter => 'कार्ये असलेले';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'मासिकवर स्विच करा';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, महिन्याला $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly च्या न भरलेल्या वार्षिक शुल्काऐवजी. दर महिन्याला नूतनीकरण होते. कधीही रद्द करा.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'पेमेंट नाकारले गेले. तुमचा प्लॅन बदललेला नाही.';
+
+  @override
+  String get monthlySwitchUnavailable => 'सध्या स्विच उपलब्ध नाही. त्याऐवजी कार्ड अपडेट करा.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'तुम्ही आता मासिक प्लॅनवर आहात';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'आज $price भरले. दर महिन्याला नूतनीकरण होते.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'या महिन्याची $minutes मिनिटे वापरली गेली आहेत';
+  }
+
+  @override
+  String get freeCapBody => 'Omi अजूनही रेकॉर्ड करत आहे. ट्रान्सक्रिप्शन कसे सुरू ठेवायचे ते निवडा.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'अमर्यादित क्लाउड ट्रान्सक्रिप्शन';
+
+  @override
+  String get freeCapProAccuracy => 'सर्वोत्तम अचूकता';
+
+  @override
+  String get freeCapProWaiting => 'तुमची प्रतीक्षेतील रेकॉर्डिंग्ज ट्रान्सक्राइब करते';
+
+  @override
+  String get freeCapPhoneSubtitle => 'मोफत. तुम्ही परत बदलेपर्यंत चालू राहते.';
+
+  @override
+  String get transcribingOnThisPhone => 'या फोनवर ट्रान्सक्राइब होत आहे';
+
+  @override
+  String get getPro => 'Pro मिळवा';
+
+  @override
+  String get unlock => 'अनलॉक करा';
+
+  @override
+  String get transcribeWith => 'याद्वारे ट्रान्सक्राइब करा';
+
+  @override
+  String get omiCloud => 'Omi क्लाउड';
+
+  @override
+  String get thisPhone => 'हा फोन';
+
+  @override
+  String get onDeviceReady => 'तयार';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit मिनिटे शिल्लक · $date रोजी रीसेट';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes क्लाउड मिनिटे उपलब्ध';
+  }
+
+  @override
+  String get switchBack => 'परत बदला';
+
+  @override
+  String get setUpThisPhone => 'हा फोन सेट करा';
+
+  @override
+  String get speechRecognition => 'स्पीच रेकग्निशन';
+
+  @override
+  String get audioStaysOnPhone => 'ऑडिओ तुमच्या फोनवरच राहतो';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB डाउनलोड';
+  }
+
+  @override
+  String get downloadNow => 'आता डाउनलोड करा';
+
+  @override
+  String get onWifiLater => 'नंतर Wi-Fi वर';
 }

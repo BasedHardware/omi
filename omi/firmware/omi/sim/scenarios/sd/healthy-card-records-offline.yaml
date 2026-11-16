@@ -1,0 +1,8 @@
+id: sd/healthy-card-records-offline
+summary: Power model sanity for storage. A healthy card mounts at boot and offline audio reaches the raw ring.
+tags: [guard]
+timeline: []
+end: 20000
+expect:
+  boots:
+    - {exit: stop, sd_ready: true, sd_dropped: 0, log: ["[SD_BOOT] raw ring ready"]}

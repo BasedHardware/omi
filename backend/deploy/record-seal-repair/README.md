@@ -9,22 +9,23 @@ The host-side repair loop remains an operator fallback. This job reuses the
 worker image, KSA/GSA and encryption-secret reference. It runs on CPU nodes,
 independently of the unchanged 240-second sweeper. No GPU is allocated.
 
-When unsuspended: eight disposable row processes, 270 seconds per row (configurable
-1–270), 1500 seconds per cycle, 1680-second Kubernetes Job ceiling, every five
-minutes with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
+When unsuspended: 8 disposable row processes per pod (live and pinned production values),
+270 seconds per row (configurable1–270), 1500 seconds per cycle, and a1680-second
+Kubernetes Job ceiling. Schedule: every minute after the first-shipment patch;
+every five minutes before it, with `concurrencyPolicy: Forbid`. Rows that exhaust a budget are counted
 and skipped; all other rows continue. A timed-out transaction might have
 committed: the next canonical plan reconciles the row instead of blindly
 replaying a write. The controller kills/reaps each row's process group, including
 decoder descendants, even when the row leader already exited and on TERM.
 
 Discovery pages completed `batch_live_v1` / `batch_sync_v1` metadata by
-`finished_at, __name__` ascending within each pass, skipping already-closed rows, with hard caps
+`finished_at, __name__` descending (newest first) within each pass, skipping already-closed rows, with hard caps
 of 10,000 metadata reads / 1024 unsealed candidates and 60 seconds. The added
 collection-group composite index must be READY before deployment. Discovery
 reads only finish/closed metadata. Lead ruling `f79d45` authorizes a maintenance
 read/write per apply cycle; ruling `4cbd2a` extends this to two encrypted
 point writes on the same document and key at
-`batch_pipeline_prod_maintenance/record_seal_repair_cursor_v1`. The cursor's
+`batch_pipeline_prod_maintenance/record_seal_repair_cursor_v2`. The cursor's
 finish time and private path are authenticated/encrypted with a domain-separated
 key derived from the existing job encryption secret; no plaintext identities or
 cursor payloads are logged. Firestore nanoseconds round-trip without truncation.
@@ -61,7 +62,7 @@ refused privacy or an over-budget backlog can still leave old rows. Lead must
 measure actual in-cluster plan/apply throughput and the full age census before
 the batch ramp. `discovery_saturated`, `deferred`, `budget_exhausted` and error
 counts must be investigated. Cursor fairness avoids permanent prefix starvation;
-oldest-first priority within a pass is still no guarantee of settlement.
+newest-first priority within a pass is still no guarantee of settlement.
 
 ## Deploy and refresh policy without restarting workers
 
@@ -82,22 +83,14 @@ recordSealRepair:
     # Also preserve the collected final-pass policy inputs and cohort allowlists.
 ```
 
-This is a shape example, not current production flags. Never commit or print
-cohort allowlists. At each ramp rung, lead refreshes the map with the same
-already-deployed chart/image and retained release values:
-
-```sh
-helm upgrade prod-omi-batch-pipeline-worker backend/charts/batch-pipeline-worker \
-  --namespace prod-omi-backend --reuse-values \
-  --values /private/repair-flags.yaml --wait --timeout 15m
-```
-
-Render before apply and require that only `CronJob/record-seal-repair` changes.
-The offline chart regression compares 0% and 100% maps and proves identical
-worker Deployments, sweeper and RBAC. No rollout/restart is needed per rung.
-Existing repair Jobs retain their startup map for at most 1680 seconds; new Jobs
-use the refreshed map. Lead should settle/stop the old repair Job before the
-next rung if that overlap is unacceptable.
+This is a shape example, not current production flags. The stock-drain packet
+procedure in backend/docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md
+**preserves the live environment and does not refresh RECORD_SEAL_REPAIR_SERVER_FLAGS**.
+It deliberately ignores a newly rendered policy map. Do not use it for ramp or
+final-pass policy refreshes. A separate target-only, UID/resourceVersion-guarded
+policy-map refresh procedure is future work and is not part of this change.
+Existing Jobs retain their startup map for up to1680s; new stock-drain Jobs use
+the same preserved map. No full worker-chart apply or GPU rollout is permitted.
 
 When live `_ramp` values override revision env defaults, use those effective
 percentages in the repair map. Copying only revision env fallbacks is stale.
@@ -107,7 +100,8 @@ capture. Tests prove registration succeeds at both 0% and 100%; however its
 immutable job policy records different `batch_percent`, `retire_percent`,
 `live_stt_retired` and `policy_id`. During the minutes between a rung and the
 refresh (or while the previous Job finishes), repaired registrations can freeze
-the earlier values. The refresh prevents extending that drift to new Jobs; it
+the earlier values. Until the separate policy-refresh procedure exists and is executed, that drift
+extends to new stock-drain Jobs too. A policy refresh would prevent it; it
 does not rewrite already-created policies. Final-pass inputs must also match
 the serving role. Existing pending jobs retain their original admission policy.
 
@@ -120,13 +114,15 @@ permission before Helm applies (the existing ci-deployer pods:list grant may
 already cover it). No workload YAML/env or PodList is logged or stored.
 
 Counts-only structured JSON rows (`record_seal_repair_row`) contain a closed
-disposition, count=1, and seal age in seconds (zero for refusals). Proof
+disposition, count=1, and seal age in seconds (zero for refusals). Invalid-clock
+rows omit seal age and are excluded from both summary age maxima;
+`invalid_clock_rows` counts those attempted rows without changing repair eligibility. Proof
 refusals also carry a closed `proof_reason`: `tail_lagging`,
 `tail_lost_or_unproven`, `overlap_conflict`, `decode_or_checksum`, `budget_limit`,
 `finish_missing`, `registration_refused`, or `other`. Tail lagging is a
 necessary-condition failure, not proof that an upload will recover or is lost.
 No terminal marker or age-gate exemption is written. Summaries
-include dispositions, observed oldest age, saturation and deferred rows. Native
+include dispositions, observed oldest age, invalid-clock attempts, saturation and deferred rows. Native
 SDK stdout/stderr is suppressed; IDs, exceptions, paths and plan digests are
 never output. `log-metrics.json` defines rows by disposition and seal-age
 distribution and proof-reason counts; lead installs these metrics through the normal monitoring path.
@@ -141,17 +137,47 @@ proof reads but performs no writes. The sweeper and host fallback remain usable.
 ## Aged pending discovery and proof-gated exits
 
 `RECORD_SEAL_REPAIR_JOBS` defaults on; only `off` disables the added discovery
-leg. It scans at most 128 `{ns}_jobs` metadata rows in document order, selecting
-`record_pending` jobs aged at least the existing 30-minute partial wait. Upload
-admission's zero-second grace is unsuitable for a repair scan; 30 minutes gives
-ordinary uploads their existing proof wait without assigning any expiry to a
-producer token. Numeric `enqueued_at` is filtered locally so no new composite
-index is required. Resolution happens inside the existing disposable row budget.
-The jobs leg has its own encrypted maintenance cursor at
-`batch_pipeline_prod_maintenance/record_seal_repair_jobs_cursor_v1`; its candidates
-occupy at most half the first worker group (one for a single-worker run). Both
-legs share the existing discovery deadline, row cap, worker cap and run deadline.
-Preview does not write either frontier.
+leg. With `RECORD_SEAL_REPAIR_AGE_ORDER` on (the default), it first scans up to
+128 pending jobs in the final 24 hours of their stored
+`record_dead_letter_deadline_at`, in deadline/name ascending order. It then
+fills remaining job places from up to 128 pending jobs in enqueue/name descending
+order (newest first). Both select jobs aged at least the existing 30-minute
+partial wait. Enqueue age never fabricates a deadline. The required deadline
+and recency composite indexes must be READY before image deployment; the
+`gcp_diarizer.yml` batch-pipeline-worker path runs the shared readiness gate.
+A missing/building urgent index skips only the urgent leg and emits a
+content-free `record_seal_repair_urgent` / `index_unavailable` event; ordinary
+and conversation discovery continue. Ordinary recency discovery falls back to
+hash order if its index is unavailable. Setting `RECORD_SEAL_REPAIR_AGE_ORDER=off`
+skips urgency and restores the original document-order jobs query.
+
+The jobs frontiers are encrypted maintenance documents at
+`batch_pipeline_prod_maintenance/record_seal_repair_jobs_cursor_v2` (recency)
+and `batch_pipeline_prod_maintenance/record_seal_repair_urgent_cursor_v1`
+(deadline). The urgent cursor's `enqueued_at` payload slot carries the raw ordered deadline
+value as an encrypted scalar scan position, including skipped malformed clocks.
+Eligibility still requires a finite positive stored deadline. The query's
+`> 0` floor excludes non-positive deadlines; local rejection advances past
+any malformed returned row and adds it to `invalid_clock_rows`. A saturated
+malformed page therefore cannot pin valid work behind it. The same existing
+state/deadline/name index serves both range bounds. Recency
+freezes an enqueue horizon; urgency recomputes its window on each run. Old v1
+recency/conversation documents remain for code rollback and are not advanced.
+
+Urgent and ordinary jobs together occupy at most half the first worker group
+(one for a single-worker run); conversations keep their existing reservation.
+Ordinary discovery runs every enabled run within the shared discovery budget.
+For job allocation `A = max(1, workers // 2)`, it reserves `max(1, A // 4)`
+places when candidates exist; urgency gets the rest, including unused ordinary
+reserve. With 16 workers, ordinary work retains 2 of the 8 job places under
+continuous urgency; an empty ordinary pass allows 8 urgent jobs. Urgent jobs
+still run in deadline order before ordinary attempts. Unused urgent places
+return to ordinary candidates without advancing past held ordinary work.
+This is a one-run discovery starvation bound, not a settlement-time guarantee;
+see the [priority change note](../../docs/listen_pusher_pipeline/changes/2026-11-10-record-seal-priority.md).
+All three legs share the existing discovery deadline, aggregate scan cap, row
+cap, worker cap and run deadline. Preview writes none of the three frontiers.
+Resolution happens inside the existing disposable row budget.
 
 Producer-token, upload-failed and closed-but-pending rows run the existing
 same-digest planner/apply path. Closed rows must pass the full retained-tail proof
@@ -179,3 +205,9 @@ is not served on Cloud Run; the `omi_.*` GMP keep list also covers the metric
 name. Set `recordSealRepair.jobsDiscovery=off` to pass `RECORD_SEAL_REPAIR_JOBS=off`
 to the CronJob and restore the prior discovery and partial-retry behavior. Existing
 custody owners stay unchanged.
+
+
+The November 15 stock drain adds independent hash partitions, continuous fresh
+priority and newest-first refills. Production placement/resources, the separate
+repair image pin, read/capacity estimates and exact target-only patch/rollback
+commands are in [the stock-drain change note](../../docs/listen_pusher_pipeline/changes/2026-11-15-sharded-seal-stock-drain.md).

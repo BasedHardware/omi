@@ -12,7 +12,7 @@ ladder, the failover drills and the guard interlocks. Numbers marked
 
 | Setting | Where | Owner | Rollback |
 | --- | --- | --- | --- |
-| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | preserve audited live min 6 / max 12; reductions need a new lead decision |
+| GPU floor (HPA min and baseline) | `charts/batch-pipeline-worker/prod_omi_batch-pipeline-worker_values.yaml` `replicaCount` + `autoscaling.minReplicas` | lead, at a worker Helm roll | restore baseline/min 6 and max 12 if GPU queue depth or ready_units climbs back past 50k |
 | L4 node pool minimum | GKE `batch-pipeline-pool` (operator-managed, not in this repo) | lead / op1 | previous minimum |
 | GPU floor share of routed units | route table `gpu_floor_percent`, cohort `batch-vendor-gpu-floor` | lead, runtime config (slice B) | 0 |
 | `provider-stt` queue size | `deploy/ops/prod.yaml` `cloud_tasks.provider-stt` | lead, config-train | previous size |
@@ -23,27 +23,25 @@ config-train change, never a code change.
 
 ## GPU floor
 
-**Current bounds (2026-11-03, lead af6df5): baseline/min 6, max 12.** The
-read-only live check confirmed min 6 / max 12, with 11 desired replicas. The
-chart preserves those bounds; Helm's existing lookup preserves the live replica
-count on upgrades. The earlier four-worker sizing below is historical, not a
-rollback target or evidence that six workers have the same cost or capacity.
-Recheck Ready on-demand capacity before any later roll; do not scale down to
-the earlier baseline as part of an observability rollback.
+**Current bounds (2026-11-06, David D4 / coordinator ask bc18db): baseline/min 4,
+max 8.** cl2-deploy patched the live HPA at 00:50Z after the transcription
+backlog drained. The chart preserves those bounds; Helm's existing lookup
+preserves the live replica count on upgrades. Rollback: restore baseline/min 6
+and max 12 if GPU queue depth or ready_units climbs back past 50k.
 
-These audited bounds are not full-volume capacity qualification. The historical
+These approved bounds are not full-volume capacity qualification. The historical
 3.7x replay's 4/16 hot-minute and catch-up witnesses retain their original
-bounds. With 6/12, the synthetic 12 chain-second/second step does not catch up
-within the model's 90-minute window (12 workers at its 0.93 per-worker ceiling
+bounds. Even with the former 6/12, the synthetic 12 chain-second/second step
+does not catch up within the model's 90-minute window (12 workers at its 0.93 per-worker ceiling
 provide 11.16 chain-seconds/second). Assess actual demand, scheduling and
 throughput before expansion; do not change the live bounds to clear a replay.
 
 Current operator checklist:
 
-1. Before a worker roll, confirm HPA min 6 / max 12 and at least 6 Ready on-demand
+1. Before a worker roll, confirm HPA min 4 / max 8 and at least 4 Ready on-demand
    L4 nodes. A later change needs a new lead decision and a fresh capacity read.
-2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 6 together, with
-   `maxReplicas` 12. Let Helm preserve the live replica count; never force it to
+2. Keep chart `replicaCount` and `autoscaling.minReplicas` at 4 together, with
+   `maxReplicas` 8. Let Helm preserve the live replica count; never force it to
    the baseline during an outage.
 3. Use the current chart's scale-in policy. The older sizing, prices,
    recommendations and scale-in procedures below are dated evidence only.
@@ -249,7 +247,7 @@ Follows vendorscope-ops section 5. Each step is one write to roll back.
 
 0. Preconditions: #24222 queues live; slices A–D merged dormant; F1, F2 and
    F3 adopted (above); staging drill table green; staging ladder receipt; current
-   floor 6 live with at least 6 Ready OD nodes, HPA max 12.
+   floor 4 live with at least 4 Ready OD nodes, HPA max 8.
 1. Shadow at the current batch percent: decisions counted, routing unchanged.
 2. 1% vendor routing with floor share on, plus the prod drill.
 3. 5% → 25% in lockstep with the batch and draining-cohort steps (vendor
@@ -388,7 +386,7 @@ Leave the floor alone. On close, watch `vendor_held` drain at the queue rate.
 
 **L4 stockout.** The floor holds and scale-up fails. Do not delete or recreate
 pool nodes, and do not lower the floor to free quota. Deep backlog is
-tolerated; audio is durable while it waits. If the floor itself drops below 6
+tolerated; audio is durable while it waits. If the floor itself drops below 4
 Ready (a node lost to maintenance), vendors carry the overflow only where
 overflow is armed (section above) and only for fresh units; check that no
 vendor is also unhealthy before expanding any percent.

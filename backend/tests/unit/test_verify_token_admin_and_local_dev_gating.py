@@ -67,12 +67,21 @@ def _build_fakes():
     database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
     database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
+    directory_pkg = types.ModuleType("database.directory")
+    directory_pkg.__path__ = []
+    directory_router_stub = types.ModuleType("database.directory.router")
+    directory_router_stub.routing_active = lambda: False
+    directory_router_stub.cached_plane = lambda _uid: 'firestore'
+    directory_router_stub.DirectoryRoutingUnavailable = RuntimeError
+
     users_stub = types.ModuleType("database.users")
     users_stub.record_user_platform = MagicMock()
     users_stub.record_client_device = MagicMock()
 
     fakes = {
         "database": database_pkg,
+        "database.directory": directory_pkg,
+        "database.directory.router": directory_router_stub,
         "utils": utils_pkg,
         "utils.other": utils_other_pkg,
         "firebase_admin": firebase_admin_stub,

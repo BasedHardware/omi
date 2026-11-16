@@ -432,6 +432,21 @@ class ConversationSpeakers(BaseModel):
     status: Literal['resolved', 'capture', 'unavailable']
     version: int = 1
     participant_speaker_ids: List[int] = []
+    input_membership_sha256: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+
+    @model_serializer(mode='wrap')
+    def _serialize_membership(self, handler, info):
+        data = handler(self)
+        excluded = info.exclude if isinstance(info.exclude, (dict, set, frozenset)) else ()
+        included = info.include
+        if (
+            info.mode != 'json'
+            and self.input_membership_sha256 is not None
+            and 'input_membership_sha256' not in excluded
+            and (included is None or 'input_membership_sha256' in included)
+        ):
+            data['input_membership_sha256'] = self.input_membership_sha256
+        return data
 
 
 class CaptureEvidenceMetadata(BaseModel):
@@ -464,6 +479,8 @@ class RecordAudioPartial(BaseModel):
 
 
 class Conversation(BaseModel):
+    title_content_units: float = Field(default=0, exclude=True)
+    notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
     l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -478,6 +495,7 @@ class Conversation(BaseModel):
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     capture_timezone: Optional[str] = Field(default=None, max_length=128)
+    capture_time_trust: Optional[Literal['untrusted']] = None
     recorded_start: Optional[datetime] = None
     recorded_end: Optional[datetime] = None
     arrival_at: Optional[datetime] = None
@@ -520,6 +538,9 @@ class Conversation(BaseModel):
     # summarize. Successful enrichment clears it. A separate field rather than
     # a ``processing_state`` value: released clients decode that enum strictly.
     summary_retryable: Optional[bool] = None
+    # Server-authored Home row contract on list reads (utils/conversations/home_step.py):
+    # ready | transcribing | writing_notes | failed | noise. Omitted when unset.
+    home_step: SkipJsonSchema[Optional[Literal['ready', 'transcribing', 'writing_notes', 'failed', 'noise']]] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -605,7 +626,7 @@ class Conversation(BaseModel):
     def _collect_match_scores(self):
         try:
             updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
-            if updates and match_scores.enabled():
+            if updates:
                 self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
         except Exception:
             self.speaker_match_scores = None
@@ -617,6 +638,8 @@ class Conversation(BaseModel):
         data = handler(self)
         if not self.processing_deferred and 'processing_deferred' not in self.model_fields_set:
             data.pop('processing_deferred', None)
+        if self.home_step is None:
+            data.pop('home_step', None)
         if info.mode == 'python' and self.owner_recognition_diagnostics:
             excluded = info.exclude or ()
             included = info.include
@@ -649,7 +672,7 @@ class Conversation(BaseModel):
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
+    # plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
 
     user_corrections: List[Dict] = Field(default_factory=list)
@@ -671,7 +694,7 @@ class Conversation(BaseModel):
     visibility: ConversationVisibility = ConversationVisibility.private
     starred: bool = False
 
-    # TODO: processing_memory_id for backward compatibility with the old memories routes and app
+    # processing_memory_id for backward compatibility with the old memories routes and app
     processing_memory_id: Optional[str] = None
 
     processing_conversation_id: Optional[str] = None

@@ -150,28 +150,6 @@ def test_shadow_no_visible_change_and_content_free_logs(monkeypatch, caplog):
     assert caplog.text.count('event=speaker_grouping_shadow_segment') == 6
 
 
-def test_mode_selects_without_shadow(monkeypatch):
-    monkeypatch.setenv('SPEAKER_GROUPING_MODE', 'provider_strict')
-    monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'off')
-    segments = [segment(0), segment(1)]
-    c = conversation(segments)
-    vectors = {'0': [1, 0], '1': [1, 0]}
-    baseline = resolve_conversation_speakers(segments, vectors)
-    selected = shadow.compare_and_select(
-        'uid',
-        c,
-        baseline,
-        vectors,
-        manual_speakers={},
-        voiceprints={},
-        embedding_seconds={},
-        abstained_segment_ids=set(),
-        receipt={},
-    )
-    assert len(set(selected.speaker_ids.values())) == 2
-    assert all(s.speaker_grouping_shadow is None for s in segments)
-
-
 @pytest.mark.parametrize('failure', ['exception', 'budget', 'limit', 'provenance'])
 def test_fail_open(monkeypatch, failure):
     segments = [segment(0)]

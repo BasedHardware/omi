@@ -33,7 +33,6 @@ class _AutoMockModule(ModuleType):
 _STUBS = [
     "redis",
     "cachetools",
-    "prometheus_client",
     "google.cloud.tasks_v2",
     "ulid",
     "pinecone",
@@ -170,7 +169,14 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(response.headers['X-Omi-Has-More'], 'true')
         self.assertEqual(response.headers['X-Omi-Next-Cursor'], 'next')
         self.assertEqual(
-            read.call_args.kwargs['extra_field_paths'], ['structured', 'source', 'geolocation', 'folder_id']
+            read.call_args.kwargs['extra_field_paths'],
+            [
+                'structured',
+                'source',
+                'geolocation',
+                'folder_id',
+                *developer.transcribing_hold.READ_FIELDS,
+            ],
         )
 
     def test_search_term_on_list_route_is_rejected_instead_of_ignored(self):

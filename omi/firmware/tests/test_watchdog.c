@@ -6,8 +6,21 @@
 struct device test_wdt = {.ready = true};
 static unsigned attempts, installs, setups, feeds;
 static int setup_result;
+static bool reset_captured;
+int hwinfo_get_reset_cause(uint32_t *cause)
+{
+    assert(attempts == 0);
+    *cause = 0x1234;
+    return 0;
+}
+void omi_diagnostics_set_reset_cause(uint32_t cause)
+{
+    assert(cause == 0x1234 && attempts == 0);
+    reset_captured = true;
+}
 void safe_mode_early_boot(void)
 {
+    assert(reset_captured);
     attempts++;
 }
 int wdt_feed(const struct device *dev, int channel)

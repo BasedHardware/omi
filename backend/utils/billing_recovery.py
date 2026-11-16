@@ -7,7 +7,9 @@ PaymentIssue only when the stored subscription is past_due or unpaid, the user
 did not choose to cancel, it is not a trial's first charge, and its latest
 renewal invoice is open with money due. It never writes, never charges and never returns
 a payment URL: the client opens a Stripe-hosted page through
-POST /v1/payments/customer-portal.
+POST /v1/payments/customer-portal. A declined yearly renewal also carries the plan's
+monthly price as ``monthly_switch`` (utils/monthly_switch.py), applied by
+POST /v1/payments/payment-issue/monthly-switch.
 """
 
 import logging
@@ -16,12 +18,41 @@ from typing import Any, Mapping, Optional
 import stripe
 
 from models.users import PaymentIssue, PlanType, Subscription
+from utils import monthly_switch
 from utils.observability.fallback import record_fallback
 from utils.subscription import get_plan_type_from_price_id, is_paid_plan
 
 logger = logging.getLogger(__name__)
 
 RECOVERABLE_STATUSES = frozenset({'past_due', 'unpaid'})
+PAYMENT_RECOVERY_NOTIFICATION_TITLE = 'Payment declined'
+PAYMENT_RECOVERY_NOTIFICATION_BODY = 'Update your payment method to restore your subscription benefits.'
+
+
+def payment_recovery_transition(
+    subscription: Mapping[str, Any], previous_attributes: Optional[Mapping[str, Any]]
+) -> bool:
+    """A verified status transition, not a later recovery-state update."""
+    previous_status = (previous_attributes or {}).get('status')
+    return bool(
+        previous_status
+        and previous_status not in RECOVERABLE_STATUSES
+        and subscription.get('status') in RECOVERABLE_STATUSES
+    )
+
+
+def payment_recovery_notification_eligible(
+    uid: str,
+    subscription: Mapping[str, Any],
+    previous_attributes: Optional[Mapping[str, Any]],
+    invoice: Optional[Mapping[str, Any]],
+) -> bool:
+    """Fail closed unless a first lapse has a payable first-party renewal."""
+    if not uid or not payment_recovery_transition(subscription, previous_attributes):
+        return False
+    if (subscription.get('metadata') or {}).get('app_id'):
+        return False
+    return payment_issue_from_stripe(uid, subscription, invoice) is not None
 
 
 def payment_issue_from_stripe(
@@ -99,4 +130,7 @@ def payment_issue_for(
             outcome='degraded',
         )
         return None
-    return payment_issue_from_stripe(uid, stripe_subscription, invoice)
+    issue = payment_issue_from_stripe(uid, stripe_subscription, invoice)
+    if issue is not None:
+        issue.monthly_switch = monthly_switch.offer(stripe_subscription, invoice)
+    return issue

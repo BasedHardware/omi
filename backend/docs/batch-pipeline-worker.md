@@ -17,8 +17,10 @@ routes approximately 99% to backfill. One job per owner, queue concurrency
 13 seconds/job constrain dispatch. Supplied GPU utilization is approximately
 7%; batch pyannote T4 RTF is 0.04 and Parakeet L4 RTF 0.0025. The supplied
 1.5 seconds/audio-hour batch estimate is not qualified full-chain capacity.
-`SYNC_LEGACY_FRESH_ENABLED` remains independently owned; its classification
-feeds this queue unchanged.
+The optional legacy fresh-admission flags and Redis budget were retired in
+[#24754](https://github.com/BasedHardware/omi/pull/24754). Recent unbound
+uploads retain fresh routing only when legacy mode is `on`, including its
+fail-safe path; `draining` and `dark` disable that promotion.
 
 ## Target, ownership and work units
 
@@ -477,13 +479,12 @@ Service remains the primary rank and worker affinity breaks ties within the
 bounded query prefix. Set 64 to restore the previous query width; list reuse
 remains active. `BATCH_SHARD_SPREAD_ENABLED=false` restores legacy selection.
 
-`worker.firestoreReadLevers: '{"batch_privacy_memoize":100}'` renders
-`FIRESTORE_READ_LEVERS='{"batch_privacy_memoize":100}'` on worker pods only.
-The existing transaction-local memo enrolls each first read in the conflict set,
-including commit-boundary privacy checks, and is rebuilt on transaction retry.
-Set `worker.firestoreReadLevers: '{}'` in the override values file to disable it. A string avoids Helm's deep-map
-merge retaining the enabled default when an empty map is supplied. Serving-role
-complete lever literals and privacy fences are unchanged.
+`worker.firestoreReadLevers: '{}'` is the default. The retired WQ12
+`batch_privacy_memoize` lever and its transaction snapshot dedupe are removed;
+privacy checks retain the live walk and WQ26 token fencing. The string setting
+avoids Helm deep-map merging when operators supply a complete lever literal.
+The token-fenced negative lookup rollout is documented in
+[privacy-check-shadow.md](runbooks/privacy-check-shadow.md).
 
 `worker.admissionParallelCalls` maps to `BATCH_ADMISSION_PARALLEL_CALLS`
 (default true; false restores serial flight calls). First-seen owner groups are

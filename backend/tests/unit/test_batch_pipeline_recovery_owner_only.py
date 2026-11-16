@@ -83,7 +83,8 @@ async def test_owner_wake_leaves_process_wide_drain_queue_for_periodic_owner():
     await service.reconcile_async(owner_id=BURST, recovered='recovered', owner_only=True)
 
     assert projector.drains is None
-    assert projector.drain_requests == {'unrelated-owner': None, BURST: None}
+    assert list(projector.drain_requests) == ['unrelated-owner', BURST]
+    assert projector.drain_requests['unrelated-owner'] is None
     projector.start_followups.assert_awaited_once_with(['recovered'], discover=False)
     projector.schedule_index_flush.assert_called_once_with(BURST)
 
@@ -184,27 +185,16 @@ async def test_periodic_restart_finishes_durable_publication_after_request_failu
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
         initial_probes = restarted.complete_content.call_count
-        assert initial_probes == 1  # Discovery offers only one receipt per owner.
-        if failure == 'after_assignment':
-            assert [sid for sid in ids if log.results[sid]['projection_state'] == 'ready'] == ids[:1]
-        # Persisted siblings resume on later discovery passes; walk-owed rows
-        # can also finish on the next tick after the pre-assignment failure.
-        for _ in range(len(ids) - 1):
-            if all(log.results[sid]['projection_state'] == 'ready' for sid in ids):
-                break
-            await periodic.reconcile_async(periodic=True, recover_quarantine=True)
-            while restarted.followups and restarted.followups.tasks:
-                await asyncio.gather(*list(restarted.followups.tasks.values()))
-        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
-        assert log.persist_order == ids
-        assert {call.args[0] for call in restarted.complete_content.call_args_list} == set(ids)
-        # Mocked completion leaves ready receipts discoverable. Another pass
-        # must still probe: page coalescing is not process-wide suppression.
-        probes = restarted.complete_content.call_count
+        assert initial_probes == (1 if failure == 'before_assignment' else len(ids))
         await periodic.reconcile_async(periodic=True, recover_quarantine=True)
         while restarted.followups and restarted.followups.tasks:
             await asyncio.gather(*list(restarted.followups.tasks.values()))
-        assert restarted.complete_content.call_count == probes + 1
+        assert all(log.results[sid]['projection_state'] == 'ready' for sid in ids)
+        assert log.persist_order == ids
+        # Mocked completion leaves ready receipts discoverable. The first
+        # probe for each unit plus one ready-content probe on the next page
+        # are required; page coalescing is not a process-wide suppression.
+        assert restarted.complete_content.call_count == len(ids) + 1
     finally:
         tasks = [
             task for runner in (restarted.drains, restarted.followups) if runner for task in list(runner.tasks.values())

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.568",
+  "date": "2026-11-05",
+  "changes": [
+    "Fixed pending batch recordings losing their Transcribing title or offering Reprocess while transcription is still running"
+  ]
+}

@@ -679,6 +679,9 @@ The loader writes two dark-able tables:
 - `omi_finops.vendor_balance_snapshot` — one row per successful pull
   (`date`, `ts`, `vendor`, `used_usd`, `available_usd`,
   `invoice_billing_enabled`), idempotent per (date, vendor).
+  Money is rendered to the NUMERIC contract at the artifact boundary (at most
+  nine fractional digits, rounded half-up; the loader re-renders it too), because
+  the vendor sends longer decimals than BigQuery NUMERIC accepts.
 - `omi_finops.vendor_balance_spend_daily` — the **derived day rate**: each
   interval between consecutive snapshots belongs to the UTC days strictly
   after the previous snapshot's day through the current snapshot's day
@@ -691,7 +694,12 @@ The loader writes two dark-able tables:
   without backfilling.
 
 Optional by design: a missing key, a 401/403, or a transport/shape failure
-writes `status=skipped` with a reason and never fails the daily job. The TV
+writes `status=skipped` with a reason and never fails the daily job. The reason
+is a fixed token — `key_unavailable`, `permission_unavailable`,
+`redirect_refused`, `http_error`, `transport_error` or `invalid_response` — plus
+an integer `http_status` on `http_error`; the daily job copies that token (never
+free text, a URL, a header or a response body) onto its own stderr, because the
+run's `pull.log` is ephemeral on Cloud Run. The TV
 (`fetchVendorBalanceHistory`) shows Soniox as **measured** with its as-of
 date only once **≥2 snapshots** exist; before that the labelled, dated
 console constant (read 2026-10-16, STALE after 14 days) stays as the
@@ -720,17 +728,210 @@ platform.modulate.ai (100 credits = $1, so $0.06/h is 6 credits/h); live SKU
 The rate card is SHA-pinned by backend tests; a price change is a reviewed
 commit that updates the pinned expectations and this line's as-of date.
 
-Coverage caveat, surfaced by the reconciliation rather than hidden: the
-Prometheus series meters backend live/PTT streaming sessions; any Modulate
-batch-REST volume outside that counter appears as reconciliation variance
-against Mercury cash. The wall computes the trailing-30-day variance between
-the modelled line and Mercury `modulate` cash (`stt_vendor` in the vendor
-map) and prints it on the STT line. When the modelled line is unavailable
-(missing series or missing card) the wall falls back to labelled Mercury
-Modulate cash, exactly as before.
+REST coverage uses `omi_prerecorded_vendor_audio_seconds_total{provider="modulate"}`
+from Grafana `uid/prometheus` with `cluster!="__run__"` and `uid/gmp-cloud-run`
+with `project_id="based-hardware",cluster="__run__",job="omi-cloud-run-application-metrics"`.
+Only `outcome="ok"` is priced: `endpoint="stt"` at **$0.03/audio hour** and
+`endpoint="lid"` at **$0.01/audio hour**. These prices, their public source and
+2026-11-08 as-of date live in the finops-owned `modulate_prices.json`; the live
+rate card is unchanged. Error seconds are logged as an unpriced upper bound.
+Live and REST counters do not overlap; the REST cluster selectors keep GKE and
+Cloud Run disjoint. The daily total is `(live_seconds * live_price +
+rest_stt_seconds * rest_price + lid_seconds * lid_price) / 3600`.
 
-The loader writes `omi_finops.stt_modulate_modelled_daily` (date, audio
-seconds, usd, price, price as-of, `method='modelled'`), dark while skipped.
+Measured reference supplied for this change (ro-prod GMP, **2026-11-06 UTC**):
+STT ok **1,360.2 h**, LID ok **184.8 h**, STT error **6.7 h**. At these list
+prices the modelled estimate is approximately **$40.81 + $1.85 = $42.66**,
+plus live **0**. This is a dated operator reference, independent of test fixtures;
+no GCP measurement was made during implementation. Cloud Run `increase()` can
+miss audio sent before an instance's first scrape. The wall's trailing-30-day
+variance against Mercury cash remains the reconciliation authority, including
+any difference between public list prices and contract prices.
+
+If any query fails (or an expected live/REST query is absent), the whole window
+is skipped with `reason=gmp_query_failed`; stale ready rows are replaced by a
+skipped artifact. A day with no series in either source gets no row. Missing
+prices or series keep the line unavailable and the wall uses labelled Mercury
+Modulate cash.
+
+The loader writes `omi_finops.stt_modulate_modelled_daily` with total audio
+seconds, `live_seconds`, `rest_stt_seconds`, `lid_seconds`, usd, the live price
+and as-of date, `rest_price_usd_per_hour`, `lid_price_usd_per_hour` and
+`method='modelled'`. The new columns are nullable for historical rows.
 The Modulate ORG key binding (`FINOPS_MODULATE_ORG_KEY`) is mounted for a
 future vendor API; **no code calls a Modulate endpoint with it**, pinned by
 test.
+
+## Settled spend ledger (PR1, additive)
+
+The same daily job now assembles `derived/spend_daily.json` and
+`derived/spend_daily_gcp_sku.json` from its existing aggregate artifacts. No
+reader changes ship here. `assemble_spend_daily.py` is offline; the loader
+reassembles with the exact Mercury run rates computed by `load_mercury.py`,
+including retained annual history, through `derived/mercury_run_rates.json`.
+Raw-only replay uses only the cash history in the run directory. Mercury run
+rates with fewer than 30 covered days or `inputs_complete=false` are omitted
+rather than publishing an undercount as measured/settled. Annual-history
+caveats stay in `note`.
+
+Ledger SaaS rates filter Anthropic, Replicate, xAI and OpenRouter before cadence
+detection, including retained annual history. Those vendors have separate cash
+rows with their own basis flags and never enter `saas_tooling` or all-in through
+that aggregate. The existing sibling `mercury_saas_daily` calculation is unchanged.
+
+`spend_daily` is partitioned on `date` without expiry and clustered on
+`line, source`. Key `(date, line, source, status)` is NOT NULL with a
+`PRIMARY KEY ... NOT ENFORCED`; assembly and loading reject duplicate keys.
+Other columns: `usd FLOAT64`, `in_all_in BOOL`, `in_margin_basis BOOL`,
+`basis_class STRING`, `basis_version STRING`, `note STRING`,
+`inputs_settled BOOL`, `run_id STRING`, `computed_at TIMESTAMP`.
+`spend_daily_gcp_sku` holds `date, project_class (prod/dev), service, sku,
+usd_net, run_id, computed_at`, partitioned by date and clustered by
+`service, project_class`. Schemas live in `load_bigquery.SCHEMAS`.
+
+Each source gets a staged transactional date-and-source DELETE/INSERT.
+Empty successful/known-missing windows can delete stale rows without inserting
+fake zeros (notably Modulate). Every spend transaction also deletes
+`status='provisional' AND date < frontier`, as specified by the settlement
+contract. Producer source replacement never matches `meter_live`. The only
+cross-writer deletion is this stale-provisional housekeeping. Mercury's 90-day
+refresh is independently scoped; it cannot delete older GCP/vendor rows.
+Modulate cash all-in preference is recomputed against stored modelled rows in
+the transaction, including dates outside the current modelled pull window.
+SKU detail commits in the billing-source transaction. Different source families
+remain independently refreshed; readers must use the main ledger for totals
+and must not assume an atomic snapshot across source families.
+
+The discoverable `unit_cost_daily` total is published after spend and the
+other sibling loads. Gap-fill discovery requires billing spend with the same
+run ID as that total, so a failed ledger load cannot be hidden by an already
+published unit-cost total. On the first deployment, discovery may find no spend
+table and load the frontier only; use the explicit backfill below for history.
+
+### Basis and taxonomy
+
+The KB `projects/admin-omi-tv-dashboard/margin-basis.json` is authoritative.
+After a ruling: bump its version, run
+`python3 backend/scripts/finops/sync_spend_basis.py /path/to/margin-basis.json`,
+commit the deterministic `spend_basis.json` projection, redeploy, and rerun
+affected dates. Every row carries the projection version. Unit tests check
+internal consistency and taxonomy coverage without requiring the external KB.
+
+| Line | Source / status | All-in | Margin | Class |
+| --- | --- | --- | --- | --- |
+| `gcp:<service_slug>` | billing_export / billed | yes | yes | fixed (unsplit fallback) |
+| `gcp_vertex_provisioned_throughput` | billing_export / billed | yes | no | excluded |
+| `gcp_vertex_ai`, `gcp_gemini_api` | billing_export / billed | yes | yes | variable |
+| `gcp_dev` | billing_export / billed | no | no | excluded |
+| `llm_openai` | openai_admin_api / measured | yes | yes | variable |
+| `llm_anthropic_api` | anthropic_admin_api / measured | yes | yes | variable |
+| `stt_soniox` | soniox_usage_api / measured | yes | yes | variable |
+| `stt_deepgram` | deepgram_billing_api / measured | yes | yes | variable |
+| `stt_modulate_modelled` | prometheus / estimate | yes when present | no | variable |
+| `stt_modulate_cash` | mercury / measured | only without modelled | yes | variable |
+| `saas_tooling` | mercury / measured | yes | no | fixed |
+| `saas_anthropic_seats` | mercury / measured | no | no | fixed |
+| `infra_non_gcp` | mercury / measured | yes | yes | fixed |
+| `stripe_fees` | stripe_api / measured | yes | no | variable |
+| `stripe_fees_subscription` | stripe_api / estimate | no | yes | variable |
+| `pinecone` | rate_card / estimate | no | yes | variable |
+| `agent_tooling_claude_code` | mercury / estimate | no | no | excluded |
+| `openrouter`, `xai`, `replicate` | mercury / measured | no | yes | variable |
+
+GCP totals use the **full** service/SKU extract and `net` (cost + credits),
+not the truncated resource extract. Non-`based-hardware` projects follow the
+existing job's dev classification. Service totals mix fixed and variable SKUs;
+the projection explicitly selects the KB's fixed unsplit fallback for ordinary
+GCP services. This preserves billed totals but does not claim the finer
+GPU-utilization/Cloud Run/Firestore variable split. SKU detail is preserved.
+The reservation match is service `Vertex AI` and SKU prefix
+`Vertex AI: Provisioned Throughput`; the remainder and Gemini API stay variable.
+
+Current Mercury classification includes Anthropic in SaaS. Preserve that
+aggregate for parity; `saas_anthropic_seats` is a cash-detail row excluded from
+both flags, not a second all-in charge. Do not blindly sum all ledger rows:
+measured fees and subscription estimates, cash and modelled Modulate, and
+excluded detail intentionally coexist. Sum the membership flags instead.
+
+Stripe subscription estimate requires all seven fee/volume days and a Stripe
+MRR snapshot: `sum(fee)/sum(volume) * sum(mapped MRR)/30.44`. Its note records
+that the snapshot is not historical MRR. Pinecone and the agent-tooling cap
+come from the projected basis. No availability fallback invents vendor dollars.
+A successful Anthropic report, including an empty zero report, writes measured
+zero days. A failed required pull aborts before load, leaving no new run rows.
+OpenAI 429 retries once per page, honoring numeric or HTTP-date `Retry-After`
+(default 20 seconds), then fails normally. Optional-pull `WARNING:` lines reach
+Cloud Logging through both subprocess layers.
+
+### Deploy-owner checklist (not executed by this PR)
+
+1. Dispatch existing `.github/workflows/gcp_finops_unit_cost_job.yml` with
+   `environment=development`, `branch=<PR head>`, `run_after_deploy=false` and
+   `provision_scheduler=false`. Check the existing image smoke/identity checks.
+   Do not execute the development job against production sources to smoke this
+   additive table. Use offline replay below for the data path.
+2. After review/merge and separate deploy authorization, dispatch that same
+   workflow with `environment=prod`, `branch=main`, `run_after_deploy=false`.
+   Keep the existing scheduler/identity. Record workflow run ID, deployed image
+   digest/source SHA, and one new ledger row's run ID after execution.
+3. Backfill **2026-10-01 through the UTC D-2 frontier**, oldest first. The new
+   `FINOPS_BACKFILL_FROM=2026-10-01` loops at most 45 dates, each with its existing
+   lease; it is mutually exclusive with `FINOPS_DATE`. Existing successful
+   leases remain valid for six hours: wait for expiry rather than removing
+   another execution's lock. Failures stop the loop and release that date's
+   lease. Retries skip still-owned dates only after verifying a matching settled
+   billing-spend run and unit-cost total. An active lease without verified
+   completion returns nonzero, including when completion discovery fails, so a
+   contending backfill cannot report a hole as success.
+
+   The existing job has a **3600-second task timeout**. For a long single
+   backfill, the deploy owner must first select a sufficient bounded task
+   timeout (Cloud Run supports a longer job timeout); per-date pull timeout
+   remains 3600 seconds. Alternatively, keep the job configuration unchanged
+   and execute one settled `FINOPS_DATE` at a time, or use <=7-day local windows
+   with `run_unit_cost.py --backfill-from <start> --date <end> --load` under the
+   existing finops-writer path. These are deploy-owner actions, never ro-prod
+   operations. Daily artifacts live in container memory; use per-date executions
+   for a memory-bounded backfill if retaining the existing 2 GiB job limit.
+4. Remove `FINOPS_BACKFILL_FROM` / `FINOPS_DATE` and restore any temporary timeout
+   before resuming the unchanged daily scheduler. Check all dates are present,
+   partition/cluster schema, optional skips, and reconciliation output.
+5. Run the **read-only** parity gate as ro-prod (no user rows):
+
+   ```bash
+   source ~/.local/bin/gcp-agent-env.sh ro-prod
+   export CLOUDSDK_CORE_ACCOUNT=read-only-bot-account@based-hardware.iam.gserviceaccount.com
+   python3 backend/scripts/finops/verify_spend_parity.py
+   python3 backend/scripts/finops/verify_spend_parity.py --print-query
+   bq show --format=prettyjson based-hardware:omi_finops.spend_daily
+   ```
+
+The checker SELECT groups only the ledger's 2026-11-04 aggregate rows. It
+asserts duplicate keys and unsettled rows are absent, component totals agree
+to $1, and `stt_modulate_modelled` has **no row**. Expected figures are in
+`verify_spend_parity.EXPECTED`: GCP ex-Vertex 1680.85; Vertex/Gemini 328.68;
+OpenAI 295.68; Soniox 8.25; Modulate cash 200; SaaS 750.50; fees 281.84;
+infra 3.41. These sum to **3549.21**, not the plan's screenshot-derived 3543;
+the all-in gate uses the explicit component sum +/- $2. A nonzero actual
+Anthropic cost_report can legitimately fail this fixed historical total and
+must be reconciled against the real pull, never changed to zero to pass.
+
+Offline replay, with no credentials:
+
+```bash
+python3 backend/scripts/finops/assemble_spend_daily.py \
+  backend/tests/unit/fixtures/finops/spend_2026_11_04 /path/on/scratch/spend-replay \
+  2026-11-04 2026-11-04 --settled-through 2026-11-04
+python3 backend/scripts/finops/verify_spend_parity.py \
+  --fixture /path/on/scratch/spend-replay/spend_daily.json
+```
+
+The fixture README distinguishes reported aggregates from synthetic daily
+coverage/rate inputs. This is offline arithmetic parity, not production
+backfill acceptance. No meter or Omi TV reader ships in PR1.
+
+Rollback: redeploy the previous job image (or revert the producer integration
+and matching gap-fill discovery join). Existing readers and sibling-table
+schemas stay intact. Leave the additive ledger tables for diagnosis; optional
+table deletion is a separately authorized deploy-owner operation. Do not drop
+the table while new gap-fill discovery still references it.

@@ -30,6 +30,8 @@ from collections import Counter
 from difflib import SequenceMatcher
 from typing import Optional
 
+from utils.sync.occurrence_alignment import OccurrenceMatch, aligned_occurrence_indices
+
 MAX_MIDPOINT_DISTANCE_SECONDS = 1800.0
 MAX_INCOMING_SEGMENTS = 64
 MAX_LIVE_SEGMENTS = 4096
@@ -377,6 +379,9 @@ def drop_covered_repeats(
     live_pinned: bool,
     verified_capture_indices: frozenset[int] = frozenset(),
     require_capture_proof: bool = True,
+    incoming_limit: int = MAX_INCOMING_SEGMENTS,
+    midpoint_distance_seconds: float = MAX_MIDPOINT_DISTANCE_SECONDS,
+    require_occurrence_alignment: bool = False,
 ) -> tuple[list[dict], dict]:
     """Return (kept incoming segments, drop report) for one bound intake.
 
@@ -388,6 +393,8 @@ def drop_covered_repeats(
     aggregation; nothing here mutates the inputs. Stored donor consolidation may
     explicitly set ``require_capture_proof=False`` to use the same lexical rule
     when WAL context is unavailable. The incoming default remains proof-gated.
+    Long stored pools additionally require an unambiguous placed occurrence;
+    local lexical proximity alone never authorizes their unproved drops.
     """
     if (require_capture_proof and not verified_capture_indices) or len(live_segments) > MAX_LIVE_SEGMENTS:
         return list(incoming_segments), _zero_report()
@@ -405,14 +412,21 @@ def drop_covered_repeats(
         live_index.append((midpoint, bounds, segment))
     live_index.sort(key=lambda item: (item[0], item[1][0], item[1][1], item[2].get('text') or ''))
     midpoints = [item[0] for item in live_index]
+    live_phrases: dict[tuple[str, ...], list[tuple[float, float]]] = {}
+    if require_occurrence_alignment:
+        for _, bounds, segment in live_index:
+            live_phrases.setdefault(tuple(_tokens(segment.get('text') or '')), []).append(bounds[:2])
 
     kept: list[dict] = []
     dropped_seconds = 0.0
     methods: list[str] = []
     dropped_count = 0
     evaluated = 0
+    occurrence_options: dict[int, list[OccurrenceMatch]] = {}
+    occurrence_signatures: dict[int, tuple[tuple[str, ...], float | None]] = {}
+    deferred: set[int] = set()
     for index, segment in enumerate(incoming_segments):
-        if index >= MAX_INCOMING_SEGMENTS:
+        if index >= min(incoming_limit, MAX_LIVE_SEGMENTS):
             kept.append(segment)
             continue
         if require_capture_proof and index not in verified_capture_indices:
@@ -421,6 +435,8 @@ def drop_covered_repeats(
         evaluated += 1
         span = incoming_speech_span(segment)
         text = segment.get('text') or ''
+        if require_occurrence_alignment and len(text) <= MAX_CHARS:
+            occurrence_signatures[index] = (tuple(_tokens(text)), None if span is None else sum(span) / 2)
         if span is None or len(text) > MAX_CHARS:
             kept.append(segment)
             continue
@@ -433,8 +449,21 @@ def drop_covered_repeats(
         if not math.isfinite(midpoint):
             kept.append(segment)
             continue
-        low = bisect_left(midpoints, midpoint - MAX_MIDPOINT_DISTANCE_SECONDS)
-        high = bisect_right(midpoints, midpoint + MAX_MIDPOINT_DISTANCE_SECONDS)
+        if (
+            require_occurrence_alignment
+            and index not in verified_capture_indices
+            and sum(
+                abs(bounds[0] - span[0]) <= midpoint_distance_seconds
+                or abs(sum(bounds) / 2 - midpoint) <= midpoint_distance_seconds
+                for bounds in live_phrases.get(tuple(tokens), [])
+            )
+            > 1
+        ):
+            kept.append(segment)
+            continue
+        distance_limit = min(midpoint_distance_seconds, MAX_MIDPOINT_DISTANCE_SECONDS)
+        low = bisect_left(midpoints, midpoint - distance_limit)
+        high = bisect_right(midpoints, midpoint + distance_limit)
         if high - low > MAX_CANDIDATE_SEGMENTS:
             kept.append(segment)
             continue
@@ -469,13 +498,16 @@ def drop_covered_repeats(
         incoming_protected = _protected(tokens)
         incoming_trigrams = _trigrams(tokens)
         eligible = []
+        align_occurrence = require_occurrence_alignment and index not in verified_capture_indices
         for parts, window_tokens in windows:
             window_start, window_end = parts[0][1][0], parts[-1][1][1]
             window_duration = _duration((window_start, window_end))
             if not math.isfinite(window_duration) or window_duration <= 0:
                 continue
             ratio = incoming_duration / window_duration
-            if not math.isfinite(ratio) or not DURATION_RATIO_MIN <= ratio <= DURATION_RATIO_MAX:
+            if not math.isfinite(ratio) or (
+                not align_occurrence and not DURATION_RATIO_MIN <= ratio <= DURATION_RATIO_MAX
+            ):
                 continue
             window_substantive = Counter(_substantive(window_tokens))
             if any(window_substantive[token] < count for token, count in incoming_substantive.items()):
@@ -488,7 +520,13 @@ def drop_covered_repeats(
             window_text = ' '.join(part[2].get('text') or '' for part in parts)
             eligible.append((distance, window_start, window_end, window_text, window_tokens, parts))
         eligible.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
+        if align_occurrence and (
+            len(eligible) > MAX_WINDOWS_EVALUATED or segment.get('audio_alignment') not in {None, 'placed'}
+        ):
+            kept.append(segment)
+            continue
         matched = None
+        occurrences = []
         for distance, window_start, window_end, window_text, window_tokens, parts in eligible[:MAX_WINDOWS_EVALUATED]:
             matched_blocks = SequenceMatcher(None, window_tokens, tokens, autojunk=False).get_matching_blocks()
             covered = sum(block.size for block in matched_blocks)
@@ -497,14 +535,47 @@ def drop_covered_repeats(
                 or covered / len(window_tokens) < COVERAGE_CANDIDATE_RATIO
             ):
                 continue
-            matched = parts
-            break
+            duration_consistent = (
+                DURATION_RATIO_MIN <= incoming_duration / (window_end - window_start) <= DURATION_RATIO_MAX
+            )
+            if align_occurrence:
+                occurrences.append(
+                    OccurrenceMatch(
+                        span[0],
+                        span[1],
+                        window_start,
+                        window_end,
+                        frozenset(id(part[2]) for part in parts),
+                        duration_consistent
+                        and all(part[2].get('audio_alignment') in {None, 'placed'} for part in parts),
+                        tokens == window_tokens,
+                    )
+                )
+            if duration_consistent and matched is None:
+                matched = parts
+            if not align_occurrence:
+                break
+        if align_occurrence and occurrences:
+            occurrence_options[index] = occurrences
+            deferred.add(index)
+            kept.append(segment)
+            continue
         if matched is None:
             kept.append(segment)
             continue
         dropped_count += 1
         dropped_seconds += incoming_duration
         methods.append('source_frame_lexical' if index in verified_capture_indices else 'lexical')
+    if deferred:
+        aligned = aligned_occurrence_indices(occurrence_options, occurrence_signatures)
+        excluded = {id(incoming_segments[index]) for index in aligned}
+        kept = [segment for segment in kept if id(segment) not in excluded]
+        for index in sorted(aligned):
+            span = incoming_speech_span(incoming_segments[index])
+            if span is not None:
+                dropped_seconds += span[1] - span[0]
+        dropped_count += len(aligned)
+        methods.extend(['lexical'] * len(aligned))
     report = {
         'dropped_seconds': dropped_seconds,
         'dropped_segments': dropped_count,

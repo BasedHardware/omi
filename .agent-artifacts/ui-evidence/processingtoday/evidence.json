@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-today-before.png",
+      "platform": "mobile-ios",
+      "description": "home today before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-today-after.png",
+      "platform": "mobile-ios",
+      "description": "home today after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-home-past-before.png",
+      "platform": "mobile-ios",
+      "description": "home past before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-home-past-after.png",
+      "platform": "mobile-ios",
+      "description": "home past after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-activity-processing-before.png",
+      "platform": "mobile-ios",
+      "description": "activity processing before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-activity-processing-after.png",
+      "platform": "mobile-ios",
+      "description": "activity processing after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-activity-empty-before.png",
+      "platform": "mobile-ios",
+      "description": "activity empty before. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-activity-empty-after.png",
+      "platform": "mobile-ios",
+      "description": "activity empty after. Real Flutter widgets, iOS theme and SF Pro fixtures; before uses HOME_STEP_PROJECTION rollback behavior.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-episode-owner-before.png",
+      "platform": "mobile-ios",
+      "description": "Episode membership before the episode fetch, before. Before omits the previously unparsed episode_id; after keeps both recordings inside their episode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-episode-owner-after.png",
+      "platform": "mobile-ios",
+      "description": "Episode membership before the episode fetch, after. Before omits the previously unparsed episode_id; after keeps both recordings inside their episode.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-home-failed-before.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on home, before; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-home-failed-after.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on home, after; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-activity-failed-before.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on activity, before; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-ios-activity-failed-after.png",
+      "platform": "mobile-ios",
+      "description": "Relay 9e09f1: failed conversation on activity, after; switch off restores prior Home placement, on shows Activity retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-web-home-failed-after.png",
+      "platform": "web",
+      "description": "Real web FolderTabs and ConversationGallery with confirmed admission: failed row absent from All.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-web-activity-failed-after.png",
+      "platform": "web",
+      "description": "Real web Activity tab and ConversationTile: failed projection has Retry.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-desktop-macos-home-failed-after.png",
+      "platform": "desktop-macos",
+      "description": "Real SwiftUI HomeFailuresMovedState used by ConversationsPage: failed-only Home has Activity link.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-desktop-macos-activity-failed-after.png",
+      "platform": "desktop-macos",
+      "description": "Real SwiftUI FailedConversationsActivitySection used by ActivityHubTab: failure and Try Again.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-notes-case-010.png",
+      "platform": "mobile-ios",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-notes-case-011.png",
+      "platform": "mobile-ios",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-ios-notes-case-012.png",
+      "platform": "mobile-ios",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-web-notes-case-010.png",
+      "platform": "web",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-web-notes-case-011.png",
+      "platform": "web",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-web-notes-case-012.png",
+      "platform": "web",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "025-desktop-macos-notes-case-010.png",
+      "platform": "desktop-macos",
+      "description": "Case 010: Notes failure with retained outputs, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "026-desktop-macos-notes-case-011.png",
+      "platform": "desktop-macos",
+      "description": "Case 011: Notes failure with action items kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "027-desktop-macos-notes-case-012.png",
+      "platform": "desktop-macos",
+      "description": "Case 012: Notes failure with events kept, shown once in Activity Needs attention with Re-run notes through the server ledger. Synthetic fixtures; saved outputs are unchanged.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ],
+  "captured_at_utc": "2026-11-10T13:10:14.224870+00:00",
+  "method": "Real Flutter page RepaintBoundary; real web tabs/gallery/tiles via hermetic headless Chromium; native production SwiftUI components via ImageRenderer. Synthetic fixtures, real fonts, no remote backend."
+}

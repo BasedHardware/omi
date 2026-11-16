@@ -141,3 +141,43 @@ def test_local_upload_refuses_source_outside_owned_roots(monkeypatch, tmp_path):
     allowed.write_bytes(b'profile')
     blob.upload_from_filename(str(allowed))
     assert blob.download_as_bytes() == b'profile'
+
+
+@pytest.mark.parametrize('finish', [True, False])
+def test_resumable_session_survives_client_restart_and_is_terminal(tmp_path, finish):
+    client = LocalStorageClient(tmp_path)
+    blob = client.bucket('lake').blob('owner/transcript')
+    blob.metadata = {'stamp': 'original'}
+    uri = blob.create_resumable_upload_session(
+        content_type='application/octet-stream', size=7, if_generation_match=0, timeout=(1, 1), retry=None
+    )
+    assert not blob.exists()
+    status_headers = {'Content-Length': '0', 'Content-Range': 'bytes */*'}
+    restarted = LocalStorageClient(tmp_path)
+    assert restarted._http.request('PUT', uri, headers=status_headers).status_code == 308
+    if finish:
+        blob.metadata = {'stamp': 'changed after initiation'}
+        assert restarted._http.request('PUT', uri, data=b'payload').status_code == 200
+        current = restarted.bucket('lake').blob(blob.name)
+        current.reload()
+        assert current.metadata == {'stamp': 'original'}
+        assert current.download_as_bytes() == b'payload'
+        current.delete()
+    for _ in range(2):
+        restarted._http.request('DELETE', uri)
+        assert restarted._http.request('PUT', uri, headers=status_headers).status_code == (200 if finish else 499)
+        assert 400 <= restarted._http.request('PUT', uri, data=b'payload').status_code < 500
+        assert not blob.exists()
+    assert not list(restarted.bucket('lake').list_blobs())
+
+
+def test_two_sessions_finalize_with_generation_zero_precondition(tmp_path):
+    client = LocalStorageClient(tmp_path)
+    blob = client.bucket('lake').blob('owner/transcript')
+    kwargs = dict(content_type='application/octet-stream', size=7, if_generation_match=0, timeout=(1, 1), retry=None)
+    one = blob.create_resumable_upload_session(**kwargs)
+    two = blob.create_resumable_upload_session(**kwargs)
+    assert one != two
+    assert client._http.request('PUT', one, data=b'payload').status_code == 200
+    assert client._http.request('PUT', two, data=b'changed').status_code == 412
+    assert blob.download_as_bytes() == b'payload'

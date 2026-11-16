@@ -16,6 +16,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 import '../support/typed_conversation_screen.dart';
 
 class _ThrowingInitialConversations extends ConversationProvider {
@@ -224,11 +225,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 50));
         expect(find.text(a.structured.title), findsNothing);
         expect(find.text(b.structured.title), findsNothing);
-        if (elapsed + const Duration(milliseconds: 50) >= const Duration(milliseconds: 500)) {
-          expect(find.text('Finishing up…'), findsOneWidget, reason: 'the 500 ms cap paints a neutral hold');
-        } else {
-          expect(find.text('Finishing up…'), findsNothing, reason: 'nothing paints before the join deadline');
-        }
+        // The skeleton holds through the whole join; no second loader replaces it.
+        expect(find.byType(ShimmerWithTimeout), findsWidgets);
+        expect(find.text('Finishing up…'), findsNothing);
       }
       overlay.complete(
         ApiSuccess(
@@ -250,7 +249,9 @@ void main() {
       );
       await tester.pump();
       await tester.pump();
-      expect(find.text('Finishing up…'), findsOneWidget);
+      expect(find.byType(ShimmerWithTimeout), findsNothing);
+      // The joined episode row, still waiting for its summary.
+      expect(find.text('Processing…'), findsOneWidget);
       expect(find.text(a.structured.title), findsNothing);
       expect(find.text(b.structured.title), findsNothing);
       final paints = tester.allWidgets.where((w) => w.key == const Key('home_processing_row')).length;
@@ -327,7 +328,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text(a.structured.title), findsNothing, reason: 'a failed read is not ready membership');
       expect(find.text(b.structured.title), findsNothing);
-      if (i >= 6) expect(find.text('Finishing up…'), findsOneWidget);
+      expect(find.byType(ShimmerWithTimeout), findsWidgets, reason: 'the skeleton holds through the retry');
     }
     expect(reads, 2, reason: 'retry once while keeping first paint joined');
     retry.complete(ApiSuccess(EpisodePageRead(enabled: true, episodes: [
@@ -563,13 +564,14 @@ void main() {
       for (var i = 0; i < (earlyMillis == 300 ? 3 : 6); i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(find.text('Finishing up…'), earlyMillis == 300 ? findsNothing : findsOneWidget);
+      expect(find.byType(ShimmerWithTimeout), findsWidgets, reason: 'the skeleton is the only loading state');
+      expect(find.text('Finishing up…'), findsNothing);
       expect(find.text(row.structured.title), findsNothing);
       expect(reads, earlyMillis == 300 ? 2 : 3, reason: 'startup retries are bounded and leave with Home');
       if (earlyMillis == 0) {
         await tester.pump(const Duration(milliseconds: 1500));
         await tester.pump();
-        expect(find.text('Finishing up…'), findsNothing);
+        expect(find.byType(ShimmerWithTimeout), findsNothing);
         expect(find.text(row.structured.title), findsOneWidget, reason: 'persistent failure cannot block Home forever');
       }
       await tester.pumpWidget(const SizedBox.shrink());

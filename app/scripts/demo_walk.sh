@@ -154,7 +154,7 @@ trap cleanup EXIT
   OMI_DEMO_WALK="$walk" \
   OMI_DEMO_WALK_MARKER="$marker" \
   ${hold:+OMI_DEMO_WALK_HOLD_MS="$hold"} \
-    flutter test -d "$device" --flavor dev integration_test/visual_audit/demo_walk_test.dart --reporter expanded
+    flutter test -d "$device" --flavor dev --dart-define="OMI_DEMO_WALK=$walk" integration_test/visual_audit/demo_walk_test.dart --reporter expanded
 ) >"$log" 2>&1 &
 test_pid=$!
 
@@ -167,7 +167,7 @@ echo "Waiting for the walk to start (a cold iOS build can take a long time)"
 ready=0
 # 40 minutes. A first dev-flavor simulator build (pods + compile) often exceeds 10.
 for _ in $(seq 1 4800); do
-  if grep -q DEMO_WALK_READY "$marker" || grep -q "demo walk " "$log"; then
+  if grep -q DEMO_WALK_READY "$marker" || grep -Fq "demo walk $walk" "$log"; then
     ready=1
     break
   fi

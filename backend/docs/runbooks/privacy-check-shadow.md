@@ -32,7 +32,9 @@ version, conversation existence/ownership/privacy/redirect fields, conversation
 tombstones, and privacy epoch/purge state. This includes dynamic payloads,
 field transforms and deletes. Metadata-only updates with an exists precondition
 are excluded when they cannot change the decision. Full-row `snapshots=`
-consumers always read live, including episode and recorded-time metadata.
+consumers (`database.batch_pipeline_projection_session`, intake, retention,
+custody) read live unless the owner memo serves the decision; see the owner-memo
+section for the partial export that can produce.
 
 Each cached decision re-reads the durable token and checks its server revision,
 including nanoseconds. Missing or malformed tokens/revisions cause live reads.
@@ -74,11 +76,67 @@ absence. `record_deletion` invalidates it. These hints remain bounded to 30
 seconds and never authorize reuse without the durable token. No deletion TTL
 cap is raised. Per-session memo entries on listen/pusher are bounded and closed
 on teardown; late executor leaves cannot reuse a closed holder.
-The new negative families use a fixed managed-deployment ceiling of 30 seconds;
+The older `fsr_read_cache` hints behind `tombstone_negative_cache` and
+`legal_hold_fence_cache` use a fixed managed-deployment ceiling of 30 seconds;
 their TTL environment names are not deployment tuning knobs. Optional local
-overrides can only shorten that ceiling. Rollouts use the declared reader levers.
+overrides can only shorten that ceiling. This is separate from the WQ26
+token-certified process-local negative LRU below, whose second bound is 60
+seconds. Rollouts use each family's declared reader levers.
 
 ## Measurement
+
+### Token-fenced negative lookups (omi-pipeline, owner lead2)
+
+`privacy_negative_lookup_cache` uses the existing 0–100 percent cohorts. Zero
+is the kill switch. `privacy_checks_shadow` selects shadow mode within that same
+new-lever
+cohort: every lookup stays live, and generation-memo hits are bypassed so the
+walk supplies comparisons. With the new lever at 0, existing decision shadow
+behavior remains unchanged. No second new lever is introduced. The new lever
+replaces retired `batch_privacy_memoize` one-for-one (lead2 ruling 258db3 (03)).
+Its class, caller plumbing, memo-only replay assertions and deployment literals
+are removed. The shared env registry/flag-budget slot remains
+`FIRESTORE_READ_LEVERS`; individual levers have no separate budget entry.
+No cache cohort is enabled by this PR. Runtime config changes only remove the
+retired key, including the worker's former 100% value.
+This is independent of `privacy_ttl60` and its Firestore kill document; it never
+touches Redis or seeds an older deletion-marker cache.
+
+Only real NOT_FOUND reads of `account_deletions/{uid}`, per-ID conversation
+tombstones and conversations can seed the process-local 50,000-entry LRU.
+Entries expire at 60 seconds, measured before the authoritative read, and
+carry the client's plane, owner, exact document path and token/server revision.
+Every reuse requires an uncached token read in the same authorizing transaction.
+Malformed/missing/blocked tokens, nontransactional calls and full-row exports
+stay live. The retired WQ12 snapshot memo cannot seed or certify these hints.
+Metadata-only conversation creates/upserts rotate the token too; existing-only
+updates may skip rotation only when they cannot change privacy authority.
+Legal-hold writes rotate the token, but hold adjudication remains in the
+existing legal-hold fence; the batch walk does not introduce a new hold policy.
+
+`privacy_negative_lookup_total{collection,mode,result}` has bounded collection
+labels (`account_deletions`, `deleted_conversations`, `conversations`, `other`),
+mode `shadow|enforce`, result `hit|miss|mismatch`. A shadow hit is a compared
+candidate NOT_FOUND; a live document is always a mismatch, even within TTL.
+The denominator for qualification is shadow **hits**, not cold misses. Both
+Cloud Run keep-lists retain it; GKE PodMonitoring retains application counters
+without a name keep-list. The GPU worker registers the counter on its private
+metrics registry, and its pod parent merges each child's series with a
+`worker_process` label. Isolated sync workers fold the counter across exits.
+
+Proposed ramp after the lead verifies writer-fence coverage on every plane:
+hour 0–2 set `privacy_negative_lookup_cache:100` and `privacy_checks_shadow:100`
+(shadow only, no enforcement); require zero mismatches on at least
+10,000 shadow hits with every serving plane represented and no scrape gaps.
+Hours 2–4 enforce 10%, hours 4–6 enforce 50%, hour 6 onward enforce 100%,
+only after the preceding two-hour window stays clean. Set existing `privacy_checks_shadow:10` during enforcement
+(shadow wins overlapping cohorts; its samples do not enforce). Lead2 owns each advancement;
+insufficient samples extend the window rather than advancing by the clock.
+Any mismatch stops the ramp: set enforcement to 0 (and existing `privacy_checks_shadow` to 0 for an exact
+original read path), investigate the writer bypass, and requalify from shadow.
+Compare absolute caller reads and cache hits against each plane's own baseline.
+This schedule covers token-fenced lookup hints; the decision-cache family's
+qualification window below remains separate.
 
 All labels are closed enums with no owner, conversation, job or session IDs.
 Point reads retain their historical SDK caller labels through a closed privacy
@@ -89,8 +147,8 @@ use the separate live/shadow counters when measuring the live decision path.
 | Metric | Meaning |
 | --- | --- |
 | `privacy_check_calls_total{family,mode}` | Calls, including invalid inputs and nested fences |
-| `privacy_checks_total{family,mode,reason}` | Allow/block/error decisions |
-| `privacy_check_reads_total{family,mode,result}` | Issued point reads, hit/miss/error |
+| `privacy_checks_total{family,mode,reason,plan_group}` | Allow/block/error decisions |
+| `privacy_check_reads_total{family,mode,result,plan_group}` | Issued point reads, hit/miss/error |
 | `privacy_conversations_walked_total{mode}` | Distinct conversation nodes walked per check |
 | `privacy_session_cycle_operations{plane,family,mode,kind}` | Completed 60-second intervals: listen after bootstrap; pusher from websocket entry, including bootstrap |
 | `privacy_shadow_checks_total{family,result}` | Match/mismatch/error denominator |
@@ -106,6 +164,59 @@ Unresolved shadow errors or missing candidate coverage block qualification.
 Compare each plane against its own lifecycle baseline; pusher's first complete
 interval includes setup checks, while listen resets its census after bootstrap.
 
+### Owner-level decision memo (candidate on; enforcement admission off)
+
+SCA-2190 re-land: candidates remain on (`bpp_owner_memo:100`), but serving an owner memo also requires the separate `bpp_owner_memo_enforce` admission lever (default 0). Old, missing or malformed config therefore cannot admit a new image to owner enforcement. This packet explicitly keeps admission at 0; only the cost lead may authorize a later reviewed config change after qualification. One entry per (client, uid) holds the
+token version, generation, the conversation-id union a walk certified and the
+user sync default. Every use re-reads the token in the caller's transaction and
+requires token, server revision and generation to match; ids outside the
+certified union are walked live in that transaction; BLOCK is never stored; the
+kill switch `ops_kill_switches/privacy_decision_cache` is consulted before every
+served decision. `privacy_ttl60` stays off and is not used here.
+
+A served decision exports no rows for ids the entry has already certified.
+Unseen ids are walked live and their rows ARE exported, so a `snapshots=`
+caller can receive a partial export; the projection, intake, retention and
+custody consumers read any row they still need themselves.
+
+Shadow window to run before any owner-memo enforcement admission:
+
+- Keep `bpp_owner_memo:100` and `bpp_owner_memo_enforce:0`; set
+  `privacy_checks_shadow:10`, `privacy_negative_lookup_cache:0`, and `privacy_ttl60:0`.
+  Clearing shadow alone NEVER admits this memo: the enforcement gate stays off.
+- For the sampled 10% of uids every transactional batch check serves the LIVE
+  decision and then compares an owner-memo candidate. That covers all three
+  previously unshadowed shapes: attempt-scoped calls, the store/retention
+  `no_attempt` calls and the `snapshots=` callers (projection, intake). Gating
+  shadow on an attempt, or skipping export callers, would leave those paths
+  enforcing with no comparison and a zero `stale_allow` there would be
+  structural, not evidence.
+- The candidate receives a throwaway export dict, so a comparison can never
+  publish rows or perturb the caller's export.
+- Unsampled uids do not enforce either: while any `privacy_checks_shadow`
+  percentage is set, the owner memo serves no one, so the unsampled cohort
+  serves plain live decisions (baseline reads, no memo saving) until the
+  lever clears. Nothing the comparison cohort has not validated serves a
+  decision during the window. Nontransactional provider-STT preflight stays
+  live and never enters the memo path (no transaction); it is live by
+  construction in every stage, so no later lever or stage enforces the memo
+  there. The already-shipped attempt-scoped id-set memo keeps its existing
+  levers and behavior throughout; it is not part of this release's change.
+- The negative lookup cache must stay off for the window: with it on,
+  `negative_shadow` wins and the memo neither enforces nor compares.
+- Gate: `privacy_decision_mismatch_total{family="batch",reason="stale_allow"}`
+  is zero and `privacy_shadow_checks_total{family="batch",result="mismatch"}`
+  is zero, with `candidate_source="owner_hit"` comparisons observed on every
+  shape above. A zero comparison count is not evidence: it means the negative
+  cache is still on or the window is not set.
+- Read cost: the window saves nothing. Sampled uids roughly double their reads
+  — a cold owner pays the live walk plus the candidate walk, a warm owner pays
+  the live walk plus one candidate token read, and every sampled check adds
+  one observation token read. Snapshot callers add per-new-id reads on
+  candidate misses. The unsampled cohort returns to baseline live reads. At
+  10% sampling that is about +0.5 read per check across the fleet, plus the
+  baseline (no-saving) reads for the unsampled 90% until the window ends.
+
 ## Deploy and ramp
 
 1. Lead deploys writer code: **listen → pusher → Cloud Run** (backend,
@@ -117,8 +228,9 @@ interval includes setup checks, while listen resets its census after bootstrap.
    Staging/migration tools are not authority to enable production caching.
 2. Record each slice's pre-ramp live read baseline. Enable
    `privacy_checks_shadow` for the sampled cohorts, then all planes. The memo
-   candidate runs **after** live allow/block, never changes it and never exports
-   snapshots. Shadow wins if an enforcement lever is also present.
+   candidate runs **after** live allow/block, never changes it and never writes
+   to the caller's export (it gets a throwaway copy). Shadow wins if an
+   enforcement lever is also present.
 3. Require **at least 14 days** of all-plane shadow and **zero unexplained
    `privacy_decision_mismatch_total`**, plus the emulator writer matrix and privacy contracts.
    Count/classify benign concurrent ordering rather than discarding it. Grade

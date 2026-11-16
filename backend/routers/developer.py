@@ -99,6 +99,8 @@ from utils.observability.firestore_request_reads import ReadComponent, read_comp
 from utils import external_list_reads as external_lists
 from utils import external_polling_cache as polling_cache
 from utils.developer_item_reads import read_conversation_item
+from utils.conversations import transcribing_hold
+from config.episodes import home_transcription_presentation_gate_enabled
 from utils.mcp_server.handlers.conversations import conversation_cards_page_core
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import conversation_participants
@@ -1351,17 +1353,16 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not folder or not folder.get('id'):
+        if not folder or not folder.id:
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            DeveloperFolder.model_validate(folder)
-            valid_folders.append(folder)
+            DeveloperFolder.model_validate(folder.model_dump(exclude_unset=True))
+            valid_folders.append(folder.model_dump(exclude_unset=True))
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
-                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
+                f"Skipping invalid folder doc {folder.id} for uid {uid}: " f"missing/invalid fields {invalid_fields}"
             )
             continue
     return valid_folders
@@ -1535,7 +1536,11 @@ def get_conversations(
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
         budget = external_lists.developer_conversation_offset_budget(request, response, offset, auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not home_transcription_presentation_gate_enabled()
+            else None
+        )
         if cached is not None:
             status = 200
             returned_count = len(json.loads(bytes(cached.body)))
@@ -1554,7 +1559,13 @@ def get_conversations(
                     end_dt=end_date,
                     categories=[c.value for c in category_list],
                     cursor_kind="developer_conversations",
-                    extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                    extra_field_paths=[
+                        "structured",
+                        "source",
+                        "geolocation",
+                        "folder_id",
+                        *transcribing_hold.READ_FIELDS,
+                    ],
                     **budget_kwargs,
                 )
             except ToolExecutionError as exc:
@@ -1570,6 +1581,7 @@ def get_conversations(
                 limit + 1,
                 offset,
                 include_discarded=False,
+                presentation=True,
                 statuses=["completed"],
                 start_date=start_date,
                 end_date=end_date,
@@ -1594,6 +1606,7 @@ def get_conversations(
         # Filter out locked conversations completely
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
 
+        unlocked_conversations = [transcribing_hold.project(row) for row in unlocked_conversations]
         for conv in unlocked_conversations:
             conv.update(conversation_participants(conv, include_display=False))
             conv['transcript_included'] = include_transcript

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 from typing import Any, Callable, Mapping, Optional, TypedDict
 
 from database import user_usage as user_usage_db
@@ -34,6 +35,25 @@ def billable_transcription_seconds(
     `held_seconds(start, end)` returns the wall-clock part of the window whose
     audio the STT cap held instead of transcribing; recovery meters it once.
     """
+    return int(
+        billable_transcription_window_seconds(
+            last_usage_record_timestamp,
+            last_audio_received_time,
+            current_time,
+            last_audio_resume_time,
+            held_seconds=held_seconds,
+        )
+    )
+
+
+def billable_transcription_window_seconds(
+    last_usage_record_timestamp: Optional[float],
+    last_audio_received_time: Optional[float],
+    current_time: float,
+    last_audio_resume_time: Optional[float] = None,
+    held_seconds: Optional[Callable[[float, float], float]] = None,
+) -> float:
+    """Unrounded exposure for leases; the hourly writer applies the same window's integer floor."""
     if not last_usage_record_timestamp:
         return 0
     billable_from = last_usage_record_timestamp
@@ -41,7 +61,7 @@ def billable_transcription_seconds(
         billable_from = last_audio_resume_time
     billable_until = min(current_time, last_audio_received_time or current_time)
     held = held_seconds(billable_from, billable_until) if held_seconds is not None else 0
-    return max(0, int(billable_until - billable_from - held))
+    return max(0.0, billable_until - billable_from - held)
 
 
 def record_usage(
@@ -56,6 +76,7 @@ def record_usage(
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
     usage_metadata: Mapping[str, Any] | None = None,
+    allowance_operation: Any = None,
 ):
     """Record hourly usage without failing capture on an erasure-fence refusal."""
     now = datetime.now(timezone.utc)
@@ -102,6 +123,16 @@ def record_usage(
             reason='usage_root_missing' if isinstance(exc, UsagePublicationRootMissing) else 'usage_fence_blocked',
             outcome='degraded',
         )
+        return
+    if transcription_seconds > 0 or allowance_operation is not None:
+        from utils.stt.allowance_session import current
+
+        scope = allowance_operation if allowance_operation is not None else current.get()
+        if scope is not None and scope.uid == uid:
+            try:
+                scope.billed(transcription_seconds)
+            except Exception:
+                logging.getLogger(__name__).warning('event=free_allowance_lease decision=settlement_unavailable')
 
 
 def record_sync_v1_usage(uid: str, **usage: Any):

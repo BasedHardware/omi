@@ -301,6 +301,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   String? appleReminderId,
   int? sortOrder,
   int? indentLevel,
+  bool Function()? canSend,
 }) async {
   var requestBody = <String, dynamic>{};
 
@@ -340,6 +341,8 @@ Future<ActionItemWithMetadata?> updateActionItem(
     headers: {},
     method: 'PATCH',
     body: jsonEncode(requestBody),
+    canSend: canSend,
+    signOutOn401: canSend == null,
   );
 
   if (response == null) return null;

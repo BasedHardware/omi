@@ -8,6 +8,7 @@ outcomes stay shared by origin and cache paths.
 from fastapi import HTTPException
 from typing import Any, Callable
 from utils import external_polling_cache as polling_cache
+from utils.conversations import transcribing_hold
 
 
 def read_conversation_item(
@@ -55,6 +56,8 @@ def read_conversation_item(
 
         conversation.update(conversation_participants(conversation, include_display=False))
         conversation['transcript_included'] = include_transcript
+
+        conversation = transcribing_hold.project(conversation)
 
         # Remove transcript_segments if not requested
         if not include_transcript:

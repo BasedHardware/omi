@@ -173,9 +173,8 @@ def sdk_reference(reference_store, monkeypatch):
     return SimpleNamespace(store=store, calls=calls, clock=clock, state=state)
 
 
-@pytest.mark.parametrize('memo', [False, True])
-def test_reference_sdk_bounds_all_reads_including_privacy_and_cleanup(sdk_reference, monkeypatch, memo):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda lever, *_: memo and lever == 'batch_privacy_memoize')
+def test_reference_sdk_bounds_all_reads_including_privacy_and_cleanup(sdk_reference, monkeypatch):
+    monkeypatch.setattr(privacy, 'lever_enabled', lambda *_: False)
     budget = ArtifactReadBudget(101, 0, 0)
     reference = references.load_reference(sdk_reference.store, UID, 'unit-a', 'conversation', read_budget=budget)
     assert reference[0].segment_id == 'unit-a'

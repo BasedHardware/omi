@@ -78,7 +78,8 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 _BOOST_EXEMPT_DEFAULT = (
     "storefront:plans,import:upload,action_items:list,action_items:list_hot_client,static_map:get,"
     "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
-    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global,screen_task:gate,screen_task:gate_daily,users:budget_choice,"
+    "conversations:task-presence"
 )
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
@@ -91,6 +92,16 @@ _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_
 # ---------------------------------------------------------------------------
 
 RATE_POLICIES: dict[str, tuple[int, int]] = {
+    # Spaces device pulls and FCM refreshes permit paging bursts.
+    "spaces:changes": (600, 60),
+    # Cursor acknowledgements track device pull frequency.
+    "spaces:cursors": (600, 60),
+    # Full resync starts (including epoch restarts) are rare (425 recovery).
+    "spaces:snapshot": (30, 3600),
+    # 600 pages/min permits 300,000 rows/min at the 500-row page budget during a large resync.
+    "spaces:snapshot_page": (600, 60),
+    # User edits share the memories/action-items write class.
+    "spaces:mutations": (120, 3600),
     "users:surface_state": (60, 60),  # Multiple devices plus foreground transitions; metadata only.
     "users:budget_choice": (6, 60),  # Shared GET/PUT ceiling before monthly usage reads.
     # A plans sheet opens on user intent; bound accidental polling before provider reads.
@@ -109,6 +120,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:merge": (5, 3600),
     # Episodes: "Wrap up now" and Undo on a captured item; no model call.
     "episodes:write": (60, 3600),
+    "home:prepare": (12, 60),  # account-scoped idle preparation; three-call bursts
     # From-segments: on-device-STT upload path (segments already transcribed, so
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
@@ -213,6 +225,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "goals:extract": (30, 3600),
     # Search
     "conversations:search": (60, 3600),
+    # Batches only mounted rows (at most 100 IDs); canonical membership is
+    # short-lived/version-cached and contains no task content.
+    "conversations:task-presence": (120, 3600),
     # Expensive background ops
     "knowledge_graph:rebuild": (2, 3600),
     # Return-only SSOT extract for desktop onboarding / local graph writers
@@ -225,6 +240,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
     "users:ai_profile_synthesize": (8, 86400),
+    # Explicit backend-owned AI user profile refresh (Generate Now / Regenerate)
+    "users:ai_profile_refresh": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),

@@ -1988,6 +1988,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get memoryHistory => 'Istorija';
 
   @override
+  String get recordingWithYourPhone => 'Įrašoma telefonu';
+
+  @override
+  String get wrapUp => 'Užbaigti';
+
+  @override
+  String get recordingDiscarded => 'Įrašas atmestas';
+
+  @override
   String get undo => 'Atšaukti';
 
   @override
@@ -7034,6 +7043,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepavyko prisijungti su Apple, bandykite dar kartą.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prisijungti su Apple nepavyko. Bandykite dar kartą arba tęskite su Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepavyko gauti Firebase žetono, bandykite dar kartą.';
 
   @override
@@ -9182,6 +9195,24 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get unableToDetermineFirmwareVersion =>
       'Nepavyko nustatyti dabartinės programinės aparatinės įrangos versijos';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Taikyti dabartiniam planui';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kodas pritaikytas dabartiniam planui.',
+        'refused': 'Šio kodo pritaikyti negalima. Patikrinkite kodą ir reikiamą planą.',
+        'conflict': 'Kodas jau panaudotas arba jūsų planui jau taikoma nuolaida.',
+        'rateLimited': 'Per daug bandymų. Palaukite ir bandykite vėliau.',
+        'other': 'Kodo pritaikyti nepavyko. Bandykite dar kartą.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Reklamos kodas';
@@ -13407,6 +13438,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Turite Omi Pro kodą? Įveskite jį kitame ekrane.';
+
+  @override
   String get paywallTrialCancelNote => 'Atšaukti bet kada. Jokių mokesčių, jokių baudų.';
 
   @override
@@ -13674,6 +13708,9 @@ class AppLocalizationsLt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Kurti pastabas iš naujo';
 
   @override
   String get attentionSummaryFailed => 'Nepavyko apibendrinti šio pokalbio';
@@ -14843,6 +14880,22 @@ class AppLocalizationsLt extends AppLocalizations {
   String get episodeWritingNotes => 'Rašomos pastabos…';
 
   @override
+  String get homeStepTranscribing => 'Transkribuojama…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count įrašų',
+      many: '$count įrašo',
+      few: '$count įrašai',
+      one: '$count įrašas',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Pirmiausia baigiame transkripciją. Galite palikti šį puslapį.';
 
   @override
@@ -15384,7 +15437,140 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsų kortelė atmesta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atnaujinkite kortelę arba vėl naudokite $plan už $price per mėnesį';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atnaujinkite kortelę, kad vėl naudotumėte $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Yra susietų užduočių';
+
+  @override
+  String get hasTasksFilter => 'Su užduotimis';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pereiti prie mėnesinio';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per mėnesį';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Pakeičia neapmokėtą $yearly metinį mokestį. Atnaujinama kas mėnesį. Atšaukti galite bet kada.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Mokėjimas atmestas. Jūsų planas nepasikeitė.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Dabar mokate kas mėnesį';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šiandien sumokėta $price. Atnaujinama kas mėnesį.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Išnaudojote šio mėnesio $minutes min.';
+  }
+
+  @override
+  String get freeCapBody => 'Omi vis dar įrašinėja. Pasirinkite, kaip tęsti transkribavimą.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neribotas transkribavimas debesyje';
+
+  @override
+  String get freeCapProAccuracy => 'Didžiausias tikslumas';
+
+  @override
+  String get freeCapProWaiting => 'Transkribuoja laukiančius įrašus';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Nemokama. Lieka įjungta, kol perjungsite atgal.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkribuojama šiame telefone';
+
+  @override
+  String get getPro => 'Gauti Pro';
+
+  @override
+  String get unlock => 'Atrakinti';
+
+  @override
+  String get transcribeWith => 'Transkribuoti naudojant';
+
+  @override
+  String get omiCloud => 'Omi debesis';
+
+  @override
+  String get thisPhone => 'Šis telefonas';
+
+  @override
+  String get onDeviceReady => 'Paruošta';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Liko $left iš $limit min. · atsinaujina $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Galima $minutes debesies min.';
+  }
+
+  @override
+  String get switchBack => 'Grįžti';
+
+  @override
+  String get setUpThisPhone => 'Nustatykite šį telefoną';
+
+  @override
+  String get speechRecognition => 'Kalbos atpažinimas';
+
+  @override
+  String get audioStaysOnPhone => 'Garsas lieka jūsų telefone';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB atsisiuntimas';
+  }
+
+  @override
+  String get downloadNow => 'Atsisiųsti dabar';
+
+  @override
+  String get onWifiLater => 'Vėliau per Wi-Fi';
 }

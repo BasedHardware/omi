@@ -1988,6 +1988,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get recordingWithYourPhone => 'Снима се телефоном';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимак одбачен';
+
+  @override
   String get undo => 'Врати';
 
   @override
@@ -7034,6 +7043,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава са Apple, молим покушајте поново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Пријава преко Apple-а није успела. Покушајте поново или наставите са Google-ом.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преузимање firebase токена, молим покушајте поново.';
 
   @override
@@ -9177,6 +9190,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Примени на тренутни план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код је примењен на ваш тренутни план.',
+        'refused': 'Овај код није могуће применити. Проверите код и потребан план.',
+        'conflict': 'Код је већ искоришћен или ваш план већ има попуст.',
+        'rateLimited': 'Превише покушаја. Сачекајте и покушајте касније.',
+        'other': 'Код није примењен. Покушајте поново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -13393,6 +13424,9 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате Omi Pro код? Унесите га на следећем екрану.';
+
+  @override
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez penala.';
 
   @override
@@ -13660,6 +13694,9 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Поново генериши белешке';
 
   @override
   String get attentionSummaryFailed => 'Овај разговор није могуће сажети';
@@ -14828,6 +14865,21 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeWritingNotes => 'Пишемо белешке…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибујемо…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака',
+      few: '$count снимка',
+      one: '$count снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Прво завршавамо транскрипт. Можете напустити ову страницу.';
 
   @override
@@ -15369,7 +15421,140 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша картица је одбијена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте картицу или вратите $plan за $price месечно';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте картицу да бисте вратили $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има повезане задатке';
+
+  @override
+  String get hasTasksFilter => 'Са задацима';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Пређите на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замењује неплаћену годишњу наплату од $yearly. Обнавља се месечно. Откажите било када.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаћање је одбијено. Ваш план се није променио.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сада плаћате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Данас плаћено $price. Обнавља се месечно.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Искористили сте $minutes минута за овај месец';
+  }
+
+  @override
+  String get freeCapBody => 'Omi и даље снима. Изаберите како да наставите са транскрипцијом.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Неограничена транскрипција у облаку';
+
+  @override
+  String get freeCapProAccuracy => 'Најбоља тачност';
+
+  @override
+  String get freeCapProWaiting => 'Транскрибује ваше снимке на чекању';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Бесплатно. Остаје укључено док се не вратите.';
+
+  @override
+  String get transcribingOnThisPhone => 'Транскрипција на овом телефону';
+
+  @override
+  String get getPro => 'Узмите Pro';
+
+  @override
+  String get unlock => 'Откључај';
+
+  @override
+  String get transcribeWith => 'Транскрибуј помоћу';
+
+  @override
+  String get omiCloud => 'Omi облак';
+
+  @override
+  String get thisPhone => 'Овај телефон';
+
+  @override
+  String get onDeviceReady => 'Спремно';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Преостало $left од $limit мин · обнавља се $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Доступно $minutes минута у облаку';
+  }
+
+  @override
+  String get switchBack => 'Врати се';
+
+  @override
+  String get setUpThisPhone => 'Подесите овај телефон';
+
+  @override
+  String get speechRecognition => 'Препознавање говора';
+
+  @override
+  String get audioStaysOnPhone => 'Звук остаје на вашем телефону';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Преузимање $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Преузми сада';
+
+  @override
+  String get onWifiLater => 'Касније на Wi-Fi';
 }

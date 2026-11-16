@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-today.png",
+      "platform": "mobile-ios",
+      "description": "Fixture recreation of David's 2026-11-05 Home: three unfinished rows today and five yesterday each fold into one Processing row with its step; junk titles (Yeah., Mm-hmm., Recording \u00b7 9:38 AM) never show. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-mixed-steps.png",
+      "platform": "mobile-ios",
+      "description": "A run mixing an empty capture and stand-in titles shows its least advanced step: Transcribing\u2026 \u00b7 3 recordings. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-failed-hidden.png",
+      "platform": "mobile-ios",
+      "description": "Two failed recordings are hidden on the default Home the way noise is; only the finished rows around them show. Activity's Needs attention section owns the retry. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-noise-hidden.png",
+      "platform": "mobile-ios",
+      "description": "Rows the server classifies as noise never show on Home. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-finished-breaks-run.png",
+      "platform": "mobile-ios",
+      "description": "A finished conversation between unfinished ones splits them into two Processing rows, keeping time order. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-locked-row.png",
+      "platform": "mobile-ios",
+      "description": "A locked row stays its own upgrade row and is never folded into Processing. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-all-processing.png",
+      "platform": "mobile-ios",
+      "description": "A day of only unfinished recordings shows one Processing row. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-home-nov6.png",
+      "platform": "mobile-ios",
+      "description": "David's 2026-11-06 Home: no Processing row at all. Yesterday's junk settled to noise or failed and is hidden (the 11 s empty capture now failed among them), leaving Family Tensions, Project Work and Company OS above Wednesday's finished rows; the two morning noise recordings are gone from Wed, Nov 4. Widget-rendered with synthetic data; emoji tiles render as bars because the test font has no emoji glyphs.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "batch_stt": {
+    "micro_usd_per_hour": 30000,
+    "status": "card",
+    "source": "platform.modulate.ai public pricing",
+    "as_of": "2026-11-08"
+  },
+  "lid": {
+    "micro_usd_per_hour": 10000,
+    "status": "card",
+    "source": "platform.modulate.ai public pricing",
+    "as_of": "2026-11-08"
+  }
+}

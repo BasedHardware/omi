@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any
 from google.cloud import firestore
 from prometheus_client import Counter
 
-from config.batch_pipeline import projection_source_deleted_enabled
+from config.batch_pipeline import (
+    projection_source_deleted_enabled,
+    batch_held_dead_letter_enabled,
+    HELD_DEAD_LETTER_SECONDS,
+)
 
-from config.firestore_read_levers import lever_enabled
 from database.batch_pipeline_privacy import (
     assert_batch_write_allowed,
-    BatchPrivacyMemo,
     BatchPrivacyBlocked,
     BatchPrivacyReason,
 )
@@ -24,8 +26,10 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionReplay,
     normalized_binding,
 )
+from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
-from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
+from database.sync_ledger import sync_content_ledger_ref, LEDGER_RETENTION_DAYS
+from database.sync_ledger_ownership import batch_projection_ledger_owner_matches
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
@@ -56,6 +60,7 @@ class ProjectionSession:
         self.policy = policy or store.policy(segment_id)
         self.client = store.client
         self.result_ref = store.ref('results', segment_id)
+        self.job_ref = store.ref('jobs', segment_id)
         self.owner_ref = store.ref('owners', owner_key(binding.owner_id))
         self.ledger_ref = sync_content_ledger_ref(self.client, binding.owner_id, binding.content_id)
         self.entry: dict[str, Any] = {}
@@ -82,33 +87,65 @@ class ProjectionSession:
         receipt = self.entry.get('projection') or {}
         return {} if receipt.get('privacy_control_only') else receipt
 
-    def write_receipt(self, transaction, receipt):
-        """Ready acknowledgment and summary share one result-keyed receipt."""
+    def write_receipt(self, transaction, receipt) -> bool:
+        """Write the receipt and return a sibling hold transition for post-commit logging."""
         if self.entry.get('projection_privacy_refusal') or self._privacy_refusal_transaction is transaction:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
-            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
-            return
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, receipt)
+            transaction.update(
+                self.result_ref,
+                {
+                    'projection': receipt,
+                    'projection_state': receipt['state'],
+                    **projection_finish_state_fields(
+                        receipt['state'], self.now, async_projection=self.policy.async_projection
+                    ),
+                },
+            )
+            return False
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
         summary = dict(self.entry.get('projection') or {})
         if summary and all(part.get('state') in {'ready', 'quarantined'} for part in parts.values()):
             if any(part.get('state') == 'quarantined' for part in parts.values()):
                 # A successful sibling's follow-up cannot acknowledge held text.
+                sibling_hold_changed = (
+                    summary.get('state') != 'quarantined' or self.entry.get('projection_state') != 'quarantine_held'
+                )
                 summary['state'] = 'quarantined'
-                changes.update(projection=summary, projection_state='quarantine_held')
+                changes.update(
+                    projection=summary,
+                    projection_state='quarantine_held',
+                    **projection_finish_state_fields(
+                        'quarantine_held', self.now, async_projection=self.policy.async_projection
+                    ),
+                )
                 transaction.update(self.result_ref, changes)
-                return
+                return sibling_hold_changed
             summary['state'] = 'ready'
-            changes.update(projection=summary, projection_state='ready')
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, summary)
+            changes.update(
+                projection=summary,
+                projection_state='ready',
+                **projection_finish_state_fields('ready', self.now, async_projection=self.policy.async_projection),
+            )
         transaction.update(self.result_ref, changes)
+        return False
 
     def guard(self, transaction, conversation_ids=()):
-        options = {}
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            options['memo'] = getattr(self, '_privacy_memo', None)
-        snapshots: dict[str, Any] = {}
+        # Decision-only: the fence budget counts the distinct documents this
+        # prepare actually verified, including every redirect hop the walk read
+        # (plus any refusing id below). No full-row export, so a certified memo
+        # decision can serve the check with one live token read.
+        checked: set[str] = set()
+        if self.job.get('capture_source_conversation_id'):
+            conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
         try:
             return assert_batch_write_allowed(
                 self.client,
@@ -116,20 +153,23 @@ class ProjectionSession:
                 self.binding.owner_id,
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
-                snapshots=snapshots,
-                **options,
+                verified_out=checked,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
-                # A tombstone refuses before the conversation snapshot exists.
-                snapshots.setdefault('conversations', {})[error.conversation_id] = {}
+                # A tombstone refuses before any row is read; the refusing id
+                # (possibly a redirect survivor) still counts against the budget.
+                checked.add(error.conversation_id)
             raise
         finally:
             # Input/output checks have separate refusal semantics, but share
             # the same distinct-document ceiling during prepare. Later plan
             # validations retain their existing independent walk budgets.
             if self._privacy_fence_ids is not None:
-                self._privacy_fence_ids.update(snapshots.get('conversations', {}))
+                # Requested ids count even when a certified decision serves
+                # them without a walk; verified ids add each redirect survivor.
+                self._privacy_fence_ids.update(conversation_ids)
+                self._privacy_fence_ids.update(checked)
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
@@ -147,6 +187,10 @@ class ProjectionSession:
             ids.append(self.binding.target_conversation_id)
         if self.job.get('conversation_id'):
             ids.append(self.job['conversation_id'])
+        if self.job.get('capture_source_conversation_id'):
+            ids.append(self.job['capture_source_conversation_id'])
+        if not getattr(self, 'detach_source_alias', False):
+            ids.extend(self.job.get('source_conversation_ids') or [])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
@@ -241,12 +285,6 @@ class ProjectionSession:
         self._source_deletion_transaction = None
         self._source_deleted = False
         self._privacy_fence_ids = set()
-        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
-            # A session may survive the pre-check and assignment retries. Only
-            # prepare and validate_plan within this attempt may share snapshots.
-            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
-        elif hasattr(self, '_privacy_memo'):
-            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -259,6 +297,9 @@ class ProjectionSession:
             or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
             or not (
                 self.entry.get('protocol_version') == 1
+                or self.entry.get('protocol_version') == 2
+                and (self.entry.get('source_reuse_version') == 1 or self.entry.get('source_alias_version') == 1)
+                and bool(self.job.get('source_reuse_key'))
                 or self.entry.get('protocol_version') == 2
                 and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2
@@ -302,6 +343,9 @@ class ProjectionSession:
             or self.ledger.get('job_id') != self.binding.job_id
         ):
             raise ProjectionBlocked('durable intake ledger binding required')
+        from database.batch_pipeline_source_reuse import prepare as prepare_source
+
+        prepare_source(self, transaction)
         receipt = self.receipt()
         if not (receipt and self.ledger.get('status') == 'completed') and not batch_projection_ledger_owner_matches(
             self.ledger,
@@ -394,6 +438,16 @@ class ProjectionSession:
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        from database.batch_pipeline_source_reuse import claim
+
+        claim(
+            self,
+            transaction,
+            {
+                **receipt,
+                'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
+            },
+        )
         if len(outputs) > 1:
             receipt['size_rollover_outputs'] = [
                 {'conversation_id': row['id'], 'created': row_created} for row, row_created in outputs
@@ -404,6 +458,8 @@ class ProjectionSession:
             receipt['privacy_reason'] = 'conversation_deleted'
             if self._source_deleted:
                 receipt['disposition'] = 'source_deleted'
+        if quarantined and batch_held_dead_letter_enabled():
+            receipt['held_deadline_at'] = self.now + HELD_DEAD_LETTER_SECONDS
         if quarantined:
             receipt.update(
                 state='quarantined',
@@ -423,11 +479,24 @@ class ProjectionSession:
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
             if privacy_replay:
-                changes['projection_state'] = 'pending'
+                changes.update(
+                    projection_state='pending',
+                    **projection_finish_state_fields(
+                        'pending', self.now, async_projection=self.policy.async_projection
+                    ),
+                )
             if quarantined:
                 # Old projector binaries require result protocol 1. Fence them
                 # before they can turn an unknown held receipt into ready.
                 changes.update(protocol_version=2, lineage_quarantine_version=1)
+                if batch_held_dead_letter_enabled():
+                    if self.entry.get('projection_state') == 'pending' and self.entry.get('held_expired_reason'):
+                        changes.update(held_expired_at=None, held_expired_reason=None)
+                    changes['held_deadline_at'] = (
+                        receipt['held_deadline_at']
+                        if self.entry.get('projection_state') == 'pending'
+                        else self.entry.get('held_deadline_at') or receipt['held_deadline_at']
+                    )
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion(output_ids)
                 transaction.update(
@@ -467,14 +536,18 @@ class ProjectionSession:
                     ),
                     speech_seconds=0.0,
                 )
+            # Proven parts still owe follow-ups after async assignment or a
+            # crash. Keep the outbox discoverable until they are ready.
+            summary_state = (
+                'quarantine_held'
+                if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
+                else 'persisted' if held else str(summary['state'])
+            )
             changes.update(
                 projection=summary,
-                # Proven parts still owe follow-ups after async assignment or
-                # a crash. Keep the outbox discoverable until they are ready.
-                projection_state=(
-                    'quarantine_held'
-                    if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
-                    else 'persisted' if held else summary['state']
+                projection_state=summary_state,
+                **projection_finish_state_fields(
+                    summary_state, self.now, async_projection=self.policy.async_projection
                 ),
             )
             changes.update(completed_checkpoint_fields(self.entry, quarantined=held))
@@ -487,7 +560,24 @@ class ProjectionSession:
                 {
                     'projection': receipt,
                     'projection_state': 'quarantine_held' if quarantined else receipt['state'],
+                    **projection_finish_state_fields(
+                        'quarantine_held' if quarantined else receipt['state'],
+                        self.now,
+                        async_projection=self.policy.async_projection,
+                    ),
                     **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                    **(
+                        {
+                            'held_deadline_at': receipt['held_deadline_at'],
+                            **(
+                                {'held_expired_at': None, 'held_expired_reason': None}
+                                if self.entry.get('held_expired_reason')
+                                else {}
+                            ),
+                        }
+                        if quarantined and batch_held_dead_letter_enabled()
+                        else {}
+                    ),
                     **completed_checkpoint_fields(self.entry, quarantined=quarantined),
                     **(
                         {'projection_release_attempts': 0}

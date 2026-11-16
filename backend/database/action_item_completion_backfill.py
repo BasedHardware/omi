@@ -6,6 +6,7 @@ aggregation probe remains authoritative, so a late legacy restore cannot make
 an old migration marker suppress tasks. No permanent marker is trusted.
 """
 
+from database.action_item_fence import fenced_action_item_commit
 from typing import Any
 
 from google.api_core.exceptions import FailedPrecondition, NotFound
@@ -37,9 +38,10 @@ def backfill_completion_page(
             if apply:
                 completed = prepare_action_item_for_read(dict(raw))['completed']
                 try:
-                    doc.reference.update(
-                        {'completed': completed}, option=client.write_option(last_update_time=doc.update_time)
-                    )
+                    with fenced_action_item_commit(uid):
+                        doc.reference.update(
+                            {'completed': completed}, option=client.write_option(last_update_time=doc.update_time)
+                        )
                     updated += 1
                 except (FailedPrecondition, NotFound):
                     conflicts += 1

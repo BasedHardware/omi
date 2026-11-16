@@ -3,7 +3,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
@@ -12,6 +14,7 @@ import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_feed_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/ui/components/omi_button.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -234,6 +237,76 @@ void main() {
     await tester.pump();
     expect(requests, 1);
     expect(provider.conversations.any((conversation) => conversation.id == 'older'), isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('collapsed Home card days load older cards only when requested', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final today = DateUtils.dateOnly(DateTime.now());
+    HomeFeedCard card(String id, DateTime at) => HomeFeedCard(
+          id: 'conversation:$id',
+          kind: 'conversation',
+          detailId: id,
+          startedAt: at,
+          title: id,
+          emoji: '',
+          preview: '',
+          status: 'completed',
+          homeStep: 'ready',
+          starred: false,
+          isLocked: false,
+          hasTasks: false,
+          memberCount: 1,
+          sources: const [],
+          summaryAvailable: true,
+          revision: 'fixture',
+        );
+    final cursors = <String?>[];
+    final feed = HomeFeedProvider(
+      owner: () => 'fixture',
+      fetch: ({cursor}) async {
+        cursors.add(cursor);
+        return ApiSuccess(HomeFeedPage(
+          // The newest page ends beyond the seven-day warm window, so only the button loads more.
+          items: cursor == null
+              ? [
+                  card('new', today.add(const Duration(hours: 9))),
+                  card('old', today.subtract(const Duration(days: 10)))
+                ]
+              : [card('older', today.subtract(const Duration(days: 11)))],
+          nextCursor: cursor == null ? 'next' : null,
+          hasMore: cursor == null,
+          truncated: false,
+          generation: 'fixture',
+        ));
+      },
+    );
+    addTearDown(feed.dispose);
+    final provider = ConversationProvider(isSignedIn: () => false)
+      ..isLoadingConversations = false
+      ..groupConversationsByDate();
+    addTearDown(provider.dispose);
+    final screen = await buildTypedConversationScreen(provider, feed: feed);
+    await tester.runAsync(feed.start);
+    await tester.pumpWidget(screen);
+    await tester.pump();
+    expect(cursors, [null]);
+
+    await tester.tap(find.byKey(ValueKey('collapse_day_${today.toIso8601String()}')));
+    await tester.pump();
+    expect(find.text('new'), findsNothing);
+    expect(find.text('old'), findsOneWidget);
+    expect(find.text('show more ↓'), findsOneWidget);
+
+    await tester.tap(find.text('show more ↓'));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(cursors, [null, 'next']);
+    expect(find.text('show more ↓'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

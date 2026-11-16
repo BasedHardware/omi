@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-phone-durable-pendant-proof",
+  "violated_contract": "Every capture route and interrupted download must preserve the exact coordinates linking phone-durable, indexed audio to its pendant safety copy. Capture-route changes, process restart and transient BLE epoch replacement must neither discard that reclaim proof nor widen it across unproven records.",
+  "canonical_prevention": "Commit exact device/ring/session/ordinal or ring-sequence coordinates with the fsynced audio and persisted index. Preserve conservative replay metadata and connection-independent download receipts. Revalidate files/index/owner and the exact contiguous frontier before scoped ADVANCE, replay before READ, and reuse proven spans. Keep one read owner through STOP and final persistence; use actual DATA progress rather than total elapsed time. Test append, index, restart, reconnect, cancellation, malformed input and rollback boundaries with real files and fake pendant commands.",
+  "canonical_prevention_artifact": [
+    "app/test/services/wals/batch_ring_proof_test.dart",
+    "app/test/unit/ring_download_receipt_test.dart",
+    "app/test/unit/ring_custody_download_test.dart",
+    "app/test/services/wals/recording_transfer_coordinator_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/services/wals/mobile_batch_buffer.dart",
+    "app/lib/services/wals/mobile_standard_batch.dart",
+    "app/lib/services/wals/pendant_ring_custody.dart",
+    "app/lib/services/wals/ring_storage_sync.dart",
+    "app/lib/services/wals/device_chunk_persistence.dart"
+  ],
+  "status": "open"
+}

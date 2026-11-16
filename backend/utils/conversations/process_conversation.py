@@ -9,6 +9,7 @@ vs custom-STT credit gates sit here so one path cannot bill the wrong budget
 """
 
 from utils import funded_processing
+from utils.episodes import member_notes
 from utils.sync import processing_hold
 from utils.conversations.summary_delivery import PROCESS_CONTEXT
 from utils.processing_backlog import defer_estimate
@@ -80,10 +81,12 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
+from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.conversations.relevance_media_metrics import observe_owner_memory_admission
+from utils.conversations import l1_admission
 from utils.llm.notes_short_clip import quiet_minimum, has_explicit_reminder
 from utils.llm.notes_short_clip_policy import english_word_floor, selected_summary_app
 from utils.conversations.minimum_derived import is_server_minimum
@@ -94,6 +97,15 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.home_titles import title_for_stability
+from utils.summary_quality import (
+    clean_structured,
+    stable_title,
+    valid_title,
+    title_or_fallback,
+    content_units,
+    title_basis,
+)
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
@@ -122,7 +134,6 @@ from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_FIELD
 from utils.conversations.reprocess_contract import (
     DERIVED_EFFECTS_TRANSCRIPT_FIELD,
     derived_effects_transcript_digest,
-    reprocess_result_contract_enabled,
 )
 from config.jev_decisions import relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
@@ -194,12 +205,13 @@ from utils.managed_compute import (
     managed_compute_decision_for as _managed_compute_decision_for,
 )
 from models.other import Person
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import Section, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils import ai_profile_refresh
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_app_result,
@@ -341,13 +353,6 @@ class ExplicitAppSelectionFailedError(RuntimeError):
     selection the user made, so the reprocess boundary must surface a real
     error instead of returning success with empty `apps_results` (SCA-359).
     """
-
-
-APP_RESULT_FAILED_CODE = 'app_result_failed'
-APP_RESULT_FAILED_ERROR_DETAIL = {
-    'code': APP_RESULT_FAILED_CODE,
-    'message': 'The selected app could not finish this summary. Please try again.',
-}
 
 
 def _stored_meeting_lookup_enabled() -> bool:
@@ -685,6 +690,7 @@ def _get_structured(
         )
         from utils.conversations import llm_input_dedupe
 
+        member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = llm_input_dedupe.notes(
                 uid,
@@ -709,7 +715,7 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -729,6 +735,33 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    if relevance_discarded is False:
+        cleaned = clean_structured(structured.model_dump())
+        if not valid_title(structured.title):
+            cleaned['title'] = title_or_fallback(
+                deterministic_minimum_title(
+                    conversation, tz_name_provider=lambda: notification_db.get_user_time_zone(uid)
+                )
+            )
+        old_title = title_for_stability(conversation)
+        cleaned['title'], title_reason = stable_title(
+            old_title,
+            cleaned['title'],
+            previous_units=getattr(conversation, 'title_content_units', 0),
+            current_units=content_units(getattr(conversation, 'transcript_segments', [])),
+        )
+        if isinstance(conversation, Conversation):
+            conversation.title_content_units = title_basis(
+                conversation.title_content_units, content_units(conversation.transcript_segments), title_reason
+            )
+        if str(getattr(conversation, 'user_title', '') or '').strip():
+            cleaned['title'] = conversation.user_title
+        # Preserve private notes identity carried on the model instance.
+        for key in ('title', 'overview', 'gist'):
+            if key in cleaned:
+                setattr(structured, key, cleaned[key])
+        if 'sections' in cleaned:
+            structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
@@ -1105,6 +1138,9 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         # Quote grounding and the L1 fingerprint must see this same owner-only
         # input. Never mutate the retained transcript or the notes/task input.
         conversation = conversation.model_copy(update={'transcript_segments': owner_segments})
+    if l1_admission.skip(uid, conversation):
+        # Noise or short owner speech: nothing to remember, nothing written.
+        return
     sweep_owned_mode = _sweep_owned_writer_mode(uid)
     if sweep_owned_mode is not None:
         logger.info(
@@ -2600,6 +2636,7 @@ def process_conversation(
     client_projection: ClientProcessing | None = None,
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     user_kept: bool = False,
+    restores_discarded: bool = False,
     speaker_receipt_observer: Callable[[bool], None] | None = None,
     smart_merge_refresh: tuple[int, str] | None = None,
     capture_group_refresh_fence: tuple[str, int, str] | None = None,
@@ -2609,12 +2646,14 @@ def process_conversation(
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    recovery_final_attempt: bool = True,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
     ``first_party_only`` requests Omi notes; the derived-effects digest identifies
     the transcript last used for memories, tasks and goal progress.
     """
+    member_notes.before_notes(uid, conversation, trigger, finalization_fence=finalization_fence)
     generated_conversation_id = str(uuid.uuid4()) if _is_ingress_create(conversation) else None
     bind_generation(uid, generated_conversation_id)
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
@@ -2635,6 +2674,14 @@ def process_conversation(
         )
 
     def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # Keep current-revision observation inside the telemetry boundary:
+        # importing or emitting optional metrics must not interrupt persistence.
+        try:
+            from database.owner_identity_availability import observe_safely
+
+            observe_safely(uid, completed.id)
+        except Exception:
+            logger.warning('event=owner_identity_availability outcome=observation_unavailable')
         # One observation per conversation, on every successful persist. The
         # completed stores return through report_persistence, so a new
         # early return that reports a
@@ -2838,6 +2885,18 @@ def process_conversation(
             + '\n'
         )
         sys.stdout.flush()
+    structured, empty_structure_minimum_applied = apply_empty_structure_minimum(
+        uid,
+        trigger,
+        conversation,
+        structured,
+        discarded,
+        decisions,
+        app_id,
+        recovery_transcript_decoded,
+        recovery_minimum_fallback,
+        recovery_final_attempt,
+    )
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -2856,6 +2915,7 @@ def process_conversation(
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
         and not recovery_minimum_fallback
+        and not empty_structure_minimum_applied
     ):
         sys.stdout.write(
             json.dumps(
@@ -2892,11 +2952,15 @@ def process_conversation(
     content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
     if user_kept and not conversation.discarded:
-        # Commit restore authority with visibility, before derived work can fail.
+        # Commit restore authority before derived work can fail. A discarded row being
+        # restored stays hidden here: visibility waits for the router's restore, which
+        # registers its recording obligation before it commits the metadata.
         payload['sync_relevance_user_kept'] = True
         if conversation.sync_relevance == 'review':
             conversation.sync_relevance = 'keep'
             payload['sync_relevance'] = 'keep'
+        if restores_discarded:
+            payload['discarded'] = True
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled
@@ -2905,6 +2969,8 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if not conversation.discarded:
+        payload['content_word_units'] = content_units(conversation.transcript_segments)
     if 'extractions' in open_loop_sink:
         # Server-only derived field, deliberately outside the client wire
         # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
@@ -2922,7 +2988,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -2946,7 +3012,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded:
+    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,
@@ -2995,8 +3061,7 @@ def process_conversation(
     # app failures propagate after the bundle; automatic selection is fail-open.
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
     user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
-    # User reprocess preserves template results on failure; the flag selects 502.
-    result_contract = user_reprocess and reprocess_result_contract_enabled()
+    # User reprocess preserves template results on failure.
 
     def _emit_derived_effects() -> None:
         assigned_folder_id = None
@@ -3133,6 +3198,8 @@ def process_conversation(
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+            # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
+            ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
@@ -3181,11 +3248,6 @@ def process_conversation(
         # processing step is a real error, never a 200 whose payload quietly
         # substitutes first-party notes for the selected app's summary (SCA-359).
         failure = explicit_selection_failures[0]
-        if result_contract:
-            # Distinguishable from a notes/structure failure so clients can say
-            # "<App> couldn't finish" while the regenerated notes stay persisted.
-            logger.error('Conversation processing failed: %s', type(failure).__name__)
-            raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
         raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
     complete_explicit(uid, conversation, trigger)
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')

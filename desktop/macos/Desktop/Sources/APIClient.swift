@@ -248,7 +248,8 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true,
     expectedOwnerId: String? = nil,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    idempotencyKey: String? = nil
   ) async throws -> T {
     let authPolicy = try resolvedRequestAuthPolicy(
       expectedOwnerId: expectedOwnerId,
@@ -266,6 +267,9 @@ actor APIClient {
       includeBYOK: includeBYOK,
       expectedAuthOwnerId: authOwnerId)
     try validateExpectedOwner(authPolicy)
+    if let idempotencyKey {
+      request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+    }
 
     return try await performRequest(
       request,

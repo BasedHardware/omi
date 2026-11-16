@@ -58,3 +58,22 @@ ruled on `merged/` after the 10-24 audio-loss incident freeze. The lead must not
 dispatch prod `apply` until those additional delete rules are explicitly cleared.
 
 Plan and evidence: `omi-knowledge-base/projects/gcp-cost-efficiency/evidence/2026-09-02-coldline-rollout-plan.md`.
+
+`lake-forward.json` declares the new, unprovisioned object lake: encrypted space
+content has no age-based deletion, versioning or soft-delete copies. Transcripts
+stay Standard/Nearline. `validate_object_lake_bucket_contract.py` checks this
+contract offline; [LAKE.md](LAKE.md) documents the separately authorized bucket,
+KMS and audit-log provisioning. No existing bucket receives this policy.
+
+
+## Batch staging lifecycle (separate, procedural)
+
+The private-cloud-sync workflow above does not apply the batch staging bucket's
+policy. Before and after any separately authorized batch lifecycle change, follow
+the [mandatory batch lifecycle-change check](../../docs/runbooks/held-staging-inputs.md#mandatory-batch-lifecycle-change-check-procedural).
+The existing `backend/scripts/check_sync_staging_lifecycle.py` enforces live Delete
+age strictly greater than the runtime input terminal, in addition to all existing
+hold/privacy floors. Review the proposed Delete against that same strict cutoff
+before applying it and retain both checker receipts. Metadata denial or any failed
+prerequisite blocks qualification. No automatic batch scheduler/apply integration
+is claimed; out-of-band changes bypass this procedural detection.

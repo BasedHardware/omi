@@ -161,6 +161,18 @@ remain; eagerly initialized live-STT fallback components are dropped. Backend
 keeps its broad 30s configuration with the CPU allocation above; desktop uses
 its own CPU profile above, while listen and jobs retain their existing profiles.
 
+Since SCA-2067 (2026-11-13) the fleet also keeps the enrichment LLM cost/usage
+families the SCA-1960 guardrail regression reads: `omi_conversation_llm_calls_total`
+(attributable calls by bounded feature/outcome), `omi_shaped_agent_input_tokens_total`
+(shaped input tokens by feature and cache kind), the `omi_notes_agent_*` counters
+and histograms (runs, decisions, tokens, repairs, estimated cost, latency) and
+`omi_episode_moment_{cost_usd_total,tokens_total,updates_total}`. SCA-2057 proved
+all four were dropped by this keep rule even though `backend-integration` emits
+them. The names are explicit, not a prefix catch-all; the worst-case bound is
+~400 series per instance against the 15000-sample ceiling. The cost families are
+estimates — the gateway ledger is authoritative — and an empty vector means the
+family was not scraped, never that spend was zero.
+
 The fleet and David gates currently read projection logs and durable job state;
 the fleet gate also reads native `run.googleapis.com/request_count`. These paths
 are unaffected by metric relabeling. Consumer changes must update the allowlist
@@ -297,7 +309,9 @@ sum by (service_name, journey, outcome) (
 
 Confirm the exact normalized name in Prometheus before installing an alert; Stackdriver exporter builds names from `stackdriver`, monitored resource type, Cloud Monitoring metric type, and value type. It retains metric and monitored-resource labels. Cloud Monitoring distributions become Prometheus histograms; the exporter reconstructs `_sum` as distribution mean multiplied by count. Both bucket-based `histogram_quantile` and `_sum / _count` queries are available, but verify the normalized series names after deployment.
 
-Do not add uid, conversation, request, revision, or configuration labels. `service_name`, bounded journey/outcome labels, and the required instance identity are sufficient. Revision/configuration target labels are explicitly disabled in the checked-in `RunMonitoring` config to avoid rollout-driven series churn.
+Do not add uid, conversation, request, or configuration labels. The runtime rollout
+adoption families are the explicit revision-label exception; see
+[runtime rollout export](runtime-rollout-export.md). `service_name`, bounded journey/outcome labels, and the required instance identity are sufficient. Revision/configuration target labels are explicitly disabled in the checked-in `RunMonitoring` config to avoid rollout-driven series churn.
 
 ## Cost and cardinality
 

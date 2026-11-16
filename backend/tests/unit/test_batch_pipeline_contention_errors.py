@@ -291,11 +291,15 @@ def test_direct_transaction_reads_are_named(monkeypatch):
     monkeypatch.setattr(batch_pipeline_store, 'first_pending', lambda *a, **k: None)
     monkeypatch.setattr(batch_pipeline_store, 'service_frontier', lambda *a, **k: 0.0)
     monkeypatch.setattr(batch_pipeline_store, 'assert_batch_write_allowed', lambda *a, **k: 1)
-    monkeypatch.setattr(batch_pipeline_store, 'lever_enabled', lambda *a, **k: False)
     view = batch_pipeline_store.FirestoreTransaction(Mock(), 'batch_pipeline_dev', Mock())
     batch_pipeline_store._note_direct_reads(view)
     assert batch_pipeline_store.contention_tables(view) == ('none', 'none')
     view.first_pending('owner')
     view.service_frontier(0)
     view.check_privacy('uid')
+    # Default: the frontier is a hint read outside the transaction, so it is not a contended read.
+    assert batch_pipeline_store.contention_tables(view) == ('jobs_query,privacy', 'none')
+    # With admission_frontier_hint off, the transactional frontier query is named again.
+    monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"admission_frontier_hint": 0}')
+    view.service_frontier(0)
     assert batch_pipeline_store.contention_tables(view) == ('control_query,jobs_query,privacy', 'none')

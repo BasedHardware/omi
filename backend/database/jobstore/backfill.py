@@ -6,7 +6,7 @@ Firestore stays the primary and the only authority. Each copy goes through the A
 primary's current state. A backfill page therefore never regresses a row that a live mirror updated after the
 census read it, and a document deleted meanwhile is deleted from Postgres too. Rerunnable and idempotent.
 
-Only the eight mirrored batch tables are read; customer documents (``conversations``, ``content``) never
+Only the ten mirrored batch tables are read; customer documents (``conversations``, ``content``) never
 are. The report holds counts only, never a key, id or value. Postgres-only rows are counted, not deleted.
 """
 
@@ -16,6 +16,7 @@ import logging
 from dataclasses import asdict, dataclass
 from typing import Any, Iterator
 
+from database.jobstore.connection import sql
 from database.jobstore.dual_store import MIRRORED_TABLES, DualStore, ShadowParityOutcome, compare, read_current
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,9 @@ def _pages(client: Any, collection: str, page_size: int) -> Iterator[list[Any]]:
 
 def postgres_keys(conn: Any, namespace: str, table: str) -> set[str]:
     if table in _TYPED:
-        rows = conn.execute(f'SELECT key FROM {table} WHERE namespace = %s', (namespace,)).fetchall()
+        psycopg_sql = sql()
+        query = psycopg_sql.SQL('SELECT key FROM {} WHERE namespace = %s').format(psycopg_sql.Identifier(table))
+        rows = conn.execute(query, (namespace,)).fetchall()
     else:
         rows = conn.execute('SELECT key FROM docs WHERE namespace = %s AND tbl = %s', (namespace, table)).fetchall()
     return {row[0] for row in rows}
@@ -74,7 +77,7 @@ def backfill_table(dual: DualStore, client: Any, table: str, *, apply: bool, pag
                 key = snapshot.id
                 seen.add(key)
                 report.firestore += 1
-                outcome = compare(snapshot.to_dict() or {}, shadow.read_doc(conn, table, key))
+                outcome = compare(snapshot.to_dict() or {}, shadow.read_doc(conn, table, key), table)
                 if outcome is ShadowParityOutcome.MATCH:
                     report.match += 1
                     continue

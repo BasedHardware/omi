@@ -357,7 +357,14 @@ async def test_zero_sample_packets_do_not_expand_or_shrink_batch_span(remote, mo
             originals.append(b'\xff')
     await archive.close()
     receipt = AudioReceipt(**h.events[0].receipt)
-    assert remote.blob(receipt.path).data == b''.join(originals)
+    blob = remote.blob(receipt.path)
+    if blob.metadata['codec'] == 'flac':
+        # Lossless storage can change the container; custody still recovers
+        # every original PCM byte through the generation/hash-verified reader.
+        assert read_pcm('owner', receipt) == b''.join(originals)
+    else:
+        # Undecodable/unaligned zero-sample packets retain their raw bytes.
+        assert blob.data == b''.join(originals)
     manifest = json.loads(remote.blob(receipt.manifest_path).data)
     assert len(manifest['frames']) == len(originals)
     assert sum(frame['samples'] for frame in manifest['frames']) == 16000
@@ -393,10 +400,21 @@ async def test_first_audio_marker_failure_keeps_buffered_original_for_shutdown_c
 
 
 @pytest.mark.asyncio
-async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch):
+@pytest.mark.parametrize(
+    'trigger',
+    [
+        finalizer.ProcessingTrigger.CAPTURE_END,
+        finalizer.ProcessingTrigger.SERVER_RECOVERY,
+        finalizer.ProcessingTrigger.CLIENT_FINALIZE,
+    ],
+)
+@pytest.mark.parametrize('status', [ConversationStatus.processing, ConversationStatus.completed])
+async def test_zero_preview_finalizer_registers_exact_language_bounds_before_completion(monkeypatch, trigger, status):
     row = capture()
     row.update(
-        status='processing',
+        status=status.value,
+        home_transcription_pending_at=datetime.fromtimestamp(1002, timezone.utc),
+        home_transcription_deadline_at=datetime.fromtimestamp(8202, timezone.utc),
         started_at=datetime.fromtimestamp(1000, timezone.utc),
         finished_at=datetime.fromtimestamp(1002, timezone.utc),
         language='es',
@@ -405,7 +423,7 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         server_batch_audio_end=1002,
     )
     store = MemoryStore()
-    model = SimpleNamespace(status=ConversationStatus.processing, transcript_segments=[])
+    model = SimpleNamespace(status=status, transcript_segments=[])
     monkeypatch.setattr(finalizer, '_load_admitted_conversation', AsyncMock(return_value=(None, row, model)))
     monkeypatch.setattr(
         finalizer, 'register_recording', lambda owner, data: register_recording(owner, data, store=store, now=1)
@@ -420,7 +438,8 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         assert args == ('owner', 'conversation', row, 'job', 1, 1)
         return 'completed'
 
-    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', complete)
+    completion = Mock(side_effect=complete)
+    monkeypatch.setattr(finalizer.lifecycle_service, 'complete_server_batch_capture', completion)
     monkeypatch.setattr(
         finalizer.lifecycle_service, 'claim_finalization_fanout', Mock(side_effect=AssertionError('split fanout'))
     )
@@ -433,9 +452,12 @@ async def test_zero_preview_finalizer_registers_exact_language_bounds_before_com
         finalizer, '_episode_at_finalization_start', AsyncMock(side_effect=AssertionError('preview work'))
     )
     result = await finalizer.finalize_persisted_conversation(
-        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1
+        'owner', 'conversation', finalization_job_id='job', dispatch_generation=1, lease_epoch=1, trigger=trigger
     )
     assert result is finalizer.ConversationFinalizationDisposition.completed
+
+    assert completion.call_count == 1
+    assert row['home_transcription_deadline_at'] == datetime.fromtimestamp(8202, timezone.utc)
 
 
 @pytest.mark.asyncio

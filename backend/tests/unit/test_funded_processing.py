@@ -76,7 +76,6 @@ def test_unlimited_legacy_plan_does_not_read_finite_usage(monkeypatch):
 
     monkeypatch.setattr(usage, 'budget_session', session)
     monkeypatch.setattr(funded, 'legacy_enabled', lambda: True)
-    monkeypatch.setattr(ladder_policy, 'budget_enforcement_enabled', lambda: False)
     monkeypatch.setattr(
         subscription, 'resolve_transcription_allowance', lambda *args, **kwargs: SimpleNamespace(managed=True)
     )

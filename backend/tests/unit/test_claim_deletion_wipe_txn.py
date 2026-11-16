@@ -841,3 +841,54 @@ def test_heartbeat_keeps_running_wipe_unclaimable_without_resurrecting_other_sta
             assert _run_claim(data)[0] is None
         else:
             assert txn._updates == []
+
+
+# ---------------------------------------------------------------------------
+# R14 (David, 2026-11-08): legacy markers with no wipe_status stay quarantined
+# ---------------------------------------------------------------------------
+
+_LEGACY_MARKER = {
+    'uid': 'legacy1',
+    'reason': 'synthetic',
+    'reason_details': 'synthetic',
+    'timestamp': datetime(2026, 6, 1, tzinfo=timezone.utc),
+}
+
+
+class _StatusEqualityCollection:
+    """Serve every marker by real equality on its stored wipe_status."""
+
+    def __init__(self, docs):
+        self._docs, self.queried = docs, []
+
+    def where(self, field, op, value):
+        assert (field, op) == ('wipe_status', '==')
+        self.queried.append(value)
+        matched = _StatusEqualityCollection([d for d in self._docs if d.get('wipe_status') == value])
+        matched.queried = self.queried
+        return matched
+
+    def limit(self, n):
+        return self
+
+    def stream(self):
+        for data in self._docs:
+            yield _FakeDocSnapshot(data)
+
+
+def test_r14_legacy_marker_without_status_is_never_claimed_or_redriven():
+    # Neither claim path may write or enqueue a marker with no wipe_status,
+    # and the reconciler's equality-only queries can never return one.
+    result, updates = _run_claim(dict(_LEGACY_MARKER))
+    assert result is None and updates == []
+    result, updates = _run_task_claim(dict(_LEGACY_MARKER))
+    assert result == 'not_actionable' and updates == []
+
+    stale = datetime.now(timezone.utc) - timedelta(days=1)
+    collection = _StatusEqualityCollection(
+        [dict(_LEGACY_MARKER), {'uid': 'failed1', 'wipe_status': 'failed', 'wipe_failed_at': stale}]
+    )
+    with patch.object(users_db, 'account_deletion_collection', lambda **_kwargs: collection):
+        uids = [row['uid'] for row in users_db.get_pending_deletion_wipes(limit=100)]
+    assert 'legacy1' not in uids and collection.queried
+    assert None not in collection.queried

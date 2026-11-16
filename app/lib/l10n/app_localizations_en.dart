@@ -1986,6 +1986,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memoryHistory => 'History';
 
   @override
+  String get recordingWithYourPhone => 'Recording with your phone';
+
+  @override
+  String get wrapUp => 'Wrap Up';
+
+  @override
+  String get recordingDiscarded => 'Recording discarded';
+
+  @override
   String get undo => 'Undo';
 
   @override
@@ -7026,6 +7035,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Failed to sign in with Apple, please try again.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Sign in with Apple didn\'t work. Try again or continue with Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Failed to retrieve firebase token, please try again.';
 
   @override
@@ -9165,6 +9177,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Unable to determine current firmware version';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Apply to Current Plan';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code applied to your current plan.',
+        'refused': 'This code cannot be applied. Check the code and its required plan.',
+        'conflict': 'Code already used, or your plan already has a discount.',
+        'rateLimited': 'Too many tries. Please wait and try again later.',
+        'other': 'Could not apply this code. Please try again.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promo code';
@@ -13369,6 +13399,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Have an Omi Pro code? Add it on the next screen.';
+
+  @override
   String get paywallTrialCancelNote => 'Cancel anytime. No fees, no penalties.';
 
   @override
@@ -13636,6 +13669,9 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Re-run notes';
 
   @override
   String get attentionSummaryFailed => 'Couldn\'t summarize this conversation';
@@ -14806,6 +14842,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get episodeWritingNotes => 'Writing notes…';
 
   @override
+  String get homeStepTranscribing => 'Transcribing…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Finishing the transcript first. You can leave this page.';
 
   @override
@@ -15347,7 +15397,140 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paymentDeclinedTitle => 'Your card was declined';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Update it, or get $plan back for $price a month';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Update it to get $plan back';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Has linked tasks';
+
+  @override
+  String get hasTasksFilter => 'Has tasks';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Switch to Monthly';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price a month';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Replaces the unpaid $yearly yearly charge. Renews monthly. Cancel anytime.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Payment declined. Your plan didn\'t change.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Switching isn\'t available right now. Update your card instead.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'You\'re on monthly';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price paid today. Renews monthly.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Processing changed. Review the list and try again.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'You\'ve used this month\'s $minutes minutes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi is still recording. Choose how to keep transcribing.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Unlimited cloud transcription';
+
+  @override
+  String get freeCapProAccuracy => 'Best accuracy';
+
+  @override
+  String get freeCapProWaiting => 'Transcribes your waiting recordings';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Free. Stays on until you switch back.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcribing on this phone';
+
+  @override
+  String get getPro => 'Get Pro';
+
+  @override
+  String get unlock => 'Unlock';
+
+  @override
+  String get transcribeWith => 'Transcribe with';
+
+  @override
+  String get omiCloud => 'Omi cloud';
+
+  @override
+  String get thisPhone => 'This phone';
+
+  @override
+  String get onDeviceReady => 'Ready';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left of $limit min left · resets $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes cloud minutes available';
+  }
+
+  @override
+  String get switchBack => 'Switch Back';
+
+  @override
+  String get setUpThisPhone => 'Set up this phone';
+
+  @override
+  String get speechRecognition => 'Speech recognition';
+
+  @override
+  String get audioStaysOnPhone => 'Audio stays on your phone';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB download';
+  }
+
+  @override
+  String get downloadNow => 'Download Now';
+
+  @override
+  String get onWifiLater => 'On Wi-Fi Later';
 }

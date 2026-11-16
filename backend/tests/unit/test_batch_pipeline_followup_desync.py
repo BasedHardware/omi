@@ -63,6 +63,8 @@ class ResultQuery:
 
 
 def runner(rows, monkeypatch, *, fraction=0.0, now=None):
+    # Isolate the pre-existing follow-up offset/backoff switch from global striping.
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_STRIPING_ENABLED', 'off')
     query = ResultQuery(rows)
     store = Mock()
     store.projection_page.side_effect = lambda **kw: projection_page(query, 'batch_pipeline_dev', **kw)

@@ -2003,6 +2003,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'S\'està gravant amb el telèfon';
+
+  @override
+  String get wrapUp => 'Tanca';
+
+  @override
+  String get recordingDiscarded => 'S\'ha descartat l\'enregistrament';
+
+  @override
   String get undo => 'Desfer';
 
   @override
@@ -7067,6 +7076,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'No s\'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'No s\'ha pogut iniciar la sessió amb Apple. Torna-ho a provar o continua amb Google.';
+
+  @override
   String get authFailedToRetrieveToken =>
       'No s\'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.';
 
@@ -9221,6 +9234,24 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'No s\'ha pogut determinar la versió actual del firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Aplica al pla actual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Codi aplicat al teu pla actual.',
+        'refused': 'No es pot aplicar aquest codi. Comprova el codi i el pla necessari.',
+        'conflict': 'El codi ja s\'ha utilitzat o el pla ja té un descompte.',
+        'rateLimited': 'Massa intents. Espera i torna-ho a provar més tard.',
+        'other': 'No s\'ha pogut aplicar el codi. Torna-ho a provar.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Codi promocional';
@@ -13452,6 +13483,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Tens un codi d\'Omi Pro? Introdueix-lo a la pantalla següent.';
+
+  @override
   String get paywallTrialCancelNote => 'Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.';
 
   @override
@@ -13720,6 +13754,9 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Torna a generar les notes';
 
   @override
   String get attentionSummaryFailed => 'No s\'ha pogut resumir aquesta conversa';
@@ -14896,6 +14933,20 @@ class AppLocalizationsCa extends AppLocalizations {
   String get episodeWritingNotes => 'S\'estan escrivint les notes…';
 
   @override
+  String get homeStepTranscribing => 'Transcrivint…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments',
+      one: '$count enregistrament',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Primer acabem la transcripció. Pots sortir d\'aquesta pàgina.';
 
   @override
@@ -15439,7 +15490,140 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualitza-la o recupera $plan per $price al mes';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualitza-la per recuperar $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Té tasques vinculades';
+
+  @override
+  String get hasTasksFilter => 'Amb tasques';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Canvia a mensual';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price al mes';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Substitueix el càrrec anual pendent de $yearly. Es renova cada mes. Cancel·la quan vulguis.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pagament rebutjat. El teu pla no ha canviat.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Ara no es pot canviar. Actualitza la targeta.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Ara pagues mensualment';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagats avui. Es renova cada mes.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Has fet servir els $minutes minuts d\'aquest mes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi continua gravant. Tria com vols continuar transcrivint.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcripció al núvol il·limitada';
+
+  @override
+  String get freeCapProAccuracy => 'La millor precisió';
+
+  @override
+  String get freeCapProWaiting => 'Transcriu les gravacions en espera';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Es manté fins que tornis enrere.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcrivint en aquest telèfon';
+
+  @override
+  String get getPro => 'Aconsegueix Pro';
+
+  @override
+  String get unlock => 'Desbloqueja';
+
+  @override
+  String get transcribeWith => 'Transcriu amb';
+
+  @override
+  String get omiCloud => 'Núvol d\'Omi';
+
+  @override
+  String get thisPhone => 'Aquest telèfon';
+
+  @override
+  String get onDeviceReady => 'A punt';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Queden $left de $limit min · es renova el $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minuts al núvol disponibles';
+  }
+
+  @override
+  String get switchBack => 'Torna';
+
+  @override
+  String get setUpThisPhone => 'Configura aquest telèfon';
+
+  @override
+  String get speechRecognition => 'Reconeixement de veu';
+
+  @override
+  String get audioStaysOnPhone => 'L\'àudio es queda al telèfon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Baixada de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Baixa ara';
+
+  @override
+  String get onWifiLater => 'Més tard amb Wi-Fi';
 }

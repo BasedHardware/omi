@@ -17,7 +17,8 @@ def read_conversation_frame(
     conversation_id: str,
     photo_id: str,
 ) -> tuple[bytes, str]:
-    if not conversations_db.get_conversation(uid, conversation_id):
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation or conversations_db.is_soft_deleted(conversation):
         raise KeyError("conversation frame not found")
     photos = conversations_db.get_conversation_photos(uid, conversation_id) or []
     photo = next(
@@ -44,11 +45,15 @@ def delete_conversation_and_frame_evidence(
     need a complete ``utils.memory.retraction_scope``.
     """
 
+    from utils.other import lake_wipe, object_lake
+
     deleter = delete_conversation
+    default_deleter = None
     if deleter is None:
         from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
 
-        deleter = delete_conversation_with_sync_sources
+        default_deleter = delete_conversation_with_sync_sources
+        deleter = default_deleter
 
     photo_storage_ids = [
         str(photo.get("storage_id"))
@@ -61,7 +66,18 @@ def delete_conversation_and_frame_evidence(
     )
     storage_ids = list(dict.fromkeys(photo_storage_ids + request_storage_ids))
     frame_requests_db.persist_conversation_frame_deletion_outbox(uid, conversation_id, storage_ids)
-    deleter(uid, conversation_id)
+    # Deletion inventory must survive a previous attempt that removed the
+    # pointer's blob but failed before metadata cleanup.
+    try:
+        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
+    except Exception:
+        raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
+    source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]
+    lake_wipe.purge_conversation_lake_objects(uid, conversation_id, source_ids)
+    if default_deleter is not None:
+        default_deleter(uid, conversation_id, conversation_row=conversation)
+    else:
+        deleter(uid, conversation_id)
     for storage_id in storage_ids:
         try:
             delete_frame_request_pixels_for_user(uid, [storage_id])

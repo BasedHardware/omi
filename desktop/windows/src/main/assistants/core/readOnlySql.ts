@@ -34,7 +34,7 @@ export type QueryRunner = (sql: string) => { columns: string[]; rows: unknown[][
 
 /** The ONLY tables execute_sql may read. A deliberate tightening of Mac's shared
  *  executor, which runs against the whole omi.db: Insight only ever needs rewind
- *  frames, and other tables (`local_conversation`, `ai_user_profiles`, the
+ *  frames, and other tables (`local_conversation`, `memories`, the
  *  knowledge graph, …) hold content that must not flow to Gemini. `rewind_frames`
  *  is the frame timeline; `rewind_frames_fts` is its FTS5 mirror (see db.ts). */
 const TABLE_ALLOWLIST = new Set(['rewind_frames', 'rewind_frames_fts'])

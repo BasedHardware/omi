@@ -926,9 +926,21 @@ def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
-def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
+def delete_conversation_with_sync_sources(
+    uid: str,
+    conversation_id: str,
+    *,
+    merged_into: Optional[str] = None,
+    conversation_row: Optional[Dict] = None,
+) -> None:
     """User/source deletion owns retained bridge artifacts, unlike raw DB deletion."""
-    row = conversations_db.get_conversation(uid, conversation_id) or {}
+    # An explicit lake purge may already have removed the transcript object.
+    # Reuse its raw inventory rather than losing donors through decoded reads.
+    row = (
+        conversation_row
+        if conversation_row is not None
+        else conversations_db.get_conversation(uid, conversation_id) or {}
+    )
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:
             # The source row is destroyed below; without intent its from-segments
@@ -1182,3 +1194,6 @@ def _handle_merge_failure(
 def delete_merged_source(uid: str, conversation_id: str, target_id: str) -> None:
     """Replay the existing idempotent derived/source retraction for a sealed merge."""
     _delete_conversation_and_related_data(uid, conversation_id, merged_into=target_id)
+    # The merge-source delete path also owns the sibling ledger row; the
+    # conversation delete above normally removes it, and this is idempotent.
+    conversations_db.delete_pipeline_ledger_row(uid, conversation_id)

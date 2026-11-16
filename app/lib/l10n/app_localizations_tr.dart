@@ -1995,6 +1995,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryHistory => 'Geçmiş';
 
   @override
+  String get recordingWithYourPhone => 'Telefonunla kaydediliyor';
+
+  @override
+  String get wrapUp => 'Bitir';
+
+  @override
+  String get recordingDiscarded => 'Kayıt silindi';
+
+  @override
   String get undo => 'Geri Al';
 
   @override
@@ -7040,6 +7049,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple ile giriş yapılamadı, lütfen tekrar deneyin.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple ile giriş yapılamadı. Tekrar deneyin veya Google ile devam edin.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase jetonu alınamadı, lütfen tekrar deneyin.';
 
   @override
@@ -9181,6 +9193,24 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Mevcut Plana Uygula';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Kod mevcut planınıza uygulandı.',
+        'refused': 'Bu kod uygulanamıyor. Kodu ve gerekli planı kontrol edin.',
+        'conflict': 'Kod zaten kullanılmış veya planınızda zaten indirim var.',
+        'rateLimited': 'Çok fazla deneme. Lütfen bekleyip daha sonra tekrar deneyin.',
+        'other': 'Kod uygulanamadı. Lütfen tekrar deneyin.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promosyon kodu';
@@ -13398,6 +13428,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro kodunuz mu var? Bir sonraki ekranda girin.';
+
+  @override
   String get paywallTrialCancelNote => 'İstediğiniz zaman iptal edin. Ücret yok, ceza yok.';
 
   @override
@@ -13665,6 +13698,9 @@ class AppLocalizationsTr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Notları yeniden oluştur';
 
   @override
   String get attentionSummaryFailed => 'Bu konuşma özetlenemedi';
@@ -14834,6 +14870,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get episodeWritingNotes => 'Notlar yazılıyor…';
 
   @override
+  String get homeStepTranscribing => 'Metne dökülüyor…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Önce döküm tamamlanıyor. Bu sayfadan çıkabilirsiniz.';
 
   @override
@@ -15375,7 +15424,140 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Kartınız reddedildi';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Kartınızı güncelleyin veya $plan planını aylık $price ile geri alın';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan planınızı geri almak için kartınızı güncelleyin';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Bağlı görevleri var';
+
+  @override
+  String get hasTasksFilter => 'Görev içerenler';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Aylığa geçin';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, aylık $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ödenmemiş $yearly yıllık ücretin yerine geçer. Her ay yenilenir. İstediğiniz zaman iptal edin.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Ödeme reddedildi. Planınız değişmedi.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Artık aylık ödüyorsunuz';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Bugün $price ödendi. Her ay yenilenir.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Bu ayın $minutes dakikasını kullandınız';
+  }
+
+  @override
+  String get freeCapBody => 'Omi kayda devam ediyor. Transkripsiyona nasıl devam edileceğini seçin.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Sınırsız bulut transkripsiyonu';
+
+  @override
+  String get freeCapProAccuracy => 'En iyi doğruluk';
+
+  @override
+  String get freeCapProWaiting => 'Bekleyen kayıtlarınızı yazıya döker';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Ücretsiz. Geri dönene kadar açık kalır.';
+
+  @override
+  String get transcribingOnThisPhone => 'Bu telefonda yazıya dökülüyor';
+
+  @override
+  String get getPro => 'Pro\'ya Geç';
+
+  @override
+  String get unlock => 'Kilidi Aç';
+
+  @override
+  String get transcribeWith => 'Şununla yazıya dök';
+
+  @override
+  String get omiCloud => 'Omi bulutu';
+
+  @override
+  String get thisPhone => 'Bu telefon';
+
+  @override
+  String get onDeviceReady => 'Hazır';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit dk kaldı · $date tarihinde yenilenir';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes bulut dakikası kullanılabilir';
+  }
+
+  @override
+  String get switchBack => 'Geri Dön';
+
+  @override
+  String get setUpThisPhone => 'Bu telefonu ayarlayın';
+
+  @override
+  String get speechRecognition => 'Konuşma tanıma';
+
+  @override
+  String get audioStaysOnPhone => 'Ses telefonunuzda kalır';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB indirme';
+  }
+
+  @override
+  String get downloadNow => 'Şimdi İndir';
+
+  @override
+  String get onWifiLater => 'Sonra Wi-Fi\'da';
 }

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -31,6 +33,38 @@ Future<SharedPreferencesUtil> _prefs(Map<String, Object> values) async {
   SharedPreferences.setMockInitialValues({'uid': 'fixture-owner', ...values});
   await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
   return SharedPreferencesUtil();
+}
+
+class _RejectingConversationCache extends InMemorySharedPreferencesStore {
+  _RejectingConversationCache(super.data, {required this.throwOnLegacyWrite}) : super.withData();
+
+  final bool throwOnLegacyWrite;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.cachedConversations') return false;
+    if (key == 'flutter.cachedMemories') {
+      if (throwOnLegacyWrite) throw StateError('Legacy cache write failed');
+      return false;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+class _DelayedConversationCache extends InMemorySharedPreferencesStore {
+  _DelayedConversationCache(super.data) : super.withData();
+
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (key == 'flutter.cachedConversations' && !started.isCompleted) {
+      started.complete();
+      await release.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 void main() {
@@ -129,6 +163,86 @@ void main() {
     expect(restored.single.appResults.single.appId, 'fixture-plugin');
     expect(offUiIsolateFallbacks, 0);
   });
+
+  test('eviction removes the selected row from both cache formats off the UI isolate', () async {
+    final removed = jsonEncode(_conversation('deleted', segments: 60).toJson());
+    final kept = jsonEncode(_conversation('keep').toJson());
+    final prefs = await _prefs({
+      'migratedMemories': true,
+      'cachedMemories': [removed, kept],
+      'cachedConversations': [kept, removed],
+    });
+    final completedBefore = offUiIsolateWorkerCompletions;
+
+    await prefs.evictCachedConversation('deleted');
+
+    expect(prefs.getStringList('cachedConversations'), [kept]);
+    expect(prefs.getStringList('cachedMemories'), [kept]);
+    expect((await prefs.loadCachedConversations()).map((row) => row.id), ['keep']);
+    expect(offUiIsolateWorkerCompletions, greaterThan(completedBefore));
+    expect(offUiIsolateFallbacks, 0);
+  });
+
+  test('a confirmed delete survives a restart before cache eviction finishes', () async {
+    final deleted = jsonEncode(_conversation('deleted').toJson());
+    final kept = jsonEncode(_conversation('keep').toJson());
+    final store = _DelayedConversationCache({
+      'flutter.uid': 'fixture-owner',
+      'flutter.cachedConversations': [deleted, kept],
+    });
+    SharedPreferences.setMockInitialValues({});
+    SharedPreferencesStorePlatform.instance = store;
+    await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+    final prefs = SharedPreferencesUtil();
+    await prefs.recordConfirmedConversationDelete('deleted');
+    final eviction = prefs.evictCachedConversation('deleted');
+    await store.started.future;
+    final interruptedDisk = await store.getAll();
+    store.release.complete();
+    expect(await eviction, isTrue);
+    expect((await store.getAll())['flutter.pendingConversationCacheEvictions:fixture-owner'], isEmpty);
+
+    expect(interruptedDisk['flutter.cachedConversations'], [deleted, kept]);
+    SharedPreferences.setMockInitialValues(interruptedDisk);
+    await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+    expect((await prefs.loadCachedConversations()).map((row) => row.id), ['keep']);
+  });
+
+  for (final throwOnLegacyWrite in [false, true]) {
+    test('failed cache writes cannot bring a confirmed deletion back on restart (throw: $throwOnLegacyWrite)',
+        () async {
+      final removed = jsonEncode(_conversation('deleted').toJson());
+      final kept = jsonEncode(_conversation('keep').toJson());
+      final cache = [removed, kept];
+      final store = _RejectingConversationCache({
+        'flutter.uid': 'fixture-owner',
+        'flutter.migratedMemories': true,
+        'flutter.cachedMemories': cache,
+        'flutter.cachedConversations': cache,
+      }, throwOnLegacyWrite: throwOnLegacyWrite);
+      SharedPreferences.setMockInitialValues({});
+      SharedPreferencesStorePlatform.instance = store;
+      await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+      final prefs = SharedPreferencesUtil();
+
+      expect(await prefs.evictCachedConversation('deleted'), isFalse);
+
+      final disk = await store.getAll();
+      expect(disk['flutter.cachedConversations'], cache);
+      expect(disk['flutter.cachedMemories'], cache);
+      SharedPreferences.setMockInitialValues(disk);
+      await SharedPreferencesUtil.init(mirrorNativeAuthToken: false);
+
+      expect((await prefs.loadCachedConversations()).map((row) => row.id), ['keep']);
+      expect(prefs.cachedConversations.map((row) => row.id), ['keep']);
+      await prefs.saveBool('migratedMemories', false);
+      await prefs.saveStringList('cachedConversations', cache);
+      expect((await prefs.loadCachedConversations()).map((row) => row.id), ['keep']);
+
+      prefs.uid = 'different-owner';
+      expect((await prefs.loadCachedConversations()).map((row) => row.id), ['deleted', 'keep']);
+    });
+  }
 
   test('an old legacy read cannot migrate over a newer cache writer', () async {
     final prefs = await _prefs({

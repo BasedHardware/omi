@@ -208,8 +208,13 @@ application stops with `privacy_cache:unverified_fault`.
 
 `transition_results` records each row's applicability, actual application,
 completion, verification status and bounded evidence. Redis injection counters
-prove calls were refused; BEGIN loss also requires a successful END. Request memo
-cases require a warmed entry, a real memo hit and writer-driven clearing.
+prove calls were refused; BEGIN loss also requires a successful END. Subscription
+request memo cases require a warmed entry, a real memo hit and writer-driven clearing.
+Deletion-marker `request_memo` cases instead prove the absence of request memoization:
+both warm reads must consult fenced Redis, a real writer runs in a separate request
+scope, and every probe in the original open scope must consult Redis and immediately
+observe the updated marker. Reintroducing the request memo fails this proof, including
+when the writer would have cleared a memo in its own request.
 Overlap cases require every writer to reach real FSR BEGIN, or (for batch and
 uncached protection) a nonempty Firestore SDK Commit, before the overlapping read.
 The Commit barrier delegates to the saved real method, retaining the product
@@ -260,10 +265,10 @@ invalidations lost with Redis reads available, BEGIN-token loss, overlapping
 writers/readers, a reader held inside the real BEGIN fence, and a request memo
 spanning the real writer. Cache publication/memo events verify eligible warm
 paths actually exercise the optimization. Batch reads call the real guard twice
-inside one transaction with one shared `BatchPrivacyMemo`; distinct source sets
-force cold generation-memo misses and shared marker/user snapshot reuse. The
-`batch_snapshot:memo_hit` observation asserts snapshot object reuse separately
-from `batch:memo_hit` generation-decision reuse. Emulator mutation tests set
+inside one transaction; distinct source sets force cold generation-memo misses
+and independent live authority walks. `batch:memo_hit` proves generation-decision
+reuse across repeated checks; the retired WQ12 snapshot memo is no longer a
+qualification requirement. Emulator mutation tests set
 120s TTLs and lose invalidations: both BYOK directions and deletion-marker creation
 must record the +60/+61 mismatches and finish all probes. Default-TTL controls
 preserve the observed closed-boundary behavior, and 55s controls must qualify.

@@ -44,7 +44,10 @@ PAID_INTENT_VIOLATIONS = Counter(
 )
 HOLD_TRANSITIONS = Counter(contracts.METRIC_HOLD_TRANSITIONS, 'vendor_held transitions', ['outcome'])
 HELD_UNITS = Gauge(contracts.METRIC_HELD_UNITS, 'Units parked in vendor_held', ['reason'])
-HELD_OLDEST_AGE = Gauge(contracts.METRIC_HELD_OLDEST_AGE, 'Oldest vendor_held unit age; alert above 2h')
+# Literal for the alert emitter scan; frozen-name equality is covered by the contract test.
+HELD_OLDEST_AGE = Gauge(
+    'omi_batch_pipeline_vendor_held_oldest_age_seconds', 'Oldest vendor_held unit age; alert above 2h'
+)
 HEALTH_DECISIONS = Counter(contracts.METRIC_HEALTH_DECISIONS, 'VendorHealth.allows answers', ['provider', 'reason'])
 BREAKER_STATE = Gauge(
     contracts.METRIC_BREAKER_STATE, 'Vendor breaker state, 1 for the current one', ['provider', 'state']
@@ -57,6 +60,11 @@ OVERFLOW_AUDIO = Counter(
     'omi_batch_pipeline_vendor_overflow_audio_seconds_total',
     'Billed vendor audio seconds for units routed to a vendor over a capable GPU (overflow)',
     ['route'],
+)
+SHORT_SPEECH_SKIPPED_AUDIO = Counter(
+    contracts.METRIC_SHORT_SPEECH_SKIPPED_AUDIO,
+    'Unit audio seconds not sent to a vendor because measured speech was under the minimum',
+    ['provider'],
 )
 COLLECTORS = (
     ROUTE_DECISIONS,
@@ -77,6 +85,7 @@ COLLECTORS = (
     AUDIO_HOURS_CAP,
     CAP_HITS,
     OVERFLOW_AUDIO,
+    SHORT_SPEECH_SKIPPED_AUDIO,
 )
 
 
@@ -216,5 +225,14 @@ def cap_hit(provider: str, reason: VendorHealthReason | str) -> None:
         CAP_HITS.labels(
             provider=_vendor(provider), reason=reason_label(ReasonFamily.VENDOR_ROUTE, reason, VendorHealthReason)
         ).inc()
+    except Exception:
+        pass
+
+
+def short_speech_skip(provider: str, audio_seconds: float) -> None:
+    """Count the unbilled audio of a unit answered as silence below the speech minimum."""
+    try:
+        if audio_seconds > 0:
+            SHORT_SPEECH_SKIPPED_AUDIO.labels(provider=_vendor(provider)).inc(audio_seconds)
     except Exception:
         pass

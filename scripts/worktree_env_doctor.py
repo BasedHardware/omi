@@ -513,6 +513,8 @@ def run_all_checks(
 ) -> Report:
     """Component state a freshly bootstrapped worktree should already have.
 
+    App dependencies are deferred to the first Flutter command; diff-scoped
+    checks still require them for the Flutter checks they select.
     Components whose toolchain is absent are skipped rather than failed: a host
     without Flutter cannot push app changes either, and the diff-scoped run
     reports the missing tool when such a push happens.
@@ -523,8 +525,7 @@ def run_all_checks(
     report.checked.append("backend/.venv")
     report.findings += check_backend_venv(root, ("bootstrap",), ("pyright", "pytest"), which, probe)
     if which("flutter"):
-        report.checked.append("app dependencies")
-        report.findings += check_app_dependencies(root, ("bootstrap",), which)
+        report.skipped.append("app dependencies (deferred: flutter run, test and build resolve them on first use, or run `(cd app && flutter pub get)`; the pre-push check still requires them for Dart formatting and Flutter generated output)")
     else:
         report.skipped.append("app dependencies (flutter is not on PATH)")
     if which("xcrun"):

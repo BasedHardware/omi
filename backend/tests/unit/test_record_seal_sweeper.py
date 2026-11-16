@@ -288,3 +288,74 @@ def test_cli_import_failure_emits_only_generic_summary(monkeypatch, capsys):
     assert out.err == '' and len(out.out.splitlines()) == 1
     assert json.loads(json.loads(out.out)['message']) == {'event': 'record_seal_sweep', 'outcome': 'error'}
     assert 'example.invalid' not in out.out and 'private/object' not in out.out and 'AbC012' not in out.out
+
+
+@pytest.mark.parametrize('enabled', [True, False])
+def test_refused_age_and_count_preserve_bare_token_skip(source, proof, monkeypatch, enabled):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', str(enabled).lower())
+    source[1].rows[PATH].update(record_seal_refused_at=900.25, record_upload_sessions={'old': True})
+    report = run(source, proof())
+    assert report['omi_record_seal_refused_count'] == int(enabled)
+    assert report['omi_record_seal_refused_age_seconds'] == (99 if enabled else 0)
+    assert report['bare_token_skips'] == 1
+    assert report['dispositions'] == {'bare_token': 1}
+    assert not any(tx.updates for tx in source[1].transactions)
+
+
+@pytest.mark.parametrize('stamp', [None, True, '900', float('nan'), float('inf')])
+def test_invalid_refused_clock_is_not_measured(source, proof, stamp):
+    source[1].rows[PATH].update(record_seal_refused_at=stamp, record_upload_sessions={'old': True})
+    report = run(source, proof())
+    assert report['omi_record_seal_refused_count'] == 0
+    assert report['omi_record_seal_refused_age_seconds'] == 0
+
+
+@pytest.mark.parametrize('with_open_row', [False, True])
+def test_closed_refusal_stamp_contributes_neither_count_nor_age(source, proof, monkeypatch, with_open_row):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'true')
+    store, client, artifacts = source
+    client.rows[PATH].update(record_audio_closed=True, record_seal_refused_at=100)
+    jobs = ['pending']
+    if with_open_row:
+        client.rows[(*PATH[:-1], 'open-record')] = {
+            'record_audio_closed': False,
+            'record_seal_refused_at': 990,
+            'record_upload_sessions': {'bare': True},
+        }
+        client.rows[(*JOB_PATH[:-1], 'open-job')] = {
+            'state': 'record_pending',
+            'owner_id': 'synthetic',
+            'conversation_id': 'open-record',
+        }
+        jobs.append('open-job')
+    report = sweeper.sweep(store, object(), artifacts, inventory=proof, discover=lambda *_: jobs)
+    assert report['outcome'] == 'ok'
+    assert report['omi_record_seal_refused_count'] == int(with_open_row)
+    assert report['omi_record_seal_refused_age_seconds'] == (10 if with_open_row else 0)
+    assert report['backlog'] == int(with_open_row)
+    assert report['dispositions']['already_closed'] == 1
+    assert client.rows[PATH]['record_seal_refused_at'] == 100
+    assert not any(tx.updates for tx in client.transactions)
+
+
+def test_repair_sealed_row_retains_stamp_but_next_sweep_ignores_it(source, proof, monkeypatch):
+    monkeypatch.setenv('RECORD_SEAL_REFUSED_STAMP_ENABLED', 'true')
+    client = source[1]
+    client.rows[PATH].update(
+        record_seal_refused_at=900,
+        record_upload_sessions={'token': {'pod': 'old', 'process_started_at': 900}},
+    )
+    first = run(source, proof())
+    assert first['outcome'] == 'ok' and first['dispositions'] == {'sealed': 1}
+    assert first['omi_record_seal_refused_count'] == 1  # Pre-apply sample.
+    assert first['omi_record_seal_refused_age_seconds'] == 100
+    assert client.rows[PATH]['record_audio_closed'] is True
+    assert client.rows[PATH]['record_seal_refused_at'] == 900
+    client.transactions.clear()
+    second = run(source, proof())
+    assert second['outcome'] == 'ok' and second['dispositions'] == {'already_closed': 1}
+    assert second['omi_record_seal_refused_count'] == 0
+    assert second['omi_record_seal_refused_age_seconds'] == 0
+    assert second['backlog'] == 0
+    assert client.rows[PATH]['record_seal_refused_at'] == 900
+    assert not any(tx.updates for tx in client.transactions)

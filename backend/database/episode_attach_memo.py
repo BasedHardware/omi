@@ -3,7 +3,9 @@
 from google.cloud import firestore
 
 from config.episode_attach import content_gate_enabled
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client
+from database import transcript_pointer
+from database.transcript_pointer import run_preloaded_transactional
 from database.conversations import decode_transcript_segments_verified
 from utils.conversations.episode_attach_key import content_key, memo_eligible
 from utils.conversations.fragment_visibility import is_relevance_discarded
@@ -19,7 +21,11 @@ def current_key(uid, row):
             uid, row.get('transcript_segments'), bool(row.get('transcript_segments_compressed'))
         )
         return content_key(decoded)
-    except Exception:
+    except (
+        transcript_pointer.TranscriptSegmentsDecodeError,
+        transcript_pointer.TranscriptBlobAbsent,
+        transcript_pointer.TranscriptShredded,
+    ):
         # Failed verification cannot manufacture a memo hit or a completed stamp.
         return None
 
@@ -47,7 +53,9 @@ def matches(uid, cid, row, *, firestore_client=None, finalized=False):
         return current.get('episode_id') == link['episode_id'] and current_key(uid, current) == key
 
     try:
-        return run_transactional(client, check, transient=True)
+        return run_preloaded_transactional(client, check, transient=True)
+    except transcript_pointer.TranscriptPointerError:
+        raise
     except Exception:
         record_fallback(
             component='episodes',
@@ -98,7 +106,9 @@ def complete(uid, cid, row, owner, *, firestore_client=None, finalized=False):
             transaction.update(ref, {marker: key})
 
     try:
-        run_transactional(client, finish, transient=True)
+        run_preloaded_transactional(client, finish, transient=True)
+    except transcript_pointer.TranscriptPointerError:
+        raise
     except Exception:
         # The recovery already committed. An absent completion stamp keeps
         # future calls on the full path without changing this call's outcome.
