@@ -13459,6 +13459,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro కోడ్ ఉందా? తదుపరి స్క్రీన్‌లో దాన్ని నమోదు చేయండి.';
+
+  @override
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override

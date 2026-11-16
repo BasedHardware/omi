@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Účtováno ročně",
     "paywallTrialSaveAmount": "Ušetřete {amount}",
     "paywallTrialCta": "Začněte za {price}",
+    "paywallTrialCodeHint": "Máte kód Omi Pro? Zadejte ho na další obrazovce.",
     "paywallTrialCancelNote": "Zrušte kdykoli. Žádné poplatky, žádné sankce.",
     "paywallMonthlyFallbackTitle": "Celý rok je zatím moc?",
     "paywallMonthlyFallbackTrialBody": "Začněte s měsíčním plánem. Stejných {days} dní zdarma, poté {price} měsíčně. Zrušte kdykoli.",

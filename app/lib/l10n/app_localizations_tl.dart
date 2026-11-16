@@ -13512,6 +13512,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'May Omi Pro code ka? Ilagay ito sa susunod na screen.';
+
+  @override
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override

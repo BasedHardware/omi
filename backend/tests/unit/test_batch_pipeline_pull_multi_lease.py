@@ -20,6 +20,14 @@ from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
 
 
+@pytest.fixture(autouse=True)
+def legacy_service_contract(monkeypatch):
+    # This file characterizes the pre-protection batching/order contract and
+    # rollback, including its exact transaction count. Enabled discovery has
+    # its own explicit extra-read/claim/batch bounds in protected_share tests.
+    monkeypatch.setenv('BATCH_PIPELINE_PROTECTED_SHARE_ENABLED', 'off')
+
+
 class SnapshotTransaction(MemoryTransaction):
     def __init__(self, rows, counts):
         super().__init__(rows)

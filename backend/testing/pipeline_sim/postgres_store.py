@@ -96,6 +96,9 @@ class _Recording:
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return self._tx.ready_predecessor(owner_key, priority, segment_id)
 
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        return self._tx.protected_ready(owner_key, priority, now, after=after)
+
     def service_frontier(self, priority: int) -> float:
         return self._tx.service_frontier(priority)
 
@@ -137,6 +140,9 @@ class PgSimStore(SimStore):
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
         return self.pg.due(state, now, limit)
+
+    def protected_retries(self, now, limit, *, after=None):
+        return self.pg.protected_retries(now, limit, after=after)
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         return self.pg.oldest(priority, ready_only=ready_only)

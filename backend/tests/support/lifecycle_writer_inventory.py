@@ -1,6 +1,26 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Client polling adapter only; never writes conversation lifecycle status.
+    'database/record_wal_handoff.py': [
+        (
+            'status',
+            'status',
+            "'processing'",
+            (
+                'failed_segments',
+                'job_id',
+                'lane',
+                'poll_after_ms',
+                'processed_segments',
+                'reason_code',
+                'status',
+                'successful_segments',
+                'total_files',
+                'total_segments',
+            ),
+        ),
+    ],
     'utils/batch_pipeline/empty_transcription.py': [
         (
             'stamp',
@@ -4431,7 +4451,13 @@ FIELD_SITES = {
     'utils/workers/consumer.py': [('http_response', 'status', 'result.outcome.value', ('reason', 'status'))],
     'utils/workers/retry.py': [('retry_response', 'status', "'retry'", ('reason', 'status'))],
     'utils/conversations/transcribing_hold.py': [
-        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured'))
+        ('project', 'status', "'completed' if status == 'failed' else status", ('status', 'structured')),
+        # API response only; never sent to a lifecycle persistence helper.
+        ('retry_wire', 'status', "'processing'", ('home_step', 'status', 'structured', 'summary_retryable')),
+    ],
+    'utils/conversations/empty_capture.py': [
+        # Expired-placeholder wire copy, not a stored terminal transition.
+        ('project', 'status', "'completed'", ('status', 'structured', 'summary_retryable')),
     ],
 }
 

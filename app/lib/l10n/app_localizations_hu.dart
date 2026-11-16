@@ -13458,6 +13458,9 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Van Omi Pro kódod? Add meg a következő képernyőn.';
+
+  @override
   String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
 
   @override

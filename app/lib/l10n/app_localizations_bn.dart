@@ -13404,6 +13404,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro কোড আছে? পরের স্ক্রিনে সেটি দিন।';
+
+  @override
   String get paywallTrialCancelNote => 'যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।';
 
   @override

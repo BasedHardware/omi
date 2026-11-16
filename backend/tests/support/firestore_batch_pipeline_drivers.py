@@ -29,6 +29,37 @@ def _poll_skip_modes(client):
 def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreStore.protected_retries',
+            covered_by=('database.batch_pipeline_store.protected_capture_page',),
+            reason='thin adapter forwards the bounded capture-clock builder with the owning namespace and transaction',
+            expect_observed=False,
+            body_digest='b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
+        ),
+        CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.protected_ready',
+            covered_by=('database.batch_pipeline_store.protected_capture_page',),
+            reason='thin adapter forwards the bounded capture-clock builder with the owning namespace and transaction',
+            expect_observed=False,
+            body_digest='c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.protected_capture_page',
+            domains={'namespace': namespaces, 'after': [None, [2900000.0, 'previous']]},
+            profiles=(
+                CallerProfile('ready', {'state': ['ready'], 'owner_key': ['owner-hash'], 'priority': [1, 2]}),
+                CallerProfile('retry', {'state': ['retry'], 'owner_key': [None], 'priority': [None]}),
+            ),
+            neutrals={
+                'now': (3000000.0, 'capture window only'),
+                'limit': (25, 'bounded page only'),
+                'transaction': (None, 'transaction binding only'),
+            },
+        ),
+        DriverEntry(
+            'database.record_wal_handoff.pending_sample',
+            domains={'namespace': namespaces},
+        ),
         DriverEntry(
             'database.batch_pipeline_delivered_share.delivered_share_page',
             domains={'namespace': namespaces},

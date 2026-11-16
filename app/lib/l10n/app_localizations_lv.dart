@@ -13438,6 +13438,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vai jums ir Omi Pro kods? Ievadiet to nākamajā ekrānā.';
+
+  @override
   String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
 
   @override

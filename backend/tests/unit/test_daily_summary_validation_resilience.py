@@ -27,6 +27,13 @@ from routers.developer import get_developer_daily_summaries, get_developer_daily
 from routers.users import get_daily_summaries, get_daily_summary, search_daily_summaries
 
 
+@pytest.fixture(autouse=True)
+def _isolate_memory_reference_reads(monkeypatch):
+    # These tests cover schema/paging resilience. Memory authority resolution
+    # has its own transport regressions in test_recap_learning_refs.py.
+    monkeypatch.setattr(users_router, 'refresh_recap_learning_refs', lambda uid, summaries: summaries)
+
+
 def _read_auth():
     return ApiKeyAuth(
         uid="uid1",
