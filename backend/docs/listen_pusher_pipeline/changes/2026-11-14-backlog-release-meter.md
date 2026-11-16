@@ -40,7 +40,7 @@ the supervisor exits that loop. Stopping the writer leaves the gate to expire.
 
 A heartbeat **copies `window` and `tokens_used` unchanged**, even across an hour.
 Only the first successful commit in the heartbeat's new hour rolls the window
-and starts the count at one. Malformed existing counters or regressing clocks
+and starts the count at one. Existing empty documents, malformed existing counters or regressing clocks
 stop the writer; they are never repaired by resetting a budget. Rate changes,
 closing and reopening retain the same hour's spend. A depleted hour cannot be
 reopened by restarting the writer. The rate is a global hourly cap in units,
@@ -94,7 +94,11 @@ Before spending a token the merge transaction compares the owner's
 `log_sequence` with the result at `projection_watermark`, reusing the existing
 catch-up contract. At or above `BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH` it refuses
 with `reason="projection"`. Disabling that general switch retains a mandatory
-16-unit backlog ceiling. A missing/malformed referenced watermark or impossible
+16-unit backlog ceiling. A referenced result must match the committing owner
+(both owner key and owner id) and watermark segment id, with a positive sequence
+no greater than the owner sequence. Equal sequences require the watermark to
+be the owner log tail; an earlier sequence requires a distinct valid tail.
+A missing/malformed referenced watermark or impossible
 sequence is **unknown headroom**, so refuses; it never grants a token. A new
 owner without a projection watermark has zero projected rows. Fresh commits
 still bypass the meter and owner allowlist, and existing predecessor, privacy,
@@ -120,7 +124,7 @@ operating alongside a potentially unmetered committer. Never use meter `false`
 plus legacy `true`. A writer config change is effective only on the current
 lease holder; complete a rollout/stop old writers before relying on it.
 
-### Operator runbook: one owner at 2/hour (requires separate production approval)
+### Operator runbook: one owner at 60/hour (requires separate production approval)
 
 Do not run production writes merely because this code merged. The implementation
 lane has no authorization to open the gate, deploy, or change flags. Use the
@@ -175,7 +179,7 @@ The following is the concrete activation configuration, not a change made here.
    Path(os.environ['BACKLOG_ENV_FILE']).write_text(
        'BATCH_PIPELINE_BACKLOG_RELEASE_WRITER: enabled\n'
        'BATCH_PIPELINE_BACKLOG_RELEASE_STATE: open\n'
-       'BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR: "2"\n'
+       'BATCH_PIPELINE_BACKLOG_RELEASE_RATE_PER_HOUR: "60"\n'
        'BATCH_PIPELINE_BACKLOG_RELEASE_REACH_SECONDS: "0"\n'
        'BATCH_PIPELINE_BACKLOG_RELEASE_MODE: allowlist_only\n'
        f'BATCH_PIPELINE_BACKLOG_RELEASE_OWNER_KEYS: "{digest}"\n'
@@ -200,7 +204,7 @@ The following is the concrete activation configuration, not a change made here.
    supervisor to tick. Within 20 seconds a fenced holder creates/updates the
    v2 gate. Read back **only** state, schema version, timestamp, rate, reach,
    mode, list size, window and tokens. Require age < 180 seconds, mode
-   `allowlist_only`, list size 1, rate 2, reach 0. Do not manually reset tokens
+   `allowlist_only`, list size 1, rate 60, reach 0. Do not manually reset tokens
    or create an open v1 gate. A previously spent hour waits until the next hour.
 
 5. **Verify delivery, not just grants.** Take the aggregate readbacks below
@@ -209,8 +213,17 @@ The following is the concrete activation configuration, not a change made here.
    IDs/content. If that owner's existing projection depth is full, refusal is
    expected: projection must drain first; do not bypass the headroom guard.
    Grants alone are not evidence that Home received the result. The release
-   owner should review the first hour, then raise 2 → 10 → 20/hour only with
-   stable/declining projection obligations and successful delivery. The Q12
+   owner should review the first hour at 60/hour, with no automatic increase.
+   This bounded exclusive cap is deliberate: a support case of about 369 held
+   units would require about 185 grant-hours at 2/hour, versus about 6.2 at
+   60/hour, before projection delays, retries and hour boundaries. These are
+   planning estimates, not measured delivery. Only one owner is eligible;
+   the per-owner projection-headroom guard (default depth 16, including when
+   general catch-up limiting is off) prevents piling releases behind a stalled
+   projection watermark. The hourly budget can burst, so retain both guards.
+   For separately approved `all` mode, start conservatively at 2/hour and
+   increase 2 → 10 → 20/hour only with stable/declining fleet projection
+   obligations and successful delivery. The Q12
    quality lead owns activation review by 2026-11-17; a still-closed gate is a
    reported rollout blocker, not a completed customer recovery. Expansion to
    `all` is a separately approved cohort change.

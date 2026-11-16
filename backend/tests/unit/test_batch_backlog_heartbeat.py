@@ -4,6 +4,8 @@ from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
 from unittest.mock import Mock
+from types import SimpleNamespace
+from testing.pipeline_sim.store import SimTransaction
 
 import pytest
 from google.api_core.exceptions import Aborted, ServiceUnavailable
@@ -15,7 +17,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import backlog_release as gate, serving
 from config.batch_pipeline_backlog_release import WriterConfig, PREFIX
 from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, LEASE_KEY
-from utils.batch_pipeline.scheduler import owner_key
+from utils.batch_pipeline.scheduler import owner_key, _OwnWrites
 
 
 @pytest.fixture(autouse=True)
@@ -229,8 +231,23 @@ def test_projection_headroom_even_with_catch_up_switch_off(depth, monkeypatch):
     monkeypatch.setattr(gate, 'REFUSED', refused)
     assert merge(store, depth=depth) is None and tokens(store) == 0
     refused.labels.assert_called_with('projection')
-    put(store, 'results', 'projected', {'log_sequence': limit})
-    put(store, 'owners', owner_key('synthetic'), {'log_sequence': limit, 'projection_watermark': 'projected'})
+    put(
+        store,
+        'results',
+        'projected',
+        {
+            'log_sequence': limit,
+            'segment_id': 'projected',
+            'owner_key': owner_key('synthetic'),
+            'owner_id': 'synthetic',
+        },
+    )
+    put(
+        store,
+        'owners',
+        owner_key('synthetic'),
+        {'log_sequence': limit, 'projection_watermark': 'projected', 'log_tail': 'projected'},
+    )
     assert merge(store, depth=depth) and tokens(store) == 1
 
 
@@ -239,9 +256,24 @@ def test_unknown_or_invalid_projection_watermark_is_closed(sequence):
     store = MemoryStore()
     ready(store, 'a')
     assert authority(store).tick()
-    put(store, 'owners', owner_key('synthetic'), {'log_sequence': 2, 'projection_watermark': 'missing'})
+    put(
+        store,
+        'owners',
+        owner_key('synthetic'),
+        {'log_sequence': 2, 'projection_watermark': 'missing', 'log_tail': 'tail'},
+    )
     if sequence is not None:
-        put(store, 'results', 'missing', {'log_sequence': sequence})
+        put(
+            store,
+            'results',
+            'missing',
+            {
+                'log_sequence': sequence,
+                'segment_id': 'missing',
+                'owner_key': owner_key('synthetic'),
+                'owner_id': 'synthetic',
+            },
+        )
     assert merge(store) is None and tokens(store) == 0
 
 
@@ -353,3 +385,146 @@ def test_deleted_gate_cannot_reset_current_hour_tokens():
     with pytest.raises(ValueError, match='missing backlog gate'):
         writer.tick()
     assert ('backlog_release', 'gate') not in store.rows
+
+
+@pytest.mark.parametrize('document', [{}, {'tokens_used': 1}])
+def test_strict_firestore_existing_empty_or_partial_gate_latches_closed(document, monkeypatch):
+    """Reviewer reproduction: an existing {} must never be initialized as an absent gate."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    store = FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
+    store.run(lambda tx: tx.put('backlog_release', 'gate', document))
+    writer = authority(store)
+    with pytest.raises(ValueError, match='invalid existing backlog gate'):
+        writer.tick()
+    assert writer.failed and not writer.tick()
+    assert row(store) == document
+    assert store.run(lambda tx: tx.get_existing('leases', LEASE_KEY)) is None
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'owner_key': owner_key('different-owner'), 'owner_id': 'different-owner'},
+        {'owner_key': None},
+        {'owner_id': None},
+        {'owner_id': 'different-owner'},
+        {'segment_id': None},
+        {'segment_id': 'different-segment'},
+        {'log_sequence': 0},
+        {'log_sequence': True},
+        {'log_sequence': 3},
+    ],
+)
+def test_projection_watermark_requires_matching_owner_and_segment(change, monkeypatch):
+    store = MemoryStore()
+    ready(store, 'a')
+    assert authority(store).tick()
+    put(
+        store,
+        'owners',
+        owner_key('synthetic'),
+        {
+            'log_sequence': 2,
+            'projection_watermark': 'projected',
+            'log_tail': 'projected',
+        },
+    )
+    result = {
+        'log_sequence': 2,
+        'segment_id': 'projected',
+        'owner_key': owner_key('synthetic'),
+        'owner_id': 'synthetic',
+    }
+    for field, value in change.items():
+        if value is None:
+            result.pop(field)
+        else:
+            result[field] = value
+    put(store, 'results', 'projected', result)
+    refused = Mock()
+    monkeypatch.setattr(gate, 'REFUSED', refused)
+    assert merge(store) is None and tokens(store) == 0
+    refused.labels.assert_called_with('projection')
+
+
+@pytest.mark.parametrize('tail,allowed', [('projected', True), ('other', False), (None, False)])
+def test_projection_sequence_equal_requires_watermark_at_owner_log_tail(tail, allowed):
+    store = MemoryStore()
+    ready(store, 'a')
+    assert authority(store).tick()
+    put(
+        store,
+        'owners',
+        owner_key('synthetic'),
+        {
+            'log_sequence': 2,
+            'projection_watermark': 'projected',
+            'log_tail': tail,
+        },
+    )
+    put(
+        store,
+        'results',
+        'projected',
+        {
+            'log_sequence': 2,
+            'segment_id': 'projected',
+            'owner_key': owner_key('synthetic'),
+            'owner_id': 'synthetic',
+        },
+    )
+    assert bool(merge(store)) is allowed
+    assert tokens(store) == int(allowed)
+
+
+@pytest.mark.parametrize('adapter', ['firestore', 'simulator', 'scheduler'])
+def test_existence_read_preserves_legacy_get_cache_and_buffered_empty_write(adapter, monkeypatch):
+    def body(tx):
+        assert tx.get('backlog_release', 'gate') == {}
+        assert tx.get_existing('backlog_release', 'gate') is None
+        tx.put('backlog_release', 'gate', {})
+        assert tx.get_existing('backlog_release', 'gate') == {}
+
+    if adapter == 'firestore':
+        monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+        store = FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
+        store.run(body)
+        store.run(lambda tx: tx.get('backlog_release', 'gate'))
+        assert store.run(lambda tx: tx.get_existing('backlog_release', 'gate')) == {}
+    elif adapter == 'scheduler':
+        MemoryStore().run(lambda tx: body(_OwnWrites(tx)))
+    else:
+        body(SimTransaction(SimpleNamespace(rows={})))
+        tx = SimTransaction(SimpleNamespace(rows={('backlog_release', 'gate'): {}}))
+        assert tx.get('backlog_release', 'gate') == {}
+        assert tx.get_existing('backlog_release', 'gate') == {}
+
+
+@pytest.mark.parametrize('tail,allowed', [('tail', True), ('projected', False), (None, False)])
+def test_earlier_projection_sequence_requires_a_distinct_valid_log_tail(tail, allowed):
+    store = MemoryStore()
+    ready(store, 'a')
+    assert authority(store).tick()
+    put(
+        store,
+        'owners',
+        owner_key('synthetic'),
+        {
+            'log_sequence': 2,
+            'projection_watermark': 'projected',
+            'log_tail': tail,
+        },
+    )
+    put(
+        store,
+        'results',
+        'projected',
+        {
+            'log_sequence': 1,
+            'segment_id': 'projected',
+            'owner_key': owner_key('synthetic'),
+            'owner_id': 'synthetic',
+        },
+    )
+    assert bool(merge(store)) is allowed
+    assert tokens(store) == int(allowed)

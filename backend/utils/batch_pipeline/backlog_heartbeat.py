@@ -49,7 +49,7 @@ class HeartbeatAuthority:
 
         def body(tx):
             lease = tx.get('leases', LEASE_KEY)
-            row = tx.get('backlog_release', 'gate')
+            row = tx.get_existing('backlog_release', 'gate')
             now = self.clock()  # Resampled on transaction retries.
             if type(now) not in (float, int) or not 0 <= now < float('inf'):
                 raise ValueError('invalid heartbeat clock')
@@ -67,10 +67,10 @@ class HeartbeatAuthority:
                     raise ValueError('invalid heartbeat lease or regressing clock')
                 if lease['expires_at'] > now and lease['holder'] != self.holder:
                     return None
-            gate = Gate.parse(row) if row else None
-            if lease and not row:
+            gate = Gate.parse(row) if row is not None else None
+            if lease and row is None:
                 raise ValueError('missing backlog gate after authority initialization')
-            if row and gate is None:
+            if row is not None and gate is None:
                 # A malformed count must never be repaired by resetting the budget.
                 raise ValueError('invalid existing backlog gate')
             if gate and now < gate.updated_at:

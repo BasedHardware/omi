@@ -138,7 +138,7 @@ def read(tx, job: dict, now: Callable[[], float], source: str) -> tuple[dict | N
     return {**row, 'window': gate.hour(), 'tokens_used': gate.used() + 1}, None
 
 
-def projection_refusal(tx, owner: dict, depth: int) -> str | None:
+def projection_refusal(tx, owner: dict, depth: int, *, owner_key: str, owner_id: str) -> str | None:
     """Reuse the owner log/projection watermark, but uncertainty cannot grant backlog headroom."""
     from config.batch_pipeline import MERGE_CATCH_UP_DEPTH_DEFAULT
 
@@ -146,8 +146,22 @@ def projection_refusal(tx, owner: dict, depth: int) -> str | None:
     if type(sequence) is not int or sequence < 0:
         return 'projection'
     projected = owner.get('projection_watermark')
-    done = tx.get('results', projected).get('log_sequence') if projected else 0
-    if type(done) is not int or not 0 <= done <= sequence:
-        return 'projection'
+    done = 0
+    if projected is not None:
+        if not isinstance(projected, str) or not projected:
+            return 'projection'
+        result = tx.get('results', projected)
+        done = result.get('log_sequence')
+        if (
+            result.get('owner_key') != owner_key
+            or result.get('owner_id') != owner_id
+            or result.get('segment_id') != projected
+            or type(done) is not int
+            or not 1 <= done <= sequence
+            or not isinstance(owner.get('log_tail'), str)
+            or not owner['log_tail']
+            or ((done == sequence) != (owner['log_tail'] == projected))
+        ):
+            return 'projection'
     # Turning off fresh-first depth must never turn off the backlog flood guard.
     return 'projection' if sequence - done >= (depth or MERGE_CATCH_UP_DEPTH_DEFAULT) else None

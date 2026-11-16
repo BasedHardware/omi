@@ -441,7 +441,7 @@ class OrderedMerge:
                 if reason:
                     backlog['refusal'] = reason
                     return None
-                if backlog_release.projection_refusal(tx, owner, depth):
+                if backlog_release.projection_refusal(tx, owner, depth, owner_key=key, owner_id=owner_id):
                     backlog['refusal'] = 'projection'
                     return None
                 backlog['token'] = token

@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 class Transaction(Protocol):
     def get(self, table: str, key: str) -> dict: ...
+    def get_existing(self, table: str, key: str) -> dict | None: ...
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
@@ -154,6 +155,7 @@ class FirestoreTransaction:
         self.transaction = transaction
         self.read_budget = read_budget
         self.cache: dict[tuple[str, str], dict] = {}
+        self.exists: dict[tuple[str, str], bool] = {}
         self.writes: dict[tuple[str, str], dict] = {}
         self.patches: dict[tuple[str, str], dict] = {}
         # Documents outside the batch tables that join this transaction (the provider-STT outbox row).
@@ -194,8 +196,15 @@ class FirestoreTransaction:
             if self.read_budget is not None:
                 options = dict(timeout=self.read_budget.timeout(10), retry=None)
             snapshot = self._ref(table, key).get(transaction=self.transaction, **options)
+            self.exists[address] = snapshot.exists
             self.cache[address] = (snapshot.to_dict() or {}) if snapshot.exists else {}
         return deepcopy({**self.writes.get(address, self.cache[address]), **self.patches.get(address, {})})
+
+    def get_existing(self, table: str, key: str) -> dict | None:
+        """Preserve absence separately from an existing empty document, including buffered writes."""
+        row = self.get(table, key)
+        address = (table, key)
+        return row if address in self.writes or address in self.patches or self.exists[address] else None
 
     def put(self, table: str, key: str, value: dict) -> None:
         if table == 'conversations':
