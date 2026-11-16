@@ -27,6 +27,7 @@ with metrics.mode_scope('shadow'):
     metrics.read_snapshot('batch', SimpleNamespace(get=lambda: SimpleNamespace(exists=False)))
 metrics.compare('batch', 'allow', 'allow')
 metrics.owner_comparison('snapshots', 'match', 'owner_hit')
+metrics.owner_shadow_error('attempt', TimeoutError('synthetic-private-detail'))
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
@@ -74,6 +75,10 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 ]
                 == attempt
             )
+            assert (
+                before[('privacy_owner_shadow_error_total', (('error_class', 'timeout'), ('shape', 'attempt')))]
+                == attempt
+            )
             assert before[('privacy_shadow_checks_total', (('family', 'batch'), ('result', 'match')))] == attempt
             assert before[('privacy_memo_requests_total', (('family', 'batch'), ('result', 'hit')))] == attempt
             assert (
@@ -107,6 +112,7 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_decision_mismatch_total',
                 'privacy_decision_comparison_total',
                 'privacy_owner_comparison_total',
+                'privacy_owner_shadow_error_total',
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
                 'privacy_negative_lookup_total',

@@ -1521,18 +1521,21 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     assert shared['spec']['endpoints'][0]['interval'] == '60s'
     assert shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'] == (
         'omi_.*|omi_listen_server_batch_suppression_total|listen_quiet_check_.*|conversation_llm_input_dedupe_.*'
-        '|privacy_(checks|check_calls|check_reads|decision_mismatch|decision_comparison|owner_comparison|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total'
+        '|privacy_(checks|check_calls|check_reads|decision_mismatch|decision_comparison|owner_comparison|owner_shadow_error|shadow_checks|memo_requests|memo_ineligible|ttl_cache|negative_lookup)_total|privacy_ttl_cache_disabled'
     )
     # The privacy shadow kill switch reads these from Cloud Run (cl2-infracost 2026-11-04).
     for name in (
         'privacy_decision_mismatch_total',
         'privacy_decision_comparison_total',
         'privacy_owner_comparison_total',
+        'privacy_owner_shadow_error_total',
+        'privacy_ttl_cache_disabled',
         'privacy_shadow_checks_total',
         'privacy_ttl_cache_total',
         'privacy_negative_lookup_total',
     ):
         assert re.fullmatch(shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], name)
+        assert kept(name), name
     assert re.fullmatch(
         shared['spec']['endpoints'][0]['metricRelabeling'][0]['regex'], 'omi_listen_preview_batch_custody_total'
     )

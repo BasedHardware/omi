@@ -181,8 +181,18 @@ custody consumers read any row they still need themselves.
 
 Shadow window to run before any owner-memo enforcement admission:
 
+- Before interpreting any match count, read
+  `ops_kill_switches/privacy_decision_cache` and require it to be clear. Require
+  a present `privacy_ttl_cache_disabled = 0` series for **each serving service**
+  and positive `candidate_source="owner_hit"` comparisons on each eligible
+  shape. A set switch makes the owner comparison window vacuous even when
+  fresh-read comparisons match. The old kill guard left this switch set from
+  2026-11-04T22:50:25Z through 2026-11-16 (confirmed by David's ro-prod read);
+  release owns clearing it after old revisions drain. Enforcement stays off.
 - Keep `bpp_owner_memo:100` and `bpp_owner_memo_enforce:0`; set
   `privacy_checks_shadow:10`, `privacy_negative_lookup_cache:0`, and `privacy_ttl60:0`.
+  This 10% stage is diagnostic; the current qualification policy below requires
+  100% live shadow for two hours after synthetic/replay proof.
   Clearing shadow alone NEVER admits this memo: the enforcement gate stays off.
 - For the sampled 10% of uids every transactional batch check serves the LIVE
   decision and then compares an owner-memo candidate. That covers all three
@@ -240,8 +250,10 @@ calls reporting `reason="snapshots"` mean the owner path was off at its gate,
 not that their throwaway export changed a cache key. `privacy_memo_requests_total`
 with `result="no_token"` is not a count of all unusable tokens: it only increments
 when minting is allowed by the caller and `_mintable` accepts the snapshot.
-Missing server revisions, wrong schemas, blocked tokens and non-integer
-generations can prevent eligibility without incrementing that series.
+Missing server revisions, blocked tokens and non-integer generations can
+prevent eligibility without incrementing that series. Unsupported schema
+versions are mintable and do increment `no_token` when the caller permits
+minting, even if `bpp_token_mint` is off and the scheduler therefore does nothing.
 
 Candidate exceptions increment both the existing error denominator and
 `privacy_owner_shadow_error_total{shape="attempt|no_attempt|snapshots",error_class="..."}`.
@@ -260,6 +272,17 @@ sum by (service_name, shape, error_class) (
 
 ## Deploy and ramp
 
+**Correction 2026-11-17 — calendar soak requirements superseded.** David's
+2026-11-04 ~17:10Z ruling replaced calendar soaks for **all Firestore read
+levers**, including the 14-day privacy shadow: privacy/deletion levers require
+**evidence, not time**. Require zero mismatches across at least approximately
+1,000 synthetic plus replayed risky transitions, then **two hours of live
+shadow at 100%**, with an automatic kill switch on the **first mismatch**.
+The old 14-day clauses in steps 3–4 below are retained as superseded history;
+they must not govern admission. Writer coverage, privacy contracts, mismatch
+classification and baseline economics still apply. This correction does not
+admit enforcement; the cost lead owns that separate decision.
+
 1. Lead deploys writer code: **listen → pusher → Cloud Run** (backend,
    backend-sync, backend-sync-backfill, desktop-backend and other serving
    writers) **→ jobs/operator producers**. Verify the running artifact at
@@ -272,12 +295,12 @@ sum by (service_name, shape, error_class) (
    candidate runs **after** live allow/block, never changes it and never writes
    to the caller's export (it gets a throwaway copy). Shadow wins if an
    enforcement lever is also present.
-3. Require **at least 14 days** of all-plane shadow and **zero unexplained
+3. **Superseded calendar clause (see correction above):** Require **at least 14 days** of all-plane shadow and **zero unexplained
    `privacy_decision_mismatch_total`**, plus the emulator writer matrix and privacy contracts.
    Count/classify benign concurrent ordering rather than discarding it. Grade
    memo economics against the scope's 30% repeat-key hit-rate bar; a cache with
    insufficient repeat-key traffic has no demonstrated saving.
-4. Infracost owns expansion and the first enforcement decision is due **14 days
+4. **Superseded calendar clause (see correction above):** Infracost owns expansion and the first enforcement decision is due **14 days
    after shadow reaches all planes**. Remove shadow for the qualified cohort,
    then ramp `bpp_generation_memo`, `legal_hold_fence_cache`, and
    `tombstone_negative_cache` separately to **5% → PASS on two ticks → 100%**,

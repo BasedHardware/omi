@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import json
 import re
-import time
+from types import SimpleNamespace
 
 import fakeredis
 from google.api_core import exceptions
@@ -16,6 +16,7 @@ from database import batch_pipeline_privacy as privacy, conversation_tombstones 
 from database import fsr_read_cache as cache, legal_holds, privacy_check_metrics as metrics
 from database.batch_privacy_attempt import batch_privacy_attempt
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+from utils.batch_pipeline import artifact_reads
 from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
 
 UID = 'privacy-test-owner'
@@ -374,7 +375,8 @@ def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, s
     assert counter._value.get() == before + 2
 
 
-def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
+@pytest.mark.parametrize('config_name', ['cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'])
+def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run(config_name):
 
     class PrivateOwnerContentError(Exception):
         pass
@@ -393,9 +395,9 @@ def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
         before = counter._value.get()
         metrics.owner_shadow_error('private-shape', error)
         assert counter._value.get() == before + 1
-    rendered = repr(metrics.OWNER_SHADOW_ERRORS.collect())
+    rendered = repr(list(metrics.OWNER_SHADOW_ERRORS.collect()))
     assert 'private' not in rendered.lower()
-    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / config_name).read_text())
     keeps = [
         rule['regex']
         for endpoint in config['spec']['endpoints']
@@ -410,24 +412,22 @@ def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(w
 
     db, reads, _, _ = world
     enable(monkeypatch, 'privacy_checks_shadow', 'bpp_generation_memo', 'bpp_decision_cache')
-    budget = ArtifactReadBudget(deadline=time.monotonic() + 2, max_bytes=0, max_objects=0)
-    original = budget.timeout
-    calls = 0
+    monkeypatch.setattr(artifact_reads, 'time', SimpleNamespace(monotonic=lambda: 1.0))
+    budget = ArtifactReadBudget(deadline=3.0, max_bytes=0, max_objects=0)
+    original = privacy._assert_batch_write_allowed_memo
+    live_reads = []
 
-    def timeout(ceiling):
-        nonlocal calls
-        calls += 1
-        # Observation token + five live authority reads complete before the
-        # seventh budget check, at the candidate's token read.
-        if calls == 7:
-            budget.deadline = 0
-        return original(ceiling)
+    def expired_candidate(*args, **kwargs):
+        assert kwargs['owner_candidate'] is True
+        live_reads.extend(reads)
+        budget.deadline = 0  # Expire when shadow enters, independent of live read count.
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(budget, 'timeout', timeout)
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', expired_candidate)
     counter = metrics.OWNER_SHADOW_ERRORS.labels('attempt', 'artifact_read_limit')
     before = counter._value.get()
     with batch_privacy_attempt():
         assert check(db, read_budget=budget) == 7
-    assert len(reads) == 6  # Failed budget checks do not issue extra SDK reads.
-    assert calls >= 7
+    assert TOKEN in live_reads and SOURCE in live_reads
+    assert reads == live_reads  # Failed candidate budget checks issue no SDK reads.
     assert counter._value.get() == before + 1
