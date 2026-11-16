@@ -25,6 +25,37 @@ from test_operator_ingress import inputs
 
 class ControlTests(unittest.TestCase):
 
+    def test_source_container_containment_and_exact_cleanup(self):
+        for readiness in (False, True):
+            with self.subTest(readiness=readiness), patch.object(
+                image_smoke.subprocess, 'check_output', return_value='owned-container\n'
+            ) as create, patch.object(
+                image_smoke.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout='proof')
+            ) as run:
+                self.assertEqual(image_smoke.run_container(['image', 'program'], readiness=readiness), 'proof')
+            argv = create.call_args.args[0]
+            for flag in (
+                '--platform=linux/amd64',
+                '--network=none',
+                '--read-only',
+                '--memory=512m',
+                '--cap-drop=ALL',
+                '--security-opt=no-new-privileges',
+                '--tmpfs=/tmp:rw,mode=1777',
+                '--pids-limit=128',
+            ):
+                self.assertEqual(argv.count(flag), 1)
+            self.assertEqual(
+                [arg for arg in argv if arg.startswith('--cpus=')], ['--cpus=0.5' if readiness else '--cpus=2']
+            )
+            for flag in ('--hostname=jobstore-reconcile-0', '--env=GIT_OPTIONAL_LOCKS=0'):
+                self.assertEqual(argv.count(flag), int(readiness))
+            self.assertEqual(argv[-2:], ['image', 'program'])
+            self.assertEqual(
+                [call.args[0] for call in run.call_args_list],
+                [['docker', 'start', '-a', 'owned-container'], ['docker', 'rm', '-f', 'owned-container']],
+            )
+
     def test_optimized_python_cannot_emit_false_source_refusal_proof(self):
         # No image, credential, source file or child is accessed: the fake guard
         # supplies a failed source stage that must never become a passing proof.
@@ -178,6 +209,12 @@ sys.modules['process_guard']=guard
                 else:
                     bad['resource_bound_source_refusal'] = proof
                 with self.subTest(proof=proof), self.assertRaises(ValueError):
+                    publish_operator.validate_qualification(c, bad)
+
+            for proof in (None, 1, True, 'proof', []):
+                bad = copy.deepcopy(receipt)
+                bad['resource_bound_source_refusal'] = proof
+                with self.subTest(malformed=proof), self.assertRaisesRegex(ValueError, 'SOURCE_REFUSAL_REQUIRED'):
                     publish_operator.validate_qualification(c, bad)
 
     def test_emulated_host_receipt_refused(self):

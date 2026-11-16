@@ -92,7 +92,8 @@ def validate_source_refusal(report, expected_sha):
         'sql_called': False,
     }
     if (
-        set(report) != set(expected) | {'elapsed_ms'}
+        not isinstance(report, dict)
+        or set(report) != set(expected) | {'elapsed_ms'}
         or any(type(report.get(key)) is not type(value) or report[key] != value for key, value in expected.items())
         or type(report.get('elapsed_ms')) is not int
         or not 0 <= report['elapsed_ms'] < 60000

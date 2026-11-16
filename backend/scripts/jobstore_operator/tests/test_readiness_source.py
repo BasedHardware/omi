@@ -2,20 +2,49 @@
 """Discriminators for real cleanliness checks and fixed failure-stage evidence."""
 
 import io
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import time
+import types
 import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-import runner_readiness as readiness
 from readiness_contract import CONTRACT
+
+# These controls exercise source and receipt logic, never SDK behavior. Load a
+# private runner module with explicit failing SDK seams, even when SDKs happen
+# to be installed. Restore sys.modules so other tests cannot inherit the fakes.
+SDK_MODULES = {
+    name: types.ModuleType(name)
+    for name in (
+        'google',
+        'google.auth',
+        'google.auth.compute_engine',
+        'google.auth.compute_engine.credentials',
+        'psycopg',
+    )
+}
+SDK_MODULES['google'].auth = SDK_MODULES['google.auth']
+
+
+def unexpected_sdk_call(*args, **kwargs):
+    raise AssertionError('PORTABLE_CONTROL_MUST_NOT_CALL_SDK')
+
+
+SDK_MODULES['google.auth'].default = unexpected_sdk_call
+SDK_MODULES['google.auth.compute_engine.credentials'].Credentials = unexpected_sdk_call
+SDK_MODULES['psycopg'].connect = unexpected_sdk_call
+RUNNER_SPEC = importlib.util.spec_from_file_location('portable_readiness_under_test', ROOT / 'runner_readiness.py')
+readiness = importlib.util.module_from_spec(RUNNER_SPEC)
+with patch.dict(sys.modules, SDK_MODULES):
+    RUNNER_SPEC.loader.exec_module(readiness)
 
 EXPECTED = CONTRACT['migrations']
 
