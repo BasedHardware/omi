@@ -63,6 +63,7 @@ async def snapshot(uid, row):
         permit = await run_blocking(db_executor, attempts.reserve, uid, cid, token, row['_v3_revision'], quiet=True)
         if not permit:
             return 'skipped'
+        dispatch_seconds = (datetime.now(timezone.utc) - row['finished_at']).total_seconds()
         started, first_section = monotonic(), []
 
         def emit(_section):
@@ -70,6 +71,7 @@ async def snapshot(uid, row):
                 first_section.append(monotonic() - started)
 
         structured = await leased_work(uid, key, token, llm_executor, summary.write, uid, permit['row'], emit)
+        writer_seconds = monotonic() - started
         await run_blocking(
             db_executor,
             summary.writers.store_summary,
@@ -83,10 +85,11 @@ async def snapshot(uid, row):
             source_revisions=permit['sources'],
         )
         logger.info(
-            'event=v3_quiet_summary outcome=stored quiet_dispatch_seconds=%.3f model_seconds=%.3f first_section_seconds=%s',
-            (datetime.now(timezone.utc) - row['finished_at']).total_seconds() - (monotonic() - started),
-            monotonic() - started,
+            'event=v3_quiet_summary outcome=stored quiet_dispatch_seconds=%.3f writer_seconds=%.3f writer_first_section_seconds=%s persistence_seconds=%.3f',
+            dispatch_seconds,
+            writer_seconds,
             round(first_section[0], 3) if first_section else None,
+            monotonic() - started - writer_seconds,
         )
         return 'stored'
     except Conflict:

@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import math
 import os
 from datetime import datetime, timezone
 
@@ -67,7 +68,7 @@ def enqueue(uid, *, at=None, manual_end_id=None, quiet_recording_id=None, quiet_
         base + '/v1/conversations-v3/reconcile',
         task_id,
         payload,
-        schedule_at=int(instant.timestamp()),
+        schedule_at=math.ceil(instant.timestamp()) if quiet_generation else int(instant.timestamp()),
     )
 
 

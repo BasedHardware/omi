@@ -97,6 +97,8 @@ def test_quiet_names_are_separate_from_manual_end_and_distinct_within_a_minute(m
     assert len({call[0][2] for call in sent}) == 4
     assert sent[2] == sent[4]
     assert sent[2][0][3] == {'uid': 'u', 'quiet_recording_id': 'r', 'quiet_generation': 'a' * 64}
+    assert sent[2][1]['schedule_at'] >= AT.timestamp()
+    assert sent[2][1]['schedule_at'] < AT.timestamp() + 1
 
 
 @pytest.mark.asyncio
