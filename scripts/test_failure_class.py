@@ -470,13 +470,10 @@ class FailureClassCliTests(unittest.TestCase):
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
         self.assertIn("unknown_failure_class_family", [item["code"] for item in payload["errors"]])
 
-    def test_definition_without_family_is_rejected(self) -> None:
-        path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
-        data = json.loads(path.read_text(encoding="utf-8"))
-        del data["family"]
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    def test_definition_without_family_is_accepted_during_migration(self) -> None:
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
-        self.assertIn("missing_definition_field", [item["code"] for item in payload["errors"]])
+        self.assertTrue(payload["ok"], payload["errors"])
+        self.assertIsNone(payload["family"]["key"])
 
     def test_missing_catalogue_is_one_structured_error(self) -> None:
         (self.root / ".github" / "failure-class-families.json").unlink()
@@ -486,11 +483,14 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertNotIn("unknown_failure_class_family", codes)
 
     def test_explain_lists_family_members(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        self.set_definition_field("FC-trapping-dict-merge", "family", "write-fence")
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
         family = payload["family"]
         self.assertEqual(family["key"], payload["failure_class"]["family"])
         self.assertTrue(family["contract"])
         self.assertNotIn("FC-malformed-doc-read", family["open_members_shown"])
+        self.assertIn("FC-trapping-dict-merge", family["open_members_shown"])
         self.assertLessEqual(len(family["open_members_shown"]), 25)
         self.assertGreaterEqual(family["members_total"], 1)
 
