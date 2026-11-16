@@ -830,7 +830,12 @@ final class OmiBleManager: NSObject {
                     self?.ringReadDiagnostics.requested(peripheralUuid, characteristic: characteristicUuid, data: payload)
                     self?.peripherals[peripheralUuid]?.writeValue(payload, for: characteristic, type: .withResponse)
                 },
-                completion: completion
+                completion: { [weak self] result in
+                    if case .failure = result {
+                        self?.ringReadDiagnostics.rejected(peripheralUuid, characteristic: characteristicUuid, data: payload)
+                    }
+                    completion(result)
+                }
             ))
             if wasIdle { issueNextWrite(key) }
             return

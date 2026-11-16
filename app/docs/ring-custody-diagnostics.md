@@ -80,6 +80,10 @@ The native BLE boundary observes the storage characteristic's valid READ_BEGIN
 `RingProtocol` framing. BEGIN is accepted only after this link writes a ring READ
 (0x11 with 9 or 13 bytes); legacy file READs use 6 bytes and never arm it. This
 prevents legacy raw audio/file-list packets from being mistaken for ring frames.
+BEGIN must echo the requested start sequence. Rejected/failed native writes clear
+the matching pending request; neither a failed request nor a different sequence
+can turn a later packet into a measured active read. The temporary sequence is
+never included in the new export or analytics fields.
 Firmware sends DONE for completion, STOP and read errors.
 A READ request alone does not mean active; a timeout or failed STOP does not
 prove termination before DONE. A disconnect consumes the state; a new connection

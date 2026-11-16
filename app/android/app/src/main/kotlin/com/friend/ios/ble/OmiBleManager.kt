@@ -493,7 +493,10 @@ class OmiBleManager private constructor(private val application: Application) {
 
         val key = "$addr:$serviceUuid:$characteristicUuid".lowercase()
         if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) {
-            writeCompletions[key] = completion
+            writeCompletions[key] = { result ->
+                if (result.isFailure) ringReadDiagnostics.rejected(addr, gatt, characteristicUuid, data)
+                completion(result)
+            }
         }
 
         enqueueCommand {
@@ -512,6 +515,7 @@ class OmiBleManager private constructor(private val application: Application) {
             }
             if (!success) {
                 Log.e(TAG, "writeCharacteristic failed for $key")
+                ringReadDiagnostics.rejected(addr, gatt, characteristicUuid, data)
                 writeCompletions.remove(key)?.invoke(Result.failure(Exception("Write request rejected")))
                 completeCommand()
             } else if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) {

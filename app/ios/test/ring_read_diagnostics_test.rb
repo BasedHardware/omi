@@ -32,6 +32,17 @@ class RingReadDiagnosticsTest < Minitest::Test
                 state.received("a", characteristic: characteristic, data: Data([0x05]), now: 1)
                 precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
                 state.connected("a")
+                state.requested("a", characteristic: characteristic, data: read)
+                state.rejected("a", characteristic: characteristic, data: read)
+                state.received("a", characteristic: characteristic, data: begin, now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
+                state.requested("a", characteristic: characteristic, data: read)
+                var mismatch = begin
+                mismatch[8] = 1
+                state.received("a", characteristic: characteristic, data: mismatch, now: 1)
+                precondition(state.disconnected("a", now: 2)["ring_read_active"] as? Bool == false)
+                state.connected("a")
                 state.connected("b")
                 state.requested("a", characteristic: characteristic, data: read)
                 state.received("a", characteristic: characteristic, data: begin, now: 1)

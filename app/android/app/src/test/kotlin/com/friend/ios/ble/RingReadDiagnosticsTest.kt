@@ -26,6 +26,16 @@ class RingReadDiagnosticsTest {
         state.received("a", owner, characteristic, byteArrayOf(0x05), 1000) // truncated
         assertEquals(mapOf("ring_read_active" to false), state.disconnected("a", 2000))
         state.connected("a", owner)
+        state.requested("a", owner, characteristic, read)
+        state.rejected("a", owner, characteristic, read)
+        state.received("a", owner, characteristic, begin, 1000)
+        assertEquals(mapOf("ring_read_active" to false), state.disconnected("a", 2000))
+        state.connected("a", owner)
+        state.requested("a", owner, characteristic, read)
+        val mismatch = begin.copyOf().also { it[8] = 1 }
+        state.received("a", owner, characteristic, mismatch, 1000)
+        assertEquals(mapOf("ring_read_active" to false), state.disconnected("a", 2000))
+        state.connected("a", owner)
         state.connected("b", Any())
         state.requested("a", owner, characteristic, read)
         state.received("a", owner, characteristic, begin, 1000)
