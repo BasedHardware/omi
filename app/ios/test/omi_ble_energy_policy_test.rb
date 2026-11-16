@@ -419,3 +419,6 @@ class OmiBleEnergyPolicyTest < Minitest::Test
     end
   end
 end
+
+# The existing BLE policy gate also owns disconnect ring-read observation tests.
+require_relative 'ring_read_diagnostics_test'
