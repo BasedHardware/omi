@@ -38,6 +38,7 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
+from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
@@ -1470,9 +1471,10 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    quiet_armed = False
                     if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
                         try:
-                            await self.persistence.call(
+                            quiet_armed = await self.persistence.call(
                                 quiet_finalization.arm,
                                 self.request.uid,
                                 conversation_id,
@@ -1489,7 +1491,9 @@ class ListenSessionRuntime:
                             conversation_id,
                             {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                    if conversation and (
+                    if await resumable_after_drop(self, conversation_id, conversation, quiet_owned=quiet_armed):
+                        await self.transcripts.flush_speaker_assignments(conversation_id)
+                    elif conversation and (
                         server_batch_owned(conversation)
                         or (
                             self.state.close_code == 1000
