@@ -600,7 +600,8 @@
     },
     "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED": {
       "owner": "quality-lead",
-      "review_by": "2026-11-17",
+      "review_by": "2026-11-22",
+      "reason": "2026-11-16 renewed: default-off opt-in detach (gated off in d4dcd04); quality lead decides keep-and-ramp or delete by 2026-11-22",
       "registry": "config/feature-flags.yaml"
     },
     "EPISODE_HARD_CAP_ACROSS_CONVERSATIONS": {
@@ -1089,7 +1090,8 @@
     },
     "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED": {
       "owner": "Q12-AD / sync capture recovery",
-      "review_by": "2026-11-15"
+      "review_by": "2026-11-22",
+      "reason": "2026-11-16 renewed: review_by expiry failed the flag-budget guard for every branch; enabling waits on the product decision how recovered future-dated recordings appear on Home; quality lead keeps or deletes by 2026-11-22"
     },
     "SYNC_INLINE_BACKFILL_CONCURRENCY": {
       "seeded": "2026-10-25"
