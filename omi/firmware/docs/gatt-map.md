@@ -28,7 +28,8 @@ change; discover by UUID.
 | Storage `30295780-4301-EABD-2904-2849ADFEAE43` | `30295781`, CCC; `30295782`, CCC (same suffix) |
 | Diagnostics `19B10040` | Device telemetry `41`; recovery state `42`; both read-only, no CCC |
 
-The backlog's 25-byte telemetry remains at `19B10041`, including its coherent
+Append-only telemetry remains at `19B10041` (25-byte base plus the optional
+battery and connection tails described below), including its coherent
 per-connection long-read cache and single-ATT-bearer requirement. A new offset-zero
 read refreshes that snapshot. The safe-mode release also claimed `41` for an
 incompatible 16-byte format. This candidate moves that recovery prefix to
@@ -104,7 +105,7 @@ field offsets and meaning; only its format-version byte changes. Version 1
 readers must recognize version 2 before parsing the prefix. New readers accept
 both lengths/versions. Offset reads use a per-connection snapshot, refreshed
 on an offset-zero read and invalidated at disconnect/reconnect. `19B10041`
-remains the unchanged 25-byte version 1 packet.
+retains its version 1 base layout, extended with the optional tails described above.
 
 | Offset | Size | Meaning |
 | --- | --- | --- |

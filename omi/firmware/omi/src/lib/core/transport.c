@@ -1235,7 +1235,6 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             supervision_timeout);
 
     if (interval > 24) {
-        LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
         update_conn_params(conn);
     }
 }
@@ -1299,7 +1298,6 @@ static void update_conn_params(struct bt_conn *conn)
     atomic_val_t attempts = atomic_get(&conn_param_requests[index]);
     for (;;) {
         if (attempts >= CONN_PARAM_MAX_REQUESTS) {
-            LOG_WRN("Connection parameter request budget exhausted; accepting central params.");
             return;
         }
         if (atomic_cas(&conn_param_requests[index], attempts, attempts + 1)) {
