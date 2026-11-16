@@ -6,7 +6,7 @@ import time
 from collections import deque
 from contextvars import ContextVar
 from functools import wraps
-from typing import Any
+from typing import Any, cast
 
 import config.owner_recognition_diagnostics as contract
 from utils.observability.owner_identity_retry import resolver_trace
@@ -290,11 +290,11 @@ def observe_resolver(fn):
 from prometheus_client import REGISTRY, Counter
 
 
-def _counter(name, description, label):
+def _counter(name, description, label) -> Counter:
     try:
         return Counter(name, description, [label])
     except ValueError:
-        return REGISTRY._names_to_collectors[name]
+        return cast(Counter, REGISTRY._names_to_collectors[name])  # type: ignore[attr-defined]
 
 
 PROOF_REFUSALS = _counter(

@@ -11,9 +11,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, cast
 
 from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client.registry import Collector
 
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
@@ -554,7 +555,9 @@ def identity_availability_snapshot(conversation):
     import json
 
     rows = []
-    amounts = {f'{measure}_{identity}': 0 for measure in AVAILABILITY_MEASURES for identity in IDENTITY_VALUES}
+    amounts: dict[str, float] = {
+        f'{measure}_{identity}': 0 for measure in AVAILABILITY_MEASURES for identity in IDENTITY_VALUES
+    }
     for segment in _segments(conversation):
         identity = (
             'owner' if _field(segment, 'is_user') else 'known_person' if _field(segment, 'person_id') else 'unknown'
@@ -584,7 +587,7 @@ def identity_availability_snapshot(conversation):
     return digest, amounts
 
 
-class IdentityAvailability:
+class IdentityAvailability(Collector):
     def __init__(self):
         from threading import Lock
 
@@ -644,8 +647,13 @@ class IdentityAvailability:
         yield from families
 
 
-try:
-    IDENTITY_AVAILABILITY = IdentityAvailability()
-    REGISTRY.register(IDENTITY_AVAILABILITY)
-except ValueError:
-    IDENTITY_AVAILABILITY = REGISTRY._names_to_collectors['omi_owner_recognition_identity_segments']
+def _identity_availability() -> IdentityAvailability:
+    collector = IdentityAvailability()
+    try:
+        REGISTRY.register(collector)
+        return collector
+    except ValueError:
+        return cast(IdentityAvailability, REGISTRY._names_to_collectors['omi_owner_recognition_identity_segments'])  # type: ignore[attr-defined]
+
+
+IDENTITY_AVAILABILITY = _identity_availability()

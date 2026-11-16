@@ -113,3 +113,7 @@ def recurring_enabled_for(uid: str, segments) -> bool:
 
 def original_evidence_enabled() -> bool:
     return default_on('BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED')
+
+
+def final_pass_switch_enabled() -> bool:
+    return _default_on(BATCH_FINAL_PASS_ENV)

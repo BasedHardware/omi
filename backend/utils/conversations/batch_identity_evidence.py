@@ -52,7 +52,7 @@ def load(uid, conversation, deadline, *, cache, clip_seconds, extract, max_attem
     artifacts = batch.artifacts_for(store)
     diagnostics = {}
     failure = batch.UnitFailureContext()
-    references = batch._references(store, uid, conversation, units, budget, diagnostics, failure)
+    references = batch.read_unit_references(store, uid, conversation, units, budget, diagnostics, failure)
     if any(not reference[2].private_cloud_sync_enabled for reference in references.values()):
         reason('private_cloud_disabled')
         raise PermissionError('source privacy forbids durable identity evidence')
@@ -65,7 +65,7 @@ def load(uid, conversation, deadline, *, cache, clip_seconds, extract, max_attem
     used_windows = []
     segments = {s.id: s for s in conversation.transcript_segments}
     try:
-        for item, pcm, words, validate in batch._decode_units(
+        for item, pcm, words, validate in batch.decode_unit_evidence(
             uid,
             conversation,
             references,

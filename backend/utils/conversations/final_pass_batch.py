@@ -226,7 +226,9 @@ def _assemble(stream):
     return pcm[:used].toreadonly(), words, checks
 
 
-def _references(store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext):
+def read_unit_references(
+    store, uid, conversation, units, read_budget, diagnostics, failure_context: UnitFailureContext
+):
     references, errors, shared, absent = {}, [], [], []
     for unit in units:
         read_budget.timeout(3)
@@ -287,7 +289,7 @@ def _units(
     read_budget.timeout(3)
     store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     artifacts = artifacts_for(store)
-    references = _references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
+    references = read_unit_references(store, uid, conversation, units, read_budget, diagnostics, failure_context)
     if sum(max(1, ref[0].duration_seconds) for ref in references.values()) > MAX_AUDIO_SECONDS:
         raise OverflowError('audio too long')
     if not references:
@@ -305,14 +307,14 @@ def _units(
     return UnitStream(
         origin,
         capacity,
-        _decode_units(
+        decode_unit_evidence(
             uid, conversation, references, store, artifacts, read_budget, deadline, diagnostics, failure_context
         ),
         read_budget,
     )
 
 
-def _decode_units(
+def decode_unit_evidence(
     uid,
     conversation,
     references,
@@ -465,12 +467,12 @@ def run_batch_final_pass(uid, conversation, receipt, *, load_prints, apply, requ
     deferral records fallback telemetry; its later admitted retry owns the result.
     """
     from utils.observability.owner_recognition_diagnostics import final_pass_availability
-    from config.batch_conversation_speakers import BATCH_FINAL_PASS_ENV, has_batch_authority, _default_on
+    from config.batch_conversation_speakers import has_batch_authority, final_pass_switch_enabled
 
     if not final_pass_enabled_for(uid, conversation.transcript_segments):
         final_pass_availability(
             'disabled'
-            if has_batch_authority(conversation.transcript_segments) and not _default_on(BATCH_FINAL_PASS_ENV)
+            if has_batch_authority(conversation.transcript_segments) and not final_pass_switch_enabled()
             else 'ineligible'
         )
         return {'outcome': 'skipped_ineligible'}
