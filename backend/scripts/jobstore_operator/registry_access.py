@@ -47,7 +47,7 @@ def validate_evidence(contract):
         or evidence.get('principal') != PRINCIPAL
         or evidence.get('effective_authorization') != 'UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS'
         or any(
-            not re.fullmatch('[0-9a-f]{64}', evidence.get(key, ''))
+            not isinstance(evidence.get(key), str) or not re.fullmatch('[0-9a-f]{64}', evidence[key])
             for key in ('allow_policy_receipt_sha256', 'wif_metadata_receipt_sha256', 'sa_trust_receipt_sha256')
         )
     ):
