@@ -235,3 +235,49 @@ def test_explicit_empty_evidence_clear_keeps_no_old_title():
     old = {'title': 'Pilot budget', 'started_at': datetime.now(timezone.utc)}
     result = _merge_state(old, {'title': '', 'bullets': [], 'moments': []})
     assert result['title'] == '' and result['moments'] == []
+
+
+@pytest.mark.parametrize('trusted', [False, True])
+def test_episode_prompt_renderers_reuse_owner_authority_and_keep_unknown_speech(monkeypatch, trusted):
+    from utils.episodes import composer, incremental
+    from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
+    from utils.conversations.owner_attribution import speaker_role_map
+    from zoneinfo import ZoneInfo
+
+    monkeypatch.setenv('SPEAKER_ROLE_PROJECTION_ENABLED', 'true')
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    segments = [
+        {
+            'text': 'I will approve the pilot budget.',
+            'is_user': True,
+            'speaker_id': 1,
+            'speaker_id_scope': 'synthetic',
+            'speaker_identity_status': 'user' if trusted else 'ambiguous',
+            'speaker_match_source': 'conversation_voice' if trusted else 'carried',
+            'start': 0,
+            'end': 5,
+        },
+        {
+            'text': 'I prefer a smaller pilot.',
+            'is_user': False,
+            'speaker_id': 2,
+            'speaker_id_scope': 'synthetic',
+            'speaker_identity_status': 'no_match',
+            'start': 6,
+            'end': 10,
+        },
+    ]
+    roles = speaker_role_map(segments)
+    assert (roles.for_segment(segments[0]).role == 'primary_user') is trusted
+    safe, _ = owner_safe_transcript_segments(segments)
+    assert bool(safe[0]['is_user']) is trusted and len(safe) == 2
+    lines = composer.transcript_lines(
+        {'started_at': datetime.now(timezone.utc), 'transcript_segments': segments}, 'Riley', ZoneInfo('UTC')
+    )
+    rendered = '\n'.join(text for _, text in lines)
+    assert ('Riley:' in rendered) is trusted
+    assert 'I prefer a smaller pilot.' in rendered
+    live = incremental.render_moment(segments, owner_name='Riley').text
+    assert ('Riley:' in live) is trusted
+    assert 'I prefer a smaller pilot.' in live
+    assert segments[0]['is_user'] is True  # prompt-only copy; persisted labels untouched

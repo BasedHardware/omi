@@ -185,7 +185,9 @@ def test_composes_a_closed_episode_into_summary_and_real_chapters(store):
     # The late member's end moves the episode's activity forward (the 1h46m lunch bug).
     assert written['member_activity']['c2'] == T0 + timedelta(minutes=189)
     system, human = calls[0]
-    assert 'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56:00] David: We planned' in human[1]
+    assert (
+        'David' in system[1] and 'Existing summary: O' in human[1] and '[14:56:00] Speaker 01: We planned' in human[1]
+    )
 
 
 def test_waits_for_members_still_processing(store):

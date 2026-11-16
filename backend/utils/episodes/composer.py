@@ -82,6 +82,7 @@ from config.episodes import (
 from database import conversations as conversations_db
 from database import episodes as episodes_db
 from utils.conversations.recorded_time import conversation_span
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.episodes import compose_wait, composer_context, metrics, policy, transcript_receipts
 from utils.episodes.composer_detail import detail_budget
 from utils.episodes.state import is_placeholder_heading, trim_text
@@ -225,7 +226,7 @@ def notes_hash(state: Mapping[str, Any]) -> str:
 def _speaker(segment: Mapping[str, Any], owner: str) -> str:
     if segment.get('is_user'):
         return owner
-    name = str(segment.get('person_name') or '').strip()
+    name = str(segment.get('person_name') or '').strip() if segment.get('person_id') else ''
     if name:
         return name
     label = str(segment.get('speaker') or 'Someone').replace('SPEAKER_', 'Speaker ')
@@ -256,7 +257,8 @@ def transcript_lines(row: Mapping[str, Any], owner: str, tz: ZoneInfo) -> list[t
             local = open_at.astimezone(tz)
             out.append((open_at, f"[{local:%H:%M:%S}] {open_speaker}: {' '.join(words)}"))
 
-    for segment in _segments(row):
+    segments, _ = owner_safe_transcript_segments(_segments(row))
+    for segment in segments:
         start = float(segment.get('start') or 0)
         at = (origin or datetime.now(timezone.utc)) + timedelta(seconds=start)
         speaker = _speaker(segment, owner)

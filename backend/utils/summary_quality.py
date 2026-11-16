@@ -13,7 +13,11 @@ from typing import Any, Mapping
 
 NOTE_QUALITY_RULES = """Write concrete notes, not narration about a conversation.
 State the actual proposal, reason, number with its referent, decision or unresolved question.
-Use second person only for confidently identified owner speech; otherwise use neutral phrasing.
+Use second person only when the supplied SpeakerRoleMap/owner_attribution authority marks the source as
+primary_user (the owner). A raw is_user flag, account name, episode membership, calendar or nearby speech
+never establishes owner participation. Unknown voices stay neutral: "someone", "a participant", or a
+subject-focused fact with no attribution. Never turn their first-person speech into "you" or an owner fact.
+Do not omit a chapter merely because its voices are unknown or is_user=false.
 For example: "The pilot budget is $8,000; approval is due Friday", not "a speaker discusses budgets".
 Never write "a speaker discusses", "the conversation covers", or "episode notes continue".
 Never describe transcript/pipeline/capture mechanics: missing transcript, audio gaps, processing,

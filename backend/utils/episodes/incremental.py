@@ -41,6 +41,7 @@ from utils.llm.notes_refactor_metrics import shadow
 from utils.llm.output_language import resolve_output_language
 from utils.episodes.state import IncrementalUpdate, parse_update
 from utils.summary_quality import NOTE_QUALITY_RULES
+from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 from utils.llm.clients import get_llm
 from utils.llm.jev_client import ask_jev
 from utils.llm.usage_tracker import track_usage
@@ -191,6 +192,7 @@ def render_moment(
     voice_order: Sequence[str] | None = None,
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
+    segments, _ = owner_safe_transcript_segments(segments)
     owner = owner_name or _resolve_owner_name(uid) or 'You'
     display = display_participants(
         segments, owner_name=owner, voice_order=voice_order, display_scope=conversation_id, defer_short_voices=True
