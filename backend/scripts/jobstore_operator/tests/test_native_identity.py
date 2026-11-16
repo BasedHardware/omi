@@ -207,6 +207,7 @@ class NativeIdentityTests(unittest.TestCase):
                 'archive_sha256': hashlib.sha256(b'image').hexdigest(),
                 'fixture': {'bytes': 7, 'sha256': hashlib.sha256(b'fixture').hexdigest()},
                 'source_sha': 's',
+                'readiness_sha256': 'a' * 64,
                 'source_tree': 't',
                 'build_inputs_sha256': 'i',
                 'supervisor_sha256': 'g',
@@ -220,7 +221,25 @@ class NativeIdentityTests(unittest.TestCase):
             ), patch.object(
                 qualify, 'fixture_files', return_value={'source_sha': 's'}
             ), patch.object(
-                qualify.image_smoke, 'run_container', side_effect=['smoke', 'Ran 49 tests in 1.0s\n\nOK\n', 'hold']
+                qualify.image_smoke,
+                'run_container',
+                side_effect=[
+                    json.dumps(
+                        {
+                            'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
+                            'readiness_sha256': 'a' * 64,
+                            'uid': 1000,
+                            'full_source_check': True,
+                            'credential_refusal_injected': True,
+                            'real_credentials_used': False,
+                            'sql_called': False,
+                            'elapsed_ms': 100,
+                        }
+                    ),
+                    'smoke',
+                    'Ran 56 tests in 1.0s\n\nOK\n',
+                    'hold',
+                ],
             ), patch.dict(
                 os.environ, {'GITHUB_WORKFLOW_SHA': 'w', 'GITHUB_RUN_ID': '1'}
             ):

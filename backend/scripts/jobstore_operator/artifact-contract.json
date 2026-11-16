@@ -49,5 +49,6 @@
     "allow_policy_receipt_sha256": "86bdb76a0b57dc383cfc64a21c937df417627449c5e6d143b35e53ad12d4eeed",
     "wif_metadata_receipt_sha256": "9514752dee8ebf61b40a7faab48946bdaed54d21d0e3f3d274a572bc689f0aa1",
     "sa_trust_receipt_sha256": "45706b58f3972a31e7e8a9f7edb254b5a04cf9b6b0b851c359e4c50a64d69243"
-  }
+  },
+  "readiness_sha256": "2fba16a333ab9eda78f94b8fbf26be2d7bf6c0173dca12d64683ef6b5ce395aa"
 }

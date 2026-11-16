@@ -27,6 +27,7 @@ class ControlTests(unittest.TestCase):
         c, _, _ = inputs()
         c.update(
             source_tree='b' * 40,
+            readiness_sha256='a' * 64,
             build_inputs_sha256='c' * 64,
             supervisor_sha256='d' * 64,
             oci_manifest_digest='sha256:' + 'e' * 64,
@@ -64,7 +65,17 @@ class ControlTests(unittest.TestCase):
                     'supervisor_sha256',
                 )
             },
-            'tests_run': 49,
+            'tests_run': 56,
+            'resource_bound_source_refusal': {
+                'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
+                'readiness_sha256': c['readiness_sha256'],
+                'uid': 1000,
+                'full_source_check': True,
+                'credential_refusal_injected': True,
+                'real_credentials_used': False,
+                'sql_called': False,
+                'elapsed_ms': 100,
+            },
             'tests_skipped': 0,
             'uid': 1000,
             'container_network': 'none',
@@ -117,6 +128,30 @@ class ControlTests(unittest.TestCase):
                 bad = copy.deepcopy(r)
                 bad[key] = value
                 with self.assertRaises(ValueError):
+                    publish_operator.validate_qualification(c, bad)
+
+    def test_missing_or_weakened_source_refusal_prevents_publication(self):
+        c, _, receipt = self.prepared()
+        cases = [None]
+        for key, value in [
+            ('readiness_sha256', 'z' * 64),
+            ('full_source_check', False),
+            ('real_credentials_used', True),
+            ('sql_called', True),
+            ('elapsed_ms', 60000),
+            ('elapsed_ms', True),
+        ]:
+            bad = copy.deepcopy(receipt['resource_bound_source_refusal'])
+            bad[key] = value
+            cases.append(bad)
+        with patch.dict(os.environ, {'GITHUB_WORKFLOW_SHA': 'w', 'GITHUB_RUN_ID': '1'}):
+            for proof in cases:
+                bad = copy.deepcopy(receipt)
+                if proof is None:
+                    bad.pop('resource_bound_source_refusal')
+                else:
+                    bad['resource_bound_source_refusal'] = proof
+                with self.subTest(proof=proof), self.assertRaises(ValueError):
                     publish_operator.validate_qualification(c, bad)
 
     def test_emulated_host_receipt_refused(self):

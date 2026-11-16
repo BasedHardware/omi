@@ -23,13 +23,72 @@ subprocess.run([sys.executable,'/build/verify_dependencies.py'],check=True,timeo
 # Wrong fixed hostname refuses before ADC acquisition or any SQL attempt.
 result=subprocess.run([sys.executable,'/opt/runner/readiness.py'],stdout=subprocess.PIPE,text=True,timeout=60)
 report=json.loads(result.stdout)
-assert result.returncode==2 and report=={'result':'HOLD','failure_class':'ValueError','write_attempted':False,'state_initialized':False,'customer_rows_read':False},report
+assert result.returncode==2 and report['result']=='HOLD' and report['failure_class']=='ValueError' and report['failure_stage']=='workload_binding',report
+assert set(report)=={'result','failure_class','failure_stage','failure_stage_elapsed_ms','write_attempted','state_initialized','customer_rows_read'}
+assert type(report['failure_stage_elapsed_ms']) is int and report['failure_stage_elapsed_ms']>=0
+assert all(report[k] is False for k in ('write_attempted','state_initialized','customer_rows_read'))
 assert list(state.iterdir())==[]
 print(json.dumps({'result':'ACTUAL_IMAGE_OFFLINE_SMOKE_PASS','uid':os.getuid(),'python':sys.version.split()[0],'psycopg':psycopg.__version__,'machine':platform.machine(),'source':git('rev-parse','HEAD'),'state_empty':True,'wrong_workload_refused_before_adc_sql':True,'native_amd64_qualified':False}))
 '''
 
 
-def run_container(arguments, *, hold=False):
+# This runs the image's actual readiness source and full Git checks. The only
+# injected seam is a credential refusal, so no ADC/network/SQL call is needed.
+SOURCE_REFUSAL_PROGRAM = r'''
+import hashlib,json,os,pathlib,sys,time
+sys.path.insert(0,'/opt/runner')
+import process_guard
+expected='__READINESS_SHA256__'
+assert os.getuid()==1000
+assert hashlib.sha256(pathlib.Path('/opt/runner/readiness.py').read_bytes()).hexdigest()==expected
+child="""
+import sys
+sys.path.insert(0,'/opt/runner')
+import google.auth
+from google.auth.exceptions import DefaultCredentialsError
+import readiness
+calls=[]
+def refuse(*args,**kwargs):
+    calls.append(True)
+    raise DefaultCredentialsError('OFFLINE_CREDENTIAL_REFUSAL')
+google.auth.default=refuse
+code=readiness.main()
+assert calls==[True] and code==2
+raise SystemExit(code)
+"""
+started=time.monotonic()
+guard,raw=process_guard.run_group([sys.executable,'-c',child],timeout=60)
+assert guard=={'result':'COMPLETED','exit_code':2}
+report=json.loads(raw)
+assert set(report)=={'result','failure_class','failure_stage','failure_stage_elapsed_ms','write_attempted','state_initialized','customer_rows_read'}
+assert report['result']=='HOLD' and report['failure_class']=='DefaultCredentialsError' and report['failure_stage']=='credentials'
+assert type(report['failure_stage_elapsed_ms']) is int and report['failure_stage_elapsed_ms']>=0
+assert all(report[k] is False for k in ('write_attempted','state_initialized','customer_rows_read'))
+print(json.dumps({'result':'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL','readiness_sha256':expected,'uid':1000,'full_source_check':True,'credential_refusal_injected':True,'real_credentials_used':False,'sql_called':False,'elapsed_ms':round((time.monotonic()-started)*1000)}))
+'''
+
+
+def validate_source_refusal(report, expected_sha):
+    expected = {
+        'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
+        'readiness_sha256': expected_sha,
+        'uid': 1000,
+        'full_source_check': True,
+        'credential_refusal_injected': True,
+        'real_credentials_used': False,
+        'sql_called': False,
+    }
+    if (
+        set(report) != set(expected) | {'elapsed_ms'}
+        or any(type(report.get(key)) is not type(value) or report[key] != value for key, value in expected.items())
+        or type(report.get('elapsed_ms')) is not int
+        or not 0 <= report['elapsed_ms'] < 60000
+    ):
+        raise ValueError('REAL_RESOURCE_BOUND_SOURCE_REFUSAL_REQUIRED')
+    return report
+
+
+def run_container(arguments, *, hold=False, readiness=False):
     cid = subprocess.check_output(
         [
             'docker',
@@ -40,7 +99,8 @@ def run_container(arguments, *, hold=False):
             '--tmpfs=/tmp:rw,mode=1777',
             '--cap-drop=ALL',
             '--security-opt=no-new-privileges',
-            '--cpus=2',
+            '--cpus=0.5' if readiness else '--cpus=2',
+            *(['--hostname=jobstore-reconcile-0', '--env=GIT_OPTIONAL_LOCKS=0'] if readiness else []),
             '--memory=512m',
             '--pids-limit=128',
             *arguments,

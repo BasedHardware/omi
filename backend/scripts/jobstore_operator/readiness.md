@@ -43,6 +43,37 @@ resource or policy checks. Do not resize, add capacity, alter access, relax
 admission or change a node to fit it. Escalate any genuinely ungranted guarded
 delta as a concrete action. The sole existing Release executor owns execution.
 
+## Source-check correction and qualification gate
+
+The earlier cached-image attempt on `8b0bf0de…` terminated with exit 2 and
+`TimeoutExpired`; its exact UID cleanup was verified. No SQL-readiness or rollback
+receipt was accepted. The previous qualification's wrong-host refusal did not
+exercise the real source checks at the admitted resource limit.
+
+`runner_readiness.py` is the versioned candidate for the in-image `readiness.py`.
+It retains full HEAD and tracked/untracked cleanliness checks, bounds HEAD to 5s
+and status to 15s within the unchanged 50s probe deadline, and adds fixed failure
+stages and bounded error categories only to HOLD reports. The successful metadata
+report stays unchanged. The 15s stage allowance is a candidate that must pass
+native acceptance; local emulation exceeded a 25s measurement allowance.
+
+Before publication, qualification now runs the exact new image with the correct
+hostname, UID1000, read-only root, no network, 0.5 CPU and 512Mi. It executes the
+real source checks before an injected credential refusal; no real ADC or SQL call
+is needed. This check runs before the broader 2-CPU smoke, avoiding that smoke's
+source access as a prerequisite. It is not a guarantee of cold host page cache or
+future Kubernetes startup latency. Its exact runner hash and fixed refusal proof
+are required by publication admission, in addition to all 56 native fixture tests
+without skips and exact image identity/cleanup checks.
+
+Any source-stage timeout holds before publication. Do not drop tracked-file
+content checks, untracked-file checks, or extend the global/Pod/waiter deadlines
+or resources to clear the gate. A new image/build/fixture contract and actual
+native publication receipt are required before another separately reviewed live
+metadata attempt. Old image receipts remain historical evidence. No source change
+here admits persistent state, serving, or a Firestore authority flip.
+
+
 ## Concrete execution packet
 
 Before creation, bind the reviewed source commit, manifest hash, fresh placement
