@@ -470,10 +470,18 @@ class FailureClassCliTests(unittest.TestCase):
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
         self.assertIn("unknown_failure_class_family", [item["code"] for item in payload["errors"]])
 
-    def test_definition_without_family_is_accepted_during_migration(self) -> None:
+    def test_definition_without_family_is_rejected(self) -> None:
+        path = self.root / ".github" / "failure-classes" / "FC-malformed-doc-read.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["family"]
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         payload = self.payload(self.cli("explain", "FC-malformed-doc-read"))
-        self.assertTrue(payload["ok"], payload["errors"])
-        self.assertIsNone(payload["family"]["key"])
+        self.assertIn("missing_definition_field", [item["code"] for item in payload["errors"]])
+
+    def test_every_seed_definition_names_a_catalogue_family(self) -> None:
+        families = json.loads(FAMILIES_CATALOGUE.read_text(encoding="utf-8"))["families"]
+        for path in sorted(SEED_DIRECTORY.glob("*.json")):
+            self.assertIn(json.loads(path.read_text(encoding="utf-8")).get("family"), families, path.name)
 
     def test_missing_catalogue_is_one_structured_error(self) -> None:
         (self.root / ".github" / "failure-class-families.json").unlink()

@@ -298,12 +298,9 @@ def validate_definition(
         "canonical_prevention",
         "evidence_prs",
         "status",
+        "family",
     }
-    # `family` becomes required once every definition carries one. The registry is
-    # migrated in PRs under 300 files each (GitHub's compare API caps a PR's file list
-    # at 300 and the UI-approval guard fails closed above it); the last migration PR
-    # moves "family" into `required`.
-    allowed = required | {"scope_hints", "dormant_since", "canonical_prevention_artifact", "family"}
+    allowed = required | {"scope_hints", "dormant_since", "canonical_prevention_artifact"}
     errors: list[dict[str, Any]] = []
     for key in sorted(required - data.keys()):
         errors.append(error("missing_definition_field", f"missing required field '{key}'", path=str(path)))
