@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils.conversations.mcp_transcript_search",
     "utils.conversations.transcript_chunks",
     "utils.conversations.transcript_for_llm",
+    "utils.conversations.layer",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.calendar_tools",
@@ -465,6 +466,8 @@ memories_svc = _load_module_from_file(
     "utils.retrieval.tool_services.memories",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "memories.py",
 )
+# The real product by-id guard: it only wraps the stubbed database reader.
+_load_module_from_file("utils.conversations.layer", BACKEND_DIR / "utils" / "conversations" / "layer.py")
 action_items_svc = _load_module_from_file(
     "utils.retrieval.tool_services.action_items",
     BACKEND_DIR / "utils" / "retrieval" / "tool_services" / "action_items.py",

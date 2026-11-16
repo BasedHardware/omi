@@ -964,10 +964,6 @@ environments:
         PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
-        CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
-        CONVERSATIONS_V3_FIRST_APP_BUILD:
-          value: ''
-          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
@@ -1416,6 +1412,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -1821,6 +1820,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -2210,6 +2212,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -2573,6 +2578,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
@@ -3936,10 +3944,6 @@ environments:
         MENTOR_PIPELINE: {value: cohort, category: rollout}
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
-        CONVERSATIONS_V3_STAGE: {value: beta, category: rollout}
-        CONVERSATIONS_V3_FIRST_APP_BUILD:
-          value: ''
-          category: config
       secrets:
         SCREEN_VECTOR_STRIPE_API_KEY:
           env_var: SCREEN_VECTOR_STRIPE_READ_SECRET
@@ -4560,6 +4564,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
           capabilities:
@@ -5110,6 +5117,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           flags:
             --timeout: 3600s
           forbidden_env:
@@ -5625,6 +5635,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           provisional: true
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
@@ -6085,6 +6098,9 @@ environments:
             CONVERSATIONS_V3_FIRST_APP_BUILD:
               value: ''
               category: config
+            CONVERSATIONS_V3_TASKS_QUEUE:
+              value: conversations-v3
+              category: reliability
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL

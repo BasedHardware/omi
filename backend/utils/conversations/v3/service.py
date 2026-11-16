@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 def recording_short_path(fn):
     @wraps(fn)
     def guarded(uid, language_code, conversation, *args, **kwargs):
-        if not getattr(conversation, 'recording', False):
-            if getattr(conversation, 'v3_derived', False) and not fence.current():
+        if not policy.flag(conversation, 'recording'):
+            if policy.flag(conversation, 'v3_derived') and not fence.current():
                 from utils.conversations.v3.processing import run_external
 
                 return run_external(fn, uid, language_code, conversation, *args, **kwargs)

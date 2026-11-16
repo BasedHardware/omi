@@ -111,6 +111,8 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "cap-hold-durable-redrive",
         "app-review-config-sweep-hourly",
         "candidate-integration-sweep",
+        "conversations-v3-legacy-users",
+        "conversations-v3-sweep",
         "dream-agent-canary-half-hourly",
         "dream-agent-sweep-hourly",
         "day3-reengagement-email-daily",

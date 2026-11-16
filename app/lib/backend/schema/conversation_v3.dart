@@ -4,6 +4,8 @@
 /// desktop, imports) omit them, and [ConversationV3Fields.fromJson] then returns null.
 library;
 
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+
 /// Where a conversation is in the pipeline; drives the Home tile.
 enum ConversationTileState {
   /// The conversation is still going: breathing dot.
@@ -43,15 +45,19 @@ class RecordingPiece {
   final double start;
   final double end;
 
+  factory RecordingPiece.fromGenerated(wire.GeneratedRecordingPiece piece) => RecordingPiece(
+      recordingId: piece.recordingId, audioFileId: piece.audioFileId, start: piece.start, end: piece.end);
+
+  /// Null for a malformed piece (or one that ends before it starts): one bad piece never fails the row.
   static RecordingPiece? fromJson(Object? json) {
     if (json is! Map) return null;
-    final recordingId = json['recording_id'];
-    final audioFileId = json['audio_file_id'];
-    final start = json['start'];
-    final end = json['end'];
-    if (recordingId is! String || audioFileId is! String || start is! num || end is! num || end < start) return null;
-    return RecordingPiece(
-        recordingId: recordingId, audioFileId: audioFileId, start: start.toDouble(), end: end.toDouble());
+    final wire.GeneratedRecordingPiece piece;
+    try {
+      piece = wire.GeneratedRecordingPiece.fromJson(Map<String, dynamic>.from(json));
+    } catch (_) {
+      return null;
+    }
+    return piece.end < piece.start ? null : RecordingPiece.fromGenerated(piece);
   }
 
   Map<String, dynamic> toJson() =>

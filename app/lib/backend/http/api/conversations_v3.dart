@@ -19,5 +19,5 @@ Map<String, dynamic> _object(String body) {
 Future<ApiResult<ConversationsLiveRead>> getConversationsLive({ApiSend? send}) => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/conversations/live', method: 'GET'),
       send: send,
-      decode: (body) => ConversationsLiveRead.fromJson(_object(body)),
+      decode: (body) => ConversationsLiveRead.fromGeneratedWireJson(_object(body)),
     );

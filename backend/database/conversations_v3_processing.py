@@ -10,7 +10,7 @@ from google.cloud import firestore
 from database import conversations, conversations_v3 as store
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
-from utils.conversations.v3.errors import Conflict
+from utils.conversations.v3 import Conflict
 
 
 def store_summary(uid, cid, token, revision, structured, covers, *, firestore_client=None):

@@ -600,7 +600,7 @@ async def finalize_persisted_conversation(
                     and latest_data is not None
                     and not latest_data.get('deleted', False)
                     and not getattr(latest, 'discarded', False)
-                    and not getattr(latest, 'recording', False)
+                    and getattr(latest, 'recording', False) is not True
                     and getattr(latest, 'structured', None)
                     and latest.structured == getattr(conversation, 'structured', None)
                 ):
@@ -657,7 +657,7 @@ async def finalize_persisted_conversation(
                 and latest_data is not None
                 and not latest_data.get('deleted')
                 and not getattr(latest, 'discarded', False)
-                and not getattr(latest, 'recording', False)
+                and getattr(latest, 'recording', False) is not True
                 and getattr(latest, 'structured', None)
             ):
                 # The claim does not return its document. Re-read after claim/merge;

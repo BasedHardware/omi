@@ -8,14 +8,19 @@ def field(row, name):
     return row.get(name) if isinstance(row, Mapping) else getattr(row, name, None)
 
 
+def flag(row, name):
+    """A v3 boolean marker is set only when it is literally True (never a truthy stand-in)."""
+    return field(row, name) is True
+
+
 def manual_intent(row):
     return bool(
-        field(row, 'v3_derived') and field(row, 'manual_end') and field(row, 'kind') not in {'media', 'background'}
+        flag(row, 'v3_derived') and flag(row, 'manual_end') and field(row, 'kind') not in {'media', 'background'}
     )
 
 
 def explicit_retry(row, trigger):
-    return bool(field(row, 'v3_derived') and trigger == ProcessingTrigger.USER_REPROCESS)
+    return bool(flag(row, 'v3_derived') and trigger == ProcessingTrigger.USER_REPROCESS)
 
 
 def full_notes(row, trigger=ProcessingTrigger.CAPTURE_END):

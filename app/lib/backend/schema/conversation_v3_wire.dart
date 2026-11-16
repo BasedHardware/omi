@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -13,7 +14,9 @@ class ConversationsLiveRead {
   final bool v3;
   final ServerConversation? conversation;
 
-  static ConversationsLiveRead fromJson(Map<String, dynamic> json) {
+  /// The live row is checked against the generated compact-row contract before it becomes a
+  /// [ServerConversation].
+  static ConversationsLiveRead fromGeneratedWireJson(Map<String, dynamic> json) {
     final v3 = json['v3'] == true;
     final conversation = json['conversation'];
     ServerConversation? live;
@@ -21,6 +24,7 @@ class ConversationsLiveRead {
       // The switch must resolve even when the live row cannot be read: an unreadable row is no live row,
       // never an unanswered switch (which would hold back both Homes).
       try {
+        wire.GeneratedLiveConversation.fromJson(conversation);
         live = ServerConversation.fromJson(conversation);
       } catch (e) {
         Logger.debug('conversations/live: unreadable live row: $e');

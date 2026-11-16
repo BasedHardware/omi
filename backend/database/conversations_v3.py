@@ -17,7 +17,7 @@ from database import conversations, conversations_v3_leases as leases
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
-from utils.conversations.v3.errors import Conflict
+from utils.conversations.v3 import Conflict
 
 LIMIT = 128
 

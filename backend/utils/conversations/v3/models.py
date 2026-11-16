@@ -7,11 +7,22 @@ from typing import Callable
 
 from langchain_core.callbacks import BaseCallbackHandler
 
-from utils.llm.providers import get_or_create_omi_gateway_llm
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.usage_tracker import track_usage
 from utils.generated_compute import require_current_generated_compute
 from utils.conversations.v3 import metrics
+
+
+def get_or_create_omi_gateway_llm(*args, **kwargs):
+    """Gateway model, with LangChain providers loaded on first use.
+
+    process_conversation imports v3 at module load; that import must not pull in
+    every chat-model provider.
+    """
+    from utils.llm.providers import get_or_create_omi_gateway_llm as gateway_llm
+
+    return gateway_llm(*args, **kwargs)
+
 
 _notes_mode: ContextVar[tuple[str, bool, Callable[[str], None] | None] | None] = ContextVar(
     'v3_notes_mode', default=None

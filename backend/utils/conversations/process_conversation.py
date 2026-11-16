@@ -445,7 +445,7 @@ def _get_structured(
             if not decision.discard and is_recovery_trigger(trigger) and recovery_minimum_fallback_observer is not None:
                 recovery_minimum_fallback_observer()
             return minimum, decision.discard
-        if getattr(conversation, 'v3_derived', False):
+        if v3_policy.flag(conversation, 'v3_derived'):
             words = sum(len(s.text.split()) for s in conversation.transcript_segments)
             if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
                 return conversation.structured, True
@@ -698,10 +698,10 @@ def _get_structured(
             main_conv,
             calendar_context,
             tz_str,
-            include_background=not getattr(conversation, 'v3_derived', False),
+            include_background=not v3_policy.flag(conversation, 'v3_derived'),
             include_screen_text=True,
         )
-        if getattr(conversation, 'v3_derived', False):
+        if v3_policy.flag(conversation, 'v3_derived'):
             from utils.conversations.v3 import context as v3_context
 
             corrections_block = meeting_context_block or ''
@@ -801,7 +801,7 @@ def _get_conversation_obj(
             structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     # Apply the durable v3 lock after generated-title cleanup and salience projection.
-    if getattr(conversation, 'title_locked', False):
+    if v3_policy.flag(conversation, 'title_locked'):
         structured.title = conversation.structured.title
         structured.emoji = conversation.structured.emoji
     if relevance_discarded is False and not structured.title.strip():
@@ -2252,7 +2252,7 @@ def _save_action_items(
 
 
 def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
-    if getattr(conversation, 'recording', False):
+    if v3_policy.flag(conversation, 'recording'):
         OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_recording').inc()
         return True
     if is_server_minimum(conversation):
@@ -3246,7 +3246,7 @@ def process_conversation(
             # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
             ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = not is_recovery_trigger(trigger) and not getattr(conversation, 'v3_derived', False)
+        capture_audio = not is_recovery_trigger(trigger) and not v3_policy.flag(conversation, 'v3_derived')
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)

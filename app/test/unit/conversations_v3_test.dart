@@ -4,12 +4,14 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/http/api/conversations_v3.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/conversation_v3.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/gen/home_feed_wire.g.dart' as feed_wire;
 import 'package:omi/backend/schema/home_feed.dart';
 import 'package:omi/providers/conversations_v3_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
@@ -68,7 +70,7 @@ void main() {
     });
 
     test('the compact live row the server sends decodes', () {
-      final read = ConversationsLiveRead.fromJson({
+      final read = ConversationsLiveRead.fromGeneratedWireJson({
         'v3': true,
         'conversation': {
           'id': 'c-live',
@@ -88,7 +90,7 @@ void main() {
     });
 
     test('a failed conversation decodes through the generated wire type', () {
-      final read = ConversationsLiveRead.fromJson({
+      final read = ConversationsLiveRead.fromGeneratedWireJson({
         'v3': true,
         'conversation': {
           'id': 'c-failed',
@@ -104,7 +106,7 @@ void main() {
     });
 
     test('an unreadable live row still answers the switch', () {
-      final read = ConversationsLiveRead.fromJson({
+      final read = ConversationsLiveRead.fromGeneratedWireJson({
         'v3': true,
         'conversation': {'id': 'c-live', 'status': 'in_progress'},
       });
@@ -158,7 +160,7 @@ void main() {
 
   group('ConversationsV3Provider', () {
     ApiResult<ConversationsLiveRead> live(bool v3, {Map<String, dynamic>? conversation}) =>
-        ApiSuccess(ConversationsLiveRead.fromJson({'v3': v3, 'conversation': conversation}));
+        ApiSuccess(ConversationsLiveRead.fromGeneratedWireJson({'v3': v3, 'conversation': conversation}));
 
     test('unknown until the server answers, and legacy reads wait for the answer', () async {
       final provider = ConversationsV3Provider(fetchLive: () async => live(false), uid: () => 'u1', cached: '');
@@ -323,5 +325,84 @@ void main() {
       expect(calls, 0);
       feed.dispose();
     });
+  });
+
+  group('wire decoders', _wireDecoderContracts);
+}
+
+/// Synthetic additive-wire and capture-identity decoder contracts (current source, not a released build).
+void _wireDecoderContracts() {
+  final base = <String, dynamic>{
+    'id': 'synthetic-conversation',
+    'created_at': '2026-11-16T10:00:00Z',
+    'started_at': '2026-11-16T10:00:00Z',
+    'finished_at': '2026-11-16T10:05:00Z',
+    'source': 'omi',
+    'status': 'completed',
+    'structured': {'title': 'Planning the next visit', 'overview': 'A synthetic summary', 'emoji': '🌳'},
+    'transcript_segments': [
+      {'text': 'Synthetic speech inside this conversation.', 'start': 0.0, 'end': 4.0, 'is_user': true}
+    ],
+  };
+  test('additive v3 fields preserve the existing conversation decoder', () {
+    final row = ServerConversation.fromJson({
+      ...base,
+      'kind': 'conversation',
+      'home_hidden': false,
+      'tile_state': 'done',
+      'title_locked': true,
+      'recording_pieces': [
+        {'recording_id': 'r', 'audio_file_id': 'f', 'start': 12.5, 'end': 25.0}
+      ],
+      'summary_covers_through': '2026-11-16T10:05:00Z',
+    });
+    expect(row.id, base['id']);
+    expect(row.structured.title, 'Planning the next visit');
+    expect(row.transcriptSegments.single.text, 'Synthetic speech inside this conversation.');
+    expect(row.isHiddenFromDefaultList, false);
+  });
+  test('capture socket payload preserves recording identity and donor bridge', () {
+    final live = ServerConversation.fromJson({...base, 'id': 'recording', 'status': 'in_progress', 'recording': true});
+    expect(live.id, 'recording');
+    final completed = ServerConversation.fromJson({...base, 'id': 'recording', 'sync_merged_into': 'covering'});
+    expect(completed.id, 'recording');
+    expect(completed.isMergedDonor, true);
+  });
+  test('v3 Home uses the existing closed kind vocabulary', () {
+    final card = feed_wire.GeneratedHomeFeedCard.fromJson({
+      'id': 'c',
+      'kind': 'conversation',
+      'detail_id': 'c',
+      'sort_at': base['created_at'],
+      'status': 'completed',
+      'revision': 'synthetic',
+    });
+    expect(card.kind, 'conversation');
+  });
+  test('compact live row decodes with a nullable finished_at key', () {
+    final row = ServerConversation.fromJson({
+      'id': 'live',
+      'created_at': base['created_at'],
+      'started_at': base['started_at'],
+      'finished_at': null,
+      'status': 'in_progress',
+      'tile_state': 'live',
+      'structured': {'title': 'A plan', 'emoji': '🌳'},
+    });
+    expect(row.id, 'live');
+    expect(row.finishedAt, isNull);
+  });
+  test('pending v3 aliases keep playback and export polling without a source URL', () {
+    final response = AudioUrlsResponse.fromJson({
+      'audio_files': [
+        {'id': 'alias', 'status': 'pending', 'signed_url': null, 'duration': 10}
+      ],
+      'conversation_audio': {'status': 'pending', 'signed_url': null, 'spans': []},
+      'poll_after_ms': 5000,
+    });
+    expect(response.files, isNotEmpty);
+    expect(response.hasPending, true);
+    expect(response.playbackReady, false);
+    expect(response.files.single.signedUrl, isNull);
   });
 }

@@ -8,7 +8,7 @@ import threading
 from time import monotonic
 from google.cloud import firestore
 from database._client import get_firestore_client
-from utils.conversations.v3.errors import Conflict
+from utils.conversations.v3 import Conflict
 
 LEASE_SECONDS = 240
 logger = logging.getLogger(__name__)
