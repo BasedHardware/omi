@@ -9,11 +9,11 @@ timeline fence commit together. Rehoming requires corroborating finite
 with trusted provenance (`live_capture`, `frame` or `device`). Their interval
 must be at most five seconds wide, no source may exceed transaction server time
 by more than five seconds, and every source must be at or after the boundary.
-A first admission has no owner to change and precedes the audio clock metadata:
-it uses stored `started_at`, falling back to `created_at`, with the same
-five-second future-skew bound. Missing optional `recorded_start`, batch stamp or
-provenance never blocks initial admission. Explicitly untrusted captures still
-refuse. Existing membership changes always require all three trusted clocks.
+A first admission has no owner to change and shares main's existing selector:
+finite `server_batch_audio_start`, then stored `started_at`, then `created_at`.
+The selector is shared with batch admission, without additional trust or future
+refusals on initial placement. No known start keeps admission's existing skip
+behavior. Existing membership changes always require all three trusted clocks.
 Missing/untrusted clocks, wider disagreements, and even a small disagreement
 across the boundary retain existing ownership. Finished-subset readiness still
 unblocks that episode. A stale gap close cannot erase a newer activity

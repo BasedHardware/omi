@@ -49,18 +49,6 @@ def _utc(value: Any) -> datetime | None:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def admission_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
-    """Unowned live admissions precede audio clocks; use the stored admission clock."""
-    started = _utc(row.get('started_at')) or _utc(row.get('created_at'))
-    if started is None:
-        return CaptureStart(refusal='missing')
-    if row.get('capture_time_trust') == 'untrusted':
-        return CaptureStart(refusal='untrusted')
-    if started > now + timedelta(seconds=CAPTURE_FUTURE_SKEW_SECONDS):
-        return CaptureStart(refusal='future')
-    return CaptureStart(lower=started, upper=started)
-
-
 def capture_start(row: Mapping[str, Any], *, now: datetime) -> CaptureStart:
     """Changing an owner requires all three trusted clocks to corroborate."""
     value = row.get('server_batch_audio_start')

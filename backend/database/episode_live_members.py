@@ -11,7 +11,7 @@ from config.episodes import CLOSE_GAP_SECONDS, MAX_EPISODE_SECONDS, MAX_MOMENTS,
 from database import episodes, episode_timeline, episode_batch_pending
 from database.transcript_pointer import run_preloaded_transactional
 from utils.conversations.fragment_visibility import is_relevance_discarded
-from utils.conversations.recorded_time import conversation_span
+from utils.conversations.recorded_time import admitted_start, conversation_span
 
 
 def _remove_member(transaction: Any, root: Any, owner: Mapping[str, Any], cid: str, start: datetime) -> dict[str, Any]:
@@ -112,8 +112,13 @@ def place(
         ):
             return {**owner, '_live_member_rehomed': False}
         # Re-read all clocks in the ownership transaction, including every retry.
-        clock = live.capture_start if owner is not None else live.admission_start
-        capture = clock(row, now=datetime.now(timezone.utc))
+        if owner is not None:
+            capture = live.capture_start(row, now=datetime.now(timezone.utc))
+        else:
+            start = admitted_start(row)
+            if start is None:
+                return None  # Preserve the existing admission caller's no-start behavior.
+            capture = live.CaptureStart(lower=start, upper=start)
         refusal = capture.refusal
         if (
             not refusal

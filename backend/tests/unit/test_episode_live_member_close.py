@@ -10,7 +10,7 @@ from config import episode_live_members as live
 from database import episode_live_members as placement, episodes
 from tests.unit.test_episode_batch_audio_close import timeline_store  # noqa: F401
 from tests.unit.test_episode_composer import T0, UID, _c, _row, store  # noqa: F401
-from utils.episodes import composer, service
+from utils.episodes import batch_close, composer, service
 
 
 def active(start=T0, **changes):
@@ -390,14 +390,23 @@ def test_initial_admission_uses_row_clocks_without_optional_audio_metadata(timel
     assert db.rows == before
 
 
-def test_initial_admission_still_refuses_missing_both_row_clocks(timeline_store):
+def test_initial_admission_without_any_start_keeps_main_skip_behavior(timeline_store, monkeypatch):
     db = timeline_store
     seed(db)
     row = db.rows[('users', 'owner', 'conversations', 'live')]
-    row['started_at'] = row['created_at'] = None
+    row['started_at'] = row['created_at'] = row['server_batch_audio_start'] = None
+    row['external_data'] = {'server_batch_only': True}
+    monkeypatch.setattr(batch_close, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(batch_close, 'recorded_episodes_enabled', lambda: True)
+    monkeypatch.setattr(batch_close, 'batch_admission_attach_enabled', lambda: True)
     before = deepcopy(db.rows)
-    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_missing'):
-        place(db)
+    assert place(db) is None
+    assert (
+        batch_close.attach_admitted_batch_capture(
+            'owner', 'live', row, collaborators=service.Collaborators(firestore_client=db)
+        )
+        == 'skipped'
+    )
     assert db.rows == before
 
 
@@ -444,16 +453,17 @@ def test_recorded_time_rollback_stops_repair_but_keeps_finished_subset_readiness
 
 
 @pytest.mark.parametrize('field', ['started_at', 'created_at'])
-def test_initial_admission_bounds_the_selected_row_clock_against_server_time(timeline_store, field):
+def test_initial_admission_preserves_main_acceptance_of_future_row_clocks(timeline_store, field):
     db = timeline_store
     seed(db)
     row = db.rows[('users', 'owner', 'conversations', 'live')]
     row.pop('started_at')
+    row.pop('server_batch_audio_start')
     row[field] = datetime.now(timezone.utc) + timedelta(minutes=1)
-    before = deepcopy(db.rows)
-    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_future'):
-        place(db)
-    assert db.rows == before
+    result = place(db)
+    assert result['status'] == 'live'
+    assert result['started_at'] == row[field]
+    assert not result['_live_member_rehomed']
 
 
 def test_initial_admission_does_not_require_optional_audio_clocks_to_agree(timeline_store):
@@ -468,15 +478,34 @@ def test_initial_admission_does_not_require_optional_audio_clocks_to_agree(timel
     )
     result = place(db)
     assert result['status'] == 'live' and result['id'] != 'old'
-    assert result['started_at'] == row['started_at']
+    assert result['started_at'] == datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc)
     assert not result['_live_member_rehomed']
 
 
-def test_initial_admission_still_refuses_explicitly_untrusted_capture(timeline_store):
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'capture_time_trust': 'untrusted'},
+        {'started_at': None, 'created_at': None},
+        {'started_at': None, 'created_at': T0 - timedelta(days=10)},
+    ],
+    ids=['untrusted', 'batch-only', 'stale-created-at'],
+)
+def test_initial_admission_uses_mains_batch_clock_and_acceptance_policy(timeline_store, monkeypatch, changes):
     db = timeline_store
-    seed(db)
-    db.rows[('users', 'owner', 'conversations', 'live')]['capture_time_trust'] = 'untrusted'
-    before = deepcopy(db.rows)
-    with pytest.raises(episodes.EpisodeConflict, match='live_member_capture_clock_untrusted'):
-        place(db)
-    assert db.rows == before
+    seed(db, start=T0 + timedelta(hours=1, seconds=1))
+    row = db.rows[('users', 'owner', 'conversations', 'live')]
+    row.update(changes)
+    row['external_data'] = {'server_batch_only': True}
+    monkeypatch.setattr(batch_close, 'episodes_enabled_for', lambda uid: True)
+    monkeypatch.setattr(batch_close, 'recorded_episodes_enabled', lambda: True)
+    monkeypatch.setattr(batch_close, 'batch_admission_attach_enabled', lambda: True)
+    assert (
+        batch_close.attach_admitted_batch_capture(
+            'owner', 'live', row, collaborators=service.Collaborators(firestore_client=db)
+        )
+        == 'attached'
+    )
+    result = db.rows[('users', 'owner', 'episodes', row['episode_id'])]
+    assert result['status'] == 'live' and result['id'] != 'old'
+    assert result['started_at'] == datetime.fromtimestamp(row['server_batch_audio_start'], timezone.utc)

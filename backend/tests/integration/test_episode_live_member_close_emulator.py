@@ -285,3 +285,30 @@ def test_admission_before_first_frame_opens_live_successor_without_rehoming(db, 
     assert closed['status'] == 'closed'
     assert closed['summary_needs_regeneration']
     assert root.collection('episode_links').document('current').get().to_dict()['episode_id'] == result['id']
+
+
+@pytest.mark.parametrize(
+    'changes',
+    [
+        {'capture_time_trust': 'untrusted'},
+        {'started_at': None, 'created_at': None},
+        {'started_at': None, 'created_at': T0 - timedelta(days=10)},
+    ],
+    ids=['untrusted', 'batch-only', 'stale-created-at'],
+)
+def test_initial_admission_preserves_main_batch_clock_selection(db, changes):
+    client, uid = db
+    root, old, template = seed(client, uid)
+    member = root.collection('conversations').document('live')
+    member.update(changes)
+    before = member.get().to_dict()
+    result = placement.place(uid, 'live', template=template, firestore_client=client, admission=True)
+    assert result['id'] != 'old' and result['status'] == 'live'
+    assert result['started_at'] == datetime.fromtimestamp(before['server_batch_audio_start'], timezone.utc)
+    assert not result['_live_member_rehomed']
+    after = member.get().to_dict()
+    assert after['episode_id'] == result['id']
+    assert {key: value for key, value in after.items() if key not in {'episode_id', 'home_source_version'}} == {
+        key: value for key, value in before.items() if key not in {'episode_id', 'home_source_version'}
+    }
+    assert episodes.get_episode(uid, 'old', firestore_client=client)['conversation_ids'] == ['finished']
