@@ -212,6 +212,10 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     rewrites=prior.get('v3_rewrites', 0),
                 )
             )
+            if rewrite:
+                # The old summary no longer covers the window: without this the covered-summary guard
+                # returns the previous notes and the only automatic rewrite is spent on nothing.
+                row['summary_covers_through'] = None
             if prior is not None and was_ended and not rewrite and not promoted:
                 row['status'] = prior['status']
                 row['tile_state'] = prior.get('tile_state', 'done')

@@ -346,6 +346,44 @@ def test_projection_partitions_bytes_and_keeps_pending_until_last_batch(strict, 
     assert len(strict.rows[R]['claims']) == 128
 
 
+def test_multi_batch_backfill_conversion_is_not_its_own_race_and_keeps_an_obligation(strict, monkeypatch):
+    # A backfill donor is a plain conversation until the first batch hides it as a recording.
+    strict.rows[R] = {'id': 'r', 'status': 'completed', 'structured': {'title': 'Old notes'}}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    original = store.firestore.transactional
+    observations = []
+
+    def transactional(body):
+        wrapped = original(body)
+
+        def run(tx, *args):
+            result = wrapped(tx, *args)
+            observations.append((strict.rows[R].get('recording'), strict.rows[R].get('v3_pending')))
+            return result
+
+        return run
+
+    monkeypatch.setattr(store.firestore, 'transactional', transactional)
+    rows = [
+        {
+            'id': f'c{i}',
+            'status': 'processing',
+            'started_at': AT,
+            'finished_at': AT,
+            'v3_recording_ids': ['r'],
+            'transcript_segments': [{'text': 'x' * 60000}],
+        }
+        for i in range(128)
+    ]
+    donor = {**strict.rows[R], 'recording': True, '_v3_derive': True, '_v3_revision': 1}
+    store.commit_projection('synthetic', token, {'r': donor}, {}, rows, [], firestore_client=strict)
+    assert len(observations) >= 4
+    # Hidden as a recording from the first batch, with a durable obligation until the last one lands.
+    assert all(recording is True and pending is True for recording, pending in observations[:-1])
+    assert observations[-1] == (True, False)
+    assert len(strict.rows[R]['claims']) == 128
+
+
 def test_metadata_revision_change_does_not_rebill_unchanged_content(strict, monkeypatch):
     cid = ('users', 'synthetic', 'conversations', 'c')
     original = {'id': 'c', 'transcript_segments': [{'text': 'same real content'}], 'sync_content_revision': 1}

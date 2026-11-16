@@ -251,8 +251,20 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 coll.document(rid),
                 {
                     'claims': claims,
-                    'v3_pending': False if final and clear_pending else recording.get('v3_pending', False),
-                    'v3_pending_since': None if final and clear_pending else recording.get('v3_pending_since'),
+                    # A backfill conversion hides its donor as a recording in the first batch; until the
+                    # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
+                    # by the ordinary builder (backfill's loader skips recordings).
+                    'v3_pending': (
+                        False
+                        if final and clear_pending
+                        else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
+                    ),
+                    'v3_pending_since': (
+                        None
+                        if final and clear_pending
+                        else recording.get('v3_pending_since')
+                        or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
+                    ),
                     'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
                     and final
                     and clear_pending
@@ -303,6 +315,9 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 snapshot = coll.document(rid).get()
                 current = snapshot.to_dict() or {}
                 owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
+                if recordings[rid].get('_v3_derive'):
+                    # Our own committed conversion, not an external change.
+                    owned |= {'recording', 'structured'}
                 if {k: v for k, v in current.items() if k not in owned} != {
                     k: v for k, v in observed[rid].items() if k not in owned
                 }:

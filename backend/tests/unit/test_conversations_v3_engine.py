@@ -276,3 +276,35 @@ def test_piece_trim_uses_playback_clock_for_171_second_capture_skew():
     group = outline.stretches([row], NOW + timedelta(hours=1))[0]
     built = planner.build('u', planner.windows([group], [[entry()]])[0], {'r': row})
     assert built['recording_pieces'] == [{'recording_id': 'r', 'audio_file_id': 'f', 'start': 0, 'end': 10}]
+
+
+def test_copy_keeps_strongest_protection_and_custom_stt_provenance():
+    plain = recording('a', segments=[{'text': 'first part of the talk', 'start': 0, 'end': 10}])
+    guarded = recording(
+        'b',
+        NOW + timedelta(seconds=20),
+        segments=[{'text': 'second part of the talk', 'start': 0, 'end': 10}],
+        data_protection_level='enhanced',
+        uses_custom_stt=True,
+    )
+    plain['data_protection_level'] = 'standard'
+    group = outline.stretches([plain, guarded], NOW + timedelta(hours=1))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('synthetic', window, {'a': plain, 'b': guarded})
+    assert built['v3_recording_ids'] == ['a', 'b']
+    assert built['data_protection_level'] == 'enhanced'
+    assert built['uses_custom_stt'] is True
+    # A conversation that is already enhanced never drops back to standard.
+    only_plain = planner.windows([outline.stretches([plain], NOW + timedelta(hours=1))[0]], [[entry()]])[0]
+    rebuilt = planner.build(
+        'synthetic',
+        only_plain,
+        {'a': plain},
+        {
+            'id': 'kept',
+            'data_protection_level': 'enhanced',
+            'started_at': NOW,
+            'finished_at': NOW + timedelta(seconds=10),
+        },
+    )
+    assert rebuilt['data_protection_level'] == 'enhanced' and rebuilt['uses_custom_stt'] is False

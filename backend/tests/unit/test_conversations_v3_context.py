@@ -209,3 +209,33 @@ async def test_context_change_alone_never_schedules_summary_rewrite(builder, mon
     rebuilt = committed[-1][4][0]
     assert rebuilt['v3_process_pending'] is False and rebuilt['tile_state'] == 'done'
     assert rebuilt.get('v3_rewrites', 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_late_speech_rewrite_drops_old_summary_coverage(builder, monkeypatch):
+    from datetime import datetime
+
+    committed, _calls = builder
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return AT + timedelta(minutes=10)
+
+    monkeypatch.setattr(service, 'datetime', Clock)
+    existing, cache = {}, []
+    recording = source(transcript_segments=[{'text': 'greenhouse plan ' * 160, 'start': 0, 'end': 10}])
+    monkeypatch.setattr(store, 'load', lambda *a, **kw: ({'r': recording}, existing, cache))
+    await service.reconcile('u')
+    row = committed[-1][4][0]
+    row.update(
+        status='completed', tile_state='done', v3_process_pending=False, summary_covers_through=row['finished_at']
+    )
+    existing[row['id']] = row
+    cache[:] = committed[-1][5]
+    # Late transcription adds well over 10% more words inside the summarized window.
+    recording['transcript_segments'].append({'text': 'late detail ' * 80, 'start': 4, 'end': 8})
+    await service.reconcile('u')
+    rebuilt = committed[-1][4][0]
+    assert rebuilt['v3_rewrites'] == 1 and rebuilt['v3_process_pending'] is True
+    assert rebuilt['summary_covers_through'] is None

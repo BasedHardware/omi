@@ -157,7 +157,25 @@ def build(uid, window, recordings, existing=None):
         'finished_at': end,
         'source': first.get('source', 'omi'),
         'language': first.get('language'),
-        'data_protection_level': first.get('data_protection_level', 'standard'),
+        # The copy keeps the strongest protection of any contributing recording (as sync merges do),
+        # and never drops below what the conversation already has.
+        'data_protection_level': (
+            'enhanced'
+            if any(
+                level == 'enhanced'
+                for level in [(existing or {}).get('data_protection_level')]
+                + [
+                    recordings[rid].get('data_protection_level')
+                    for rid in dict.fromkeys(l['conversation_id'] for l in lines)
+                ]
+            )
+            else first.get('data_protection_level', 'standard')
+        ),
+        # Custom-STT provenance follows the words: any contributing custom-STT recording marks the copy.
+        'uses_custom_stt': bool(
+            (existing or {}).get('uses_custom_stt')
+            or any(recordings[l['conversation_id']].get('uses_custom_stt') for l in lines)
+        ),
         'private_cloud_sync_enabled': bool(first.get('private_cloud_sync_enabled')),
         'is_locked': (
             existing['is_locked']

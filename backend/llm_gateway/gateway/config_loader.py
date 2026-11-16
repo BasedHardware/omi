@@ -19,7 +19,7 @@ from config.jev_decisions import (
 from llm_gateway.gateway.dream_lanes import DREAM_LANES, dream_lane_items, validate_dream_route
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
 from utils.llm import vertex_pt_routing as ptr
-from config.conversations_v3_models import FEATURES as V3_FEATURES
+from utils.llm.model_constants import LUNA_MODEL
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
     get_all_configured_features,
@@ -28,6 +28,13 @@ from utils.llm.model_config import (
     get_route_options,
     is_structured_output_feature,
 )
+
+# Conversations v3 gateway-only features (never part of the legacy route fingerprint).
+V3_FEATURES = {
+    'conversation_v3_outline': (LUNA_MODEL, 'openai'),
+    'conversation_v3_summary': (LUNA_MODEL, 'openai'),
+    'conversation_v3_summary_open': (LUNA_MODEL, 'openai'),
+}
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
