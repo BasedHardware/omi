@@ -23,14 +23,20 @@ def eligible(paths: Sequence[str], context: Mapping[str, Any] | None) -> bool:
         context.get('source_reuse_excluded')
         or context.get('capture_evidence_claims')
         or context.get('recording_session_id')
+        or context.get('capture_clock_policy')
     ):
         return False  # Existing source-frame/custody rules remain authoritative.
-    return all(
-        not is_early_capture_time(get_timestamp_from_path(path))
-        and not is_implausible_future_capture_time(get_timestamp_from_path(path))
-        and not capture_clock_run_from_path(path)
-        for path in paths
-    )
+    try:
+        return all(
+            not is_early_capture_time(get_timestamp_from_path(path))
+            and not is_implausible_future_capture_time(get_timestamp_from_path(path))
+            and not capture_clock_run_from_path(path)
+            for path in paths
+        )
+    except ValueError:
+        # Filename clock metadata is only an optional reuse proof. An adapter
+        # may decode a different naming scheme; it retains admission authority.
+        return False
 
 
 def decode_sources(

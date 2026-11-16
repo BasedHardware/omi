@@ -114,6 +114,26 @@ def test_unsupported_source_context_abstains(tmp_path, context):
     assert not source_reuse_decode.eligible([raw_file(tmp_path)], context)
 
 
+@pytest.mark.parametrize('path', ['a.bin', 'audio_omi_pcm16_16000_invalid.bin'])
+def test_unproven_filename_keeps_the_normal_decoder(path):
+    from utils.batch_pipeline.audio import audio_unit
+
+    unit = audio_unit(1750000100, b'\0\0' * 1600)
+    decoder = Mock(return_value=iter([unit]))
+    context = {'client_device_id': 'synthetic-device', 'capture_received_at': 1750000200}
+    assert list(decode_for_intake([path], 600, UID, context, decoder=decoder)) == [unit]
+    decoder.assert_called_once_with([path], max_seconds=600, received_at=1750000200)
+    assert unit.source_reuse_key is None
+
+
+@pytest.mark.parametrize('policy', ['future_device_offset_v1', 'estimated_source_isolated_v1', 'unknown'])
+def test_clock_recovery_policy_keeps_normal_decode_without_reuse(tmp_path, policy):
+    path = raw_file(tmp_path)
+    context = {'client_device_id': 'synthetic-device', 'capture_clock_policy': policy}
+    assert not source_reuse_decode.eligible([path], context)
+    assert len(list(decode_for_intake([path], 600, UID, context, decoder=decode_units))) == 1
+
+
 def test_kill_switch_restores_packing_and_unknown_clocks_abstain(tmp_path, monkeypatch):
     monkeypatch.setenv('BATCH_SOURCE_REUSE_ENABLED', 'false')
     units = decoded([raw_file(tmp_path, name='a'), raw_file(tmp_path, at=1750000101, name='b')])

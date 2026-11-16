@@ -15,6 +15,9 @@ This changes packing granularity, so monitor unit admission and queue latency
 as well as the source reuse counters. Uploads above the bounded file limit,
 unknown clocks, coverage trimming, alternate decoders, explicit targets,
 coalesced receipt imports and native recordings keep their existing path.
+An unparseable filename is a reuse-proof miss; the supplied decoder still
+owns ordinary validation and admission. Explicit clock-recovery policies also
+keep that decoder's path, without an exact-source key.
 
 ## Canonical ownership and billing
 
