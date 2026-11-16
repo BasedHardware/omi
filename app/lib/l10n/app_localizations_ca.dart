@@ -15551,6 +15551,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Has fet servir els $minutes minuts d\'aquest mes';
   }

@@ -15465,6 +15465,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Du har brugt månedens $minutes minutter';
   }

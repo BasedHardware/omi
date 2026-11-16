@@ -1301,7 +1301,7 @@ runs:
           revision="$service-${{ steps.image-tag.outputs.revision_suffix }}"
           actual="$(gcloud run revisions describe "$revision" \
             --region='${{ inputs.region }}' --project='${{ inputs.project_id }}' \
-            --format='json(metadata.name,metadata.labels,spec.containers.env)' \
+            --format='json(metadata.name,metadata.labels,spec.containers[].env)' \
             | jq -er --arg revision "$revision" --arg service "$service" '
                 select(.metadata.name == $revision and .metadata.labels["serving.knative.dev/service"] == $service)
                 | [.spec.containers[].env[]? | select(.name == "OMI_BACKEND_RELEASE_SHA") | .value]

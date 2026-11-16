@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-too-old-recording.png",
+      "platform": "mobile-ios",
+      "description": "Offline Sync with a too-old recording: the 30-day explanation, Download Audio, and secondary Delete.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-too-old-larger-text.png",
+      "platform": "mobile-ios",
+      "description": "The same too-old recording at 150 percent text size; explanation and both actions remain readable.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

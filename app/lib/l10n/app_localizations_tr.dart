@@ -15485,6 +15485,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Bu ayın $minutes dakikasını kullandınız';
   }

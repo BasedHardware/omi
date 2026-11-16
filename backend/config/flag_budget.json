@@ -506,6 +506,10 @@
       "owner": "overflow / two-lane lead",
       "review_by": "2026-11-29"
     },
+    "BATCH_VENDOR_OVERFLOW_PRIORITIES": {
+      "owner": "overflow / two-lane lead",
+      "review_by": "2026-11-29"
+    },
     "BATCH_VENDOR_ROUTE_TABLE": {
       "owner": "vroute-b / two-lane lead",
       "review_by": "2026-11-29"
