@@ -34,7 +34,10 @@ def guard_metric_names(source=None):
         if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
             continue
         target = node.targets[0]
-        if not isinstance(target, ast.Name) or not target.id.startswith('PROJECTION_FINISH_'):
+        if not isinstance(target, ast.Name) or target.id not in {
+            'PROJECTION_FINISH_READS',
+            'PROJECTION_FINISH_COMPLETED',
+        }:
             continue
         name = ast.literal_eval(node.value.args[0])
         assert isinstance(name, str) and name.startswith('omi_')
