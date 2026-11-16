@@ -36,6 +36,10 @@ class LiveSummarySection extends StatefulWidget {
   /// True while this section stands in for the page's summary.
   final ValueChanged<bool> onActiveChanged;
   final SummaryStreamOpener? stream;
+
+  /// Test seam for the page-level section, which the summary tab builds without a [stream].
+  @visibleForTesting
+  static SummaryStreamOpener? debugStream;
   final Duration pollInterval;
   final Duration pollFor;
 
@@ -92,6 +96,7 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
     _coveredAtOpen = widget.conversation.v3?.summaryCoversThrough;
     _active(true);
     final open = widget.stream ??
+        LiveSummarySection.debugStream ??
         (String id) => streamConversationSummary(id, cancelSignal: _cancel.isCompleted ? null : _cancel.future);
     _subscription = open(widget.conversation.id).listen(_onEvent, onError: (_) => _fail());
   }

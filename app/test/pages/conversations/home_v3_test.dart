@@ -1,4 +1,12 @@
 import 'package:clock/clock.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +33,8 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/live_summary_section.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/conversation_state_tile.dart';
@@ -54,6 +64,9 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/ui/ui.dart';
+
+import '../../helpers/sfpro_font_fixtures.dart';
 
 // v3 Home (recordings and conversations), on the hermetic fixture of perf/scroll_home_notify_test.dart.
 
@@ -298,79 +311,87 @@ class _Home {
   );
   late final _Conversations conversations = _Conversations()
     ..conversations = [
+      _conversation('c-transcribing', DateTime(2026, 11, 16, 11, 20), 'Call with the venue',
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.transcribing)),
       _conversation('c-writing', DateTime(2026, 11, 16, 10, 30), 'Hiring plan',
           v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.writing)),
       _conversation('c-hidden', DateTime(2026, 11, 16, 9, 45), 'Television in the kitchen',
           v3: const ConversationV3Fields(kind: 'media', homeHidden: true, tileState: ConversationTileState.done)),
       _conversation('c-today', DateTime(2026, 11, 16, 9, 0), 'Standup', v3: _done),
       _conversation('c-yesterday', DateTime(2026, 11, 15, 15, 0), 'Design review', v3: _done),
+      _conversation('c-yesterday-2', DateTime(2026, 11, 15, 11, 10), 'Lunch with Sam',
+          v3: const ConversationV3Fields(kind: 'conversation', tileState: ConversationTileState.done)),
     ]
     ..groupConversationsByDate();
 }
 
-Widget _app(_Home home) {
-  return MultiProvider(
-    providers: [
-      ChangeNotifierProvider<ConversationProvider>.value(value: home.conversations),
-      ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
-      ChangeNotifierProvider<CaptureProvider>.value(value: home.capture),
-      ChangeNotifierProvider<ConversationsV3Provider>.value(value: home.conversationsV3),
-      ChangeNotifierProvider<EpisodeProvider>.value(value: home.episodes),
-      ChangeNotifierProvider<LocalRecordingsProvider>.value(value: _StubLocalRecordings()),
-      ChangeNotifierProvider<FolderProvider>.value(value: FolderProvider(foldersFetcher: () async => <Folder>[])),
-      ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
-      ChangeNotifierProvider<DeviceProvider>.value(value: _StubDeviceProvider()),
-      ChangeNotifierProvider<PhoneCallProvider>.value(value: _StubPhoneCallProvider()),
-      ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(
-        value: SpeakerTagPromptsProvider(
-          fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
-        ),
-      ),
-      ChangeNotifierProvider<SyncProvider>.value(value: home.sync),
-      ChangeNotifierProvider<ConnectivityProvider>.value(value: _StubConnectivityProvider()),
-      ChangeNotifierProvider<PeopleProvider>.value(
-        value: PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
-      ),
-      ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
-      ChangeNotifierProvider<IntegrationProvider>.value(
-        value: IntegrationProvider(
-          fetchStatus: (_) async => null,
-          saveStatus: (_, __) async => false,
-          deleteStatus: (_) async => false,
-          persistPref: (_, __) async {},
-        ),
-      ),
-      ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-        create: (_) => ConversationDetailProvider(),
-        update: (_, app, conversations, previous) =>
-            (previous?..setProviders(app, conversations)) ?? ConversationDetailProvider(),
-      ),
-    ],
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
-      home: Scaffold(
-        body: ConversationsPage(
-          requestInitialLoad: false,
-          loadRecaps: () async => (items: <DailySummary>[], ok: true),
-          openDaySummary: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
-          pendingWork: PendingWorkStore(
-            loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
-            loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+Widget _app(_Home home, {Key? boundary, ThemeData? theme}) {
+  return RepaintBoundary(
+      key: boundary,
+      child: MultiProvider(
+        providers: [
+          ChangeNotifierProvider<ConversationProvider>.value(value: home.conversations),
+          ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
+          ChangeNotifierProvider<CaptureProvider>.value(value: home.capture),
+          ChangeNotifierProvider<ConversationsV3Provider>.value(value: home.conversationsV3),
+          ChangeNotifierProvider<EpisodeProvider>.value(value: home.episodes),
+          ChangeNotifierProvider<LocalRecordingsProvider>.value(value: _StubLocalRecordings()),
+          ChangeNotifierProvider<FolderProvider>.value(value: FolderProvider(foldersFetcher: () async => <Folder>[])),
+          ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
+          ChangeNotifierProvider<DeviceProvider>.value(value: _StubDeviceProvider()),
+          ChangeNotifierProvider<PhoneCallProvider>.value(value: _StubPhoneCallProvider()),
+          ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(
+            value: SpeakerTagPromptsProvider(
+              fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
+            ),
+          ),
+          ChangeNotifierProvider<SyncProvider>.value(value: home.sync),
+          ChangeNotifierProvider<ConnectivityProvider>.value(value: _StubConnectivityProvider()),
+          ChangeNotifierProvider<PeopleProvider>.value(
+            value: PeopleProvider(loadPeople: () async => const PeopleListResponse(people: [])),
+          ),
+          ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
+          ChangeNotifierProvider<IntegrationProvider>.value(
+            value: IntegrationProvider(
+              fetchStatus: (_) async => null,
+              saveStatus: (_, __) async => false,
+              deleteStatus: (_) async => false,
+              persistPref: (_, __) async {},
+            ),
+          ),
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+            create: (_) => ConversationDetailProvider(),
+            update: (_, app, conversations, previous) =>
+                (previous?..setProviders(app, conversations)) ?? ConversationDetailProvider(),
+          ),
+        ],
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: theme,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: ConversationsPage(
+              requestInitialLoad: false,
+              loadRecaps: () async => (items: <DailySummary>[], ok: true),
+              openDaySummary: (_) async => const ApiFailure(ApiProblem(ApiProblemKind.transport)),
+              pendingWork: PendingWorkStore(
+                loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+                loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      ));
 }
 
-Future<_Home> _pumpHome(WidgetTester tester, {required bool v3}) async {
-  tester.view.physicalSize = const Size(800, 1600);
+Future<_Home> _pumpHome(WidgetTester tester, {required bool v3, Key? boundary, ThemeData? theme, Size? size}) async {
+  tester.view.physicalSize = size ?? const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final home = _Home(v3: v3);
-  await tester.pumpWidget(_app(home));
+  await tester.pumpWidget(_app(home, boundary: boundary, theme: theme));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
   await tester.pump(const Duration(milliseconds: 300));
@@ -418,11 +439,12 @@ void main() {
       expect(home.conversationsV3.v3, isTrue);
       expect(home.liveReads, greaterThanOrEqualTo(1));
 
-      expect(_rowIds(tester), ['live-1', 'c-writing', 'c-today', 'c-yesterday'],
+      expect(_rowIds(tester), ['live-1', 'c-transcribing', 'c-writing', 'c-today', 'c-yesterday', 'c-yesterday-2'],
           reason: 'the live conversation leads Today; the hidden one is only off Home');
       expect(find.byType(LiveEpisodeRow), findsNothing);
       expect(find.byKey(const Key('conversation_tile_live')), findsOneWidget);
       expect(find.byKey(const Key('conversation_tile_writing')), findsOneWidget);
+      expect(find.byKey(const Key('conversation_tile_transcribing')), findsOneWidget);
       expect(find.byType(ConversationWritingPen), findsOneWidget);
       expect(find.text('Television in the kitchen'), findsNothing);
 
@@ -446,4 +468,94 @@ void main() {
       await _dispose(tester, home);
     });
   });
+
+  group('render evidence (written when V3_HOME_RENDER_OUTPUT is set; a layout check otherwise)', () {
+    const output = String.fromEnvironment('V3_HOME_RENDER_OUTPUT');
+    final boundary = GlobalKey();
+
+    setUpAll(_loadFonts);
+
+    Future<void> shoot(WidgetTester tester, String name) async {
+      expect(tester.takeException(), isNull, reason: '$name rendered with an exception');
+      if (output.isEmpty) return;
+      await tester.runAsync(() async {
+        final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+        final image = await render.toImage(pixelRatio: 3);
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        await Directory(output).create(recursive: true);
+        await File('$output/$name.png').writeAsBytes(bytes!.buffer.asUint8List());
+      });
+    }
+
+    ThemeData theme() {
+      final base = buildOmiTheme(brightness: Brightness.dark);
+      return base.copyWith(
+        appBarTheme: base.appBarTheme.copyWith(
+          titleTextStyle: base.appBarTheme.titleTextStyle?.copyWith(fontFamily: 'SF Pro Display'),
+        ),
+      );
+    }
+
+    testWidgets('Home, and opening the conversation in progress', (tester) async {
+      await withClock(Clock.fixed(_now), () async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        OmiColors.active = OmiColors.forBrightness(Brightness.dark);
+        final sections = StreamController<SummaryStreamEvent>();
+        LiveSummarySection.debugStream = (_) => sections.stream;
+        final home = await _pumpHome(tester, v3: true, boundary: boundary, theme: theme(), size: const Size(393, 852));
+        await shoot(tester, '001-mobile-ios-v3-home');
+
+        await tester.tap(find.text('Launch checklist'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.byType(ConversationDetailPage), findsOneWidget);
+        expect(find.text('Writing your summary…'), findsOneWidget);
+        await shoot(tester, '002-mobile-ios-v3-live-summary-writing');
+
+        sections
+          ..add(const SummarySection('## Venue and date\n- The venue holds Thursday the 26th; deposit due Friday.'
+              '\n- Capacity is 180 seated, so the guest list needs a cut of about 20.'))
+          ..add(const SummarySection('## Run of show\n- Doors at 6, talks at 7, demos after.'
+              '\n- You own the slide order; Priya sends speaker bios by Tuesday.'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(find.textContaining('deposit due Friday'), findsOneWidget);
+        await shoot(tester, '003-mobile-ios-v3-live-summary-streamed');
+
+        LiveSummarySection.debugStream = null;
+        unawaited(sections.close());
+        debugDefaultTargetPlatformOverride = null;
+        await _dispose(tester, home);
+      });
+    });
+  });
+}
+
+Future<void> _loadFonts() async {
+  final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
+  for (final family in manifest) {
+    final loader = FontLoader(family['family'] as String);
+    for (final font in family['fonts'] as List) {
+      loader.addFont(rootBundle.load(font['asset'] as String));
+    }
+    await loader.load();
+  }
+  for (final family in [
+    '.SF UI Text',
+    '.SF UI Display',
+    '.SF Pro Text',
+    '.SF Pro Display',
+    'SF Pro Display',
+    'CupertinoSystemText',
+    'CupertinoSystemDisplay',
+    'FlutterTest',
+    'Roboto'
+  ]) {
+    final loader = FontLoader(family);
+    for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
+    }
+    await loader.load();
+  }
 }

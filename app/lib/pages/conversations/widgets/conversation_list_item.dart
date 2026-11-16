@@ -1,3 +1,4 @@
+import 'package:clock/clock.dart';
 import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
@@ -586,7 +587,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 // came with the live read.
                 LiveEpisodeClock(
                   key: const Key('conversation_row_live_length'),
-                  clock: DateTime.now,
+                  clock: clock.now,
                   builder: (context, now) {
                     final seconds = now.difference(widget.conversation.startedAt!).inSeconds;
                     return seconds <= 0
