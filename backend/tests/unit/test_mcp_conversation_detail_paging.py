@@ -42,6 +42,17 @@ def read(**options):
     return mcp_sse.execute_tool(OWNER, 'get_conversation_by_id', {'conversation_id': CID, **options})
 
 
+@pytest.fixture(scope='module')
+def registry_and_budget():
+    """Load the committed catalogs once, with the same safe YAML semantics."""
+    root = Path(__file__).resolve().parents[3]
+    budget = json.loads((root / 'backend/config/flag_budget.json').read_text())['names']
+    registry = yaml.load(
+        (root / 'config/feature-flags.yaml').read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    )['flags']
+    return {flag['key']: flag for flag in registry}, budget
+
+
 def test_walk_1200_segments_once_with_one_existing_read_per_page(stored):
     row, fetch = stored
     pages = []
@@ -219,6 +230,9 @@ def test_batch_item_cursor_resumes_with_detail_tool_without_extra_reads(stored):
 
 
 def test_single_and_batch_serialized_budget_returns_actionable_error(stored):
+    # The overview alone exceeds the wire cap; transcript length is irrelevant
+    # to this error/lean-projection contract (the 1,200-segment walk is separate).
+    stored[0]['transcript_segments'] = [{'id': 's0', 'text': 'synthetic'}]
     stored[0]['structured']['overview'] = 'x' * 120_000
     for name, arguments in [
         ('get_conversation_by_id', {'conversation_id': CID}),
@@ -246,12 +260,11 @@ def test_hosted_schemas_and_challenge_remain_valid():
     assert response.status_code == 200
 
 
-def test_default_env_is_owned_in_registry_and_budget():
-    root = Path(__file__).resolve().parents[3]
+def test_default_env_is_owned_in_registry_and_budget(registry_and_budget):
+    registry, budgets = registry_and_budget
     key = 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS'
-    budget = json.loads((root / 'backend/config/flag_budget.json').read_text())['names'][key]
-    registry = yaml.safe_load((root / 'config/feature-flags.yaml').read_text())['flags']
-    flag = next(f for f in registry if f['key'] == key)
+    budget = budgets[key]
+    flag = registry[key]
     assert budget['review_by'] == '2026-12-15'
     assert budget['owner'] == flag['owner']
     assert flag['lifecycle'] == 'config_switch'

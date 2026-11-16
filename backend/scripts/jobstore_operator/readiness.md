@@ -30,6 +30,11 @@ Placement is an independent admission, not an argument supplied on trust.
 Release must freshly verify the exact cluster/context, namespace and KSA UIDs,
 GSA binding, Linux AMD64 node UID, Ready/no-pressure/uncordoned status, taints,
 requested and actual headroom, quota/LimitRange, network and admission policies.
+The node's fresh region and zone labels must equal `us-central1` and
+`us-central1-a`. These exact topology labels are rendered explicitly following
+the 2026-11-16 admission dry-run; they are not inferred from the Pod or accepted
+as arbitrary injected metadata. A node UID or topology change holds execution
+until placement and the pinned literals are reviewed again.
 The 100m CPU/256Mi request and 500m/512Mi limit are ceilings to review against
 that placement, not an approved serving budget. `nodeName` pins the existing
 node and prevents this unscheduled workload from requesting an autoscaler
@@ -48,6 +53,8 @@ Recheck those UIDs and controls at execution. A server dry-run must first pass
 a new `--output` receipt: unexpected mutation
 or a collision holds the attempt. No server dry-run is implicit in these tools.
 Labels and annotations must match exactly, and nonempty finalizers refuse.
+Missing, changed or additional topology labels refuse at both dry-run and
+completed-Pod validation; there is no topology wildcard or normalization.
 Only enumerated API defaults are normalized: the KSA mirror, default scheduler,
 zero priority, default preemption policy, the two standard 300-second NoExecute
 tolerations, false container stdin/tty flags, false container `privileged`,
