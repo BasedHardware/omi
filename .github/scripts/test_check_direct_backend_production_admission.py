@@ -146,6 +146,86 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                 CHECKER.validate(root),
             )
 
+    def test_scalar_contract_cannot_replace_real_control_checkout(self):
+        for style in ('|', '>'):
+            with self.subTest(style=style), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                target = root / CHECKER.LISTEN_WORKFLOW
+                text = target.read_text()
+                start = text.index('      - name: Checkout trusted overlay evidence controls')
+                end = text.index('      - name: Reconstruct evidence runtime', start)
+                text = text[:start] + text[end:]
+                fake = '    name: ' + style + '\n      ' + CHECKER.LISTEN_EVIDENCE_CONTROL + '\n'
+                text = text.replace('  helm-upgrade:\n', '  helm-upgrade:\n' + fake, 1)
+                target.write_text(text)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence controls must use immutable workflow source in their isolated path",
+                    CHECKER.validate(root),
+                )
+
+    def test_evidence_commands_require_real_trusted_steps(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        mutations = (
+            ('.github/listen-evidence-control/.github/scripts/listen_runtime.py', '.github/scripts/listen_runtime.py'),
+            (
+                '.github/listen-evidence-control/.github/scripts/listen_overlay_evidence.py job',
+                '.github/scripts/listen_overlay_evidence.py job',
+            ),
+            (
+                '      - name: Reconstruct evidence runtime before credentials',
+                '      - working-directory: candidate\n        name: Reconstruct evidence runtime before credentials',
+            ),
+            (
+                '      - name: Reconstruct evidence runtime before credentials',
+                '      - env:\n          PYTHONPATH: candidate\n        name: Reconstruct evidence runtime before credentials',
+            ),
+            (
+                '      - name: Produce private-overlay effect receipt without mutation',
+                '      - shell: bash -c \"candidate\"\n        name: Produce private-overlay effect receipt without mutation',
+            ),
+        )
+        for old, new in mutations:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                self.assertIn(old, source)
+                (root / CHECKER.LISTEN_WORKFLOW).write_text(source.replace(old, new, 1))
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                    CHECKER.validate(root),
+                )
+
+    def test_controls_must_precede_real_bootstrap_and_duplicate_keys_refuse(self):
+        source = (ROOT / CHECKER.LISTEN_WORKFLOW).read_text()
+        start = source.index('      - name: Checkout trusted overlay evidence controls')
+        middle = source.index('      - name: Reconstruct evidence runtime', start)
+        end = source.index('      - name: Install Helm', middle)
+        reordered = source[:start] + source[middle:end] + source[start:middle] + source[end:]
+        duplicate = source.replace(
+            '          path: .github/listen-evidence-control',
+            '          path: candidate\n          path: .github/listen-evidence-control',
+            1,
+        )
+        for text in (reordered, duplicate):
+            with self.subTest(text=text[start : start + 80]), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                for relative in CHECKER.WORKFLOWS:
+                    target = root / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ROOT / relative, target)
+                (root / CHECKER.LISTEN_WORKFLOW).write_text(text)
+                self.assertIn(
+                    f"{CHECKER.LISTEN_WORKFLOW} evidence commands must execute isolated immutable controls in order",
+                    CHECKER.validate(root),
+                )
+
     def test_wrong_pin_and_firestore_control_contracts_refuse(self):
         for replacement in ('actions/checkout@' + 'f' * 40, 'actions/checkout@v7x'):
             with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as directory:
