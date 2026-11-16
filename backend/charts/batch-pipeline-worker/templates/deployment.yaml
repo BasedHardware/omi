@@ -41,11 +41,7 @@ spec:
   {{- $replicas := .instance.baselineReplicas | default .Values.replicaCount }}
   {{- if hasKey .instance "fixedReplicas" }}
   {{- $replicas = .instance.fixedReplicas }}
-  {{- /* Operators scale the fallback with kubectl; upgrades keep the live count. */}}
-  {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
-  {{- if $current }}
-  {{- $replicas = dig "spec" "replicas" $replicas $current }}
-  {{- end }}
+  {{- /* Fixed siblings are values-owned: activation and rollback must override live scale. */}}
   {{- else if .Values.autoscaling.enabled }}
   {{- $current := lookup "apps/v1" "Deployment" .Release.Namespace .instance.name }}
   {{- if $current }}
@@ -100,6 +96,7 @@ spec:
       {{- end }}
       containers:
         - name: worker
+          # All GPU instances share this release image; never retain a sibling image via lookup.
           image: "{{ required "image.repository required" .Values.image.repository }}@{{ .Values.image.digest }}"
           command: [python, -m, diarizer.batch_pipeline_runtime]
           ports:

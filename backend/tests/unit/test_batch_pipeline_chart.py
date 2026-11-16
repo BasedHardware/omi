@@ -466,8 +466,8 @@ def test_production_cutover_preserves_live_single_od_hpa_min4_max16():
     assert pod['nodeSelector']['cloud.google.com/gke-nodepool'] == 'batch-pipeline-pool'
     assert pod['terminationGracePeriodSeconds'] == 1500
     assert 'affinity' not in pod and 'priorityClassName' not in pod
-    # The T4 stockout fallback ships at zero replicas with no HPA.
-    assert by_name(docs, 'Deployment')['synthetic-worker-t4']['spec']['replicas'] == 0
+    # The incident setting is values-owned, with no T4 HPA.
+    assert by_name(docs, 'Deployment')['synthetic-worker-t4']['spec']['replicas'] == 4
     assert 'synthetic-worker-t4' not in hpas
     # Prod L4 workers run two pump processes; the T4 sibling stays at one.
     for name, processes in (('synthetic-worker', '2'), ('synthetic-worker-t4', '1')):
@@ -476,6 +476,21 @@ def test_production_cutover_preserves_live_single_od_hpa_min4_max16():
         assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == processes
         # Four pump lanes per process on L4; the slower T4 sibling keeps two.
         assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('4' if processes == '2' else '2')
+
+
+@pytest.mark.parametrize('replicas', [0, 4])
+def test_prod_t4_activation_and_rollback_use_the_shared_release_image(replicas):
+    result = render_prod('--set', f't4Fallback.replicas={replicas}', '--set-string', 'image.digest=sha256:' + 'b' * 64)
+    assert result.returncode == 0, result.stderr
+    docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+    deployments = by_name(docs, 'Deployment')
+    t4 = deployments['synthetic-worker-t4']
+    assert t4['spec']['replicas'] == replicas
+    for name in ('synthetic-worker', 'synthetic-worker-t4'):
+        assert deployments[name]['spec']['template']['spec']['containers'][0]['image'] == (
+            'gcr.io/based-hardware/batch-pipeline-worker@sha256:' + 'b' * 64
+        )
+    assert 'synthetic-worker-t4' not in by_name(docs, 'HorizontalPodAutoscaler')
 
 
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
@@ -820,11 +835,15 @@ def test_worker_dispatch_scope_can_be_bound_without_changing_other_admission():
     assert env['BATCH_PIPELINE_ENABLED'] == 'false'
 
 
-def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
+@pytest.mark.parametrize('replicas', [0, 4])
+@pytest.mark.parametrize('digest', ['a' * 64, 'b' * 64])
+def test_t4_fallback_shares_release_image_and_has_fixed_replicas_without_hpa(replicas, digest):
     result = render(
         *enabled_arguments(),
         '--set',
-        'autoscaling.enabled=true,autoscaling.minReplicas=4,autoscaling.maxReplicas=16,t4Fallback.enabled=true',
+        f'autoscaling.enabled=true,autoscaling.minReplicas=4,autoscaling.maxReplicas=16,t4Fallback.enabled=true,t4Fallback.replicas={replicas}',
+        '--set-string',
+        f'image.digest=sha256:{digest}',
     )
     assert result.returncode == 0, result.stderr
     docs = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
@@ -834,7 +853,7 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     assert set(deployments) == monitors == {'synthetic-worker', 'synthetic-worker-t4'}
     assert hpas == {'synthetic-worker'}
     primary, t4 = deployments['synthetic-worker'], deployments['synthetic-worker-t4']
-    assert t4['spec']['replicas'] == 0
+    assert t4['spec']['replicas'] == replicas
     pod = t4['spec']['template']
     assert pod['metadata']['labels']['app.kubernetes.io/instance'] == 'synthetic-worker-t4'
     assert pod['metadata']['labels'] == {
@@ -847,6 +866,7 @@ def test_t4_fallback_is_a_zero_replica_t4_sibling_without_hpa():
     }
     assert pod['spec']['tolerations'] == primary['spec']['template']['spec']['tolerations']
     assert pod['spec']['containers'][0]['image'] == primary['spec']['template']['spec']['containers'][0]['image']
+    assert pod['spec']['containers'][0]['image'] == f'synthetic/worker@sha256:{digest}'
     assert t4['spec']['strategy']['type'] == 'Recreate'
 
 
