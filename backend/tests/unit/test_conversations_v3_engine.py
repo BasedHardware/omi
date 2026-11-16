@@ -115,6 +115,25 @@ def test_model_resume_can_undo_a_topic_split_inside_continuous_speech():
     assert len(windows[0]['lines']) == 2
 
 
+def test_model_resume_keeps_overlapping_speech_in_one_window():
+    row = recording(
+        segments=[
+            {'text': 'long opening turn', 'start': 0, 'end': 30},
+            {'text': 'overlapping short turn', 'start': 10, 'end': 15},
+            {'text': 'continuing overlapping turn', 'start': 20, 'end': 40},
+        ]
+    )
+    groups = outline.stretches([row], NOW + timedelta(hours=1))
+    assert len(groups) == 1
+    windows = planner.windows(groups, [[entry(), entry(3, resumes_previous=True)]])
+    assert len(windows) == 1
+    assert [(line['segment']['start'], line['segment']['end']) for line in windows[0]['lines']] == [
+        (0, 30),
+        (10, 15),
+        (20, 40),
+    ]
+
+
 @pytest.mark.parametrize('order', ['in_order', 'reversed', 'reconnect_first'])
 def test_two_hour_exchange_stays_one_window_across_reconnects_and_arrival_order(order):
     # Same recorded shape as the incident: an unrelated family chat, a 15m pause,

@@ -62,7 +62,7 @@ def windows(groups, outlines):
                     and not prior.get('manual_end')
                     and prior['kind'] == candidate['kind']
                     and prior.get('people') == candidate.get('people')
-                    and timedelta(0) <= part[0]['start'] - max(line['end'] for line in prior['lines']) < SILENCE
+                    and max(timedelta(0), part[0]['start'] - max(line['end'] for line in prior['lines'])) < SILENCE
                     and part[-1]['end'] - prior['lines'][0]['start'] <= CAP
                 ):
                     prior['lines'].extend(part)
