@@ -41,6 +41,7 @@ from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTIO
 from google.api_core.exceptions import Aborted
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from config.batch_pipeline import projection_finish_classify_page_limit
+from config.policy import ProjectionPolicy
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -52,8 +53,9 @@ SWITCHES = (
 
 
 @pytest.mark.parametrize('state', ['persisted', 'ready'])
-def test_async_state_move_stamps_independent_followup_clock(state):
-    assert projection_finish_state_fields(state, 123.0, async_projection=True) == {
+@pytest.mark.parametrize('fields', [projection_finish_state_fields, projection_finish_entry_fields])
+def test_async_state_move_stamps_independent_followup_clock(state, fields):
+    assert fields(state, 123.0, async_projection=True) == {
         PROJECTION_FINISH_DUE_FIELD: -1.0,
         PROJECTION_FINISH_STEP_FIELD: 0,
         FOLLOWUP_DUE: 123.0,
@@ -784,3 +786,22 @@ def test_default_classification_budget_stops_at_eight(monkeypatch):
     projector.sweep(limit=100)
     assert log.retire_async_finish.call_count == 8
     assert sum(log.results[sid][PROJECTION_FINISH_DUE_FIELD] == -1.0 for sid in ids) == 8
+
+
+@pytest.mark.parametrize('group_ready', [False, True])
+@pytest.mark.parametrize('async_projection', [False, True])
+def test_held_ready_settlement_keeps_pinned_finish_policy(monkeypatch, group_ready, async_projection):
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_FOLLOWUP_PAGE_ENABLED', str(group_ready).lower())
+    client, store, binding = projection_fixture()
+    client.rows[('batch_pipeline_dev_jobs', 'good')]['policy_parts']['projection'] = ProjectionPolicy(
+        async_projection=async_projection
+    ).to_dict()
+    entry = client.rows[('batch_pipeline_dev_results', 'good')]
+    entry[PROJECTION_FINISH_DUE_FIELD] = -1.0 if async_projection else 1.0
+    receipt = deepcopy(entry['projection'])
+    for now in (100.0, 101.0):
+        assert store.hold_for_quarantine('good', binding, now)
+        assert entry[PROJECTION_FINISH_DUE_FIELD] == (-1.0 if async_projection else now)
+        assert entry[FOLLOWUP_DUE] == now
+        assert entry['projection'] == receipt
