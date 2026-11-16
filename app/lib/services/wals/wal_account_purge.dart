@@ -3,14 +3,16 @@ part of 'local_wal_sync.dart';
 /// Recordings of accounts deleted from this phone, and the file-ownership checks
 /// every deletion of a recording goes through.
 extension _WalAccountPurge on LocalWalSyncImpl {
-  bool _fileReferencedByOtherWal(Wal wal, String fileName) {
+  bool _fileReferencedByOtherWal(Wal wal, String fileName) => _otherWalReferencingFile(wal, fileName) != null;
+
+  Wal? _otherWalReferencingFile(Wal wal, String fileName) {
     for (final other in [..._retiredWals, ..._foreignWals, ..._wals]) {
       if (identical(other, wal)) continue;
       final otherPath = other.filePath;
       final otherName = (otherPath != null && otherPath.isNotEmpty) ? otherPath.split('/').last : other.getFileName();
-      if (otherName == fileName) return true;
+      if (otherName == fileName) return other;
     }
-    return false;
+    return null;
   }
 
   bool _isTrackedWal(Wal wal) =>

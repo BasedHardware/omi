@@ -28,9 +28,35 @@ class _UndeletableAudio implements File {
   @override
   Directory get parent => real.parent;
   @override
+  String get path => real.path;
+  @override
   Future<bool> exists() => real.exists();
   @override
   Future<File> delete({bool recursive = false}) => throw const FileSystemException('audio delete denied');
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _CreationBarrierFile implements File {
+  final File real;
+  final Completer<void> entered, release;
+  _CreationBarrierFile(this.real, this.entered, this.release);
+  @override
+  Directory get parent => real.parent;
+  @override
+  Future<bool> exists() => real.exists();
+  @override
+  String get path => real.path;
+  @override
+  Future<File> create({bool recursive = false, bool exclusive = false}) async {
+    if (!entered.isCompleted) entered.complete();
+    await release.future;
+    return real.create(recursive: recursive, exclusive: exclusive);
+  }
+
+  @override
+  Future<File> writeAsBytes(List<int> bytes, {FileMode mode = FileMode.write, bool flush = false}) =>
+      real.writeAsBytes(bytes, mode: mode, flush: flush);
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -62,6 +88,7 @@ void main() {
     await WalFileManager.init();
   });
   tearDown(() async {
+    WalFileManager.beforeLegacyMigrationSaveForTesting = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), null);
     await documents.delete(recursive: true);
@@ -489,5 +516,302 @@ void main() {
     await expectLater(sync.deleteWal(wal), throwsA(isA<FileSystemException>()));
     expect(sync.testWals, isEmpty);
     expect(await WalWriteIntent.exists(documents, name), isFalse);
+  });
+  test('a stale index cleanup cannot retire a newer transaction reusing its filename', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_reused.bin');
+    await WalWriteIntent.write(documents, old, [1, 2]);
+    await File('${documents.path}/${old.filePath}').delete();
+    await WalWriteIntent.retireFile(documents, old.filePath!);
+    final replacement = Wal.fromJson(old.toJson());
+    await WalWriteIntent.write(documents, replacement, [3, 4]);
+    await WalWriteIntent.retire(documents, old);
+    expect(await WalWriteIntent.exists(documents, replacement.filePath!), isTrue);
+    expect((await WalFileManager.loadWals()).single.filePath, replacement.filePath);
+  });
+
+  test('a stale main row cannot retire the intent of replacement bytes at the same filename', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        totalFrames: 1,
+        storage: WalStorage.disk,
+        status: WalStatus.synced,
+        ownerUid: 'owner-a',
+        filePath: 'audio_replaced.bin');
+    await WalWriteIntent.write(documents, old, [1, 2]);
+    await WalFileManager.saveWals([old]);
+    await File('${documents.path}/${old.filePath}').delete();
+    await WalWriteIntent.retireFile(documents, old.filePath!);
+    final replacement = Wal.fromJson(old.toJson())
+      ..status = WalStatus.miss
+      ..totalFrames = 2;
+    await WalWriteIntent.write(documents, replacement, [3, 4]);
+    final sync = LocalWalSyncImpl(_Listener(), deltaIndexAllowed: () async => true);
+    await sync.loadForOnDeviceWorker();
+    expect(sync.testWals.single.status, WalStatus.miss);
+    expect(sync.testWals.single.totalFrames, 2);
+    expect(await sync.hasDurableWal(sync.testWals.single, admittedGeneration: 0), isFalse);
+    expect(await WalWriteIntent.exists(documents, replacement.filePath!), isTrue);
+    await sync.persistRetryMetadata(sync.testWals.single);
+    addTearDown((await sync.indexWorkerForTesting)!.close);
+    expect((await WalFileManager.loadIndexedWals()).single.totalFrames, 2);
+    expect(await WalWriteIntent.exists(documents, replacement.filePath!), isFalse);
+  });
+  test('deletion racing file creation cannot remove the only intent before bytes arrive', () async {
+    final wal = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_creating.bin');
+    final entered = Completer<void>(), release = Completer<void>();
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+      await WalFileManager.saveWals(rows);
+    });
+    sync.testWals = [wal];
+    final writing = IOOverrides.runZoned(() => WalWriteIntent.write(documents, wal, [1, 2]), createFile: (path) {
+      final real = Zone.root.run(() => File(path));
+      return path.endsWith('/${wal.filePath}') ? _CreationBarrierFile(real, entered, release) : real;
+    });
+    await entered.future;
+    final deleting = sync.deleteWal(wal);
+    await pumpEventQueue(times: 100);
+    release.complete();
+    await writing;
+    await deleting;
+    expect(await File('${documents.path}/${wal.filePath}').exists(), isFalse,
+        reason: 'a successful user delete must not be followed by an untracked late creation');
+    expect(await WalFileManager.loadWals(), isEmpty);
+  });
+  test('device chunks refuse to create ownerless audio before admission', () async {
+    await SharedPreferencesUtil().saveString('uid', '');
+    final sync = LocalWalSyncImpl(_Listener(),
+        freeDiskBytes: () async => 64 << 30,
+        persistWals: (rows) async {
+          await WalFileManager.saveWals(rows);
+        });
+    await expectLater(
+        sync.persistDeviceChunk(
+            source: Wal(timerStart: 1, codec: BleAudioCodec.opus, seconds: 10, device: 'pendant'),
+            frames: [
+              [1, 2]
+            ],
+            timerStart: 1,
+            admittedGeneration: 0,
+            nextCollisionSequence: () => 1),
+        throwsStateError);
+    expect(await documents.list().where((f) => f.path.split('/').last.startsWith('audio_')).length, 0);
+  });
+
+  test('an account switch during load still establishes the shared index namespace', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_owner_a.bin');
+    await File('${documents.path}/${old.filePath}').writeAsBytes([1, 2]);
+    await WalFileManager.saveWals([old]);
+    final entered = Completer<void>(), release = Completer<void>();
+    final sync = LocalWalSyncImpl(_Listener(),
+        deltaIndexAllowed: () async => true,
+        loadWals: () async {
+          final rows = await WalFileManager.loadWals();
+          entered.complete();
+          await release.future;
+          return rows;
+        });
+    sync.start();
+    await entered.future;
+    sync.clearUserData();
+    await SharedPreferencesUtil().saveString('uid', 'owner-b');
+    release.complete();
+    await sync.walReady;
+    final added = Wal(
+        timerStart: 2,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-b',
+        filePath: 'audio_owner_b.bin');
+    await WalWriteIntent.write(documents, added, [3, 4]);
+    await sync.addExternalWal(added, admittedGeneration: sync.sessionGeneration);
+    await sync.stop();
+    addTearDown((await sync.indexWorkerForTesting)!.close);
+    expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath), [old.filePath, added.filePath]);
+    expect(sync.testWals.every((w) => w.ownerUid == 'owner-b'), isTrue);
+  });
+
+  for (final accountPurge in [false, true]) {
+    test('a ${accountPurge ? 'purge' : 'delete'} during live write cannot resurrect its memory row', () async {
+      final live = Wal(
+          timerStart: 1,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          device: 'pendant',
+          ownerUid: 'owner-a',
+          totalFrames: 1,
+          data: [
+            [1, 2]
+          ]);
+      final name = live.getFileName();
+      final entered = Completer<void>(), release = Completer<void>();
+      final sync = LocalWalSyncImpl(_Listener(),
+          freeDiskBytes: () async => 64 << 30,
+          persistWals: (rows) async {
+            await WalFileManager.saveWals(rows);
+          });
+      sync.testWals = [live];
+      final writing = IOOverrides.runZoned(() => sync.stop(), createFile: (path) {
+        final real = Zone.root.run(() => File(path));
+        return path.endsWith('/$name') ? _CreationBarrierFile(real, entered, release) : real;
+      });
+      await entered.future;
+      final deleting = accountPurge ? sync.purgeAccountWals('owner-a') : sync.deleteWal(live);
+      await pumpEventQueue(times: 100);
+      release.complete();
+      await writing;
+      await deleting;
+      expect(await File('${documents.path}/$name').exists(), isFalse);
+      expect(await WalFileManager.loadWals(), isEmpty);
+    });
+  }
+
+  test('legacy migration cannot overwrite a newer file registration', () async {
+    final old = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_initial.bin');
+    await File('${documents.path}/${old.filePath}').writeAsBytes([1, 2]);
+    await WalFileManager.saveWals([old]);
+    final legacy = File('${documents.path}/audio_limitless_opus_16000_1_fs320_r1_1794741663000.bin');
+    await legacy.writeAsBytes([1, 2]);
+    await SharedPreferencesUtil().saveStringList('flash_page_pending_uploads', [legacy.path]);
+    final entered = Completer<void>(), release = Completer<void>();
+    WalFileManager.beforeLegacyMigrationSaveForTesting = () async {
+      entered.complete();
+      await release.future;
+    };
+    final added = Wal(
+        timerStart: 2,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_during_migration.bin');
+    var savedBeforeRelease = false;
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+      if (!release.isCompleted && rows.any((w) => w.filePath == added.filePath)) savedBeforeRelease = true;
+      await WalFileManager.saveWals(rows);
+    });
+    sync.start();
+    await entered.future;
+    await WalWriteIntent.write(documents, added, [3, 4]);
+    final adding = sync.addExternalWal(added, admittedGeneration: 0);
+    await pumpEventQueue(times: 100);
+    release.complete();
+    await adding;
+    await sync.walReady;
+    await sync.stop();
+    expect(savedBeforeRelease, isFalse, reason: 'registration must wait through migration and reload');
+    expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath), contains(added.filePath));
+  });
+  for (final failCommit in [false, true]) {
+    test('shared-file deletion transfers its intent without resurrecting the deleted row (failure=$failCommit)',
+        () async {
+      final deleted = Wal(
+          timerStart: 1,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          storage: WalStorage.disk,
+          ownerUid: 'owner-a',
+          filePath: 'audio_shared.bin');
+      await WalWriteIntent.write(documents, deleted, [1, 2]);
+      final survivor = Wal(
+          timerStart: 2,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          storage: WalStorage.disk,
+          ownerUid: 'owner-a',
+          filePath: deleted.filePath);
+      await WalFileManager.saveWals([survivor]);
+      final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+        if (failCommit) throw const FileSystemException('injected shared delete index failure');
+        await WalFileManager.saveWals(rows);
+      });
+      sync.testWals = [deleted, survivor];
+      if (failCommit) {
+        await expectLater(sync.deleteWal(deleted), throwsA(isA<FileSystemException>()));
+      } else {
+        await sync.deleteWal(deleted);
+      }
+      expect((await WalFileManager.loadWals()).map((w) => w.id), [survivor.id]);
+      expect(await File('${documents.path}/${survivor.filePath}').readAsBytes(), [1, 2]);
+      expect(await WalWriteIntent.exists(documents, survivor.filePath!), failCommit);
+    });
+  }
+
+  test('failed admission completes ready with an error and keeps all subsequent saves closed', () async {
+    final original = jsonEncode({
+      'version': 1,
+      'wals': [
+        {'file_path': 'audio_uncertain.bin'}
+      ]
+    });
+    final main = File('${documents.path}/wals.json');
+    await main.writeAsString(original);
+    WalFileManager.quarantineRenameForTesting = (_) async => throw const FileSystemException('rename denied');
+    addTearDown(() => WalFileManager.quarantineRenameForTesting = null);
+    final sync = LocalWalSyncImpl(_Listener());
+    await IOOverrides.runZoned(() async {
+      sync.start();
+      await expectLater(sync.walReady.timeout(const Duration(seconds: 2)), throwsA(isA<FileSystemException>()));
+      await expectLater(
+          sync.addExternalWal(Wal(timerStart: 2, codec: BleAudioCodec.opus, seconds: 10), admittedGeneration: 0),
+          throwsA(isA<FileSystemException>()));
+      await expectLater(sync.stop(), throwsA(isA<FileSystemException>()));
+    }, createFile: (path) {
+      if (path.contains('wals.json.corrupt-')) return _UnwritableArchive();
+      return Zone.root.run(() => File(path));
+    });
+    expect(await main.readAsString(), original);
+  });
+
+  test('live ring replay preserves its fsynced file hash and exact write transaction', () async {
+    final sync = failingLedger();
+    final live = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        ownerUid: 'owner-a',
+        device: 'pendant',
+        totalFrames: 2,
+        data: [
+          [1, 2],
+          [3, 4]
+        ],
+        liveRingId: 42,
+        liveOrdinalStart: 0,
+        liveOrdinalEnd: 2);
+    sync.testWals = [live];
+    await expectLater(sync.stop(), throwsA(isA<FileSystemException>()));
+    final recovered = (await WalFileManager.loadWals()).single;
+    expect(recovered.fileSha256, isNotNull);
+    expect(recovered.fileSha256, live.fileSha256);
+    expect(recovered.liveDeviceId, 'pendant');
+    expect(recovered.fileWriteId, live.fileWriteId);
+    expect(recovered.fileWriteId, isNotNull);
   });
 }

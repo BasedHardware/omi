@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'wal.dart';
+import 'wal_write_intent.dart';
 
 /// Tracks all custody buckets together. Moving a row between buckets is not a
 /// deletion. Only changed identities are visited when taking a disk delta.
@@ -48,7 +49,7 @@ class WalIndexInventory {
     if (count != 0) return;
     _tokens[wal] ??= _nextToken++;
     _removed.remove(_tokens[wal]);
-    if (!_seeded.remove(wal) || wal.storage == WalStorage.mem) _dirty.add(wal);
+    if (!_seeded.remove(wal) || wal.storage == WalStorage.mem || WalWriteIntent.isRecovered(wal)) _dirty.add(wal);
     if (wal.status == WalStatus.uploaded) _uploaded.add(wal);
     wal.addChangeListener(_changed);
   }

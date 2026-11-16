@@ -188,6 +188,9 @@ class WalFileManager {
   @visibleForTesting
   static Future<void> Function(File file)? quarantineRenameForTesting;
 
+  @visibleForTesting
+  static Future<void> Function()? beforeLegacyMigrationSaveForTesting;
+
   static Future<void> _quarantineIndex(File file, String reason) async {
     _indexRevision++;
     if (!await file.exists()) return;
@@ -472,6 +475,7 @@ class WalFileManager {
     // Save migrated WALs
     if (newWals.isNotEmpty) {
       final allWals = List<Wal>.from(existingWals)..addAll(newWals);
+      await beforeLegacyMigrationSaveForTesting?.call();
       await saveWals(allWals);
       Logger.debug('WalFileManager: Saved ${newWals.length} migrated WALs');
     }

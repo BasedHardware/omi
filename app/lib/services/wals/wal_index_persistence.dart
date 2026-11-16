@@ -4,18 +4,41 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
   /// Admission owns the index token namespace before any producer/save can
   /// start a worker. A slow Documents recovery must never look like an empty
   /// ledger to a timer or stop/codec-change flush.
-  Future<List<Wal>> _loadAndAdmitIndex(int generation, {bool useOverride = true}) {
+  Future<List<Wal>> _loadAndAdmitIndex(int generation, {bool useOverride = true, bool migrateLegacy = false}) {
     final load = () async {
       await WalFileManager.init();
-      if (!_isCurrent(generation)) return <Wal>[];
       final override = useOverride ? _loadWalsOverride : null;
-      final loaded = override != null ? await override() : await WalFileManager.loadWals();
-      if (_isCurrent(generation)) _admitLoadedWals(loaded);
+      var loaded = override != null ? await override() : await WalFileManager.loadWals();
+      if (migrateLegacy && _isCurrent(generation)) {
+        final count = await WalFileManager.migrateLegacyLimitlessFiles(loaded);
+        if (count > 0) {
+          loaded = override != null ? await override() : await WalFileManager.loadWals();
+          DebugLogManager.logInfo('WAL migration completed', {'migratedCount': count, 'totalAfter': loaded.length});
+        }
+      }
+      // The index is device-wide. A stale UI generation must still establish
+      // its token namespace; park those rows until current-owner reconciliation.
+      _admitLoadedWals(loaded, publishCurrent: _isCurrent(generation));
       return loaded;
     }();
     _indexLoadInFlight = load;
-    return load.whenComplete(() {
+    return load.then((loaded) {
       if (identical(_indexLoadInFlight, load)) _indexLoadInFlight = null;
+      return loaded;
+    }, onError: (Object error, StackTrace stack) {
+      if (identical(_indexLoadInFlight, load)) {
+        // Keep the failed gate: empty admission must never overwrite unknown
+        // durable rows. Consumers fail fast instead of waiting indefinitely.
+        _chunkingTimer?.cancel();
+        _flushingTimer?.cancel();
+        _pendantTimer?.cancel();
+        if (!_walReady.isCompleted) {
+          _walReady.future.ignore();
+          _walReady.completeError(error, stack);
+        }
+        DebugLogManager.logError('WAL index admission failed closed', stack, error.toString());
+      }
+      Error.throwWithStackTrace(error, stack);
     });
   }
 
@@ -56,15 +79,20 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
     _forceIndexWrite = false;
     // Capture keys at admission, never from mutable rows after an await.
     final confirmedKeys = delta.disk.map(_durableKey).toList();
+    final intents = [
+      for (final wal in delta.disk.where(WalWriteIntent.hasPending))
+        (wal: wal, fileName: wal.filePath, transactionId: wal.fileWriteId),
+    ];
     final write = () async {
       await _writeIndexDelta(delta);
-      for (final wal in delta.disk.where(WalWriteIntent.hasPending)) {
+      for (final intent in intents) {
         // Cleanup is best effort AFTER commit; retrying a leftover intent is
         // idempotent. Never turn a committed write into a failed index delta.
         try {
-          if (wal.filePath != null && !wal.filePath!.contains('/')) {
+          if (intent.fileName != null && !intent.fileName!.contains('/')) {
             final directory = await getApplicationDocumentsDirectory();
-            await WalWriteIntent.retire(directory, wal);
+            await WalWriteIntent.retire(directory, intent.wal,
+                fileName: intent.fileName, transactionId: intent.transactionId);
           }
         } on FileSystemException catch (e) {
           Logger.debug('WAL intent retirement deferred: $e');

@@ -249,12 +249,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// Partitions a freshly-loaded disk index into current-session records and
   /// foreign-owner records. Both buckets remain in the shared durable index.
   /// Load replaces the published/parked inventories without dropping records.
-  void _admitLoadedWals(List<Wal> loaded) {
+  void _admitLoadedWals(List<Wal> loaded, {bool publishCurrent = true}) {
     _indexInventory.primeLoaded(loaded);
     final admitted = <Wal>[];
     final foreign = <Wal>[];
     for (final wal in loaded) {
-      if (_walAdmittedAtLoad(wal)) {
+      if (publishCurrent && _walAdmittedAtLoad(wal)) {
         admitted.add(wal);
       } else {
         foreign.add(wal);
@@ -515,7 +515,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void start() {
-    _initializeWals();
+    unawaited(_initializeWals().catchError((Object error, StackTrace stack) {
+      // Admission reports the failure through walReady and keeps its failed
+      // write gate. Do not also throw from this fire-and-forget lifecycle hook.
+    }));
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _runNativeIntake();
     _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
@@ -563,7 +566,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<void> _reportStaleWalsWhenReady(int generation) async {
-    await _walReady.future;
+    try {
+      await _walReady.future;
+    } catch (_) {
+      return; // Admission already recorded the hard failure; no backlog is asserted.
+    }
     if (_isCurrent(generation)) reportStaleMissingWals(trigger: 'foreground');
   }
 
@@ -620,7 +627,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   Future<void> _initializeWals() async {
     final generation = _sessionGeneration;
-    final loaded = await _loadAndAdmitIndex(generation);
+    await _loadAndAdmitIndex(generation, migrateLegacy: true);
     if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
@@ -635,22 +642,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       'synced': syncedCount,
     });
 
-    // Run migrations for legacy Limitless files
-    final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(loaded);
-    if (!_isCurrent(generation)) {
-      if (!_walReady.isCompleted) _walReady.complete();
-      return;
-    }
-    if (migratedCount > 0) {
-      // Reload WALs after migration
-      _admitLoadedWals(_loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals());
-      if (!_isCurrent(generation)) {
-        if (!_walReady.isCompleted) _walReady.complete();
-        return;
-      }
-      Logger.debug("wal service after migration: ${_wals.length}");
-      DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount, 'totalAfter': _wals.length});
-    }
     if (!await _purgeDeletedAccountWalsAtLoad(generation)) return;
 
     // Fix any inconsistent WAL states from old implementations
@@ -1119,11 +1110,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         final file = File(filePath);
+        if (wal.liveRingId != null) {
+          wal.fileSha256 = sha256.convert(data).toString();
+          wal.liveDeviceId = wal.device;
+        }
         try {
           final row = Wal.fromJson(wal.toJson()
             ..['file_path'] = fileName
             ..['storage'] = WalStorage.disk.name);
           await WalWriteIntent.write(file.parent, row, data);
+          wal.fileWriteId = row.fileWriteId;
           WalWriteIntent.markPending(wal);
         } catch (e) {
           Logger.debug('LocalWalSync: flush write failed for ${wal.id}: $e');
@@ -1132,10 +1128,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           break;
         }
         _consumeAdmission(data.length);
-        if (wal.liveRingId != null) {
-          wal.fileSha256 = sha256.convert(data).toString();
-          wal.liveDeviceId = wal.device;
-        }
         wal.filePath = fileName;
         wal.storage = WalStorage.disk;
         if (wal.liveRingId != null && wal.liveOrdinalStart != null) {
@@ -1489,7 +1481,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<int> applySyncedCopyRetention() => _removeExpiredSyncedCopies();
 
   @override
-  Future<int> purgeAccountWals(String uid) => _purgeAccountWals(uid);
+  Future<int> purgeAccountWals(String uid) => _enqueueBuffer(() => _purgeAccountWals(uid));
   @override
   Future<void> rehydrateForCurrentUser() => _rehydrateForCurrentUser();
 
@@ -1542,7 +1534,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<void>? _indexWriteInFlight;
   bool _forceIndexWrite = true;
 
-  String _durableKey(Wal wal) => '${wal.id}|${wal.filePath ?? wal.getFileName()}';
+  String _durableKey(Wal wal) {
+    final key = '${wal.id}|${wal.filePath ?? wal.getFileName()}';
+    final transaction = wal.fileWriteId;
+    return transaction == null || transaction.isEmpty ? key : '$key|$transaction';
+  }
 
   String _uploadTelemetrySource(List<Wal> wals) => ClientTelemetry.uploadSourceForBatch([
         for (final wal in wals)
@@ -1586,23 +1582,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final fullPath = await Wal.getFilePath(filePath);
         if (fullPath == null) return false;
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-        final type = await FileSystemEntity.type(fullPath, followLinks: false);
-        if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
-        if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
-          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            await File(fullPath).delete();
-            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
-            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
-            if (await sidecar.exists()) await sidecar.delete();
-            if (!_isCurrent(generation)) return false;
-          }
-        } else if (type == FileSystemEntityType.notFound) {
-          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
-          }
-        } else {
-          return false;
-        }
+        final deleted = await WalWriteIntent.deleteAudio(File(fullPath).parent, fullPath.split('/').last,
+            stillOwned: () => _isCurrent(generation) && _isTrackedWal(wal),
+            sharedWith: () => _otherWalReferencingFile(wal, fullPath.split('/').last),
+            transactionId: wal.fileWriteId,
+            sidecarPath: nativeBatchGeolocationSidecarPath(fullPath));
+        if (!deleted || !_isCurrent(generation) || !_isTrackedWal(wal)) return false;
       } catch (e) {
         Logger.debug(e.toString());
         return false;
@@ -1615,7 +1600,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   @override
-  Future deleteWal(Wal wal) async {
+  Future deleteWal(Wal wal) => _enqueueBuffer(() => _deleteRequestedWal(wal));
+
+  Future<void> _deleteRequestedWal(Wal wal) async {
     final generation = _sessionGeneration;
     Wal? target;
     for (final candidate in _wals) {

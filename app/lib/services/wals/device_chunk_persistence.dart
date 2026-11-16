@@ -77,7 +77,9 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? downloadSeqEnd,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
-    final owner = SharedPreferencesUtil().uid;
+    final uid = SharedPreferencesUtil().uid;
+    final owner = uid.isEmpty ? source.ownerUid : uid;
+    if (owner == null || owner.isEmpty) throw StateError('device chunk has no captured owner');
     final data = encodeWalFrames(frames);
     if (!await ensureStorageAdmission(bytes: data.length, admittedGeneration: admittedGeneration)) {
       throw StateError('storage admission refused (cap/disk reserve)');
@@ -110,7 +112,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           sampleRate: sampleRate ?? source.sampleRate,
           timerStart: timerStart,
           filePath: name,
-          ownerUid: owner.isEmpty ? source.ownerUid : owner,
+          ownerUid: owner,
           storage: WalStorage.disk,
           status: WalStatus.miss,
           device: source.device,
