@@ -249,23 +249,15 @@ void main() {
     await _loadFonts();
   });
 
-  testWidgets('too-old recording opens a support draft without deleting or retrying audio', (tester) async {
+  testWidgets('too-old recording downloads its whole audio without deleting or retrying it', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    final calls = <MethodCall>[];
-    const channel = MethodChannel('maido.io/intercom');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
-      calls.add(call);
-      return null;
-    });
     final sync = await _pump(tester, _tooOldAfternoon());
-    await tester.tap(find.byKey(const Key('too_old_get_help')));
+    await tester.tap(find.byKey(const Key('too_old_download')));
     await tester.pumpAndSettle();
-    expect(calls.single.method, 'displayMessageComposer');
-    expect(calls.single.arguments.toString(), contains('30-day automatic sync window'));
+    expect(sync.shared.single, hasLength(10), reason: 'one file for the whole recording, not one per chunk');
     expect(sync.deleted, isEmpty);
     expect(sync.manuallyRetried, isEmpty);
     expect(sync.wals, hasLength(10));
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -274,11 +266,12 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       OmiColors.active = OmiColors.forBrightness(Brightness.dark);
       await _pump(tester, _tooOldAfternoon(), render: true, textScale: scale);
-      await tester.ensureVisible(find.byKey(const Key('too_old_get_help')));
+      await tester.ensureVisible(find.byKey(const Key('too_old_download')));
       await tester.pumpAndSettle();
-      expect(find.text('Get help'), findsOneWidget);
+      expect(find.text('Download Audio'), findsOneWidget);
       expect(
-          find.text('This recording is older than the 30-day automatic sync window. The audio is still on this phone.'),
+          find.text(
+              "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here."),
           findsOneWidget);
       await _frame(tester, scale == 1 ? '001-mobile-ios-too-old-recording' : '002-mobile-ios-too-old-larger-text');
       debugDefaultTargetPlatformOverride = null;

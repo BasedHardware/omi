@@ -627,9 +627,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             ]),
             if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
               const SizedBox(height: 8),
-              TooOldRecordingHelp(onDelete: () {
-                _confirmDeleteWals(block.wals);
-              }),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), block.wals),
+                onDelete: () => _confirmDeleteWals(block.wals),
+              ),
             ],
           ],
         ),
@@ -813,9 +814,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             ]),
             if (state == WalSyncDisplayState.outsideRecoveryWindow) ...[
               const SizedBox(height: 8),
-              TooOldRecordingHelp(onDelete: () {
-                _confirmDeleteWal(wal);
-              }),
+              TooOldRecordingHelp(
+                onDownload: () => _shareRecording(context.read<SyncProvider>(), [wal]),
+                onDelete: () => _confirmDeleteWal(wal),
+              ),
             ],
           ],
         ),

@@ -15579,10 +15579,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncTooOldExplanation =>
-      'This recording is older than the 30-day automatic sync window. The audio is still on this phone.';
-
-  @override
-  String get syncGetHelp => 'Get help';
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
 
   @override
   String freeCapTitle(int minutes) {

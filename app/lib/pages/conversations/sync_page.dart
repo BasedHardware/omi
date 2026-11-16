@@ -16,6 +16,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -210,7 +211,14 @@ class WalListItem extends StatelessWidget {
                     ),
                     if (displayState == WalSyncDisplayState.outsideRecoveryWindow) ...[
                       const SizedBox(height: 8),
-                      TooOldRecordingHelp(onDelete: () async {
+                      TooOldRecordingHelp(onDownload: () async {
+                        try {
+                          await syncProvider.shareRecordingAsWav([wal]);
+                        } catch (e) {
+                          Logger.error('Sync: failed to share too-old recording audio: $e');
+                          if (context.mounted) OmiFeedback.error(context, context.l10n.audioPlaybackFailed);
+                        }
+                      }, onDelete: () async {
                         final confirmed = await showOmiConfirm(
                           context,
                           title: context.l10n.deleteRecording,

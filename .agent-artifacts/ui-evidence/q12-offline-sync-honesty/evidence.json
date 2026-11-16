@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-too-old-recording.png",
       "platform": "mobile-ios",
-      "description": "Offline Sync with a retained too-old recording, Get help, and secondary Delete.",
+      "description": "Offline Sync with a too-old recording: the 30-day explanation, Download Audio, and secondary Delete.",
       "captured_by": "agent",
       "source": "visual-audit"
     },

@@ -1,17 +1,14 @@
-// Explain a retained recording outside automatic sync and open existing support.
-// This presentation never retries, retires, or sends the recording.
+// A recording outside automatic sync can't be transcribed, so the row offers the two things the
+// user can still do: keep the audio (system share sheet) or delete it. It never retries or uploads.
 import 'package:flutter/material.dart';
 
-import 'package:omi/pages/settings/settings_destinations.dart';
-import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Presentation only: support opens a draft, never sends audio or recording IDs.
 class TooOldRecordingHelp extends StatelessWidget {
-  const TooOldRecordingHelp({super.key, required this.onDelete});
+  const TooOldRecordingHelp({super.key, required this.onDownload, required this.onDelete});
 
+  final Future<void> Function() onDownload;
   final VoidCallback onDelete;
 
   @override
@@ -24,17 +21,10 @@ class TooOldRecordingHelp extends StatelessWidget {
             spacing: 8,
             children: [
               OmiButton.secondary(
-                key: const Key('too_old_get_help'),
-                label: context.l10n.syncGetHelp,
+                key: const Key('too_old_download'),
+                label: context.l10n.downloadAudio,
                 size: OmiButtonSize.compact,
-                onPressed: () async {
-                  final support = IntercomManager.instance;
-                  if (support.isIntercomEnabled) {
-                    await support.intercom.displayMessageComposer(context.l10n.syncTooOldExplanation);
-                  } else {
-                    await openSettingsDestination(context, SettingsDestination.helpCenter);
-                  }
-                },
+                onPressed: onDownload,
               ),
               OmiButton.tertiary(
                 key: const Key('too_old_delete'),

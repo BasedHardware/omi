@@ -27150,14 +27150,8 @@ abstract class AppLocalizations {
   /// No description provided for @syncTooOldExplanation.
   ///
   /// In en, this message translates to:
-  /// **'This recording is older than the 30-day automatic sync window. The audio is still on this phone.'**
+  /// **'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
   String get syncTooOldExplanation;
-
-  /// No description provided for @syncGetHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'Get help'**
-  String get syncGetHelp;
 
   /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
   ///
