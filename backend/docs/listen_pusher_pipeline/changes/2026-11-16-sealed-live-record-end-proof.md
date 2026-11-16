@@ -2,13 +2,26 @@
 
 ## What changed
 
-- `utils.sync.capture_end.seal_proof` (pure) and `sealed` (kill switch + metric): a completed `batch_live_v1`
-  row with a closed record barrier and a projected record transcript, and no notes yet, is proven ended.
-- `database.capture_end.proven` asks the seal first, with no read, then the phone marker as before. Both
-  hold admissions that already pass `end_proven` (enrichment callback, legacy sync pipeline) get it.
-- Complete-record notes scheduling in projection passes the same proof to `processing_hold.admission`
-  (`RECORD_NOTES_EAGER_ENABLED`, still off in prod), so a sealed record's completion is due now.
+- `utils.sync.capture_end.seal_barrier` (row only) and `seal_proof(row, ledger)` (pure): a completed `batch_live_v1`
+  row with a closed record barrier, projected record text and no notes yet, whose lifecycle ledger shows
+  `transcribed` at or after `record_sealed_at`, is proven ended with all its text landed.
+- `database.capture_end.sealed` reads the capture's `pipeline_ledger` document only for a row that passes the
+  barrier; `proven` asks it first, then the phone marker as before. Both hold admissions that already pass
+  `end_proven` (enrichment callback, legacy sync pipeline) get it.
+- Complete-record notes scheduling in projection (`RECORD_NOTES_EAGER_ENABLED`, still off in prod) runs only after
+  every unit is ready, so it applies the row barrier for the job carrying the row's current upload revision; the
+  `sealed` count is recorded after commit, once per committed proof.
 - `CaptureEndProofOutcome.SEALED` (`omi_sync_capture_end_proof_total{result="sealed"}`).
+
+## Units, reseals and reopens
+
+A record's transcript is projected one unit (up to an hour of audio) at a time and `record_projection_revision`
+counts units, so a projected revision alone is not proof. The ledger's `transcribed` transition is written by
+`ProjectionStore._observe_transcription`, which runs only after the record binding's whole completion. The ledger is
+monotonic, so after a reseal its old `transcribed` predates the new `record_sealed_at` and the quiet wait applies; the
+second completion is a ledger duplicate, so a resealed record never gets the seal proof. A ledger that was never
+written (fail-open writer, ledger off) is "not proven". A reopen between admission and the summary run changes the
+row, so the first-summary claim's `updated_at` precondition fails and the retry re-admits the fresh row.
 
 ## Why
 
@@ -25,6 +38,9 @@ The seal proves the server's capture ended. It says nothing about a pendant copy
 first notes only. Content that lands after notes starts a normal hold epoch: quiet wait, then at most
 `MAX_LATE_RUNS` (1) automatic re-run if the change is material; unchanged and immaterial rules are unchanged. Pure
 sync uploads and `batch_sync_v1` records keep the quiet rule.
+
+Reads: one `pipeline_ledger` document per admission that would otherwise wait, only for rows that pass the
+seal barrier. No writes.
 
 Not changed: the 120 s first-summary deadline on per-unit projection marks, live-episode member-notes deferral,
 and a sync mark that lands after the record's own mark (it still schedules its wake at +quiet; the proof applies

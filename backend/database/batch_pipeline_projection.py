@@ -730,11 +730,13 @@ class ProjectionStore:
         policy = policy or self.policy(segment_id)
         coalescing_receipts: list[tuple[str, str]] = []
         notes_wakes = []
+        sealed_proofs: list[str] = []
 
         @firestore.transactional
         def commit(transaction):
             coalescing_receipts.clear()
             notes_wakes.clear()
+            sealed_proofs.clear()
             session = self.session(segment_id, binding, now, policy=policy)
             session.prepare(transaction, replay=False)
             members = coalescing_completion.prepare(
@@ -895,6 +897,19 @@ class ProjectionStore:
                     due_at = now if eager else now + settle_seconds()
                     hold_owns_delay = producer_ready and processing_hold.FIELD in row
                     if hold_owns_delay:
+
+                        def sealed_record(row=row, canonical=canonical):
+                            # Every unit of this record is projected by now and this job
+                            # carries the row's current upload: the barrier is the proof.
+                            proven = bool(
+                                capture_end.enabled()
+                                and session.job.get('record_input_upload_revision') is not None
+                                and capture_end.seal_barrier(row) is None
+                            )
+                            if proven:
+                                sealed_proofs.append(canonical)
+                            return proven
+
                         # The transcript arrival already started this clock.
                         # Do not add another settle after its absolute deadline.
                         # Only clocks are needed here: raw Firestore transcript
@@ -911,8 +926,7 @@ class ProjectionStore:
                                 },
                                 {'first_pending_at': now},
                                 now=now,
-                                # A sealed live record needs no quiet wait for its first notes.
-                                end_proven=lambda: capture_end.sealed(row),
+                                end_proven=sealed_record,
                             )
                             if processing_hold.enabled_for(row)
                             else ('ready', None)
@@ -985,6 +999,8 @@ class ProjectionStore:
 
         with nullcontext() if accounting.get('source_deleted') else writing('usage_month_cache', binding.owner_id):
             result, changed, seconds = self.run(commit, policy=policy)
+        for _ in sealed_proofs:
+            capture_end.record_proof('sealed')  # Once per committed proof, never per retry.
         for outbox, row_id, token in notes_wakes:
             outbox.wake(row_id, token)
         self._mirror(binding, coalescing_receipts)

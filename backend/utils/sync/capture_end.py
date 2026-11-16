@@ -36,6 +36,8 @@ FIELD = 'capture_end'
 TOLERANCE_SECONDS = 5.0
 # ``utils.sync.processing_hold.FIELD``; pinned by a test so this module stays import-light.
 HOLD_FIELD = 'sync_processing_hold'
+# ``database.pipeline_ledger.TRANSCRIBED``; pinned by a test for the same reason.
+LEDGER_TRANSCRIBED = 'transcribed'
 CLOCK_END_MATCH_SECONDS = 1.0
 MAX_CLOCK_SPAN_SECONDS = 7 * 86400
 CLIENT_END_TYPES = {'user_initiated': 'user_initiated', 'silence_backstop': 'silence_backstop', 'disconnect': 'unknown'}
@@ -193,17 +195,12 @@ def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
     return 'proven'
 
 
-def seal_proof(row: Mapping[str, Any]) -> str:
-    """Whether the server's own seal proves this row's first notes need not wait.
+def seal_barrier(row: Mapping[str, Any]) -> str | None:
+    """The row-only half of ``seal_proof``: ``None`` when the row itself allows a seal proof.
 
-    A batch-owned live recording reaches the server over the live socket, so
-    the server knows it ended without any phone marker: ``proven`` needs the
-    completed row's record barrier closed (not partial, no open or failed
-    upload) and its record transcript projected, the sealed and transcribed
-    phases of ``utils.conversations.phase``. The seal says nothing about a
-    pendant or phone copy that is still uploading, so it proves the first notes
-    only (``notes_written``): content that lands after them keeps the quiet
-    wait and the one late run.
+    A completed ``batch_live_v1`` row whose record barrier is closed (not
+    partial, no open or failed upload), with record text projected and no notes
+    yet. A projected revision means at least one unit landed, not all of them.
     """
     if row.get('record_lane_owner') != 'batch_live_v1':
         return 'absent'
@@ -225,15 +222,38 @@ def seal_proof(row: Mapping[str, Any]) -> str:
         or row.get('summary_completed_at')
     ):
         return 'notes_written'
+    return None
+
+
+def seal_proof(row: Mapping[str, Any], ledger: Mapping[str, Any] | None) -> str:
+    """Whether the server's own seal proves this row's first notes need not wait.
+
+    A batch-owned live recording reaches the server over the live socket, so
+    the server knows it ended without any phone marker. Its transcript is
+    projected one unit (up to an hour of audio) at a time, so ``proven`` also
+    needs every unit landed: the capture's lifecycle ledger (``ledger``,
+    ``database.pipeline_ledger``) is advanced to ``transcribed`` only when the
+    record's whole projection completes, and that transition must not predate
+    the latest seal (``record_sealed_at`` moves on reseal; the ledger never
+    moves back). The seal says nothing about a pendant or phone copy that is
+    still uploading, so it proves the first notes only: content that lands
+    after them keeps the quiet wait and the one late run.
+    """
+    reason = seal_barrier(row)
+    if reason is not None:
+        return reason
+    sealed_at = _seconds(row.get('record_sealed_at'))
+    transitions = ledger.get('transitions') if isinstance(ledger, Mapping) else None
+    if sealed_at <= 0 or not isinstance(transitions, list):
+        return 'units_pending'
+    if not any(
+        isinstance(entry, Mapping)
+        and entry.get('stage') == LEDGER_TRANSCRIBED
+        and _seconds(entry.get('at')) >= sealed_at
+        for entry in transitions
+    ):
+        return 'units_pending'
     return 'proven'
-
-
-def sealed(row: Mapping[str, Any]) -> bool:
-    """``seal_proof`` under the kill switch; a proof is counted as ``sealed``. No read."""
-    if not enabled() or seal_proof(row) != 'proven':
-        return False
-    record_proof('sealed')
-    return True
 
 
 def record_proof(result: str) -> None:

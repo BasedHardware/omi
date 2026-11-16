@@ -9414,13 +9414,19 @@ and late-cap rules still apply. Any other result, a read failure included, leave
 `no_speech_clock`, `content_behind`, `resumed`, `sealed`).
 
 **Server seal proof (2026-11-16).** A batch-owned live record (`record_lane_owner == 'batch_live_v1'`) needs no
-phone marker: the server captured it, so its seal is the proof. Before any session read, admission skips the wait
-(outcome `end_proof`, proof result `sealed`) when the completed row's record barrier is closed (`record_audio_closed`,
-not partial, no open or failed upload) and its record transcript is projected (`record_projection_revision`), the
-sealed and transcribed phases of `utils/conversations/phase.py`. The seal proves only the first notes: once the row
-has notes (`summary_output_present`, `summary_completed_at` or a hold `full_snapshot`), a later pendant or phone copy
-keeps the quiet wait and receives at most the one automatic late run. Complete-record notes scheduling in
-projection uses the same proof. It shares the `SYNC_UPLOAD_WATERMARK_ENABLED` kill switch and adds no read or write.
+phone marker: the server captured it, so its seal is the proof. Admission skips the wait (outcome `end_proof`, proof
+result `sealed`) when the completed row's record barrier is closed (`record_audio_closed`, not partial, no open or
+failed upload), its record text is projected (`record_projection_revision`), and every unit of the record has landed:
+the capture's `pipeline_ledger` document holds a `transcribed` transition (written only when the record's whole
+projection completes) at or after `record_sealed_at`. A reseal moves `record_sealed_at` while the ledger never moves
+back, so a resealed record keeps the quiet wait. Only a row that passes the barrier reads its ledger document (one
+read); a missing or unreadable ledger is "not proven". The seal proves only the first notes: once the row has notes
+(`summary_output_present`, `summary_completed_at` or a hold `full_snapshot`), a later pendant or phone copy keeps the
+quiet wait and receives at most the one automatic late run. The first-summary claim's `updated_at` precondition fences
+any row write between admission and the run (a reopen included); the retry re-reads the row and re-admits it.
+Complete-record notes scheduling in projection runs only after every unit is ready and applies the same barrier for the
+job carrying the row's current upload revision, counting `sealed` after commit. It shares the
+`SYNC_UPLOAD_WATERMARK_ENABLED` kill switch and adds no write.
 [Change note](listen_pusher_pipeline/changes/2026-11-16-sealed-live-record-end-proof.md).
 
 `SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
