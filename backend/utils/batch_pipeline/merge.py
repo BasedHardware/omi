@@ -287,6 +287,10 @@ class OrderedMerge:
             candidate = tx.first_pending(key)
             if candidate and candidate.get('shadow'):
                 return None
+            if candidate and candidate.get('source_alias_fallback') and candidate.get('state') == 'result_ready':
+                from database.batch_pipeline_source_fallback import merge_ready
+
+                return merge_ready(tx, candidate, now)
             over_cap = bool(depth and candidate and _awaiting_projection(tx, owner) >= depth)
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
@@ -441,7 +445,8 @@ class OrderedMerge:
                 if reason:
                     backlog['refusal'] = reason
                     return None
-                if over_cap:
+                if backlog_release.projection_refusal(tx, owner, depth, owner_key=key, owner_id=owner_id):
+                    backlog['refusal'] = 'projection'
                     return None
                 backlog['token'] = token
             if over_cap and not fresh_first and not released.get('recovered') and _catch_up(candidate):
@@ -476,6 +481,9 @@ class OrderedMerge:
                 'projection_state': 'pending',
                 'fresh_capture': job.get('fresh_capture') is True,
             }
+            for field in ('source_reuse_version', 'source_alias_version'):
+                if field in job:
+                    entry[field] = job[field]
             if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             if bypass:
@@ -749,6 +757,11 @@ class OrderedMerge:
             backlog_release.REFUSED.labels(backlog['refusal']).inc()
         if entry and entry.get('backlog_release'):
             backlog_release.COMMITTED.inc()
+            backlog_release.TOKENS_GRANTED.inc()
+            backlog_release.TOKENS_USED.set(backlog['token']['tokens_used'])
+            backlog_release.WINDOW.set(backlog['token']['window'])
+            if key in backlog['token'].get('owner_keys', ()):
+                backlog_release.ALLOWLIST_HITS.inc()
         if entry:
             record_correctness('committed', source=self.commit_source)
             if self.metrics:

@@ -102,6 +102,9 @@ def persist_speaker_resolution_if_current(
     written, reason, identities = transcript_pointer.run_preloaded_transactional(client, persist)
     observe('cas_committed' if written else 'cas_refused', reason)
     if written:
+        from database.owner_identity_availability import observe_safely
+
+        observe_safely(uid, conversation_data['id'])
         if on_committed_identity is not None:
             try:
                 on_committed_identity(*identities)

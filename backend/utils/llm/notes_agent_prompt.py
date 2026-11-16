@@ -27,8 +27,10 @@ from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v8'
-LEGACY_PROMPT_VERSION = 'notes-agent-v7'
+from utils.summary_quality import NOTE_QUALITY_RULES
+
+PROMPT_VERSION = 'notes-agent-v9'
+LEGACY_PROMPT_VERSION = 'notes-agent-v9-legacy'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -75,7 +77,7 @@ EVIDENCE
 - A name merely mentioned in the transcript may refer to a third party. Preserve names as heard with a hedge
   when useful, but never promote that mention to a verified speaker identity or expand it from People alone.
 - Record evidenced non-owner participants with their speaker key and evidence. Otherwise omit the participant
-  and attribute the statement as "someone said". Lead the title with the topic
+  and state the supported point neutrally without attributing an unknown voice. Lead the title with the topic
   whenever the counterpart's identity is unverified; do not put a guessed or hedged identity in the title.
 - A calendar invitee or screen listing alone is not proof of attendance; never infer an absence or no-show from it.
 - Keep proposals, decisions, intentions and completed work distinct, and keep tense and hedges. A suggestion is
@@ -117,6 +119,7 @@ ACTION ITEMS
   tasks; another process reconciles them.
 - Verb-led, at most 15 words, owner_name set. Leave due_at empty unless an explicit completion date was committed.
 """
+    + NOTE_QUALITY_RULES
     + ACTION_ITEM_EXTRACTION_RULES
     + """
 

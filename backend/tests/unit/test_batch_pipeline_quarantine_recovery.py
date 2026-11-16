@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from config.batch_pipeline import recovery_owners
-from config.policy import resolve_batch_policy, resolve_stage_policy
+from config.policy import ProjectionPolicy, resolve_batch_policy, resolve_stage_policy
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay
@@ -503,8 +503,13 @@ def test_result_held_logs_stage_and_type_without_private_exception(setup, monkey
     assert all(record.exc_info is None for record in caplog.records)
 
 
-def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
+@pytest.mark.parametrize('async_head,async_sibling', [(False, False), (True, False), (False, True), (True, True)])
+def test_crash_after_assignment_replays_receipt_and_meters_once(setup, async_head, async_sibling):
     client, store, binding, _, stt, recovery = setup
+    for sid, async_policy in [('bad', async_head), ('good', async_sibling)]:
+        row(client, 'jobs', sid)['policy_parts'] = {
+            'projection': ProjectionPolicy(async_projection=async_policy).to_dict()
+        }
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     result = row(client)['result']
     row(client)['state'] = 'committed'
@@ -539,6 +544,9 @@ def test_crash_after_assignment_replays_receipt_and_meters_once(setup):
     ledger_key = ('users', binding.owner_id, 'sync_content_ledger', binding.content_id)
     original_usage = client.rows[ledger_key]['usage_committed_at']
     assert row(client, 'results', 'good')['projection_state'] == 'ready'
+    for sid, async_policy in [('bad', async_head), ('good', async_sibling)]:
+        assert row(client, 'results', sid)['projection_finish_due_at'] == (-1.0 if async_policy else 104)
+        assert row(client, 'results', sid)['projection_followup_due_at'] == 104
     assert projection.complete('bad', binding, 105, accounting) == first
     assert client.rows[ledger_key]['usage_committed_at'] == original_usage
     # The strict fixture does not model hourly merge writes; exercise the real

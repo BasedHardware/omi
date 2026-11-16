@@ -593,6 +593,11 @@ class Projector:
             raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
+        if item.source_reuse_key:
+            from database.batch_pipeline_source_projection import project_alias
+
+            if project_alias(self.store, item, binding, self.clock(), policy=policy):
+                return
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
         if job.get('_projection_privacy_deleted'):
             persist_disposition(session, privacy_deleted=True)

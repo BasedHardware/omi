@@ -116,6 +116,7 @@ class TranscriptSegment(BaseModel):
     translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
+    speaker_word_seconds: SkipJsonSchema[Optional[float]] = Field(default=None, exclude=True)
     # Persisted for backend identity consumers. SkipJsonSchema keeps these out of
     # the generated OpenAPI/Dart/Swift client schema while validation and
     # model_dump (Firestore persistence, and the pusher transcript frames that
@@ -197,6 +198,7 @@ class TranscriptSegment(BaseModel):
             'audio_capture_end',
             'audio_source',
             'speaker_match_scores',
+            'speaker_word_seconds',
             'provider_speaker',
             'speaker_grouping_shadow',
             'speaker_grouping_shadow_expires_at',

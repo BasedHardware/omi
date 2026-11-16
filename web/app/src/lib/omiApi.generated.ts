@@ -9,6 +9,8 @@ export interface AIUserProfileResponse {
   data_sources_used?: number | null;
   generated_at?: string | null;
   profile_text?: string | null;
+  refreshed_at?: string | null;
+  source?: string | null;
 }
 
 export interface AcceptSharedActionItemsResponse {
@@ -6333,6 +6335,7 @@ export interface UpdateAIUserProfileRequest {
   data_sources_used?: number | null;
   generated_at?: string | null;
   profile_text?: string | null;
+  source?: "user_edit" | "exploration" | null;
 }
 
 export interface UpdateActionItemDescriptionRequest {
@@ -11625,6 +11628,24 @@ export interface OmiApiPaths {
     };
     patch: {
       operationId: "update_ai_profile_v1_users_ai_profile_patch";
+      responses: {
+        "200": AIUserProfileResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_ai_profile_v1_users_ai_profile_delete";
+      responses: {
+        "204": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/ai-profile/refresh": {
+    post: {
+      operationId: "refresh_ai_profile_v1_users_ai_profile_refresh_post";
       responses: {
         "200": AIUserProfileResponse;
         "401": void;
@@ -20880,6 +20901,44 @@ export async function update_ai_profile_v1_users_ai_profile_patch(header: { auth
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_ai_profile_v1_users_ai_profile_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
+export async function refresh_ai_profile_v1_users_ai_profile_refresh_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AIUserProfileResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/ai-profile/refresh`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

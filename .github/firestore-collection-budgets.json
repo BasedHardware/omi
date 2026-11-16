@@ -251,6 +251,18 @@
       "basis": "planning-bound",
       "source": "backend/docs/runbooks/projection-followup-due-clock.md: 10000 admitted pages/day x 200 rows/page x 6 reads/row, allowing discovery plus transactional fence plus optional shadow refresh and one retry. Operator-only bounded migration, not recurring serving or measured population. Repeated passes, higher page volume or more retries require remeasurement/rebudgeting.",
       "reviewed": "2026-11-15"
+    },
+    {
+      "site": "backend/database/owner_identity_availability.py",
+      "expression": "f'owner_identity_availability_{current_stage()}'",
+      "collection_pattern": "owner_identity_availability_*",
+      "owner": "q12-speaker-evidence",
+      "unit": "one completion observation or one complete metrics refresh",
+      "reads_per_unit_budget": 16,
+      "reads_per_day_budget": 500000,
+      "basis": "planning-bound",
+      "source": "Code bound: observation reads current row, deletion marker and one aggregate shard, with one transaction attempt and no retries; complete refresh reads exactly 16 fixed shards and no user rows. Planning envelope 100000 observations/day plus 10000 refreshes/day = 460000 reads, rounded to 500000. Not measured traffic, a runtime volume cap or a savings claim. Rebudget if observation or refresh volume exceeds that envelope. See backend/docs/operational/batch-identity-evidence.md.",
+      "reviewed": "2026-11-16"
     }
   ],
   "exempt": [

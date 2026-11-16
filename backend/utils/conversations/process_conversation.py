@@ -97,6 +97,15 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.home_titles import title_for_stability
+from utils.summary_quality import (
+    clean_structured,
+    stable_title,
+    valid_title,
+    title_or_fallback,
+    content_units,
+    title_basis,
+)
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
@@ -196,12 +205,13 @@ from utils.managed_compute import (
     managed_compute_decision_for as _managed_compute_decision_for,
 )
 from models.other import Person
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import Section, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
 from utils.default_summary_template import DEFAULT_SUMMARY_APP_ID, default_summary_app
 from utils.apps import get_available_app_model_by_id, get_available_apps, update_persona_prompt
+from utils import ai_profile_refresh
 from utils.executors import llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_app_result,
@@ -753,6 +763,33 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    if relevance_discarded is False:
+        cleaned = clean_structured(structured.model_dump())
+        if not valid_title(structured.title):
+            cleaned['title'] = title_or_fallback(
+                deterministic_minimum_title(
+                    conversation, tz_name_provider=lambda: notification_db.get_user_time_zone(uid)
+                )
+            )
+        old_title = title_for_stability(conversation)
+        cleaned['title'], title_reason = stable_title(
+            old_title,
+            cleaned['title'],
+            previous_units=getattr(conversation, 'title_content_units', 0),
+            current_units=content_units(getattr(conversation, 'transcript_segments', [])),
+        )
+        if isinstance(conversation, Conversation):
+            conversation.title_content_units = title_basis(
+                conversation.title_content_units, content_units(conversation.transcript_segments), title_reason
+            )
+        if str(getattr(conversation, 'user_title', '') or '').strip():
+            cleaned['title'] = conversation.user_title
+        # Preserve private notes identity carried on the model instance.
+        for key in ('title', 'overview', 'gist'):
+            if key in cleaned:
+                setattr(structured, key, cleaned[key])
+        if 'sections' in cleaned:
+            structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     # Apply the durable v3 lock after generated-title cleanup and salience projection.
     if getattr(conversation, 'title_locked', False):
@@ -2673,6 +2710,14 @@ def process_conversation(
         )
 
     def _observe_owner_recognition_completion(completed: Conversation) -> None:
+        # Keep current-revision observation inside the telemetry boundary:
+        # importing or emitting optional metrics must not interrupt persistence.
+        try:
+            from database.owner_identity_availability import observe_safely
+
+            observe_safely(uid, completed.id)
+        except Exception:
+            logger.warning('event=owner_identity_availability outcome=observation_unavailable')
         # One observation per conversation, on every successful persist. The
         # completed stores return through report_persistence, so a new
         # early return that reports a
@@ -2960,6 +3005,8 @@ def process_conversation(
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
     payload.update(llm_hashes)
+    if not conversation.discarded:
+        payload['content_word_units'] = content_units(conversation.transcript_segments)
     if 'extractions' in open_loop_sink:
         # Server-only derived field, deliberately outside the client wire
         # model, like RELEVANCE_DECISION_FIELD below. None is a fresh parse
@@ -3187,6 +3234,8 @@ def process_conversation(
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+            # Daily backend-owned AI profile refresh: no-op unless stale, bounded per process.
+            ai_profile_refresh.schedule_refresh(uid)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = not is_recovery_trigger(trigger) and not getattr(conversation, 'v3_derived', False)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:

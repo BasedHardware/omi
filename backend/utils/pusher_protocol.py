@@ -52,6 +52,7 @@ class AudioBackpressure(RuntimeError):
 
     def __init__(self, stage: str, pending: Any = None):
         super().__init__('audio custody capacity exhausted; input remains unacknowledged')
+        self.stage = stage
         self.pending = pending
         record_would_drop(stage)
         BACKPRESSURE.labels(stage=stage).inc()

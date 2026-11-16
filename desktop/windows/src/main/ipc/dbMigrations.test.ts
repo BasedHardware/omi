@@ -139,12 +139,61 @@ describe('legacy local data compatibility', () => {
     for (const table of legacy) {
       db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`)
     }
-    expect(runMigrations(db)).toBe(0)
+    // Every later migration (v3+) runs over the sentinels and must leave them be.
+    expect(runMigrations(db)).toBe(MIGRATIONS.length - 2)
     expect(runMigrations(db)).toBe(0)
     for (const table of legacy) {
       expect(db.prepare(`SELECT id FROM ${table}`).get()).toEqual({ id: 'sentinel' })
     }
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    db.close()
+  })
+})
+
+describe('migration v3 (reserved no-op)', () => {
+  const tableExists = (db: DatabaseSync, name: string): boolean =>
+    Boolean(db.prepare("SELECT 1 AS x FROM sqlite_master WHERE name = ?").get(name))
+
+  it('keeps the old local AI-profile table: the profile service uploads, then drops it', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    runMigrations(db as unknown as MigrationDb, MIGRATIONS.slice(0, 2))
+    // The table + index exactly as db.ts's Track 3 block used to create them.
+    db.exec(`
+      CREATE TABLE ai_user_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_text TEXT NOT NULL,
+        data_sources_used TEXT,
+        generated_at INTEGER NOT NULL,
+        backend_synced INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
+      INSERT INTO ai_user_profiles (profile_text, generated_at) VALUES ('unsynced edit', 1);
+    `)
+    expect(runMigrations(db as unknown as MigrationDb)).toBe(MIGRATIONS.length - 2)
+    expect(tableExists(db, 'ai_user_profiles')).toBe(true)
+    expect(db.prepare('SELECT profile_text AS t FROM ai_user_profiles').get()).toEqual({
+      t: 'unsynced edit'
+    })
+    expect(getUserVersion(db as unknown as MigrationDb)).toBeGreaterThanOrEqual(3)
+    db.close()
+  })
+
+  it('a database that already ran the unreleased dropping v3 migrates on cleanly', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    runMigrations(db as unknown as MigrationDb, MIGRATIONS.slice(0, 2))
+    db.exec('PRAGMA user_version = 3')
+    expect(runMigrations(db as unknown as MigrationDb)).toBe(MIGRATIONS.length - 3)
+    expect(getUserVersion(db as unknown as MigrationDb)).toBe(MIGRATIONS.length)
+    db.close()
+  })
+
+  it('is a no-op on an install that never had the table', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    expect(runMigrations(db as unknown as MigrationDb)).toBe(MIGRATIONS.length)
+    expect(tableExists(db, 'ai_user_profiles')).toBe(false)
     db.close()
   })
 })
