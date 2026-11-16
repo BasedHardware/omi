@@ -463,7 +463,29 @@ class RecordAudioPartial(BaseModel):
     applied_generation: int = 0
 
 
+class RecordingPiece(BaseModel):
+    recording_id: str
+    audio_file_id: str
+    start: float = Field(ge=0)
+    end: float = Field(ge=0)
+
+
 class Conversation(BaseModel):
+    # Server-authored; absent on pre-v3 documents. Never trusted on create requests.
+    recording: Optional[bool] = None
+    kind: Optional[Literal['conversation', 'voice_work', 'media', 'background']] = None
+    home_hidden: Optional[bool] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done']] = None
+    title_locked: Optional[bool] = None
+    recording_pieces: Optional[List[RecordingPiece]] = None
+    summary_covers_through: Optional[datetime] = None
+    v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
+    v3_derived: SkipJsonSchema[Optional[bool]] = None
+    v3_recording_ids: SkipJsonSchema[Optional[List[str]]] = None
+    v3_process_pending: SkipJsonSchema[Optional[bool]] = None
+    v3_rewrites: SkipJsonSchema[Optional[int]] = None
+    backfilled: SkipJsonSchema[Optional[bool]] = None
+
     notes_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
     notes_llm_output_hash: Optional[str] = Field(default=None, exclude=True)
     l1_llm_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -1078,3 +1100,17 @@ class ConversationAnalytics(BaseModel):
     words_per_minute: float
     speaker_count: int
     speakers: List[SpeakerAnalytics] = []
+
+
+class ConversationsLiveResponse(BaseModel):
+    v3: bool
+    conversation: Optional[Conversation] = None
+
+
+class AudioManifestPiece(RecordingPiece):
+    url: str
+    expires_at: datetime
+
+
+class ConversationAudioManifest(BaseModel):
+    pieces: List[AudioManifestPiece]
