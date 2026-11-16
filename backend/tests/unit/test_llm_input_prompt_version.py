@@ -23,6 +23,8 @@ BACKEND = Path(__file__).resolve().parents[2]
 # prompt. A change here can change the model's output for the same input.
 PROMPT_SOURCES: dict[str, tuple[str, ...]] = {
     'notes': (
+        'utils/summary_quality.py',
+        'utils/llm/notes_agent_prompt.py',
         'config/notes_detail.py',
         'utils/llm/conversation_notes_prompts.py',
         'utils/llm/notes_packet.py',
@@ -65,6 +67,8 @@ PINNED: dict[str, dict[str, str]] = {
         'notes-2': 'da38487a9fb7cc52ef0508b6fa3639c6724b42666c5b38600e5235fa9fbc7437',
         'notes-3': '5307871ec67f0f81cafbca8d9aa209dd4fdc3fe9eec9d13139156fd0706ac766',
         'notes-4': '018b0f5c72af37d0ccb23f8a492ebfd88d8f8c28d30024042ad7ce0114efddc8',
+        'notes-5': '618f083cb5fb222e0982df19e52b2ad7e18b7b9871c839463eb931f3aa636801',
+        'notes-6': '25076427ce2b964154d4e1ccc272b48690e875cc937e65aa4e8d16533f401462',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }

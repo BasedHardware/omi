@@ -59,6 +59,16 @@
       "basis": "planning-bound",
       "source": "One transactional gate read per backlog attempt; planning envelope is the default discovery rate, 20 owner visits per 10 s tick = 2 attempts/s/environment, every visit finding a held head. Raising owners-per-tick (max 100) raises this in proportion. No cache; writes only on a release. Revisit before increasing attempts. Namespaced pattern: {ns}_backlog_release via generic tx.get/put; not a measured saving.",
       "reviewed": "2026-11-14"
+    },
+    {
+      "collection": "conversation_v3_leases",
+      "owner": "lane/conversations-v3",
+      "unit": "active pendant user-day",
+      "reads_per_unit_budget": 6000,
+      "reads_per_day_budget": 60000000,
+      "basis": "planning-bound",
+      "source": "backend/docs/runbooks/conversations-v3.md; one builder per active minute plus conversation summary leases, 10000 active owners planning cap",
+      "reviewed": "2026-11-16"
     }
   ],
   "dynamic": [
@@ -241,6 +251,18 @@
       "basis": "planning-bound",
       "source": "backend/docs/runbooks/projection-followup-due-clock.md: 10000 admitted pages/day x 200 rows/page x 6 reads/row, allowing discovery plus transactional fence plus optional shadow refresh and one retry. Operator-only bounded migration, not recurring serving or measured population. Repeated passes, higher page volume or more retries require remeasurement/rebudgeting.",
       "reviewed": "2026-11-15"
+    },
+    {
+      "site": "backend/database/owner_identity_availability.py",
+      "expression": "f'owner_identity_availability_{current_stage()}'",
+      "collection_pattern": "owner_identity_availability_*",
+      "owner": "q12-speaker-evidence",
+      "unit": "one completion observation or one complete metrics refresh",
+      "reads_per_unit_budget": 16,
+      "reads_per_day_budget": 500000,
+      "basis": "planning-bound",
+      "source": "Code bound: observation reads current row, deletion marker and one aggregate shard, with one transaction attempt and no retries; complete refresh reads exactly 16 fixed shards and no user rows. Planning envelope 100000 observations/day plus 10000 refreshes/day = 460000 reads, rounded to 500000. Not measured traffic, a runtime volume cap or a savings claim. Rebudget if observation or refresh volume exceeds that envelope. See backend/docs/operational/batch-identity-evidence.md.",
+      "reviewed": "2026-11-16"
     }
   ],
   "exempt": [

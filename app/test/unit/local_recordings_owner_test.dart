@@ -52,6 +52,19 @@ void main() {
     expect(await File('${dir.path}/$name').exists(), isTrue);
   });
 
+  test('a new native recording with an accepted legacy job counts as fresh pending work', () async {
+    await audio(name);
+    await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'accepted-job'}));
+    final before = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final ledger = await custodyLedger();
+    await NativeRecordingIntake(ledger).scan();
+    final wal = (await ledger.getAllWals()).single;
+    expect(wal.status, WalStatus.uploaded);
+    expect(wal.jobId, 'accepted-job');
+    expect(wal.uploadedAt, greaterThanOrEqualTo(before));
+    expect(wal.countsAsPendingWork(nowSeconds: before + 60), isTrue);
+  });
+
   test('legacy owners migrate into parked ledger custody without reassignment', () async {
     await audio(name);
     await File('${dir.path}/omibatch_owners.json').writeAsString(jsonEncode({name: 'other'}));

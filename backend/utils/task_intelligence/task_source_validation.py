@@ -1,5 +1,6 @@
 """Validate task conversation links only inside the authenticated account."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -28,7 +29,7 @@ def validate_task_sources(uid: str, items: Sequence[Mapping[str, Any]]) -> None:
             if source in checked:
                 continue
             # Never search another account to distinguish foreign from missing.
-            row = conversations_db.get_conversation(uid, source)
+            row = read_product_conversation(conversations_db.get_conversation, uid, source)
             if not row or row.get('deleted'):
                 raise TaskSourceValidationError('Task source conversation is unavailable.')
             checked.add(source)

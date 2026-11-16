@@ -38,7 +38,7 @@ void main() {
     expect(views.refusalSummary().seconds, oldRefusals.seconds);
     expect(identical(views.refusalSummary(), views.refusalSummary()), isTrue);
     expect(views.pendingSecondsByDay.values.fold<int>(0, (a, b) => a + b), views.pendingSeconds);
-    expect(views.pendingSeconds, 220);
+    expect(views.pendingSeconds, catchUpStaleHandleOff ? 220 : 190);
   });
 
   test('incremental status, identity, duration and runtime changes match fresh full-scan views', () {

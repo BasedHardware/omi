@@ -38,6 +38,16 @@
   "registry_write_authorization": null,
   "required_disposable_free_bytes": 20963938304,
   "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
-  "status": "APPROVED_INGRESS_STAGED_REGISTRY_UNVERIFIED_NOT_DISPATCHABLE",
-  "loaded_tag": "omi-jobstore-operator:root-97074-20261115-isolated-venv"
+  "status": "REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION",
+  "loaded_tag": "omi-jobstore-operator:root-97074-20261115-isolated-venv",
+  "registry_access_evidence": {
+    "decision": "REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT",
+    "repository": "gcr.io/based-hardware/jobstore-reconcile-operator",
+    "iam_resource": "projects/based-hardware/locations/us/repositories/gcr.io",
+    "principal": "omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com",
+    "effective_authorization": "UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS",
+    "allow_policy_receipt_sha256": "86bdb76a0b57dc383cfc64a21c937df417627449c5e6d143b35e53ad12d4eeed",
+    "wif_metadata_receipt_sha256": "9514752dee8ebf61b40a7faab48946bdaed54d21d0e3f3d274a572bc689f0aa1",
+    "sa_trust_receipt_sha256": "45706b58f3972a31e7e8a9f7edb254b5a04cf9b6b0b851c359e4c50a64d69243"
+  }
 }

@@ -173,6 +173,85 @@ void main() {
     expect(restored.onDeviceConversation?['id'], 'local-result');
   });
 
+  group('discardRecording (CUSTODY invariant 2: the user discards the recording)', () {
+    test('drops the live frames and every WAL of that recording, and nothing else', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.setDeviceInfo('phone-mic', 'Phone Microphone');
+      sync.setActiveRecordingSessionId('recording-discard');
+      sync.onFrameCaptured(WalFrame(payload: [0xAA], syncKey: FrameSyncKey([1])));
+      sync.onFrameCaptured(WalFrame(payload: [0xBB], syncKey: FrameSyncKey([2])));
+      final uploading = Wal(
+        timerStart: now - 4,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        status: WalStatus.miss,
+        storage: WalStorage.mem,
+        recordingSessionId: 'recording-discard',
+      )..isSyncing = true;
+      sync.testWals = [
+        Wal(
+          timerStart: now - 3,
+          codec: BleAudioCodec.opus,
+          seconds: 2,
+          status: WalStatus.miss,
+          storage: WalStorage.mem,
+          recordingSessionId: 'recording-discard',
+        ),
+        uploading,
+        Wal(
+          timerStart: now - 600,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.mem,
+          recordingSessionId: 'recording-kept',
+        ),
+      ];
+
+      final removed = await sync.discardRecording('recording-discard');
+
+      expect(removed, 1);
+      expect(sync.testFrames, isEmpty, reason: 'the discarded recording\'s live tail is never written');
+      expect(sync.testFrameSynced, isEmpty);
+      expect(sync.testWals.map((w) => w.recordingSessionId), ['recording-discard', 'recording-kept']);
+      expect(sync.testWals.first, same(uploading), reason: 'a WAL mid-upload is never deleted under it');
+
+      // A late finalize finds nothing to write for the discarded recording.
+      await sync.finalizeCurrentSession();
+      expect(sync.testWals.where((w) => w.recordingSessionId == 'recording-discard' && !w.isSyncing), isEmpty);
+    });
+
+    test('a WAL that was uploading is never picked again and goes once its upload settles', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final uploading = Wal(
+        timerStart: now - 4,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        status: WalStatus.miss,
+        storage: WalStorage.mem,
+        recordingSessionId: 'recording-discard',
+      )..isSyncing = true;
+      sync.testWals = [uploading];
+
+      expect(await sync.discardRecording('recording-discard'), 0);
+      expect(sync.testWals, [same(uploading)]);
+
+      // The upload failed and released the WAL for retry; the next pass deletes it instead.
+      uploading.isSyncing = false;
+      await sync.syncAll();
+      expect(sync.testWals, isEmpty);
+    });
+
+    test('another recording\'s live frames are kept', () async {
+      sync.setDeviceInfo('phone-mic', 'Phone Microphone');
+      sync.setActiveRecordingSessionId('recording-now');
+      sync.onFrameCaptured(WalFrame(payload: [0xAA], syncKey: FrameSyncKey([1])));
+
+      expect(await sync.discardRecording('recording-earlier'), 0);
+      expect(sync.testFrames, hasLength(1));
+    });
+  });
+
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
       final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));

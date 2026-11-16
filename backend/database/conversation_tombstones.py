@@ -150,6 +150,10 @@ def record_deletion(uid: str, conversation_id: str) -> None:
     from database.from_segments_chunks import purge_chunks
 
     purge_chunks(uid, conversation_id, firestore_client=db)
+    if row.get('v3_derived') or row.get('recording_pieces'):
+        from database.conversations_v3 import release_claims
+
+        release_claims(uid, {**row, 'id': conversation_id}, firestore_client=db)
     if deferred is not None:
         return
     # Intent remains durable if storage cleanup fails, and retry runs the purge

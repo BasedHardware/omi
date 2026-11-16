@@ -122,6 +122,7 @@ part 'capture_transcript_snapshot.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
+part 'capture_phone_discard.dart';
 part 'capture_voice_questions.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
@@ -154,6 +155,7 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
+  final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
 
@@ -359,6 +361,10 @@ class CaptureController extends ChangeNotifier
   /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
   bool _transcribingOnPhoneAtCap = false;
   bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
+
+  /// This session's socket transcribes on the phone: the cap switch or a persisted on-device choice.
+  bool _transcribingOnPhone = false;
+  bool get transcribingOnPhone => _transcribingOnPhone;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -438,6 +444,8 @@ class CaptureController extends ChangeNotifier
     Future<bool?> Function(String deviceId)? deviceMuteReader,
     Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
+    Future<bool> Function(String conversationId)? deleteDiscardedConversation,
+    List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     Future<void> Function(String deviceId)? pendantReconnect,
     bool Function(String deviceId)? pendantReconnectBlocked,
@@ -467,6 +475,10 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
+        _phoneDiscard = _PhoneDiscardState(
+          retryDelays: discardDeleteRetryDelays,
+          deleteOverride: deleteDiscardedConversation,
+        ),
         _deviceConnectionLoader = deviceConnectionLoader,
         _pendantReconnectLoader = pendantReconnect,
         _pendantReconnectBlocked = pendantReconnectBlocked,
@@ -505,6 +517,7 @@ class CaptureController extends ChangeNotifier
         Logger.debug('[CaptureProvider] capture restore recovery failed: $e');
       }),
     );
+    unawaited(_resumeDiscardDeletes().catchError((Object e) => Logger.debug('discard delete resume failed: $e')));
     lifetime.own(() => _calendarGapMonitor?.dispose());
     if (calendarGapMonitor != null) {
       lifetime.listenTo(calendarGapMonitor.localMeetings, _syncCalendarGapTimer);
@@ -1840,6 +1853,7 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2549,6 +2563,7 @@ class CaptureController extends ChangeNotifier
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
+    _transcribingOnPhone = !decision.blockSocket && decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -3203,6 +3218,14 @@ class CaptureController extends ChangeNotifier
     await _clearPhoneRestoreMarker();
     return true;
   }
+
+  /// Undo on Home's recording bar: end the phone's live recording and keep nothing of it; see
+  /// [_CapturePhoneDiscard]. Returns false when there was no live phone recording to discard.
+  Future<bool> discardPhoneRecording() => _discardPhoneRecording();
+
+  /// Discarded recordings whose server delete is running now; tests await it.
+  @visibleForTesting
+  Future<void> get pendingDiscardDeletes => Future.wait(_phoneDiscard.deletes.toList());
 
   Future<bool> _stopPhoneBatchBody({required String reason}) async {
     await _setCaptureForegroundRequired(false);
@@ -4907,6 +4930,7 @@ class CaptureController extends ChangeNotifier
           WritePhoneRestoreMarkerStage() => _writePhoneRestoreMarker(stage.mutedBefore),
           ClearPhoneRestoreMarkerStage() => _clearPhoneRestoreMarker(),
           StopPhoneLiveStage() => _stopPhoneLiveBody(reason: stage.reason),
+          DiscardPhoneLiveStage() => _discardPhoneLiveBody(),
           StopPhoneBatchStage() => _stopPhoneBatchBody(reason: stage.reason),
           StopPhonePolicyRestoreStage() => _stopPhonePolicyRestoreBody(
               mutedBefore: stage.mutedBefore,

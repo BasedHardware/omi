@@ -78,6 +78,7 @@ from utils.capture.dedupe import choose_segments
 from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.live_overlap import (
+    batch_target_contains,
     choose_live_overlap,
     compatible_capture,
     discoverable_live_overlap,
@@ -168,16 +169,20 @@ def auto_mergeable(row: dict) -> bool:
     Explicit live targets retain their identity. Shared/curated/photo-bearing records
     remain intact rather than exposing private donors or orphaning user edits.
     """
-    return bool(row.get('sync_content_revision')) and not (
-        (row.get('smart_merge') or {}).get('role') == 'survivor'
-        or row.get('sync_live_target')
-        or row.get('has_photos')
-        or row.get('user_title')
-        or row.get('starred')
-        or row.get('folder_user_set')
-        or row.get('sync_relevance_user_kept')
-        or row.get('has_transcript_corrections')
-        or row.get('visibility', 'private') not in (None, 'private')
+    return (
+        bool(row.get('sync_content_revision'))
+        and not row.get('v3_derived')
+        and not (
+            (row.get('smart_merge') or {}).get('role') == 'survivor'
+            or row.get('sync_live_target')
+            or row.get('has_photos')
+            or row.get('user_title')
+            or row.get('starred')
+            or row.get('folder_user_set')
+            or row.get('sync_relevance_user_kept')
+            or row.get('has_transcript_corrections')
+            or row.get('visibility', 'private') not in (None, 'private')
+        )
     )
 
 
@@ -464,9 +469,9 @@ def assign_in_transaction(
         and (target['created_at'] - incoming['finished_at']).total_seconds() > DEFAULT_GAP_SECONDS
         and target_recorded_span is None
     )
-    if (
-        late_audio_intake_enabled()
-        and target
+    if target and (
+        not batch_target_contains(target, incoming)
+        or late_audio_intake_enabled()
         and (
             stale_empty_target
             or incoming['finished_at'] < target_recorded_start - timedelta(seconds=DEFAULT_GAP_SECONDS)
@@ -611,6 +616,8 @@ def assign_in_transaction(
                 ):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
+                        continue
+                    if plan_target and not batch_target_contains(plan_target, decode(raw)):
                         continue
                     candidates.append((cid, raw))
             if receipt_owner is None:
@@ -823,6 +830,27 @@ def assign_in_transaction(
                 'exact_retries': exact_retries,
                 'sync_retry': sync_retry,
             }
+        if (
+            live_dedupe
+            and live_row is not None
+            and live_row.get('record_lane_owner') == 'batch_live_v1'
+            and live_row.get('record_projection_revision')
+        ):
+            # A sync unit can arrive after the final record transcript. The
+            # frame-proof-only fresh path abstains on legacy receipts; apply
+            # the same conservative lexical rule as stored donor transfer.
+            batch_repeats = dedupe_donor(survivors, incoming, live_row)
+            survivors = batch_repeats.kept
+            if live_stats is not None:
+                report = live_stats['report']
+                report['dropped_segments'] += batch_repeats.capture + batch_repeats.lexical
+                report['methods'].extend(
+                    ['source_frame_lexical'] * batch_repeats.capture + ['lexical'] * batch_repeats.lexical
+                )
+                if batch_repeats.capture or batch_repeats.lexical:
+                    methods = set(report['methods'])
+                    report['alignment_method'] = next(iter(methods)) if len(methods) == 1 else 'mixed'
+                live_stats['exact_retries'] += batch_repeats.exact_retry
         if fleet_live_dedupe or not live_dedupe:
             # Compose the cohort contract with the shipped fleet matcher:
             # capture-proven lexical drops and exact retries run first, then
@@ -1200,13 +1228,13 @@ def assign_in_transaction(
         and not chosen.created
         and chosen.canonical == target_id
         and target is not None
-        and not (absorb_contained_processed_donor and chosen.donor_updates)
+        and not chosen.donor_updates
     ):
         # Every incoming segment repeated speech already on the explicit live
         # target. Acknowledge without any writes; a sync-scoped retry still
         # completes the enrichment the earlier commit owed. A requested
-        # contained-donor absorption is the exception: the donor redirect is a
-        # write this call owes, so the shortcut must not skip it.
+        # donor absorption is the exception: the donor redirect and cumulative
+        # ancestry are writes this call owes even when all its words repeat.
         no_op = decode(chosen.matched[chosen.canonical])
         no_op['id'] = chosen.canonical
         no_op['sync_live_target'] = chosen.result['sync_live_target']

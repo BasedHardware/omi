@@ -18,6 +18,30 @@ SORTED_PATHS = [f'tests/unit/test_{index:02d}.py' for index in range(13)]
 GUARD_ENV_LINE = 'test:0.1:1.0:1:not integration and not slow:auto:auto'
 
 
+def test_real_file_runner_propagates_selected_portable_test_failure(tmp_path):
+    failing = tmp_path / 'test_jobstore_operator_failure.py'
+    failing.write_text('def test_portable_failure():\n    assert False, "portable-negative-discriminator"\n')
+    selected = tmp_path / 'selected.txt'
+    selected.write_text(bash_path(failing, cwd=REPO_ROOT) + '\n')
+    environment = os.environ | {
+        'PYTHON': bash_path(Path(sys.executable), cwd=REPO_ROOT),
+        'BACKEND_UNIT_TEST_FILE_LIST': bash_path(selected, cwd=REPO_ROOT),
+        'BACKEND_PYTEST_FILE_ISOLATION': '1',
+        'BACKEND_PYTEST_WORKERS': '1',
+    }
+    result = subprocess.run(
+        bash_command(REPO_ROOT / 'backend/test.sh', cwd=REPO_ROOT),
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert 'portable-negative-discriminator' in result.stdout
+    assert 'Backend unit test file failed:' in result.stdout
+
+
 @pytest.fixture(autouse=True)
 def isolated_worker_setting(monkeypatch):
     monkeypatch.delenv('BACKEND_PYTEST_WORKERS', raising=False)

@@ -20,6 +20,19 @@ No audio, URL, user or job identity enters the metric. The two routine STT
 `*_prerecorded_from_bytes bytes_len` breadcrumbs are DEBUG; errors and existing
 outcome metrics remain unchanged. See [sync egress attribution](./runbooks/sync-egress-attribution.md).
 
+## Recording-derived conversations v3
+
+`CONVERSATIONS_V3_STAGE` defaults to `beta` (`cohort`, `beta`, `all`);
+`CONVERSATIONS_V3=off` stops marking new pendant captures. Beta admission uses
+the existing 14-day `episodes:client_seen:{uid}` marker, refreshed by beta calls
+to episode routes and `/v1/conversations/live`. Admission is per owner.
+Recording documents (`recording: true`) retain capture IDs, socket payload shape,
+WAL/finalization semantics and audio custody. Their `v3_pending` obligation drives
+one named task per owner-minute. Derived conversations own copied transcript
+windows, stable titles and recording-file pieces. See the
+[v3 runbook](./runbooks/conversations-v3.md) for query budgets, queue identity,
+summary leases, counters, rollout, rollback and deletion criteria.
+
 ## Pre-recorded Modulate credit-refusal failover
 
 `PRERECORDED_SONIOX_FAILOVER_ENABLED` defaults to `true` and is explicitly declared
@@ -9831,7 +9844,7 @@ storage probes or scheduling changes. [Schema, bounds and readback](listen_pushe
 ### Durable playback projection rebuild debt
 
 `PUSHER_PROJECTION_DEBT_DURABLE_ENABLED` defaults **on**; `0`, `false`, or `off`
-disables pusher handoff and repair consumption. Pusher receives the flag through
+disables listen original-commit handoff, pusher handoff and repair consumption. Pusher receives the flag through
 its existing `runtimeConfigMapName` `envFrom` binding; no literal env entry
 shadows that ConfigMap key. The repair CronJob declares it independently through
 `recordSealRepair.projectionDebtDurableEnabled` (default `true`). Rollback sets
@@ -9857,7 +9870,7 @@ sanitized logs and `omi_pusher_projection_debt_total` outcomes. Persistent stora
 failure, saturation, or process death before commit can still prevent handoff;
 the marker is not a WAL.
 
-The existing repair CronJob runs a separate 60-second metadata-only pass over
+The existing repair CronJob runs a separate 60-second playback recovery pass over
 at most 128 markers ordered by request time. A bounded collection scan reads at
 most 10,001 markers; the maintenance ceiling is 10,000. A confirmed empty
 inventory retires as `retired_no_objects` after seven days from Firestore document
@@ -9891,16 +9904,44 @@ marker version; a replacement marker always wins. No PCM or audio-object
 mutation occurs. The [phase 5C change note](./listen_pusher_pipeline/changes/2026-11-06-durable-projection-debt.md)
 records scope and verification limits.
 
+Since 2026-11-16, a consented mono listen original pack also awaits a coalesced
+marker write after its immutable media and manifest commit, before releasing its
+retained pack or sending a phone custody receipt. Failure retries that exact
+pack; no successful relay send grants storage coverage. Cold rebuild preflights
+privacy before audio reads, refreshes the raw inventory, and validates only
+uncovered originals through their manifest and decoded frame union. It pins
+media generation/metadata and checks hashes, sample counts, owner and positions;
+real gaps and zero-sample entries never become silence or coverage. Each
+rebuild has a 20-second proof deadline, 4,096 inventory entries, at most 64 new
+pack decodes and 128 MiB decoded input, with each stored pack at most 16 MiB.
+The five-minute proof cache holds at most 1,024 media proofs / 4,096 spans and
+no PCM; current media metadata and manifest must still validate on every hit.
+Bound exhaustion, timeout, deletion, cancellation or ambiguity retains debt.
+The existing transaction still rechecks privacy and the prior audio_files
+revision. Recovery neither dispatches STT nor clears producer fences.
+Archive-required batch intake refreshes the original inventory instead of
+using the 120-second cross-pod cache. Ordinary playback selection is unchanged.
+
+`omi_audio_relay_samples_total{stage="sent|committed|recovered|missing"}` counts
+observations including retries: transport sends, listen original commits,
+validated uncovered candidates after a successful recovery transaction, and candidates whose proof failed, respectively.
+These are native-rate samples at send/commit and 16 kHz samples at recovery;
+do not subtract stages as a loss rate or interpret `missing` as permanent loss.
+No stage is a phone receipt. `omi_audio_raw_pack_exclusions_total{reason}` exposes
+closed inventory exclusion reasons. See the
+[relay recovery note](./listen_pusher_pipeline/changes/2026-11-16-pusher-gap-recovery.md)
+for rollout and local verification.
+
 ### Held staging input expiry
 
 `BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
-`false` is the kill for new day-29 transitions in the existing held sweep.
+`false` is the kill for new day-59 transitions in the existing held sweep.
 Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
 for replacement objects with a finite positive numeric clock, else `enqueued_at`
 as the earlier admission/staging proxy, including when the replacement clock is
 present but malformed. Two unusable clocks never authorize `input_expiring`.
 Exact-bundle repair stamps the new object time without changing original enqueue.
-The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 59 days the job retains its audio,
 results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
 with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
 Before the ordinary held name page, two indexed urgency streams (legacy enqueue
@@ -9915,8 +9956,9 @@ custody-repair protocol carry needs-attention and GPU re-upload; legacy readers
 retain their existing custody-safe response. Checked operator GPU requeue or
 target-restorable assignment release is the manual exit, even with the new kill
 off. Status polling and nightly held-expired redrive never reopen this reason.
-`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 21 days with
-fresh sample evidence. The 30-day privacy ceiling is unchanged. See the
+`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 51 days with
+fresh sample evidence. Both thresholds derive from the retention contract's
+60-day production staging lifecycle (extended 2026-11-16). See the
 [operator runbook](runbooks/held-staging-inputs.md) for approved manual execution.
 `omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
 in completed bounded age samples and existing held sweep pages, including
@@ -10106,3 +10148,58 @@ No metric label contains an identity. Phase 2 will map source frames, prove
 redundancy/missing intervals, reserve only missing work under the canonical
 owner, and settle status after projection. Custody acceptance alone proves no
 recovered speech.
+
+### Mobile server-batch reconnect grace
+
+For mono mobile `omi`/`phone` server-batch captures with a known device and client
+recording origin, `LISTEN_BATCH_RECONNECT_ENABLED=true` (default false) holds a drained
+producer's conversation `in_progress` after transport loss.
+`LISTEN_BATCH_RECONNECT_GRACE_SECONDS=120` (default, clamped to 1..120) bounds this
+hold. The existing durable quiet-check outbox admits normal finalization at the
+earlier of this fixed deadline and the real quiet/calendar/day/span boundary;
+dispatch and processing retain their existing queue latency. Explicit user/end
+provenance bypasses the grace. Switch-off refuses marked-row resume, ends a drained hold on reconnect and
+rearms its quiet check due now; workers also ignore the stored grace while off.
+Active owners drain and finalize at teardown on upgraded listeners. Unmarked
+sessions retain origin/main behavior while off.
+
+`listen_batch_producer` is server-owned metadata: version, producer token, origin,
+session binding, phase, lease expiry, hard boundary, drain proof, and optional
+fixed deadline. It contains no audio/transcript. Claim, renewal, drain release,
+quiet expiry and normal finalization conflict on the same parent document. Only
+the current token may publish audio bounds, close the archive, or release its
+lease. A new socket never clears `server_batch_audio_closed`, a batch job ID,
+revision, generation or terminal status. Archive capture-session IDs keep each
+socket's packs immutable; custody ACKs still require their committed receipts.
+
+Keep the rollout flag off until readers and every listen pod run the new revision
+and all old sockets have drained. Old listeners can bypass producer tokens; mixed
+active revisions are unsafe. Release enables/expands through its train, Quality
+reviews the clean metrics, with a proposed 2026-11-20 completion/review. Rollback:
+switch off on new binaries, drain their active sockets, wait >120 seconds plus
+one observed reconciler period, verify zero marked in-progress rows, then roll
+back listen. Keep upgraded workers until outstanding finalization work drains.
+Details, aggregate readback query and ramp:
+[change note](listen_pusher_pipeline/changes/2026-11-16-batch-reconnect-grace.md).
+
+
+### Closed episodes and still-capturing live members
+
+`EPISODE_LIVE_MEMBER_CLOSE_ENABLED` defaults on; `false` restores legacy placement
+and all-member readiness. A live capture starting at or after a gap boundary
+opens or joins the successor under the existing recorded-timeline fence. Closed
+episodes compose finished members while an open live capture remains excluded;
+finish/read recovery includes it again. No custody or billing contract changes.
+See [the change note](./listen_pusher_pipeline/changes/2026-11-16-live-member-close.md).
+
+### Batch vendor overflow priorities
+
+`BATCH_VENDOR_OVERFLOW_PRIORITIES` is a comma-separated list of `fresh`, `recent`, and `deep`,
+read at each admission. Unset, empty, or malformed lists allow only `fresh`; FRESH is always
+included. `fresh,recent` also permits RECENT units to overflow from GPU to the route table's
+next healthy primary vendor, inside the existing vendor-routing cohort with legacy sync draining
+or dark. Each priority must independently pass the backlog age and admissible-ready count gates.
+`BATCH_VENDOR_OVERFLOW_ENABLED` remains the kill switch. The legacy-sync capacity fallback remains
+FRESH-only. Saturation gauges retain their names and add the bounded `priority=fresh|recent|deep`
+label. No production setting is changed; expanding the list requires a separate spend decision.
+See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-when-the-gpu-floor-is-full).

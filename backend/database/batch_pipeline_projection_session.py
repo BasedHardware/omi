@@ -93,6 +93,9 @@ class ProjectionSession:
             raise ProjectionBlocked('privacy hold cannot acknowledge content')
         parts = dict(self.entry.get('projection_parts') or {})
         if self.part_index is None or not parts:
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, receipt)
             transaction.update(
                 self.result_ref,
                 {
@@ -124,6 +127,9 @@ class ProjectionSession:
                 transaction.update(self.result_ref, changes)
                 return sibling_hold_changed
             summary['state'] = 'ready'
+            from database.batch_pipeline_source_reuse import claim
+
+            claim(self, transaction, summary)
             changes.update(
                 projection=summary,
                 projection_state='ready',
@@ -133,7 +139,11 @@ class ProjectionSession:
         return False
 
     def guard(self, transaction, conversation_ids=()):
-        snapshots: dict[str, Any] = {}
+        # Decision-only: the fence budget counts the distinct documents this
+        # prepare actually verified, including every redirect hop the walk read
+        # (plus any refusing id below). No full-row export, so a certified memo
+        # decision can serve the check with one live token read.
+        checked: set[str] = set()
         if self.job.get('capture_source_conversation_id'):
             conversation_ids = (*conversation_ids, self.job['capture_source_conversation_id'])
         try:
@@ -143,19 +153,23 @@ class ProjectionSession:
                 self.binding.owner_id,
                 conversation_ids=conversation_ids,
                 expected_generation=self.binding.privacy_generation,
-                snapshots=snapshots,
+                verified_out=checked,
             )
         except BatchPrivacyBlocked as error:
             if error.conversation_id:
-                # A tombstone refuses before the conversation snapshot exists.
-                snapshots.setdefault('conversations', {})[error.conversation_id] = {}
+                # A tombstone refuses before any row is read; the refusing id
+                # (possibly a redirect survivor) still counts against the budget.
+                checked.add(error.conversation_id)
             raise
         finally:
             # Input/output checks have separate refusal semantics, but share
             # the same distinct-document ceiling during prepare. Later plan
             # validations retain their existing independent walk budgets.
             if self._privacy_fence_ids is not None:
-                self._privacy_fence_ids.update(snapshots.get('conversations', {}))
+                # Requested ids count even when a certified decision serves
+                # them without a walk; verified ids add each redirect survivor.
+                self._privacy_fence_ids.update(conversation_ids)
+                self._privacy_fence_ids.update(checked)
                 if len(self._privacy_fence_ids) > 256:
                     raise BatchPrivacyBlocked('conversation_fence_budget')
 
@@ -175,6 +189,8 @@ class ProjectionSession:
             ids.append(self.job['conversation_id'])
         if self.job.get('capture_source_conversation_id'):
             ids.append(self.job['capture_source_conversation_id'])
+        if not getattr(self, 'detach_source_alias', False):
+            ids.extend(self.job.get('source_conversation_ids') or [])
         # Assigned destinations are outputs, not proof that another part's
         # original input was deleted. They get independent fences below.
         outputs = set(self.job.get('conversation_ids') or []) - set(ids)
@@ -282,6 +298,9 @@ class ProjectionSession:
             or not (
                 self.entry.get('protocol_version') == 1
                 or self.entry.get('protocol_version') == 2
+                and (self.entry.get('source_reuse_version') == 1 or self.entry.get('source_alias_version') == 1)
+                and bool(self.job.get('source_reuse_key'))
+                or self.entry.get('protocol_version') == 2
                 and self.entry.get('projection_release_version') == 1
                 or self.entry.get('protocol_version') == 2
                 and checkpoint(self.entry)
@@ -324,6 +343,9 @@ class ProjectionSession:
             or self.ledger.get('job_id') != self.binding.job_id
         ):
             raise ProjectionBlocked('durable intake ledger binding required')
+        from database.batch_pipeline_source_reuse import prepare as prepare_source
+
+        prepare_source(self, transaction)
         receipt = self.receipt()
         if not (receipt and self.ledger.get('status') == 'completed') and not batch_projection_ledger_owner_matches(
             self.ledger,
@@ -416,6 +438,16 @@ class ProjectionSession:
                 assigned.get('id') and (not repeat_only or assigned.get('_sync_lineage_completion_pending'))
             ),
         }
+        from database.batch_pipeline_source_reuse import claim
+
+        claim(
+            self,
+            transaction,
+            {
+                **receipt,
+                'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
+            },
+        )
         if len(outputs) > 1:
             receipt['size_rollover_outputs'] = [
                 {'conversation_id': row['id'], 'created': row_created} for row, row_created in outputs
