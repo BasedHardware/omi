@@ -1594,6 +1594,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             stillOwned: () => _isCurrent(generation) && _isTrackedWal(wal),
             sharedWith: () => _otherWalReferencingFile(wal, fullPath.split('/').last),
             transactionId: wal.fileWriteId,
+            deletedWal: wal,
             sidecarPath: nativeBatchGeolocationSidecarPath(fullPath));
         if (!deleted || !_isCurrent(generation) || !_isTrackedWal(wal)) return false;
       } catch (e) {

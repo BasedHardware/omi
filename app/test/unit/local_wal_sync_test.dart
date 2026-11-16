@@ -2079,8 +2079,9 @@ void main() {
       File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
       var saves = 0;
       final local = build(persist: (wals) async => saves++);
-      final covered = stamped(100, filePath: name, status: WalStatus.synced, syncedAt: 1);
-      final sibling = stamped(200, conversationId: 'other', filePath: name, status: WalStatus.miss);
+      final covered = stamped(100, filePath: name, status: WalStatus.synced, syncedAt: 1)..ownerUid = 'owner-a';
+      final sibling = stamped(200, conversationId: 'other', filePath: name, status: WalStatus.miss)
+        ..ownerUid = 'owner-a';
       local.testWals = [covered, sibling];
 
       await local.deleteWal(covered);

@@ -62,7 +62,13 @@ class WalFileManager {
     }
 
     final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
-    return loaded ?? await _loadFromBackup();
+    final indexed = loaded ?? await _loadFromBackup();
+    final retained = await WalWriteIntent.withoutRetiredRows(_walFile!.parent, indexed);
+    if (retained.length == indexed.length) return indexed;
+    // Exceptional shared-file deletion recovery needs a real commit before
+    // old rows disappear from strict readers or worker token assignment.
+    await _saveWals(retained);
+    return (await _loadIndex(_walFile!))!;
   }
 
   /// Null means the index is unusable; a partially valid index retains every

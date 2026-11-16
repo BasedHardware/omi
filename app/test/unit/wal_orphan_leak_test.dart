@@ -529,7 +529,7 @@ void main() {
         filePath: 'audio_reused.bin');
     await WalWriteIntent.write(documents, old, [1, 2]);
     await File('${documents.path}/${old.filePath}').delete();
-    await WalWriteIntent.retireFile(documents, old.filePath!);
+    await File('${documents.path}/.wal-pending/${old.filePath}.json').delete();
     final replacement = Wal.fromJson(old.toJson());
     await WalWriteIntent.write(documents, replacement, [3, 4]);
     await WalWriteIntent.retire(documents, old);
@@ -548,7 +548,7 @@ void main() {
     await WalWriteIntent.write(documents, old, [1, 2]);
     await WalFileManager.saveWals([old]);
     await File('${documents.path}/${old.filePath}').delete();
-    await WalWriteIntent.retireFile(documents, old.filePath!);
+    await File('${documents.path}/.wal-pending/${old.filePath}.json').delete();
     final replacement = Wal.fromJson(old.toJson())..totalFrames = 2;
     await WalWriteIntent.write(documents, replacement, [3, 4]);
     final sync = LocalWalSyncImpl(_Listener(), persistWals: WalFileManager.saveWals);
@@ -572,7 +572,7 @@ void main() {
     await WalWriteIntent.write(documents, old, [1, 2]);
     await WalFileManager.saveWals([old]);
     await File('${documents.path}/${old.filePath}').delete();
-    await WalWriteIntent.retireFile(documents, old.filePath!);
+    await File('${documents.path}/.wal-pending/${old.filePath}.json').delete();
     final replacement = Wal.fromJson(old.toJson())
       ..status = WalStatus.miss
       ..totalFrames = 2;
@@ -752,40 +752,74 @@ void main() {
     expect(savedBeforeRelease, isFalse, reason: 'registration must wait through migration and reload');
     expect((await WalFileManager.loadIndexedWals()).map((w) => w.filePath), contains(added.filePath));
   });
-  for (final failCommit in [false, true]) {
-    test('shared-file deletion transfers its intent without resurrecting the deleted row (failure=$failCommit)',
-        () async {
-      final deleted = Wal(
-          timerStart: 1,
-          codec: BleAudioCodec.opus,
-          seconds: 10,
-          storage: WalStorage.disk,
-          ownerUid: 'owner-a',
-          filePath: 'audio_shared.bin');
-      await WalWriteIntent.write(documents, deleted, [1, 2]);
-      final survivor = Wal(
-          timerStart: 2,
-          codec: BleAudioCodec.opus,
-          seconds: 10,
-          storage: WalStorage.disk,
-          ownerUid: 'owner-a',
-          filePath: deleted.filePath);
-      await WalFileManager.saveWals([survivor]);
-      final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
-        if (failCommit) throw const FileSystemException('injected shared delete index failure');
-        await WalFileManager.saveWals(rows);
-      });
-      sync.testWals = [deleted, survivor];
-      if (failCommit) {
-        await expectLater(sync.deleteWal(deleted), throwsA(isA<FileSystemException>()));
-      } else {
-        await sync.deleteWal(deleted);
+  for (final legacyRow in [false, true]) {
+    for (final pendingIntent in [false, true]) {
+      for (final failCommit in [false, true]) {
+        test(
+            'shared-file deletion transfers without resurrection (failure=$failCommit, pending=$pendingIntent, legacy=$legacyRow)',
+            () async {
+          final deleted = Wal(
+              timerStart: 1,
+              codec: BleAudioCodec.opus,
+              seconds: 10,
+              storage: WalStorage.disk,
+              ownerUid: 'owner-a',
+              filePath: 'audio_shared.bin');
+          await WalWriteIntent.write(documents, deleted, [1, 2]);
+          final survivor = Wal(
+              timerStart: 2,
+              codec: BleAudioCodec.opus,
+              seconds: 10,
+              storage: WalStorage.disk,
+              ownerUid: 'owner-a',
+              filePath: deleted.filePath);
+          final diskDeleted = Wal.fromJson(deleted.toJson())..ownerUid = legacyRow ? null : deleted.ownerUid;
+          await WalFileManager.saveWals([diskDeleted, survivor]);
+          if (!pendingIntent) await WalWriteIntent.retire(documents, deleted);
+          final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+            if (failCommit) throw const FileSystemException('injected shared delete index failure');
+            await WalFileManager.saveWals(rows);
+          });
+          sync.testWals = [deleted, survivor];
+          if (failCommit) {
+            await expectLater(sync.deleteWal(deleted), throwsA(isA<FileSystemException>()));
+          } else {
+            await sync.deleteWal(deleted);
+          }
+          expect((await WalFileManager.loadIndexedWals()).map((w) => w.id), [survivor.id]);
+          expect((await WalFileManager.loadWals()).map((w) => w.id), [survivor.id]);
+          expect(await File('${documents.path}/${survivor.filePath}').readAsBytes(), [1, 2]);
+          // A stale but valid backup must not restore the retired shared row.
+          expect(await WalWriteIntent.exists(documents, survivor.filePath!), isTrue);
+          await File('${documents.path}/wals.json').writeAsString('{');
+          expect((await WalFileManager.loadIndexedWals()).map((w) => w.id), [survivor.id]);
+          await WalFileManager.saveWals(await WalFileManager.loadWals());
+          await WalFileManager.loadWals();
+          expect(await WalWriteIntent.exists(documents, survivor.filePath!), isFalse);
+        });
       }
-      expect((await WalFileManager.loadWals()).map((w) => w.id), [survivor.id]);
-      expect(await File('${documents.path}/${survivor.filePath}').readAsBytes(), [1, 2]);
-      expect(await WalWriteIntent.exists(documents, survivor.filePath!), failCommit);
-    });
+    }
   }
+
+  test('strict loading fails closed until shared-row retirement can be committed', () async {
+    final deleted = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        filePath: 'audio_retirement.bin');
+    await WalWriteIntent.write(documents, deleted, [1, 2]);
+    final survivor = Wal.fromJson(deleted.toJson())..timerStart = 2;
+    await WalFileManager.saveWals([deleted, survivor]);
+    final sync = failingLedger()..testWals = [deleted, survivor];
+    await expectLater(sync.deleteWal(deleted), throwsA(isA<FileSystemException>()));
+    final blockedWrite = await Directory('${documents.path}/wals.json.tmp').create();
+    await expectLater(WalFileManager.loadIndexedWals(), throwsA(isA<FileSystemException>()));
+    expect((jsonDecode(await File('${documents.path}/wals.json').readAsString())['wals'] as List), hasLength(2));
+    await blockedWrite.delete();
+    expect((await WalFileManager.loadIndexedWals()).map((w) => w.id), [survivor.id]);
+  });
 
   test('failed admission completes ready with an error and keeps all subsequent saves closed', () async {
     final original = jsonEncode({

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:pool/pool.dart';
 import 'package:uuid/uuid.dart';
+import '../../utils/off_ui_isolate.dart';
+import '../../utils/wal_index_codec.dart';
 import 'wal.dart';
 
 /// The producer owns this intent until the exact file has a durable index row.
@@ -62,25 +64,40 @@ abstract final class WalWriteIntent {
     final name = fileName ?? _name(wal);
     final id = transactionId ?? wal.fileWriteId;
     if (id == null) return;
+    var retired = false;
     await _lock.withResource(() async {
       final intent = File('${_directory(documents).path}/$name.json');
-      if (!await intent.exists()) return;
+      if (!await intent.exists()) {
+        retired = true;
+        return;
+      }
       try {
         final record = jsonDecode(await intent.readAsString());
         if (record is! Map || record['transaction_id'] != id) return;
+        if (record.containsKey('retired_rows')) {
+          final backup = File('${documents.path}/wals_backup.json');
+          if (await backup.exists()) {
+            final content = await backup.readAsString();
+            final safe = await offUiIsolate(() {
+              var containsRetired = false;
+              final invalid = visitWalIndex(content, (_, wal) {
+                if (_isRetired(record['retired_rows'] as List, wal)) containsRetired = true;
+              });
+              return !invalid && !containsRetired;
+            }, size: content.length, threshold: 0, debugName: 'wal_retirement_backup');
+            if (!safe) return;
+          }
+        }
       } on FormatException {
         return; // Malformed evidence is retained, never guessed disposable.
+      } on TypeError {
+        return;
       }
       await intent.delete();
+      retired = true;
     });
-    if (wal.filePath == name && wal.fileWriteId == id) _pending[wal] = false;
+    if (retired && wal.filePath == name && wal.fileWriteId == id) _pending[wal] = false;
   }
-
-  /// Explicit ledger deletion already removed the last referenced audio file.
-  static Future<void> retireFile(Directory documents, String fileName) => _lock.withResource(() async {
-        final intent = File('${_directory(documents).path}/$fileName.json');
-        if (await intent.exists()) await intent.delete();
-      });
 
   /// Ledger-only deletion shares the producer lock, including its file write.
   /// Inspect after acquiring it: an earlier notFound can become a late file.
@@ -88,6 +105,7 @@ abstract final class WalWriteIntent {
           {required bool Function() stillOwned,
           required Wal? Function() sharedWith,
           required String? transactionId,
+          required Wal deletedWal,
           required String sidecarPath}) =>
       _lock.withResource(() async {
         if (!stillOwned()) return false;
@@ -112,17 +130,28 @@ abstract final class WalWriteIntent {
         }
         final survivor = sharedWith();
         if (survivor != null) {
-          if (record != null) {
-            // Transfer the recovery reference, never resurrect the deleted
-            // row. A new identity protects it from that row's delayed save.
-            survivor.fileWriteId = const Uuid().v4();
-            record['transaction_id'] = survivor.fileWriteId;
-            record['wal'] = survivor.toJson();
-            final tmp = File('${intent.path}.tmp');
-            await tmp.writeAsString(jsonEncode(record), flush: true);
-            await tmp.rename(intent.path);
-            markPending(survivor);
+          if (survivor.ownerUid == null || survivor.ownerUid!.isEmpty) return false;
+          if (record == null) {
+            if (type != FileSystemEntityType.file) return false;
+            record = {
+              'version': 1,
+              'bytes': await audio.length(),
+              'sha256': await _hashAudio(audio),
+            };
           }
+          // The old index may still contain this row after a failed save.
+          // Keep its exact identity until replay has durably repaired it.
+          final retired = List<dynamic>.of(record['retired_rows'] as List? ?? const []);
+          retired.add(deletedWal.toJson());
+          record['retired_rows'] = retired;
+          survivor.fileWriteId = const Uuid().v4();
+          record['transaction_id'] = survivor.fileWriteId;
+          record['wal'] = survivor.toJson();
+          await intent.parent.create(recursive: true);
+          final tmp = File('${intent.path}.tmp');
+          await tmp.writeAsString(jsonEncode(record), flush: true);
+          await tmp.rename(intent.path);
+          markPending(survivor);
           return stillOwned();
         }
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
@@ -135,6 +164,72 @@ abstract final class WalWriteIntent {
         if (await intent.exists()) await intent.delete();
         return stillOwned();
       });
+
+  static Future<String> _hashAudio(File audio) async {
+    final path = audio.path;
+    return offUiIsolate(() {
+      late Digest digest;
+      final sink = sha256.startChunkedConversion(ChunkedConversionSink<Digest>.withCallback((values) {
+        digest = values.single;
+      }));
+      final input = File(path).openSync();
+      try {
+        for (;;) {
+          final bytes = input.readSync(64 * 1024);
+          if (bytes.isEmpty) break;
+          sink.add(bytes);
+        }
+        sink.close();
+        return digest.toString();
+      } finally {
+        input.closeSync();
+      }
+    }, size: await audio.length(), threshold: 0, debugName: 'wal_intent_hash');
+  }
+
+  // An explicit deletion also retires the exact legacy unowned disk row
+  // admitted to that session; it never targets a different known owner.
+  static bool _isRetired(List<dynamic> rows, Wal wal) => rows.any((value) {
+        final retired = Wal.fromJson(Map<String, dynamic>.from(value as Map));
+        return wal.id == retired.id &&
+            wal.filePath == retired.filePath &&
+            (wal.ownerUid == retired.ownerUid || (wal.ownerUid == null && retired.ownerUid != null)) &&
+            wal.fileWriteId == retired.fileWriteId;
+      });
+
+  /// Shared bytes outlive a deleted row. Apply its durable retirement before
+  /// assigning index tokens or publishing even the strict custody reader.
+  static Future<List<Wal>> withoutRetiredRows(Directory documents, List<Wal> indexed) async {
+    final directory = _directory(documents);
+    if (!await directory.exists()) return indexed;
+    var retained = indexed;
+    await for (final entry in directory.list(followLinks: false)) {
+      if (entry is! File || !entry.path.endsWith('.json')) continue;
+      final dynamic decoded;
+      try {
+        decoded = jsonDecode(await entry.readAsString());
+      } on FormatException {
+        continue; // No readable retirement authority; preserve the source.
+      }
+      if (decoded is! Map || !decoded.containsKey('retired_rows')) continue;
+      final record = Map<String, dynamic>.from(decoded);
+      final survivor = Wal.fromJson(Map<String, dynamic>.from(record['wal'] as Map));
+      if (record['version'] != 1 ||
+          survivor.ownerUid == null ||
+          survivor.ownerUid!.isEmpty ||
+          survivor.fileWriteId == null ||
+          record['transaction_id'] != survivor.fileWriteId ||
+          entry.path != _intent(documents, survivor).path) {
+        throw const FormatException('Invalid WAL retirement authority');
+      }
+      for (final value in record['retired_rows'] as List) {
+        final retired = Wal.fromJson(Map<String, dynamic>.from(value as Map));
+        if (retired.filePath != survivor.filePath) throw const FormatException('Invalid retired WAL path');
+        retained = retained.where((wal) => !_isRetired([value], wal)).toList();
+      }
+    }
+    return retained;
+  }
 
   static Future<List<Wal>> recover(Directory documents, List<Wal> indexed) async {
     final directory = _directory(documents);
@@ -156,7 +251,7 @@ abstract final class WalWriteIntent {
         if (id is! String || id.isEmpty || wal.fileWriteId != id) continue;
         final audio = File('${documents.path}/$name');
         if (!await audio.exists() || await audio.length() != record['bytes']) continue;
-        if ((await sha256.bind(audio.openRead()).first).toString() != record['sha256']) continue;
+        if (await _hashAudio(audio) != record['sha256']) continue;
         final existing = known[(wal.id, wal.filePath)];
         markPending(wal);
         if (existing != null) {
@@ -164,6 +259,7 @@ abstract final class WalWriteIntent {
               existing.fileWriteId == id &&
               existing.loadedIndexSource == '${documents.path}/wals.json') {
             await retire(documents, wal);
+            if (hasPending(wal)) markPending(existing);
             continue;
           }
           // A reused filename is not a commit of these new bytes. Replace the
