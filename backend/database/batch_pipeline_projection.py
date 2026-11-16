@@ -49,7 +49,7 @@ from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.projection_hold_observability import log_projection_hold
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.processing_hold import MAX_HOLD_SECONDS
-from utils.sync import processing_hold
+from utils.sync import capture_end, processing_hold
 from database.batch_pipeline_projection_protocol import (
     ProjectionBlocked as ProjectionBlocked,
     ProjectionReplay as ProjectionReplay,
@@ -911,6 +911,8 @@ class ProjectionStore:
                                 },
                                 {'first_pending_at': now},
                                 now=now,
+                                # A sealed live record needs no quiet wait for its first notes.
+                                end_proven=lambda: capture_end.sealed(row),
                             )
                             if processing_hold.enabled_for(row)
                             else ('ready', None)

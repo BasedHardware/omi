@@ -93,12 +93,17 @@ def load(uid: str, recording_session_id: str, *, firestore_client: Any = None) -
 
 
 def proven(uid: str, conversation_data: Mapping[str, Any], *, firestore_client: Any = None) -> bool:
-    """Whether the phone has proven this row's recording ended and its speech landed.
+    """Whether this row's recording is proven ended with its speech landed.
 
-    Asked by hold admission only when it would otherwise wait: one session
-    document read, and only for a row that carries a recording session id. Any
-    failure is "not proven"; the quiet rule is the fallback, never an error.
+    Asked by hold admission only when it would otherwise wait. A sealed,
+    transcribed batch-owned live record is proven by the server's own seal
+    (``policy.seal_proof``) with no read. Otherwise the phone's marker decides:
+    one session document read, and only for a row that carries a recording
+    session id. Any failure is "not proven"; the quiet rule is the fallback,
+    never an error.
     """
+    if policy.sealed(conversation_data):
+        return True
     recording = (conversation_data.get('external_data') or {}).get('recording_session_id')
     if not policy.enabled() or not isinstance(recording, str) or not recording:
         return False

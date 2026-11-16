@@ -9411,7 +9411,17 @@ has since moved for another reason the result is `clock_unknown` and the quiet r
 and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
 `omi_sync_capture_end_total{end_type,outcome}` counts markers and
 `omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
-`no_speech_clock`, `content_behind`, `resumed`).
+`no_speech_clock`, `content_behind`, `resumed`, `sealed`).
+
+**Server seal proof (2026-11-16).** A batch-owned live record (`record_lane_owner == 'batch_live_v1'`) needs no
+phone marker: the server captured it, so its seal is the proof. Before any session read, admission skips the wait
+(outcome `end_proof`, proof result `sealed`) when the completed row's record barrier is closed (`record_audio_closed`,
+not partial, no open or failed upload) and its record transcript is projected (`record_projection_revision`), the
+sealed and transcribed phases of `utils/conversations/phase.py`. The seal proves only the first notes: once the row
+has notes (`summary_output_present`, `summary_completed_at` or a hold `full_snapshot`), a later pendant or phone copy
+keeps the quiet wait and receives at most the one automatic late run. Complete-record notes scheduling in
+projection uses the same proof. It shares the `SYNC_UPLOAD_WATERMARK_ENABLED` kill switch and adds no read or write.
+[Change note](listen_pusher_pipeline/changes/2026-11-16-sealed-live-record-end-proof.md).
 
 `SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
 reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,

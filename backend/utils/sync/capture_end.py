@@ -4,6 +4,7 @@ Owns: the shape of the phone's end marker, the rule that turns a marker into
 proof that a recording's speech has fully landed, and the upload trace header.
 The marker lets full processing start without the arrival-quiet wait; it never
 changes custody, and a marker that proves nothing leaves the quiet rule as is.
+A batch-owned live record needs no marker: the server's own seal is its proof.
 
 Lifecycle: ops kill switch ``SYNC_UPLOAD_WATERMARK_ENABLED``, default on; owner
 lifecycle-owner (SCA-1766); review 2026-12-14.
@@ -190,6 +191,49 @@ def proof(row: Mapping[str, Any], marker: Mapping[str, Any] | None) -> str:
     if finished > decided + TOLERANCE_SECONDS:
         return 'resumed'
     return 'proven'
+
+
+def seal_proof(row: Mapping[str, Any]) -> str:
+    """Whether the server's own seal proves this row's first notes need not wait.
+
+    A batch-owned live recording reaches the server over the live socket, so
+    the server knows it ended without any phone marker: ``proven`` needs the
+    completed row's record barrier closed (not partial, no open or failed
+    upload) and its record transcript projected, the sealed and transcribed
+    phases of ``utils.conversations.phase``. The seal says nothing about a
+    pendant or phone copy that is still uploading, so it proves the first notes
+    only (``notes_written``): content that lands after them keeps the quiet
+    wait and the one late run.
+    """
+    if row.get('record_lane_owner') != 'batch_live_v1':
+        return 'absent'
+    status = row.get('status')
+    if (
+        getattr(status, 'value', status) != 'completed'
+        or not row.get('record_audio_closed')
+        or row.get('record_audio_partial')
+        or row.get('record_upload_sessions')
+        or row.get('record_upload_failed')
+    ):
+        return 'record_open'
+    if not row.get('record_projection_revision'):
+        return 'transcript_pending'
+    state = row.get(HOLD_FIELD) or {}
+    if (
+        (isinstance(state, Mapping) and state.get('full_snapshot'))
+        or row.get('summary_output_present')
+        or row.get('summary_completed_at')
+    ):
+        return 'notes_written'
+    return 'proven'
+
+
+def sealed(row: Mapping[str, Any]) -> bool:
+    """``seal_proof`` under the kill switch; a proof is counted as ``sealed``. No read."""
+    if not enabled() or seal_proof(row) != 'proven':
+        return False
+    record_proof('sealed')
+    return True
 
 
 def record_proof(result: str) -> None:

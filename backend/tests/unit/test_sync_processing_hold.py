@@ -264,6 +264,41 @@ def test_first_summary_repair_cannot_bypass_a_stored_hold(monkeypatch):
     full.assert_not_called()
 
 
+def test_sealed_live_record_is_processed_at_claim_instead_of_waiting_quiet(monkeypatch):
+    # The server sealed and transcribed this live recording; a phone copy just
+    # landed (last_content_at 100), which alone would hold notes until 700.
+    current = {
+        **row(),
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_projection_revision': 1,
+        'sync_live_target': True,
+    }
+
+    class Reached(Exception):
+        pass
+
+    monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *_: current)
+    monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
+    monkeypatch.setattr(callback, 'claim_from_snapshot', lambda *_: True)
+    monkeypatch.setattr(callback, 'get_firestore_client', Mock())
+    monkeypatch.setattr(callback.time, 'time', lambda: 200)
+    full = Mock(side_effect=Reached)
+    # Past admission and the summary claim, the next step builds the model for processing.
+    monkeypatch.setattr(callback, 'deserialize_conversation', full)
+    context = {'owner': 'worker', 'lease_until': 1000, 'first_pending_at': 100, 'sync_hold': True}
+    token = PROCESS_CONTEXT.set(context)
+    try:
+        with pytest.raises(Reached):
+            callback.enrich_conversation('u', 'c', 'en')
+    finally:
+        PROCESS_CONTEXT.reset(token)
+    full.assert_called_once()
+    assert context['hold_outcome'] == 'end_proof' and 'defer_until' not in context
+    assert context['hold_snapshot'] == hold.content_snapshot(current)
+
+
 @pytest.mark.parametrize('has_summary', [True, False])
 def test_late_wal_after_smart_refresh_still_processes_new_content(monkeypatch, has_summary):
     world = World(monkeypatch)

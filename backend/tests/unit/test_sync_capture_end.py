@@ -327,3 +327,96 @@ def test_the_store_names_the_same_collection_as_the_session_authority():
     from database import recording_sessions
 
     assert store.RECORDING_SESSIONS_COLLECTION == recording_sessions.RECORDING_SESSIONS_COLLECTION
+
+
+def sealed_live(**changes):
+    """A batch-owned live record the server sealed and transcribed, with a phone copy that landed after."""
+    base = {
+        'status': 'completed',
+        'record_lane_owner': 'batch_live_v1',
+        'record_audio_closed': True,
+        'record_projection_revision': 1,
+        'sync_live_target': True,
+        'external_data': {'server_batch_only': True},
+        **row(),
+    }
+    return {**base, **changes}
+
+
+@pytest.mark.parametrize(
+    'changes, expected',
+    [
+        ({}, 'proven'),
+        ({'record_lane_owner': None}, 'absent'),
+        ({'record_lane_owner': 'batch_sync_v1'}, 'absent'),
+        ({'status': 'in_progress'}, 'record_open'),
+        ({'record_audio_closed': False}, 'record_open'),
+        ({'record_audio_partial': True}, 'record_open'),
+        ({'record_upload_sessions': {'s': {}}}, 'record_open'),
+        ({'record_upload_failed': True}, 'record_open'),
+        ({'record_projection_revision': None}, 'transcript_pending'),
+        ({'summary_completed_at': 900.0}, 'notes_written'),
+        ({'summary_output_present': True}, 'notes_written'),
+        (
+            {hold.FIELD: {'pending_since': 100, 'last_content_at': 100, 'full_snapshot': {'digest': 'd'}}},
+            'notes_written',
+        ),
+    ],
+)
+def test_the_seal_proves_only_a_closed_transcribed_live_record_before_its_first_notes(changes, expected):
+    assert capture_end.seal_proof(sealed_live(**changes)) == expected
+
+
+def test_a_sealed_live_record_is_proven_without_a_session_read_and_counts_as_sealed(monkeypatch):
+    load = Mock(side_effect=AssertionError('the seal needs no session read'))
+    monkeypatch.setattr(store, 'load', load)
+    counted = Mock()
+    monkeypatch.setattr(capture_end, 'record_proof', counted)
+    assert store.proven('u', sealed_live()) is True
+    counted.assert_called_once_with('sealed')
+    # Without the seal, a recording-session row still asks the phone's marker.
+    monkeypatch.setattr(store, 'load', Mock(return_value=None))
+    unsealed = sealed_live(record_audio_closed=False, external_data={'recording_session_id': 's'})
+    assert store.proven('u', unsealed) is False
+    monkeypatch.setenv('SYNC_UPLOAD_WATERMARK_ENABLED', 'false')
+    assert store.proven('u', sealed_live()) is False
+
+
+def test_a_sealed_live_record_gets_notes_now_while_a_sync_only_row_still_waits_quiet():
+    proven = lambda conversation: lambda: store.proven('u', conversation)  # noqa: E731
+    sealed = sealed_live()
+    assert hold.admission(sealed, {'first_pending_at': 100}, now=130, end_proven=proven(sealed)) == ('end_proof', None)
+    sync_only = row()
+    assert hold.admission(sync_only, {'first_pending_at': 100}, now=130, end_proven=proven(sync_only)) == (
+        'quiet_wait',
+        100 + hold.quiet_seconds(),
+    )
+
+
+def test_a_pendant_copy_after_sealed_notes_waits_quiet_then_buys_exactly_one_late_run():
+    conversation = sealed_live()
+    asked = lambda: store.proven('u', conversation)  # noqa: E731
+    assert hold.admission(conversation, {'first_pending_at': 100}, now=130, end_proven=asked)[0] == 'end_proof'
+    # First notes settle the epoch and record what they saw.
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    conversation['summary_completed_at'] = 131.0
+    # The pendant's stored copy lands later and adds material speech.
+    conversation['transcript_segments'].append({'text': 'pendant ' * 120, 'start': 60, 'end': 120})
+    conversation[hold.FIELD] = hold.activity_patch(conversation, 1000)
+    pending = {'first_pending_at': 1000}
+    assert hold.admission(conversation, pending, now=1030, end_proven=asked) == (
+        'quiet_wait',
+        1000 + hold.quiet_seconds(),
+    )
+    assert hold.admission(conversation, pending, now=1000 + hold.quiet_seconds(), end_proven=asked) == ('ready', None)
+    conversation[hold.FIELD] = hold.completion_patch(conversation, hold.content_snapshot(conversation))
+    assert conversation[hold.FIELD]['late_runs'] == 1
+    # A further copy cannot buy a second automatic run.
+    conversation['transcript_segments'].append({'text': 'later ' * 120, 'start': 120, 'end': 180})
+    conversation[hold.FIELD] = hold.activity_patch(conversation, 2000)
+    assert hold.admission(
+        conversation, {'first_pending_at': 2000}, now=2000 + hold.quiet_seconds(), end_proven=asked
+    ) == (
+        'late_cap',
+        None,
+    )
