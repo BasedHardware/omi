@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-free-cap-sheet-dark.png",
+      "platform": "mobile-ios",
+      "description": "Free plan at the monthly cloud cap: the one prompt, Omi Pro first and primary, transcribing on this phone second",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-free-cap-sheet-light.png",
+      "platform": "mobile-ios",
+      "description": "The same cap sheet in light mode",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-on-phone-banner-held-row-dark.png",
+      "platform": "mobile-ios",
+      "description": "Recording banner while transcribing on the phone, and a held recording row with Unlock",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-settings-phone-setup-dark.png",
+      "platform": "mobile-android",
+      "description": "Settings > Transcription opened from the cap sheet: This phone selected, model size with Download now or On Wi-Fi later",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-settings-switch-back-dark.png",
+      "platform": "mobile-android",
+      "description": "After the monthly reset a pinned phone choice offers Switch back in Settings (no pop-up); the model row shows because the test host has no model file",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

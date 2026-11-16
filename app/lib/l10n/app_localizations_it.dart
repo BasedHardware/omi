@@ -15541,4 +15541,81 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'L\'elenco in elaborazione è cambiato. Controllalo e riprova.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Hai usato i $minutes minuti di questo mese';
+  }
+
+  @override
+  String get freeCapBody => 'Omi continua a registrare. Scegli come continuare la trascrizione.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Trascrizione cloud illimitata';
+
+  @override
+  String get freeCapProAccuracy => 'Massima precisione';
+
+  @override
+  String get freeCapProWaiting => 'Trascrive le registrazioni in attesa';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Resta attivo finché non torni indietro.';
+
+  @override
+  String get transcribingOnThisPhone => 'Trascrizione su questo telefono';
+
+  @override
+  String get getPro => 'Passa a Pro';
+
+  @override
+  String get unlock => 'Sblocca';
+
+  @override
+  String get transcribeWith => 'Trascrivi con';
+
+  @override
+  String get omiCloud => 'Cloud di Omi';
+
+  @override
+  String get thisPhone => 'Questo telefono';
+
+  @override
+  String get onDeviceReady => 'Pronto';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left di $limit min rimasti · si rinnova il $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minuti cloud disponibili';
+  }
+
+  @override
+  String get switchBack => 'Torna indietro';
+
+  @override
+  String get setUpThisPhone => 'Configura questo telefono';
+
+  @override
+  String get speechRecognition => 'Riconoscimento vocale';
+
+  @override
+  String get audioStaysOnPhone => 'L\'audio resta sul telefono';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Download di $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Scarica ora';
+
+  @override
+  String get onWifiLater => 'Più tardi su Wi-Fi';
 }
