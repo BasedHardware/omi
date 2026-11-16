@@ -19,10 +19,30 @@ NOW = datetime(2026, 10, 20, 17, 0, tzinfo=timezone.utc)
 def test_render_moment_joins_voices_and_bounds_long_text():
     rendered = incremental.render_moment(
         [
-            {'text': 'hello there', 'is_user': True},
-            {'text': 'still me', 'is_user': True},
+            {
+                'text': 'hello there',
+                'is_user': True,
+                'speaker_id': 1,
+                'speaker_id_scope': 'fixture',
+                'speaker_identity_status': 'user',
+                'speaker_match_source': 'conversation_voice',
+            },
+            {
+                'text': 'still me',
+                'is_user': True,
+                'speaker_id': 1,
+                'speaker_id_scope': 'fixture',
+                'speaker_identity_status': 'user',
+                'speaker_match_source': 'conversation_voice',
+            },
             {'text': 'hi', 'speaker_id': 2},
-            {'text': 'named', 'person_name': 'Minh', 'person_id': 'minh'},
+            {
+                'text': 'named',
+                'person_name': 'Minh',
+                'person_id': 'minh',
+                'speaker_id': 3,
+                'speaker_id_scope': 'fixture',
+            },
             {'text': '   '},
         ]
     )

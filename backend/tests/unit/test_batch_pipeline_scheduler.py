@@ -24,6 +24,9 @@ class MemoryTransaction:
     def get(self, table, key):
         return deepcopy(self.rows.get((table, key), {}))
 
+    def get_existing(self, table, key):
+        return deepcopy(self.rows.get((table, key)))
+
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
