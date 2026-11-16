@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-undeclared-serving-query-index",
+  "family": "derived-inventory",
   "violated_contract": "A serving Firestore query's required composite index must be declared in the repository index registry; an index that exists only as a hand-created live index (or not at all) leaves the query failing closed with FailedPrecondition in production.",
   "canonical_prevention": "Execute registered runtime drivers and caller witnesses against the recording Firestore client, require every database and non-database serving query shape to be served and certain by the generated manifest, and validate Firestore's actual planning response with the index oracle. Apply declared indexes through the serialized index workflow; backend deploy readiness blocks until they are READY, and a missing-index alert routes incidents to the registry and runbook. Hand-created indexes are not a prevention mechanism.",
   "canonical_prevention_artifact": [

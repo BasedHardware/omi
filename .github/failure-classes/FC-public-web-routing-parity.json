@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-public-web-routing-parity",
+  "family": "duplicated-implementation",
   "violated_contract": "Compatibility projections of public-web routing must make the same routing decision as the authoritative gateway policy.",
   "canonical_prevention": "Keep the Python gateway authoritative and run every compatibility projection against one shared behavioral routing corpus.",
   "canonical_prevention_artifact": [

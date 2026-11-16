@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-transport-drop-terminalizes-resumable-capture",
+  "family": "identity-qualifier",
   "violated_contract": "A socket close is a stop only on a client whose close means stop. A client that reconnects to the same recording must keep that capture open across the drop, with durable finalization (the quiet check) as its owner. A close-means-stop rule written for desktop server-batch capture also matched mobile once SERVER_BATCH_ONLY_MOBILE_PERCENT reached 100. Every phone or pendant socket drop then finalized the capture, and the next reconnect rolled into a new conversation. One continuous talk split into one conversation per socket.",
   "canonical_prevention": "Key immediate finalization on the client's close semantics (platform, source, and an explicit client finalization reason), not on lane ownership alone. Skip it only when a durable finalization owner is confirmed and this socket's audio is committed. Otherwise fall back to immediate finalization, so a capture is never left without an owner. Pin the per-platform split and every fallback in a teardown contract test that runs the real teardown.",
   "canonical_prevention_artifact": [

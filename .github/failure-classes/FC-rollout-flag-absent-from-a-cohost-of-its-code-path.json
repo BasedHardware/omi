@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-rollout-flag-absent-from-a-cohost-of-its-code-path",
+  "family": "flag-binding",
   "violated_contract": "A rollout flag must be declared on every deployed service that executes the code path it gates, or hosts can behave differently for the same user action.",
   "canonical_prevention": "Enumerate every service that hosts each active gated code path and validate effective values across composed runtime_env, charts, and workflow/action overlays. Exercise each entrypoint and verify deployment validators reject a co-host missing a required setting.",
   "canonical_prevention_artifact": [

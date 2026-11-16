@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-voice-playback-gates-question-completion",
+  "family": "deadline-budget",
   "violated_contract": "A pendant question must terminate even if native spoken-output setup or cleanup never completes. Optional audio feedback must not strand tutorial Processing or retain the voice busy guard, and delayed cleanup must not stop a newer response.",
   "canonical_prevention": "Bound playback admission and revoke late admission after timeout; complete request failures independently of best-effort, request-scoped audio cleanup. Fence cleanup by the admitted playback lifecycle, not the begin-attempt counter: mode-off, missing-headphone and revoked-admission skips must leave existing cleanup intact, while an admitted replacement must be protected from old cleanup.",
   "canonical_prevention_artifact": [

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-portable-operator-tests-outside-unit-discovery",
+  "family": "ci-merge-integrity",
   "violated_contract": "Portable operator guard tests must be discovered and selected by backend unit CI when operator source, tests or fixtures change. A green backend selection that omits those tests cannot validate the operator guard.",
   "canonical_prevention": "Register portable operator tests in full unit discovery and map the entire operator subtree to them without suppressing generic guards. Exercise each selected file through the existing isolated runner and require nonzero test exits to fail that runner.",
   "canonical_prevention_artifact": [

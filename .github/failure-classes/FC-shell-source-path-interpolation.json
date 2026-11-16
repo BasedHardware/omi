@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-shell-source-path-interpolation",
+  "family": "input-tolerance",
   "violated_contract": "A repository checkout path must never be interpolated into shell program text where path characters can change shell syntax or execute commands.",
   "canonical_prevention": "Derive the resolver path inside the shell program or pass paths as shell data, and exercise the real Make target from a quote-containing temporary checkout with a controlled marker command.",
   "evidence_prs": [10017],

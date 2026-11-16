@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-rolling-window-relies-on-write-time-pruning",
+  "family": "work-bounded-resumable",
   "violated_contract": "A rolling-time summary must exclude events older than its advertised window even when no new event has caused persisted history to be pruned. Mobile diagnostics counted all retained disconnects since pairing as last-seven-day events, although both native stores remove expired rows only when appending another event.",
   "canonical_prevention": "Apply a shared read-time lower bound equal to the later of the counter epoch and now minus the advertised duration to every recent-summary consumer. Keep lifetime counters and their epoch separate. Exercise the real display and export paths with persisted events that have aged out without another native write.",
   "canonical_prevention_artifact": [

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-release-proof-omits-serving-query-guard",
+  "family": "ci-merge-integrity",
   "violated_contract": "An exact-SHA backend release proof must execute the serving-query index guard when the release diff changes its inventory or guard inputs; a bypassable advisory PR test is not release admission evidence.",
   "canonical_prevention": "Select the narrow hermetic guard through the canonical local and CI check manifest using the backend selector's shared inventory predicate and test list. Fail proof on guard or setup errors with actionable diagnostics. Keep declared-index readiness as the separate live schema gate. This diff-scoped contract does not certify unchanged guard inputs on later unrelated SHAs or remove explicit operator break-glass.",
   "canonical_prevention_artifact": [

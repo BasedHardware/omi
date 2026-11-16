@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-alert-render-calls-back-into-alerting-plane",
+  "family": "observability-gap",
   "violated_contract": "Work the alerting plane does on behalf of a notification must not depend on the same Grafana instance staying responsive. Alert screenshots render a dashboard panel by calling back into that Grafana; when its dashboards are slow the renders time out while holding its HTTP handlers, alert evaluation fails, and the external health check flaps.",
   "canonical_prevention": "Keep unified-alerting screenshots disabled in every environment and carry dashboard/panel links in the notification template instead; a contract test pins capture=false in the checked-in values.",
   "canonical_prevention_artifact": [
