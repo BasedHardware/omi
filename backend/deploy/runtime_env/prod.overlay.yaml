@@ -1825,6 +1825,11 @@ overlay:
           # trigger and kept off by ruling (SCA-2173, SCA-2283). It saved nothing while on, because
           # async-policy finish rows are never deferred; #25314 is the fix for those reads.
           BATCH_PROJECTION_FINISH_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          # SCA-2283 / David: persist the integration-only values applied 2026-11-16 20:54Z.
+          # Inverse: page rows 200, tick 10 seconds, classify page limit 8.
+          BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '100', category: config}
+          BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '20', category: config}
+          BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: config}
           # Quiet-check empty exit (David 0192a6, lead2 9b4ffd); evaluated on backend-sync. Kill switch: false.
           QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
           BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
