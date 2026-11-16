@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 from config.episodes import home_neutral_minimum_titles_enabled
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
+from utils.conversations.summary_delivery import field, present
 
 
 def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
@@ -32,6 +33,33 @@ def summary_owed(row: Mapping[str, Any]) -> bool:
     )
 
 
+def is_deferred_preview_title(row: Any) -> bool:
+    """Recognize legacy, unmarked first-eight-word placeholders without a read/write."""
+    structured = field(row, 'structured')
+    first = next(
+        (
+            str(field(segment, 'text') or '').strip()
+            for segment in field(row, 'transcript_segments') or []
+            if str(field(segment, 'text') or '').strip()
+        ),
+        '',
+    )
+    return (
+        not field(structured, 'title_provenance')
+        and not present(structured)
+        and len(first.split()) >= 8
+        and field(structured, 'title') == ' '.join(first.split()[:8])
+    )
+
+
+def title_for_stability(row: Any) -> str:
+    """A deterministic/preview title is provisional until real enrichment lands."""
+    structured = field(row, 'structured')
+    if field(structured, 'title_provenance') == 'server_minimum' or is_deferred_preview_title(row):
+        return ''
+    return field(structured, 'title') or ''
+
+
 def neutralize_minimum_title(
     row: dict[str, Any], *, tz_name_provider: Optional[Callable[[], Optional[str]]] = None
 ) -> dict[str, Any]:
@@ -53,7 +81,6 @@ def neutralize_minimum_title(
     provenance = structured.get('title_provenance')
     text_parts = [str(s.get('text') or '').strip() for s in row.get('transcript_segments') or [] if isinstance(s, dict)]
     text = ' '.join(part for part in text_parts if part)
-    first = next((part for part in text_parts if part), '')
     start, end = row.get('started_at'), row.get('finished_at')
     short = isinstance(start, datetime) and isinstance(end, datetime) and 0 <= (end - start).total_seconds() <= 60
     decision = row.get('relevance_decision') or {}
@@ -61,7 +88,7 @@ def neutralize_minimum_title(
         row.get('summary_blocked_reason') == 'content_below_floor' or decision.get('reason') == 'content_below_floor'
     )
     title = structured.get('title')
-    lazy = not provenance and len(first.split()) >= 8 and title == ' '.join(first.split()[:8])
+    lazy = is_deferred_preview_title(row)
     minimum = (short or floor or summary_owed(row)) and (
         provenance == 'server_minimum'
         or (not provenance and text and title == truncate_on_word_boundary(first_sentence(text)))

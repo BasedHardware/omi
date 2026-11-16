@@ -157,7 +157,9 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold
+    from utils.conversations import summary_delivery, lifecycle_clocks, home_titles, transcribing_hold, llm_input_dedupe
+    from utils import summary_quality
+    from models import structured
     from database import sync_live_overlap, transcript_pointer
     from utils.sync import live_overlap, stage
     from utils.home_feed import projection as home_feed_projection
@@ -239,10 +241,14 @@ def conversations_db():
         "database.users": AutoMockModule("database.users"),
         "models": models,
         "models.audio_file": AutoMockModule("models.audio_file"),
+        "models.structured": structured,
         "models.conversation_enums": AutoMockModule("models.conversation_enums"),
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        # Archive reads do not execute notes writes; retain the module-level pure seams.
+        "utils.summary_quality": summary_quality,
+        "utils.conversations.llm_input_dedupe": llm_input_dedupe,
         "utils.home_feed.projection": home_feed_projection,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
