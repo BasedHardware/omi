@@ -1045,3 +1045,31 @@ def test_fallback_cannot_guess_missing_admission_funding_policy():
     with pytest.raises(ProjectionBlocked, match='funding policy required'):
         project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
     assert store.client.rows == before
+
+
+def test_erasure_discovers_fallback_provenance_and_retains_suspended_ordering(monkeypatch):
+    from database import batch_pipeline_purge as purge
+
+    store, original = setup_store()
+    item, binding = prepare_copy(store, original)
+    slot = store.ref('results', COPY).get().to_dict()
+    patch_document(store, store.ref('jobs', SOURCE), {'state': 'dead'})
+    with pytest.raises(reuse.SourceReuseUnavailable, match='enqueued'):
+        project_alias(store, item, binding, NOW, policy=ProjectionPolicy())
+    job = store.ref('jobs', COPY).get().to_dict()
+    assert 'visible' not in job['source_conversation_ids']
+    assert purge.row_belongs(job, 'visible')
+    assert not purge.row_belongs(job, 'unrelated')
+    assert not store.ref('results', COPY).get().exists
+    monkeypatch.setattr(purge.queries, 'predecessor_documents', lambda *args: [])
+    monkeypatch.setattr(purge, 'mirror_refresh', lambda *args: None)
+    purge.delete_job(
+        store.client, NS, SimpleNamespace(id=COPY, reference=store.ref('jobs', COPY)), retain_ordering=True
+    )
+    erased = store.ref('results', COPY).get().to_dict()
+    assert erased['projection_state'] == 'erased'
+    assert erased['previous_segment_id'] == slot['previous_segment_id']
+    assert erased.get('log_sequence') == slot.get('log_sequence')
+    assert not erased.get('result') and not store.ref('jobs', COPY).get().exists
+    with pytest.raises(ProjectionBlocked):
+        project_alias(store, item, binding, NOW + 1, policy=ProjectionPolicy())

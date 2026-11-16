@@ -87,6 +87,9 @@ only their own upload fences. An erased alias or erasure-requested own audio
 cannot run. Deleted canonical destinations remain tombstoned and normal
 assignment cannot restore them. A missing expired marker blob is unnecessary
 for own-audio processing; a missing/erased own audio reservation refuses it.
+Conversation erasure still discovers the job through its bounded audit
+provenance and deletes segment-linked artifacts and source receipts. If its
+result slot is suspended, erasure preserves only the original ordering edge.
 
 The pending alias result-log slot is preserved on its job while ordinary
 worker/provider failure recovery expects no committed result. Queue admission,
