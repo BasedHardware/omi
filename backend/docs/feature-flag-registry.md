@@ -828,6 +828,7 @@ and an explicit empty literal renders as `''`.
 | `LLM_GATEWAY_ACCOUNTING_ENABLED` | Record gateway-managed usage accounting | backend, llm-gateway | env | closed | true | true (backend-listen (chart), cloud_run/backend, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | true (backend-listen (chart), cloud_run/backend, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | keep | — | auditfix |
 | `LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS` | Expose provider error details from gateway | llm-gateway | env | closed | — | true (llm-gateway (chart)) | — | — | keep | keep | — | auditfix |
 | `LLM_GATEWAY_FLEX_FIRST_TIMEOUT_MS` | Override cap on the Flex-first attempt before Standard fallback (lane defaults: conv-structure 15000 ms, memory-l1 10000 ms; never more than half the remaining route budget) | llm-gateway | env | open | — | — | — | — | keep | keep | — | auditfix |
+| `MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS` | Hosted MCP detail default is 500 segments; set 120 to roll back; clamp 1..500, invalid uses 500 | backend | env | open | — | — | — | — | keep | keep | — | quality-lead / q12-mcp-paging |
 | `MEETING_NOTES_EPISODE_EFFORT` | Episode writer thinking effort: default, high or xhigh; baseline unchanged | backend | env | closed | — | — | — | — | pending | keep | — | auditfix |
 | `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active | backend | env | closed | — | — | — | — | pending | keep | — | auditfix |
 | `MEMORY_IMPORT_BODY_STORAGE_MODE` | Select memory import body storage mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
@@ -1373,6 +1374,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `LOCAL_PREVIEW_BATCH_ENABLED` — Default on; a mobile listen session that declares local_preview=enabled, whose uid is on the batch record lane (batch allowlist or batch percent) with private cloud sync and no custom STT, journals all pendant audio through the mobile Standard batch route and defers the cloud live STT stream until audio reaches the socket (fail: open)
 - `LOCAL_PREVIEW_ENGINE_RESCIND_ENABLED` — Default on; a granted phone with no speech engine rescinds local preview and uses the existing on-screen Modulate restore cohort after 15 seconds visible (fail: open)
 - `LOCKED_CONTENT_RESET_RECOVERY_ENABLED` — Default-off bounded recovery of already-locked content on authenticated HTTP requests in each UTC quota month; current plan allowance must be available. (fail: closed)
+- `MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS` — Hosted MCP detail default is 500 segments; set 120 to roll back; clamp 1..500, invalid uses 500 (fail: open)
 - `MEDIA_NOISE_MODE` — Media/noise classification and transcript admission: off/shadow/serve; default shadow (fail: closed)
 - `MEDIA_NOISE_MODE_SERVE_PERCENT` — Media/noise serve percentage; default zero (fail: closed)
 - `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` — Media/noise digest cohort; default empty (fail: closed)

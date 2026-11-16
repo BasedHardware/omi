@@ -6,6 +6,7 @@ dispatch. REST ``routers/mcp.py`` may read this registry for overlapping
 metadata, but its response contracts stay its own.
 """
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -16,6 +17,7 @@ from utils.mcp_server.constants import (
     MCP_CONVERSATION_BATCH_MAX_IDS,
     MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS,
     MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS,
+    conversation_fetch_default_max_segments,
     MCP_CONVERSATION_FETCH_MAX_CHARS,
     MCP_CONVERSATION_FETCH_MAX_SEGMENTS,
     MCP_CONVERSATION_LIST_MAX_LIMIT,
@@ -219,6 +221,10 @@ class ToolSpec:
     handler: ToolHandler
 
     def list_entry(self) -> Dict[str, Any]:
+        input_schema = self.input_schema
+        if self.name in {'get_conversation_by_id', 'get_conversations_by_ids'}:
+            input_schema = deepcopy(input_schema)
+            input_schema['properties']['max_segments']['default'] = conversation_fetch_default_max_segments()
         return {
             "name": self.name,
             "title": self.title,
@@ -226,7 +232,7 @@ class ToolSpec:
             "annotations": dict(self.annotations),
             # Released clients read the advertised scope from this field.
             "securitySchemes": _SECURITY_BY_SCOPE[self.scope],
-            "inputSchema": self.input_schema,
+            "inputSchema": input_schema,
             "outputSchema": self.output_schema,
         }
 
@@ -568,7 +574,11 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         title="Get conversation by ID",
         description=(
             "Deep-read one conversation card and a bounded transcript. Use only for a few ids selected from "
-            "get_conversations or search_conversations; the response reports truncated=true when clipped. "
+            "get_conversations or search_conversations. If truncated=true, call again with next_cursor as cursor "
+            "and the same conversation_id and options until next_cursor is null. Each page respects max_chars "
+            "(text plus original_text); total_segments counts readable segments. An oversized segment is continued "
+            "with segment_index, text_offset and original_text_offset for exact reassembly. "
+            "Pages may contain fewer segments or characters to stay within the 120000-character serialized budget. "
             "Transcript offsets are nonnegative: text before the conversation origin is clamped at zero; "
             "a zero-duration interval is unplaced text, not a playback window."
         ),
@@ -584,6 +594,10 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 "summary_only": _SUMMARY_ONLY_INPUT,
                 "fields": _FIELDS_INPUT,
                 "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"},
+                "cursor": {
+                    "type": "string",
+                    "description": "Opaque next_cursor from this conversation detail or its batch item; keep all options unchanged.",
+                },
                 "max_segments": {
                     "type": "integer",
                     "description": "Maximum transcript segments to return",
@@ -606,6 +620,8 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 ["conversation"],
                 conversation={"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                 truncated={"type": "boolean"},
+                total_segments={"type": "integer", "minimum": 0},
+                next_cursor={"type": ["string", "null"]},
             )
         ),
         scope="conversations.read",
@@ -623,6 +639,8 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
             "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
             "are listed in omitted_ids/next_ids with next_cursor. Per-item limits are never reduced to fit a batch. "
+            "For a truncated item, call get_conversation_by_id with that item's next_cursor as cursor, its id as "
+            "conversation_id and the same options to continue its transcript. The top-level cursor pages ids only. "
             "Each successful item has id and one nested conversation; locked items return id and an error. "
             "The serialized response cap is 120000 characters; use include_participants=false for lean reads."
         ),
@@ -674,6 +692,8 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                             "id": {"type": "string"},
                             "conversation": {"type": "object", "properties": dict(_CONVERSATION_CARD_FIELDS)},
                             "truncated": {"type": "boolean"},
+                            "total_segments": {"type": "integer", "minimum": 0},
+                            "next_cursor": {"type": ["string", "null"]},
                             "truncated_fields": {"type": "array", "items": {"type": "string"}},
                             "error": {
                                 "type": "object",
