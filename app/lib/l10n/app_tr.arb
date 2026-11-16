@@ -4144,6 +4144,7 @@
     "paywallTrialBilledYearly": "Yıllık faturalandırılır",
     "paywallTrialSaveAmount": "{amount} tasarruf edin",
     "paywallTrialCta": "{price} karşılığında başlayın",
+    "paywallTrialCodeHint": "Omi Pro kodunuz mu var? Bir sonraki ekranda girin.",
     "paywallTrialCancelNote": "İstediğiniz zaman iptal edin. Ücret yok, ceza yok.",
     "paywallMonthlyFallbackTitle": "Tam bir yıla henüz hazır değil misin?",
     "paywallMonthlyFallbackTrialBody": "Bunun yerine aylıkla başla. Yine {days} gün ücretsiz, ardından ayda {price}. İstediğin zaman iptal et.",

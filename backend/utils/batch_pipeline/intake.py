@@ -27,6 +27,7 @@ from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
 from config.prerecorded_language import language_guard_enabled, language_class
 from config.stt_provider_policy import normalized_stt_language, PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
+from database import record_wal_handoff as wal_receipts
 from database.batch_pipeline_intake import admit, cache_completed
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_recovery_fence import RecoveryFence
@@ -239,6 +240,9 @@ def _only_deleted_total(tx, uid: str, content_id: str) -> int | None:
 
 
 def durable_status(store, uid: str, job_id: str) -> dict | None:
+    if job_id.startswith(wal_receipts.JOB_PREFIX):
+        authority_store = getattr(store, 'store', store)
+        return wal_receipts.read_status(authority_store.client, authority_store.namespace, uid, job_id)
     from database.batch_pipeline_artifact_missing import artifact_missing, REASON_CODE
     from utils.batch_pipeline.upload_coalescing import member_status
 
@@ -1330,13 +1334,22 @@ def repair_upload_owner_matches(uid: str, content_id: str, job_id: str) -> bool:
     return store.run(lambda tx: _repair_owner_matches(tx.get('content', f'{uid}/{content_id}'), job_id))
 
 
+def _wal_receipt_status(uid: str, job_id: str) -> dict | None:
+    # WAL receipts are Firestore-owned and independent of ordinary jobstore
+    # shadow/index modes, including released clients' headerless status polls.
+    return durable_status(FirestoreStore(f'batch_pipeline_{current_stage()}'), uid, job_id)
+
+
 def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = False) -> dict | None:
     if not job_id.startswith(JOB_PREFIX):
         return None
     if len(job_id) > 128 or '/' in job_id:
         raise HTTPException(status_code=404, detail='Sync job not found')
-    # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
-    status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
+    if job_id.startswith(wal_receipts.JOB_PREFIX):
+        status = _wal_receipt_status(uid, job_id)
+    else:
+        # A2 seam: durable_status may redrive a dead job (writes jobs/queues/control).
+        status = durable_status(shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}')), uid, job_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Sync job not found')
     if status.get('reason_code') == 'batch_artifact_missing' and not artifact_retry:

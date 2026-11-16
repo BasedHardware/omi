@@ -42,6 +42,7 @@ def with_poll_hint(status: dict, *, surface_open: bool = False) -> dict:
     if status.get('status') == 'processing' and status.get('reason_code') in {
         'batch_unit_held',
         'batch_artifact_missing',
+        'source_alignment_pending',
     }:
         return {**status, 'poll_after_ms': 300000}
     if not poll_backoff():

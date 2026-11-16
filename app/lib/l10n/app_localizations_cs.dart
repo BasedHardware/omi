@@ -13407,6 +13407,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Máte kód Omi Pro? Zadejte ho na další obrazovce.';
+
+  @override
   String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
 
   @override

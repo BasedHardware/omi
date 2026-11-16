@@ -23841,6 +23841,12 @@ abstract class AppLocalizations {
   /// **'Try for {price}'**
   String paywallTrialCta(String price);
 
+  /// Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next
+  ///
+  /// In en, this message translates to:
+  /// **'Have an Omi Pro code? Add it on the next screen.'**
+  String get paywallTrialCodeHint;
+
   /// Paywall footnote
   ///
   /// In en, this message translates to:

@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Facturat anualment",
     "paywallTrialSaveAmount": "Estalvia {amount}",
     "paywallTrialCta": "Comença per {price}",
+    "paywallTrialCodeHint": "Tens un codi d'Omi Pro? Introdueix-lo a la pantalla següent.",
     "paywallTrialCancelNote": "Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.",
     "paywallMonthlyFallbackTitle": "Encara no vols un any sencer?",
     "paywallMonthlyFallbackTrialBody": "Comença amb el pla mensual. Els mateixos {days} dies gratis, després {price} al mes. Cancel·la quan vulguis.",

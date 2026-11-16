@@ -4109,6 +4109,7 @@
     "paywallTrialBilledYearly": "Thanh toán hàng năm",
     "paywallTrialSaveAmount": "Tiết kiệm {amount}",
     "paywallTrialCta": "Bắt đầu với {price}",
+    "paywallTrialCodeHint": "Bạn có mã Omi Pro? Hãy nhập ở màn hình tiếp theo.",
     "paywallTrialCancelNote": "Hủy bất cứ lúc nào. Không phí, không phạt.",
     "paywallMonthlyFallbackTitle": "Chưa sẵn sàng cho cả năm?",
     "paywallMonthlyFallbackTrialBody": "Hãy bắt đầu với gói tháng. Vẫn miễn phí {days} ngày, sau đó {price} mỗi tháng. Hủy bất cứ lúc nào.",

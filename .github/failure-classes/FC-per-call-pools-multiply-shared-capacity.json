@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-per-call-pools-multiply-shared-capacity",
+  "violated_contract": "A connection ceiling must cover the lifetime and ownership scope of the resource. Constructing a bounded pool for each namespace or concurrent invocation must not multiply a process's allowed physical connections or let optional work consume capacity required for retryable erasure.",
+  "canonical_prevention": "Share fixed-target process-owned pools across namespace and cold-call factories, reserve an independent erasure lane, reject in-process retargeting, and exercise the actual pool with a counting connector under saturated normal work, concurrent cold and cached purges, connection failure, cancellation and retry.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_jobstore_copy_connections.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/jobstore/**",
+    "backend/tests/unit/test_jobstore_copy_connections.py"
+  ],
+  "status": "open"
+}

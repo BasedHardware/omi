@@ -9,6 +9,8 @@ from google.cloud import firestore
 
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
+from database import record_wal_capacity
+from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
 from database.batch_pipeline_allowance_hold import STATE as ALLOWANCE_HELD, OWNERS as ALLOWANCE_OWNERS
@@ -207,6 +209,10 @@ def purge_batch_owner(
         from utils.batch_pipeline.retention import delete_batch_object
 
         delete_uri = delete_batch_object
+    # Sweep before deleting reservations: crash orphans have no receipt URI.
+    # Failure leaves metadata and quota reachable and the purge incomplete.
+    if default_storage_cleanup:
+        purge_record_wal_owner(uid, conversation_id)
     deleted = 0
     for namespace in namespaces:
         segments = set()
@@ -256,6 +262,8 @@ def purge_batch_owner(
                         _delete_job(client, namespace, snapshot, retain_ordering=conversation_id is not None)
                     elif table == 'results' and conversation_id is not None:
                         _erase_result(client, namespace, snapshot)
+                    elif table == 'intakes' and data.get('kind') in {'record_wal_file', 'record_wal_reservation'}:
+                        record_wal_capacity.erase_file(client, snapshot.reference, uid)
                     elif table == 'coalesce_groups':
                         from database.batch_pipeline_coalescing import purge_group
 

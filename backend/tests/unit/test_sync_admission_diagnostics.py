@@ -9,11 +9,19 @@ from types import SimpleNamespace
 
 import pytest
 
+
 from config.policy import BatchUnitPolicy
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import intake, live_upload
 from utils.batch_pipeline.contracts import Priority
+
+
+@pytest.fixture(autouse=True)
+def strict_coverage_rollback(monkeypatch):
+    """These regressions exercise the strict path retained by the kill switch."""
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
+    monkeypatch.setattr(live_upload.record_wal_handoff.receipts, 'has_receipts', lambda *_: False)
 
 
 @pytest.fixture(autouse=True)

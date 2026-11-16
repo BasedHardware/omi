@@ -13474,6 +13474,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Tens un codi d\'Omi Pro? Introdueix-lo a la pantalla següent.';
+
+  @override
   String get paywallTrialCancelNote => 'Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.';
 
   @override

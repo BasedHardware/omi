@@ -196,6 +196,12 @@ class PostgresTransaction:
         ).fetchall()
         return self._locked_query_row(*rows[0]) if len(rows) == 1 else None
 
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        rows = self.store.protected_page_in(
+            self.conn, 'ready', now, 8, owner_key=owner_key, priority=priority, after=after
+        )
+        return [self._locked_query_row(*row) for row in rows]
+
     def service_frontier(self, priority: int) -> float:
         return self.store.service_frontier_in(self.conn, priority)
 
@@ -318,6 +324,33 @@ class PostgresStore:
                 (self.namespace, state, now, max(1, min(limit, 100))),
             ).fetchall()
         return [row[0] for row in rows]
+
+    def protected_retries(self, now, limit, *, after=None):
+        with self._read_conn() as conn:
+            return [row[1] for row in self.protected_page_in(conn, 'retry', now, min(100, limit), after=after)]
+
+    def protected_page_in(self, conn, state, now, limit, *, owner_key=None, priority=None, after=None):
+        predicates = [
+            "namespace = %s",
+            "state = %s",
+            "capture_at >= %s",
+            "capture_at <= %s",
+            "doc->'compute_decision'->>'outcome' IN ('unattempted', 'allowed')",
+        ]
+        params = [self.namespace, state, now - 14400, now]
+        if owner_key is not None:
+            predicates.extend(["owner_key = %s", "priority = %s"])
+            params.extend([owner_key, priority])
+        if after is not None:
+            predicates.append('(capture_at, key COLLATE "C") < (%s, %s)')
+            params.extend(after)
+        params.append(max(1, min(limit, 8 if state == 'ready' else 100)))
+        return conn.execute(
+            'SELECT key, doc FROM jobs WHERE '
+            + ' AND '.join(predicates)
+            + ' ORDER BY capture_at DESC, key COLLATE "C" DESC LIMIT %s',
+            params,
+        ).fetchall()
 
     def oldest(self, priority: int, *, ready_only: bool = False) -> float | None:
         if ready_only:

@@ -13437,6 +13437,9 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ada kod Omi Pro? Masukkannya pada skrin seterusnya.';
+
+  @override
   String get paywallTrialCancelNote => 'Batal bila-bila masa. Tiada yuran, tiada penalti.';
 
   @override

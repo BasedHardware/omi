@@ -494,6 +494,15 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
                 'record_projection_revision',
                 'record_upload_failed',
                 'finalization_status',
+                'record_admitted_at',
+                'home_transcription_queue_observed_at',
+                'has_content',
+                'episode_transcription_pending_at',
+                'episode_transcription_deadline_at',
+                'sync_content_revision',
+                'is_locked',
+                'server_batch_audio_received',
+                'server_batch_audio_closed',
             ]
         )
     assert ("select", tuple(dict.fromkeys(expected_fields))) in firestore.queries[0].events
