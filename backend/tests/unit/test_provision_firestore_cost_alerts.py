@@ -160,6 +160,8 @@ def test_failed_target_readback_and_concurrent_other_changes_cannot_pass(scoped,
     api.ignore_writes = True
     receipt = scoped.execute(api, desired(scoped), scoped.TARGETS, backup=tmp_path / 'ignored.json')
     assert len(receipt['differences']) == 3
+    assert receipt['status'] == 'failed-readback'
+    assert receipt['selected_expected'] == desired(scoped)
     api.ignore_writes = False
     api.mutate_other = True
     with pytest.raises(ValueError, match='non-target alerts or dashboards changed'):

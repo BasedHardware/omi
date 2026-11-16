@@ -135,7 +135,12 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
     saved, created = restore_plan(restore, targets) if restore else ({}, [])
     before = snapshot(api, targets)
     receipt = evidence if evidence is not None else {}
-    receipt.update(status='incomplete', targets=sorted(targets), unchanged_before=before)
+    receipt.update(
+        status='incomplete',
+        targets=sorted(targets),
+        unchanged_before=before,
+        selected_expected=saved if restore else desired,
+    )
     live = api.rules()
     # Shared reconciliation sees only selected rules. Check their full live
     # groups first so filtering cannot hide a provenance boundary.
@@ -152,6 +157,8 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
     scoped = ScopedGrafana(api, targets)
     if restore:
         receipt['restore_delete_uids'] = sorted(created)
+        if any(live[uid].get('provenance', '') not in ('', 'api') for uid in created if uid in live):
+            raise ValueError('restore cannot delete rules owned by another provisioner')
         # Restore can delete only UIDs that the original selected apply created.
         differences = shared.drift(saved, scoped.rules())
         if backup:
@@ -211,7 +218,7 @@ def execute(api, desired, targets, *, backup=None, restore=None, evidence=None):
         raise ValueError('non-target alerts or dashboards changed; retain backup and investigate concurrent changes')
     receipt.update(
         {
-            'status': 'complete',
+            'status': 'failed-readback' if backup and differences else 'complete',
             'mode': ('restore' if restore else 'apply') if backup else 'dry-run',
             'targets': sorted(targets),
             'differences': differences,
