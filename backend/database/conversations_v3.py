@@ -35,10 +35,12 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
         uid, data.get('transcript_segments') or [], bool(data.get('transcript_segments_compressed'))
     )
     data = conversations.prepare_conversation_for_read(data, uid)
-    if data is not None:
-        data['transcript_segments'] = segments
     if data is None:
         raise Conflict('recording_decode_unavailable')
+    # The strict decode only proves the stored transcript is readable. Projection reads the hydrated
+    # segments, which carry manual speaker corrections and the recurring-voice privacy filter.
+    if not isinstance(data.get('transcript_segments'), list):
+        data['transcript_segments'] = segments
     data['_v3_revision'] = snapshot.update_time
     return data
 

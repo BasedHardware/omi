@@ -54,8 +54,10 @@ def playback_snapshot(uid, conversation) -> dict[str, Any]:
             (
                 af
                 for af in owner.get('audio_files') or []
-                if af.get('recording_id') == piece['recording_id']
-                and af.get('recording_file_id', af['id']) == piece['audio_file_id']
+                # Audio a merge copied from a legacy conversation has no recording alias: it belongs to
+                # this conversation under its own file id.
+                if (af.get('recording_id') or owner['id']) == piece['recording_id']
+                and (af.get('recording_file_id') or af['id']) == piece['audio_file_id']
             ),
             None,
         )

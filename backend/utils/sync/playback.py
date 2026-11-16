@@ -4,6 +4,7 @@ import io
 import logging
 import wave
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse, RedirectResponse
@@ -608,6 +609,9 @@ def _stream_audio_response(
     )
 
 
+SIGNED_AUDIO_HOST = 'storage.googleapis.com'
+
+
 def download_audio_file_response(
     uid: str,
     conversation_id: str,
@@ -626,8 +630,12 @@ def download_audio_file_response(
             raise HTTPException(404, 'Conversation not found')
         response = get_audio_signed_urls(uid, conversation_id, owner.get('audio_files') or [], owner)
         entry = response['conversation_audio']
-        if entry.get('signed_url'):
-            return RedirectResponse(entry['signed_url'], status_code=307)
+        if url := entry.get('signed_url'):
+            # Redirect only to a Cloud Storage signed URL, never to a location from anywhere else.
+            parts = urlsplit(url)
+            if parts.scheme != 'https' or parts.hostname != SIGNED_AUDIO_HOST:
+                raise HTTPException(502, 'Audio location unavailable')
+            return RedirectResponse(url, status_code=307)
         return JSONResponse(
             status_code=202, content={'status': entry['status'], 'poll_after_ms': AUDIO_URLS_POLL_AFTER_MS}
         )

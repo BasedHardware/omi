@@ -16,6 +16,7 @@ from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import HTTPException
 
 import database.conversations as conversations_db
 from utils import plugin_backup_audio as backup
@@ -497,6 +498,34 @@ def test_v3_download_never_returns_covering_recording(monkeypatch):
     assert result.status_code == 202
 
 
+@pytest.mark.parametrize(
+    'url, status',
+    [
+        ('https://storage.googleapis.com/synthetic/conversation-exact.mp3?X-Goog-Signature=x', 307),
+        ('https://elsewhere.example/conversation-exact.mp3', 502),
+        ('http://storage.googleapis.com/synthetic/conversation-exact.mp3', 502),
+    ],
+)
+def test_v3_download_redirects_only_to_cloud_storage(monkeypatch, url, status):
+    from types import SimpleNamespace
+
+    _, row, _ = _v3_fixture(monkeypatch)
+    monkeypatch.setattr(
+        playback,
+        'get_audio_signed_urls',
+        lambda *a, **kw: {'conversation_audio': {'status': 'cached', 'signed_url': url}},
+    )
+    try:
+        result = playback.download_audio_file_response(
+            'u', 'c', 'alias', row['audio_files'][0], SimpleNamespace(headers={}), 'wav'
+        )
+    except HTTPException as exc:
+        result = SimpleNamespace(status_code=exc.status_code, headers={})
+    assert result.status_code == status
+    if status == 307:
+        assert result.headers['location'] == url
+
+
 def test_cached_backup_artifact_keeps_legacy_audio_files_protocol(monkeypatch):
     from types import SimpleNamespace
 
@@ -593,3 +622,20 @@ def test_v3_fully_deleted_piece_needs_no_source_download(monkeypatch):
     monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
     _, spans = audio.build_artifact('u', snapshot)
     assert sum(s['len'] for s in spans) == 2
+
+
+def test_v3_merged_legacy_audio_without_alias_stays_playable(monkeypatch):
+    audio, row, _ = _v3_fixture(monkeypatch)
+    # A merge copies legacy audio into the merged conversation: no recording alias, pieces keyed by the
+    # conversation's own id and the copied file id.
+    row['audio_files'].append(
+        {'id': 'legacy', 'chunk_timestamps': [1000.0], 'duration': 10, 'recording_id': None, 'recording_file_id': None}
+    )
+    row['recording_pieces'].append({'recording_id': 'c', 'audio_file_id': 'legacy', 'start': 0, 'end': 2})
+    monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
+    monkeypatch.setattr(playback, '_merge_playback_sources', lambda *a: b'\0' * 320000)
+    snapshot = audio.playback_snapshot('u', row)
+    assert all('source' in part for part in snapshot['_v3_playback_parts'])
+    _, spans = audio.build_artifact('u', snapshot)
+    assert sum(s['len'] for s in spans) == 6
+    assert {s['file_id'] for s in spans} == {'file', 'legacy'}

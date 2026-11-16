@@ -219,7 +219,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                 policy.transcription_failed(recordings[l['conversation_id']]) for l in window['lines']
             )
             waiting = not transcription_failed and any(
-                recordings[l['conversation_id']].get('record_audio_partial') for l in window['lines']
+                policy.transcription_pending(recordings[l['conversation_id']]) for l in window['lines']
             )
             if ended and waiting:
                 row['tile_state'] = 'transcribing'

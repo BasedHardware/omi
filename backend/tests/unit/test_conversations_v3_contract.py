@@ -387,3 +387,34 @@ def test_episode_request_uses_build_header_not_marketing_version(monkeypatch):
     meter.labels.assert_called_once_with('/v1/episodes/live', 'store', 'pre_v3', 'false')
     monkeypatch.delenv('CONVERSATIONS_V3_FIRST_APP_BUILD')
     assert switch.episode_build_bucket('992') == 'unknown'
+
+
+@pytest.mark.parametrize(
+    'mark, pending',
+    [
+        (None, False),
+        ({'generation': 0, 'applied_generation': 0}, True),
+        ({'generation': 2, 'applied_generation': 1}, True),
+        ({'generation': 2, 'applied_generation': 2}, False),
+    ],
+)
+def test_settled_partial_recording_is_not_pending_transcription(mark, pending):
+    from utils.conversations.v3 import policy
+
+    row = {'record_audio_partial': mark} if mark is not None else {}
+    assert policy.transcription_pending(row) is pending
+
+
+def test_projection_reads_hydrated_segments_with_speaker_corrections(monkeypatch):
+    from types import SimpleNamespace
+
+    from database import conversations as conversations_db, conversations_v3 as store
+
+    raw = [{'text': 'hi', 'speaker_id': 0, 'is_user': False}]
+    corrected = [{'text': 'hi', 'speaker_id': 0, 'is_user': True, 'person_id': 'p'}]
+    monkeypatch.setattr(conversations_db, 'decode_transcript_segments_verified', lambda *a: raw)
+    monkeypatch.setattr(
+        conversations_db, 'prepare_conversation_for_read', lambda data, uid: {**data, 'transcript_segments': corrected}
+    )
+    snapshot = SimpleNamespace(exists=True, id='r', update_time=1, to_dict=lambda: {'transcript_segments': []})
+    assert store.decode_row('u', snapshot)['transcript_segments'] == corrected
