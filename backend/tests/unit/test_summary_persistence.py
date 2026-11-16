@@ -1,6 +1,7 @@
 """The actual lifecycle writer emits only after its transaction commits."""
 
 from unittest.mock import Mock
+from datetime import datetime, timezone
 
 import pytest
 from google.api_core.exceptions import InvalidArgument
@@ -223,3 +224,40 @@ def test_preserved_title_checkpoints_and_home_projection_match_the_committed_out
     written = writer.commits[0]
     assert written[NOTES_OUTPUT_HASH] == output_fingerprint(Structured.model_validate(written['structured']))
     assert reveal_display('u', written[DISPLAY])['title'] == 'Pilot budget'
+
+
+@pytest.mark.parametrize('marked', [False, True])
+def test_first_real_summary_replaces_provisional_preview_and_home_agrees(writer, marked):
+    from utils.home_feed.projection import DISPLAY, reveal_display
+
+    preview = 'We should review the pilot budget before Friday'
+    writer.document.update(
+        structured={
+            'title': ' '.join(preview.split()[:8]),
+            **({'title_provenance': 'server_minimum'} if marked else {}),
+        },
+        transcript_segments=[{'text': preview, 'start': 0, 'end': 5}],
+        started_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+    )
+    notes = payload('Approval is due Friday.')
+    notes['structured']['title'] = 'Pilot budget approval'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    written = writer.commits[0]
+    assert written['structured']['title'] == 'Pilot budget approval'
+    assert reveal_display('u', written[DISPLAY])['title'] == 'Pilot budget approval'
+    # A subsequent automatic refresh must retain the first actual headline.
+    writer.document.update(written)
+    notes['structured']['title'] = 'New wording of the pilot budget'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    assert writer.commits[-1]['structured']['title'] == 'Pilot budget approval'
+
+
+def test_actual_summary_matching_preview_prefix_still_keeps_its_title(writer):
+    speech = 'We should review the pilot budget before Friday'
+    title = ' '.join(speech.split()[:8])
+    writer.document.update(
+        structured={'title': title, 'overview': 'Approval is due Friday.'},
+        transcript_segments=[{'text': speech}],
+    )
+    assert db.persist_processing_result_with_lifecycle('u', payload('Updated supported notes'))
+    assert writer.commits[0]['structured']['title'] == title

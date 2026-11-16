@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from utils.observability.fallback import record_fallback
+
 NOTE_QUALITY_RULES = """Write concrete notes, not narration about a conversation.
 State the actual proposal, reason, number with its referent, decision or unresolved question.
 Use second person only when the supplied SpeakerRoleMap/owner_attribution authority marks the source as
@@ -20,8 +22,9 @@ subject-focused fact with no attribution. Never turn their first-person speech i
 Do not omit a chapter merely because its voices are unknown or is_user=false.
 For example: "The pilot budget is $8,000; approval is due Friday", not "a speaker discusses budgets".
 Never write "a speaker discusses", "the conversation covers", or "episode notes continue".
-Never describe transcript/pipeline/capture mechanics: missing transcript, audio gaps, processing,
-recording availability, or insufficient evidence. Omit unsupported content without explaining its absence.
+Never narrate the current capture's transcript/pipeline mechanics: missing transcript, audio gaps,
+processing, recording availability, or insufficient evidence. Omit unsupported content without explaining
+its absence. Preserve supported subject-matter work, such as fixing software pipeline failures.
 Every title and chapter/moment heading must be non-empty and describe supported subject matter.
 Do not invent names, numbers, units, decisions or commitments to make a note specific.
 """
@@ -32,8 +35,13 @@ _MECHANICS = re.compile(
     r"\b(?:missing (?:from (?:the )?)?transcript|(?:not|never) (?:in|captured in|present in) (?:the )?transcript|"
     r"transcript (?:is |was |remains )?(?:missing(?! from\b)|unavailable|incomplete|empty)|"
     r"(?:no|without|insufficient) (?:usable )?(?:transcript|transcription|audio evidence)|"
-    r"(?:audio|capture|recording|transcription|pipeline) (?:gaps?|missing|unavailable|pending|failures?)|"
-    r"(?:still|awaiting|pending|finishing) (?:processing|transcription)|"
+    r"(?:audio|capture|recording|transcription|pipeline) (?:gaps?|failures?) "
+    r"(?:prevent|preclude|limit|leave|mean|make)\b|"
+    r"(?:this|the|our) (?:audio|capture|recording|transcription|pipeline) "
+    r"(?:is|was|remains|has) (?:missing|unavailable|pending|incomplete|gaps?|failed|failures?)|"
+    r"^(?:audio|capture|recording|transcription|pipeline) (?:gaps?|missing|unavailable|pending|failures?)[.!]?$|"
+    r"(?:still|awaiting|pending|finishing) (?:processing|transcription) (?:the |this |our )?"
+    r"(?:recording|capture|audio|transcript)|"
     r"(?:not enough|insufficient|lack of) (?:transcript |audio )?evidence|"
     r"(?:a |the )?(?:speaker discusses|conversation covers)|episode notes.*continue)\b",
     re.I,
@@ -60,8 +68,6 @@ def title_or_fallback(value: Any, *, index: int | None = None) -> str:
     title = valid_title(value)
     if title:
         return title
-    from utils.observability.fallback import record_fallback
-
     record_fallback(
         component='conversation_notes',
         from_mode='generated_title',

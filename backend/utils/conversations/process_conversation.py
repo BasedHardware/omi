@@ -97,6 +97,8 @@ from utils.conversations.deterministic_minimum import (
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
+from utils.conversations.home_titles import title_for_stability
+from utils.summary_quality import clean_structured, stable_title, valid_title, title_or_fallback
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.sync_hold_completion import complete_explicit, defer_held_budget_denial
 from utils.conversations.merge_before_processing import before_notes, ConversationAbsorbed
@@ -196,7 +198,7 @@ from utils.managed_compute import (
     managed_compute_decision_for as _managed_compute_decision_for,
 )
 from models.other import Person
-from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
+from models.structured import Section, Structured  # type: ignore[reportAttributeAccessIssue]  # SDK/fallback export is runtime-complete.
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
@@ -725,8 +727,6 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
-    from utils.summary_quality import clean_structured, stable_title, valid_title, title_or_fallback
-
     if relevance_discarded is False:
         cleaned = clean_structured(structured.model_dump())
         if not valid_title(structured.title):
@@ -735,18 +735,13 @@ def _get_conversation_obj(
                     conversation, tz_name_provider=lambda: notification_db.get_user_time_zone(uid)
                 )
             )
-        previous = getattr(conversation, 'structured', None)
-        old_title = (
-            getattr(previous, 'title', '') if getattr(previous, 'title_provenance', None) != 'server_minimum' else ''
-        )
+        old_title = title_for_stability(conversation)
         cleaned['title'], _ = stable_title(old_title, cleaned['title'])
         # Preserve private notes identity carried on the model instance.
         for key in ('title', 'overview', 'gist'):
             if key in cleaned:
                 setattr(structured, key, cleaned[key])
         if 'sections' in cleaned:
-            from models.structured import Section
-
             structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():

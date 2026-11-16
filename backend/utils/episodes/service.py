@@ -94,6 +94,7 @@ from utils.episodes.recorded_recovery import (
     unconsumed_moments,
 )
 from utils.observability.fallback import record_fallback
+from utils.summary_quality import episode_quality, title_or_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -2174,8 +2175,6 @@ def episode_by_id(
 
 def _wire_heading(heading: Any) -> str:
     text = clean_text(heading, 240)
-    from utils.summary_quality import title_or_fallback
-
     return text if text.startswith('Discussion ') else title_or_fallback(text)
 
 
@@ -2183,8 +2182,6 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
         return None
-    from utils.summary_quality import episode_quality
-
     episode = episode_quality({}, episode)
     return {
         'id': episode['id'],

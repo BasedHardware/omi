@@ -37,6 +37,8 @@ def test_missing_and_unsafe_titles_have_deterministic_nonempty_labels(title):
         'A speaker discusses budgets.',
         'Episode notes of city life continue.',
         'The topic was not captured in the transcript.',
+        'Our recording is unavailable.',
+        'Pipeline failures prevent a recap.',
     ],
 )
 def test_mechanics_and_meta_narration_are_removed(text):
@@ -51,6 +53,9 @@ def test_mechanics_and_meta_narration_are_removed(text):
         'Processing invoices costs $40 per month.',
         'An audio-gap detector needs unit tests.',
         'Riley proposed a transcription service.',
+        'Fix pipeline failures before Friday.',
+        'Investigate audio gaps in the mobile app.',
+        'Audio gaps in the mobile app need investigation.',
     ],
 )
 def test_concrete_facts_and_product_discussion_survive(text):
