@@ -44,7 +44,7 @@ def histogram_count(histogram, tool):
 
 @pytest.fixture(autouse=True)
 def no_posthog():
-    with patch('utils.mcp_analytics.emit_mcp_posthog_event'):
+    with patch.object(mcp_analytics, 'emit_mcp_posthog_event'):
         yield
 
 
