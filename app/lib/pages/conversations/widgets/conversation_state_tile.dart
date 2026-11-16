@@ -34,6 +34,11 @@ class ConversationStateTile extends StatelessWidget {
           const ConversationWritingPen(key: Key('conversation_tile_writing')),
           l10n.conversationWritingSummary
         ),
+      ConversationTileState.failed => (
+          Icon(Icons.error_outline_rounded,
+              key: const Key('conversation_tile_failed'), size: 20, color: OmiColors.warning),
+          l10n.conversationSummaryFailed,
+        ),
       _ => (
           Text(
             conversation.structured.getEmoji(),

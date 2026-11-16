@@ -16,13 +16,18 @@ enum ConversationTileState {
   writing,
 
   /// Finished: the subject's emoji.
-  done;
+  done,
+
+  /// Transcription or the summary failed for good: a warning mark, so a failed conversation never
+  /// reads as finished.
+  failed;
 
   static ConversationTileState? parse(Object? value) => switch (value) {
         'live' => ConversationTileState.live,
         'transcribing' => ConversationTileState.transcribing,
         'writing' => ConversationTileState.writing,
         'done' => ConversationTileState.done,
+        'failed' => ConversationTileState.failed,
         _ => null,
       };
 }

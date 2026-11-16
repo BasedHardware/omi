@@ -83,6 +83,13 @@ void main() {
       expect(find.byType(ConversationWritingPen), findsNothing);
     });
 
+    testWidgets('failed shows a warning mark, never the emoji', (tester) async {
+      await pumpTile(tester, _conversation(state: ConversationTileState.failed));
+      expect(find.byKey(const Key('conversation_tile_failed')), findsOneWidget);
+      expect(find.text('🚀'), findsNothing);
+      expect(find.bySemanticsLabel('Summary failed'), findsOneWidget);
+    });
+
     testWidgets('done, and every conversation without v3 fields, shows its emoji', (tester) async {
       await pumpTile(tester, _conversation(state: ConversationTileState.done));
       expect(find.text('🚀'), findsOneWidget);

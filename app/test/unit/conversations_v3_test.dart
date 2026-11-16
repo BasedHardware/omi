@@ -67,6 +67,11 @@ void main() {
       expect(RecordingPiece.fromJson({'recording_id': 'r', 'audio_file_id': 'a', 'start': 5, 'end': 1}), isNull);
     });
 
+    test('every tile state the server sends parses, failed included', () {
+      expect(ConversationTileState.parse('failed'), ConversationTileState.failed);
+      expect(ConversationTileState.parse('done'), ConversationTileState.done);
+    });
+
     test('an unknown tile state reads as none', () {
       expect(ConversationTileState.parse('sparkling'), isNull);
     });
