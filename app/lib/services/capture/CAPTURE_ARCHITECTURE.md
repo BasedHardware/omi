@@ -109,8 +109,10 @@ User/API intents: `PhoneStartRequested`, `PhoneStopRequested`,
 the live teardown is `DiscardPhoneLiveStage`, which keeps nothing. That stage does not flush, it
 drops the recording's WALs (`LocalWalSyncImpl.discardRecording`, CUSTODY invariant 2) and clears
 the transcript, and nothing is processed. After the socket closes, `discardPhoneRecording` deletes
-the server's copy by recording id, retrying a failed delete. Batch phone sessions and captures the
-phone does not own are ignored.
+the server's copy by recording id. The delete is persisted before the first attempt and cleared
+only when the server accepts it, so a delete an offline or killed app could not finish runs again
+on the next launch (`capture_phone_discard.dart`). Batch phone sessions and captures the phone does
+not own are ignored.
 
 A Live Activity tap sends `PauseCaptureRequested`, `ResumeCaptureRequested` or
 `FinishRequested` with the card's `SystemSurfaceTarget` (recording id and

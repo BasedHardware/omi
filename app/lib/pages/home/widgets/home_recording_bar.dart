@@ -30,7 +30,7 @@ class HomeRecordingBar extends StatefulWidget {
   final DateTime Function() now;
 
   /// Whether the bar replaces Home's bottom row: a live (not Transcribe Later) recording owned by
-  /// this phone, from the tap (initialising) until it stops.
+  /// this phone, from when its start commits until it stops.
   static bool showsFor(CaptureProvider capture) =>
       capture.liveCaptureSource == 'phone' && !capture.isPhoneMicBatchRecording;
 
@@ -42,9 +42,13 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
   Timer? _tick;
   bool _busy = false;
 
+  /// When the bar appeared; it bounds the Undo window while the mic has not reported a start time.
+  late final DateTime _shownAt;
+
   @override
   void initState() {
     super.initState();
+    _shownAt = widget.now();
     // The elapsed time and the Undo → Wrap Up switch both move on whole seconds.
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
@@ -72,7 +76,8 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
       duration: OmiFeedbackTiming.confirm,
     );
     try {
-      await capture.discardPhoneRecording();
+      // The recording may have ended on its own since the last frame; then there is nothing to confirm.
+      if (!await capture.discardPhoneRecording()) return;
       // Pairs with phoneMicRecordingStarted; the recording's lifecycle telemetry says it was
       // discarded (reason user_discarded).
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -114,11 +119,12 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final capture = context.watch<CaptureProvider>();
+    final now = widget.now();
     final startedAt = capture.liveCaptureStartedAt;
-    final elapsed = startedAt == null ? Duration.zero : widget.now().difference(startedAt);
-    // Undo until the recording has run for the whole window; while the mic is still starting
-    // (no start time yet) it is always Undo.
-    final canUndo = elapsed < HomeRecordingBar.undoWindow;
+    final elapsed = startedAt == null ? Duration.zero : now.difference(startedAt);
+    // Undo until the recording has run for the whole window. Before the mic reports a start time
+    // the clock reads 0:00, and the window counts from when the bar appeared instead.
+    final canUndo = (startedAt == null ? now.difference(_shownAt) : elapsed) < HomeRecordingBar.undoWindow;
     final paused = capture.isPhoneMicPaused ||
         capture.recordingState == RecordingState.pause ||
         capture.recordingState == RecordingState.interrupted;
@@ -129,6 +135,8 @@ class _HomeRecordingBarState extends State<HomeRecordingBar> {
       button: true,
       label: '${l10n.recordingWithYourPhone}, $detail',
       hint: l10n.episodeOpenTranscript,
+      // excludeSemantics drops the GestureDetector's own tap action, so the node carries it.
+      onTap: () => _open(capture),
       excludeSemantics: true,
       child: GestureDetector(
         key: const ValueKey('home_recording_bar_open'),

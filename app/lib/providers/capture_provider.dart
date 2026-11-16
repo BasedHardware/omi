@@ -30,6 +30,7 @@ class CaptureProvider extends CaptureController {
     super.deviceMuteWriter,
     super.processInProgressOutcome,
     super.deleteDiscardedConversation,
+    super.discardDeleteRetryDelays,
     super.deviceConnectionLoader,
     super.pendantReconnect,
     super.pendantReconnectBlocked,

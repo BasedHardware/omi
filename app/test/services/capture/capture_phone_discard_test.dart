@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
-import 'package:omi/services/capture/capture_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
@@ -22,7 +22,6 @@ void main() {
   });
 
   tearDown(() async {
-    CaptureController.discardDeleteRetryDelays = CaptureController.defaultDiscardDeleteRetryDelays;
     await world.dispose();
     if (directory.existsSync()) directory.deleteSync(recursive: true);
   });
@@ -39,6 +38,9 @@ void main() {
   Future<List<String?>> walRecordings() async =>
       (await world.wal.syncs.phone.getAllWals()).map((w) => w.recordingSessionId).toList();
 
+  Future<List<String>> pendingServerDeletes() async =>
+      (await SharedPreferences.getInstance()).getStringList('captureDiscardedServerDeletes') ?? const [];
+
   test('a discarded phone recording is not processed, leaves no audio, and its server copy is deleted', () async {
     final session = await startPhone();
     world.injectAudioFrames(120, sessionId: session);
@@ -46,6 +48,9 @@ void main() {
     final c = world.controller;
     final recording = c.activeRecordingId;
     expect(recording, isNotNull);
+    // Seal a WAL boundary so the recording has audio on disk for the discard to remove.
+    await world.wal.syncs.phone.finalizeCurrentSession();
+    expect(await walRecordings(), contains(recording));
 
     expect(await c.discardPhoneRecording(), isTrue);
     await world.settle();
@@ -57,6 +62,26 @@ void main() {
     expect(c.isPaused, isFalse, reason: 'the next recording must not start paused');
     expect(c.segments, isEmpty);
     expect(await walRecordings(), isNot(contains(recording)), reason: 'offline sync must not resurrect it');
+    expect(world.discardDeletes, [recording]);
+    expect(await pendingServerDeletes(), isEmpty, reason: 'a confirmed delete is not retried on launch');
+  });
+
+  test('a discard while the mic is interrupted (a phone call) keeps nothing either', () async {
+    final session = await startPhone();
+    world.injectAudioFrames(40, sessionId: session);
+    await world.settle();
+    final recording = world.controller.activeRecordingId;
+    world.emitNativeState(PhoneMicCaptureState.interrupted, sessionId: session);
+    await world.settle();
+    expect(world.controller.isCallActive, isTrue, reason: 'the phase is audioInterrupted');
+
+    expect(await world.controller.discardPhoneRecording(), isTrue);
+    await world.settle();
+    await world.controller.pendingDiscardDeletes;
+
+    expect(world.processCalls, 0);
+    expect(world.controller.recordingState, RecordingState.stop);
+    expect(await walRecordings(), isNot(contains(recording)));
     expect(world.discardDeletes, [recording]);
   });
 
@@ -79,7 +104,6 @@ void main() {
   });
 
   test('a failed server delete is retried until it lands', () async {
-    CaptureController.discardDeleteRetryDelays = const [Duration.zero, Duration.zero, Duration.zero];
     var failures = 2;
     world.deleteDiscardedResult = (_) => failures-- <= 0;
     await startPhone();
@@ -89,6 +113,27 @@ void main() {
     await world.controller.pendingDiscardDeletes;
 
     expect(world.discardDeletes, [recording, recording, recording]);
+    expect(await pendingServerDeletes(), isEmpty);
+  });
+
+  test('a server delete this run could not finish is retried on the next launch', () async {
+    world.deleteDiscardedResult = (_) => false;
+    await startPhone();
+    final recording = world.controller.activeRecordingId!;
+
+    await world.controller.discardPhoneRecording();
+    await world.controller.pendingDiscardDeletes;
+    expect(world.discardDeletes, List.filled(4, recording), reason: 'the first try and three retries');
+    expect(await pendingServerDeletes(), hasLength(1));
+
+    world.killProcess();
+    world.deleteDiscardedResult = null;
+    world.discardDeletes.clear();
+    await world.reconstructProcess();
+    await world.controller.pendingDiscardDeletes;
+
+    expect(world.discardDeletes, [recording]);
+    expect(await pendingServerDeletes(), isEmpty);
   });
 
   test('Transcribe Later and an idle phone have nothing to discard', () async {

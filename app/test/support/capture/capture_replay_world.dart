@@ -452,6 +452,7 @@ class CaptureReplayWorld {
         discardDeletes.add(id);
         return deleteDiscardedResult?.call(id) ?? true;
       },
+      discardDeleteRetryDelays: const [Duration.zero, Duration.zero, Duration.zero],
       processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
@@ -660,6 +661,7 @@ class _ReplayCaptureController extends CaptureController {
     super.deviceConnectionLoader,
     super.processInProgressOutcome,
     super.deleteDiscardedConversation,
+    super.discardDeleteRetryDelays,
     super.omiCallState,
     super.calendarGapMonitor,
     super.deviceMuteWriter,

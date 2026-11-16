@@ -2306,6 +2306,20 @@ void main() {
       expect(stages(discard), contains(DiscardPhoneLiveStage));
     });
 
+    test('a phone recording interrupted by a call can be discarded too', () {
+      final model = SequenceModel()
+        ..step(const ScriptStep(2))
+        ..step(const ScriptStep(13));
+      expect(model.state.phase, CapturePhase.audioInterrupted);
+      final env = environment(model.state, muted: model.muted);
+      final stop =
+          transitionCapture(model.state, const PhoneStopRequested(reason: 'user_stopped', userStop: true), env);
+      final discard = transitionCapture(model.state, const PhoneDiscardRequested(), env);
+      expect(discard.state.encode(), stop.state.encode());
+      expect(stages(discard), contains(DiscardPhoneLiveStage));
+      expect(stages(discard), isNot(contains(StopPhoneLiveStage)));
+    });
+
     test('a pendant the phone took over from resumes, as after a user stop', () {
       final model = SequenceModel()
         ..step(const ScriptStep(0))

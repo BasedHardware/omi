@@ -221,6 +221,27 @@ void main() {
       expect(sync.testWals.where((w) => w.recordingSessionId == 'recording-discard' && !w.isSyncing), isEmpty);
     });
 
+    test('a WAL that was uploading is never picked again and goes once its upload settles', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final uploading = Wal(
+        timerStart: now - 4,
+        codec: BleAudioCodec.opus,
+        seconds: 2,
+        status: WalStatus.miss,
+        storage: WalStorage.mem,
+        recordingSessionId: 'recording-discard',
+      )..isSyncing = true;
+      sync.testWals = [uploading];
+
+      expect(await sync.discardRecording('recording-discard'), 0);
+      expect(sync.testWals, [same(uploading)]);
+
+      // The upload failed and released the WAL for retry; the next pass deletes it instead.
+      uploading.isSyncing = false;
+      await sync.syncAll();
+      expect(sync.testWals, isEmpty);
+    });
+
     test('another recording\'s live frames are kept', () async {
       sync.setDeviceInfo('phone-mic', 'Phone Microphone');
       sync.setActiveRecordingSessionId('recording-now');

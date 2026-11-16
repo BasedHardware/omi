@@ -162,7 +162,8 @@ class RecordingLifecycleTelemetry {
   bool complete({String reason = 'user_stopped'}) {
     if (_recordingId == null) return false;
     if (!_startedEmitted) {
-      failStart(failureClass: 'pipeline_closed');
+      // Undo before the mic reported running is the reader's choice, not a broken pipeline.
+      failStart(failureClass: reason == 'user_discarded' ? 'user_discarded' : 'pipeline_closed');
       return false;
     }
     if (_startedAt != null && _source != null) {
@@ -254,6 +255,7 @@ class RecordingLifecycleTelemetry {
         'capture_unavailable' ||
         'pipeline_unavailable' ||
         'pipeline_closed' ||
+        'user_discarded' ||
         'unknown' =>
           failureClass,
         _ => 'unknown',

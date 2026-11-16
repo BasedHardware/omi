@@ -122,6 +122,7 @@ part 'capture_transcript_snapshot.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
+part 'capture_phone_discard.dart';
 part 'capture_voice_questions.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
@@ -154,7 +155,7 @@ class CaptureController extends ChangeNotifier
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
-  final Future<bool> Function(String conversationId)? _deleteDiscardedConversationOverride;
+  final _PhoneDiscardState _phoneDiscard;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final Future<void> Function(String deviceId)? _pendantReconnectLoader;
 
@@ -440,6 +441,7 @@ class CaptureController extends ChangeNotifier
     Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
     Future<bool> Function(String conversationId)? deleteDiscardedConversation,
+    List<Duration> discardDeleteRetryDelays = const [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)],
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     Future<void> Function(String deviceId)? pendantReconnect,
     bool Function(String deviceId)? pendantReconnectBlocked,
@@ -469,7 +471,10 @@ class CaptureController extends ChangeNotifier
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
         _processInProgressOutcomeOverride = processInProgressOutcome,
-        _deleteDiscardedConversationOverride = deleteDiscardedConversation,
+        _phoneDiscard = _PhoneDiscardState(
+          retryDelays: discardDeleteRetryDelays,
+          deleteOverride: deleteDiscardedConversation,
+        ),
         _deviceConnectionLoader = deviceConnectionLoader,
         _pendantReconnectLoader = pendantReconnect,
         _pendantReconnectBlocked = pendantReconnectBlocked,
@@ -508,6 +513,7 @@ class CaptureController extends ChangeNotifier
         Logger.debug('[CaptureProvider] capture restore recovery failed: $e');
       }),
     );
+    unawaited(_resumeDiscardDeletes().catchError((Object e) => Logger.debug('discard delete resume failed: $e')));
     lifetime.own(() => _calendarGapMonitor?.dispose());
     if (calendarGapMonitor != null) {
       lifetime.listenTo(calendarGapMonitor.localMeetings, _syncCalendarGapTimer);
@@ -3207,81 +3213,13 @@ class CaptureController extends ChangeNotifier
     return true;
   }
 
-  /// Undo on Home's recording bar: stop the phone's live recording and keep nothing of it. There is
-  /// no Home row, nothing is processed, and no audio is left for offline sync. If speech already
-  /// reached the server, its in-progress copy is deleted once the socket has closed. Its id is the
-  /// recording id the phone sent as `client_conversation_id`; a discard in the first seconds comes
-  /// before any silence rollover could mint another. Returns false when there was no live phone
-  /// recording to discard.
-  Future<bool> discardPhoneRecording() async {
-    final recordingId = activeRecordingId;
-    final outcome = await _capture.dispatch(const PhoneDiscardRequested());
-    outcome.throwIfFailed();
-    if (outcome.result != true) return false;
-    if (recordingId != null && recordingId.isNotEmpty) {
-      final deleting = _deleteDiscardedServerCopy(recordingId);
-      _discardedServerDeletes.add(deleting);
-      unawaited(deleting.whenComplete(() => _discardedServerDeletes.remove(deleting)));
-    }
-    return true;
-  }
+  /// Undo on Home's recording bar: end the phone's live recording and keep nothing of it; see
+  /// [_CapturePhoneDiscard]. Returns false when there was no live phone recording to discard.
+  Future<bool> discardPhoneRecording() => _discardPhoneRecording();
 
-  /// When each retry of a discarded recording's server delete starts. Offline, the stale
-  /// in-progress sweep would otherwise finalize the few seconds the server already has.
-  static const defaultDiscardDeleteRetryDelays = [Duration(seconds: 5), Duration(seconds: 30), Duration(minutes: 2)];
-
+  /// Discarded recordings whose server delete is running now; tests await it.
   @visibleForTesting
-  static List<Duration> discardDeleteRetryDelays = defaultDiscardDeleteRetryDelays;
-
-  final Set<Future<void>> _discardedServerDeletes = {};
-
-  /// Discarded recordings whose server delete has not settled yet; tests await it.
-  @visibleForTesting
-  Future<void> get pendingDiscardDeletes => Future.wait(_discardedServerDeletes.toList());
-
-  /// Deletes the server's copy of a discarded recording. The delete answers 204, and records the
-  /// tombstone, whether or not a row was ever created, so only a transport or server failure retries.
-  Future<void> _deleteDiscardedServerCopy(String recordingId) async {
-    final delete = _deleteDiscardedConversationOverride ?? deleteConversationServer;
-    for (var attempt = 0;; attempt++) {
-      var deleted = false;
-      try {
-        deleted = await delete(recordingId);
-      } catch (e) {
-        Logger.debug('discardPhoneRecording: server delete failed: $e');
-      }
-      if (deleted || attempt >= discardDeleteRetryDelays.length || lifetime.isClosed) {
-        Logger.debug('discardPhoneRecording: server delete ${deleted ? 'done' : 'gave up'} after ${attempt + 1}');
-        return;
-      }
-      await Future<void>.delayed(discardDeleteRetryDelays[attempt]);
-    }
-  }
-
-  /// [_stopPhoneLiveBody] without keeping anything. The buffered tail is not flushed to the WAL or
-  /// the socket, this recording's WAL audio is dropped, and the in-memory transcript is cleared, so
-  /// nothing on the phone can make it a conversation later.
-  Future<bool> _discardPhoneLiveBody() async {
-    final recordingId = activeRecordingId;
-    await _setCaptureForegroundRequired(false);
-    _phoneMicWalActive = false;
-    // Invalidate before native/WAL teardown so in-flight work cannot publish.
-    _rollCaptureSession('discarded');
-    await _cleanupCurrentState(disableNativeBackground: true);
-    _phoneMic.stop();
-    updateRecordingState(RecordingState.stop);
-    await _socket?.stop(reason: 'phone recording discarded');
-    if (recordingId != null && recordingId.isNotEmpty) {
-      await _wal.getSyncs().phone.discardRecording(recordingId);
-    }
-    _clearSessionLocation();
-    _sessionTransportInterrupted = false;
-    await _resetStateVariables();
-    externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
-    _recordingTelemetry.complete(reason: 'user_discarded');
-    await _clearPhoneRestoreMarker();
-    return true;
-  }
+  Future<void> get pendingDiscardDeletes => Future.wait(_phoneDiscard.deletes.toList());
 
   Future<bool> _stopPhoneBatchBody({required String reason}) async {
     await _setCaptureForegroundRequired(false);
