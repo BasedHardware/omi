@@ -492,7 +492,25 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertNotIn("FC-malformed-doc-read", family["open_members_shown"])
         self.assertIn("FC-trapping-dict-merge", family["open_members_shown"])
         self.assertLessEqual(len(family["open_members_shown"]), 25)
-        self.assertGreaterEqual(family["members_total"], 1)
+        self.assertGreater(family["members_total"], 1)
+
+    def test_explain_text_prints_the_family_and_its_open_members(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        self.set_definition_field("FC-trapping-dict-merge", "family", "write-fence")
+        result = run([sys.executable, str(CLI), "explain", "FC-malformed-doc-read", "--root", str(self.root),
+                      "--format", "text"], self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("family write-fence:", result.stdout)
+        self.assertIn("FC-trapping-dict-merge", result.stdout)
+
+    def test_prepare_tags_candidates_with_their_family(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "family", "write-fence")
+        result = self.cli("prepare", "--base", self.base, "--head", "HEAD", "--all-candidates",
+                          "--pr-body-file", str(self.body("## Summary\n")))
+        payload = self.payload(result)
+        by_id = {c["id"]: c for c in payload["advisory_candidates"]}
+        self.assertEqual(by_id["FC-malformed-doc-read"]["family"], "write-fence")
+        self.assertEqual(sum(payload["candidate_families"].values()), payload["candidates_shown"])
 
     def test_explain_emits_versioned_definition(self) -> None:
         result = self.cli("explain", "FC-trapping-dict-merge")

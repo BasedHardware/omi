@@ -104,6 +104,12 @@ def emit(payload: dict[str, Any], output_format: str) -> None:
     elif command == "explain":
         definition = payload["failure_class"]
         print(f"  {definition['id']}: {definition['violated_contract']}")
+        family = payload.get("family") or {}
+        if family.get("key"):
+            print(f"  family {family['key']}: {family.get('contract') or ''}")
+            shown = family.get("open_members_shown") or []
+            more = family.get("open_members_total", len(shown)) - len(shown)
+            print(f"  open members: {', '.join(shown) or 'none'}" + (f" (+{more} more)" if more > 0 else ""))
     elif command == "prepare":
         patch = payload["pr_body_patch"]
         print(f"  patch operation={patch['operation']}")
