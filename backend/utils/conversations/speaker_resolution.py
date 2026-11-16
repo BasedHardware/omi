@@ -859,6 +859,15 @@ def resolve_speakers_for_processing(
         return False
     if trace is not None and trace.pass_name == 'first':
         record_retry('first', 'eligible', 'candidate')
+    resolution = conversation.speaker_resolution
+    if resolution is not None and has_batch_authority(conversation.transcript_segments):
+        membership = transcript_membership(conversation.transcript_segments)
+        if resolution.status == 'resolved' and resolution.input_membership_sha256 != membership:
+            # A terminal whole-pass obligation may suppress new inference, but
+            # its old snapshot cannot certify newly appended/rebased text.
+            resolution.status = 'unavailable'
+            resolution.participant_speaker_ids = []
+        resolution.input_membership_sha256 = membership
     evidence_token = None if skip_automatic else speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:

@@ -237,3 +237,20 @@ def test_sync_off_source_binding_cannot_become_durable_sync_on_evidence(original
     resolve(lane)
     assert not calls and not cache
     assert not any(s.is_user for s in lane.conversation.transcript_segments)
+
+
+def test_terminal_final_pass_snapshot_cannot_certify_late_membership(original):
+    lane, cache, calls = original
+    later = deepcopy(lane.conversation.transcript_segments[1:])
+    lane.conversation.transcript_segments = lane.conversation.transcript_segments[:1]
+    resolve(lane)
+    assert lane.conversation.speaker_resolution.status == 'resolved'
+    lane.conversation.transcript_segments.extend(later)
+    assert stage.resolve_speakers_for_processing(
+        UID, lane.conversation, skip_automatic=True, final_pass_runner=lambda *a, **kw: None
+    )
+    assert len(calls) == 1
+    assert lane.conversation.speaker_resolution.status == 'unavailable'
+    assert lane.conversation.speaker_resolution.input_membership_sha256 == transcript_membership(
+        lane.conversation.transcript_segments
+    )
