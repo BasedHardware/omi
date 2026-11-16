@@ -550,6 +550,8 @@ def test_unfinished_owner_waits_and_never_projects_alias_text():
 
 def test_long_exact_copy_never_selects_adjacent_short_native_row():
     store, original = setup_store()
+    original = replace(original, duration_seconds=1729.0)
+    store.client.rows[store.ref('jobs', SOURCE).path]['duration_seconds'] = original.duration_seconds
     copy, binding = prepare_copy(store, original)
     user = store.client.collection('users').document(UID)
     user.collection('conversations').document('later-short-row').create(
