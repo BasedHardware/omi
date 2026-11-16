@@ -96,7 +96,10 @@ _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
     },
     'shown_on_home': {'type': 'boolean'},
     'summary_covers_through': {**_DATETIME_OR_NULL, 'description': 'Last speech the stored summary covers'},
-    'duration_seconds': {'type': ['integer', 'null']},
+    'duration_seconds': {
+        'type': ['integer', 'null'],
+        'description': 'Speech span of the transcript; null on list and search cards, which carry no transcript',
+    },
     'is_call': {'type': ['boolean', 'null']},
     'call_platform': {'type': ['string', 'null']},
     'calendar_event_id': {'type': ['string', 'null']},
@@ -651,6 +654,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 total_segments={"type": "integer", "minimum": 0},
                 next_cursor={"type": ["string", "null"]},
                 sections=detail_views.SECTIONS_OUTPUT,
+                sections_truncated={"type": "boolean"},
             )
         ),
         scope="conversations.read",

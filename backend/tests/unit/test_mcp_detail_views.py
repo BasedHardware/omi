@@ -4,9 +4,11 @@ Paging and its cursors are covered by ``test_mcp_conversation_detail_paging.py``
 """
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
+from utils.mcp_dates import localize_timestamps
 from utils.mcp_server import detail_views
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.handlers import conversations
@@ -87,6 +89,18 @@ def test_outline_anchors_sections_to_the_segments_they_cite(stored):
     assert ids[0] == 'seg-12' and ids[-1] == 'seg-40' and section['truncated'] is True
 
 
+def test_outline_is_bounded_and_says_when_sections_were_left_out(stored):
+    stored['structured']['sections'] = [
+        {'heading': 'h' * 5_000, 'source_segment_ids': [f'seg-{i}']}
+        for i in range(detail_views.OUTLINE_MAX_SECTIONS + 50)
+    ]
+    result = read({'view': 'outline'})
+    assert len(result['sections']) == detail_views.OUTLINE_MAX_SECTIONS and result['sections_truncated'] is True
+    assert len(result['sections'][0]['heading']) == detail_views.SECTION_HEADING_MAX_CHARS
+    stored['structured']['sections'] = stored['structured']['sections'][:3]
+    assert read({'view': 'outline'})['sections_truncated'] is False
+
+
 def test_transcript_reads_do_not_fetch_sections(stored):
     read({})
     assert stored['_reads'][-1] is None
@@ -113,6 +127,20 @@ def test_a_cursor_wins_over_a_resent_offset(stored):
     first = read({'offset': 5, 'max_segments': 10})
     second = read({'offset': 5, 'max_segments': 10, 'cursor': first['next_cursor']})
     assert second['conversation']['transcript_segments'][0]['segment_index'] == 15
+    assert read({'offset': 'junk', 'max_segments': 10, 'cursor': first['next_cursor']})['total_segments'] == 1300
+
+
+@pytest.mark.parametrize('offset', [-1, 2_000_000_000, 'ten', True, 1.5])
+def test_out_of_range_or_malformed_offsets_are_rejected_not_clamped(stored, offset):
+    with pytest.raises(ToolExecutionError) as error:
+        read({'offset': offset})
+    assert error.value.code == -32602
+
+
+def test_default_format_keeps_the_cursor_fingerprint_of_plain_paging():
+    filters = conversations._detail_filters({}, 'synthetic-long', 500, 24_000)
+    assert 'format' not in filters
+    assert conversations._detail_filters({'format': 'lines'}, 'synthetic-long', 500, 24_000)['format'] == 'lines'
 
 
 def test_lines_format_is_a_fraction_of_the_segment_json(stored):
@@ -192,6 +220,10 @@ def test_page_counter_records_view_format_position_and_more(stored):
     before = value('get_conversation_by_id', 'outline', 'segments', 'first', 'false')
     read({'view': 'outline'})
     assert value('get_conversation_by_id', 'outline', 'segments', 'first', 'false') == before + 1
+    # A section read that starts at an offset is still the first page the agent asked for.
+    before = value('get_conversation_by_id', 'transcript', 'segments', 'first', 'true')
+    read({'offset': 600, 'max_segments': 10})
+    assert value('get_conversation_by_id', 'transcript', 'segments', 'first', 'true') == before + 1
 
 
 def test_card_reports_state_and_kind_only_where_stored():
@@ -211,3 +243,15 @@ def test_card_reports_state_and_kind_only_where_stored():
     )
     assert 'kind' not in conversation_card(long_conversation(count=2, kind='something-new'))
     assert select_card_fields(legacy, ['kind', 'status']) == {'id': legacy['id'], 'status': 'completed'}
+
+
+def test_list_cards_without_a_transcript_do_not_guess_duration_from_the_wall_window():
+    row = long_conversation(count=2)
+    del row['transcript_segments']
+    assert conversation_card(row)['duration_seconds'] is None
+
+
+def test_summary_coverage_is_localized_like_the_other_card_timestamps():
+    card = {'started_at': NOW, 'summary_covers_through': NOW}
+    local = localize_timestamps(card, ZoneInfo('America/Los_Angeles'))
+    assert local['summary_covers_through'] == local['started_at'] != NOW.isoformat()

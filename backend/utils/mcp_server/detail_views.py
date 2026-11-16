@@ -16,13 +16,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from prometheus_client import REGISTRY, Counter
 
-from utils.mcp_memories import parse_mcp_int
 from utils.mcp_server.errors import ToolExecutionError
 
 FORMATS = ('segments', 'lines')
 VIEWS = ('transcript', 'outline')
 OFFSET_MAX = 1_000_000
 SECTION_HEADING_MAX_CHARS = 200
+OUTLINE_MAX_SECTIONS = 100
 
 VIEW_INPUT: Dict[str, Any] = {
     'type': 'string',
@@ -101,15 +101,23 @@ def parse_choice(arguments: Dict[str, Any], name: str, choices: Tuple[str, ...])
 
 
 def start_offset(arguments: Dict[str, Any]) -> Optional[int]:
-    """The explicit segment index to start at, or None when the read starts at the beginning or a cursor."""
-    if arguments.get('offset') is None:
+    """The explicit segment index to start at, or None when the read starts at the beginning or a cursor.
+
+    The cursor holds the exact position, so an agent resending its original offset
+    with it does not restart the read. Out-of-range values are errors, not clamped.
+    """
+    value = arguments.get('offset')
+    if value is None or arguments.get('cursor') is not None:
         return None
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ToolExecutionError('Invalid offset: expected integer.', code=-32602)
     try:
-        offset = parse_mcp_int(arguments.get('offset'), 'offset', default=0, minimum=0, maximum=OFFSET_MAX)
+        offset = int(value)
     except ValueError as exc:
-        raise ToolExecutionError(str(exc), code=-32602) from exc
-    # The cursor holds the exact position; an agent resending its original offset must not restart the read.
-    return None if arguments.get('cursor') is not None else offset
+        raise ToolExecutionError('Invalid offset: expected integer.', code=-32602) from exc
+    if not 0 <= offset <= OFFSET_MAX:
+        raise ToolExecutionError(f'offset must be between 0 and {OFFSET_MAX}.', code=-32602)
+    return offset
 
 
 def readable_segments(segments: Any) -> List[Dict[str, Any]]:
@@ -118,7 +126,11 @@ def readable_segments(segments: Any) -> List[Dict[str, Any]]:
 
 
 def outline_sections(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Stored note sections, each anchored to the span of transcript segments it cites."""
+    """Stored note sections, each anchored to the span of transcript segments it cites.
+
+    Returns at most ``OUTLINE_MAX_SECTIONS + 1`` entries, so the caller can report
+    ``sections_truncated`` without walking an unbounded stored list.
+    """
     structured = conversation.get('structured')
     sections = structured.get('sections') if isinstance(structured, dict) else None
     if not isinstance(sections, list):
@@ -127,6 +139,8 @@ def outline_sections(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
     index_of = {str(s['id']): i for i, s in enumerate(source) if s.get('id') is not None}
     result: List[Dict[str, Any]] = []
     for number, section in enumerate(sections):
+        if len(result) > OUTLINE_MAX_SECTIONS:
+            break
         if not isinstance(section, dict):
             continue
         cited = section.get('source_segment_ids')

@@ -266,16 +266,28 @@ def get_conversation_by_id(
         raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
 
     total = len(detail_views.readable_segments(conversation.get('transcript_segments')))
+    fmt = filters.get('format', 'segments')
+    first_page = arguments.get('cursor') is None
+    # One card per request: the budget loop below only re-slices the transcript.
+    card = conversation_card(conversation, include_participants=filters['include_participants'])
     if view == 'outline':
-        detail_views.count_page('get_conversation_by_id', view, filters['format'], True, False)
-        card = conversation_card(conversation, include_participants=filters['include_participants'])
-        return {
+        sections = detail_views.outline_sections(conversation)
+        result = {
             'conversation': select_card_fields(card, filters['fields']),
-            'sections': detail_views.outline_sections(conversation),
+            'sections': sections[: detail_views.OUTLINE_MAX_SECTIONS],
+            'sections_truncated': len(sections) > detail_views.OUTLINE_MAX_SECTIONS,
             'total_segments': total,
             'truncated': False,
             'next_cursor': None,
         }
+        if tool_response_serialized_chars(result) > MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
+            raise ToolExecutionError(
+                'Outline exceeds the 120000-character serialized response budget. '
+                'Retry with include_participants=false or fewer fields.',
+                code=-32602,
+            )
+        detail_views.count_page('get_conversation_by_id', view, fmt, True, False)
+        return result
     if offset is not None and offset > total:
         raise ToolExecutionError(
             f'offset {offset} is past the end of the transcript (total_segments={total}).', code=-32602
@@ -287,17 +299,17 @@ def get_conversation_by_id(
     page_segments, page_chars = max_segments, max_chars
     while True:
         result = _conversation_detail_page(
-            uid, conversation, filters, position=position, page_segments=page_segments, page_chars=page_chars
+            uid,
+            conversation,
+            filters,
+            position=position,
+            page_segments=page_segments,
+            page_chars=page_chars,
+            card=card,
         )
         if tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
             if not filters['summary_only']:
-                detail_views.count_page(
-                    'get_conversation_by_id',
-                    view,
-                    filters['format'],
-                    position == {'offset': 0, 'char_offset': 0},
-                    result['truncated'],
-                )
+                detail_views.count_page('get_conversation_by_id', view, fmt, first_page, result['truncated'])
             return result
         if filters['summary_only'] or (page_segments == 1 and page_chars == 1):
             break
@@ -326,8 +338,17 @@ def _detail_filters(
         'fields': arguments.get('fields'),
         'summary_only': summary_only,
         'include_participants': include_participants,
-        'format': detail_views.parse_choice(arguments, 'format', detail_views.FORMATS),
-    }
+    } | _format_filter(arguments)
+
+
+def _format_filter(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """The cursor filters name the format only when it is not the default.
+
+    Detail cursors authenticate their filters, so a default read keeps the same
+    fingerprint as before ``format`` existed and in-flight cursors still decode.
+    """
+    fmt = detail_views.parse_choice(arguments, 'format', detail_views.FORMATS)
+    return {} if fmt == 'segments' else {'format': fmt}
 
 
 def _conversation_detail_page(
@@ -338,6 +359,7 @@ def _conversation_detail_page(
     position: Optional[Dict[str, int]] = None,
     page_segments: Optional[int] = None,
     page_chars: Optional[int] = None,
+    card: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     summary_only = filters['summary_only']
     page = transcript_page(
@@ -346,8 +368,12 @@ def _conversation_detail_page(
         max_chars=page_chars or filters['max_chars'],
         **(position or {}),
     )
-    result = conversation_card(conversation, include_participants=filters['include_participants'])
-    if not summary_only and filters['format'] == 'lines':
+    result = (
+        dict(card)
+        if card is not None
+        else conversation_card(conversation, include_participants=filters['include_participants'])
+    )
+    if not summary_only and filters.get('format') == 'lines':
         result.update(detail_views.lines_fields(page.segments))
     elif not summary_only:
         result['transcript_segments'] = page.segments
@@ -504,7 +530,11 @@ def get_conversations_by_ids(
     for item in items:
         if 'total_segments' in item and not detail_filters['summary_only']:
             detail_views.count_page(
-                'get_conversations_by_ids', 'transcript', detail_filters['format'], True, item['truncated']
+                'get_conversations_by_ids',
+                'transcript',
+                detail_filters.get('format', 'segments'),
+                True,
+                item['truncated'],
             )
     return envelope(items)
 
