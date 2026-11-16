@@ -32,43 +32,46 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   @override
   void initState() {
-    var device = widget.device!;
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       Provider.of<DeviceProvider>(context, listen: false).setOnFirmwareUpdatePage(true);
-      setState(() {
-        isLoading = true;
-      });
-
-      if (widget.isRollback) {
-        await getStableVersion(deviceModelNumber: device.modelNumber);
-        if (mounted) {
-          setState(() {
-            shouldUpdate = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
-            updateMessage = shouldUpdate ? '' : context.l10n.noStableFirmwareFound;
-            isLoading = false;
-          });
-        }
-      } else {
-        await getLatestVersion(
-          deviceModelNumber: device.modelNumber,
-          firmwareRevision: device.firmwareRevision,
-          hardwareRevision: device.hardwareRevision,
-          manufacturerName: device.manufacturerName,
-          serialNumber: device.serialNumber,
-        );
-        var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
-        if (mounted) {
-          setState(() {
-            shouldUpdate = result.$2;
-            updateMessage =
-                widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
-            isLoading = false;
-          });
-        }
-      }
+      await _checkVersion();
     });
     super.initState();
+  }
+
+  Future<void> _checkVersion() async {
+    final device = widget.device!;
+    setState(() {
+      isLoading = true;
+    });
+
+    if (widget.isRollback) {
+      await getStableVersion(deviceModelNumber: device.modelNumber);
+      if (mounted) {
+        setState(() {
+          shouldUpdate = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
+          updateMessage = shouldUpdate ? '' : context.l10n.noStableFirmwareFound;
+          isLoading = false;
+        });
+      }
+    } else {
+      await getLatestVersion(
+        deviceModelNumber: device.modelNumber,
+        firmwareRevision: device.firmwareRevision,
+        hardwareRevision: device.hardwareRevision,
+        manufacturerName: device.manufacturerName,
+        serialNumber: device.serialNumber,
+      );
+      var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
+      if (mounted) {
+        setState(() {
+          shouldUpdate = result.$2;
+          updateMessage =
+              widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
+          isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -322,11 +325,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     bool hasChangelog = changelogData != null && changelogData is List && (List<String>.from(changelogData)).isNotEmpty;
     final deviceProvider = context.watch<DeviceProvider>();
     final batteryTooLow = _batteryTooLow(deviceProvider);
+    final hasLatestVersion = latestFirmwareDetails.isNotEmpty && latestFirmwareDetails['version'] != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Up to date status (only when not needing update)
+        // Up to date or check failure status (only when not needing update)
         if (!shouldUpdate) ...[
           Padding(
             padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
@@ -334,12 +338,20 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               children: [
                 Flexible(
                   child: Text(
-                    widget.isRollback ? context.l10n.alreadyOnStableFirmware : context.l10n.yourDeviceIsUpToDate,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    !hasLatestVersion
+                        ? (updateMessage.isNotEmpty ? updateMessage : 'Unable to check for firmware updates')
+                        : (widget.isRollback ? context.l10n.alreadyOnStableFirmware : context.l10n.yourDeviceIsUpToDate),
+                    style: OmiType.subhead.copyWith(
+                      color: !hasLatestVersion ? OmiColors.warning : OmiColors.textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(width: OmiSpacing.xs),
-                FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),
+                FaIcon(
+                  !hasLatestVersion ? FontAwesomeIcons.circleExclamation : FontAwesomeIcons.circleCheck,
+                  color: !hasLatestVersion ? OmiColors.warning : OmiColors.success,
+                  size: 14,
+                ),
               ],
             ),
           ),
@@ -354,18 +366,30 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 version: widget.device!.firmwareRevision,
                 chipColor: shouldUpdate ? OmiColors.dangerSurface : null,
               ),
-              if (shouldUpdate && latestFirmwareDetails['version'] != null) ...[
+              if (hasLatestVersion) ...[
                 Divider(height: 1, color: OmiColors.border),
                 _buildVersionItem(
                   icon: FontAwesomeIcons.cloudArrowDown,
                   label: context.l10n.latestVersion,
                   version: '${latestFirmwareDetails['version']}',
-                  chipColor: OmiColors.successSurface,
+                  chipColor: shouldUpdate ? OmiColors.successSurface : null,
                 ),
               ],
             ],
           ),
         ),
+
+        // Retry check button when firmware lookup failed or version is unavailable
+        if (!shouldUpdate && !hasLatestVersion) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          OmiButton(
+            key: const Key('firmware_update_retry_check'),
+            label: context.l10n.tryAgain,
+            leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
+            expand: true,
+            onPressed: _checkVersion,
+          ),
+        ],
 
         // Changelog
         if (hasChangelog) ...[
