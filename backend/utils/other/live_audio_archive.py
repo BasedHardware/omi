@@ -8,6 +8,8 @@ from collections.abc import Awaitable, Callable
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
 from config.audio_custody import framed_pack
+from config.batch_pipeline_projection_rebuild import enabled as projection_debt_enabled
+from database import record_projection_rebuild
 from utils.other.audio_frame_table import FRAME_SCHEMA
 from database.server_batch_audio import note_server_batch_audio, note_server_batch_audio_received
 from models.message_event import AudioCustodyEvent
@@ -17,6 +19,7 @@ from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
 from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.observability.fallback import record_fallback
+from utils.other.relay_recovery_metrics import SAMPLES
 
 
 class LiveAudioArchive:
@@ -307,6 +310,13 @@ class LiveAudioArchive:
                 metadata,
                 frames,
             )
+            if pack.conversation_id and not getattr(self.host, 'is_multi_channel', False) and projection_debt_enabled():
+                # A successful relay send is not proof that pusher consumed it.
+                # Persist socket-independent, coalesced recovery work before
+                # releasing this pack or publishing any phone custody receipt.
+                # Failure keeps the exact pack/identity in uncommitted for retry.
+                await run_blocking(db_executor, record_projection_rebuild.mark_due, request.uid, pack.conversation_id)
+            SAMPLES.labels(stage='committed').inc(sum(frame['samples'] for frame in frames))
             if getattr(self.host, 'server_batch_only', False) is True and pack.conversation_id:
                 # Zero-sample originals are retained above, but their arrival
                 # clocks cannot expand or shrink the decoded-audio obligation.
