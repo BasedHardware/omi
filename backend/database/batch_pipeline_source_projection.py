@@ -30,6 +30,9 @@ def project_alias(store, item, binding, now, *, policy):
             source_reuse.observe('alias_wait')
             raise SourceReuseUnavailable('canonical source result not ready')
         expected = session.job.get('source_alias')
+        if not expected and not source_reuse.enabled():
+            source_reuse.observe('alias_refusal')
+            raise SourceReuseUnavailable('new source projection aliases are disabled')
         if expected and expected.get('segment_id') != canonical['segment_id']:
             raise SourceReuseUnavailable('accepted alias canonical owner changed')
         ids = canonical['dependencies']

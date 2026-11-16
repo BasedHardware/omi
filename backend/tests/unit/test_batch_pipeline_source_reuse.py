@@ -737,3 +737,14 @@ def test_alias_preserves_the_existing_fresh_capture_class():
         proposal={'segment_id': SOURCE, 'result_uri': 'gs://synthetic/marker#1'},
     )
     assert tx.get('jobs', COPY)['fresh_capture'] is False
+
+
+def test_off_stops_new_projection_aliases_but_retains_already_computed_work(monkeypatch):
+    store, original = setup_store()
+    copy, binding = prepare_copy(store, original, accepted=False)
+    monkeypatch.setenv('BATCH_SOURCE_REUSE_ENABLED', 'false')
+    before = store.ref('jobs', COPY).get().to_dict()
+    with pytest.raises(reuse.SourceReuseUnavailable, match='disabled'):
+        project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
+    assert store.ref('jobs', COPY).get().to_dict() == before
+    assert 'projection' not in store.ref('results', COPY).get().to_dict()

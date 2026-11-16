@@ -7,6 +7,7 @@ marker; it can never re-enter a paid queue, including after rollback.
 
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
 from database.batch_pipeline_staging import artifact_id
@@ -46,7 +47,7 @@ def dependencies(job, receipt=None):
     )
 
 
-def current(tx, item: WorkItem, now: float, *, expected=None, require_artifacts=True):
+def current(tx, item: WorkItem, now: float, *, expected=None, require_artifacts=True) -> dict[str, Any] | None:
     """Fresh transactional source, generation, deletion, result and accounting proof."""
     key = item.source_reuse_key
     row = tx.get(TABLE, receipt_id(key)) if key else {}
