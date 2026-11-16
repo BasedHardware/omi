@@ -74,6 +74,10 @@
       "why": "Reviewed 2026-10-18: the worker imports projection only transitively (Pump/Scheduler never call Projection); the flag is not executed there."
     },
     {
+      "key": "reader-split|prod|helm/batch-pipeline-worker/BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH",
+      "why": "SCA-2185 persists the serving integration-specific operator override under the rollout lead's four-Cloud-Run-service scope. It is not a shared backend default or a worker rollout; the worker keeps its inherited setting. Remove this exception if the integration override is retired or the worker setting converges through its own rollout."
+    },
+    {
       "key": "task-target-retry-semantics|code|account-deletion/routers/users.py:run_account_deletion_wipe/500",
       "why": "Contract (d) audit-only target (account-deletion wipe). Ratchet: no new keys; fix by answering 409 retry_response for expected retries."
     },

@@ -98,9 +98,19 @@ envFrom:
 # protected-environment secret LISTEN_PRIVATE_VALUES_YAML, in the same Helm
 # rollout. Never commit values here. A key replaces the env entry of the same
 # name below (e.g. the STT_CAP_DISPATCH_* defaults).
+# MEDIA_NOISE_MODE_SERVE_UID_SHA256S is a private cohort. Supply its existing
+# production value through LISTEN_PRIVATE_VALUES_YAML.privateEnv before Helm
+# admission; no public placeholder may reset that binding.
 privateEnv: {}
 
 env:
+  # SCA-2185: preserve observed production overrides; rollback changes these pins.
+  - name: MEDIA_NOISE_MODE
+    value: "shadow"
+  - name: MEDIA_NOISE_MODE_SERVE_PERCENT
+    value: "0"
+  - name: NOTES_SHORT_CLIP_FLOOR
+    value: "true"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED
     value: "false"
   - name: PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT

@@ -45,6 +45,10 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # SCA-2185: preserve this host's observed production bindings.
+        MEDIA_NOISE_MODE: {value: "shadow", category: rollout}
+        MEDIA_NOISE_MODE_SERVE_PERCENT: {value: "0", category: rollout}
+        NOTES_SHORT_CLIP_FLOOR: {value: "true", category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -297,6 +301,11 @@ overlay:
           category: rollout
     pusher:
       env:
+        # SCA-2304: pusher activation at 2026-11-15 14:23:17Z, generation 3309.
+        # Rollback inverse: set this binding and the prod chart to "false", then regenerate.
+        AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED: {value: "true", category: ops_kill}
+        # SCA-2185: preserve this host's observed production bindings.
+        NOTES_SHORT_CLIP_FLOOR: {value: "true", category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1784,6 +1793,9 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          BATCH_PIPELINE_MERGE_CATCH_UP_DEPTH: {value: '1', category: reliability}
+          BATCH_PIPELINE_PROVIDER_MERGE_MEMBERSHIP_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_BRIDGE_CONTAINED_DONOR_MERGE_ENABLED: {value: 'off', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}

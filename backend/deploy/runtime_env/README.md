@@ -14,6 +14,15 @@ Keep it out of deployment defaults and use the
 one-time zero seed, controller/guard cutover and rollback. Existing env values
 are fallback only, never evidence of effective admission after that seed.
 
+SCA-2185 persists integration's production merge catch-up depth 1, provider
+merge membership on, and contained donor merge off across service rolls.
+Rollback uses the same overlay; provider membership accepts `false` and donor
+merge remains `off`. The separately reviewed Train 1 Firestore lever literals
+remain authoritative; a pre-Train 1 serving read must not overwrite them with
+reset values. Finish-backoff configuration and its renderer contract are owned
+by PR #25307 for Train 2, with the flag on for prod sync and integration only
+(SCA-2270). Keep that policy in its reviewed change rather than duplicating it.
+
 Version 2 requires the backend voice route's staging bucket as an explicit
 literal: `syncing-local-development` in dev and `syncing-local` in prod. Normal
 admission and the existing prebuild preflight reject missing, blank, implicit,
@@ -173,3 +182,51 @@ whose `firestore_read_lever_policy` contains only `lever_expiry`. The offline gu
 extracts each historical train claim and compares it with every base declaration.
 It rejects missing or ambiguous claims, agreement with a stale UNRESOLVED note,
 and a missing note while the sources disagree.
+
+## SCA-2185 GKE operator settings
+
+The prod listen and pusher chart values and prod runtime overlay carry the
+public operator settings observed on 2026-11-15. They preserve each host's
+existing scope. Rollback
+changes these same pins rather than removing them from the chart.
+
+Listen's nonempty `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` cohort must be supplied
+through `LISTEN_PRIVATE_VALUES_YAML` under `privateEnv`. Its payload must never
+enter this repository. Before admitting a Helm apply, the deploy owner must
+confirm that the protected input contains the existing cohort and compare the
+final private/runtime-overridden render with the serving ReplicaSets. The
+public chart alone cannot prove preservation of that private binding.
+
+The source epoch remains `c2fs_20261026_r1` on prod listen and pusher, as required
+by SCA-1750's allowance-watch contract, although the observed serving epoch is
+`v1` on both. This discrepancy requires the rollout/usage owner to reconcile;
+copying the older epoch into source would reverse that reviewed contract. The
+five explicit pusher bindings already present in source (Soniox failover and
+four token-lease keys) stay declared. Their absence from the serving spec is
+a live/source discrepancy, not permission to delete their declarations.
+
+This contribution does not authorize deployment. Keep GKE changes image-only
+until a fresh ro-prod comparison against main proves the required agreement.
+
+Ten baseline live-only keys are retired under David's 2026-11-09 ruling:
+`SPEAKER_MATCH_SCORES_ENABLED`, `FIRST_SUMMARY_DEADLINE_ENABLED`,
+`FIRST_SUMMARY_DEADLINE_PERCENT`, `AUDIO_ARCHIVE_COALESCE_ENABLED`,
+`AUDIO_ARCHIVE_UID_ALLOWLIST`, `SPEAKER_GROUPING_MODE`, and
+`SYNC_EMPTY_MULTILINGUAL_RECOVERY_ENABLED`, `LIVE_CAPTURE_WINDOW_RETENTION`,
+`LIVE_CAPTURE_WINDOW_STRICT_PROJECTION`, and `REPEAT_WORK_LLM_VERSION`.
+They remain absent from source; the registry and graduation tests continue to
+reject their reintroduction. The rollout owner must dispose of those stale
+production entries before claiming literal environment agreement.
+
+Release's 2026-11-15 14:23:17Z pusher-only activation under SCA-2304 supersedes
+the captain's 02:55Z compression-off contingency. Prod pusher explicitly pins
+`AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED=true`, matching runtime generation 3309
+on source `afa75349` / image digest prefix `055d316`. All other settings and
+listen's default-on behavior are preserved. Ready enabled serving and the full
+canary remain pending; this config audit records the activation without granting
+acceptance or deployment permission.
+
+Rollback inverse: set only this pusher binding to `false` in both the production
+chart and runtime overlay, then regenerate `runtime_env.yaml` and the flag catalog.
+This disables optional compression while preserving PCM custody and existing
+FLAC readers. Release owns any guard rollback and its matching disposition here.

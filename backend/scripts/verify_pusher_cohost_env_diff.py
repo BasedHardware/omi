@@ -403,7 +403,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _PREVIEW_CUSTODY_LISTEN_ONLY
     | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'})
-    | _FINALIZATION_REPLAY_LISTEN_ONLY,
+    | _FINALIZATION_REPLAY_LISTEN_ONLY
+    # SCA-2185 carries existing listen-only media-noise rollout; do not widen to pusher.
+    | frozenset({'MEDIA_NOISE_MODE', 'MEDIA_NOISE_MODE_SERVE_PERCENT'}),
 }
 
 # Pusher owns the process-local shadow worker; sync/backfill also runs the
@@ -458,7 +460,10 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
     )
-    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES)
+    # Captain 02:55Z keeps pusher codec off after latency breaches (SCA-2304).
+    # Listen remains accepted with the code default on.
+    | frozenset({'AUDIO_CUSTODY_PCM_COMPRESSION_ENABLED'}),
 }
 
 # Queue-age publishing is active only on backend-listen. Pusher may omit the
