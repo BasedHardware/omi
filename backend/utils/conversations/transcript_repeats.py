@@ -45,6 +45,17 @@ def _exact_copy(row: dict, candidates: list[dict]) -> bool:
     )
 
 
+def _bounds(row: Mapping[str, Any]) -> tuple[float, float] | None:
+    start, end = row.get('start'), row.get('end')
+    if not isinstance(start, (int, float)) or isinstance(start, bool):
+        return None
+    if not isinstance(end, (int, float)) or isinstance(end, bool):
+        return None
+    if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+        return None
+    return float(start), float(end)
+
+
 def canonical_prompt_segments(segments: Sequence[Any]) -> list[Any]:
     """Select existing segment objects; callers retain the complete stored source."""
     if not sync_live_dedupe_enabled() or len(segments) > _MAX_SEGMENTS:
@@ -60,7 +71,7 @@ def canonical_prompt_segments(segments: Sequence[Any]) -> list[Any]:
         'person_id',
         'is_user',
     )
-    rows = [
+    rows: list[dict[str, Any]] = [
         {key: segment.get(key) if isinstance(segment, Mapping) else getattr(segment, key, None) for key in fields}
         for segment in segments
     ]
@@ -80,15 +91,19 @@ def canonical_prompt_segments(segments: Sequence[Any]) -> list[Any]:
             index,
         )
 
-    retained, reference = set(), []
+    retained: set[int] = set()
+    reference: list[dict[str, Any]] = []
     for index in sorted(range(len(rows)), key=preference):
         row = rows[index]
         scope = _scope(row)
-        start, end = row.get('start'), row.get('end')
-        valid = all(type(value) in {int, float} and math.isfinite(value) for value in (start, end))
+        bounds = _bounds(row)
+        if bounds is None:
+            retained.add(index)
+            continue
+        start, end = bounds
         protected = row.get('speaker_label_source') in {'manual', 'carried'} or row.get('translations')
         candidates = []
-        if scope and valid and end > start and not protected:
+        if scope and not protected:
             midpoint = (start + end) / 2
             candidates = [
                 other
@@ -105,6 +120,6 @@ def canonical_prompt_segments(segments: Sequence[Any]) -> list[Any]:
             if not kept:
                 continue
         retained.add(index)
-        if valid and end > start and scope.startswith('final:batch:'):
+        if scope.startswith('final:batch:'):
             reference.append(row)
     return [segment for index, segment in enumerate(segments) if index in retained]

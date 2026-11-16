@@ -88,3 +88,10 @@ def test_short_exact_cross_scope_copy_is_only_omitted_at_the_same_time():
     original[1]['start'] += 2
     original[1]['end'] += 2
     assert canonical_prompt_segments(original) == original
+
+
+@pytest.mark.parametrize('start', [None, True, 'invalid', float('nan'), float('inf')])
+def test_malformed_clock_is_preserved_instead_of_certifying_a_repeat(start):
+    original = [segment('a'), segment('b', scope='final:batch:other')]
+    original[1]['start'] = start
+    assert canonical_prompt_segments(original) == original
