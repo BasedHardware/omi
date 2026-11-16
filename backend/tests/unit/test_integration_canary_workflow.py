@@ -21,6 +21,13 @@ from scripts.runtime_env_validation import manifest as manifest_validation
 ROOT = Path(__file__).resolve().parents[3]
 
 
+@pytest.fixture(autouse=True)
+def action_runner_scope(tmp_path, monkeypatch):
+    # Execute snippets with the actual runner's environment-file protocol.
+    monkeypatch.setenv('GITHUB_ENV', str(tmp_path / 'github-env'))
+    monkeypatch.setenv('SELECTED_CLOUD_RUN_SERVICES', ' '.join(SERVICES))
+
+
 def snapshot():
     return {
         'source': SOURCE,

@@ -268,6 +268,10 @@ episode's final notes in one `episode_composer` call (gpt-6-luna, low effort):
   10/20/40 minutes and stops after four until the evidence changes.
 - Chapter clock times are mapped on the same clock as the transcript labels and
   must fall inside the episode's transcript span (two-minute slack).
+- With `EPISODE_LIVE_MEMBER_CLOSE_ENABLED` (default on), a closed episode excludes
+  still-capturing live members from readiness and summary inputs. The compose tick
+  rehomes post-gap live members atomically; true pre-boundary members retain their
+  owner and recompose after finishing.
 - A pending member transcript waits for `episode_compose_transcript_wait_seconds()`
   (20 minutes by default), measured from its pending stamp. After expiry the
   episode can compose the available speech; a later transcript receipt schedules

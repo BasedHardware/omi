@@ -535,6 +535,21 @@ def with_backend_storage_env(payload: str) -> str:
     )
 
 
+def with_conversations_v3_env(payload: str) -> str:
+    """The conversations v3 rollout stage, first app build and task queue ride every product API host."""
+    for service in ('backend', 'backend-sync', 'backend-integration'):
+        payload = re.sub(
+            rf'("{service}":\s*\{{.*?"env":\s*\[)',
+            r'\1\n        {"name": "CONVERSATIONS_V3_STAGE", "value": "beta"},'
+            r'\n        {"name": "CONVERSATIONS_V3_FIRST_APP_BUILD", "value": ""},'
+            r'\n        {"name": "CONVERSATIONS_V3_TASKS_QUEUE", "value": "conversations-v3"},',
+            payload,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return payload
+
+
 def with_object_lake_env(payload: str) -> str:
     """Complete synthetic revisions with the six inert C1 lake bindings."""
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
@@ -766,7 +781,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     )
     # Prepending lake entries earlier hides the leading GOOGLE_CLOUD_PROJECT
     # anchor used by the translation and sync fixture helpers above.
-    return with_object_lake_env(with_firestore_read_runtime_env(payload))
+    return with_conversations_v3_env(with_object_lake_env(with_firestore_read_runtime_env(payload)))
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -4111,3 +4126,34 @@ def test_future_capture_admissions_default_off_until_reader_rollout(environment)
     assert {entry['name']: entry.get('value') for entry in values['env']}[
         'SYNC_FUTURE_CAPTURE_CLAMP_ENABLED'
     ] == 'false'
+
+
+@pytest.mark.parametrize('service', ['all', 'backend-sync'])
+def test_control_sync_routing_validates_deployed_values_without_changing_manifest(tmp_path, monkeypatch, service):
+    from scripts.sync_backfill_routing import compose_rendered_routing, read_routing
+
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    config = validator._get_env_config(manifest, 'prod')
+    original = copy.deepcopy(config)
+    overlay = tmp_path / 'routing.env'
+    overlay.write_text(
+        'SYNC_BACKFILL_TASKS_QUEUE=control-current\n'
+        'SYNC_BACKFILL_TASKS_HANDLER_URL=https://backfill.example.invalid/v2/sync-jobs/run\n'
+        'SYNC_BACKFILL_TASKS_OIDC_AUDIENCE=https://backfill.example.invalid/v2/sync-jobs/run\n'
+    )
+    state = compose_rendered_routing(render_cloud_run_state(config, monkeypatch), read_routing(overlay))
+    path = tmp_path / 'state.json'
+    path.write_text(json.dumps(state))
+    mismatches = validator.validate_runtime_env(env='prod', cloud_run_state_path=path, cloud_run_service=service)
+    assert any('SYNC_BACKFILL_TASKS_QUEUE' in e.message for e in mismatches), [(e.scope, e.message) for e in mismatches]
+    assert (
+        validator.validate_runtime_env(
+            env='prod', cloud_run_state_path=path, cloud_run_service=service, sync_routing_env_path=overlay
+        )
+        == []
+    )
+    assert config == original
+    assert validator.validate_runtime_env(
+        env='prod', cloud_run_state_path=path, cloud_run_service='backend-integration', sync_routing_env_path=overlay
+    )[0].message == ('sync routing overlay outside selected service scope')

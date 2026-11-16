@@ -16,6 +16,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -25,6 +26,7 @@ import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
+import 'widgets/too_old_recording_help.dart';
 import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 
 Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
@@ -203,9 +205,30 @@ class WalListItem extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        _trailing(context, syncProvider, hasError),
+                        if (displayState != WalSyncDisplayState.outsideRecoveryWindow)
+                          _trailing(context, syncProvider, hasError),
                       ],
                     ),
+                    if (displayState == WalSyncDisplayState.outsideRecoveryWindow) ...[
+                      const SizedBox(height: 8),
+                      TooOldRecordingHelp(onDownload: () async {
+                        try {
+                          await syncProvider.shareRecordingAsWav([wal]);
+                        } catch (e) {
+                          Logger.error('Sync: failed to share too-old recording audio: $e');
+                          if (context.mounted) OmiFeedback.error(context, context.l10n.audioPlaybackFailed);
+                        }
+                      }, onDelete: () async {
+                        final confirmed = await showOmiConfirm(
+                          context,
+                          title: context.l10n.deleteRecording,
+                          message: context.l10n.thisCannotBeUndone,
+                          confirmLabel: context.l10n.delete,
+                          destructive: true,
+                        );
+                        if (confirmed) await syncProvider.deleteWal(wal);
+                      }),
+                    ],
                     if (showBar) ...[
                       const SizedBox(height: 12),
                       Row(

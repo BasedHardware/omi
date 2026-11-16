@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "तुमच्या फोनवर रेकॉर्डिंग सुरू आहे",
+    "wrapUp": "पूर्ण करा",
+    "recordingDiscarded": "रेकॉर्डिंग रद्द केले",
     "undo": "पूर्ववत् करा",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "सध्या स्विच उपलब्ध नाही. त्याऐवजी कार्ड अपडेट करा.",
     "monthlySwitchDoneTitle": "तुम्ही आता मासिक प्लॅनवर आहात",
     "monthlySwitchDoneBody": "आज {price} भरले. दर महिन्याला नूतनीकरण होते.",
-    "processingDeleteScopeChanged": "प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा."
+    "processingDeleteScopeChanged": "प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "या महिन्याची {minutes} मिनिटे वापरली गेली आहेत",
+    "freeCapBody": "Omi अजूनही रेकॉर्ड करत आहे. ट्रान्सक्रिप्शन कसे सुरू ठेवायचे ते निवडा.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "अमर्यादित क्लाउड ट्रान्सक्रिप्शन",
+    "freeCapProAccuracy": "सर्वोत्तम अचूकता",
+    "freeCapProWaiting": "तुमची प्रतीक्षेतील रेकॉर्डिंग्ज ट्रान्सक्राइब करते",
+    "freeCapPhoneSubtitle": "मोफत. तुम्ही परत बदलेपर्यंत चालू राहते.",
+    "transcribingOnThisPhone": "या फोनवर ट्रान्सक्राइब होत आहे",
+    "getPro": "Pro मिळवा",
+    "unlock": "अनलॉक करा",
+    "transcribeWith": "याद्वारे ट्रान्सक्राइब करा",
+    "omiCloud": "Omi क्लाउड",
+    "thisPhone": "हा फोन",
+    "onDeviceReady": "तयार",
+    "cloudMinutesLeft": "{left}/{limit} मिनिटे शिल्लक · {date} रोजी रीसेट",
+    "cloudMinutesAvailable": "{minutes} क्लाउड मिनिटे उपलब्ध",
+    "switchBack": "परत बदला",
+    "setUpThisPhone": "हा फोन सेट करा",
+    "speechRecognition": "स्पीच रेकग्निशन",
+    "audioStaysOnPhone": "ऑडिओ तुमच्या फोनवरच राहतो",
+    "onDeviceModelDownloadSize": "{size} MB डाउनलोड",
+    "downloadNow": "आता डाउनलोड करा",
+    "onWifiLater": "नंतर Wi-Fi वर",
+    "conversationWritingSummary": "तुमचा सारांश लिहित आहे…"
 }

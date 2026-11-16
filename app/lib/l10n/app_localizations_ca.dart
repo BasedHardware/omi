@@ -2003,6 +2003,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get memoryHistory => 'Historial';
 
   @override
+  String get recordingWithYourPhone => 'S\'està gravant amb el telèfon';
+
+  @override
+  String get wrapUp => 'Tanca';
+
+  @override
+  String get recordingDiscarded => 'S\'ha descartat l\'enregistrament';
+
+  @override
   String get undo => 'Desfer';
 
   @override
@@ -15540,4 +15549,88 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Has fet servir els $minutes minuts d\'aquest mes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi continua gravant. Tria com vols continuar transcrivint.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Transcripció al núvol il·limitada';
+
+  @override
+  String get freeCapProAccuracy => 'La millor precisió';
+
+  @override
+  String get freeCapProWaiting => 'Transcriu les gravacions en espera';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Gratis. Es manté fins que tornis enrere.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transcrivint en aquest telèfon';
+
+  @override
+  String get getPro => 'Aconsegueix Pro';
+
+  @override
+  String get unlock => 'Desbloqueja';
+
+  @override
+  String get transcribeWith => 'Transcriu amb';
+
+  @override
+  String get omiCloud => 'Núvol d\'Omi';
+
+  @override
+  String get thisPhone => 'Aquest telèfon';
+
+  @override
+  String get onDeviceReady => 'A punt';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Queden $left de $limit min · es renova el $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes minuts al núvol disponibles';
+  }
+
+  @override
+  String get switchBack => 'Torna';
+
+  @override
+  String get setUpThisPhone => 'Configura aquest telèfon';
+
+  @override
+  String get speechRecognition => 'Reconeixement de veu';
+
+  @override
+  String get audioStaysOnPhone => 'L\'àudio es queda al telèfon';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Baixada de $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Baixa ara';
+
+  @override
+  String get onWifiLater => 'Més tard amb Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Escrivint el teu resum…';
 }

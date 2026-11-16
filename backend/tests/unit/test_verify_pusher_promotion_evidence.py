@@ -1216,6 +1216,9 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         "RECORD_TOKEN_LEASE_MODE_SERVE_PERCENT": config_name,
         "RECORD_TOKEN_LEASE_SECONDS": config_name,
         "RECORD_TOKEN_LEASE_DEPLOYED_AT": config_name,
+        # The conversations v3 stage moves with the canary config like every other rollout key.
+        "CONVERSATIONS_V3_STAGE": config_name,
+        "CONVERSATIONS_V3_FIRST_APP_BUILD": config_name,
     }
 
 

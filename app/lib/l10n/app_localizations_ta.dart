@@ -2005,6 +2005,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get memoryHistory => 'வரலாறு';
 
   @override
+  String get recordingWithYourPhone => 'உங்கள் ஃபோனில் பதிவாகிறது';
+
+  @override
+  String get wrapUp => 'முடி';
+
+  @override
+  String get recordingDiscarded => 'பதிவு நிராகரிக்கப்பட்டது';
+
+  @override
   String get undo => 'மறுசெய்க';
 
   @override
@@ -15567,4 +15576,88 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'இந்த மாதத்தின் $minutes நிமிடங்களைப் பயன்படுத்திவிட்டீர்கள்';
+  }
+
+  @override
+  String get freeCapBody => 'Omi இன்னும் பதிவு செய்கிறது. எப்படி எழுத்துப்படியைத் தொடர்வது என்பதைத் தேர்வுசெய்க.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'வரம்பற்ற கிளவுட் எழுத்துப்படி';
+
+  @override
+  String get freeCapProAccuracy => 'சிறந்த துல்லியம்';
+
+  @override
+  String get freeCapProWaiting => 'காத்திருக்கும் பதிவுகளை எழுத்துப்படியாக்குகிறது';
+
+  @override
+  String get freeCapPhoneSubtitle => 'இலவசம். நீங்கள் மீண்டும் மாற்றும் வரை இயங்கும்.';
+
+  @override
+  String get transcribingOnThisPhone => 'இந்தத் தொலைபேசியில் எழுத்துப்படியாக்குகிறது';
+
+  @override
+  String get getPro => 'Pro பெறுக';
+
+  @override
+  String get unlock => 'திறக்கவும்';
+
+  @override
+  String get transcribeWith => 'இதன் மூலம் எழுத்துப்படியாக்கு';
+
+  @override
+  String get omiCloud => 'Omi கிளவுட்';
+
+  @override
+  String get thisPhone => 'இந்தத் தொலைபேசி';
+
+  @override
+  String get onDeviceReady => 'தயார்';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit நிமிடம் மீதம் · $date அன்று மீட்டமைப்பு';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes கிளவுட் நிமிடங்கள் கிடைக்கின்றன';
+  }
+
+  @override
+  String get switchBack => 'மீண்டும் மாற்று';
+
+  @override
+  String get setUpThisPhone => 'இந்தத் தொலைபேசியை அமைக்கவும்';
+
+  @override
+  String get speechRecognition => 'பேச்சு அறிதல்';
+
+  @override
+  String get audioStaysOnPhone => 'ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB பதிவிறக்கம்';
+  }
+
+  @override
+  String get downloadNow => 'இப்போது பதிவிறக்கு';
+
+  @override
+  String get onWifiLater => 'பின்னர் Wi-Fi இல்';
+
+  @override
+  String get conversationWritingSummary => 'உங்கள் சுருக்கம் எழுதப்படுகிறது…';
 }

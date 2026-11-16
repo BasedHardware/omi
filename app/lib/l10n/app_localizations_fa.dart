@@ -1987,6 +1987,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
+  String get recordingWithYourPhone => 'در حال ضبط با تلفن شما';
+
+  @override
+  String get wrapUp => 'جمع‌بندی';
+
+  @override
+  String get recordingDiscarded => 'ضبط حذف شد';
+
+  @override
   String get undo => 'بازگشت';
 
   @override
@@ -15456,4 +15465,88 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '$minutes دقیقهٔ این ماه را استفاده کرده‌اید';
+  }
+
+  @override
+  String get freeCapBody => 'Omi همچنان در حال ضبط است. انتخاب کنید رونویسی چگونه ادامه پیدا کند.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'رونویسی ابری نامحدود';
+
+  @override
+  String get freeCapProAccuracy => 'بهترین دقت';
+
+  @override
+  String get freeCapProWaiting => 'ضبط‌های در انتظار شما را رونویسی می‌کند';
+
+  @override
+  String get freeCapPhoneSubtitle => 'رایگان. تا وقتی برنگردید روشن می‌ماند.';
+
+  @override
+  String get transcribingOnThisPhone => 'در حال رونویسی روی این تلفن';
+
+  @override
+  String get getPro => 'دریافت Pro';
+
+  @override
+  String get unlock => 'باز کردن';
+
+  @override
+  String get transcribeWith => 'رونویسی با';
+
+  @override
+  String get omiCloud => 'ابر Omi';
+
+  @override
+  String get thisPhone => 'این تلفن';
+
+  @override
+  String get onDeviceReady => 'آماده';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left از $limit دقیقه باقی‌مانده · تمدید در $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes دقیقهٔ ابری در دسترس است';
+  }
+
+  @override
+  String get switchBack => 'بازگشت';
+
+  @override
+  String get setUpThisPhone => 'راه‌اندازی این تلفن';
+
+  @override
+  String get speechRecognition => 'تشخیص گفتار';
+
+  @override
+  String get audioStaysOnPhone => 'صدا روی تلفن شما می‌ماند';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'دانلود $size مگابایت';
+  }
+
+  @override
+  String get downloadNow => 'اکنون دانلود کن';
+
+  @override
+  String get onWifiLater => 'بعداً با Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
 }

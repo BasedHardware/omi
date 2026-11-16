@@ -21,7 +21,11 @@ from config.batch_pipeline_language import (
     admission_language_sample_enabled,
     batch_admission_language,
 )
-from config.batch_pipeline_vendor_overflow import legacy_capacity_fallback_enabled, overflow_enabled
+from config.batch_pipeline_vendor_overflow import (
+    legacy_capacity_fallback_enabled,
+    overflow_enabled,
+    overflow_priorities,
+)
 from config.policy import BatchUnitPolicy, resolve_batch_policy
 from config.batch_pipeline_coverage_wait import decode_failure_memo_enabled
 from config.batch_pipeline_providers import provider_config
@@ -50,7 +54,8 @@ from utils.sync.receipt_clock import (
     FutureCaptureRetry,
 )
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
-from utils.capture.batch_coverage import decode_for_intake, covered_response
+from utils.capture.batch_coverage import covered_response
+from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence
@@ -774,15 +779,19 @@ async def accept_upload(
         if inherited:
             input_language = inherited
         # All-vendor routing: outside its cohort, with its kill switch off, or while this
-        # owner's legacy is on, this is resolve_route exactly (today's routing). Only fresh
-        # units may overflow to a vendor when the GPU ring is past its SLO; backfill waits.
+        # owner's legacy is on, this is resolve_route exactly (today's routing). Configured
+        # priorities may overflow only when their own GPU backlog is past its SLO.
         route = select_route(
             language,
             byok=byok_enabled,
             uid=uid,
             batch_percent=policy.batch_percent,
             vendor_eligible=vendor_table and mode is not LegacySyncMode.ON,
-            gpu_saturated=(lambda: overflow_enabled() and gpu_overflow.saturated(store)) if fresh else None,
+            gpu_saturated=(
+                (lambda: overflow_enabled() and gpu_overflow.saturated(store, int(seed.priority)))
+                if int(seed.priority) in overflow_priorities()
+                else None
+            ),
         ).route
         # C8: with legacy draining or dark, a language Parakeet cannot serve goes
         # to the batch provider-STT stage instead of the legacy fallback; inside the
@@ -867,15 +876,9 @@ async def accept_upload(
         config = provider_config()
         if config.pool_kind != 'dedicated_batch':
             raise ValueError('serving intake requires a dedicated batch GPU pool')
-        if decode is None and decode_failure_memo_enabled():
-            # Same bytes, same decoder, same proven failure: answer the existing
-            # retryable 503 without decoding or staging them again. The phone
-            # keeps custody exactly as it does on any other 503.
-            deterministic_key = await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
-            if deterministic_key and await run_blocking(db_executor, cached_decode_failure, deterministic_key):
-                OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo='decode_failure').inc()
-                logger.info('event=batch_intake_decode_memo outcome=hit')
-                return _sync_unavailable_response()
+        deterministic_key, memo_hit = await _cached_decode_refusal(uid, content_id, paths, decode)
+        if memo_hit:
+            return _sync_unavailable_response()
         # A sampled upload is held whole before staging, so no single unit may exceed the hold bound.
         max_unit_seconds = min(config.max_unit_seconds, SAMPLE_SCAN_SECONDS) if sampled else config.max_unit_seconds
         decode_paths = paths
@@ -888,11 +891,21 @@ async def accept_upload(
                 decode_paths,
                 max_unit_seconds,
                 uid,
-                {**(intake_context or {}), 'client_device_id': client_device_id},
+                _source_decode_context(
+                    intake_context,
+                    client_device_id,
+                    source,
+                    should_lock,
+                    record_origin,
+                    conversation_id,
+                    sampled,
+                    _coalescing_group,
+                ),
                 decoder=upload_decoder(uid, client_device_id, intake_context),
             )
         )
         items = []
+        source_aliases = {}
 
         def unit_item(unit, index):
             return replace(
@@ -910,6 +923,7 @@ async def accept_upload(
                 # The built-in decoder times WAL PCM from sync filenames.
                 # Alternate adapters (for example held WAV) have no such proof.
                 timing_store='sync' if decode is None else None,
+                source_reuse_key=getattr(unit, 'source_reuse_key', None),
                 capture_time_trust='untrusted' if getattr(unit, 'recovery_id', None) else None,
             )
 
@@ -944,6 +958,32 @@ async def accept_upload(
             if len(items) >= 128:
                 raise ValueError('capture bundle exceeds bounded conversation-unit limit')
             item = unit_item(unit, len(items))
+            if item.source_reuse_key:
+                from utils.batch_pipeline.source_reuse_intake import stage_alias
+
+                alias = await stage_alias(
+                    store,
+                    artifacts,
+                    item,
+                    unit,
+                    {
+                        **(intake_context or {}),
+                        'owner_id': uid,
+                        'job_id': public_job_id,
+                        'content_id': content_id,
+                        'segment_id': item.segment_id,
+                        'capture_at': item.capture_at,
+                        'source': source,
+                        'should_lock': should_lock,
+                        'client_device_id': client_device_id,
+                        'client_platform': client_platform,
+                    },
+                )
+                if alias is not None:
+                    staged, proposal = alias
+                    items.append(staged)
+                    source_aliases[item.segment_id] = proposal
+                    continue
             if len(items) in decisions:
                 # This unit was classified above under fresh authority (silent units on their own audio).
                 language_decision = decisions[len(items)]
@@ -963,12 +1003,8 @@ async def accept_upload(
                 )
                 # Refusal preserves the caller's source; never acknowledge or admit it.
                 probe_guard.raise_if_denied()
-            frozen_language = (
-                language_decision.language
-                if language_decision.parakeet_safe or language_class(language_decision.language) == 'unsupported'
-                else 'und' if language_guard_enabled() else input_language
-            )
-            repair_languages[item.segment_id] = proof = language_proof(frozen_language, language_decision)
+            proof = _frozen_language_proof(input_language, language_decision)
+            repair_languages[item.segment_id] = proof
             phase = 'freeze_audio'
             frozen = await run_blocking(
                 sync_executor,
@@ -1047,6 +1083,7 @@ async def accept_upload(
             enqueue=provider_enqueue(route, outbox, wakes) if provider else None,
             adopt=adopt,
             coalescing_group=_coalescing_group,
+            source_aliases=source_aliases,
         )
         phase = 'wake'
         for row_id, wake_token in wakes.items():
@@ -1357,3 +1394,34 @@ def get_durable_job_status(job_id: str, uid: str, *, artifact_retry: bool = Fals
         # original content identity. Only a capable exact-bundle client retries.
         return {**status, 'status': 'processing', 'poll_after_ms': 300000}
     return status
+
+
+def _frozen_language_proof(input_language, decision):
+    frozen = (
+        decision.language
+        if decision.parakeet_safe or language_class(decision.language) == 'unsupported'
+        else 'und' if language_guard_enabled() else input_language
+    )
+    return language_proof(frozen, decision)
+
+
+def _source_decode_context(context, device, source, locked, record_origin, conversation_id, sampled, group):
+    return {
+        **(context or {}),
+        'client_device_id': device,
+        'source': source,
+        'should_lock': locked,
+        'source_reuse_excluded': bool(record_origin or conversation_id or sampled or group),
+    }
+
+
+async def _cached_decode_refusal(uid, content_id, paths, decode):
+    if decode is not None or not decode_failure_memo_enabled():
+        return None, False
+    # Identical bytes and decoder faults keep the existing retryable response.
+    key = await run_blocking(sync_executor, _decode_failure_key, uid, content_id, paths)
+    if key and await run_blocking(db_executor, cached_decode_failure, key):
+        OMI_PIPELINE_RECORD_WAIT_MEMO_HITS_TOTAL.labels(memo='decode_failure').inc()
+        logger.info('event=batch_intake_decode_memo outcome=hit')
+        return key, True
+    return key, False

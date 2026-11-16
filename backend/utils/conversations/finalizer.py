@@ -479,7 +479,7 @@ async def finalize_persisted_conversation(
                 derived_effects_observer=derived_effects.append,
                 derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
             )
-        elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
+        elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD) or conversation_data.get('recording'):
             # The coordinator persisted a no-effects result (including budget waiting).
             # That write is durable; this request-scoped default is not. A
             # completed replay skips process_conversation, so restore the
@@ -600,6 +600,7 @@ async def finalize_persisted_conversation(
                     and latest_data is not None
                     and not latest_data.get('deleted', False)
                     and not getattr(latest, 'discarded', False)
+                    and getattr(latest, 'recording', False) is not True
                     and getattr(latest, 'structured', None)
                     and latest.structured == getattr(conversation, 'structured', None)
                 ):
@@ -627,7 +628,10 @@ async def finalize_persisted_conversation(
         # the empty-bundle memory fallback, and third-party app webhooks. Capture
         # receipt, keyframes, and arrival intent are not derived intelligence
         # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
-        skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+        skip_derived_effects = (
+            bool(conversation_data.get('recording'))
+            or derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+        )
         stage = 'derived_effects'
         from utils.conversations.demand_processing import lazy_enrichment_enabled
 
@@ -653,6 +657,7 @@ async def finalize_persisted_conversation(
                 and latest_data is not None
                 and not latest_data.get('deleted')
                 and not getattr(latest, 'discarded', False)
+                and getattr(latest, 'recording', False) is not True
                 and getattr(latest, 'structured', None)
             ):
                 # The claim does not return its document. Re-read after claim/merge;

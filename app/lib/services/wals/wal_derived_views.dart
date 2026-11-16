@@ -146,10 +146,29 @@ class WalDerivedViews {
   List<Wal>? _pendingWork;
   List<Wal> get pendingWork => _pendingWork ??= List.unmodifiable([...uploaded, ...syncing]);
   Map<DateTime, int>? _pendingSecondsByDay;
-  Map<DateTime, int> get pendingSecondsByDay => _pendingSecondsByDay ??= _dayTotals();
-  Map<DateTime, int> _dayTotals() {
+  int? _pendingSecondsComputedAt;
+  int? _pendingSecondsDeadline;
+  Map<DateTime, int> get pendingSecondsByDay => pendingSecondsByDayAt();
+  Map<DateTime, int> pendingSecondsByDayAt({int? nowSeconds}) {
+    final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (_pendingSecondsByDay == null ||
+        (_pendingSecondsDeadline != null && now >= _pendingSecondsDeadline!) ||
+        (_pendingSecondsComputedAt != null && now < _pendingSecondsComputedAt!)) {
+      _pendingSecondsComputedAt = now;
+      _pendingSecondsByDay = _dayTotals(now);
+    }
+    return _pendingSecondsByDay!;
+  }
+
+  Map<DateTime, int> _dayTotals(int nowSeconds) {
     final totals = <DateTime, int>{};
+    _pendingSecondsDeadline = null;
     for (final w in pendingWork) {
+      if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
+      final expires = w.pendingWorkExpiresAt;
+      if (expires != null) {
+        _pendingSecondsDeadline = _pendingSecondsDeadline == null ? expires : min(_pendingSecondsDeadline!, expires);
+      }
       final date = DateTime.fromMillisecondsSinceEpoch(w.timerStart * 1000);
       final day = DateTime(date.year, date.month, date.day);
       totals[day] = (totals[day] ?? 0) + max(0, w.seconds);

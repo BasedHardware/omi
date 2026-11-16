@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+from registry_access import validate_evidence
 
 
 def check(contract, environment, free_bytes):
@@ -28,17 +29,7 @@ def check(contract, environment, free_bytes):
         )
     ):
         raise ValueError('REVIEWED_DRAFT_AND_ASSET_IDS_REQUIRED')
-    permission = contract.get('registry_write_authorization')
-    destination = 'gcr.io/based-hardware/jobstore-reconcile-operator'
-    if (
-        contract.get('destination') != destination
-        or not isinstance(permission, dict)
-        or permission.get('principal') != 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com'
-        or permission.get('existing_authorization_verified') is not True
-        or permission.get('repository') != destination
-        or not re.fullmatch('[0-9a-f]{64}', permission.get('evidence_sha256', ''))
-    ):
-        raise ValueError('EXISTING_REGISTRY_PERMISSION_EVIDENCE_REQUIRED')
+    validate_evidence(contract)
     if free_bytes < contract['required_disposable_free_bytes']:
         raise ValueError('INSUFFICIENT_EXISTING_RUNNER_SCRATCH_NO_CLEANUP_OR_CAPACITY_CHANGE')
 

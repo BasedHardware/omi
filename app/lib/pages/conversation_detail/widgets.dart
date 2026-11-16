@@ -287,6 +287,13 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
   ConversationSummarySelection? _editingSelection;
   String? _editingOriginalContent;
 
+  /// The store app the attribution row opens. The built-in template ("The Best Summarizer") is a
+  /// local stand-in with no store entry, so its detail page could only fail; it gets no row.
+  App? get _attributionApp {
+    final app = widget.app;
+    return app == null || app.id == builtInSummaryTemplateAppId ? null : app;
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
@@ -382,7 +389,8 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                         ),
                       ),
           ),
-          if (content.isNotEmpty && !_isEditing && widget.app != null) _buildAppAttribution(context, widget.app!),
+          if (content.isNotEmpty && !_isEditing && _attributionApp != null)
+            _buildAppAttribution(context, _attributionApp!),
         ],
       ),
     );
@@ -660,13 +668,13 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                 : () => _startEditing(content),
           ),
         ),
-        if (widget.app != null) SliverToBoxAdapter(child: _buildAppAttribution(context, widget.app!)),
+        if (_attributionApp != null) SliverToBoxAdapter(child: _buildAppAttribution(context, _attributionApp!)),
       ],
     );
   }
 
-  /// The app that wrote this summary, opening its page. Omi's own summary (and an app the catalog no
-  /// longer knows) has nowhere to go, so it shows no row; the bottom pill names the source either way.
+  /// The app that wrote this summary, opening its page. Omi's own summary, the built-in template and an
+  /// app the catalog no longer knows have nowhere to go, so they show no row; the bottom pill names the source either way.
   Widget _buildAppAttribution(BuildContext context, App app) {
     const avatarRadius = 12.0;
     // An app without an image has nothing to fetch.

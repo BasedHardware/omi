@@ -2028,6 +2028,18 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
+    "recordingWithYourPhone": "Recording with your phone",
+    "@recordingWithYourPhone": {
+        "description": "Home's recording bar, line 1: this phone is recording a live conversation"
+    },
+    "wrapUp": "Wrap Up",
+    "@wrapUp": {
+        "description": "Button on Home's recording bar: end the phone recording and process it"
+    },
+    "recordingDiscarded": "Recording discarded",
+    "@recordingDiscarded": {
+        "description": "Confirmation after Undo on Home's recording bar: the accidental recording was thrown away"
+    },
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"
@@ -18873,5 +18885,128 @@
     "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
+    },
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "You've used this month's {minutes} minutes",
+    "@freeCapTitle": {
+        "description": "Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "freeCapBody": "Omi is still recording. Choose how to keep transcribing.",
+    "@freeCapBody": {
+        "description": "Body of the free-plan cap sheet"
+    },
+    "omiProPlanName": "Omi Pro",
+    "@omiProPlanName": {
+        "description": "Product name of the paid plan; keep the brand name"
+    },
+    "freeCapProUnlimited": "Unlimited cloud transcription",
+    "@freeCapProUnlimited": {
+        "description": "Omi Pro benefit on the cap sheet"
+    },
+    "freeCapProAccuracy": "Best accuracy",
+    "@freeCapProAccuracy": {
+        "description": "Omi Pro benefit on the cap sheet"
+    },
+    "freeCapProWaiting": "Transcribes your waiting recordings",
+    "@freeCapProWaiting": {
+        "description": "Omi Pro benefit: recordings held at the cap get transcribed"
+    },
+    "freeCapPhoneSubtitle": "Free. Stays on until you switch back.",
+    "@freeCapPhoneSubtitle": {
+        "description": "Subtitle of the 'Transcribe on this phone' option at the cap; the choice is permanent until switched back"
+    },
+    "transcribingOnThisPhone": "Transcribing on this phone",
+    "@transcribingOnThisPhone": {
+        "description": "Banner during recording when transcription runs on the phone"
+    },
+    "getPro": "Get Pro",
+    "@getPro": {
+        "description": "Short button label to open the Omi Pro plans; keep 'Pro'"
+    },
+    "unlock": "Unlock",
+    "@unlock": {
+        "description": "Button on a recording held at the cap; opens the plans"
+    },
+    "transcribeWith": "Transcribe with",
+    "@transcribeWith": {
+        "description": "Settings section header above the transcription source choices"
+    },
+    "omiCloud": "Omi cloud",
+    "@omiCloud": {
+        "description": "Transcription source: Omi's cloud service; keep 'Omi'"
+    },
+    "thisPhone": "This phone",
+    "@thisPhone": {
+        "description": "Transcription source: on this phone"
+    },
+    "onDeviceReady": "Ready",
+    "@onDeviceReady": {
+        "description": "Status: this phone can transcribe now"
+    },
+    "cloudMinutesLeft": "{left} of {limit} min left · resets {date}",
+    "@cloudMinutesLeft": {
+        "description": "Cloud transcription minutes left this month and the reset date, e.g. '258 of 300 min left · resets Dec 1'",
+        "placeholders": {
+            "left": {
+                "type": "int"
+            },
+            "limit": {
+                "type": "int"
+            },
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "cloudMinutesAvailable": "{minutes} cloud minutes available",
+    "@cloudMinutesAvailable": {
+        "description": "Shown to a free plan on the phone after the monthly reset: cloud minutes available again",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "switchBack": "Switch Back",
+    "@switchBack": {
+        "description": "Button: switch transcription back to Omi's cloud"
+    },
+    "setUpThisPhone": "Set up this phone",
+    "@setUpThisPhone": {
+        "description": "Settings section header: steps before the phone can transcribe"
+    },
+    "speechRecognition": "Speech recognition",
+    "@speechRecognition": {
+        "description": "Row title: the iOS speech recognition permission"
+    },
+    "audioStaysOnPhone": "Audio stays on your phone",
+    "@audioStaysOnPhone": {
+        "description": "Subtitle: on-device transcription keeps audio on the phone"
+    },
+    "onDeviceModelDownloadSize": "{size} MB download",
+    "@onDeviceModelDownloadSize": {
+        "description": "Download size of the on-device speech model in megabytes",
+        "placeholders": {
+            "size": {
+                "type": "int"
+            }
+        }
+    },
+    "downloadNow": "Download Now",
+    "@downloadNow": {
+        "description": "Button: download the speech model now on any network"
+    },
+    "onWifiLater": "On Wi-Fi Later",
+    "@onWifiLater": {
+        "description": "Button: download the speech model later, when on Wi-Fi"
+    },
+    "conversationWritingSummary": "Writing your summary…",
+    "@conversationWritingSummary": {
+        "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     }
 }

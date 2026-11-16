@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-idle-light.png",
+      "platform": "mobile-ios",
+      "description": "Home before recording: Ask anything and the round record button (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recording-bar-undo-light.png",
+      "platform": "mobile-ios",
+      "description": "Right after tapping record: Home stays, the bottom row is the recording bar with Undo (0:03) (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-recording-bar-wrap-up-light.png",
+      "platform": "mobile-ios",
+      "description": "Four minutes in: the bar shows the running time and Wrap Up; the live card above shows the newest words (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-recording-discarded-light.png",
+      "platform": "mobile-ios",
+      "description": "After Undo: the bar is gone, no row was added, and a toast says Recording discarded (light)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-home-idle-dark.png",
+      "platform": "mobile-ios",
+      "description": "Home before recording: Ask anything and the round record button (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-recording-bar-undo-dark.png",
+      "platform": "mobile-ios",
+      "description": "Right after tapping record: Home stays, the bottom row is the recording bar with Undo (0:03) (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-recording-bar-wrap-up-dark.png",
+      "platform": "mobile-ios",
+      "description": "Four minutes in: the bar shows the running time and Wrap Up; the live card above shows the newest words (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-recording-discarded-dark.png",
+      "platform": "mobile-ios",
+      "description": "After Undo: the bar is gone, no row was added, and a toast says Recording discarded (dark)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

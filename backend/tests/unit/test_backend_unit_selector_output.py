@@ -66,6 +66,51 @@ def selector():
 @pytest.mark.parametrize(
     'source',
     [
+        'backend/scripts/jobstore_operator/readiness_probe.py',
+        'backend/scripts/jobstore_operator/readiness_contract.py',
+        'backend/scripts/jobstore_operator/artifact-contract.json',
+        'backend/scripts/jobstore_operator/tests/test_readiness_probe.py',
+        'backend/scripts/jobstore_operator/tests/fixtures/pod-api-response.json',
+    ],
+)
+def test_operator_changes_select_portable_files_and_retain_generic_guards(selector, source):
+    portable = {
+        path.relative_to(BACKEND_DIR).as_posix()
+        for path in (BACKEND_DIR / 'scripts/jobstore_operator/tests').glob('test_*.py')
+    }
+    assert 'scripts/jobstore_operator/tests/test_readiness_probe.py' in portable
+    assert portable <= set(selector['discover_unit_tests']())
+    selected, reason = selector['tests_for_changed_paths']([source], selector['all_tests'])
+    assert portable <= set(selected)
+    assert len(selected) < 40
+    assert 'full backend unit suite' not in reason
+    assert 'did not match' not in reason
+    assert portable <= set(selector['focused_tests_for_changed_paths']([source], selector['all_tests']))
+    if source.endswith('.py'):
+        assert 'tests/unit/test_lifecycle_state_table_writers.py' in selected
+        assert 'tests/unit/test_reason_label_enums.py' in selected
+
+
+def test_operator_fixture_cli_selection_matches_portable_discovery(tmp_path):
+    changed = tmp_path / 'changed.txt'
+    changed.write_text('backend/scripts/jobstore_operator/tests/fixtures/pod-api-response.json\n')
+    output = subprocess.run(
+        [sys.executable, str(SELECTOR), '--changed-files', str(changed)],
+        cwd=BACKEND_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    portable = {
+        path.relative_to(BACKEND_DIR).as_posix()
+        for path in (BACKEND_DIR / 'scripts/jobstore_operator/tests').glob('test_*.py')
+    }
+    assert set(output.stdout.splitlines()) == portable
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
         'backend/scripts/integration_canary_controller.py',
         'backend/scripts/integration_canary_metrics.py',
         'backend/scripts/runtime_env_canary_ops.py',

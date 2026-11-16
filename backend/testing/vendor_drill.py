@@ -274,7 +274,9 @@ class DrillWorld:
         # sampler over this store's own admissible-fresh reads, on drill time, read synchronously.
         self.overflow = (
             gpu_overflow.GpuOverflow(
-                gpu_overflow._fresh_sample(self.store.oldest_admissible_ready, self.store.ready_for_capacity),
+                gpu_overflow._priority_sample(
+                    self.store.oldest_admissible_ready, self.store.ready_for_capacity, int(Priority.FRESH)
+                ),
                 clock=self.clock.time,
                 monotonic=self.clock.time,
                 submit=lambda fn: fn(),

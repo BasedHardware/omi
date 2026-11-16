@@ -198,6 +198,7 @@ from utils.sync.input_limits import (
     validate_backfill_uploads,
     validate_backfill_paths,
 )
+from utils.conversations.layer import has_recording_pieces
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
@@ -896,6 +897,13 @@ async def sync_local_files_v2(
                 'detail': 'Historical recovery is paused; local audio was not consumed',
             },
         )
+    try:
+        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
+            lane_decision.maximum_age_seconds or 0
+        )
+    except Exception:
+        pass
+
     if not lane_decision.automatic_recovery_allowed and repair_identity is None:
         return JSONResponse(
             status_code=422,
@@ -905,13 +913,6 @@ async def sync_local_files_v2(
                 'lane': lane_decision.lane.value,
             },
         )
-    try:
-        OMI_SYNC_RECORDING_AGE_SECONDS.labels(lane=lane_decision.lane.value).observe(
-            lane_decision.maximum_age_seconds or 0
-        )
-    except Exception:
-        pass
-
     if fresh_refused:
         return await _fair_use_restriction_response(
             uid=uid,
@@ -3980,13 +3981,23 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         if not conversation.get('audio_files'):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'no_audio_files'})
         audio_files = conversation['audio_files']
+        if has_recording_pieces(conversation):
+            from utils.conversations.v3.audio import playback_snapshot
+
+            conversation = await run_blocking(db_executor, playback_snapshot, uid, conversation)
         fingerprint = sync_playback.conversation_merge_fingerprint(conversation, demand=demand)
         if payload_fingerprint and payload_fingerprint != fingerprint:
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
-        artifact_fingerprint = compute_audio_files_fingerprint(
-            audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
+        artifact_fingerprint = (
+            conversation['_v3_playback_fingerprint']
+            if has_recording_pieces(conversation)
+            else compute_audio_files_fingerprint(
+                audio_files,
+                origin=conversation.get('started_at') or conversation.get('created_at'),
+                source_identity=True,
+            )
         )
         stamp = conversation.get('conversation_audio') or {}
         if stamp.get('audio_files_fingerprint') in (fingerprint, artifact_fingerprint) and (
@@ -4035,6 +4046,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     started_at_ts,
                     artifact_fingerprint,
                     strict_sources=demand,
+                    **({'conversation': conversation} if has_recording_pieces(conversation) else {}),
                 )
         except PlaybackSourceChanged:
             return await _refuse_changed_playback_source(payload, fingerprint=fingerprint)

@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Снима со телефонот",
+    "wrapUp": "Заврши",
+    "recordingDiscarded": "Снимката е отфрлена",
     "undo": "Врати",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "Префрлањето моментално не е достапно. Наместо тоа, ажурирајте ја картичката.",
     "monthlySwitchDoneTitle": "Сега плаќате месечно",
     "monthlySwitchDoneBody": "Денес платено {price}. Се обновува месечно.",
-    "processingDeleteScopeChanged": "Списокот за обработка се промени. Прегледајте го и обидете се повторно."
+    "processingDeleteScopeChanged": "Списокот за обработка се промени. Прегледајте го и обидете се повторно.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "Ги искористивте {minutes} минути за овој месец",
+    "freeCapBody": "Omi сè уште снима. Изберете како да продолжи транскрипцијата.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "Неограничена транскрипција во облак",
+    "freeCapProAccuracy": "Најдобра точност",
+    "freeCapProWaiting": "Ги транскрибира вашите снимки што чекаат",
+    "freeCapPhoneSubtitle": "Бесплатно. Останува вклучено додека не се вратите.",
+    "transcribingOnThisPhone": "Транскрипција на овој телефон",
+    "getPro": "Земете Pro",
+    "unlock": "Отклучи",
+    "transcribeWith": "Транскрибирај со",
+    "omiCloud": "Omi облак",
+    "thisPhone": "Овој телефон",
+    "onDeviceReady": "Подготвено",
+    "cloudMinutesLeft": "Преостануваат {left} од {limit} мин · се обновува на {date}",
+    "cloudMinutesAvailable": "Достапни се {minutes} минути во облак",
+    "switchBack": "Врати се",
+    "setUpThisPhone": "Поставете го овој телефон",
+    "speechRecognition": "Препознавање говор",
+    "audioStaysOnPhone": "Аудиото останува на вашиот телефон",
+    "onDeviceModelDownloadSize": "Преземање {size} MB",
+    "downloadNow": "Преземи сега",
+    "onWifiLater": "Подоцна на Wi-Fi",
+    "conversationWritingSummary": "Го пишуваме вашето резиме…"
 }

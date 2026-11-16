@@ -74,6 +74,7 @@ part 'wal_job_reconciliation.dart';
 part 'wal_index_persistence.dart';
 part 'device_chunk_persistence.dart';
 part 'wal_account_purge.dart';
+part 'wal_discard.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
@@ -1716,6 +1717,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await _enqueueBuffer(() => _finalizeCurrentSession(generation));
   }
 
+  /// Recordings the reader discarded whose WAL was uploading at the time; see [_WalDiscard].
+  final Set<String> _discardedRecordingSessionIds = {};
+
+  /// Throws away a phone recording the reader discarded (Undo on Home's recording bar); see
+  /// [_WalDiscard]. Returns how many WALs were removed.
+  Future<int> discardRecording(String recordingSessionId) => _discardRecording(recordingSessionId);
+
   Future<void> _finalizeCurrentSession(int generation) async {
     if (_frames.isEmpty) return;
 
@@ -2119,6 +2127,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // belongs to this pass and must never be cleared when the flush completes.
     _isCancelled = false;
     await _enqueueBuffer(() => _flush(generation));
+    await _dropDiscardedWals(generation);
     if (!_isCurrent(generation) || passCancelled()) return null;
     _accumulatedResponse = null;
 
@@ -2126,6 +2135,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     var wals = _wals
         .where((wal) =>
             isAutoUploadEligible(wal, nowSeconds: initialNowSeconds) &&
+            !_isDiscardedRecording(wal) &&
             (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
     if (wals.isEmpty) {
@@ -2189,6 +2199,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final eligible = _wals
           .where((wal) =>
               isAutoUploadEligible(wal, nowSeconds: batchNowSeconds) &&
+              !_isDiscardedRecording(wal) &&
               !attemptedWalIds.contains(walAttemptKey(wal)) &&
               !_recordingWaits.isWaiting(wal.conversationId) &&
               (wal.status != WalStatus.uploadRejected || refusalRetries < walMaxRefusalRetriesPerDrain))

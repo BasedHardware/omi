@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Снима се телефоном",
+    "wrapUp": "Заврши",
+    "recordingDiscarded": "Снимак одбачен",
     "undo": "Врати",
     "@undo": {
         "description": "Undo button text"
@@ -12213,5 +12216,30 @@
     "monthlySwitchUnavailable": "Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.",
     "monthlySwitchDoneTitle": "Сада плаћате месечно",
     "monthlySwitchDoneBody": "Данас плаћено {price}. Обнавља се месечно.",
-    "processingDeleteScopeChanged": "Листа обраде се променила. Прегледајте је и покушајте поново."
+    "processingDeleteScopeChanged": "Листа обраде се променила. Прегледајте је и покушајте поново.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "Искористили сте {minutes} минута за овај месец",
+    "freeCapBody": "Omi и даље снима. Изаберите како да наставите са транскрипцијом.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "Неограничена транскрипција у облаку",
+    "freeCapProAccuracy": "Најбоља тачност",
+    "freeCapProWaiting": "Транскрибује ваше снимке на чекању",
+    "freeCapPhoneSubtitle": "Бесплатно. Остаје укључено док се не вратите.",
+    "transcribingOnThisPhone": "Транскрипција на овом телефону",
+    "getPro": "Узмите Pro",
+    "unlock": "Откључај",
+    "transcribeWith": "Транскрибуј помоћу",
+    "omiCloud": "Omi облак",
+    "thisPhone": "Овај телефон",
+    "onDeviceReady": "Спремно",
+    "cloudMinutesLeft": "Преостало {left} од {limit} мин · обнавља се {date}",
+    "cloudMinutesAvailable": "Доступно {minutes} минута у облаку",
+    "switchBack": "Врати се",
+    "setUpThisPhone": "Подесите овај телефон",
+    "speechRecognition": "Препознавање говора",
+    "audioStaysOnPhone": "Звук остаје на вашем телефону",
+    "onDeviceModelDownloadSize": "Преузимање {size} MB",
+    "downloadNow": "Преузми сада",
+    "onWifiLater": "Касније на Wi-Fi",
+    "conversationWritingSummary": "Пишемо ваш сажетак…"
 }

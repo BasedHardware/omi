@@ -1989,6 +1989,15 @@ class AppLocalizationsSl extends AppLocalizations {
   String get memoryHistory => 'Zgodovina';
 
   @override
+  String get recordingWithYourPhone => 'Snemanje s telefonom';
+
+  @override
+  String get wrapUp => 'Zaključi';
+
+  @override
+  String get recordingDiscarded => 'Posnetek zavržen';
+
+  @override
   String get undo => 'Razveljavi';
 
   @override
@@ -15492,4 +15501,88 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Porabili ste $minutes minut tega meseca';
+  }
+
+  @override
+  String get freeCapBody => 'Omi še vedno snema. Izberite, kako nadaljevati s prepisovanjem.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neomejeno prepisovanje v oblaku';
+
+  @override
+  String get freeCapProAccuracy => 'Najboljša natančnost';
+
+  @override
+  String get freeCapProWaiting => 'Prepiše vaše čakajoče posnetke';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Brezplačno. Ostane vklopljeno, dokler ne preklopite nazaj.';
+
+  @override
+  String get transcribingOnThisPhone => 'Prepisovanje na tem telefonu';
+
+  @override
+  String get getPro => 'Pridobite Pro';
+
+  @override
+  String get unlock => 'Odkleni';
+
+  @override
+  String get transcribeWith => 'Prepisuj z';
+
+  @override
+  String get omiCloud => 'Oblak Omi';
+
+  @override
+  String get thisPhone => 'Ta telefon';
+
+  @override
+  String get onDeviceReady => 'Pripravljeno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Preostalo $left od $limit min · ponastavitev $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Na voljo $minutes minut v oblaku';
+  }
+
+  @override
+  String get switchBack => 'Preklopi nazaj';
+
+  @override
+  String get setUpThisPhone => 'Nastavite ta telefon';
+
+  @override
+  String get speechRecognition => 'Prepoznavanje govora';
+
+  @override
+  String get audioStaysOnPhone => 'Zvok ostane na telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Prenos $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Prenesi zdaj';
+
+  @override
+  String get onWifiLater => 'Pozneje prek Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš povzetek…';
 }
