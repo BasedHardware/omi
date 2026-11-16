@@ -39,6 +39,7 @@ class ControlTests(unittest.TestCase):
                 '--network=none',
                 '--read-only',
                 '--memory=512m',
+                '--memory-swap=512m',
                 '--cap-drop=ALL',
                 '--security-opt=no-new-privileges',
                 '--tmpfs=/tmp:rw,mode=1777',
@@ -77,20 +78,38 @@ class ControlTests(unittest.TestCase):
             )
 
     def test_optimized_python_cannot_emit_false_source_refusal_proof(self):
-        # No image, credential, source file or child is accessed: the fake guard
-        # supplies a failed source stage that must never become a passing proof.
+        # All later seams would produce a valid proof if the optimization gate
+        # disappeared. No real image, source, credentials or child is accessed.
         bootstrap = '''
-import sys,types
+import sys,types,os,pathlib
+os.getuid=lambda:1000
+pathlib.Path.read_bytes=lambda _:b'fixture'
 guard=types.ModuleType('process_guard')
-guard.run_group=lambda *a,**kw: ({'result':'DEADLINE','exit_code':None}, '{"result":"HOLD","failure_stage":"source_clean"}')
+guard.run_group=lambda *a,**kw: ({'result':'COMPLETED','exit_code':2}, '{"result":"HOLD","failure_class":"DefaultCredentialsError","failure_stage":"credentials","failure_stage_elapsed_ms":1,"write_attempted":false,"state_initialized":false,"customer_rows_read":false}')
 sys.modules['process_guard']=guard
 '''
-        program = image_smoke.SOURCE_REFUSAL_PROGRAM.replace('__READINESS_SHA256__', 'a' * 64)
+        program = image_smoke.source_refusal_program(hashlib.sha256(b'fixture').hexdigest())
         result = subprocess.run(
             [sys.executable, '-O', '-c', bootstrap + program], capture_output=True, text=True, timeout=10
         )
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn('SOURCE_REFUSAL_OPTIMIZATION_REFUSED', result.stderr)
         self.assertNotIn('SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
+
+    def test_source_container_preserves_bounded_failure_diagnostic_and_cleanup(self):
+        for stdout, stderr in (('', 'SOURCE_REFUSAL_GUARD'), ('x' * 20000, 'SOURCE_REFUSAL_STAGE')):
+            with self.subTest(stderr=stderr), patch.object(
+                image_smoke.subprocess, 'check_output', return_value='owned-container\n'
+            ), patch.object(
+                image_smoke.subprocess,
+                'run',
+                return_value=subprocess.CompletedProcess([], 1, stdout=stdout, stderr=stderr),
+            ) as run:
+                with self.assertRaises(RuntimeError) as caught:
+                    image_smoke.run_container(['image', 'program'], readiness=True)
+            self.assertIn(stderr, str(caught.exception))
+            self.assertLessEqual(len(str(caught.exception)), 16384)
+            self.assertEqual(run.call_args.args[0], ['docker', 'rm', '-f', 'owned-container'])
 
     def test_malformed_runner_hash_refuses_before_host_or_container_access(self):
         for value in (None, True, '', 'a' * 63, 'A' * 64, "'; print('INJECTED'); #"):

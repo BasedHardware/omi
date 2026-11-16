@@ -66,12 +66,12 @@ report stays unchanged. The 15s stage allowance is a candidate that must pass
 native acceptance; local emulation exceeded a 25s measurement allowance.
 
 Before publication, qualification now runs the exact new image with the correct
-hostname, UID1000, read-only root, no network, 0.5 CPU and 512Mi. It executes the
+hostname, UID1000, read-only root, no network, 0.5 CPU and 512Mi without extra swap. It executes the
 real source checks before an injected credential refusal; no real ADC or SQL call
 is needed. This check runs before the broader 2-CPU smoke, avoiding that smoke's
 source access as a prerequisite. It is not a guarantee of cold host page cache or
 future Kubernetes startup latency. Its exact runner hash and fixed refusal proof
-are required by publication admission, in addition to all 56 native fixture tests
+are required by publication admission, in addition to all 58 native fixture tests
 without skips and exact image identity/cleanup checks.
 Proof-critical checks use explicit failures and refuse optimized Python, so `-O`
 cannot suppress them. A malformed runner hash refuses before host/container access.

@@ -122,6 +122,7 @@ def run_container(arguments, *, hold=False, readiness=False):
                 else []
             ),
             '--memory=512m',
+            '--memory-swap=512m',
             '--pids-limit=128',
             *arguments,
         ],
@@ -138,7 +139,10 @@ def run_container(arguments, *, hold=False, readiness=False):
                 timeout=240,
             )
             if result.returncode:
-                raise RuntimeError(result.stdout)
+                diagnostic = result.stdout
+                if readiness and result.stderr:
+                    diagnostic += '\n' + result.stderr
+                raise RuntimeError(diagnostic[-16384:])
             return result.stdout
         subprocess.run(['docker', 'start', cid], check=True, stdout=subprocess.DEVNULL, timeout=30)
         # Observe logs until the first closed-state line arrives;
