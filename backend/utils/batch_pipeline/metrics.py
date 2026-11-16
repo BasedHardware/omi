@@ -29,7 +29,7 @@ from utils.batch_pipeline.leader import TIMELINESS_LEASE_GRACE_SECONDS, TIMELINE
 from utils.batch_pipeline.contracts import Priority, WORK_OUTCOMES
 from utils.observability.reasons import AdmissionHoldReason, ReasonFamily, reason_label
 from utils.lifecycle_metrics import PhaseMetrics
-from utils.batch_pipeline import vendor_route_metrics as vendor_metrics
+from utils.batch_pipeline import vendor_route_metrics as vendor_metrics, record_wal_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
 from utils.batch_pipeline.delivered_share import DeliveredShare
 
@@ -588,6 +588,7 @@ class QueueMetrics:
         interval = timeliness_interval_seconds()
         self._timeliness_due = now + interval
         if not batch_timeliness_alarm_enabled():
+            record_wal_metrics.deactivate()
             self.timeliness_samples.labels('disabled').inc()
             return
         elected = lever_enabled('batch_timeliness_leader')
@@ -605,7 +606,12 @@ class QueueMetrics:
                 # at most one lease check per minute and never sample on loss.
                 self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
                 self._timeliness_visible = False
+                record_wal_metrics.deactivate()
                 return
+        if elected:
+            record_wal_metrics.refresh(store, now, expires_at=sample_expires)
+        else:
+            record_wal_metrics.deactivate()
         # Companion counts need leader mode and this replica's lease, so a fleet
         # never runs them on every replica. Election off means no companion counts.
         all_time_counts = elected and kill_switch('BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED', log=False)

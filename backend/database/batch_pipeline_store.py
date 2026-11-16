@@ -159,6 +159,11 @@ class FirestoreTransaction:
     def _note_hinted_activation(self, key: str, priority: int) -> None:
         self.hinted_activations.add((key, int(priority)))
 
+    @classmethod
+    def intake_reference(cls, client: Any, namespace: str, key: str):
+        """Join canonical intake storage to a raw transaction without doing IO."""
+        return cls(client, namespace, None)._ref('intakes', key)
+
     def _ref(self, table: str, key: str):
         if table == 'conversations':
             uid, conversation_id = key.split('/', 1)

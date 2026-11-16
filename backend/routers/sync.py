@@ -1117,22 +1117,29 @@ async def sync_local_files_v2(
                 content={'code': 'sync_repair_bundle_changed', 'detail': 'Retain the original complete local upload'},
             )
 
-        # Keep original bytes before any 202, content-cache hit, decode or VAD.
-        # An archive failure leaves the client responsible for retrying its WAL.
-        archive_paths = await custody_lease.archive(
-            archive_mobile_batch_raw_files,
-            uid,
-            paths,
-            {
-                'app_version': client_device_context.app_version,
-                'firmware': x_omi_firmware_version if isinstance(x_omi_firmware_version, str) else None,
-                'device_model': x_omi_device_model if isinstance(x_omi_device_model, str) else None,
-                'conversation_id': conversation_id if isinstance(conversation_id, str) else None,
-                'sync_job_id': job_id,
-            },
-        )
+        archive_paths = None
 
-        custody_lease.stored(paths, archive_paths)
+        async def archive_originals():
+            nonlocal archive_paths
+            if archive_paths is not None:
+                return
+            # Keep original bytes before any 202, content-cache hit, decode or VAD.
+            # An archive failure leaves the client responsible for retrying its WAL.
+            archive_paths = await custody_lease.archive(
+                archive_mobile_batch_raw_files,
+                uid,
+                paths,
+                {
+                    'app_version': client_device_context.app_version,
+                    'firmware': x_omi_firmware_version if isinstance(x_omi_firmware_version, str) else None,
+                    'device_model': x_omi_device_model if isinstance(x_omi_device_model, str) else None,
+                    'conversation_id': conversation_id if isinstance(conversation_id, str) else None,
+                    'sync_job_id': job_id,
+                },
+            )
+
+            custody_lease.stored(paths, archive_paths)
+
         candidate_policy = resolve_batch_policy(uid)
         intake_evidence = IntakeRouteEvidence()
         batch_policy = await run_blocking(
@@ -1165,6 +1172,7 @@ async def sync_local_files_v2(
                     None if future_capture or estimated_capture or retained_capture else recording_session_id
                 ),
                 policy=batch_policy,
+                before_coverage=archive_originals,
                 loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
                 # A legacy_final_pass_v1 owner is re-homed once legacy is dark.
                 legacy_mode=legacy_mode,
@@ -1172,6 +1180,8 @@ async def sync_local_files_v2(
             )
         if isinstance(record_response, JSONResponse):
             return record_response
+
+        await archive_originals()
 
         batch_attempted = False
         if record_response is RecordUploadRoute.BATCH:

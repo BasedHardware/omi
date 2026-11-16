@@ -10029,3 +10029,50 @@ Prepared EOF/deadline recovery still blocks default-on admission. See the
 `EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED` defaults off: only explicit true adds atomic removal of the stub's episode/reverse references to existing guarded empty-live deletion. Dangling-ID read tolerance, membership acknowledgement and registered-audio protection stay active independently of this switch. The quality lead owns a 1% then 100% traffic ramp within 48 hours of this image serving on listen and pusher, gated on clean attach abort/409 lock-timeout logs; see the rollout contract above. This does not finish/discard a recording beyond the cleanup's preexisting status decision, change episode bounds, or repair production history.
 
 `HOME_SETTLED_EMPTY_WIRE_ENABLED` defaults on. Conversation-list and episode-member reads give an empty-title affirmative settled-empty noise row the terminal caption `No summary`, preserving `home_step=noise`, empty notes/transcript, status and action IDs. This prevents released clients' empty-title STT inference across both merged wire shapes. Off restores the prior empty-title wire. No title is persisted and actual pending transcripts remain pending.
+
+### Native record WAL custody handoff (phase 1)
+
+`RECORD_WAL_HANDOFF_ENABLED` defaults **off** (`config_switch`); unset, false/0/off/no (or an unknown value)
+refuses new handoffs through the existing strict coverage path. Admission is
+limited to consented `batch_live_v1` owners with matching source/device and a
+fresh privacy/deletion fence. It does not enable token leases or provider work.
+
+Before negative coverage memos or decoding can discard upload paths, every
+original file is validated and retained create-only under
+`record-wal/{uid}/{conversation_id}/`. A versioned, all-file receipt pins its
+plaintext digest/size/name, codec/time, object generation and stored checksum.
+The same transaction advances the record upload revision and creates stable
+per-file obligations and outbox wakes. A rebundled file reuses its obligation.
+Outstanding receipts, work and originals have **no routine TTL**; explicit
+privacy erasure overrides retention, including pre-receipt object orphans.
+
+Acceptance uses the existing **202** contract with a stable `bp_wh_` polling
+handle. Status stays `processing`, reason `source_alignment_pending`, with a
+five-minute polling hint. Phase 1 never returns completed or the empty covered
+200 for these originals, never creates an STT reservation, and never treats an
+old native job's completion as this upload's disposition. Shipped clients retain
+their local files at 202. Admission rollback preserves accepted receipt readers,
+status, erasure and outstanding work. Keep a receipt-capable artifact serving
+until all obligations have settled; an older artifact cannot interpret them.
+
+The existing fleet timeliness sampler exports
+`omi_record_wal_handoff_pending_files` (capped at 10001; a saturated value is a
+lower bound), `omi_record_wal_handoff_oldest_age_seconds`, and the last successful
+sample timestamp. An unavailable sample exports unknown values, never a healthy
+zero. Answer counters have only `accepted`, `replayed`, and `refused` outcomes.
+The exact `omi_record_wal_handoff_pending_bytes` gauge includes conservative
+storage reservations and crash-orphan attempts across both stage namespaces.
+`omi_record_wal_handoff_capacity_refusals_total` has only `owner`/`global` scope
+labels. New files reserve capacity before object writes: defaults 256 MiB/200
+files per owner and 4 GiB/10,000 files globally, configurable via
+`RECORD_WAL_PENDING_OWNER_BYTES`, `RECORD_WAL_PENDING_OWNER_FILES`,
+`RECORD_WAL_PENDING_GLOBAL_BYTES`, `RECORD_WAL_PENDING_GLOBAL_FILES`. Quota
+exhaustion returns the original strict 503; retries reuse reservations, and only
+completed privacy erasure releases phase-1 capacity. Both purge flows sweep all
+conversation-prefix generations and crash orphans in the configured private
+archive bucket before releasing metadata/quota. See the [dated rollout and
+capacity contract](listen_pusher_pipeline/changes/2026-11-15-record-wal-handoff.md).
+No metric label contains an identity. Phase 2 will map source frames, prove
+redundancy/missing intervals, reserve only missing work under the canonical
+owner, and settle status after projection. Custody acceptance alone proves no
+recovered speech.
