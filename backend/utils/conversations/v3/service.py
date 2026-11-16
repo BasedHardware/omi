@@ -14,7 +14,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from utils.conversations.v3.triggers import mark_new, enqueue, changed, conversations_v3_enabled
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
-from database.conversations_v3 import Conflict
+from utils.conversations.v3.errors import Conflict
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import enqueue_named_task
@@ -43,6 +43,10 @@ def recording_short_path(fn):
         # Import the lifecycle owner lazily: lifecycle also calls this module at
         # intake. No model, entitlement, notes, derived side effect or webhook.
         from utils.conversations import lifecycle
+        from utils.conversations.process_conversation import DerivedEffectsDisposition
+
+        if kwargs.get('derived_effects_disposition_observer'):
+            kwargs['derived_effects_disposition_observer'](DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
 
         persisted = lifecycle.complete(uid, conversation.id)
         current = conversations_db.get_conversation(uid, conversation.id)

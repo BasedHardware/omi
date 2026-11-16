@@ -31,6 +31,9 @@ def write(uid, row, emit):
 
     with generated_compute_scope(uid), models.notes_mode(uid, foreground=True, emit=emit):
         structured, _discarded = _get_structured(uid, row.get('language') or 'en', Conversation(**row))
+    if row.get('title_locked'):
+        structured.title = (row.get('structured') or {}).get('title', '')
+        structured.emoji = (row.get('structured') or {}).get('emoji', '💬')
     # Stream final sections too when the existing notes writer returned a cache
     # or deterministic minimum and produced no token callback.
     return structured.model_dump()

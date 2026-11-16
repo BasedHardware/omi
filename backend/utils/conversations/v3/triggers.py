@@ -29,7 +29,13 @@ def mark_new(uid, row):
 @set_data_protection_level(data_arg_name='row')
 def _mark_resolved(uid, row):
     if row.get('data_protection_level') != 'private':
-        row.update(recording=True, v3_pending=True, v3_pending_since=datetime.now(timezone.utc), structured={})
+        row.update(
+            recording=True,
+            terminal_no_derived_effects=True,
+            v3_pending=True,
+            v3_pending_since=datetime.now(timezone.utc),
+            structured={},
+        )
 
 
 def enqueue(uid, *, at=None):
