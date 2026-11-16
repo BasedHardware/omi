@@ -54,6 +54,8 @@ def test_notes_unchanged_skips_changed_inputs_run(enabled, monkeypatch):
 def test_notes_v4_only_rebuys_old_checkpoint_when_scaled_packet_changes(
     enabled, monkeypatch, words, scaled, regenerates
 ):
+    # Exercise the notes-4 compatibility policy independently of the notes-5 contract break.
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     monkeypatch.setattr(dedupe, 'noise_skip_enabled', lambda: True)
@@ -394,6 +396,8 @@ def test_implementation_digest_is_the_explicit_prompt_version():
 
 @pytest.mark.parametrize('feature', ['notes', 'l1'])
 def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(enabled, monkeypatch, feature):
+    # Exercise the notes-4 compatibility policy independently of the notes-5 contract break.
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from config.llm_input_legacy import LEGACY_IMPLEMENTATIONS
     from models.structured import Structured
 
@@ -425,6 +429,8 @@ def test_predeploy_checkpoint_survives_deploy_and_repeated_kill_switch_flips(ena
 
 @pytest.mark.parametrize('flag', ['true', 'off'])
 def test_dependency_qualified_notes_checkpoint_survives_prompt_version_bump(enabled, monkeypatch, flag):
+    # Exercise the notes-4 compatibility policy independently of the notes-5 contract break.
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
@@ -460,6 +466,8 @@ def test_historical_checkpoint_cannot_mask_changed_route(enabled, monkeypatch, f
 
 
 def test_additive_gist_does_not_rebuy_a_stable_l8a_checkpoint(enabled, monkeypatch):
+    # Exercise the notes-4 compatibility policy independently of the notes-5 contract break.
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     from models.structured import Structured
 
     original = dedupe.implementation_digest
@@ -513,6 +521,8 @@ def test_dependency_upgrade_invalidates_checkpoint_in_both_modes(
 def test_historical_aliases_require_the_recorded_dependency_versions(
     enabled, monkeypatch, dependency_identity, feature, dependency, flag
 ):
+    # Exercise the notes-4 compatibility policy independently of the notes-5 contract break.
+    monkeypatch.setattr(dedupe, 'NOTES_UNSCALED_PREVIOUS_VERSION', 'notes-3')
     monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
     monkeypatch.setattr(
         dedupe,
@@ -566,3 +576,33 @@ def test_key_modes_do_not_read_dependency_metadata_per_call(enabled, monkeypatch
         monkeypatch.setenv('EPISODE_COMPOSER_REUSE', flag)
         for feature in ('notes', 'l1'):
             assert dedupe.fingerprint(feature, {'text': 'unchanged'})
+
+
+@pytest.mark.parametrize('version', ['notes-3', 'notes-4'])
+def test_quality_contract_recomputes_old_prompt_once_then_reuses(enabled, monkeypatch, version):
+    from models.structured import Structured
+
+    captured = []
+    real_fingerprint = dedupe.fingerprint
+
+    def capture(feature, inputs):
+        captured.append(inputs)
+        return real_fingerprint(feature, inputs)
+
+    monkeypatch.setattr(dedupe, 'fingerprint', capture)
+    generate = Mock(return_value=Structured(title='Pilot budget', overview='The budget is $8,000.'))
+    hashes = {}
+    dedupe.notes('u', enabled, 'unchanged speech', generate, hashes)
+    old_version = version + ':' + dedupe.stable_implementation('notes').split(':', 1)[1]
+    row = {
+        **hashes,
+        dedupe.NOTES_HASH: dedupe._fingerprint('notes', captured[-1], old_version),
+        'structured': generate.return_value.model_dump(),
+    }
+    monkeypatch.setattr(dedupe, '_stored', lambda *a, **kw: row)
+    generate.reset_mock()
+    for _ in range(3):
+        current = {}
+        dedupe.notes('u', enabled, 'unchanged speech', generate, current)
+        row.update(current)
+    assert generate.call_count == 1

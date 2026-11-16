@@ -725,6 +725,23 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    from utils.summary_quality import clean_structured, stable_title
+
+    if relevance_discarded is False:
+        cleaned = clean_structured(structured.model_dump())
+        previous = getattr(conversation, 'structured', None)
+        old_title = (
+            getattr(previous, 'title', '') if getattr(previous, 'title_provenance', None) != 'server_minimum' else ''
+        )
+        cleaned['title'], _ = stable_title(old_title, cleaned['title'])
+        # Preserve private notes identity carried on the model instance.
+        for key in ('title', 'overview', 'gist'):
+            if key in cleaned:
+                setattr(structured, key, cleaned[key])
+        if 'sections' in cleaned:
+            from models.structured import Section
+
+            structured.sections = [Section.model_validate(section) for section in cleaned['sections']]
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.

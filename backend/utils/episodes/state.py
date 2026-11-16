@@ -27,6 +27,7 @@ from config.episodes import (
 )
 
 from utils.speakers.display import sanitize_speaker_text
+from utils.summary_quality import safe_body, title_or_fallback, stable_title
 
 ITEM_KINDS = frozenset({'task', 'reminder'})
 _SPACE = re.compile(r'\s+')
@@ -120,9 +121,13 @@ def parse_update(raw: str, *, known_item_ids: Sequence[str]) -> IncrementalUpdat
         raise InvalidUpdate('not a JSON object')
     known = set(known_item_ids)
     update = IncrementalUpdate(
-        title=clean_text(data.get('title'), MAX_TOPIC_CHARS),
-        moment_heading=clean_text(data.get('moment_heading'), MAX_HEADING_CHARS),
-        bullets=_clean_list(data.get('bullets'), limit=MAX_BULLETS, chars=MAX_ITEM_CHARS),
+        title=title_or_fallback(clean_text(data.get('title'), MAX_TOPIC_CHARS)),
+        moment_heading=title_or_fallback(clean_text(data.get('moment_heading'), MAX_HEADING_CHARS)),
+        bullets=[
+            text
+            for line in _clean_list(data.get('bullets'), limit=MAX_BULLETS, chars=MAX_ITEM_CHARS)
+            if (text := safe_body(line))
+        ],
         people=[name for name in _clean_list(data.get('people'), limit=MAX_PEOPLE, chars=60) if name != 'a speaker'],
         open_questions=_clean_list(data.get('open_questions'), limit=MAX_OPEN_QUESTIONS, chars=MAX_ITEM_CHARS),
     )
@@ -234,5 +239,7 @@ def apply_update(
         'state_updated_at': now,
     }
     if update.title:
-        changed['title'] = update.title
+        changed['title'], reason = stable_title(episode.get('title'), update.title)
+        if reason:
+            changed['title_change_reason'] = reason
     return changed

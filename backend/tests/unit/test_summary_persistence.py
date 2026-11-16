@@ -180,3 +180,30 @@ def test_same_owners_lease_expires_during_long_process_conversation_but_summary_
     assert len(writer.commits) == 1
     assert writer.commits[0]['structured']['overview'] == result.structured.overview
     assert writer.commits[0]['summary_completed_at'] == 221
+
+
+def test_reprocess_preserves_visible_title_and_refreshes_body(writer):
+    writer.document['structured'] = {'title': 'Pilot budget', 'overview': 'Earlier notes'}
+    notes = payload('Approval is due Friday.')
+    notes['structured']['title'] = 'Launch and approval'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    assert writer.commits[0]['structured']['title'] == 'Pilot budget'
+    assert writer.commits[0]['structured']['overview'] == 'Approval is due Friday.'
+
+
+def test_unsafe_title_repair_records_reason_and_filters_body(writer):
+    writer.document['structured'] = {'title': 'Missing transcript', 'overview': 'Old notes'}
+    notes = payload('The pilot budget is $8,000. Transcript is missing.')
+    notes['structured']['title'] = 'Pilot budget'
+    assert db.persist_processing_result_with_lifecycle('u', notes)
+    written = writer.commits[0]
+    assert written['structured']['title'] == 'Pilot budget'
+    assert written['structured']['overview'] == 'The pilot budget is $8,000.'
+    assert written['title_change_reason'] == 'invalid_title_repaired'
+    assert written['title_changed_at']
+
+
+def test_user_title_remains_authoritative_even_if_it_mentions_mechanics(writer):
+    writer.document.update(user_title='Missing transcript', structured={'title': 'Earlier generated title'})
+    assert db.persist_processing_result_with_lifecycle('u', payload())
+    assert writer.commits[0]['structured']['title'] == 'Missing transcript'

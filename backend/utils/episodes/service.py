@@ -2174,13 +2174,18 @@ def episode_by_id(
 
 def _wire_heading(heading: Any) -> str:
     text = clean_text(heading, 240)
-    return '' if is_placeholder_heading(text) else text
+    from utils.summary_quality import title_or_fallback
+
+    return text if text.startswith('Discussion ') else title_or_fallback(text)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
     """Only the client-visible projection; applied offsets, usage and speaker keys stay server-side."""
     if not episode:
         return None
+    from utils.summary_quality import episode_quality
+
+    episode = episode_quality({}, episode)
     return {
         'id': episode['id'],
         'status': episode.get('status') or 'closed',

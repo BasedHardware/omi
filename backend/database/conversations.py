@@ -1288,6 +1288,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             if existing.get('user_overview'):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
+            _quality_processing_notes(uid, write_data, existing)
             _reapply_current_manual_assignments(uid, write_data, existing)
             _stage_notes_identity(transaction, user_ref, write_data, existing)
             filter_processing_write(transaction, user_ref, write_data)
@@ -1305,6 +1306,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             return
 
         write_data.setdefault('has_photos', False)
+        _quality_processing_notes(uid, write_data, {})
         _stage_notes_identity(transaction, user_ref, write_data, {})
         filter_processing_write(transaction, user_ref, write_data)
         _offload_processing_transcript(uid, write_data)
@@ -1333,6 +1335,33 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
     _sync_conversation_search_index(uid, conversation_data['id'])
+
+
+def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any]) -> None:
+    from utils.summary_quality import clean_structured, stable_title
+    from utils.conversations.llm_input_dedupe import NOTES_OUTPUT_HASH, output_fingerprint
+    from models.structured import Structured
+
+    generated = data.get('structured')
+    if not isinstance(generated, dict) or data.get('discarded'):
+        return
+    before = existing.get('structured') or {}
+    cleaned = clean_structured(generated)
+    user_title = effective_user_title(existing.get('user_title'))
+    if user_title is not None:
+        cleaned['title'] = user_title
+    else:
+        prior = before.get('title') if before.get('title_provenance') != 'server_minimum' else ''
+        cleaned['title'], reason = stable_title(prior, cleaned['title'])
+        if reason:
+            data['title_change_reason'] = reason
+            data['title_changed_at'] = datetime.now(timezone.utc)
+    if existing.get('user_overview'):
+        cleaned['overview'] = existing['user_overview']
+    data['structured'] = cleaned
+    if data.get(NOTES_OUTPUT_HASH):
+        data[NOTES_OUTPUT_HASH] = output_fingerprint(Structured.model_validate(cleaned))
+    data.update(stamp_home_display(uid, {**existing, **data}, 'conversation'))
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
@@ -1545,6 +1574,8 @@ def persist_processing_result_with_lifecycle(
 
         if existing.get('user_overview'):
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
+
+        _quality_processing_notes(uid, write_data, existing)
 
         _reapply_current_manual_assignments(uid, write_data, existing)
         _stage_notes_identity(transaction, user_ref, write_data, existing)

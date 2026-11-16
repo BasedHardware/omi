@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from models.conversation_emoji import CATEGORY_EMOJI, DEFAULT_EMOJI, NEUTRAL_EMOJI, fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
+from utils.summary_quality import clean_structured
 from models.structured_extraction import (
     AgentNotesParticipant,
     ExtractedActionItem,
@@ -52,7 +53,7 @@ class NotesOutput(BaseModel):
         """A malformed optional item must not cost every other grounded field."""
         if not isinstance(data, dict):
             return data
-        data = dict(data)
+        data = clean_structured(data)
         for field in ('title', 'overview', 'emoji', 'gist'):
             if data.get(field) is None:
                 data.pop(field, None)
