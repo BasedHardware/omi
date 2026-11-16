@@ -15,6 +15,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/devices.dart';
 import 'package:omi/services/wals/sync_wake_scope.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
@@ -43,12 +44,16 @@ class _RecordingAdapter implements AnalyticsAdapter {
 
 class _CaptureIntent extends ChangeNotifier implements CaptureProvider {
   int cleared = 0;
+  final reconnectDevices = <String?>[];
   int chargeStarts = 0;
   @override
   void onChargingStarted() => chargeStarts++;
   @override
-  void updateRecordingDevice(BtDevice? device) {
-    if (device == null) cleared++;
+  void updateRecordingDevice(BtDevice? device, {String? reconnectDeviceId}) {
+    if (device == null) {
+      cleared++;
+      reconnectDevices.add(reconnectDeviceId);
+    }
   }
 
   @override
@@ -353,6 +358,38 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(provider.connectedDevice, isNull);
       expect(capture.cleared, recovery ? 0 : 1);
+    });
+  }
+
+  for (final reason in [
+    'connection_timeout',
+    'remote_device_terminated',
+    'gatt_status_8',
+    'gatt_status_19',
+    'manual',
+    'pairing_lost',
+    'unknown',
+    'clean_disconnect'
+  ]) {
+    test('capture receives $reason immediately even when reconnect cancels the UI debounce', () async {
+      const id = 'AA:AA:AA:AA:AA:13';
+      final capture = _CaptureIntent();
+      final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+      addTearDown(provider.dispose);
+      addTearDown(capture.dispose);
+      addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
+      provider.captureProvider = capture;
+      provider.pairedDevice = _device(id);
+      BleBridge.instance.onPeripheralDisconnected(id, reason);
+      provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
+      expect(capture.cleared, 1);
+      expect(
+          capture.reconnectDevices.single,
+          ['connection_timeout', 'remote_device_terminated', 'gatt_status_8', 'gatt_status_19'].contains(reason)
+              ? id
+              : null);
+      provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.connected);
+      expect(capture.cleared, 1);
     });
   }
 

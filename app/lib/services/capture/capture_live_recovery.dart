@@ -131,7 +131,11 @@ extension _CaptureLiveRecovery on CaptureController {
     if (_captureControllerDisposed || device == null || device.id != deviceId) return false;
     if (device.type != DeviceType.omi && device.type != DeviceType.openglass) return false;
     if ((!ignoreMute && _preferences.capturePolicy.muted) || _preferences.batchModeEnabled) return false;
-    if (_liveRecovery.deviceStoppedByCaller || _pendantSuspension != null) return false;
+    final suspension = _pendantSuspension;
+    if (_liveRecovery.deviceStoppedByCaller ||
+        (suspension != null && (suspension.reason != SuspendReason.reconnect || suspension.deviceId != deviceId))) {
+      return false;
+    }
     final staged = _capture.stagedReadModel;
     return !staged.phoneOwnsCapture && !staged.callActive;
   }

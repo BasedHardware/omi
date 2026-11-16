@@ -104,6 +104,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void markDisconnectIntentional(String deviceId) {
     _intentionalDisconnectDevices.add(deviceId);
+    // The link may already be down, with no further native callback owed.
+    captureProvider?.updateRecordingDevice(null);
     _wedgeMonitor.dismissDeviceEpisode(deviceId);
   }
 
@@ -993,7 +995,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     super.dispose();
   }
 
-  void onDeviceDisconnected() async {
+  void onDeviceDisconnected({bool captureLinkAlreadyHandled = false}) async {
     final generation = _sessionGeneration;
     // Capture before setConnectedDevice(null) clears both device references.
     final disconnectedDeviceId = pairedDevice?.id ?? connectedDevice?.id;
@@ -1002,6 +1004,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     // Link loss is not an unplug. Keep this device's alert; another device does not inherit it.
     if (disconnectedDeviceId != null) _fullyChargedAlert.onLinkLost(disconnectedDeviceId);
+    if (!captureLinkAlreadyHandled) _notifyCaptureLinkLost(disconnectedDeviceId);
     BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
     unawaited(setisDeviceStorageSupport());
@@ -1010,9 +1013,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     // Recovery changes the link, not the user's capture intent. Retain the
     // session (and Resume control) while native reports the physical link down.
-    if (disconnectedDeviceId == null || !BleBridge.instance.preservesCaptureIntent(disconnectedDeviceId)) {
-      captureProvider?.updateRecordingDevice(null);
-    }
 
     // Batch mode: the native writer finalizes the in-progress recording on
     // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
@@ -1053,6 +1053,18 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // stall by itself (#3328), but the evaluation keeps the persisted silence
     // age and the Needs attention row current after any transport change.
     SyncHealthWatchdog.instance.evaluateSyncHealth();
+  }
+
+  void _notifyCaptureLinkLost(String? deviceId) {
+    final intentional = deviceId != null && _intentionalDisconnectDevices.contains(deviceId);
+    if (!intentional && deviceId != null && BleBridge.instance.preservesCaptureIntent(deviceId)) return;
+    captureProvider?.updateRecordingDevice(null,
+        reconnectDeviceId: !intentional &&
+                deviceId != null &&
+                !SyncWakeScope.syncOnly &&
+                BleBridge.instance.allowsRecordingReconnect(deviceId)
+            ? deviceId
+            : null);
   }
 
   /// Emits the enriched Device Disconnected analytics event with the reason
@@ -1688,12 +1700,15 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Check if this is the paired device or currently connected device
         // Coz connectedDevice and pairedDevice are the same but connectedDevice becomes null after disconnect
         if (deviceId == connectedDevice?.id || deviceId == pairedDevice?.id) {
+          // Capture sees the loss before a sub-500ms reconnect can cancel the
+          // UI debounce. Native published its reason before this callback.
+          _notifyCaptureLinkLost(deviceId);
           // Invalidate immediately, before disconnect UI/capture work is debounced.
           _resetBatteryState();
           notifyListeners();
           _disconnectDebouncer.run(() {
             if (!_isCurrent(generation)) return;
-            onDeviceDisconnected();
+            onDeviceDisconnected(captureLinkAlreadyHandled: true);
           });
         }
         break;

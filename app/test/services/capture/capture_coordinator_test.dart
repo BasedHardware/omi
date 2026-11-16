@@ -59,8 +59,11 @@ CaptureEnvironment environment(
   bool transcriptReady = false,
   DateTime? appSuspendedAt,
   DateTime? appResumedAt,
+  DateTime Function()? now,
+  bool signedIn = true,
 }) =>
     CaptureEnvironment(
+      now: now ?? DateTime.now,
       livenessEpoch: livenessEpoch,
       appSuspended: appSuspended,
       appSuspendedAt: appSuspendedAt,
@@ -71,7 +74,7 @@ CaptureEnvironment environment(
       batchModeSuspendedForOnboarding: batchSuspended,
       deviceSupportsTranscribeLater: true,
       networkConnected: true,
-      signedIn: () => true,
+      signedIn: () => signedIn,
       phoneMicSupportsBatch: true,
       transcriptReady: transcriptReady,
       socketConnected: socketConnected ?? (state.phoneOwns || state.pendantOwns),
@@ -699,6 +702,216 @@ Future<List<ScriptStep>> shrinkEffects(List<ScriptStep> failing, String failure,
 }
 
 void main() {
+  test('short same-device link loss preserves the recording identity', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    addTearDown(coordinator.dispose);
+    (await coordinator.dispatch(DeviceStartRequested(device: pendant))).throwIfFailed();
+    final original = coordinator.state.active!;
+    (await coordinator.dispatch(DeviceUpdated(null, reconnectDeviceId: pendant.id))).throwIfFailed();
+    (await coordinator.dispatch(DeviceStartRequested(device: pendant))).throwIfFailed();
+    expect(coordinator.state.active!.recordingId, original.recordingId);
+    expect(coordinator.state.active!.sessionKey, original.sessionKey);
+  });
+
+  group('pendant reconnect grace', () {
+    late HarnessPorts fake;
+    late CaptureCoordinator coordinator;
+    late DateTime now;
+    var call = false;
+    var signedIn = true;
+    setUp(() {
+      now = DateTime.utc(2026, 11, 17);
+      call = false;
+      signedIn = true;
+      fake = HarnessPorts();
+      coordinator = CaptureCoordinator(
+          ports: fake.ports,
+          readEnvironment: () => environment(coordinator.state,
+              muted: fake.muted, batch: fake.batch, call: call, now: () => now, signedIn: signedIn));
+    });
+    tearDown(() => coordinator.dispose());
+    Future<void> send(CaptureEvent event) async => (await coordinator.dispatch(event)).throwIfFailed();
+    Future<ActiveCaptureSession> drop({bool batch = false, bool paused = false}) async {
+      fake.batch = batch;
+      fake.muted = paused;
+      await send(DeviceStartRequested(device: pendant));
+      final original = coordinator.state.active!;
+      fake.log.clear();
+      await send(DeviceUpdated(null, reconnectDeviceId: pendant.id));
+      expect(fake.log, containsAllInOrder(['stage:StopDeviceSessionStage', 'socket:close']));
+      expect(fake.log, isNot(contains('stage:DeviceStopTelemetryStage')));
+      expect(fake.ble, isFalse);
+      expect(coordinator.state.phase, CapturePhase.idle);
+      return original;
+    }
+
+    for (final batch in [false, true]) {
+      for (final paused in [false, true]) {
+        test('same device at 119s retains identity, mode and pause: batch=$batch paused=$paused', () async {
+          final original = await drop(batch: batch, paused: paused);
+          final deadline = coordinator.state.pendantSuspension!.reconnectDeadline;
+          now = now.add(const Duration(seconds: 119));
+          // The provider publishes identity before its start callback.
+          await send(DeviceUpdated(pendant));
+          expect(coordinator.state.pendantSuspension!.deviceId, pendant.id);
+          expect(coordinator.state.pendantSuspension!.reconnectDeadline, deadline);
+          await send(DeviceStartRequested(device: pendant));
+          expect(coordinator.state.active!.recordingId, original.recordingId);
+          expect(coordinator.state.active!.sessionKey, original.sessionKey);
+          expect(coordinator.state.active!.mode, original.mode);
+          expect(fake.nextId, 1);
+          expect(fake.muted, paused);
+          expect(fake.ble, !paused);
+        });
+      }
+    }
+    for (final elapsed in [120, 121]) {
+      test('exact/after deadline ($elapsed seconds) mints fresh even without timer wake', () async {
+        final original = await drop();
+        now = now.add(Duration(seconds: elapsed));
+        final transition = transitionCapture(
+            coordinator.state, DeviceStartRequested(device: pendant), environment(coordinator.state, now: () => now));
+        expect(
+            transition.effects
+                .whereType<RunStage>()
+                .map((e) => e.stage)
+                .whereType<ReconnectObservationStage>()
+                .single
+                .outcome,
+            'reconnect_grace_expired_fresh');
+        await send(DeviceStartRequested(device: pendant));
+        expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+        expect(coordinator.state.active!.sessionKey, isNot(original.sessionKey));
+      });
+    }
+    for (final stop in <CaptureEvent>[
+      const DeviceStopRequested(),
+      const DeviceUpdated(null),
+      const FinishRequested(),
+      const CaptureIdentityChanged(),
+    ]) {
+      test('${stop.runtimeType} during grace ends reuse', () async {
+        final original = await drop();
+        await send(stop);
+        expect(coordinator.state.pendantSuspension, isNull);
+        await send(DeviceStartRequested(device: pendant));
+        expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+      });
+    }
+    test('manual disconnect never enters grace', () async {
+      await send(DeviceStartRequested(device: pendant));
+      final original = coordinator.state.active!;
+      await send(const DeviceUpdated(null));
+      expect(coordinator.state.pendantSuspension, isNull);
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('different device cannot acquire the retained identity through update then start', () async {
+      final original = await drop();
+      final other = BtDevice(id: 'other', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      await send(DeviceUpdated(other));
+      expect(coordinator.state.pendantSuspension, isNull);
+      await send(DeviceStartRequested(device: other));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+      expect(coordinator.state.active!.deviceId, other.id);
+    });
+    for (final pause in <CaptureEvent>[
+      const PauseCaptureRequested(),
+      const DevicePauseRequested(),
+      const OfflineMuteToggled()
+    ]) {
+      test('${pause.runtimeType} during gap survives reconnect', () async {
+        final original = await drop();
+        await send(pause);
+        expect(coordinator.state.pendantSuspension!.wasPaused, isTrue);
+        expect(fake.muted, isTrue);
+        await send(DeviceStartRequested(device: pendant));
+        expect(coordinator.state.active!.recordingId, original.recordingId);
+        expect(coordinator.state.phase, CapturePhase.pendantPaused);
+        expect(fake.ble, isFalse);
+      });
+    }
+    test('unmute during gap restores the same identity unpaused', () async {
+      final original = await drop(paused: true);
+      await send(const DeviceResumeRequested());
+      expect(fake.muted, isFalse);
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+      expect(coordinator.state.phase, CapturePhase.pendantLive);
+    });
+    test('duplicate unexpected drop neither extends deadline nor duplicates suspension', () async {
+      await drop();
+      final deadline = coordinator.state.pendantSuspension!.reconnectDeadline;
+      now = now.add(const Duration(seconds: 60));
+      await send(DeviceUpdated(null, reconnectDeviceId: pendant.id));
+      expect(coordinator.state.suspended, hasLength(1));
+      expect(coordinator.state.pendantSuspension!.reconnectDeadline, deadline);
+    });
+    test('expiry wake completes once and snapshot is sanitized at launch', () async {
+      await drop();
+      final restored = CaptureCoordinatorState.fromJson(coordinator.state.toJson());
+      expect(restored.pendantSuspension!.reconnectDeadline, now.add(const Duration(seconds: 120)));
+      expect(restored.sanitizedForLaunch().suspended, isEmpty);
+      now = now.add(const Duration(seconds: 120));
+      fake.log.clear();
+      await send(const ReconnectGraceElapsed());
+      await send(const ReconnectGraceElapsed());
+      expect(coordinator.state.suspended, isEmpty);
+      expect(fake.log.where((e) => e == 'stage:DeviceStopTelemetryStage'), hasLength(1));
+    });
+    test('sign out invalidates grace before same-device start', () async {
+      final original = await drop();
+      signedIn = false;
+      await send(const AppForegrounded());
+      expect(coordinator.state.suspended, isEmpty);
+      signedIn = true;
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('phone takeover retires grace and its later stop cannot revive the old id', () async {
+      final original = await drop();
+      await send(const PhoneStartRequested());
+      expect(coordinator.state.suspended, isEmpty);
+      await send(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('denied phone permission leaves the grace recording available', () async {
+      final original = await drop();
+      fake.permitPhone = false;
+      await send(const PhoneStartRequested());
+      expect(coordinator.state.pendantSuspension!.recordingId, original.recordingId);
+      expect(fake.log, isNot(contains('stage:DeviceStopTelemetryStage')));
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+    });
+    test('same-device duplicate starts join, and an active device switch still mints fresh', () async {
+      await send(DeviceStartRequested(device: pendant));
+      final original = coordinator.state.active!;
+      await send(DeviceStartRequested(device: pendant));
+      expect(fake.nextId, 1);
+      final other = BtDevice(id: 'other', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      await send(DeviceUpdated(other));
+      await send(DeviceStartRequested(device: other));
+      expect(coordinator.state.active!.recordingId, isNot(original.recordingId));
+    });
+    test('reconnect during call keeps identity until call ends', () async {
+      final original = await drop();
+      call = true;
+      await send(const CallStateChanged());
+      await send(DeviceStartRequested(device: pendant));
+      expect(coordinator.state.pendantSuspension!.reason, SuspendReason.call);
+      call = false;
+      await send(const CallStateChanged());
+      expect(coordinator.state.active!.recordingId, original.recordingId);
+    });
+  });
+
   for (final batch in [false, true]) {
     for (final deviceMuted in [false, true]) {
       test('reconnect commits resolved phase before transport: batch $batch, muted $deviceMuted', () async {
@@ -1963,6 +2176,49 @@ void main() {
       if (directory.existsSync()) directory.deleteSync(recursive: true);
     }
   }
+
+  test('real pendant reconnect sends retained client id and journals new audio after the gap', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection(orphanDeviceId: pendant.id);
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final original = world.controller.activeRecordingId;
+      world.deviceConnection!.emitAudio();
+      await world.settle();
+      world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
+      await world.controller.pendingSourceSwitch;
+      expect(world.deviceConnection!.openAudioSubscriptions, 0);
+      final before = await world.wal.syncs.phone.getAllWals();
+      expect(before, isNotEmpty);
+      world.scheduler.elapse(const Duration(seconds: 30));
+      world.controller.updateRecordingDevice(pendant);
+      await world.controller.pendingSourceSwitch;
+      // Native may deliver packets before the provider's start. They still
+      // enter the existing safety WAL and may redrive capture themselves.
+      world.deviceConnection!.emitAudio(value: 8);
+      expect(world.wal.syncs.phone.testFrameSynced, isNotEmpty);
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      expect(world.controller.activeRecordingId, original);
+      expect(world.socketRecordingIds, everyElement(original));
+      expect(world.deviceConnection!.openAudioSubscriptions, 1);
+      world.deviceConnection!.emitAudio(value: 9);
+      await world.settle();
+      await world.wal.syncs.phone.finalizeCurrentSession();
+      expect(await world.wal.syncs.phone.getAllWals(), isNotEmpty);
+    }, pendantCodec: BleAudioCodec.opus);
+  });
+  test('real controller expires reconnect grace and disposes its timer', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      world.controller.updateRecordingDevice(null, reconnectDeviceId: pendant.id);
+      await world.controller.pendingSourceSwitch;
+      world.scheduler.elapse(const Duration(seconds: 120));
+      await world.settle();
+      expect(world.controller.activeRecordingId, isNull);
+    });
+  });
 
   for (final duringResume in [false, true]) {
     test('audio setup failure during ${duringResume ? 'resume' : 'start'} fails closed and permits a fresh start',

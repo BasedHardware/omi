@@ -286,6 +286,7 @@ class CaptureReplayWorld {
 
   /// The local_preview declaration of each socket the controller opened.
   final List<bool> localPreviewRequests = [];
+  final List<String?> socketRecordingIds = [];
 
   /// Every transcription socket the controller opened, in order, with the source it declared.
   final List<({String? source, ScriptedPureSocket transport})> sockets = [];
@@ -683,6 +684,7 @@ class _ReplayCaptureController extends CaptureController {
   }) async {
     final transport = ScriptedPureSocket();
     world.localPreviewRequests.add(localPreview);
+    world.socketRecordingIds.add(clientConversationId);
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {
       transport.nextConnectFails = true;

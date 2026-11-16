@@ -1126,6 +1126,8 @@ class CaptureController extends ChangeNotifier
   static const _captureSnapshotKey = 'captureCoordinatorSnapshot';
 
   CaptureCoordinator? _captureInstance;
+  Timer? _reconnectGraceTimer;
+  DateTime? _reconnectGraceDeadline;
   bool _captureControllerDisposed = false;
   bool _uplinkReconcileNeeded = false;
   bool _uplinkReconcileRunning = false;
@@ -1140,11 +1142,26 @@ class CaptureController extends ChangeNotifier
         if (!_captureControllerDisposed) {
           _syncCaptureHealthTimer(state);
           _syncCalendarGapTimer();
+          _syncReconnectGraceTimer(state);
           _reconcileTranscriptionKeepAlive();
           notifyListeners();
         }
       },
     );
+  }
+
+  void _syncReconnectGraceTimer(CaptureCoordinatorState state) {
+    final entry = state.pendantSuspension;
+    final deadline = entry?.reason == SuspendReason.reconnect ? entry?.reconnectDeadline : null;
+    if (deadline == _reconnectGraceDeadline && _reconnectGraceTimer?.isActive == true) return;
+    _reconnectGraceTimer?.cancel();
+    _reconnectGraceTimer = null;
+    _reconnectGraceDeadline = deadline;
+    if (deadline == null) return;
+    final delay = deadline.difference(_now());
+    _reconnectGraceTimer = lifetime.once(delay.isNegative ? Duration.zero : delay, () {
+      unawaited(_dispatchLogged(const ReconnectGraceElapsed()));
+    });
   }
 
   SuspendedCapture? get _pendantSuspension => _capture.stagedReadModel.pendantSuspension;
@@ -1432,7 +1449,7 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  void updateRecordingDevice(BtDevice? device) {
+  void updateRecordingDevice(BtDevice? device, {String? reconnectDeviceId}) {
     if (_captureControllerDisposed) return;
     _deviceIdentityRevision++;
     if (_testingReconnectProbeDepth > 0 &&
@@ -1443,7 +1460,7 @@ class CaptureController extends ChangeNotifier
     _recordingDevice = _recordingDevicePreservingNormalizedType(device);
     _syncContinuityWatch();
     notifyListeners();
-    unawaited(_dispatchLogged(DeviceUpdated(device)));
+    unawaited(_dispatchLogged(DeviceUpdated(device, reconnectDeviceId: reconnectDeviceId)));
   }
 
   Future _resetStateVariables() async {
@@ -2887,6 +2904,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    if (_captureInstance != null) unawaited(_dispatchLogged(const CaptureIdentityChanged()));
     _mobileStandardBatchAllowed = false;
     _mobileStandardBatch?.authorize(false);
     _localPreview.end(send: _openSocketSender, preserveForAccountChange: _preserveSuppressedForAccountChange);
@@ -2962,6 +2980,8 @@ class CaptureController extends ChangeNotifier
     _clearIngressByteObserver();
     _uplinkSilence.cancel();
     _captureControllerDisposed = true;
+    _reconnectGraceTimer?.cancel();
+    _reconnectGraceTimer = null;
     _captureHealthTimer?.cancel();
     _captureHealthTimer = null;
     _calendarGapTimer?.cancel();
@@ -4835,6 +4855,7 @@ class CaptureController extends ChangeNotifier
   }
 
   CaptureEnvironment _readCaptureEnvironment() => CaptureEnvironment(
+        now: _now,
         livenessEpoch: _livenessEpoch,
         appSuspended: _appSuspended,
         appSuspendedAt: _appSuspendedAt,
@@ -4913,6 +4934,7 @@ class CaptureController extends ChangeNotifier
       ? Future<Object?>.value(null)
       : switch (stage) {
           UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
+          ReconnectObservationStage() => Future.sync(() => _recordingTelemetry.reconnectOutcome(stage.outcome)),
           ResolveDeviceMuteStage() => _resolveDeviceMute(),
           StartDeviceSessionStage() => _startDeviceSessionBody(
               deviceRequested: stage.deviceRequested,

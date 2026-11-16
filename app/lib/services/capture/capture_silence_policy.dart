@@ -59,6 +59,7 @@ CaptureTransition _reduceSilenceResume(CaptureCoordinatorState state, CaptureEnv
 }
 
 CaptureTransition _reduceDevicePause(CaptureCoordinatorState state, CaptureEnvironment env) {
+  if (state.pendantSuspension?.reason == SuspendReason.reconnect) return _reducePause(state, env);
   if (env.silencePaused) {
     return _reducePause(state, env);
   }
