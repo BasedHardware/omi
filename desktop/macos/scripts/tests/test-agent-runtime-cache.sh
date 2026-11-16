@@ -89,10 +89,15 @@ arc_write_stamp "$STAMP" "$KEY" "$DIGEST"
 arc_cache_status "$STAMP" "$KEY" "$DIGEST" || fail "unchanged stamp reported MISS"
 
 # A hit is decision-only: it must not rewrite or touch prepared outputs.
-before_mtime="$(stat -f %m "$TMP_ROOT/outputs/sentinel.js" 2>/dev/null || stat -c %Y "$TMP_ROOT/outputs/sentinel.js")"
+# GNU stat -f prints filesystem metadata before failing on the BSD format;
+# capturing that output makes free-block changes look like file mutations.
+file_mtime() {
+  python3 -c 'import os, sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$1"
+}
+before_mtime="$(file_mtime "$TMP_ROOT/outputs/sentinel.js")"
 sleep 1
 arc_cache_status "$STAMP" "$KEY" "$(output_digest)" || fail "second unchanged check missed"
-after_mtime="$(stat -f %m "$TMP_ROOT/outputs/sentinel.js" 2>/dev/null || stat -c %Y "$TMP_ROOT/outputs/sentinel.js")"
+after_mtime="$(file_mtime "$TMP_ROOT/outputs/sentinel.js")"
 assert_eq "$after_mtime" "$before_mtime"
 
 # Source/lock, mode, and actual build toolchain metadata all participate.
@@ -144,27 +149,171 @@ rm -f "$STAMP"
 false || true
 [ ! -e "$STAMP" ] || fail "failed preparation retained a stamp"
 
-# Standalone invocations serialize their output/stamp critical section.
+# Standalone invocations serialize their output/stamp critical section. Two
+# real contender processes (each with its own pid and start stamp), a file
+# barrier instead of a timing sleep, and overlap detected by the section itself
+# rather than by the trace, which is kept as a diagnostic only.
 LOCK="$TMP_ROOT/concurrent.lock.d"
 TRACE="$TMP_ROOT/concurrent.trace"
-run_locked() {
-  local name="$1"
-  arc_acquire_lock "$LOCK" 5
-  printf '%s-start\n' "$name" >>"$TRACE"
-  sleep 0.2
-  printf '%s-end\n' "$name" >>"$TRACE"
-  arc_release_lock "$LOCK"
-}
-run_locked one &
-pid_one=$!
-run_locked two &
-pid_two=$!
-wait "$pid_one" "$pid_two"
-trace="$(cat "$TRACE")"
-case "$trace" in
-  $'one-start\none-end\ntwo-start\ntwo-end'|$'two-start\ntwo-end\none-start\none-end') ;;
-  *) fail "lock allowed interleaved critical sections: $trace" ;;
-esac
+CS_MARKER="$TMP_ROOT/concurrent.section"
+BARRIER="$TMP_ROOT/concurrent.barrier"
+mkdir -p "$BARRIER"
+
+# shellcheck disable=SC2016 # expanded by the contender shell, not here
+contender_script='
+set -euo pipefail
+source "$1"
+name="$2"
+lock="$3"
+trace="$4"
+cs_marker="$5"
+barrier="$6"
+touch "$barrier/ready-$name"
+deadline=$((SECONDS + 20))
+while [ ! -e "$barrier/release" ]; do
+  [ "$SECONDS" -lt "$deadline" ] || exit 1
+  sleep 0.01
+done
+arc_acquire_lock "$lock" 30 || exit 1
+printf "%s-start\n" "$name" >>"$trace"
+if ! (set -C; : >"$cs_marker") 2>/dev/null; then
+  echo "FAIL: overlapping lock holders: $name" >&2
+  exit 1
+fi
+printf "%s-end\n" "$name" >>"$trace"
+rm "$cs_marker"
+arc_release_lock "$lock"
+'
+bash -c "$contender_script" _ "$SCRIPT_DIR/../agent-runtime-cache.sh" one "$LOCK" "$TRACE" "$CS_MARKER" "$BARRIER" 2>"$TMP_ROOT/lock-one.log" &
+contender_one=$!
+bash -c "$contender_script" _ "$SCRIPT_DIR/../agent-runtime-cache.sh" two "$LOCK" "$TRACE" "$CS_MARKER" "$BARRIER" 2>"$TMP_ROOT/lock-two.log" &
+contender_two=$!
+# Wait for both contenders to be staged, then open the barrier together.
+barrier_deadline=$((SECONDS + 20))
+while [ ! -e "$BARRIER/ready-one" ] || [ ! -e "$BARRIER/ready-two" ]; do
+  if [ "$SECONDS" -ge "$barrier_deadline" ]; then
+    cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" >&2
+    fail "contenders did not reach the barrier"
+  fi
+  sleep 0.05
+done
+: >"$BARRIER/release"
+contender_failed=0
+wait "$contender_one" || contender_failed=1
+wait "$contender_two" || contender_failed=1
+if [ "$contender_failed" -ne 0 ]; then
+  cat "$TMP_ROOT/lock-one.log" "$TMP_ROOT/lock-two.log" "$TRACE" >&2
+  fail "lock contender failed"
+fi
+[ ! -d "$LOCK" ] || fail "contenders left the lock directory behind"
+
+# A held lock must survive a record that cannot confirm the holder. The pid
+# protocol read exactly that as staleness and deleted the live lock; the owner
+# record must make the contender wait instead. The bare `pid` record stays in
+# play because an in-flight older process may still write one.
+held_lock="$TMP_ROOT/held.lock.d"
+arc_acquire_lock "$held_lock" 5
+dead_pid=999999
+while kill -0 "$dead_pid" 2>/dev/null; do
+  dead_pid=$((dead_pid - 1))
+done
+printf '%s\n' "$dead_pid" >"$held_lock/pid"
+if bash -c 'source "$1"; arc_acquire_lock "$2" 1' _ "$SCRIPT_DIR/../agent-runtime-cache.sh" "$held_lock" 2>/dev/null; then
+  fail "a contender evicted the live owner's lock"
+fi
+[ -f "$held_lock/owner" ] || fail "a waiting contender deleted the live owner record"
+arc_release_lock "$held_lock"
+[ ! -d "$held_lock" ] || fail "releasing the held lock left the directory behind"
+
+# A stale reclaimer paused immediately before unlink must not erase a new
+# owner's record at the reused pathname. The rm shim is a scheduling barrier;
+# the other reclaimer and replacement holder use the real lock operations.
+reused_lock="$TMP_ROOT/reused.lock.d"
+mkdir "$reused_lock"
+printf '%s\t%s\n' "$dead_pid" stale >"$reused_lock/owner"
+# shellcheck disable=SC2016 # expanded by the reclaimer shell
+bash -c '
+  source "$1"
+  ready="$3"
+  release="$4"
+  rm() {
+    : >"$ready"
+    deadline=$((SECONDS + 20))
+    while [ ! -e "$release" ]; do
+      [ "$SECONDS" -lt "$deadline" ] || return 1
+      sleep 0.01
+    done
+    command rm "$@"
+  }
+  arc_recover_stale_lock "$2"
+' _ "$SCRIPT_DIR/../agent-runtime-cache.sh" "$reused_lock" "$BARRIER/reclaim-ready" "$BARRIER/reclaim-release" &
+reclaimer=$!
+barrier_deadline=$((SECONDS + 20))
+while [ ! -e "$BARRIER/reclaim-ready" ]; do
+  [ "$SECONDS" -lt "$barrier_deadline" ] || fail "reclaimer did not reach unlink barrier"
+  sleep 0.01
+done
+arc_recover_stale_lock "$reused_lock"
+arc_acquire_lock "$reused_lock" 5
+replacement_owner="$(cat "$reused_lock/owner")"
+: >"$BARRIER/reclaim-release"
+wait "$reclaimer" || true # rmdir must refuse the replacement's nonempty directory
+[ -f "$reused_lock/owner" ] || fail "stale reclaimer deleted the replacement owner's record"
+assert_eq "$(cat "$reused_lock/owner")" "$replacement_owner"
+arc_release_lock "$reused_lock"
+[ ! -d "$reused_lock" ] || fail "replacement holder left the lock directory behind"
+
+# A live pid whose start stamp cannot currently be read is not a stale owner.
+arc_acquire_lock "$held_lock" 5
+if bash -c 'source "$1"; arc_process_start_stamp() { return 1; }; arc_lock_is_stale "$2"' _ "$SCRIPT_DIR/../agent-runtime-cache.sh" "$held_lock" 2>/dev/null; then
+  fail "an unavailable start stamp evicted a live owner"
+fi
+arc_release_lock "$held_lock"
+if bash -c 'source "$1"; arc_process_start_stamp() { return 1; }; arc_acquire_lock "$2" 1' _ "$SCRIPT_DIR/../agent-runtime-cache.sh" "$held_lock" 2>/dev/null; then
+  fail "lock acquisition published an unverifiable owner"
+fi
+[ ! -d "$held_lock" ] || fail "failed owner identification left a lock directory"
+
+# Release must match the complete identity, while a genuinely different start
+# stamp on a live (reused) pid is recoverable.
+arc_acquire_lock "$held_lock" 5
+printf '%s\t%s\n' "$$" different-start >"$held_lock/owner"
+arc_release_lock "$held_lock"
+[ -f "$held_lock/owner" ] || fail "release deleted a different owner identity"
+arc_acquire_lock "$held_lock" 5
+assert_eq "$(cat "$held_lock/owner")" "$(printf '%s\t%s' "$$" "$(arc_process_start_stamp "$$")")"
+arc_release_lock "$held_lock"
+
+# A fresh ownerless directory protects mkdir -> owner publication. Age it
+# explicitly instead of sleeping through the five-second floor.
+ownerless_lock="$TMP_ROOT/ownerless.lock.d"
+mkdir "$ownerless_lock"
+if arc_lock_is_stale "$ownerless_lock"; then
+  fail "fresh ownerless directory reported stale"
+fi
+python3 - "$ownerless_lock" <<'PY'
+import os
+import sys
+import time
+old = time.time() - 10
+os.utime(sys.argv[1], (old, old))
+PY
+arc_acquire_lock "$ownerless_lock" 5
+arc_release_lock "$ownerless_lock"
+
+# A recorded owner whose pid is gone is still reclaimed, so an interrupted
+# preparation cannot wedge every later run.
+stale_pid=999999
+while kill -0 "$stale_pid" 2>/dev/null; do
+  stale_pid=$((stale_pid - 1))
+done
+stale_lock="$TMP_ROOT/stale-owner.lock.d"
+mkdir -p "$stale_lock"
+printf '%s\t%s\n' "$stale_pid" "Thu Jan  1 00:00:00 1970" >"$stale_lock/owner"
+arc_acquire_lock "$stale_lock" 5
+assert_eq "$(cut -f1 "$stale_lock/owner")" "$$"
+arc_release_lock "$stale_lock"
+[ ! -d "$stale_lock" ] || fail "released lock left the directory behind"
 
 assert_eq "$(arc_node_runtime_cache_policy "" 0)" "reuse"
 assert_eq "$(arc_node_runtime_cache_policy false 0)" "reuse"

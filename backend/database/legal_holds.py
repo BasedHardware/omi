@@ -316,12 +316,14 @@ def acquire_destructive_operation(
     firestore_client: Any | None = None,
     now: datetime | None = None,
     expires_at: datetime | None = None,
+    max_attempts: int | None = None,
 ) -> None:
     if not uid or not kind.strip() or not token.strip():
         raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
     current = now or datetime.now(timezone.utc)
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    _acquire_destructive_operation_transaction(client.transaction(), client, uid, kind, token, current, expires_at)
+    transaction = client.transaction(max_attempts=max_attempts) if max_attempts else client.transaction()
+    _acquire_destructive_operation_transaction(transaction, client, uid, kind, token, current, expires_at)
 
 
 @transactional
@@ -506,8 +508,34 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return isinstance(error, ValueError) and str(error).startswith('Failed to commit transaction')
 
 
+def same_kind_gate_running(uid: str, *, kind: str, firestore_client: Any | None = None) -> bool:
+    """Lock-free read: a fresh running gate of ``kind`` holds the account (False if free, other, unreadable)."""
+
+    return _blocking_gate_kind(account_deletion_firestore_client(firestore_client=firestore_client), uid) == kind
+
+
+def gate_busy_with_peer(error: BaseException, uid: str, *, kind: str, firestore_client: Any | None = None) -> bool:
+    """Whether a failed acquisition of ``kind`` only lost to a same-kind peer (or contention on the gate).
+
+    Another kind (account wipe, retention, audio deletion), a legal hold, or an
+    unreadable gate is never "busy with a peer".
+    """
+
+    if not isinstance(error, DestructiveOperationInProgress) and not _is_transaction_contention(error):
+        return False
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
+    return _blocking_gate_kind(client, uid) in {None, kind}
+
+
 def _acquire_with_same_kind_wait(
-    uid: str, *, kind: str, token: str, client: Any, wait_seconds: float, expires_in: float | None = None
+    uid: str,
+    *,
+    kind: str,
+    token: str,
+    client: Any,
+    wait_seconds: float,
+    expires_in: float | None = None,
+    max_attempts: int | None = None,
 ) -> float:
     """Acquire, waiting out a running gate of the same kind for at most ``wait_seconds``.
 
@@ -523,7 +551,12 @@ def _acquire_with_same_kind_wait(
         # A bounded unit measures its deadlines from the start of the attempt that wins.
         attempt_started = rpc_deadline.now()
         try:
-            if expires_in is None:
+            if expires_in is None and max_attempts:
+                # One transaction attempt makes contention an immediate answer, not SDK backoff (1 s, 2 s, 4 s...).
+                acquire_destructive_operation(
+                    uid, kind=kind, token=token, firestore_client=client, max_attempts=max_attempts
+                )
+            elif expires_in is None:
                 acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
             else:
                 attempt_wall = datetime.now(timezone.utc)
@@ -578,11 +611,13 @@ def destructive_operation_gate(
     kind: str = "explicit_memory_deletion",
     firestore_client: Any | None = None,
     wait_seconds: float = 0.0,
+    max_attempts: int | None = None,
 ) -> Iterator[str]:
     """Acquire one account-wide gate, reusing it for nested deletion layers.
 
     ``wait_seconds`` bounds how long acquisition waits behind a running gate of
     the same kind; zero keeps the fail-fast contract for every other caller.
+    ``max_attempts`` caps the acquisition transaction's own contention retries.
     """
 
     active = _ACTIVE_GATE.get()
@@ -594,7 +629,9 @@ def destructive_operation_gate(
         return
     token = uuid4().hex
     client = account_deletion_firestore_client(firestore_client=firestore_client)
-    _acquire_with_same_kind_wait(uid, kind=kind, token=token, client=client, wait_seconds=wait_seconds)
+    _acquire_with_same_kind_wait(
+        uid, kind=kind, token=token, client=client, wait_seconds=wait_seconds, max_attempts=max_attempts
+    )
     reset = _ACTIVE_GATE.set((uid, kind, token))
     try:
         yield token
@@ -991,5 +1028,7 @@ __all__ = [
     "destructive_operation_gate",
     "external_write_fence",
     "finish_destructive_operation",
+    "gate_busy_with_peer",
+    "same_kind_gate_running",
     "place_legal_hold",
 ]

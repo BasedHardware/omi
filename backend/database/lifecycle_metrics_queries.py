@@ -156,3 +156,61 @@ def enrichment_summary_repair(client):
     query = _where(_where(client.collection('sync_reprocess_outbox'), 'summary_repair', '==', True), 'due_at', '>=', 0)
     count = int(query.limit(101).count().get(timeout=10, retry=None)[0][0].value)
     return {'all': (0, count, count == 101)}
+
+
+VENDOR_HELD_COUNT_LIMIT = 100_000
+
+
+def vendor_held(client, namespace, now):
+    """Capped vendor_held counts by hold reason and the oldest held row's age, for the held gauges.
+
+    Counts are equality-only aggregations (index merging; one read per 1,000 index entries), and the
+    oldest row comes from the (state, enqueued_at) index, so a tick reads one document. A row with no
+    recognised ``vendor_hold.reason`` counts as ``unknown``. No identity leaves this function.
+    """
+    from utils.observability.reasons import VendorHoldReason
+
+    def count(query):
+        return int(query.limit(VENDOR_HELD_COUNT_LIMIT).count().get(timeout=10, retry=None)[0][0].value)
+
+    held = _where(client.collection(f'{namespace}_jobs'), 'state', '==', 'vendor_held')
+    total = count(held)
+    counts = {reason: 0 for reason in VendorHoldReason}
+    if total:
+        for reason in VendorHoldReason:
+            if reason is not VendorHoldReason.UNKNOWN:
+                counts[reason] = count(_where(held, 'vendor_hold.reason', '==', reason.value))
+        counts[VendorHoldReason.UNKNOWN] = max(0, total - sum(counts.values()))
+    oldest = [
+        doc.to_dict().get('enqueued_at')
+        for doc in held.order_by('enqueued_at').select(['enqueued_at']).limit(1).stream(timeout=10, retry=None)
+    ]
+    started = oldest[0] if oldest else None
+    age = max(0.0, now - started) if isinstance(started, (int, float)) and not isinstance(started, bool) else 0.0
+    return counts, age, total >= VENDOR_HELD_COUNT_LIMIT
+
+
+PROVIDER_STAGE_STATES = ('provider_pending', 'provider_running')
+# An aggregation bills one read per 1,000 index entries, so a 1e6 cap costs at most ~1,000 reads.
+PROVIDER_STAGE_COUNT_LIMIT = 1_000_000
+
+
+def provider_stage(client, namespace, now):
+    """Capped stock and oldest age of each provider-STT stage state, from the (state, enqueued_at) index.
+
+    The timeliness alarm leaves ``provider_pending`` out by design (allowance holds park units there
+    for a day), so this is the stage's only stock signal. One count and one head read per state.
+    """
+    jobs = client.collection(f'{namespace}_jobs')
+    rows = {}
+    for state in PROVIDER_STAGE_STATES:
+        stock = _where(jobs, 'state', '==', state)
+        count = int(stock.limit(PROVIDER_STAGE_COUNT_LIMIT).count().get(timeout=10, retry=None)[0][0].value)
+        head = [
+            doc.to_dict().get('enqueued_at')
+            for doc in stock.order_by('enqueued_at').select(['enqueued_at']).limit(1).stream(timeout=10, retry=None)
+        ]
+        started = head[0] if head else None
+        valid = isinstance(started, (int, float)) and not isinstance(started, bool)
+        rows[state] = (count, max(0.0, now - started) if valid else 0.0)
+    return rows

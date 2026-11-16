@@ -105,6 +105,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
     handles a suite layers extra attributes onto.
     """
     sys.modules.pop('utils.chat_turn', None)
+    # These suites exercise chat responses, not the real billing observer.
+    allowance = install('utils.stt.allowance_session', ModuleType('utils.stt.allowance_session'))
+    allowance.operation = lambda *a, **kw: lambda endpoint: endpoint
+    allowance.current = SimpleNamespace(get=lambda: None)
     install('utils.messaging.app_awareness', ModuleType('utils.messaging.app_awareness'))
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
 

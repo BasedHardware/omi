@@ -7028,6 +7028,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nepodarilo sa prihlásiť cez Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prihlásenie cez Apple sa nepodarilo. Skúste to znova alebo pokračujte cez Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nepodarilo sa získať token';
 
   @override
@@ -13398,6 +13402,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Máte kód Omi Pro? Zadajte ho na ďalšej obrazovke.';
+
+  @override
   String get paywallTrialCancelNote => 'Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.';
 
   @override
@@ -15393,6 +15400,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaša karta bola zamietnutá';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Aktualizujte kartu alebo obnovte $plan za $price mesačne';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Aktualizujte kartu a obnovte $plan';
   }
@@ -15417,4 +15429,34 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Prejsť na mesačné';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mesačne';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nahrádza nezaplatenú ročnú platbu $yearly. Obnovuje sa mesačne. Zrušiť môžete kedykoľvek.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Platba bola zamietnutá. Váš plán sa nezmenil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Teraz platíte mesačne';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Dnes zaplatené $price. Obnovuje sa mesačne.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
 }

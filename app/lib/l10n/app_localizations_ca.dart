@@ -7067,6 +7067,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'No s\'ha pogut iniciar sessió amb Apple, si us plau torneu-ho a provar.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'No s\'ha pogut iniciar la sessió amb Apple. Torna-ho a provar o continua amb Google.';
+
+  @override
   String get authFailedToRetrieveToken =>
       'No s\'ha pogut recuperar el token de Firebase, si us plau torneu-ho a provar.';
 
@@ -13470,6 +13474,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Tens un codi d\'Omi Pro? Introdueix-lo a la pantalla següent.';
+
+  @override
   String get paywallTrialCancelNote => 'Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.';
 
   @override
@@ -15474,6 +15481,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paymentDeclinedTitle => 'La teva targeta ha estat rebutjada';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualitza-la o recupera $plan per $price al mes';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualitza-la per recuperar $plan';
   }
@@ -15498,4 +15510,34 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Canvia a mensual';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price al mes';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Substitueix el càrrec anual pendent de $yearly. Es renova cada mes. Cancel·la quan vulguis.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pagament rebutjat. El teu pla no ha canviat.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Ara no es pot canviar. Actualitza la targeta.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Ara pagues mensualment';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price pagats avui. Es renova cada mes.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
 }

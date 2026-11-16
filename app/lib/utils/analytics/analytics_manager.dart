@@ -829,14 +829,8 @@ class AnalyticsManager {
     const TypedEvents().emit(SignInStarted(provider: value));
   }
 
-  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
-    final value = signInFailedProvider(provider);
-    if (value == null) return;
-    const TypedEvents().emit(SignInFailed(
-      provider: value,
-      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
-    ));
-  }
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) =>
+      signInFailureEvents(provider, error: error, cancelled: cancelled).forEach(const TypedEvents().emit);
 
   void onboardingPermissionResult({
     required OnboardingPermissionResultPermission permission,

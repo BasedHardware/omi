@@ -377,7 +377,7 @@ async def _periodic_conversation_batch_purge_reconcile(interval_seconds: int | N
                 reconcile_conversation_batch_purges,
                 interval_seconds,
             )
-            if result.get('dispatched') or result.get('held_for_consumer') or result.get('enqueue_failed'):
+            if any(result.get(key) for key in ('dispatched', 'queued', 'held_for_consumer', 'enqueue_failed')):
                 logger.info(f"Periodic conversation batch-purge reconciliation: {result}")
         except Exception as e:
             logger.error(f"Periodic conversation batch-purge reconciliation failed: {e}")

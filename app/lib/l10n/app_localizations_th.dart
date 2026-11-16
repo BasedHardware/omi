@@ -6994,6 +6994,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get authFailedToSignInWithApple => 'ไม่สามารถเข้าสู่ระบบด้วย Apple ได้ กรุณาลองอีกครั้ง';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'ลงชื่อเข้าใช้ด้วย Apple ไม่สำเร็จ ลองอีกครั้งหรือดำเนินการต่อด้วย Google';
+
+  @override
   String get authFailedToRetrieveToken => 'ไม่สามารถดึงโทเคน Firebase ได้ กรุณาลองอีกครั้ง';
 
   @override
@@ -13335,6 +13339,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'มีโค้ด Omi Pro ไหม ใส่โค้ดได้ในหน้าจอถัดไป';
+
+  @override
   String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override
@@ -15323,6 +15330,11 @@ class AppLocalizationsTh extends AppLocalizations {
   String get paymentDeclinedTitle => 'บัตรของคุณถูกปฏิเสธ';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'อัปเดตบัตร หรือกลับมาใช้ $plan ในราคา $price ต่อเดือน';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'อัปเดตบัตรเพื่อกลับมาใช้ $plan';
   }
@@ -15347,4 +15359,34 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'เปลี่ยนเป็นรายเดือน';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan $price ต่อเดือน';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'แทนที่ค่าบริการรายปี $yearly ที่ยังไม่ได้ชำระ ต่ออายุทุกเดือน ยกเลิกได้ทุกเมื่อ';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'การชำระเงินถูกปฏิเสธ แพ็กเกจของคุณไม่เปลี่ยนแปลง';
+
+  @override
+  String get monthlySwitchUnavailable => 'ตอนนี้ยังเปลี่ยนไม่ได้ อัปเดตบัตรแทน';
+
+  @override
+  String get monthlySwitchDoneTitle => 'ตอนนี้คุณจ่ายแบบรายเดือนแล้ว';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ชำระ $price แล้ววันนี้ ต่ออายุทุกเดือน';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
 }

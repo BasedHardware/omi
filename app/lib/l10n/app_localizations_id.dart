@@ -7037,6 +7037,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Gagal masuk dengan Apple. Silakan coba lagi.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Masuk dengan Apple tidak berhasil. Coba lagi atau lanjutkan dengan Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Gagal mengambil token. Silakan coba lagi.';
 
   @override
@@ -13412,6 +13416,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Punya kode Omi Pro? Masukkan di layar berikutnya.';
+
+  @override
   String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
 
   @override
@@ -15412,6 +15419,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get paymentDeclinedTitle => 'Kartu Anda ditolak';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Perbarui kartu, atau dapatkan kembali $plan seharga $price per bulan';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Perbarui kartu untuk mendapatkan kembali $plan';
   }
@@ -15436,4 +15448,34 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Beralih ke Bulanan';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price per bulan';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Menggantikan tagihan tahunan $yearly yang belum dibayar. Diperpanjang tiap bulan. Batalkan kapan saja.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Pembayaran ditolak. Paket Anda tidak berubah.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Anda sekarang bayar bulanan';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price dibayar hari ini. Diperpanjang tiap bulan.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
 }

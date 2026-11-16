@@ -7033,6 +7033,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Det gick inte att logga in med Apple. Försök igen eller fortsätt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
 
   @override
@@ -13408,6 +13412,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kod? Ange den på nästa skärm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt när som helst. Inga avgifter, inga påföljder.';
 
   @override
@@ -15406,6 +15413,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ditt kort nekades';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Uppdatera kortet, eller få tillbaka $plan för $price i månaden';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Uppdatera kortet för att få tillbaka $plan';
   }
@@ -15430,4 +15442,34 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Byt till månadsvis';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price i månaden';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ersätter den obetalda årsavgiften på $yearly. Förnyas varje månad. Avsluta när du vill.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betalningen nekades. Ditt abonnemang har inte ändrats.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Bytet är inte tillgängligt just nu. Uppdatera kortet i stället.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Du betalar nu månadsvis';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price betalt i dag. Förnyas varje månad.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
 }

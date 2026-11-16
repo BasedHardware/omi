@@ -832,6 +832,7 @@ async def ainvoke_openai_embeddings_gateway(
     *,
     timeout_seconds: float = EMBEDDINGS_TIMEOUT_SECONDS,
     byok_api_key: str | None = None,
+    isolated: bool = False,
 ) -> list[list[float]]:
     """Async counterpart of :func:`invoke_openai_embeddings_gateway`."""
     batches = _openai_embedding_batches(texts)
@@ -841,6 +842,18 @@ async def ainvoke_openai_embeddings_gateway(
     if byok_api_key:
         headers[byok_gateway_header_name('openai')] = byok_api_key
     vectors: list[list[float]] = []
+    if isolated:
+        # Optional summary calls own their loop/client and absolute cancellation
+        # scope. HTTPX defaults to zero transport retries; never use a key fallback.
+        async with httpx.AsyncClient(timeout=timeout_seconds, transport=httpx.AsyncHTTPTransport(retries=0)) as client:
+            for batch in batches:
+                response = await client.post(
+                    f'{get_llm_gateway_base_url()}/v1/embeddings',
+                    headers=headers,
+                    json={'model': OPENAI_EMBEDDINGS_AUTO_LANE_ID, 'input': batch},
+                )
+                vectors.extend(_post_openai_embedding_batch(response))
+        return vectors
     async with get_llm_gateway_semaphore():
         client = get_llm_gateway_client()
         for batch in batches:

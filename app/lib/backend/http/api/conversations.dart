@@ -24,6 +24,7 @@ import 'package:omi/utils/conversations/home_member_fallback.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/wal_sync_upload.dart';
+import 'package:omi/services/wals/upload_trace.dart';
 
 part 'sync_job_fetch.dart';
 part 'conversation_home_list.dart';
@@ -294,16 +295,46 @@ String? _detailCode(String body) {
   }
 }
 
-Future<bool> deleteConversationServer(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('deleteConversation: ${response.statusCode}');
-  return response.statusCode == 204;
+/// How long a delete keeps retrying while another delete on the same account holds the server's
+/// gate (409 `account_gate_busy`).
+const conversationDeleteRetryBudget = Duration(seconds: 30);
+
+/// The pause before retrying a busy delete: the server's `Retry-After`, kept within 1–10 s, or 2 s
+/// when it is missing or unreadable.
+@visibleForTesting
+Duration conversationDeleteRetryDelay(http.Response response, DateTime Function() now) {
+  final delay = parseApiRetryAfter(response, now) ?? const Duration(seconds: 2);
+  if (delay < const Duration(seconds: 1)) return const Duration(seconds: 1);
+  if (delay > const Duration(seconds: 10)) return const Duration(seconds: 10);
+  return delay;
+}
+
+/// Deletes a conversation with everything derived from it; true only on 204. A 409 is retried
+/// after its Retry-After within [conversationDeleteRetryBudget]; any other answer fails at once.
+/// [send], [wait] and [now] are test seams.
+Future<bool> deleteConversationServer(
+  String conversationId, {
+  Future<http.Response?> Function()? send,
+  Future<void> Function(Duration)? wait,
+  DateTime Function()? now,
+}) async {
+  final clock = now ?? DateTime.now;
+  final deadline = clock().add(conversationDeleteRetryBudget);
+  while (true) {
+    final response = await (send?.call() ??
+        makeApiCall(
+          url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',
+          headers: {},
+          method: 'DELETE',
+          body: '',
+        ));
+    if (response == null) return false;
+    Logger.debug('deleteConversation: ${response.statusCode}');
+    if (response.statusCode != 409) return response.statusCode == 204;
+    final delay = conversationDeleteRetryDelay(response, clock);
+    if (clock().add(delay).isAfter(deadline)) return false;
+    await (wait?.call(delay) ?? Future<void>.delayed(delay));
+  }
 }
 
 Future<bool> unlinkCalendarEvent(String conversationId) async {
@@ -1072,6 +1103,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final work = lagWork.begin(LagWork.upload);
   try {
     assertWalSyncFilesAreFramedBins(files.map((file) => file.path));
+    // Measurement only; absent when nothing was parked for this upload.
+    final uploadTrace = files.isEmpty ? null : UploadTrace.instance.take(files.first.path);
     String? captureManifest;
     if (shouldRequestSyncCaptureManifest(conversationId, claimLiveCapture)) {
       captureManifest = await _createSyncCaptureManifest(files, conversationId!);
@@ -1093,6 +1126,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
         if (captureManifest != null) 'X-Omi-Sync-Capture-Manifest': captureManifest,
         if (captureEvidence != null) 'X-Omi-Capture-Evidence': captureEvidence,
         if (geolocation != null) 'X-Omi-Conversation-Geolocation': jsonEncode(geolocation.toJson()),
+        if (uploadTrace != null) 'X-Omi-Upload-Trace': uploadTrace,
       },
       onUploadProgress: onUploadProgress,
     );

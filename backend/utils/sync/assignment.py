@@ -7,9 +7,10 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from utils.sync import processing_hold, bridge_pending
 from config.recorded_time import late_audio_intake_enabled
+from config.episodes import episodes_enabled, episode_compose_transcript_ready_enabled
 from models.conversation_continuity import DEFAULT_GAP_SECONDS
 import time
 
@@ -266,8 +267,10 @@ def assign_in_transaction(
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
+    transcript_receipt = incoming.pop('_episode_transcript_receipt', False)
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    capture_clock_shift = float(incoming.pop('_sync_capture_clock_offset', 0.0) or 0.0)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     redrive_target = incoming.pop('_batch_redrive_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
@@ -685,6 +688,8 @@ def assign_in_transaction(
             raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
+        if incoming.get('capture_time_trust') == 'untrusted':
+            result['capture_time_trust'] = 'untrusted'
         try:
             contributions = [r for record in records for r in record.get(match_scores.FIELD) or []]
             if contributions:
@@ -944,7 +949,12 @@ def assign_in_transaction(
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
         if processing_hold.enabled():
-            result[processing_hold.FIELD] = processing_hold.activity_patch(result, time.time())
+            result[processing_hold.FIELD] = processing_hold.activity_patch(
+                result,
+                time.time(),
+                clock_offset=capture_clock_shift,
+                owns_end=recorded_input_finish >= result['finished_at'],
+            )
         verdict, rule = fragment_rule(segments)
         curated = is_user_curated(result)
         result['sync_relevance'] = (
@@ -1034,6 +1044,10 @@ def assign_in_transaction(
         index.read(extent)
         result.update(write_span(result, arrival_at=incoming.get('arrival_at')))
         if survivors or transfers:
+            if transcript_receipt and episodes_enabled() and episode_compose_transcript_ready_enabled():
+                # Commit the revision signal with speech, including every size rollover.
+                # Exact assignment retries preserve the original marker.
+                result['episode_transcript_updated_at'] = datetime.now(timezone.utc)
             rearm_on_revision_change(current or {}, result)
         payload = encode(result)
         payload.pop('photos', None)

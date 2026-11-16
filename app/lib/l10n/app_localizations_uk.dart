@@ -7043,6 +7043,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не вдалося увійти через Apple, спробуйте ще раз.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не вдалося увійти через Apple. Спробуйте ще раз або продовжте з Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не вдалося отримати токен Firebase, спробуйте ще раз.';
 
   @override
@@ -13433,6 +13437,9 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Маєте код Omi Pro? Введіть його на наступному екрані.';
+
+  @override
   String get paywallTrialCancelNote => 'Скасувати будь-коли. Без комісій, без штрафів.';
 
   @override
@@ -15431,6 +15438,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашу картку відхилено';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Оновіть картку або поверніть $plan за $price на місяць';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Оновіть картку, щоб повернути $plan';
   }
@@ -15455,4 +15467,34 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перейти на щомісячний';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price на місяць';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замінює неоплачений річний платіж $yearly. Подовжується щомісяця. Скасувати можна будь-коли.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Платіж відхилено. Ваш план не змінився.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Перехід зараз недоступний. Натомість оновіть картку.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Тепер ви платите щомісяця';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сьогодні сплачено $price. Подовжується щомісяця.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Список обробки змінився. Перевірте його та спробуйте знову.';
 }

@@ -11,6 +11,9 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
+import 'package:omi/models/transcription_allowance.dart';
+import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
+import 'package:omi/services/capture/on_device_stt_preparer.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -239,6 +242,14 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
+  /// Gets the on-device speech model ready before the cloud minutes run out (S17 flag on only).
+  static Future<void> _prepareOnDeviceNearCap(TranscriptionAllowanceSnapshot? allowance) async {
+    if (!OnDeviceSttPreparer.shouldPrepareFor(allowance)) return;
+    if (!FreeTierOnDeviceSttFlag.isEnabled() || await FreeTierOnDeviceSttFlag.killed()) return;
+    if (SharedPreferencesUtil().customSttConfig.isEnabled) return;
+    OnDeviceSttPreparer.prepare();
+  }
+
   @visibleForTesting
   void debugSetSubscription(UserSubscriptionResponse? value) {
     _subscription = value;
@@ -355,6 +366,7 @@ class UsageProvider with ChangeNotifier {
       _subscription = subscription;
       TranscriptionAllowanceCache.replace(subscription.transcriptionAllowance);
       _recordAllowanceReached();
+      unawaited(_prepareOnDeviceNearCap(subscription.transcriptionAllowance));
       PlatformManager.instance.analytics.setSubscriptionTier(subscription.subscription.plan.name);
     } catch (e) {
       if (generation != _sessionGeneration) return;

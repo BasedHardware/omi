@@ -81,6 +81,7 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
+from utils.conversations.empty_structure_minimum import apply_empty_structure_minimum
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
@@ -679,6 +680,7 @@ def _get_structured(
         )
         from utils.conversations import llm_input_dedupe
 
+        member_notes.before_model(uid, main_conv, trigger, finalization_fence=finalization_fence)
         with track_usage(uid, Features.CONVERSATION_STRUCTURE):
             structured = llm_input_dedupe.notes(
                 uid,
@@ -703,7 +705,7 @@ def _get_structured(
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
-    except (ConversationAbsorbed, SyncConversationPersistenceFenced):
+    except (ConversationAbsorbed, SyncConversationPersistenceFenced, member_notes.LiveMemberNotesDeferred):
         raise
     except Exception as e:
         if funded_processing.enabled(uid, 'batch') and _is_funded_budget_denial(e):
@@ -2607,6 +2609,7 @@ def process_conversation(
     first_party_only: bool = False,
     derived_effects_transcript_sha256: str | None = None,
     finalization_fence: tuple[str, int, int] | None = None,
+    recovery_final_attempt: bool = True,
 ) -> Conversation:
     """Process using trigger policy and stored user-kept authority.
 
@@ -2837,6 +2840,18 @@ def process_conversation(
             + '\n'
         )
         sys.stdout.flush()
+    structured, empty_structure_minimum_applied = apply_empty_structure_minimum(
+        uid,
+        trigger,
+        conversation,
+        structured,
+        discarded,
+        decisions,
+        app_id,
+        recovery_transcript_decoded,
+        recovery_minimum_fallback,
+        recovery_final_attempt,
+    )
     conversation = _get_conversation_obj(
         uid,
         structured,
@@ -2855,6 +2870,7 @@ def process_conversation(
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
         and not recovery_minimum_fallback
+        and not empty_structure_minimum_applied
     ):
         sys.stdout.write(
             json.dumps(
@@ -2925,7 +2941,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or empty_structure_minimum_applied:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -2949,7 +2965,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill or content_excluded:
+    if recovery_minimum_fallback or silent_backfill or content_excluded or empty_structure_minimum_applied:
         report_persistence(
             persisted,
             completed=conversation,

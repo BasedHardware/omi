@@ -35,6 +35,19 @@ ROOT = Path(__file__).resolve().parents[2]
 ENVIRONMENTS = ("dev", "prod")
 
 REQUIRED_IDENTICAL_LITERALS = (
+    "PUSHER_RECORD_CLOSE_NOTIFY_ENABLED",
+    "PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED",
+    # Episode context, completeness and notes run on both cohosts. Missing bindings refuse the roll.
+    "EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED",
+    "EPISODE_COMPOSER_CONTEXT_ENABLED",
+    "EPISODE_COMPOSER_DETAIL_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED",
+    "EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED",
+    "EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED",
+    "EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED",
+    "EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED",
+    "HOME_SETTLED_EMPTY_WIRE_ENABLED",
+    "CONVERSATION_NOTES_SCALED_DETAIL_ENABLED",
     "MEMORY_ENABLED",
     "MEETING_NOTES_EVIDENCE_WAIT_SECONDS",
     "CLIENT_SUMMARIES_AT_CAP_ENABLED",
@@ -103,7 +116,15 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         # Held expiry/requeue is owned by main.py maintenance/RPC and GPU workers;
         # pusher does not run the held maintenance loop or worker failure writer.
         'BATCH_HELD_DEAD_LETTER_ENABLED',
+        # main.py owns the record intake drain; pusher.main never starts it.
+        'RECORD_SEAL_REPAIR_FRESH_ENABLED',
+        # Only main.py admits native record units; pusher never assigns GPU queue priority.
+        'RECORD_INTAKE_AGE_PRIORITY_ENABLED',
         'BATCH_INPUT_EXPIRING_ENABLED',
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
         'BATCH_CONTROL_CANDIDATE_FANOUT',
         'BATCH_ADMISSION_PARALLEL_CALLS',
         'BATCH_PIPELINE_IDLE_POLL_MAX_SECONDS',
@@ -136,9 +157,25 @@ _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
         'BUCKET_BATCH_PIPELINE',
     }
 )
+_RECORD_LATENCY_LISTEN_ONLY = frozenset(
+    {
+        'RECORD_FRESH_MERGE_ENABLED',
+        'RECORD_NOTES_EAGER_ENABLED',
+        'RECORD_FOLLOWUP_WAKE_ENABLED',
+        'RECORD_SEAL_WAKE_PRESERVED_ENABLED',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
+            # The unlimited_v2 backfill/import day cap is enforced by listen
+            # admission and the Cloud Run sync/batch hosts through the shared
+            # funded allowance; pusher never admits managed transcription
+            # against a user-day.
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED",
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -237,6 +274,14 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Listen mounts sync upload admission; pusher never accepts sync filenames.
+            "SYNC_FUTURE_CAPTURE_CLAMP_ENABLED",
+            # The unlimited_v2 backfill/import day cap is enforced by listen
+            # admission and the Cloud Run sync/batch hosts through the shared
+            # funded allowance; pusher never admits managed transcription
+            # against a user-day.
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_ENABLED",
+            "UNLIMITED_V2_BACKFILL_HOURS_CAP_HOURS",
             # Only listen's runtime reads these to advertise mobile control-channel
             # admission. Pusher never grants permission; sync archives unconditionally.
             "MOBILE_STANDARD_BATCH_ENABLED",
@@ -294,6 +339,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
+            # Conversation purge/erasure dispatch runs in main.py's reconciler; pusher never enqueues it.
+            "CONVERSATION_ERASURE_TASKS_QUEUE",
             "BETA_PROMOTION_TOKEN",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
@@ -375,10 +422,23 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST", "PUSHER_STORAGE_PCM_BUDGET_MB"}),
+    "dev": frozenset(
+        {
+            "GOOGLE_CLIENT_ID",
+            "REDIS_DB_HOST",
+            "TYPESENSE_HOST",
+            "PUSHER_STORAGE_PCM_BUDGET_MB",
+            # Only pusher owns the drained recording worker's producer-pending retry bound.
+            "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
+        }
+    ),
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
+            # Only pusher owns the drained recording worker's producer-pending retry bound.
+            "PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED",
+            "PUSHER_RECORD_SEAL_WAKE_ENABLED",
             # Only pusher owns closed recording workers and their eviction proof.
             "PUSHER_MAX_CLOSED_RECORD_DRAINS",
             "PUSHER_ABANDON_EVICTED_TOKENS",
@@ -559,6 +619,10 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 f"[{env}] envFrom ConfigMap set differs: pusher={sorted(pusher_from)} "
                 f"listen={sorted(listen_from)} — co-hosts must share the same bulk source"
             )
+
+        for flag in sorted(_RECORD_LATENCY_LISTEN_ONLY):
+            if flag not in listen_env:
+                errors.append(f"[{env}] record latency flag {flag} missing on backend-listen")
 
         publisher = "FSR_QUEUE_AGE_PUBLISHER"
         pusher_publisher = pusher_env.get(publisher)

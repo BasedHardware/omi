@@ -12,6 +12,7 @@ from utils.conversations import phase_shadow
 
 from database import conversation_visibility_counts, processing_backlog, speaker_auto_enroll, capture_group_notes
 from database import conversation_recorded_time
+from database import pipeline_ledger
 from utils.conversations import summary_delivery, lifecycle_clocks
 from utils.observability.delivery import summary_terminal_outcome
 from utils.sync import processing_hold, bridge_pending
@@ -75,6 +76,7 @@ from utils.conversations import transcribing_hold
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from database import transcript_pointer
+from utils.home_feed.projection import DISPLAY_FIELDS, stamp as stamp_home_display
 from database.transcript_pointer import (
     TranscriptSegmentsDecodeError,
     decode_stored_transcript as decode_transcript_segments_blob,
@@ -370,6 +372,10 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    # Partial writes cannot certify an entire legacy row. Explicit prepare
+    # reconciles them; full creates/processing results get compact content now.
+    if isinstance(data.get('structured'), dict) and ('started_at' in data or 'recorded_start' in data):
+        data.update(stamp_home_display(uid, data, 'conversation'))
     stamp_scope_index(data)
     conversation_recorded_time.stamp_for_write(data)
     summary_delivery.prepare(data, uid)
@@ -694,6 +700,10 @@ def prepare_conversation_for_read(
         return None
 
     data = copy.deepcopy(conversation_data)
+    # Separate encrypted card data must not leak into hydrated detail or be
+    # replayed as stale projection metadata by a logical-state writer.
+    for field in DISPLAY_FIELDS:
+        data.pop(field, None)
     if isinstance(data.get('transcript_segments'), dict):
         try:
             data['transcript_segments'] = decode_transcript_segments_blob(uid, data['transcript_segments'], True)
@@ -1207,19 +1217,23 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     summary_receipt = None
     delivery_outcome = None
     summary_changed = False
+    ledger_stages: tuple[str, ...] = ()
+    source_revision = 0
 
     @firestore.transactional
     def _write_processing_result(transaction):
-        nonlocal summary_receipt, summary_changed, delivery_outcome
+        nonlocal summary_receipt, summary_changed, delivery_outcome, ledger_stages, source_revision
         summary_receipt = None
         delivery_outcome = None
         summary_changed = False
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         write_data.pop('record_audio_partial', None)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         conversation_recorded_time.adopt_membership(transaction, user_ref, write_data)
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
             if existing.get('deleted'):
@@ -1282,6 +1296,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
             _offload_processing_transcript(uid, write_data, existing)
 
             summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+            ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
             delivery_outcome = summary_terminal_outcome(existing, write_data)
             summary_changed = processing_backlog.stage_transition(
                 transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1295,6 +1310,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         _offload_processing_transcript(uid, write_data)
 
         summary_receipt = summary_delivery.creation_result(write_data, uid)
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome({}, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], {}, write_data, firestore_client=db
@@ -1302,6 +1318,17 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, with_creation_scope_index(write_data))
 
     run_preloaded_transactional(db, _write_processing_result)
+    if ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
+            uid,
+            conversation_data['id'],
+            ledger_stages,
+            revision=source_revision,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
     summary_delivery.emit_result(uid, summary_changed, summary_receipt, delivery_outcome, _drop_summary_memo)
     invalidate_people_stats_cache(uid)
@@ -1353,11 +1380,13 @@ def persist_processing_result_with_lifecycle(
     summary_changed = False
     notes_refresh_state_write = None
     terminal_refusal = None
+    ledger_stages: tuple[str, ...] = ()
+    source_revision = 0
     family_enabled = _terminal_family_serving(uid)
 
     @firestore.transactional
     def _persist(transaction) -> bool:
-        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal
+        nonlocal stale_sync_revision, first_completed, summary_receipt, summary_changed, notes_refresh_state_write, delivery_outcome, terminal_refusal, ledger_stages, source_revision
         terminal_refusal = None
         summary_changed = False
         summary_receipt = None
@@ -1365,11 +1394,13 @@ def persist_processing_result_with_lifecycle(
         stale_sync_revision = False
         first_completed = False
         notes_refresh_state_write = None
+        ledger_stages = ()
         write_data = copy.deepcopy(conversation_data)
         evidence_refresh = write_data.pop('_notes_evidence_reprocess', False)
         # Capture-group membership has one writer (database.capture_groups).
         write_data.pop(CAPTURE_GROUP_FIELD, None)
         existing_snapshot = conversation_ref.get(transaction=transaction)
+        source_revision = pipeline_ledger.source_revision(existing_snapshot)
         if not getattr(existing_snapshot, 'exists', False):
             # A processor is never an authority to recreate a conversation.
             # Deleting one is a decision its owner made, and a merge write to a
@@ -1573,6 +1604,7 @@ def persist_processing_result_with_lifecycle(
 
         _offload_processing_transcript(uid, write_data, existing)
         summary_receipt = summary_delivery.merge_result(existing, write_data, uid)
+        ledger_stages = pipeline_ledger.summary_stages(summary_receipt)
         delivery_outcome = summary_terminal_outcome(existing, write_data)
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
@@ -1596,6 +1628,17 @@ def persist_processing_result_with_lifecycle(
         persisted = run_preloaded_transactional(db, _persist)
     except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
         return False
+    if persisted and ledger_stages:
+        # After the real commit, in the ledger's own fenced transaction.
+        pipeline_ledger.record_summary(
+            uid,
+            conversation_data['id'],
+            ledger_stages,
+            revision=source_revision,
+            source_ref=conversation_ref,
+            owner_ref=user_ref,
+            firestore_client=db,
+        )
     if persisted and terminal_refusal is not None:
         _record_terminal_claim_refusal(*terminal_refusal)
     stop_quiet_check_for_conversation(uid, conversation_data['id'], firestore_client=db)
@@ -2135,6 +2178,7 @@ def get_conversations_without_photos(
                 'folder_user_set',
                 'episode_id',
                 'finalization_status',
+                'notes_written_at',
                 *SETTLING_FIELDS,
                 *SUMMARY_DEBT_FIELDS,
                 *transcribing_hold.READ_FIELDS,
@@ -2591,6 +2635,18 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
+def delete_pipeline_ledger_row(uid: str, conversation_id: str) -> None:
+    """Remove the capture's sibling ledger row; a deleted capture must not leave one.
+
+    The ledger is a sibling collection, not a child of the conversation, so the
+    recursive child sweep in :func:`delete_conversation` never reaches it. A
+    failure is raised, not swallowed: a deletion that reports success must not
+    leave the user-owned row behind until its TTL. The delete is idempotent, so
+    the caller's retry completes it.
+    """
+    db.collection('users').document(uid).collection('pipeline_ledger').document(conversation_id).delete()
+
+
 def delete_conversation(uid, conversation_id):
     """Delete a conversation and every subcollection underneath it.
 
@@ -2618,6 +2674,9 @@ def delete_conversation(uid, conversation_id):
         processing_backlog.remove(uid, conversation_id)
     # Corrections are a sibling owner collection, not a child of the capture.
     user_ref.collection('transcript_corrections').document(conversation_id).delete()
+    # The in-flight ledger is also a sibling; the fence stops new writes but
+    # does not remove the row that already exists.
+    delete_pipeline_ledger_row(uid, conversation_id)
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 
@@ -4060,6 +4119,23 @@ def update_conversation_segments(
         from utils.conversations.recorded_time import write_span
 
         update_payload.update(write_span({**current, **update_payload}, arrival_at=datetime.now(timezone.utc)))
+        # A proven additive live append cannot revoke old display text. Keep
+        # these frequent writes off the explicit Home preparation path; edits,
+        # removals, re-attribution and moved origins retain the normal fence.
+        prior_by_id = {s.get('id'): s for s in persisted} if live_segments is not None else {}
+        after_by_id = {s.get('id'): s for s in accepted}
+        speech_fields = ('text', 'person_id', 'person_name', 'is_user', 'speaker')
+        if (
+            live_segments is not None
+            and current.get('status') == 'in_progress'
+            and (not started_at or started_at == current.get('started_at'))
+            and update_payload.get('recorded_start', current.get('recorded_start')) == current.get('recorded_start')
+            and all(
+                sid in after_by_id and all(before.get(k) == after_by_id[sid].get(k) for k in speech_fields)
+                for sid, before in prior_by_id.items()
+            )
+        ):
+            update_payload['home_append_only'] = True
         prepared_payload = _prepare_conversation_for_write(
             update_payload,
             uid,

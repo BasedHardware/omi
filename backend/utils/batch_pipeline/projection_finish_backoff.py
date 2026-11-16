@@ -1,78 +1,105 @@
-"""Dark finish-page backoff: page selection, one survey pass and per-row deferral.
+"""Finish-page selection gated by a shared, versioned backfill marker.
 
-The projection finish page re-reads and re-fences every ``persisted``/``ready``
-result on every serving tick. With ``BATCH_PROJECTION_FINISH_BACKOFF_ENABLED``
-on, a walk that changed nothing defers the row's next attempt (60 s, then 300 s,
-then 900 s, capped) instead of replaying it every tick.
-
-This owns only that lever's read path so ``utils.batch_pipeline.projection``
-stays the caller: with the lever off every method is the exact legacy call.
-Rows written before the lever carry no clock and a range filter cannot see a
-missing field, so the first pass after enablement is the unfiltered legacy page,
-which stamps them.
+Before maintenance completes, use the legacy page without stamp transactions.
+Once complete, every process (including a newly scaled replica) filters at once.
+Clock writes on state transitions are unconditional, so rollback/re-enable does
+not invalidate the pass. Negative marker reads are throttled to once a minute.
 """
 
-from config.batch_pipeline import projection_finish_backoff_enabled
+import time
+import threading
+
+from config.batch_pipeline import (
+    projection_finish_backoff_enabled,
+    projection_finish_async_skip_enabled,
+    projection_finish_classify_page_limit,
+)
+from database.batch_pipeline_store import PROJECTION_FINISH_STATES
+from database.batch_pipeline_projection_finish import PROJECTION_FINISH_ASYNC_CLOCK, PROJECTION_FINISH_DUE_FIELD
+from utils.batch_pipeline.metrics import PROJECTION_FINISH_CLASSIFIED, PROJECTION_FINISH_CLASSIFICATION_FAILURES
+
+# No sleeps on the serving path. Repeated reconcile RPCs cannot refill the
+# per-page migration budget until 20 seconds after its last attempt.
+CLASSIFY_COOLDOWN_SECONDS = 20.0
 
 
 class FinishBackoff:
     def __init__(self, projector):
         self.projector = projector
-        # One unfiltered pass per process after the lever turns on.
-        self.surveyed = False
-        # A short page ends the legacy walk, but the survey may only close once
-        # every row on it carries a clock: the filtered page cannot see a row
-        # whose stamp failed, so closing early would lose that obligation.
-        self.survey_short = False
-        # Rows whose stamp failed in this survey; a full page moves the cursor
-        # past them, so the failure must restart the walk.
-        self.unstamped: set[str] = set()
+        self.complete = False
+        self.check_after = 0.0
+        self.monotonic = time.monotonic
+        self.classify_lock = threading.Lock()
+        self.classify_page = threading.local()
+        self.classify_inflight = 0
+        self.classify_remaining = 0
+        self.classify_after = 0.0
 
     def page(self, size: int) -> list[str]:
-        """The finish page: legacy while the lever is off, clock-filtered when on."""
         discovery = self.projector.finish_discovery
-        if not projection_finish_backoff_enabled():
-            # A rollback can be followed by a re-enable in the same process.
-            # Rows written while the lever was off carry no clock, so the next
-            # enable must survey again before it filters.
-            self.surveyed = False
-            self.survey_short = False
-            self.unstamped.clear()
+        # Sweeps may arrive on different executor threads. Keep each page cap
+        # separate while sharing one process-wide migration budget.
+        self.classify_page.limit = projection_finish_classify_page_limit()
+        self.classify_page.remaining = self.classify_page.limit
+        backoff = projection_finish_backoff_enabled()
+        skip_async = projection_finish_async_skip_enabled()
+        if not backoff and not skip_async:
             return discovery.next(limit=size)
-        due_before = self.projector.clock() if self.surveyed else None
-        page = discovery.next(limit=size, due_before=due_before)
-        if due_before is None:
-            # A short survey page means the legacy range was walked once.
-            self.survey_short = len(page) < max(1, min(size, 200))
-        return page
+        if not self.complete and self.monotonic() >= self.check_after:
+            self.check_after = self.monotonic() + 60.0
+            self.complete = discovery.store.projection_finish_backfill_complete()
+        if not self.complete:
+            return discovery.next(limit=size)
+        if skip_async:
+            # Independent of the sync cursor. Only classified async receipts
+            # wake discovery here; legacy async rows wake it when read below.
+            rows, _ = discovery.store.projection_page(
+                limit=1, states=PROJECTION_FINISH_STATES, due_before=PROJECTION_FINISH_ASYNC_CLOCK
+            )
+            self.projector.has_async_followups |= bool(rows)
+        ceiling = self.projector.clock() if backoff else float('inf')
+        return discovery.next(limit=size, due_before=ceiling, exclude_async=skip_async)
 
-    def survey_done(self) -> None:
-        """Close the survey only after every surveyed row is durably stamped."""
-        if not self.survey_short:
-            return
-        self.survey_short = False
-        if not self.unstamped:
-            self.surveyed = True
-            return
-        # The cursor passed a row that kept no clock: restart the walk.
-        discovery = self.projector.finish_discovery
-        discovery.after = None
-        discovery.seeded = False
+    def observed_async(self, segment_id: str, entry: dict) -> None:
+        self.projector.has_async_followups = True
+        if (
+            projection_finish_async_skip_enabled()
+            and entry.get(PROJECTION_FINISH_DUE_FIELD) != PROJECTION_FINISH_ASYNC_CLOCK
+        ):
+            with self.classify_lock:
+                if getattr(self.classify_page, 'remaining', 0) <= 0:
+                    return
+                now = self.monotonic()
+                if now >= self.classify_after and self.classify_inflight == 0:
+                    self.classify_remaining = self.classify_page.limit
+                if self.classify_remaining <= 0:
+                    return
+                self.classify_remaining -= 1
+                self.classify_page.remaining -= 1
+                self.classify_inflight += 1
+                self.classify_after = now + CLASSIFY_COOLDOWN_SECONDS
+            try:
+                classified = self.projector.store.retire_async_finish(segment_id)
+            except Exception:
+                # Classification is a read-saving hint, never a delivery step.
+                # Leave its clock eligible; do not turn contention into a sweep
+                # error or invoke the synchronous row's deferral path.
+                PROJECTION_FINISH_CLASSIFICATION_FAILURES.inc()
+                return
+            finally:
+                with self.classify_lock:
+                    self.classify_inflight -= 1
+                    self.classify_after = max(self.classify_after, self.monotonic() + CLASSIFY_COOLDOWN_SECONDS)
+            if classified:
+                PROJECTION_FINISH_CLASSIFIED.inc()
 
     def settled(self, segment_id: str, entry: dict | None, result) -> None:
-        """Defer this row only after a walk that produced no completion.
+        """Defer only after a no-change walk using the clock-filtered page.
 
-        The store fences on the row's own state, so a row that moved on instead
-        of being deferred is left alone. ``entry`` is ``None`` when the row read
-        itself failed; the store then stamps only a row still in a finish state.
+        A failed deferral leaves the existing clock due, so discovery retries it.
+        The store fences on current state before changing the clock.
         """
-        self.unstamped.discard(segment_id)
-        if not projection_finish_backoff_enabled() or result is not None:
+        if not projection_finish_backoff_enabled() or not self.complete or result is not None:
             return
         state = entry.get('projection_state') if entry else None
-        try:
-            self.projector.store.defer_finish(segment_id, state, self.projector.clock())
-        except Exception:
-            # The row keeps no clock, so the rest of the survey must find it.
-            self.unstamped.add(segment_id)
-            raise
+        self.projector.store.defer_finish(segment_id, state, self.projector.clock())

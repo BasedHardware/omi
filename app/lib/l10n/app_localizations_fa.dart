@@ -7031,6 +7031,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'ورود با Apple ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'ورود با Apple انجام نشد. دوباره امتحان کنید یا با Google ادامه دهید.';
+
+  @override
   String get authFailedToRetrieveToken => 'بازیابی نشانهِ Firebase ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
@@ -13398,6 +13401,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'کد Omi Pro دارید؟ آن را در صفحه بعد وارد کنید.';
+
+  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
@@ -15391,6 +15397,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paymentDeclinedTitle => 'کارت شما رد شد';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'کارت را به‌روزرسانی کنید یا $plan را با ماهانه $price برگردانید';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'برای بازگرداندن $plan کارت را به‌روزرسانی کنید';
   }
@@ -15415,4 +15426,34 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'تغییر به ماهانه';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، ماهانه $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'جایگزین هزینه سالانه پرداخت‌نشده $yearly می‌شود. ماهانه تمدید می‌شود. هر زمان لغو کنید.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'پرداخت رد شد. طرح شما تغییری نکرد.';
+
+  @override
+  String get monthlySwitchUnavailable => 'تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'اکنون ماهانه پرداخت می‌کنید';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'امروز $price پرداخت شد. ماهانه تمدید می‌شود.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
 }

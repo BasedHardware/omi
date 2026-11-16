@@ -13,7 +13,7 @@ those dependents. This pass keeps every dependent reachable:
 3. ``parked``    owner-id fallback artifacts, matched the same way;
 4. ``segments``  each persisted segment's job/result, the conversation binding,
    is erased last and its record removed only after;
-5. ``shadow``    the jobstore shadow purge, only in shadow mode.
+5. ``shadow``    the retained jobstore copy purge, independently of writer mode.
 
 Every destructive step runs in a short unit (``UNIT_MAX_ROWS`` rows or
 ``UNIT_BUDGET_SECONDS``) inside ``progress.unit()``, which owns the account
@@ -32,6 +32,8 @@ from google.cloud import firestore
 from database import rpc_deadline
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
+from database import record_wal_capacity
+from utils.batch_pipeline.record_wal_erasure import conversation_objects
 from database.batch_pipeline_privacy import privacy_owner_key
 from database.batch_pipeline_purge import NAMESPACES
 from database.batch_pipeline_purge import delete_job as _delete_job
@@ -40,12 +42,19 @@ from database.batch_pipeline_purge import erase_result as _erase_result
 from database.batch_pipeline_purge import row_belongs as _belongs
 from database.batch_pipeline_purge import row_references as _references
 from database.batch_pipeline_shadow_hook import mirror_refresh, purge_owner as purge_jobstore_owner
-from database.batch_pipeline_shadow_hook import shadow_mode_enabled as _shadow_mode
 from database.legal_holds import settles_unknown_erasure
 
 PHASES = ('discover', 'dependents', 'parked', 'segments', 'shadow')
 DISCOVER_TABLES = ('jobs', 'results')
-DEPENDENT_TABLES = ('artifacts', 'projections', 'intakes', 'shadow_jobs')
+DEPENDENT_TABLES = (
+    'artifacts',
+    'projections',
+    'intakes',
+    'shadow_jobs',
+    'coalesce_groups',
+    'coalesce_sources',
+    'coalesce_heads',
+)
 # A unit stops starting rows at either bound; each row is a few bounded RPCs.
 UNIT_MAX_ROWS = 10
 UNIT_BUDGET_SECONDS = 1.5
@@ -162,6 +171,7 @@ def purge_conversation(
     tombstone = client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
     if not tombstone.get().exists:
         raise RuntimeError('conversation deletion intent required before batch purge')
+    default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
         from utils.other.local_storage import create_storage_client
@@ -211,13 +221,31 @@ def purge_conversation(
                     uid, namespace, snapshot, data, remote_delete(authority), fence=authority.fence, client=client
                 )
                 return
+            if table == 'coalesce_groups':
+                from database.batch_pipeline_coalescing import purge_group
+
+                purge_group(client, namespace, snapshot.id, uid, fence=authority.fence)
+                return
             for uri in _references(data):
                 remote_delete(authority)(uid, uri)
-            _fenced_delete(client, snapshot.reference, authority.fence)
+            if table == 'intakes' and data.get('kind') in {'record_wal_file', 'record_wal_reservation'}:
+                record_wal_capacity.erase_file(client, snapshot.reference, uid, fence=authority.fence)
+            else:
+                _fenced_delete(client, snapshot.reference, authority.fence)
             mirror_refresh(namespace, [(table, snapshot.id)])
 
         return erase
 
+    # Re-list before metadata on every run, including a checkpoint from an old
+    # reader already past the last namespace. Deleted generations are their
+    # own cursor: a crash/budget handoff resumes with the remaining first page.
+    if default_storage_cleanup:
+        while True:
+            _ensure_budget(progress)
+            originals = conversation_objects(uid, conversation_id, limit=UNIT_MAX_ROWS)
+            if not originals:
+                break
+            _in_units(progress, originals, lambda uri, authority: remote_delete(authority)(uid, uri), clock, settle)
     for ns_index in range(start_ns, len(NAMESPACES)):
         namespace = NAMESPACES[ns_index]
         resuming = ns_index == start_ns and start.get('phase') in PHASES
@@ -337,7 +365,7 @@ def purge_conversation(
                         if len(done) < len(bindings):
                             break  # Budget hit; re-read pending (the rest stays recorded).
                     mark({'ns': ns_index, 'phase': phase, 'table': 0, 'after': None})
-            elif phase == 'shadow' and _shadow_mode():
+            elif phase == 'shadow':
                 _ensure_budget(progress)
                 settle()
                 with progress.unit():

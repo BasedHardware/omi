@@ -143,3 +143,154 @@ Limitless's app-side ACK ordering (ACK only after fsync). No live packet format 
   non-live records. A missing mark means retain and re-download. Do not assume a fixed mark cadence.
 - **Uptime-flagged timestamps:** bit 31 (`0x80000000`) of a record timestamp means the low 31 bits are
   seconds since boot (RTC unset), not epoch UTC. The app reads such records as "no usable time".
+
+## 6. Behaviour within v1 after the 3.0.24 field report (2026-11-15)
+
+Nothing here changes the wire format or a capability bit. It records how both sides now behave inside
+the v1 contract, and why. The report: one pendant on 3.0.24 drained its battery about 2.5 times faster
+than on 3.0.21, and its ring backlog never cleared.
+
+**Firmware.**
+
+- **A status poll never writes the card.** The storage worker refreshes the status characteristic
+  four times a second while a phone is connected. That refresh used the same call as INFO, which
+  commits the buffered batch first. With live persistence on there is always a buffered batch, so the
+  pendant rewrote a whole 16 KiB batch plus a metadata sector about four times a second for the whole
+  connection. The poll now reports the same position from RAM (`sd_ring_peek_info`). `CMD_RING_INFO`
+  and the start of a READ still commit first, so what they report is readable.
+- **Timed flush depends on who else holds the audio.** A partly filled batch that contains a record
+  the phone was not sent (offline, unsubscribed, failed send) is written within one second of that
+  record arriving, as before. A batch whose records were all sent live may wait up to four seconds for
+  more audio; at speech rate it fills and is written once in that time. That longer wait needs a link:
+  "sent" is not "received" on a link that is dropping, so a disconnect writes what is buffered and,
+  while there is no link, every record is back on the one-second bound.
+- **Mark cadence** follows commits, so marks now arrive about every four seconds of speech, as section
+  3 always said, rather than several times a second. The app must not assume a cadence (section 5).
+- **The storage worker sleeps** until a command, a stop or a live mark wakes it. It used to poll every
+  millisecond while connected.
+
+**App.**
+
+- **Bounded reads.** With `CAP_APP_ACK_RECLAIM` and `CAP_RING_ID`, a sync pass reads the ring in
+  ranges of `ringReadWindowRecords` using the 13-byte READ, stores each range, sends
+  `CMD_RING_ADVANCE_ID` past it, and only then requests the next. A pass covers what was unread when
+  it began and does not chase records written during it. A dropped link costs at most the range in
+  flight. Firmware without those capabilities keeps the single read to the write head.
+- **A lost ADVANCE ack is settled by INFO.** The pendant commits an advance before acknowledging it.
+  If no ack arrives the app asks for INFO and treats the advance as done when `read_seq` has reached
+  it, instead of failing the pass and downloading the range again.
+- **Proofs are dropped when the pendant releases them.** An acked advance moves the app's record of
+  the pendant's read pointer and discards the ring and live ranges below it. A small in-memory list of
+  just-released live ranges remains, so a read already in flight can still drop those records. Each
+  proof check reads the WAL index once, not once per referenced file.
+- **The live tail is not a backlog.** With live persistence the ring always holds audio the phone
+  has received live and not yet released. The pendant emits a mark at the committed `write_seq` with
+  every commit of an unbroken live run, suppresses marks until the read pointer reaches that run, and
+  stops when an unsent record joins the ring (section 5). So a mark equal to the `write_seq` that INFO
+  reports means nothing unsent is waiting, and one committed record beyond the last mark means
+  something is. The comparison is exact: with any slack, a short unsent stretch followed by silence
+  would never be read. The mark for a commit is notified just after the INFO that reported it, so the
+  app waits `liveMarkSettle` before judging; judging early only costs a short read of audio that also
+  arrived live.
+  A range is proven between two marks, so nothing below the first mark of a connection can be proven
+  live. The app therefore reads the ring only up to that first mark and leaves everything after it to
+  the live proof. Once `read_seq` has passed the first mark and a mark covers the write head, it does
+  not start a ring read at all. Otherwise it reads to the write head as before.
+- **A recording that spans several reads is one recording.** The clock run and, when the pendant has
+  no usable clock, the estimated start and the frame count since carry from one read to the next.
+  They restart only where records were released without being read.
+
+**Still true, and still costly.** After an offline backlog the pendant suppresses marks until the
+backlog is read and advanced, so audio streamed live during that catch-up has no mark and is read from
+the ring as well. At about 68 records per second read against 8 written, that adds roughly one eighth
+to the backlog. Relaxing mark suppression would remove it and is a contract change, not made here.
+
+## 7. Recoverable mobile batch mapping (app-only)
+
+Automatic mobile batch may retain validated mark mappings across process death
+under a unique original live-session identity. These speculative mappings never
+constitute custody. Replay may pair them only with the same device/ring/session's
+exact on-disk ordinal prefix after audio fsync and persisted WAL indexing, using
+the ordinary mark-pair union and contiguous reclaim frontier. The index validator
+must exclude unindexed replay discoveries. A different ring, missing file/index,
+short prefix, counter gap, ambiguous mapping or foreign owner keeps the pendant
+copy. The ordinary live path's process-local epochs are still not serialized.
+This replaces re-download only where those exact proofs survive; it adds no
+firmware command, server receipt or weaker sample-durability rule. See CUSTODY.md
+for the default-on batch kill switch and recovery guard.
+
+## 8. Download proof survives read/session lifetime (app-only)
+
+For capability-scoped downloads, each file's WAL index transaction includes
+`download_ring_id`, exact exclusive `download_seq_start` / `download_seq_end`,
+`download_file_bytes`, and the existing device and account owner. Audio is
+fsynced before this index commit. These coordinates reconstruct proof after a
+crash between index commit and custody save; discovering an unindexed file does
+not supply proof. A separate atomic, serialized per-device/ring receipt journal
+also retains completed ranges after their live BLE epoch ends. Epoch changes
+fence commands, not the identity of already-indexed downloaded samples.
+
+Every release revalidates the persisted index, file length/frame count, owner,
+ring and exact sequence interval. A fresh pass restores proof and replays its
+contiguous prefix before refreshing INFO and choosing READ start. Missing,
+truncated, foreign or unindexed refs invalidate their own ranges; no later range
+bridges an unproven hole. A confirmed ADVANCE moves the in-memory validation
+floor so later chunks do not reopen every older WAL. Download receipts remain
+until fresh INFO confirms read_seq, preserving replay after lost/ambiguous ACKs.
+Known validated spans inside a READ may be skipped to avoid another file; that
+snapshot alone never authorizes ADVANCE, whose refs are validated again. A chunk
+never joins audio on opposite sides of a skipped span. Malformed packed audio
+retains the record; an exact-fit terminal frame is saved in full.
+
+One read owner covers the entire bounded-window pass through STOP, queued notification processing,
+in-flight index saves and final exact-prefix ADVANCE. Cancellation completes the
+read wait; a new pass cannot overlap its settling work. First-data (5 seconds)
+and DATA-silence (15 seconds) deadlines remain. Completed indexed chunks renew an
+ordinary coordinator pass; there is no total 30-minute ring-read limit. The OS
+periodic capture-fenced window retains its existing hard limit. Legacy firmware
+retains its original completion/ADVANCE rules.
+
+Default-on rollback: `--dart-define=OMI_RING_DRAIN_RECOVERY_OFF=true` restores the
+previous download-proof, decoder, ownership and timeout behavior. It does not
+control the independent batch-proof switch. No v1 wire command or capability is
+added. Historical phone files without exact ring mapping cannot be retrofitted
+from timestamps, sample similarity or live ordinals alone.
+
+
+### Receipt validation after R16 review
+
+Every replayable audio reference now names its original non-legacy account,
+physical pendant, ring incarnation, exact coordinates, byte length, frame count
+and SHA-256 of the immutable fsynced file. The SHA-256 is the same file-byte
+identity used by the upload capture manifest, not a second content scheme; WALs
+had no previously persisted per-file digest to reuse. Digest and coordinates are
+committed in the same WAL index transaction before a receipt can authorize
+ADVANCE. Ordinary live, batch and downloaded WALs all use this contract.
+Ownerless, legacy unscoped, hashless and corrupted index rows retain the pendant
+copy. Existing files/indexes are never upgraded to authority by measuring them
+at restore. Batch replay verifies the journal's fsynced prefix digest before
+recovering its original ordinals, then commits the recovered full file digest.
+
+An all-zero packed record has no samples but is still a ring record. A range
+containing only empty records writes a canonical `.ring-empty` file naming the
+owner/device/ring/exclusive sequence interval, fsyncs it, then persists a zero-
+frame, zero-duration WAL index entry and digest. It is marked synced only to
+exclude control metadata from audio upload; no server/audio acknowledgement is
+asserted. Mixed chunks include their empty records in the same exact indexed
+sequence interval as their audio. Empty reference lists never prove a range.
+Missing marker/index, wrong account or a changed marker retains the records.
+
+A separate 45-second persistence-progress watchdog stops BLE admission on a
+stalled queue/fsync/index even after DONE. DATA does not renew it or the ordinary
+coordinator; completed indexed chunks renew coordinator progress. Uncancellable
+OS writes retain exclusive device ownership until settled. They cannot be made
+proof or bypassed by a new reader merely because their watchdog expired.
+
+The compile-time OFF switches remain; the validation hardening and rejection of
+empty/unscoped/corrupted authority remain fail-closed in either build. The current
+remote flags API serves an unbounded last-known-good server snapshot and supplies
+no freshness grant, so it cannot implement absent/stale/unreadable => OFF by a
+config key alone. A bounded server freshness contract is required before using it
+for data release; see the Q12-AA R16 handoff. No remote configuration was changed.
+
+Window validation reuses index rows only, with index-revision and account fences. Positive file checks are never retained between notifications: each duplicate suppression and ADVANCE hashes the overlapping current bytes again.

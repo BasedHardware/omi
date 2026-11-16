@@ -5,6 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -190,7 +191,7 @@ void main() {
     expect(offenders, isEmpty);
   });
 
-  test('shared device persistence preserves golden bytes, names and collision suffixes', () async {
+  test('shared device persistence preserves bytes and keeps collision timestamps last', () async {
     final ledger = await custodyLedger();
     final source = Wal(timerStart: 1720000000, codec: BleAudioCodec.opus, seconds: 1, device: 'device');
     final frames = [
@@ -204,6 +205,9 @@ void main() {
         timerStart: source.timerStart,
         admittedGeneration: ledger.sessionGeneration,
         nextCollisionSequence: () => seq++);
+    final legacyName = (source.getFileName() as String).replaceFirst('.bin', '_u0.bin');
+    final legacyBytes = [7, 8, 9];
+    await File('${dir.path}/$legacyName').writeAsBytes(legacyBytes, flush: true);
     final second = await ledger.persistDeviceChunk(
         source: source,
         frames: frames,
@@ -211,10 +215,27 @@ void main() {
         admittedGeneration: ledger.sessionGeneration,
         nextCollisionSequence: () => seq++);
     expect(first.filePath, source.getFileName());
-    expect(second.filePath, (source.getFileName() as String).replaceFirst('.bin', '_u0.bin'));
+    expect(second.filePath,
+        (source.getFileName() as String).replaceFirst('_${source.timerStart}.bin', '_u0_${source.timerStart}.bin'));
+    final third = await ledger.persistDeviceChunk(
+        source: source,
+        frames: frames,
+        timerStart: source.timerStart,
+        admittedGeneration: ledger.sessionGeneration,
+        nextCollisionSequence: () => seq++);
+    expect(third.filePath,
+        (source.getFileName() as String).replaceFirst('_${source.timerStart}.bin', '_u1_${source.timerStart}.bin'));
     const golden = [3, 0, 0, 0, 0, 128, 255, 2, 0, 0, 0, 4, 5];
     expect(await File('${dir.path}/${first.filePath}').readAsBytes(), golden);
     expect(await File('${dir.path}/${second.filePath}').readAsBytes(), golden);
+    expect(await File('${dir.path}/${third.filePath}').readAsBytes(), golden);
+    expect(await File('${dir.path}/$legacyName').readAsBytes(), legacyBytes,
+        reason: 'never rename or overwrite existing legacy collisions');
+    for (final wal in [first, second, third]) {
+      expect(int.parse(wal.filePath!.split('_').last.replaceFirst('.bin', '')), source.timerStart);
+      expect(wal.timerStart, source.timerStart);
+      expect(await ledger.hasDurableWal(wal, admittedGeneration: ledger.sessionGeneration), isTrue);
+    }
     final flash = await ledger.persistDeviceChunk(
         source: source,
         frames: frames,
@@ -225,5 +246,43 @@ void main() {
         fileName: () => 'audio_limitless_opus_16000_1_fs320_r123_0_1720000000000.bin');
     expect(await File('${dir.path}/${flash.filePath}').readAsBytes(), golden);
     expect(await ledger.hasDurableWal(flash, admittedGeneration: ledger.sessionGeneration), isTrue);
+  });
+
+  test('clock-run collision names skip occupied nonces without changing time or bytes', () async {
+    final ledger = await custodyLedger();
+    final source = Wal(timerStart: 1720000000, codec: BleAudioCodec.opus, seconds: 1, device: 'device');
+    const clockRun = 'abc123';
+    final canonical = source.getFileNameByTimeStarts(source.timerStart, clockRun: clockRun) as String;
+    final legacyCollision = canonical.replaceFirst('_${source.timerStart}.bin', '_u0_${source.timerStart}.bin');
+    final collision =
+        deviceCaptureClockRepairOff ? legacyCollision : canonical.replaceFirst('_clke$clockRun', '_u0_clke$clockRun');
+    final occupied = {canonical, collision, legacyCollision};
+    for (final name in occupied) {
+      await File('${dir.path}/$name').writeAsBytes([9, 9, 9]);
+    }
+    var seq = 0;
+    final wal = await ledger.persistDeviceChunk(
+        source: source,
+        frames: [
+          [42]
+        ],
+        timerStart: source.timerStart,
+        admittedGeneration: ledger.sessionGeneration,
+        clockRun: clockRun,
+        nextCollisionSequence: () => seq++);
+    expect(
+        wal.filePath,
+        deviceCaptureClockRepairOff
+            ? canonical.replaceFirst('_${source.timerStart}.bin', '_u1_${source.timerStart}.bin')
+            : canonical.replaceFirst('_clke$clockRun', '_u1_clke$clockRun'));
+    if (!deviceCaptureClockRepairOff) {
+      expect(wal.filePath, matches(RegExp(r'_clkeabc123_[0-9]+\.bin$')));
+    }
+    expect(wal.clockRun, clockRun);
+    expect(wal.timerStart, source.timerStart);
+    expect(await File('${dir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
+    for (final name in occupied) {
+      expect(await File('${dir.path}/$name').readAsBytes(), [9, 9, 9]);
+    }
   });
 }
