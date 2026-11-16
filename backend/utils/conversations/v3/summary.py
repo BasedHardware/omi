@@ -19,6 +19,7 @@ from database import conversations_v3 as store
 from models.conversation import Conversation
 from utils.conversations.v3 import models, policy
 from utils.executors import run_blocking, db_executor, llm_executor
+from utils.subscription import should_skip_omi_paid_postprocessing
 
 
 def fresh(row):
@@ -65,8 +66,6 @@ def paid_notes_refused(uid, row):
     """The custom-STT allowance that process_conversation applies before Omi-paid notes."""
     if row.get('uses_custom_stt') is not True:
         return False
-    from utils.subscription import should_skip_omi_paid_postprocessing
-
     source = row.get('source')
     return should_skip_omi_paid_postprocessing(
         uid, uses_custom_stt=True, source=getattr(source, 'value', source) if source is not None else None
@@ -92,6 +91,11 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
         yield done(row)
         return
     token = token or await prepare(uid, row)
+    if token is None:
+        # prepare() returns no lease only when the custom-STT allowance refuses Omi-paid notes:
+        # serve the stored row and spend no model work.
+        yield done(row)
+        return
     cid = row['id']
     loop = asyncio.get_running_loop()
     queue = asyncio.Queue(maxsize=128)
