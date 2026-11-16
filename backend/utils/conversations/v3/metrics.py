@@ -22,3 +22,8 @@ EPISODE_CALLS = Counter(
     ['endpoint', 'app_channel', 'app_version', 'v3'],
 )
 EPISODE_COMPOSES = Counter('omi_episode_composes_total', 'Episode composition attempts', ['v3'])
+
+UNCERTAIN_SHOWN = Counter(
+    "omi_conversations_v3_uncertain_recognition_shown_total",
+    "Committed windows shown because wearer recognition is uncertain",
+)

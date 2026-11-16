@@ -10,6 +10,8 @@ import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service
+from utils.conversations import process_conversation as process_pipeline
+from utils.conversations import merge_conversations as merger
 from utils import entity_pages
 from database import conversations as conversations_db, mcp_conversation_pages
 from utils.mcp_server.handlers import conversations as mcp_handlers
@@ -396,3 +398,230 @@ def test_synchronous_writer_owns_and_joins_lease_heartbeat(monkeypatch):
         assert renewed.wait(1)
     assert calls and all(c == ('u', 'summary-c', 'token') for c in calls)
     assert not any(t.name == 'v3-writer-lease' for t in threading.enumerate())
+
+
+@pytest.mark.parametrize('bound,eligible,expected', [(True, True, True), (False, True, False), (True, False, False)])
+def test_recognition_uses_segment_bound_policy_evidence(monkeypatch, bound, eligible, expected):
+    from models.speaker_evidence import SpeakerEvidence
+    from utils.speakers import evidence
+    from utils.conversations.v3 import visibility
+
+    row = source(transcript_segments=[{'id': 's', 'text': 'synthetic words', 'is_user': False}])
+    packet = SpeakerEvidence(
+        status='resolved',
+        policy_version='test',
+        clusters=[
+            {
+                'id': 'v',
+                'segment_ids': ['s' if bound else 'stale'],
+                'candidates': [
+                    {
+                        'person_id': 'owner',
+                        'probability': 1,
+                        'band': 'confident',
+                        'source': 'voice',
+                        'label_eligible': eligible,
+                    }
+                ],
+            }
+        ],
+    )
+    monkeypatch.setattr(evidence, 'get_evidence', lambda *a: packet)
+    visibility.hydrate_recognition('u', {'r': row}, [{'kind': 'background', 'lines': [{'conversation_id': 'r'}]}])
+    assert row['_v3_wearer_recognized'] is expected
+
+
+@pytest.mark.asyncio
+async def test_uncertain_visibility_counter_counts_committed_first_exposure(builder, monkeypatch):
+    from unittest.mock import MagicMock
+    from utils.speakers import evidence
+
+    committed, _ = builder
+    monkeypatch.setattr(evidence, 'get_evidence', lambda *a: None)
+    monkeypatch.setattr(
+        store,
+        'load',
+        lambda *a, **kw: (
+            {
+                'r': source(
+                    transcript_segments=[{'id': 's', 'text': 'speech ' * 300, 'start': 0, 'end': 10, 'is_user': False}]
+                )
+            },
+            {},
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        service.models,
+        'outline',
+        lambda *a: '{"conversations":[{"first_line":1,"title":"A plan","line":"A plan.","kind":"background"}]}',
+    )
+    meter = MagicMock()
+    monkeypatch.setattr(service.metrics, 'UNCERTAIN_SHOWN', meter)
+    await service.reconcile('u')
+    result = committed[0][4][0]
+    assert result['kind'] == 'conversation' and not result['home_hidden']
+    prior = dict(result, status='completed')
+    monkeypatch.setattr(
+        store,
+        'load',
+        lambda *a, **kw: (
+            {
+                'r': source(
+                    transcript_segments=[{'id': 's', 'text': 'speech ' * 300, 'start': 0, 'end': 10, 'is_user': False}]
+                )
+            },
+            {prior['id']: prior},
+            [],
+        ),
+    )
+    await service.reconcile('u')
+    meter.inc.assert_called_once()
+
+
+@pytest.mark.parametrize('backfilled', [False, True])
+def test_manual_end_processes_its_own_short_window(monkeypatch, backfilled):
+    from utils.conversations import process_conversation as process, lifecycle
+    from types import SimpleNamespace
+    from database import conversations_v3_processing as writers
+
+    row = {
+        'id': 'window',
+        'v3_derived': True,
+        'backfilled': backfilled,
+        'manual_end': True,
+        'kind': 'conversation',
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'structured': {},
+        'transcript_segments': [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': False}],
+    }
+    called = []
+    monkeypatch.setattr(writers, 'begin_processing', lambda *a, **kw: True)
+    monkeypatch.setattr(writers, 'settle_processing', lambda *a, **kw: None)
+    monkeypatch.setattr(lifecycle, 'complete', lambda *a: pytest.fail('manual end skipped notes'))
+
+    def full(uid, language, conversation, **kw):
+        called.append(conversation)
+        kw['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    monkeypatch.setattr(process, 'process_conversation', full)
+    service._process('u', row, 'token')
+    assert called[0].id == 'window' and called[0].manual_end
+    assert len(called[0].transcript_segments[0].text.split()) == 40
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', ['transcription', 'outline'])
+async def test_builder_terminal_failure_is_visible_and_retryable(builder, monkeypatch, failure):
+    committed, _ = builder
+    row = source(
+        status='failed' if failure == 'transcription' else 'completed',
+        transcript_segments=[{'text': 'speech ' * 300, 'start': 0, 'end': 10, 'is_user': True}],
+    )
+    monkeypatch.setattr(store, 'load', lambda *a, **k: ({'r': row}, {}, []))
+    if failure == 'outline':
+        monkeypatch.setattr(store, 'outline_attempt', lambda *a: False)
+    await service.reconcile('u')
+    built = committed[0][4][0]
+    assert built['status'] == 'completed' and built['tile_state'] == 'failed'
+    assert built['summary_retryable'] and not built['v3_process_pending']
+    assert not built['home_hidden']
+
+
+def test_merge_stub_preserves_manual_intent_even_without_requested_reprocess(monkeypatch):
+    class Captured(BaseException):
+        pass
+
+    rows = {
+        cid: {
+            'id': cid,
+            'v3_derived': True,
+            'manual_end': cid == 'a',
+            'status': 'completed',
+            'started_at': AT + timedelta(seconds=i * 20),
+            'created_at': AT,
+            'finished_at': AT + timedelta(seconds=i * 20 + 10),
+            'structured': {'title': cid},
+            'transcript_segments': [
+                {'id': cid + '-s', 'text': 'A synthetic short plan.', 'start': 0, 'end': 10, 'is_user': True}
+            ],
+        }
+        for i, cid in enumerate(('a', 'b'))
+    }
+    monkeypatch.setattr(merger.conversations_db, 'get_conversation', lambda uid, cid: rows[cid])
+    monkeypatch.setattr(merger, '_collect_all_photos', lambda *a: [])
+    captured = []
+
+    def stub(uid, payload):
+        captured.append(payload)
+        raise Captured()
+
+    monkeypatch.setattr(merger.lifecycle_service, 'create_processing_conversation', stub)
+    with pytest.raises(Captured):
+        merger.perform_merge_async('u', ['a', 'b'], reprocess=False)
+    assert captured[0]['manual_end'] is True and not captured[0]['home_hidden']
+    assert captured[0]['tile_state'] == 'writing'  # intent forces the full notes path next
+
+
+@pytest.mark.asyncio
+async def test_late_manual_end_owes_full_notes_even_without_new_words(builder, monkeypatch):
+    committed, _ = builder
+    transcript = [{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': True}]
+    prior = {
+        'id': 'c',
+        'v3_derived': True,
+        'status': 'completed',
+        'started_at': AT,
+        'finished_at': AT + timedelta(seconds=10),
+        'home_hidden': True,
+        'kind': 'conversation',
+        'v3_recording_ids': ['r'],
+        'transcript_segments': transcript,
+        'summary_covers_through': AT + timedelta(seconds=10),
+        'tile_state': 'done',
+    }
+    monkeypatch.setattr(
+        store,
+        'load',
+        lambda *a, **k: ({'r': source(v3_manual_end=True, transcript_segments=transcript)}, {'c': prior}, []),
+    )
+    await service.reconcile('u')
+    row = committed[0][4][0]
+    assert row['manual_end'] and not row['home_hidden']
+    assert row['v3_process_pending'] and row['tile_state'] == 'writing'
+    assert row['summary_covers_through'] is None
+
+
+@pytest.mark.asyncio
+async def test_transcription_failure_does_not_wait_for_silence_deadline(builder, monkeypatch):
+    from datetime import datetime
+
+    committed, _ = builder
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return AT + timedelta(seconds=11)
+
+    monkeypatch.setattr(service, 'datetime', Clock)
+    monkeypatch.setattr(
+        store,
+        'load',
+        lambda *a, **k: (
+            {
+                'r': source(
+                    status='failed',
+                    v3_manual_end=False,
+                    transcript_segments=[{'text': 'speech ' * 300, 'start': 0, 'end': 10, 'is_user': True}],
+                )
+            },
+            {},
+            [],
+        ),
+    )
+    await service.reconcile('u')
+    row = committed[0][4][0]
+    assert row['tile_state'] == 'failed' and row['status'] == 'completed' and row['summary_retryable']

@@ -1,6 +1,74 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    # Reviewed v3 lease-fenced projection/processing payloads; no test-time refresh.
+    'database/conversations_v3_processing.py': [
+        (
+            'begin_processing.begin',
+            'status',
+            "'processing'",
+            (
+                'status',
+                'summary_retryable',
+                'tile_state',
+                'v3_process_attempts',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_fingerprint',
+                'v3_process_pending',
+            ),
+        ),
+        (
+            'failure_patch',
+            'status',
+            "'completed'",
+            (
+                'status',
+                'summary_retryable',
+                'tile_state',
+                'v3_process_failed',
+                'v3_process_failure_reason',
+                'v3_process_pending',
+            ),
+        ),
+    ],
+    'utils/conversations/v3/planner.py': [
+        (
+            'build',
+            'status',
+            "'processing' if window['finished'] else 'in_progress'",
+            (
+                'audio_files',
+                'created_at',
+                'data_protection_level',
+                'discarded',
+                'finished_at',
+                'home_hidden',
+                'home_hidden_reason',
+                'id',
+                'is_locked',
+                'kind',
+                'language',
+                'manual_end',
+                'outline_kind',
+                'private_cloud_sync_enabled',
+                'recording_pieces',
+                'source',
+                'started_at',
+                'status',
+                'structured',
+                'tile_state',
+                'title_locked',
+                'transcript_segments',
+                'v3_derived',
+                'v3_recording_ids',
+            ),
+        )
+    ],
+    'utils/conversations/v3/service.py': [
+        ('reconcile', 'status', "prior['status']", ('status',)),
+        ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
+    ],
     # Client polling adapter only; never writes conversation lifecycle status.
     'database/record_wal_handoff.py': [
         (
@@ -4321,7 +4389,9 @@ FIELD_SITES = {
             ('duration', 'id', 'signed_url', 'status'),
         ),
         ('download_audio_file_response', 'status', "'pending'", ('poll_after_ms', 'status')),
+        ('download_audio_file_response', 'status', "entry['status']", ('poll_after_ms', 'status')),
         ('precache_audio_files', 'status', "'no_audio'", ('message', 'status')),
+        ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
     ],
@@ -4467,6 +4537,14 @@ FIELD_SITES = {
 # Unclassified sites remain visible pending the typed-outcome redesign.
 KNOWN_TERMINAL_WRITERS = {
     'conversation': {
+        (
+            'database/conversations_v3.py',
+            'commit_projection.commit',
+        ): 'known_extra_writer: lifecycle v3 projection; lease/revision/claim fenced',
+        (
+            'utils/conversations/v3/service.py',
+            'recording_short_path.guarded',
+        ): 'in-memory completion projection after lifecycle.complete',
         ('database/conversation_finalization_jobs.py', '_apply_snapshot_bound_projection'): 'unclassified',
         ('database/conversation_recorded_time.py', 'create_if_absent.create'): 'unclassified',
         ('database/conversations.py', 'release_share_email_recipients'): 'unclassified',

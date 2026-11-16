@@ -223,3 +223,147 @@ def test_persisted_title_lock_wins_after_generated_title_cleanup(monkeypatch, lo
     result = process._get_conversation_obj('synthetic', Structured(title='Draft'), row)
     assert result.structured.title == ('Original' if locked else 'Cleaned generated title')
     assert result.structured.emoji == ('🌳' if locked else '🔧')
+
+
+@pytest.fixture
+def real_notes_seam(monkeypatch):
+    from contextlib import nullcontext
+    from utils.conversations.relevance import RelevanceDecision
+    from utils.conversations import llm_input_dedupe
+
+    called = []
+    monkeypatch.setattr(process, 'is_release_probe_uid', lambda *a: False)
+    monkeypatch.setattr(process, 'content_minimum', lambda *a, **k: pytest.fail('intent took content minimum'))
+    monkeypatch.setattr(process, 'quiet_minimum', lambda *a, **k: pytest.fail('intent took quiet minimum'))
+    monkeypatch.setattr(process.v3_service.models, 'short_tasks', lambda *a: pytest.fail('intent took short path'))
+    monkeypatch.setattr(process.notification_db, 'get_user_time_zone', lambda *a: 'UTC')
+    monkeypatch.setattr(process, 'resolve_output_language', lambda *a: 'en')
+    monkeypatch.setattr(process, 'selected_summary_app', lambda *a: False)
+    monkeypatch.setattr(process, 'conversation_transcripts_for_llm', lambda *a: ('speech', 'speech', {}))
+    monkeypatch.setattr(process, 'relevance_arm', lambda *a: 'legacy')
+    monkeypatch.setattr(process, 'relevance_experiment_active', lambda: False)
+    monkeypatch.setattr(
+        process, 'decide_relevance', lambda **k: RelevanceDecision('keep', 'policy', 'user_kept', k['trigger'])
+    )
+    monkeypatch.setattr(process, 'before_notes', lambda *a, **k: None)
+    monkeypatch.setattr(process.member_notes, 'before_model', lambda *a, **k: None)
+    monkeypatch.setattr(process, 'rich_notes_inputs', lambda *a, **k: (None, None, False, None, 0))
+    monkeypatch.setattr(process, 'build_conversation_prompt_prefix', lambda **k: 'synthetic prompt')
+    monkeypatch.setattr(process, 'conversation_known_spellings', lambda *a: [])
+    monkeypatch.setattr(process, '_fetch_dedup_candidates_for_query', lambda *a: [])
+    monkeypatch.setattr(process, 'notes_agent_inputs', lambda *a: {})
+    monkeypatch.setattr(process, 'track_usage', lambda *a, **k: nullcontext())
+
+    def notes(*args, **kwargs):
+        called.append(args)
+        return Structured(
+            title='An intentional plan',
+            overview='You made a plan.',
+            sections=[{'heading': 'Plan', 'body_markdown': 'Meet tomorrow.'}],
+        )
+
+    monkeypatch.setattr(llm_input_dedupe, 'notes', notes)
+    return called
+
+
+@pytest.mark.parametrize('words', [5, 40])
+def test_manual_end_runs_real_notes_path_even_below_short_minimum(real_notes_seam, words):
+    from models.conversation import Conversation
+
+    row = Conversation(
+        id='c',
+        created_at=AT,
+        started_at=AT,
+        finished_at=AT,
+        v3_derived=True,
+        manual_end=True,
+        kind='conversation',
+        structured={},
+        transcript_segments=[{'text': 'speech ' * words, 'start': 0, 'end': 10, 'is_user': False}],
+    )
+    assert summary.summary_eligible(row.model_dump())
+    structured, discarded = process._get_structured('synthetic', 'en', row)
+    assert len(real_notes_seam) == 1 and not discarded
+    assert structured.title and structured.sections[0].body_markdown
+
+
+def test_explicit_retry_bypasses_short_and_summary_coverage(real_notes_seam):
+    from models.conversation import Conversation
+    from utils.conversations.processing_trigger import ProcessingTrigger
+
+    row = Conversation(
+        id='c',
+        created_at=AT,
+        started_at=AT,
+        finished_at=AT,
+        v3_derived=True,
+        kind='conversation',
+        summary_covers_through=AT,
+        structured={'title': 'Old outline'},
+        transcript_segments=[{'text': 'speech ' * 40, 'start': 0, 'end': 10, 'is_user': True}],
+    )
+    result, discarded = process._get_structured('synthetic', 'en', row, trigger=ProcessingTrigger.USER_REPROCESS)
+    assert len(real_notes_seam) == 1 and result.overview == 'You made a plan.' and not discarded
+
+
+@pytest.mark.parametrize('outcome', ['done', 'raises', 'no_write'])
+def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
+    from copy import deepcopy
+    from database import conversations_v3 as store, conversations_v3_processing as writers, processing_attention
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.conversations.v3 import service
+
+    path = ('users', 'synthetic', 'conversations', 'window')
+    original = {
+        'id': 'window',
+        'v3_derived': True,
+        'created_at': AT,
+        'started_at': AT,
+        'finished_at': AT,
+        'kind': 'conversation',
+        'status': 'completed',
+        'tile_state': 'failed',
+        'summary_retryable': True,
+        'sync_content_revision': 1,
+        'v3_process_attempts': 2,
+        'structured': {'title': 'Old title'},
+        'recording_pieces': [{'recording_id': 'recording', 'audio_file_id': 'f', 'start': 10, 'end': 20}],
+        'transcript_segments': [{'text': 'Only this window.', 'start': 0, 'end': 10, 'is_user': True}],
+    }
+    client = StrictFirestore({path: deepcopy(original)})
+    monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(writers.firestore, 'transactional', lambda body: lambda tx: body(tx))
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda uid, cid: deepcopy(client.rows[path]))
+    monkeypatch.setattr(processing_attention, 'generation', lambda row: 1)
+    monkeypatch.setattr(processing_attention, 'claim', lambda *a, **k: ('operation', True))
+    monkeypatch.setattr(processing_attention, 'owns_live_claim', lambda *a: True)
+    monkeypatch.setattr(processing_attention, 'finish', lambda *a: None)
+    monkeypatch.setattr(routes, 'schedule_reprocessed_learning', lambda uid, row, *a, **k: row)
+    called = []
+
+    def processor(uid, language, row, **kwargs):
+        called.append(row)
+        assert row.id == 'window' and row.transcript_segments[0].text == 'Only this window.'
+        assert client.rows[path]['tile_state'] == 'writing'
+        assert summary.models.foreground()
+        if outcome == 'raises':
+            raise RuntimeError('synthetic model failure')
+        row.status = 'completed'
+        row.structured = Structured(title='Fresh', overview='Fresh notes from this window.')
+        if outcome == 'done':
+            client.rows[path].update(status='completed', structured=row.structured.model_dump())
+        kwargs['persistence_observer'](outcome == 'done')
+        return row
+
+    monkeypatch.setattr(routes, 'process_conversation', service.recording_short_path(processor))
+    if outcome == 'done':
+        result = routes.reprocess_conversation('window', uid='synthetic')
+        assert result.tile_state == 'done' and not result.summary_retryable
+    else:
+        with pytest.raises(RuntimeError):
+            routes.reprocess_conversation('window', uid='synthetic')
+    assert len(called) == 1
+    assert client.rows[path]['tile_state'] == ('done' if outcome == 'done' else 'failed')
+    assert client.rows[path]['status'] == 'completed'
+    assert client.rows[path]['summary_retryable'] is (outcome != 'done')

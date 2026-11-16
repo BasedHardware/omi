@@ -56,6 +56,7 @@ FEED_FIELDS = [
     'home_started_at',
 ]
 CONVERSATION_FIELDS = [
+    'v3_derived',
     'recording',
     'home_hidden',
     'id',
@@ -168,6 +169,9 @@ def _visible(row, *, episode_member=False):
         or row.get('sync_merged_into')
     ):
         return False
+    if row.get('v3_derived'):
+        # The v3 planner owns Home visibility; failed tiles remain recoverable rows.
+        return conversations.is_visible_conversation(row, presentation=True)
     if episode_member:
         # Existing episode Home rows preserve failed transcription recovery.
         visibility = {**row, 'status': 'completed'} if row.get('status') == 'failed' else row

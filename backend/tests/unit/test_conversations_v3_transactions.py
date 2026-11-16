@@ -411,3 +411,27 @@ def test_on_open_projection_keeps_background_pending_obligation(strict):
         firestore_client=strict,
     )
     assert strict.rows[R]['v3_pending'] is True and strict.rows[R]['v3_pending_since'] == AT
+
+
+def test_exhausted_retry_budget_is_failed_and_retryable(strict):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'transcript_segments': [{'text': 'real speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    for _ in range(2):
+        assert writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    assert not writers.begin_processing('synthetic', row, token, firestore_client=strict)
+    failed = strict.rows[path]
+    assert failed['tile_state'] == 'failed' and failed['status'] == 'completed'
+    assert failed['summary_retryable'] and failed['v3_process_failed']
+    assert writers.begin_processing('synthetic', row, token, force=True, firestore_client=strict)
+    assert strict.rows[path]['tile_state'] == 'writing'
+    assert strict.rows[path]['v3_process_attempts'] == 1
+
+
+def test_failure_never_replaces_a_locked_presentation(strict):
+    path = ('users', 'synthetic', 'conversations', 'c')
+    strict.rows[path] = {'id': 'c', 'is_locked': True, 'tile_state': 'writing'}
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    assert not writers.fail_processing('synthetic', 'c', token, None, firestore_client=strict)
+    assert strict.rows[path]['is_locked'] and strict.rows[path]['tile_state'] != 'failed'

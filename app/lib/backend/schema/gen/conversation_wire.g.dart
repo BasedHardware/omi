@@ -1134,12 +1134,14 @@ class GeneratedConversation {
   final GeneratedGeolocation? geolocation;
   final String? geolocationScope;
   final bool? homeHidden;
+  final String? homeHiddenReason;
   final String id;
   final bool imported;
   final bool? isCall;
   final bool isLocked;
   final String? kind;
   final String? language;
+  final bool? manualEnd;
   final double? meetingDedupSpeechS;
   final double? meetingDurationS;
   final bool meetingTreatmentEligible;
@@ -1211,12 +1213,14 @@ class GeneratedConversation {
     this.geolocation,
     this.geolocationScope,
     this.homeHidden,
+    this.homeHiddenReason,
     required this.id,
     this.imported = false,
     this.isCall,
     this.isLocked = false,
     this.kind,
     this.language,
+    this.manualEnd,
     this.meetingDedupSpeechS,
     this.meetingDurationS,
     this.meetingTreatmentEligible = false,
@@ -1290,12 +1294,14 @@ class GeneratedConversation {
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       geolocationScope: _readFieldValue<String>(_readField(json, const ["geolocation_scope"]), "geolocation_scope", _readString, requiredField: false, nullable: true),
       homeHidden: _readFieldValue<bool>(_readField(json, const ["home_hidden"]), "home_hidden", _readBool, requiredField: false, nullable: true),
+      homeHiddenReason: _readFieldValue<String>(_readField(json, const ["home_hidden_reason"]), "home_hidden_reason", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isCall: _readFieldValue<bool>(_readField(json, const ["is_call"]), "is_call", _readBool, requiredField: false, nullable: true),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
       meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
       meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
@@ -1370,12 +1376,14 @@ class GeneratedConversation {
       'geolocation': geolocation?.toJson(),
       'geolocation_scope': geolocationScope,
       'home_hidden': homeHidden,
+      'home_hidden_reason': homeHiddenReason,
       'id': id,
       'imported': imported,
       'is_call': isCall,
       'is_locked': isLocked,
       'kind': kind,
       'language': language,
+      'manual_end': manualEnd,
       'meeting_dedup_speech_s': meetingDedupSpeechS,
       'meeting_duration_s': meetingDurationS,
       'meeting_treatment_eligible': meetingTreatmentEligible,
@@ -1826,12 +1834,14 @@ class GeneratedConversationSearchItem {
   final GeneratedGeolocation? geolocation;
   final String? geolocationScope;
   final bool? homeHidden;
+  final String? homeHiddenReason;
   final String id;
   final bool imported;
   final bool? isCall;
   final bool isLocked;
   final String? kind;
   final String? language;
+  final bool? manualEnd;
   final List<GeneratedTranscriptMatchSnippet> matchSnippets;
   final double? meetingDedupSpeechS;
   final double? meetingDurationS;
@@ -1904,12 +1914,14 @@ class GeneratedConversationSearchItem {
     this.geolocation,
     this.geolocationScope,
     this.homeHidden,
+    this.homeHiddenReason,
     required this.id,
     this.imported = false,
     this.isCall,
     this.isLocked = false,
     this.kind,
     this.language,
+    this.manualEnd,
     this.matchSnippets = const [],
     this.meetingDedupSpeechS,
     this.meetingDurationS,
@@ -1984,12 +1996,14 @@ class GeneratedConversationSearchItem {
       geolocation: _readFieldValue<GeneratedGeolocation>(_readField(json, const ["geolocation"]), "geolocation", (value) => _readObject(value, GeneratedGeolocation.fromJson), requiredField: false, nullable: true),
       geolocationScope: _readFieldValue<String>(_readField(json, const ["geolocation_scope"]), "geolocation_scope", _readString, requiredField: false, nullable: true),
       homeHidden: _readFieldValue<bool>(_readField(json, const ["home_hidden"]), "home_hidden", _readBool, requiredField: false, nullable: true),
+      homeHiddenReason: _readFieldValue<String>(_readField(json, const ["home_hidden_reason"]), "home_hidden_reason", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       imported: _required(_readFieldValue<bool>(_readField(json, const ["imported"]), "imported", _readBool, requiredField: false, nullable: false, defaultValue: false), "imported"),
       isCall: _readFieldValue<bool>(_readField(json, const ["is_call"]), "is_call", _readBool, requiredField: false, nullable: true),
       isLocked: _required(_readFieldValue<bool>(_readField(json, const ["is_locked"]), "is_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_locked"),
       kind: _readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: true),
       language: _readFieldValue<String>(_readField(json, const ["language"]), "language", _readString, requiredField: false, nullable: true),
+      manualEnd: _readFieldValue<bool>(_readField(json, const ["manual_end"]), "manual_end", _readBool, requiredField: false, nullable: true),
       matchSnippets: _required(_readFieldValue<List<GeneratedTranscriptMatchSnippet>>(_readField(json, const ["match_snippets"]), "match_snippets", (value) => _readObjectList(value, GeneratedTranscriptMatchSnippet.fromJson), requiredField: false, nullable: false, defaultValue: const []), "match_snippets"),
       meetingDedupSpeechS: _readFieldValue<double>(_readField(json, const ["meeting_dedup_speech_s"]), "meeting_dedup_speech_s", _readDouble, requiredField: false, nullable: true),
       meetingDurationS: _readFieldValue<double>(_readField(json, const ["meeting_duration_s"]), "meeting_duration_s", _readDouble, requiredField: false, nullable: true),
@@ -2065,12 +2079,14 @@ class GeneratedConversationSearchItem {
       'geolocation': geolocation?.toJson(),
       'geolocation_scope': geolocationScope,
       'home_hidden': homeHidden,
+      'home_hidden_reason': homeHiddenReason,
       'id': id,
       'imported': imported,
       'is_call': isCall,
       'is_locked': isLocked,
       'kind': kind,
       'language': language,
+      'manual_end': manualEnd,
       'match_snippets': matchSnippets.map((value) => value.toJson()).toList(),
       'meeting_dedup_speech_s': meetingDedupSpeechS,
       'meeting_duration_s': meetingDurationS,

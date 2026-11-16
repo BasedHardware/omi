@@ -291,6 +291,7 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import policy as v3_policy
 from utils.conversations.v3 import service as v3_service
 
 logger = logging.getLogger(__name__)
@@ -386,6 +387,8 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        full_v3_notes = v3_policy.full_notes(conversation, trigger)
+        user_kept = user_kept or v3_policy.manual_intent(conversation)
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -393,7 +396,11 @@ def _get_structured(
         def occasion_reason():
             return occasion_retention(uid, conversation, conversation_id)
 
-        media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
+        media_minimum = (
+            None
+            if full_v3_notes or is_release_probe_uid(uid)
+            else content_minimum(uid, conversation, user_kept=user_kept)
+        )
         if media_minimum is not None:
             hidden = noise_hidden_from_home(
                 uid,
@@ -410,12 +417,16 @@ def _get_structured(
         tz_str: str = tz or ''
         user_language = resolve_output_language(uid, language_code, getattr(conversation, 'transcript_segments', None))
         summary_app_selected = selected_summary_app(uid, summary_app_selected, redis_db.get_user_preferred_app)
-        minimum = quiet_minimum(
-            uid,
-            conversation,
-            tz=tz,
-            user_kept=user_kept,
-            summary_app_selected=summary_app_selected,
+        minimum = (
+            None
+            if full_v3_notes
+            else quiet_minimum(
+                uid,
+                conversation,
+                tz=tz,
+                user_kept=user_kept,
+                summary_app_selected=summary_app_selected,
+            )
         )
         if minimum is not None:
             decision = short_clip_relevance(uid, conversation, trigger, _calendar_overlap_retains_conversation)
@@ -426,13 +437,14 @@ def _get_structured(
             return minimum, decision.discard
         if getattr(conversation, 'v3_derived', False):
             words = sum(len(s.text.split()) for s in conversation.transcript_segments)
-            if conversation.kind in {'media', 'background'} or words < 20:
+            if not full_v3_notes and (conversation.kind in {'media', 'background'} or words < 20):
                 return conversation.structured, True
-            if words < 300:
+            if words < 300 and not full_v3_notes:
                 return v3_service.models.short_tasks(uid, conversation), False
             covers = getattr(conversation, 'summary_covers_through', None)
             if (
                 not v3_service.models.foreground()
+                and not v3_policy.explicit_retry(conversation, trigger)
                 and covers
                 and conversation.finished_at
                 and covers >= conversation.finished_at
@@ -2840,7 +2852,7 @@ def process_conversation(
         relevance_observer=decisions.append,
         recovery_transcript_decoded=recovery_transcript_decoded,
         recovery_minimum_fallback_observer=_mark_recovery_minimum_fallback,
-        llm_hashes=llm_hashes,
+        llm_hashes=None if v3_policy.explicit_retry(conversation, trigger) else llm_hashes,
         open_loop_out=open_loop_sink,
         meeting_context_override=meeting_context_override,
         finalization_fence=finalization_fence,

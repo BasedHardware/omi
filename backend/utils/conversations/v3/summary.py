@@ -17,7 +17,7 @@ from fastapi import HTTPException
 
 from database import conversations_v3 as store
 from models.conversation import Conversation
-from utils.conversations.v3 import models
+from utils.conversations.v3 import models, policy
 from utils.executors import run_blocking, db_executor, llm_executor
 
 
@@ -29,7 +29,10 @@ def fresh(row):
 def summary_eligible(row):
     return not row.get('v3_derived') or (
         row.get('kind') not in {'media', 'background'}
-        and sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
+        and (
+            policy.manual_intent(row)
+            or sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or []) >= 300
+        )
     )
 
 
@@ -140,6 +143,19 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             await asyncio.shield(worker)
         raise
     except Exception:
+        if row.get('v3_derived') and row.get('status') != 'in_progress':
+            try:
+                await run_blocking(
+                    db_executor,
+                    writers.fail_processing,
+                    uid,
+                    cid,
+                    token,
+                    row.get('sync_content_revision'),
+                    content_hash=writers.processing_hash(row),
+                )
+            except store.Conflict:
+                pass  # A newer owner/content revision keeps its own presentation.
         yield 'error: {"detail":"Summary unavailable; poll conversation detail"}\n\n'
     finally:
         await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
