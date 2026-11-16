@@ -8,6 +8,7 @@ This module provides functions for merging multiple conversations into one.
 
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 import config.speaker_match_scores as match_scores
 
 import copy
@@ -251,7 +252,7 @@ def perform_merge_async(
         # 1. Fetch all source conversations
         conversations = []
         for conv_id in conversation_ids:
-            conv = conversations_db.get_conversation(uid, conv_id)
+            conv = read_product_conversation(conversations_db.get_conversation, uid, conv_id)
             if conv:
                 conversations.append(conv)
 
@@ -304,7 +305,23 @@ def perform_merge_async(
         # generation per object per run (the 10-16..19 CloneObject burst).
         # The bridge copy skips a destination already holding the same bytes
         # and preconditions concurrent writers on the destination generation.
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
+        v3_merge = any(c.get('v3_derived') for c in sorted_convs)
+        copy_sources = [c for c in sorted_convs if not c.get('v3_derived')]
+        merged_audio_files = (
+            _copy_audio_chunks_for_merge(uid, copy_sources, new_conversation_id, skip_existing=True)
+            if copy_sources
+            else []
+        )
+        v3_pieces = [p for c in sorted_convs for p in c.get('recording_pieces') or []]
+        if v3_merge:
+            v3_files = [af for c in sorted_convs if c.get('v3_derived') for af in c.get('audio_files') or []]
+            from models.audio_file import AudioFile
+
+            v3_pieces.extend(
+                {'recording_id': new_conversation_id, 'audio_file_id': af.id, 'start': 0.0, 'end': af.duration}
+                for af in merged_audio_files
+            )
+            merged_audio_files.extend(AudioFile(**af) for af in v3_files)
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses
@@ -376,6 +393,20 @@ def perform_merge_async(
             client_device_id=client_device_id,
             client_platform=client_platform,
             external_data={"merge_metadata": merge_metadata},
+            **(
+                {
+                    'v3_derived': True,
+                    'recording_pieces': v3_pieces,
+                    'v3_recording_ids': list(
+                        dict.fromkeys(rid for c in sorted_convs for rid in c.get('v3_recording_ids') or [])
+                    ),
+                    'kind': 'conversation',
+                    'tile_state': 'writing',
+                    'home_hidden': False,
+                }
+                if v3_merge
+                else {}
+            ),
         )
 
         # 7. Save stub conversation to database. The modeled field's None
@@ -387,7 +418,7 @@ def perform_merge_async(
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may
         # also fire on the reprocess path.
-        if merged_audio_files and is_audio_merge_dispatch_enabled():
+        if merged_audio_files and not v3_merge and is_audio_merge_dispatch_enabled():
             files_payload = [af.model_dump() for af in merged_audio_files]
             enqueue_conversation_artifact_build(
                 uid,
@@ -454,6 +485,10 @@ def perform_merge_async(
             if canonical_intake_is_fenced()
             else None
         )
+        if v3_merge:
+            from database.conversations_v3 import transfer_claims
+
+            transfer_claims(uid, sorted_convs, new_conversation.model_dump())
         for conv in sorted_convs:
 
             def mark_source_deletion_started() -> None:
@@ -939,7 +974,7 @@ def delete_conversation_with_sync_sources(
     row = (
         conversation_row
         if conversation_row is not None
-        else conversations_db.get_conversation(uid, conversation_id) or {}
+        else read_product_conversation(conversations_db.get_conversation, uid, conversation_id) or {}
     )
     for source_id in row.get('sync_merged_from', []):
         if source_id != conversation_id:

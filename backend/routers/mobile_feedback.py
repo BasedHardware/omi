@@ -1,6 +1,7 @@
 """Authenticated mobile summary and recording quality feedback."""
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 from typing import Any, Optional
 
@@ -69,7 +70,7 @@ def submit_mobile_feedback(
     resolved_target_kind = FeedbackTargetKind.conversation
     provenance: dict[str, Any] = {}
     if payload.kind is MobileFeedbackKind.summary_helpfulness or payload.target_kind == 'conversation':
-        conversation = conversations_db.get_conversation(uid, payload.target_id)
+        conversation = read_product_conversation(conversations_db.get_conversation, uid, payload.target_id)
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail='Conversation not found')
         related_conversation_id = payload.target_id
@@ -82,7 +83,7 @@ def submit_mobile_feedback(
             raise HTTPException(status_code=503, detail='Recording ownership is temporarily unavailable') from exc
         if binding:
             related_conversation_id = binding['conversation_id']
-            conversation = conversations_db.get_conversation(uid, related_conversation_id)
+            conversation = read_product_conversation(conversations_db.get_conversation, uid, related_conversation_id)
             if conversation and not conversations_db.is_soft_deleted(conversation):
                 provenance = _provenance_from_conversation(conversation)
             resolved_target_kind = FeedbackTargetKind.recording
@@ -91,7 +92,7 @@ def submit_mobile_feedback(
             # the detail page. Preserve their authenticated ownership path
             # while new callers can make this coordinate explicit with
             # target_kind=conversation.
-            conversation = conversations_db.get_conversation(uid, payload.target_id)
+            conversation = read_product_conversation(conversations_db.get_conversation, uid, payload.target_id)
             if not conversation or conversations_db.is_soft_deleted(conversation):
                 raise HTTPException(status_code=404, detail='Recording not found')
             related_conversation_id = payload.target_id

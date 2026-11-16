@@ -413,6 +413,20 @@ def get_audio_signed_urls(
     audio_files: list[dict[str, Any]],
     conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if any(af.get('recording_id') for af in audio_files):
+        from utils.conversations.v3.audio import resolve
+        from database import conversations as conversations_db
+
+        owner = conversation or conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted'):
+            raise HTTPException(404, 'Conversation not found')
+        result = []
+        for alias in audio_files:
+            rid, original, recording = resolve(uid, owner, alias)
+            response = get_audio_signed_urls(uid, rid, [original], conversation=recording)
+            for info in response.get('audio_files', []):
+                result.append({**info, 'id': alias['id']})
+        return {'audio_files': result}
     if not audio_files:
         if (
             close_fast_path_enabled()
@@ -568,6 +582,15 @@ def download_audio_file_response(
     *,
     playback_epoch: str | None = None,
 ) -> Response:
+    if audio_file.get('recording_id'):
+        from utils.conversations.v3.audio import resolve
+        from database import conversations as conversations_db
+
+        owner = conversations_db.get_conversation(uid, conversation_id)
+        if not owner or owner.get('deleted') or owner.get('is_locked'):
+            raise HTTPException(404, 'Conversation not found')
+        conversation_id, audio_file, _recording = resolve(uid, owner, audio_file)
+        audio_file_id = audio_file['id']
     try:
         if not audio_file.get('chunk_timestamps'):
             raise HTTPException(status_code=500, detail="Audio file has no chunk timestamps")

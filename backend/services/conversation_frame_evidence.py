@@ -1,6 +1,7 @@
 """Conversation-lifetime frame evidence reads and deletion convergence."""
 
 from __future__ import annotations
+from utils.conversations.layer import read_product as read_product_conversation
 
 from collections.abc import Callable
 
@@ -17,7 +18,7 @@ def read_conversation_frame(
     conversation_id: str,
     photo_id: str,
 ) -> tuple[bytes, str]:
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversations_db.is_soft_deleted(conversation):
         raise KeyError("conversation frame not found")
     photos = conversations_db.get_conversation_photos(uid, conversation_id) or []
@@ -69,7 +70,9 @@ def delete_conversation_and_frame_evidence(
     # Deletion inventory must survive a previous attempt that removed the
     # pointer's blob but failed before metadata cleanup.
     try:
-        conversation = conversations_db.get_conversation_raw_snapshot(uid, conversation_id) or {}
+        conversation = (
+            read_product_conversation(conversations_db.get_conversation_raw_snapshot, uid, conversation_id) or {}
+        )
     except Exception:
         raise object_lake.LakeFetchError('Lake conversation inventory unavailable') from None
     source_ids = [sid for sid in (conversation.get("sync_merged_from") or []) if sid != conversation_id]

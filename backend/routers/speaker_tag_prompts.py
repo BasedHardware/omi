@@ -1,5 +1,6 @@
 """Speaker tag prompts ("Was this you?" / "Who is this?") and voice-profile preferences."""
 
+from utils.conversations.layer import read_product as read_product_conversation
 import base64
 import hashlib
 import logging
@@ -101,7 +102,7 @@ def get_speaker_tag_prompt_clip(
     """A short clip of the user's own stored conversation audio (base64 WAV, at most 12 s)."""
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise HTTPException(status_code=400, detail='Clip must be at most 12 seconds')
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
     if not conversation or conversation.get('deleted'):
         raise HTTPException(status_code=404, detail='Conversation not found')
     if conversation.get('is_locked'):

@@ -26,7 +26,7 @@ from models.recording_speakers import (
     RecordingSpeakerLimit,
 )
 
-from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
+from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query, Request
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
 from config.home_feed import home_feed_enabled
@@ -44,19 +44,49 @@ from models.episode import (
 from utils.episodes import client_gate, metrics, service
 from utils.other import endpoints as auth
 
-router = APIRouter(tags=['episodes'])
+from config.conversations_v3 import conversations_v3_enabled
+
+from utils.conversations.v3 import metrics as v3_metrics
+
+
+def _record_episode_request(
+    request: Request,
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    if not request.url.path.startswith('/v1/episodes'):
+        return
+    label = app_channel(channel)
+    if label == 'beta':
+        client_gate.note_client_seen(uid)
+    # Fixed major/minor buckets: old, current, next, unknown. Never a raw build.
+    raw = request.headers.get('X-App-Version', '')
+    version = (
+        'current'
+        if raw.startswith('1.')
+        else 'next' if raw.startswith('2.') else 'old' if raw.startswith('0.') else 'unknown'
+    )
+    endpoint = getattr(request.scope.get('route'), 'path', 'unknown')
+    v3_metrics.EPISODE_CALLS.labels(endpoint, label, version, str(conversations_v3_enabled(uid)).lower()).inc()
+
+
+router = APIRouter(tags=['episodes'], dependencies=[Depends(_record_episode_request)])
 
 
 def _admitted(uid: str, channel: Optional[str]) -> bool:
     """Cohort and client channel, then the capability marker (sync routes run off the loop)."""
     label = app_channel(channel)
+    if label == 'beta':
+        client_gate.note_client_seen(uid)
+    if conversations_v3_enabled(uid):
+        metrics.record_client_request(label, 'not_admitted')
+        return False
     if not episodes_enabled_for(uid):
         metrics.record_client_request(label, 'not_admitted')
         return False
     if not client_channel_admitted(channel):
         metrics.record_client_request(label, 'channel_closed')
         return False
-    client_gate.note_client_seen(uid)
     metrics.record_client_request(label, 'admitted')
     return True
 

@@ -291,6 +291,8 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
+from utils.conversations.v3 import service as v3_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -384,6 +386,13 @@ def _get_structured(
     revision_checkpoint: Optional[Callable[[str], None]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        if getattr(conversation, 'v3_derived', False):
+            words = sum(len(s.text.split()) for s in conversation.transcript_segments)
+            covers = getattr(conversation, 'summary_covers_through', None)
+            if words < 600:
+                return v3_service.models.short_tasks(uid, conversation), False
+            if covers and conversation.finished_at and covers >= conversation.finished_at:
+                return conversation.structured, False
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             return Structured(), False
 
@@ -725,6 +734,9 @@ def _get_conversation_obj(
     relevance_discarded: Optional[bool] = None,
     user_kept: bool = False,
 ) -> Conversation:
+    if getattr(conversation, 'title_locked', False):
+        structured.title = conversation.structured.title
+        structured.emoji = conversation.structured.emoji
     structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
         # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
@@ -2579,6 +2591,7 @@ def _preserve_capture_on_budget_denial(function):
     return preserve_capture
 
 
+@v3_service.recording_short_path
 @_preserve_capture_on_budget_denial
 @funded_processing.scoped
 @spelling_context_run

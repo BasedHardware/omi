@@ -42,6 +42,8 @@ def attach_synced_at_intake(uid: str, conversation_id: str, row: Mapping[str, An
     short process cache: a batch lands many segments, and a faulting Redis must
     cost one read per window, not one per segment.
     """
+    if row and (row.get('recording') or row.get('v3_derived')):
+        return 'disabled'
     if not episodes_enabled_for(uid) or not conversation_id:
         return 'disabled'
     try:
@@ -79,6 +81,8 @@ def skip_unchanged_schedule(uid, conversation_id, row, *, finalized=False, absor
 def schedule_synced_intake_attach(uid: str, conversation_id: str, row: Mapping[str, Any] | None) -> None:
     """Run on the episode pool; saturation queues admission with bounded producer backpressure."""
     if not episodes_enabled_for(uid) or not conversation_id:
+        return
+    if row and (row.get('recording') or row.get('v3_derived')):
         return
     snapshot = dict(row) if isinstance(row, Mapping) else {}
     try:
