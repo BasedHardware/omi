@@ -297,6 +297,31 @@ final class DeviceConnectFailureShown extends RegisteredEvent {
   Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
 }
 
+enum DevicePairingSettingsOpenedFailureReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied");
+  const DevicePairingSettingsOpenedFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DevicePairingSettingsOpenedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DevicePairingSettingsOpenedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingSettingsOpened extends RegisteredEvent {
+  const DevicePairingSettingsOpened({required this.failureReason, required this.platform});
+  final DevicePairingSettingsOpenedFailureReason failureReason;
+  final DevicePairingSettingsOpenedPlatform platform;
+  @override
+  String get wireName => "Device Pairing Settings Opened";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
 enum DeviceConnectFailedErrorClass {
   timeout("timeout"),
   bluetoothOff("bluetooth_off"),

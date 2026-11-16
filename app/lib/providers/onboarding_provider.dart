@@ -39,6 +39,26 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  /// The last Bluetooth (iOS) or Nearby devices (Android) request came back denied for good: the OS
+  /// will not ask again, so only this app's Settings page can grant it.
+  bool _bluetoothPermissionNeedsSettings = false;
+
+  /// The pairing card leads with Open Settings: Try Again alone would hit the same block at once.
+  bool get pairingBlockNeedsSettings =>
+      _bluetoothPermissionNeedsSettings && _isBluetoothPermissionBlock(pairingFailureReason);
+
+  static bool _isBluetoothPermissionBlock(DeviceConnectFailureShownFailureReason? reason) =>
+      reason == DeviceConnectFailureShownFailureReason.bluetoothPermissionDenied ||
+      reason == DeviceConnectFailureShownFailureReason.nearbyDevicesDenied;
+
+  /// Back in the app (from Settings or anywhere else) while a Bluetooth permission block shows:
+  /// reads the permission again without prompting. True when it is now granted, so the page can
+  /// search again by itself.
+  Future<bool> recheckPermissionBlock() async {
+    if (_isDisposed || isConnected || !_isBluetoothPermissionBlock(pairingFailureReason)) return false;
+    return readBluetoothPermission();
+  }
+
   bool isClicked = false;
   bool isConnected = false;
   int batteryPercentage = -1;
@@ -122,6 +142,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   void updateBluetoothPermission(bool value) {
     hasBluetoothPermission = value;
+    if (value) _bluetoothPermissionNeedsSettings = false;
     notifyListeners();
   }
 
@@ -162,10 +183,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       if (Platform.isIOS) {
         PermissionStatus bleStatus = await Permission.bluetooth.request();
         Logger.debug('bleStatus: $bleStatus');
+        _bluetoothPermissionNeedsSettings = permissionStatusIsPermanentDenial(bleStatus);
         updateBluetoothPermission(bleStatus.isGranted);
       } else {
         PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
         PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
+        _bluetoothPermissionNeedsSettings =
+            permissionStatusIsPermanentDenial(bleScanStatus) || permissionStatusIsPermanentDenial(bleConnectStatus);
         updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
         // Android 11 and below require location permission for BLE scanning
         if (PlatformService.isAndroid) {

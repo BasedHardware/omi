@@ -237,6 +237,54 @@ async def test_slow_enrichment_does_not_block_later_followup_or_next_serving_pas
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', [None, 'success', 'silence'])
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_completion_uses_validated_outcome_and_honors_silence_switch(followup, monkeypatch, outcome, enabled):
+    from dataclasses import replace
+
+    f = followup
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', str(enabled).lower())
+    f.projector.clock = lambda: 10000
+    f.binding = replace(f.binding, native_record=False)
+    f.receipts['head'].update(state='ready', enrichment_required=False)
+    # The discovery fetch is only a hint; the validated session is authoritative.
+    f.projector.store.read.side_effect = lambda sid: (
+        f.jobs[sid],
+        {'projection': f.receipts[sid], 'result': {'outcome': 'success' if outcome == 'silence' else 'silence'}},
+        f.binding,
+    )
+    f.projector.store.session.side_effect = lambda sid, *_: SimpleNamespace(
+        job=f.jobs[sid],
+        entry={'projection': f.receipts[sid], **({'result': {'outcome': outcome}} if outcome else {})},
+    )
+    # Exercise the real completion selector, rather than only asserting a mock call.
+    f.projector.complete_content = projection.Projector.complete_content.__get__(f.projector)
+    result = {'outcome': 'expected_silence'}
+    f.projector.store.complete = Mock(return_value=result)
+    f.projector.store.prepare_accounting = Mock(return_value=None)
+    f.projector.store.completion_entries = Mock(
+        return_value={
+            sid: {'result': {'outcome': outcome}, 'projection': {**f.receipts[sid], 'state': 'ready'}}
+            for sid in f.binding.segment_ids
+        }
+    )
+    f.projector.store.hold_for_quarantine = Mock()
+    f.projector.publish_completion = Mock(return_value=result)
+
+    assert await f.runner._run('head') == ('completed' if enabled and outcome == 'silence' else 'incomplete')
+    if enabled and outcome == 'silence':
+        f.projector.store.complete.assert_called_once_with(
+            'head', f.binding, f.projector.clock(), None, policy=f.projector.store.policy.return_value
+        )
+        f.projector.store.prepare_accounting.assert_not_called()
+        f.projector.publish_completion.assert_called_once()
+    else:
+        f.projector.store.prepare_accounting.assert_called_once()
+        f.projector.store.complete.assert_not_called()
+        f.projector.publish_completion.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(followup):
     f = followup
     f.projector.store.mark_enrichment.side_effect = RuntimeError('synthetic interrupted enqueue')
@@ -246,7 +294,7 @@ async def test_failed_followup_stays_durable_and_resumes_with_same_receipt(follo
     f.projector.store.mark_enrichment.side_effect = None
     await f.runner.run('head')
     assert f.projector.store.mark_enrichment.call_count == 2
-    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    f.projector.complete_content.assert_called_once_with('head', f.binding, silence=False)
     f.projector.load_result.assert_not_called()
 
 
@@ -271,7 +319,7 @@ async def test_real_claim_released_across_run_blocking_leaves_never_fails_the_ta
 
     f = followup
     await asyncio.wait_for(f.runner.run('head'), 5)
-    f.projector.complete_content.assert_called_once_with('head', f.binding)
+    f.projector.complete_content.assert_called_once_with('head', f.binding, silence=False)
     # The release ran to completion: the advisory lease is gone, not left to its TTL.
     assert not redis.keys('batch_projection:*')
 
@@ -386,7 +434,7 @@ async def test_unchanged_ready_receipt_retries_when_external_sibling_unblocks(fo
     sibling_ready = False
     completed = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         if sibling_ready:
             completed.append(segment)
 
@@ -441,7 +489,7 @@ async def test_ready_backlog_scans_sibling_accounting_once_per_page(followup, mo
     f.projector.store.ref.side_effect = ref
     accounting_reads = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         reads = []
         token = probe_reads.set(reads)
         try:
@@ -581,7 +629,7 @@ async def test_recovery_wake_bypasses_same_page_ready_probe_hint(followup, wake)
         await f.runner.schedule(tail=('later',))
     await drain()
     assert f.projector.complete_content.call_count == 2
-    f.projector.complete_content.assert_called_with('later', f.binding)
+    f.projector.complete_content.assert_called_with('later', f.binding, silence=False)
 
 
 @pytest.mark.asyncio
@@ -599,7 +647,7 @@ async def test_owner_only_recovery_clears_stale_page_marker_before_completion_pr
 
     assert 'later' not in f.runner.pages
     assert (1, f.binding) in f.runner.completion_attempts
-    f.projector.complete_content.assert_called_once_with('later', f.binding)
+    f.projector.complete_content.assert_called_once_with('later', f.binding, silence=False)
 
 
 @pytest.mark.asyncio
@@ -628,7 +676,7 @@ async def test_persisted_sibling_unblocks_content_after_ready_probe_in_same_page
     f.receipts['head']['state'] = 'ready'
     completed = []
 
-    def complete(segment, binding):
+    def complete(segment, binding, *, silence):
         if all(receipt['state'] == 'ready' for receipt in f.receipts.values()):
             completed.append(segment)
 

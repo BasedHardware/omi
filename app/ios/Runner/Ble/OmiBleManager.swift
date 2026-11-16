@@ -1932,7 +1932,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         connectionStartTimes.removeValue(forKey: uuid)
 
-        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
+        // Capture policy must not classify localized OS error prose. Manual
+        // cancellation wins even if CoreBluetooth also reports a timeout.
+        let captureDisconnectReason = pairingLost ? "pairing_lost" : (isManual ? "manual" : Self.bleReasonString(from: error))
+        flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: captureDisconnectReason) { _ in }
         if savedReconnect.contains(uuid) {
             reportSavedReconnect(uuid, result: pairingLost ? "failed:pairing_lost" : "failed:disconnected")
             if shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), central.state == .poweredOn {

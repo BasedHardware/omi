@@ -51401,6 +51401,9 @@
           "401": {
             "$ref": "#/components/responses/Error401"
           },
+          "404": {
+            "description": "No in-progress conversation was found"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -51410,6 +51413,57 @@
               }
             },
             "description": "Validation Error"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conversation processing failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "conversation_processing_retryable"
+                          ],
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Transient provider failure; the in-progress conversation is recoverable and may be retried"
           }
         },
         "security": [
@@ -54930,8 +54984,59 @@
             },
             "description": "Validation Error"
           },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Conversation processing failed"
+          },
           "502": {
             "description": "The selected app produced no summary (detail code app_result_failed)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "detail": {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "conversation_processing_retryable"
+                          ],
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "detail"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Transient provider failure; the in-progress conversation is recoverable and may be retried"
           }
         },
         "security": [

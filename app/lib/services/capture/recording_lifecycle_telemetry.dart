@@ -140,6 +140,9 @@ class RecordingLifecycleTelemetry {
         'recording_source': _source,
       });
 
+  /// Identity continuity only; this observation proves no audio gap recovery.
+  void reconnectOutcome(String outcome) => _milestone(outcome);
+
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,

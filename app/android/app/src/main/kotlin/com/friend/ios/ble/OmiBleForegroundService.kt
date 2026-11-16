@@ -655,7 +655,9 @@ class OmiBleForegroundService : Service() {
 
         val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
         val retrying = handleRetryLogic(addr, status, discoveryBackoffMs)
-        val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying)
+        val userDisconnected = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getBoolean(PREFS_USER_DISCONNECTED, false)
+        val error = BleDisconnectReason.connectionErrorFromStatus(status, retrying, isManual = userDisconnected)
 
 
         val managed = managedDevices[addr]

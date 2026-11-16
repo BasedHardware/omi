@@ -187,8 +187,11 @@ async def test_followup_timeout_replays_enrichment_without_duplicate_debt_or_usa
 
 
 @pytest.mark.asyncio
-async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch):
+@pytest.mark.parametrize('silence_skip', ['false', 'true'])
+async def test_projection_discovery_drains_beyond_101_ready_rows_without_reprojection(lane, monkeypatch, silence_skip):
     """The old first page pins forever; both real scanners must escape it."""
+
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', silence_skip)
 
     monkeypatch.setenv('BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED', 'true')
     # Isolate paginated discovery. Newer owner-chain walking and pending-only
@@ -221,14 +224,15 @@ async def test_projection_discovery_drains_beyond_101_ready_rows_without_reproje
     lane.projector.sweep()
     assert lane.projector.store.ref('results', batch.ids[-1]).get().to_dict()['projection']
     assert lane.projector.store.ref('results', later.ids[0]).get().to_dict()['projection']
-    # The follow-up cursor starts independently at the blocked head. Its first
-    # page cannot complete content while the final sibling is only persisted.
+    # The follow-up cursor starts at the head. Enabled silence assignment is
+    # already ready, so the first page can complete the whole upload. Rollback
+    # retains the old persisted sibling and independent cursor boundary.
     runner = projection_followup.ProjectionFollowups(lane.projector)
     await runner.schedule()
     while runner.tasks:
         await asyncio.gather(*list(runner.tasks.values()))
         await asyncio.sleep(0)
-    assert batch.ledger.get().to_dict()['status'] == 'processing'
+    assert batch.ledger.get().to_dict()['status'] == ('completed' if silence_skip == 'true' else 'processing')
     assert later.ledger.get().to_dict()['status'] == 'processing'
     await runner.schedule()
     while runner.tasks:
