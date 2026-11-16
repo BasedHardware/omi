@@ -8,6 +8,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 import jsonschema
 import pytest
+from google.api_core.exceptions import FailedPrecondition
 
 from database.transcript_search import InvalidTranscriptCursor, TranscriptScanPage, TranscriptScanRow
 from utils.mcp_server import search_views
@@ -100,6 +101,18 @@ def test_one_index_down_still_answers_and_says_which(indexes):
     result = search()
     assert [c['id'] for c in result['conversations']] == ['k1']
     assert (result['search_coverage'], result['unavailable_indexes']) == ('keyword_only', ['summary_vectors'])
+
+
+def test_a_vector_index_still_building_falls_back_to_keyword(indexes):
+    indexes['rows'] = {'k1': conversation('k1')}
+    indexes['vector_error'], indexes['keyword'] = FailedPrecondition('index building'), ['k1']
+    result = search()
+    assert [c['id'] for c in result['conversations']] == ['k1']
+    assert (result['search_coverage'], result['unavailable_indexes']) == ('keyword_only', ['summary_vectors'])
+    indexes['keyword_error'] = RuntimeError('typesense down')
+    with pytest.raises(ToolExecutionError) as error:
+        search()
+    assert error.value.code == -32009 and 'index is still being built' in error.value.message
 
 
 def test_no_hits_with_the_keyword_index_down_is_an_actionable_503(indexes):
@@ -195,6 +208,14 @@ def test_transcript_search_never_quotes_locked_discarded_deferred_or_unreadable_
     assert result['examined'] == 5 and result['unreadable'] == 1
 
 
+def test_a_one_letter_word_in_the_query_must_be_said(scan):
+    scan['rows'] = [
+        conversation('other', words={0: 'the series finale aired'}),
+        conversation('said', words={0: 'Series B closed, then a Series... A? yes'}),
+    ]
+    assert [m['conversation']['id'] for m in find()['matches']] == ['said']
+
+
 def test_many_hits_in_one_conversation_are_capped_and_flagged(scan):
     scan['rows'] = [conversation('dense', count=20, words={i: f'series a point {i}' for i in range(0, 20, 2)})]
     (match,) = find()['matches']
@@ -224,6 +245,7 @@ def test_transcript_search_in_one_conversation(monkeypatch, scan):
         ({'query': ''}, -32602),
         ({'query': 'x' * 201}, -32602),
         ({'conversation_id': 'one', 'cursor': 'c'}, -32602),
+        ({'conversation_id': 'one', 'start_date': '2026-11-01'}, -32602),
     ],
 )
 def test_transcript_search_argument_errors(scan, arguments, code):

@@ -906,7 +906,7 @@ class TestToolResultContract:
                         ],
                     }
                 ],
-                "search_coverage": "summary_vectors_with_keyword_recovery",
+                "search_coverage": "summary_vectors_and_keyword",
             }
         )
 

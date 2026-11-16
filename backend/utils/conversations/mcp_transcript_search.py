@@ -182,12 +182,21 @@ def _query_terms(query: str) -> List[str]:
     return [t for t in _TOKEN_RE.findall(_normalize_text(query)) if len(t) >= 2]
 
 
+def _short_terms(query_norm: str) -> List[str]:
+    return [t for t in _TOKEN_RE.findall(query_norm) if len(t) < 2]
+
+
 def _segment_matches(text: str, query_norm: str, terms: Sequence[str]) -> bool:
     hay = _normalize_text(text)
     if not hay:
         return False
     if query_norm and query_norm in hay:
         return True
+    # One-character words ("Series A", "plan B") are too short to substring-match,
+    # but a query that names one must not match a segment without it as a word.
+    short = _short_terms(query_norm)
+    if short and not set(short) <= set(_TOKEN_RE.findall(hay)):
+        return False
     # Prefer multi-term: require every token when the query has 2+ terms so
     # "budget review" does not match every segment that merely says "review".
     if len(terms) >= 2:

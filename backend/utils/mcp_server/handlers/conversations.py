@@ -601,6 +601,7 @@ def search_conversation_hits(
     ends_at = int(end_dt.timestamp()) if end_dt is not None else None
 
     vectors_ok = keyword_ok = True
+    index_error: Optional[FailedPrecondition] = None
     try:
         vector_ids = resolve_mcp_conversation_search_ids(
             uid,
@@ -612,7 +613,9 @@ def search_conversation_hits(
             embed_query=vector_db.embeddings.embed_query,
         )
     except FailedPrecondition as exc:
-        raise_conversation_index_error(exc)
+        # An index still building is one index down: the keyword index may still answer.
+        logger.warning("MCP summary vector index not ready")
+        vector_ids, vectors_ok, index_error = [], False, exc
     except Exception:
         logger.warning("MCP summary vector search unavailable")
         vector_ids, vectors_ok = [], False
@@ -656,6 +659,8 @@ def search_conversation_hits(
         record_fallback(
             component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
         )
+    if not conversations and not keyword_ok and index_error is not None:
+        raise_conversation_index_error(index_error)
     if not conversations and not keyword_ok:
         raise ToolExecutionError(
             "No hydrated semantic matches and keyword search is unavailable. "

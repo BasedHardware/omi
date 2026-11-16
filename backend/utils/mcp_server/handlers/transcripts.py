@@ -42,9 +42,10 @@ def search_transcripts(
         )
     conversation_id = arguments.get('conversation_id')
     cursor = arguments.get('cursor')
-    if cursor is not None and conversation_id:
+    if conversation_id and (cursor is not None or arguments.get('start_date') or arguments.get('end_date')):
         raise ToolExecutionError(
-            'cursor cannot be combined with conversation_id; search it without a cursor.', code=-32602
+            'conversation_id searches that whole conversation; pass it without cursor, start_date or end_date.',
+            code=-32602,
         )
     try:
         limit = parse_mcp_int(

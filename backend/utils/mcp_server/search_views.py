@@ -98,7 +98,10 @@ SEARCH_TRANSCRIPTS_INPUT: Dict[str, Any] = {
             'maxLength': TRANSCRIPT_QUERY_MAX_CHARS,
             'description': 'Literal words or a short phrase, as they would be said (not a question)',
         },
-        'conversation_id': {'type': 'string', 'description': 'Search only this conversation'},
+        'conversation_id': {
+            'type': 'string',
+            'description': 'Search only this whole conversation (no dates or cursor)',
+        },
         'start_date': {'type': 'string', 'description': 'created_at on/after midnight in timezone (YYYY-MM-DD)'},
         'end_date': {'type': 'string', 'description': 'created_at through the end of this day (YYYY-MM-DD)'},
         'limit': {
