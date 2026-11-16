@@ -7,7 +7,7 @@ import re
 import uuid
 from pathlib import Path
 
-from readiness_contract import CONTRACT
+from readiness_contract import CONTRACT, READINESS_ENV
 
 NAMESPACE = 'prod-omi-backend'
 KSA = 'batch-pipeline-worker'
@@ -88,16 +88,7 @@ def render(token, node):
                         'requests': {'cpu': '100m', 'memory': '256Mi'},
                         'limits': {'cpu': '500m', 'memory': '512Mi'},
                     },
-                    'env': [
-                        {'name': 'HOME', 'value': '/home/ubuntu'},
-                        {'name': 'PYTHONDONTWRITEBYTECODE', 'value': '1'},
-                        {'name': 'GIT_OPTIONAL_LOCKS', 'value': '0'},
-                        {'name': 'BATCH_JOBSTORE_MODE', 'value': 'firestore'},
-                        {'name': 'JOBSTORE_SHADOW_WRITES', 'value': 'off'},
-                        {'name': 'JOBSTORE_PRODUCTION_MIRROR', 'value': 'off'},
-                        {'name': 'JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS', 'value': '0'},
-                        {'name': 'JOBSTORE_INDEX_READS', 'value': 'off'},
-                    ],
+                    'env': [{'name': name, 'value': value} for name, value in READINESS_ENV.items()],
                     'volumeMounts': [{'name': 'tmp', 'mountPath': '/tmp'}],
                 }
             ],
