@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-v3-home.png",
       "platform": "mobile-ios",
-      "description": "v3 Home: one flat list under day labels. The conversation in progress leads Today (even above a call that started after it) with the breathing dot and its running length; the tiles show transcribing (spinner), writing (pen) and done (emoji; the test engine has no emoji font, so emoji draw as boxes). Yesterday carries a chevron that opens the day summary; Today has none.",
+      "description": "v3 Home: one flat list under day labels. The conversation in progress leads Today (even above a call that started after it) with the breathing dot and its running length; the tiles show transcribing (spinner), writing (pen), done (emoji; the test engine has no emoji font, so emoji draw as boxes) and failed (warning mark, never the emoji). Yesterday carries a chevron that opens the day summary; Today has none.",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -25,7 +25,7 @@
     {
       "file": "004-mobile-ios-v3-home-light.png",
       "platform": "mobile-ios",
-      "description": "The same v3 Home in the light theme.",
+      "description": "The same v3 Home in the light theme, including the failed tile.",
       "captured_by": "agent",
       "source": "visual-audit"
     }
