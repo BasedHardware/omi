@@ -24,6 +24,9 @@ from typing import Any
 from prometheus_client import REGISTRY, Counter
 
 from config import enrichment as enrichment_config
+from utils.enrichment import outbox
+from utils.enrichment.age_gate import timestamp
+from utils.enrichment.outbox import first_summary_pending, valid_dispatch_binding
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +52,6 @@ def demote_after_seconds() -> float:
 
 def stale_fresh(row: dict[str, Any] | None, *, now: float) -> bool:
     """True for a fresh-bound first-summary obligation older than the demotion age."""
-    from utils.enrichment.outbox import first_summary_pending, valid_dispatch_binding
-
     after = demote_after_seconds()
     fresh = enrichment_config.fresh_queue()
     if not row or after <= 0 or not fresh:
@@ -71,10 +72,6 @@ def _finished_long_ago(row: dict[str, Any], *, now: float, after: float) -> bool
     alone would demote a recording that just finished. Unknown or unreadable metadata keeps the
     row where it is.
     """
-    from utils.enrichment import outbox
-
-    from utils.enrichment.age_gate import timestamp
-
     try:
         finished = timestamp(outbox.conversation_finished_at(row['uid'], row['conversation_id']))
     except Exception:
@@ -90,8 +87,6 @@ def demote_if_stale(row_id: str, token: str, *, now: float | None = None, client
     re-enqueued task keeps the row's own ``due_at`` (a held row stays held). The row is marked
     ``fresh_demoted`` so the sweep never promotes it back.
     """
-    from utils.enrichment import outbox
-
     current = time.time() if now is None else now
     after = demote_after_seconds()
     if after <= 0 or not enrichment_config.fresh_queue():

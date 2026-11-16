@@ -114,6 +114,16 @@ def extend_bounded(buffer: bytearray, data: bytes, queue_name: str, byte_budget:
     return True
 
 
+def optional_flush_bytes(sample_rate: int, interval_seconds: float) -> int:
+    """Bytes at which an optional buffer is queued for its consumer.
+
+    The configured interval (``sample_rate * seconds * 2``), capped at a quarter of the optional
+    budget so a long user-configured webhook interval can never strand a partial buffer below
+    its own threshold with the budget exhausted (e.g. 120 s at 48 kHz is 11.5 MB > 8 MB).
+    """
+    return max(1, min(int(sample_rate * interval_seconds * 2), OPTIONAL_AUDIO_MAX_BYTES // 4))
+
+
 def extend_optional(
     buffer: bytearray,
     data: bytes,

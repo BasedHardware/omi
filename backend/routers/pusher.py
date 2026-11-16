@@ -70,6 +70,7 @@ from utils.pusher_protocol import (
     audio_custody_ack_frame,
     bound_private_pending,
     extend_optional,
+    optional_flush_bytes,
     frame_header,
     json_object,
     pusher_session_outcome,
@@ -2004,9 +2005,8 @@ async def _run_websocket_util_trigger(
                         _reset_private_cloud_buffer()
 
                 # Queue audio bytes triggers for batched processing
-                if (
-                    has_audio_apps_enabled
-                    and len(trigger_audiobuffer) > sample_rate * audio_bytes_trigger_delay_seconds * 2
+                if has_audio_apps_enabled and len(trigger_audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_trigger_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
@@ -2019,9 +2019,8 @@ async def _run_websocket_util_trigger(
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     trigger_audiobuffer = bytearray()
-                if (
-                    audio_bytes_webhook_delay_seconds is not None
-                    and len(audiobuffer) > sample_rate * audio_bytes_webhook_delay_seconds * 2
+                if audio_bytes_webhook_delay_seconds is not None and len(audiobuffer) >= optional_flush_bytes(
+                    sample_rate, audio_bytes_webhook_delay_seconds
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
