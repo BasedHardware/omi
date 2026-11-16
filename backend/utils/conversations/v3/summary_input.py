@@ -72,6 +72,9 @@ def fingerprint(row):
     values['source'] = values['source'] or 'omi'
     values['kind'] = values['kind'] or 'conversation'
     values['manual_end'] = bool(values['manual_end'])
+    values['speaker_resolution_available'] = (
+        policy.field(policy.field(row, 'speaker_resolution'), 'status') != 'unavailable'
+    )
     if any(policy.field(photo, 'created_at') is None for photo in values['photos'] or []):
         raise ValueError('photo_capture_time_unavailable')
     values['photos'] = [
@@ -86,6 +89,8 @@ def fingerprint(row):
             'text': policy.field(s, 'text'),
             'original_text': policy.field(s, 'original_text'),
             'speaker': policy.field(s, 'speaker') or 'SPEAKER_00',
+            'audio_unplaced': policy.field(s, 'audio_alignment') == 'unplaced',
+            'has_translations': bool(policy.field(s, 'translations')),
             **_voice(s),
             'is_user': bool(policy.field(s, 'is_user')),
             'person_id': policy.field(s, 'person_id'),

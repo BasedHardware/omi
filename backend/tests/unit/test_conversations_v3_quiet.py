@@ -10,6 +10,9 @@ import pytest
 from database import conversations_v3_quiet as attempts
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
+from models.other import Person
+from utils.llm import notes_packet
+from utils.conversations import transcript_repeats
 from utils.conversations.v3 import quiet, summary_input, summary, triggers, service, renewal
 from utils.conversations import process_conversation as process
 from utils.conversations import transcript_for_llm as transcript
@@ -79,6 +82,103 @@ def test_owner_authority_changes_actual_notes_and_freshness(monkeypatch, authori
     )
     after, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
     assert 'Nik' in voices.values()
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+
+
+@pytest.mark.parametrize('initial,next_status', [('unavailable', 'resolved'), ('resolved', 'unavailable')])
+def test_serving_resolution_availability_changes_notes_and_rejects_final_reuse(
+    real_notes_seam, monkeypatch, initial, next_status
+):
+    monkeypatch.setattr(process, 'content_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(process, 'quiet_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(transcript, 'serving_for', lambda *a: True)
+    monkeypatch.setattr(transcript, 'get_user_name', lambda *a, **kw: 'Nik')
+    monkeypatch.setattr(notes_packet, 'get_evidence', lambda *a: None)
+    people = [Person(id='alice', name='Alice')]
+    original = row(
+        status='completed',
+        speaker_resolution={'status': initial},
+        summary_is_snapshot=False,
+        structured={'title': 'Old notes', 'sections': [{'heading': 'Plan', 'body_markdown': 'Prior attribution.'}]},
+    )
+    original['transcript_segments'][0].update(
+        is_user=False,
+        person_id='alice',
+        speaker_id=0,
+        speaker_id_scope='conversation:c',
+        speaker_label_source='auto',
+        speaker_identity_status='not_user',
+        speaker_match_source='conversation_voice',
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before, names = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original), people)
+    assert ('Alice' in names.values()) is (initial != 'unavailable')
+    assert summary.fresh(original)
+    original['speaker_resolution']['status'] = next_status
+    after, names = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original), people)
+    assert ('Alice' in names.values()) is (next_status != 'unavailable') and before != after
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+    with summary.models.notes_mode('u'):
+        process._get_structured('u', 'en', Conversation(**original))
+    assert len(real_notes_seam) == 1
+
+
+@pytest.mark.parametrize('resolution', [None, 'resolved', 'capture', 'unavailable'])
+def test_resolution_availability_uses_renderer_defaults_not_diagnostics(resolution):
+    original = row()
+    absent = summary_input.fingerprint(original)
+    original['speaker_resolution'] = None if resolution is None else {'status': resolution}
+    first = summary_input.fingerprint(original)
+    assert (first == absent) is (resolution != 'unavailable')
+    assert first == summary_input.fingerprint(Conversation(**original))
+    if resolution:
+        original['speaker_resolution'].update(version=9, participant_speaker_ids=[7], input_membership_sha256='changed')
+        assert summary_input.fingerprint(original) == first
+
+
+@pytest.mark.parametrize('selection', ['translations', 'audio_alignment'])
+def test_serving_prompt_selection_changes_voice_input_and_freshness(monkeypatch, selection):
+    monkeypatch.setattr(transcript, 'serving_for', lambda *a: True)
+    monkeypatch.setattr(transcript, 'get_user_name', lambda *a, **kw: 'Nik')
+    monkeypatch.setattr(notes_packet, 'get_evidence', lambda *a: None)
+    monkeypatch.setattr(transcript_repeats, 'sync_live_dedupe_enabled', lambda: True)
+    original = row(
+        transcript_segments=[
+            {
+                'id': 'live',
+                'text': 'The Friday plan is confirmed. ' * 80,
+                'start': 0,
+                'end': 30,
+                'is_user': False,
+                'speaker_id': 0,
+                'speaker_id_scope': 'capture:live',
+            },
+            {
+                'id': 'batch',
+                'text': 'The Friday plan is confirmed. ' * 80,
+                'start': 0,
+                'end': 30,
+                'is_user': False,
+                'speaker_id': 1,
+                'speaker_id_scope': 'final:batch:run',
+            },
+        ]
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before, names = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert len(names) == 1 and summary.fresh(original)
+    if selection == 'translations':
+        original['transcript_segments'][0]['translations'] = [{'lang': 'es', 'text': 'El plan está confirmado.'}]
+    else:
+        original['transcript_segments'][1]['audio_alignment'] = 'unplaced'
+    after, names = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert len(names) == 2 and before != after
     assert not summary.fresh(original)
     assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
 

@@ -331,6 +331,37 @@ async def test_snapshot_uses_photo_subcollection_and_rejects_concurrent_photo_ch
     assert paid == [cid]
 
 
+@pytest.mark.parametrize('initial,next_status', [('unavailable', 'resolved'), ('resolved', 'unavailable')])
+def test_resolution_availability_fences_old_writes_and_arms_new_source_permit(seeded, initial, next_status):
+    client, uid, cid, rid, coll = seeded
+    source = coll.document(rid).get().to_dict()
+    source['speaker_resolution'] = {'status': initial}
+    generation = summary_input.fingerprint(source)
+    coll.document(rid).update({'speaker_resolution': {'status': initial}, 'v3_quiet_generation': generation})
+    coll.document(cid).update({'speaker_resolution': {'status': initial}, 'v3_source_hashes': {rid: generation}})
+    token, old = claim(seeded)
+    persist(seeded, token, old)
+    leases.release(uid, 'summary-' + cid, token, firestore_client=client)
+    coll.document(cid).update({'speaker_resolution': {'status': next_status}})
+    assert not summary.fresh(store.decode_row(uid, coll.document(cid).get()))
+    assert coll.document(rid).get().to_dict()['v3_quiet_generation'] == generation
+    with pytest.raises(store.Conflict):
+        persist(seeded, token, old)
+    coll.document(rid).update({'speaker_resolution': {'status': next_status}})
+    patch = attempts.source_patch(uid, coll.document(rid).get(), now=datetime.now(timezone.utc) - timedelta(seconds=31))
+    assert patch.get('v3_quiet_pending') and patch['v3_quiet_generation'] != generation
+    coll.document(rid).update(patch)
+    coll.document(cid).update({'v3_source_hashes': {rid: patch['v3_quiet_generation']}})
+    token, current = claim(seeded)
+    assert current and current['input_hash'] != old['input_hash']
+    with pytest.raises(store.Conflict, match='processing_source_changed'):
+        writers.settle_processing(
+            uid, cid, token, None, old['row']['finished_at'], input_hash=old['input_hash'], firestore_client=client
+        )
+    persist(seeded, token, current)
+    assert summary.fresh(store.decode_row(uid, coll.document(cid).get()))
+
+
 def test_photo_input_pages_without_losing_evidence_or_freshness(seeded):
     from models.conversation_photo import ConversationPhoto
 
