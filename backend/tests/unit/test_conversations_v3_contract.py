@@ -125,13 +125,17 @@ def test_audio_alias_is_owner_checked(monkeypatch):
 
     def load(uid, cid):
         calls.append((uid, cid))
+        if cid == 'c':
+            return {'id': 'c'}
+        if cid != 'r':
+            return None
         return {'recording': True, 'claims': [{'conversation_id': 'c'}], 'audio_files': [{'id': 'file'}]}
 
     monkeypatch.setattr(db, 'get_conversation', load)
     assert audio.resolve('synthetic', {'id': 'c'}, {'id': 'alias', 'recording_id': 'r', 'recording_file_id': 'file'})[
         :2
     ] == ('r', {'id': 'file'})
-    assert calls == [('synthetic', 'r')]
+    assert calls == [('synthetic', 'c'), ('synthetic', 'r')]
     with pytest.raises(HTTPException):
         audio.resolve('synthetic', {'id': 'different'}, {'id': 'file', 'recording_id': 'r'})
 

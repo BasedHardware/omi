@@ -20,9 +20,13 @@ def superseded_while_locked(payload: dict) -> bool:
         conversation = conversations_db.get_conversation_raw_snapshot(
             payload['uid'],
             payload['conversation_id'],
-            field_paths=['audio_files', 'started_at', 'created_at', 'deleted'],
+            field_paths=['audio_files', 'started_at', 'created_at', 'deleted', 'recording_pieces'],
             timeout=1.0,
         )
+        if conversation and 'recording_pieces' in conversation:
+            from utils.conversations.v3.audio import playback_snapshot
+
+            conversation = playback_snapshot(payload['uid'], {**conversation, 'id': payload['conversation_id']})
         superseded = bool(
             conversation
             and not conversation.get('deleted')
@@ -48,16 +52,22 @@ def ensure_conversation_artifact(
     fingerprint: str,
     *,
     strict_sources: bool = False,
+    conversation: dict[str, Any] | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
     existing = get_conversation_playback_manifest(uid, conversation_id, fingerprint)
     if existing is not None:
         return existing
-    data, spans = build_conversation_playback_artifact(
-        uid,
-        conversation_id,
-        audio_files,
-        started_at,
-        strict_sources=strict_sources or any(af.get('source_fingerprint') for af in audio_files),
-    )
+    if conversation is not None and 'recording_pieces' in conversation:
+        from utils.conversations.v3.audio import build_artifact
+
+        data, spans = build_artifact(uid, conversation)
+    else:
+        data, spans = build_conversation_playback_artifact(
+            uid,
+            conversation_id,
+            audio_files,
+            started_at,
+            strict_sources=strict_sources or any(af.get('source_fingerprint') for af in audio_files),
+        )
     upload_conversation_playback_artifact(uid, conversation_id, data, fingerprint, spans=spans)
     return len(data), spans
