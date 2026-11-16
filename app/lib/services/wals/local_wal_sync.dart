@@ -134,6 +134,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   bool _pendingPhoneOnly = false;
   List<WalFrame> _frames = [];
+  bool _isStopped = false;
   String? _captureEvidenceRoot;
   int _captureEvidenceGeneration = 0;
   int _nextSourceFramePosition = 0;
@@ -396,6 +397,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   int get captureEvidenceGeneration => _captureEvidenceGeneration;
 
   @visibleForTesting
+  bool get isStopped => _isStopped;
+
+  @visibleForTesting
   List<WalFrame> get testFrames => _frames;
 
   /// Whether the most recent [onFrameCaptured] kept the frame (false when a
@@ -509,6 +513,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void start() {
+    _isStopped = false;
     _initializeWals();
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _runNativeIntake();
@@ -698,6 +703,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future stop() async {
+    _isStopped = true;
     final generation = _sessionGeneration;
     BleBridge.instance.removeBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _chunkingTimer?.cancel();
@@ -707,13 +713,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       WidgetsBinding.instance.removeObserver(this);
     } catch (_) {}
 
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() async => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
-
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation)) return;
+      _sealPendantTail(generation);
+      _chunk(generation);
+      _frames = [];
+      _pendingPhoneOnly = false;
+      _frameSynced = [];
+      await _flush(generation);
+    });
   }
 
   @override
@@ -1992,6 +2000,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+    if (_isStopped) return frame;
     if (LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {

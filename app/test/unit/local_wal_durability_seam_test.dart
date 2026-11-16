@@ -121,6 +121,72 @@ void main() {
     });
   }
 
+  test('packets arriving during stop flush are rejected at the boundary and admitted frames survive on disk',
+      () async {
+    final entered = Completer<void>();
+    final release = Completer<void>();
+    var holdWrite = false;
+    final sync = LocalWalSyncImpl(
+      _MockListener(),
+      freeDiskBytes: () async => 1 << 40,
+      persistWals: (wals) async {
+        if (holdWrite) {
+          holdWrite = false;
+          entered.complete();
+          await release.future;
+        }
+        expect(await WalFileManager.saveWals(wals), isTrue);
+      },
+    );
+    addTearDown(() async {
+      if (!release.isCompleted) release.complete();
+      await sync.stop();
+    });
+    sync.start();
+    await sync.walReady;
+    await sync.onAudioCodecChanged(BleAudioCodec.opus);
+    sync.setDeviceInfo('devkit-1', 'Omi DevKit');
+    for (var i = 0; i < 50; i++) {
+      sync.onFrameCaptured(frame(i, 0));
+    }
+
+    holdWrite = true;
+    final stopping = sync.stop();
+    await entered.future;
+    expect(sync.isStopped, isTrue, reason: 'the stop boundary precedes asynchronous I/O');
+    // Producer keeps calling onFrameCaptured while the stop flush is pending.
+    // Ingress is rejected at the stop boundary, preserving all admitted frames
+    // without post-flush buffer erasure (FC-buffer-clear-after-async-flush).
+    for (var i = 50; i < 60; i++) {
+      final input = frame(i, 0);
+      final result = sync.onFrameCaptured(input);
+      expect(identical(result, input), isTrue, reason: 'frame arriving after stop boundary must be rejected');
+      expect(result.sourceFramePosition, isNull, reason: 'rejected frame must not be positioned');
+    }
+    release.complete();
+    await stopping;
+
+    final index = await WalFileManager.loadWals();
+    expect(index.fold<int>(0, (total, wal) => total + wal.totalFrames), 50,
+        reason: 'all admitted frames survive on disk; rejected arrivals do not corrupt index');
+    expect(sync.testFrames, isEmpty, reason: 'buffer is empty without post-await clear erasing admitted frames');
+    final payloads = <int>[];
+    for (final wal in index) {
+      final bytes = await File('${tempDir.path}/${wal.filePath}').readAsBytes();
+      final header = ByteData.sublistView(bytes);
+      for (var offset = 0; offset < bytes.length;) {
+        final length = header.getUint32(offset, Endian.little);
+        offset += 4;
+        expect(length, 2);
+        expect(bytes[offset], 0xAA);
+        payloads.add(bytes[offset + 1]);
+        offset += length;
+      }
+    }
+    expect(payloads, orderedEquals(List<int>.generate(50, (i) => i)),
+        reason: 'every admitted packet appears exactly once on disk in order');
+  });
+
   test('finalizeCurrentSession produces a fsynced audio file AND a persisted index entry', () async {
     final sync = LocalWalSyncImpl(_MockListener());
     sync.setDeviceInfo('devkit-1', 'Omi DevKit');
