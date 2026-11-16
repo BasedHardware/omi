@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/backend/preferences.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -211,6 +213,8 @@ void main() {
   late Directory tempDir;
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({'uid': 'owner-a'});
+    await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('ring_no_advance_test_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
