@@ -164,7 +164,8 @@ def _conversation_match(row: Dict[str, Any], query: str) -> Optional[Dict[str, A
         {key: value for key, value in public_transcript_timing(snippet).items() if key in _HIT_FIELDS}
         for snippet in snippets[: search_views.TRANSCRIPT_HITS_PER_CONVERSATION]
     ]
-    structured = row.get('structured') if isinstance(row.get('structured'), dict) else {}
+    raw_structured = row.get('structured')
+    structured: Dict[str, Any] = raw_structured if isinstance(raw_structured, dict) else {}
     return {
         'conversation': {
             'id': row.get('id'),
