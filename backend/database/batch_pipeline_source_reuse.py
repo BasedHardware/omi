@@ -15,7 +15,12 @@ from utils.batch_pipeline.contracts import WorkItem, WorkResult
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline import source_reuse
 
-TABLE = 'source_reuse'
+# Reuse the existing projection-receipt collection's TTL and erasure owner.
+TABLE = 'projections'
+
+
+def receipt_id(key):
+    return f'source-{key}'
 
 
 class SourceReuseUnavailable(ProjectionBlocked):
@@ -43,7 +48,7 @@ def dependencies(job, receipt=None):
 def current(tx, item: WorkItem, now: float, *, expected=None):
     """Fresh transactional source, generation, deletion, result and accounting proof."""
     key = item.source_reuse_key
-    row = tx.get(TABLE, key) if key else {}
+    row = tx.get(TABLE, receipt_id(key)) if key else {}
     stamp = datetime.fromtimestamp(now, timezone.utc)
     if (
         not row
@@ -153,7 +158,7 @@ def prepare(session, transaction):
     key = session.job.get('source_reuse_key')
     if not key:
         return
-    ref = session.store.ref(TABLE, key)
+    ref = session.store.ref(TABLE, receipt_id(key))
     row = ref.get(transaction=transaction).to_dict() or {}
     session.source_owner = row
     if (
@@ -189,7 +194,7 @@ def claim(session, transaction, receipt):
     if len(ids) > 256:
         raise SourceReuseUnavailable('source dependency bound exceeded')
     transaction.set(
-        session.store.ref(TABLE, key),
+        session.store.ref(TABLE, receipt_id(key)),
         {
             'owner_id': session.binding.owner_id,
             'owner_key': owner_key(session.binding.owner_id),

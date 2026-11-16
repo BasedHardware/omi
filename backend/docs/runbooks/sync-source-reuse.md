@@ -18,8 +18,9 @@ coalesced receipt imports and native recordings keep their existing path.
 
 ## Canonical ownership and billing
 
-`batch_pipeline_<stage>_source_reuse` holds one owner-scoped, bounded source
-receipt. The first placed result in the owner's committed projection order
+`batch_pipeline_<stage>_projections/source-<owner HMAC>` holds one owner-scoped,
+bounded source receipt, using the existing projection-receipt TTL and erasure
+collection. The first placed result in the owner's committed projection order
 claims it in the same transaction as assignment. Every later writer rereads
 that document before writing text. A racing job may have computed already;
 it cannot publish another copy. An unfinished owner is a wait, not a completed

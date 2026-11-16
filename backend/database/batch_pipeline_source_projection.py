@@ -2,7 +2,7 @@
 
 from google.cloud import firestore
 
-from database.batch_pipeline_source_reuse import current, SourceReuseUnavailable
+from database.batch_pipeline_source_reuse import current, SourceReuseUnavailable, TABLE, receipt_id
 from database.batch_pipeline_store import FirestoreTransaction
 from database.batch_pipeline_projection_protocol import ProjectionReplay
 from utils.batch_pipeline import source_reuse
@@ -18,7 +18,7 @@ def project_alias(store, item, binding, now, *, policy):
         except ProjectionReplay:
             return True, False
         view = FirestoreTransaction(store.client, store.store.namespace, transaction)
-        row = view.get('source_reuse', item.source_reuse_key)
+        row = view.get(TABLE, receipt_id(item.source_reuse_key))
         if not row or row.get('segment_id') == item.segment_id:
             if session.job.get('source_alias'):
                 raise SourceReuseUnavailable('accepted alias source receipt unavailable')

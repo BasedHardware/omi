@@ -176,7 +176,7 @@ def setup_store(*, outcome='success', corrected=False):
             'projection_state': 'completed',
         }
     )
-    store.ref('source_reuse', KEY).create(
+    store.ref(reuse.TABLE, reuse.receipt_id(KEY)).create(
         {
             'owner_id': UID,
             'owner_key': owner_key(UID),
@@ -326,7 +326,7 @@ def test_projection_refuses_second_copy_preserves_corrections_and_ancestry(accep
     assert receipt['disposition'] == 'source_alias' and receipt['speech_seconds'] == 0
     assert receipt['conversation_id'] == 'visible'
     assert store.client.rows[row.path] == before
-    assert store.ref('source_reuse', KEY).get().to_dict()['segment_id'] == SOURCE
+    assert store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['segment_id'] == SOURCE
     assert store.ref('jobs', COPY).get().to_dict()['source_conversation_ids'] == ['input', 'visible']
     assert project_alias(store, copy, binding, NOW + 1, policy=ProjectionPolicy())  # restart/reply lost
     assert store.ref('results', COPY).get().to_dict()['projection'] == receipt
@@ -348,7 +348,7 @@ def test_source_deletion_or_restore_generation_race_blocks_alias(restore):
     copy, binding = prepare_copy(store, original)
     before = deepcopy(store.client.rows)
     if restore:
-        store.client.rows[store.ref('source_reuse', KEY).path]['privacy_generation'] = 1
+        store.client.rows[store.ref(reuse.TABLE, reuse.receipt_id(KEY)).path]['privacy_generation'] = 1
     else:
         store.client.collection('users').document(UID).collection('deleted_conversations').document('visible').create(
             {}
@@ -498,9 +498,9 @@ def test_alias_and_registry_remain_reachable_by_erasure():
     from database.batch_pipeline_purge import row_belongs
     from database.batch_pipeline_conversation_purge import DEPENDENT_TABLES
 
-    assert 'source_reuse' in DEPENDENT_TABLES
+    assert reuse.TABLE in DEPENDENT_TABLES
     store, original = setup_store()
-    assert row_belongs(store.ref('source_reuse', KEY).get().to_dict(), 'visible')
+    assert row_belongs(store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict(), 'visible')
     copy, binding = prepare_copy(store, original)
     assert project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
     artifact = store.ref('artifacts', artifact_id(COPY, copy.audio_uri)).get().to_dict()
@@ -510,7 +510,7 @@ def test_alias_and_registry_remain_reachable_by_erasure():
 @pytest.mark.parametrize('first', [SOURCE, COPY])
 def test_competing_sync_projections_claim_exactly_one_owner_in_either_order(first):
     store, original = setup_store()
-    del store.client.rows[store.ref('source_reuse', KEY).path]
+    del store.client.rows[store.ref(reuse.TABLE, reuse.receipt_id(KEY)).path]
 
     def session(sid):
         return SimpleNamespace(
@@ -535,7 +535,7 @@ def test_competing_sync_projections_claim_exactly_one_owner_in_either_order(firs
     loser = session(COPY if first == SOURCE else SOURCE)
     with pytest.raises(reuse.SourceReuseUnavailable):
         reuse.prepare(loser, store.client.transaction())
-    assert store.ref('source_reuse', KEY).get().to_dict()['segment_id'] == first
+    assert store.ref(reuse.TABLE, reuse.receipt_id(KEY)).get().to_dict()['segment_id'] == first
 
 
 def test_unfinished_owner_waits_and_never_projects_alias_text():

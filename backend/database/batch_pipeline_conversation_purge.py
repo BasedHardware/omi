@@ -54,7 +54,6 @@ DEPENDENT_TABLES = (
     'coalesce_groups',
     'coalesce_sources',
     'coalesce_heads',
-    'source_reuse',
 )
 # A unit stops starting rows at either bound; each row is a few bounded RPCs.
 UNIT_MAX_ROWS = 10
