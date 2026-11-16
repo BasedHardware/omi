@@ -7,7 +7,11 @@
     "uid": "e14da721-ef35-4e91-a986-6e7a62c06f02",
     "resourceVersion": "123",
     "creationTimestamp": "2026-11-16T00:00:00Z",
-    "labels": {"omi/readiness-token": "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4"},
+    "labels": {
+      "omi/readiness-token": "a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4",
+      "topology.kubernetes.io/region": "us-central1",
+      "topology.kubernetes.io/zone": "us-central1-a"
+    },
     "annotations": {
       "omi/source-sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
       "omi/supervisor-sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",

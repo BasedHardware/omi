@@ -58,6 +58,41 @@ class ReadinessTests(unittest.TestCase):
     def validate(self, pod, report):
         return probe.validate(pod, report, TOKEN, NODE, UID)
 
+    def test_render_pins_reviewed_topology_without_mutable_label_aliases(self):
+        expected = {
+            'omi/readiness-token': TOKEN,
+            'topology.kubernetes.io/region': 'us-central1',
+            'topology.kubernetes.io/zone': 'us-central1-a',
+        }
+        first = probe.render(TOKEN, NODE)
+        self.assertEqual(first['metadata']['labels'], expected)
+        first['metadata']['labels']['topology.kubernetes.io/zone'] = 'other'
+        self.assertEqual(probe.render(TOKEN, NODE)['metadata']['labels'], expected)
+
+    def test_topology_and_token_mutations_refuse_manifest_and_completed_receipts(self):
+        original = json.loads((Path(__file__).parent / 'fixtures/pod-api-response.json').read_text())
+        report = completed()[1]
+        mutations = []
+        for key in ('topology.kubernetes.io/region', 'topology.kubernetes.io/zone', 'omi/readiness-token'):
+            mutations.append(lambda labels, key=key: labels.pop(key))
+            for value in ('other', '', 0, False, None, ['us-central1'], {'value': 'us-central1'}):
+                mutations.append(lambda labels, key=key, value=value: labels.update({key: value}))
+        mutations.extend(
+            [
+                lambda labels: labels.update({'topology.kubernetes.io/hostname': NODE}),
+                lambda labels: labels.update({'unreviewed': 'extra'}),
+            ]
+        )
+        for mutate in mutations:
+            pod = copy.deepcopy(original)
+            mutate(pod['metadata']['labels'])
+            with self.subTest(labels=pod['metadata']['labels']), self.assertRaisesRegex(
+                ValueError, '^REVIEWED_METADATA_REQUIRED$'
+            ):
+                probe.validate_manifest(pod, TOKEN, NODE)
+            with self.assertRaisesRegex(ValueError, '^REVIEWED_METADATA_REQUIRED$'):
+                self.validate(pod, report)
+
     def test_exact_completed_probe_still_requires_cleanup_and_never_proves_serving(self):
         result = self.validate(*completed())
         self.assertEqual(result['result'], 'READINESS_PROBE_ONLY_CLEANUP_PENDING')
