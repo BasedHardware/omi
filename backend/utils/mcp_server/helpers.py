@@ -1,5 +1,6 @@
 """Parsing and projection helpers shared by hosted MCP tool handlers."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -125,12 +126,13 @@ def bounded_transcript_segments(
     max_segments: int,
     max_chars: int,
     extra_keys: Tuple[str, ...] = (),
+    speaker_display: Any = None,
 ) -> Tuple[List[Dict[str, Any]], bool]:
     source = [segment for segment in segments if isinstance(segment, dict)] if isinstance(segments, list) else []
     names = {
         str(s['person_id']): str(s['speaker_name']) for s in source if s.get('person_id') and s.get('speaker_name')
     }
-    display = display_participants(source, names=names)
+    display = speaker_display if speaker_display is not None else display_participants(source, names=names)
     bounded: List[Dict[str, Any]] = []
     used_chars = 0
     truncated = False
@@ -177,6 +179,68 @@ def bounded_transcript_segments(
 
 
 _bounded_transcript_segments = bounded_transcript_segments
+
+
+@dataclass(frozen=True)
+class TranscriptPage:
+    segments: List[Dict[str, Any]]
+    total_segments: int
+    next_position: Optional[Dict[str, int]]
+
+
+def transcript_page(
+    segments: Any, *, max_segments: int, max_chars: int, offset: int = 0, char_offset: int = 0
+) -> TranscriptPage:
+    """Page the already hydrated transcript without losing clipped text.
+
+    Keep whole segments together when possible. A segment larger than a page
+    continues at a character position across text then original_text; explicit
+    field offsets let clients reassemble those fragments without guessing.
+    Speaker identities are resolved against the full transcript on every page.
+    """
+    source = [s for s in segments if isinstance(s, dict)] if isinstance(segments, list) else []
+    if offset > len(source) or (offset == len(source) and char_offset):
+        raise ToolExecutionError('Transcript changed. Restart without cursor.', code=-32602)
+    names = {
+        str(s['person_id']): str(s['speaker_name']) for s in source if s.get('person_id') and s.get('speaker_name')
+    }
+    display = display_participants(source, names=names)
+    bounded: List[Dict[str, Any]] = []
+    remaining = max_chars
+    while offset < len(source) and len(bounded) < max_segments and remaining > 0:
+        segment = source[offset]
+        text = str(segment.get('text') or '')
+        original = str(segment['original_text']) if segment.get('original_text') is not None else ''
+        size = len(text) + len(original)
+        if char_offset > size or (char_offset and char_offset == size):
+            raise ToolExecutionError('Transcript changed. Restart without cursor.', code=-32602)
+        if bounded and size - char_offset > remaining:
+            break
+        end = min(size, char_offset + remaining)
+        fragment = dict(segment)
+        fragment['text'] = text[min(char_offset, len(text)) : min(end, len(text))]
+        if 'original_text' in fragment:
+            fragment['original_text'] = original[max(0, char_offset - len(text)) : max(0, end - len(text))]
+        projected, _ = bounded_transcript_segments(
+            [fragment], max_segments=1, max_chars=remaining, speaker_display=display
+        )
+        item = projected[0]
+        item['segment_index'] = offset
+        if char_offset or end < size:
+            item['text_offset'] = min(char_offset, len(text))
+            item['original_text_offset'] = max(0, char_offset - len(text))
+        bounded.append(item)
+        remaining -= end - char_offset
+        if end < size:
+            char_offset = end
+            break
+        offset += 1
+        char_offset = 0
+    return TranscriptPage(
+        bounded,
+        len(source),
+        {'offset': offset, 'char_offset': char_offset} if offset < len(source) else None,
+    )
 
 
 def conversation_call_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:

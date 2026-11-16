@@ -49,6 +49,7 @@ BUDGET_PATH = BACKEND_DIR / 'config' / 'flag_budget.json'
 FEATURE_FLAGS_PATH = BACKEND_DIR.parent / 'config' / 'feature-flags.yaml'
 SEED_BUDGET = 165  # 2026-10-25 seed; lower it when the surface shrinks, never raise it.
 HELPER_KILL_SWITCHES = {
+    'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS',
     'BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED',
     'BATCH_PIPELINE_PROTECTED_SHARE_ENABLED',
     'HOME_SETTLED_EMPTY_WIRE_ENABLED',
@@ -336,6 +337,9 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert entry['review_by'] == (
                 '2026-11-22' if name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED' else '2026-12-15'
             )
+        elif name == 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS':
+            assert entry['owner'] == flag['owner'] == 'quality-lead / q12-mcp-paging'
+            assert entry['review_by'] == '2026-12-15'
         elif name.startswith('RECORD_'):
             assert entry['owner'] == 'q12-post-seal'
             assert entry['review_by'] == '2026-12-14'
@@ -358,6 +362,10 @@ def test_helper_kill_switch_budget_entries_match_the_live_registry():
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
             assert flag['summary'].startswith('Default off')
+        elif name == 'MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS':
+            assert flag['lifecycle'] == 'config_switch'
+            assert flag['fail'] == 'open'
+            assert '500' in flag['summary'] and '120' in flag['summary']
         elif name == 'EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED':
             assert flag['lifecycle'] == 'config_switch'
             assert flag['fail'] == 'closed'
