@@ -26,7 +26,9 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   // status changes), so an identity+length memo keeps a per-chunk tick from
   // rescanning recording history on the UI isolate.
   final memo = _catchUpMemo[wals];
-  if (memo != null && memo.$1 == wals.length && memo.$2 == minute) return memo.$3;
+  if (memo != null && memo.$1 == wals.length && memo.$2 == minute && (memo.$4 == null || nowSeconds < memo.$4!)) {
+    return memo.$3;
+  }
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
@@ -37,7 +39,11 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   var pendingSeconds = 0;
   final spans = <(DateTime, DateTime)>[];
   final ids = <String>{};
+  int? expiresAt;
   for (final w in rows) {
+    if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
+    final expires = w.pendingWorkExpiresAt;
+    if (expires != null) expiresAt = expiresAt == null ? expires : min(expiresAt, expires);
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
     if (w.seconds <= 0) continue;
     pendingSeconds += w.seconds;
@@ -49,9 +55,10 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
       onPhoneSeconds += w.seconds;
     }
     if (w.timerStart <= 0) continue;
-    // Historical handles retain custody/counts but must be confirmed pending
-    // before they can claim a capture range in Right now.
-    if (w.status == WalStatus.uploaded &&
+    // The kill switch restores the legacy total; its date span still excludes
+    // historical handles without a recent wait, as it did before the cap.
+    if (catchUpStaleHandleOff &&
+        w.status == WalStatus.uploaded &&
         w.uploadedAt < nowSeconds - 86400 &&
         w.jobPendingConfirmedAt < nowSeconds - 300) {
       continue;
@@ -78,11 +85,11 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
     end: end,
     targetIds: targets.join('\n'),
   );
-  _catchUpMemo[wals] = (wals.length, minute, result);
+  _catchUpMemo[wals] = (wals.length, minute, result, expiresAt);
   return result;
 }
 
-final Expando<(int, int, DeviceCatchUpLocal)> _catchUpMemo = Expando('deviceCatchUpLocal');
+final Expando<(int, int, DeviceCatchUpLocal, int?)> _catchUpMemo = Expando('deviceCatchUpLocal');
 
 /// One contiguous pending run on the most recent pending day. Inventory and
 /// target totals still include historical work; a gap is never called audio.

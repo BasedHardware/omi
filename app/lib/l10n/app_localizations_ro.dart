@@ -15539,6 +15539,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
 
   @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
   String freeCapTitle(int minutes) {
     return 'Ai folosit cele $minutes minute din această lună';
   }

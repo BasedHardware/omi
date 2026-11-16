@@ -12217,6 +12217,7 @@
     "monthlySwitchDoneTitle": "நீங்கள் இப்போது மாதாந்திரத் திட்டத்தில் உள்ளீர்கள்",
     "monthlySwitchDoneBody": "இன்று {price} செலுத்தப்பட்டது. மாதந்தோறும் புதுப்பிக்கப்படும்.",
     "processingDeleteScopeChanged": "செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
     "freeCapTitle": "இந்த மாதத்தின் {minutes} நிமிடங்களைப் பயன்படுத்திவிட்டீர்கள்",
     "freeCapBody": "Omi இன்னும் பதிவு செய்கிறது. எப்படி எழுத்துப்படியைத் தொடர்வது என்பதைத் தேர்வுசெய்க.",
     "omiProPlanName": "Omi Pro",
