@@ -41,7 +41,14 @@ async def close_batch_archive(host: Any, conversation_id: str, data: dict[str, A
     if conversation_id == host.state.current_conversation_id and archive is not None:
         await archive.close()
         if getattr(host.state, 'active', False) is not True and not await host.persistence.call(
-            close_server_batch_audio, host.request.uid, conversation_id
+            close_server_batch_audio,
+            host.request.uid,
+            conversation_id,
+            **(
+                {'producer_token': host.conversations.batch_producer_token(conversation_id)}
+                if getattr(getattr(host, 'conversations', None), 'batch_producer_token', None)
+                else {}
+            ),
         ):
             return None
         data = await host.persistence.call(
