@@ -77,6 +77,8 @@ def resolve_context(
     target = binding.target_conversation_id
     origin = context.get('recording_session_id')
     start, end = context.get('audio_start_seconds'), context.get('audio_end_seconds')
+    if item.capture_time_trust == 'untrusted':
+        start = end = None  # Receipt-clock placement cannot resolve a live generation.
     for value in (start, end):
         if value is not None and (type(value) not in (float, int) or not math.isfinite(value)):
             raise _blocked('invalid intake recording clock', 'invalid_recording_clock')

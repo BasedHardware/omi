@@ -170,6 +170,13 @@ class StrictFirestoreDocument:
                     'record_projection_revision',
                     'record_upload_failed',
                     'record_audio_partial',
+                    'record_transcription_empty',
+                    'episode_transcription_pending_at',
+                    'server_batch_audio_closed',
+                    'server_batch_audio_start',
+                    'server_batch_audio_end',
+                    'record_audio_closed',
+                    'record_upload_sessions',
                     'status',
                     'started_at',
                     'finished_at',
@@ -444,7 +451,7 @@ class StrictFirestore:
         references: list[StrictFirestoreDocument],
         *,
         field_paths: list[str] | None = None,
-        transaction: StrictFirestoreTransaction,
+        transaction: StrictFirestoreTransaction | None = None,
     ) -> list[StrictFirestoreSnapshot]:
         # Whole-document BatchGet (no field mask) and the folder-membership mask are modelled.
         if field_paths is not None and field_paths != ['folder_id']:

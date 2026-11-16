@@ -482,7 +482,13 @@ dispatches simply sanitizes again next launch.
   `OfflineMuteToggled` with no connected device emits `PolicyWrite(false)` and nothing
   else — no `ResumeDeviceTailStage`, no socket, no BLE open. An offline
   unmute changes admission, never ownership. With a connected pendant, hardware
-  confirmation precedes the policy write but still starts no local capture.
+  confirmation precedes the policy write; the reducer still starts nothing, and
+  the controller (`_resumeStartingIdlePendant`) then starts the idle pendant.
+  `DeviceResumeRequested` (pendant double-press) shares this idle rule.
+- A pendant muted before the app process restarted resolves to a paused
+  session on its cold start: the start commits `RecordingState.pause` without
+  an audio subscription instead of failing closed to idle, so Resume stays
+  reachable (`_commitMutedStartAsPaused`).
 - Every fresh device session resolves the pendant mute before its transport
   stage. `DeviceMuteResolved` folds the effective policy into both the staged
   and committed pendant phase, preserving the active session and live/batch

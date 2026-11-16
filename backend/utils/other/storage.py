@@ -9,6 +9,8 @@ so deployed code must not assume real bucket semantics
 
 from utils.observability.sync_phases import sync_phase
 import datetime
+import base64
+import google_crc32c
 import hashlib
 import io
 import json
@@ -19,6 +21,7 @@ import wave
 from contextlib import contextmanager, nullcontext
 from itertools import chain
 from config import audio_archive
+from config.record_wal_storage import private_archive_bucket
 from utils.other.audio_singleflight import coalesce_rebuild
 from utils.other.playback_cache import write_once, cached_manifest
 from utils.other.playback_identity import playback_manifest_recovery_enabled
@@ -126,7 +129,7 @@ def _get_storage_client() -> Any:
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
 memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None
-private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
+private_cloud_sync_bucket = private_archive_bucket()
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
 app_thumbnails_bucket = os.getenv('BUCKET_APP_THUMBNAILS')
@@ -242,6 +245,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
                     'raw-live',
                     'audio-outbox',
                     'raw-sync',
+                    'record-wal',
                 )
             ),
         ),
@@ -1252,7 +1256,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
     bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
-        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox', 'record-wal'):
             _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked
@@ -2574,6 +2578,74 @@ def archive_capture_bytes(
     ARCHIVE_OBJECTS.labels(source=source, codec=codec).inc()
     ARCHIVE_BYTES.labels(source=source, codec=codec).inc(len(raw))
     return path
+
+
+def archive_record_wal_bytes(uid, conversation_id, raw, entry, protection):
+    """Create-only original plus a verified generation-bound custody receipt.
+
+    A nonce generated on a retry is irrelevant: verify the stored ciphertext,
+    its checksum, and its decrypted plaintext, never the new encryption output.
+    This dedicated prefix is not a live PCM/frame manifest or provider input.
+    """
+    expected = {
+        'custody_schema': 'audio_custody_v1',
+        'conversation_id': conversation_id,
+        'format': 'record-wal-original-v1',
+        'wal_file_id': entry['file_id'],
+        'wal_name': entry['name'],
+        'wal_size': str(entry['size']),
+        'codec': entry['codec'],
+        'encrypted': str(protection == 'enhanced').lower(),
+    }
+    path = archive_capture_bytes(
+        uid,
+        raw,
+        'record-wal',
+        f"{conversation_id}/{entry['file_id']}",
+        expected,
+        data_protection_level=protection,
+    )
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    blob = bucket.blob(path)
+    blob.reload(timeout=10, retry=None)
+    generation = int(blob.generation or 0)
+    if generation <= 0 or not blob.size or not blob.crc32c:
+        raise ValueError('original requires generation size and checksum')
+    if any((blob.metadata or {}).get(key) != value for key, value in expected.items()):
+        raise ValueError('original metadata conflict')
+    stored = blob.download_as_bytes(if_generation_match=generation, timeout=10, retry=None)
+    checksum = base64.b64encode(google_crc32c.value(stored).to_bytes(4, 'big')).decode()
+    if len(stored) != int(blob.size) or checksum != blob.crc32c:
+        raise ValueError('original stored checksum mismatch')
+    plaintext = stored
+    if protection == 'enhanced':
+        plaintext, consumed = encryption.decrypt_audio_chunk(stored, uid)
+        if consumed != len(stored):
+            raise ValueError('original ciphertext framing mismatch')
+    if len(plaintext) != entry['size'] or hashlib.sha256(plaintext).hexdigest() != entry['sha256']:
+        raise ValueError('original plaintext identity mismatch')
+    return {
+        'file_id': entry['file_id'],
+        'name': entry['name'],
+        'size': len(plaintext),
+        'sha256': entry['sha256'],
+        'generation': str(generation),
+        'stored_size': len(stored),
+        'crc32c': checksum,
+        'uri': f'gs://{private_cloud_sync_bucket}/{path}#{generation}',
+    }
+
+
+def delete_record_wal_original(uid, receipt):
+    prefix = f'gs://{private_cloud_sync_bucket}/record-wal/{uid}/'
+    if not receipt['uri'].startswith(prefix):
+        raise ValueError('WAL erasure owner mismatch')
+    path = receipt['uri'].split('/', 3)[3].split('#', 1)[0]
+    blob = _get_storage_client().bucket(private_cloud_sync_bucket).blob(path)
+    try:
+        blob.delete(if_generation_match=int(receipt['generation']), timeout=10, retry=None)
+    except NotFound:
+        pass
 
 
 def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optional[Dict[str, Any]] = None) -> List[str]:

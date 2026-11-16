@@ -63,12 +63,20 @@ overlay:
         EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
+        OCCASION_CONVERSATIONS_ENABLED: {value: 'off', category: rollout}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         BATCH_INPUT_EXPIRING_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
         HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
         RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
         RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -307,6 +315,12 @@ overlay:
         EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
         QUIET_EMPTY_EXIT_ENABLED: {value: 'true', category: rollout}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
@@ -590,8 +604,17 @@ overlay:
           EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          # Preserve the serving backend timings (ro-prod readback, 2026-11-15; SCA-2404).
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_SECONDS: {value: '1200', category: config}
+          FIRST_SUMMARY_DEADLINE_SECONDS: {value: '60', category: config}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
@@ -604,6 +627,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -976,6 +1000,12 @@ overlay:
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
@@ -994,6 +1024,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1145,9 +1176,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -1397,6 +1425,12 @@ overlay:
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
@@ -1412,6 +1446,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
@@ -1544,9 +1579,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1767,6 +1799,12 @@ overlay:
           EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
           RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
           RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
@@ -1788,6 +1826,7 @@ overlay:
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
           HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
           RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
           RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}

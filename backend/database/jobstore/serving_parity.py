@@ -18,12 +18,17 @@ import database.jobstore.codec as codec
 from database.jobstore.postgres_store import PostgresStore, PostgresTransaction
 from database import rpc_deadline
 from database.batch_pipeline_projection_finish_backfill import BACKFILL_KEY, backfill_marker_complete
+from database.batch_pipeline_projection_followup_backfill import (
+    BACKFILL_KEY as FOLLOWUP_BACKFILL_KEY,
+    backfill_marker_complete as followup_backfill_marker_complete,
+)
 from utils.observability.reasons import ReasonFamily, reason_label
 from database.jobstore.cohort import production_policy_applies
 
 STORE_QUERIES = frozenset(
     {
         'due',
+        'protected_retries',
         'oldest',
         'oldest_retry',
         'oldest_admissible_ready',
@@ -41,6 +46,7 @@ STORE_QUERIES = frozenset(
         'projection_page',
         'projection_successor',
         'projection_finish_backfill_complete',
+        'projection_followup_backfill_complete',
     }
 )
 TRANSACTION_QUERIES = frozenset(
@@ -51,6 +57,7 @@ TRANSACTION_QUERIES = frozenset(
         'fresh_first_pending',
         'fresh_first_ready_pending',
         'ready_predecessor',
+        'protected_ready',
         'service_frontier',
     }
 )
@@ -101,6 +108,10 @@ class _ParityPostgresStore(PostgresStore):
         # An observation takes neither; it reads the marker on the bounded connection.
         with self.read_connection() as conn:
             return backfill_marker_complete(self.read_doc(conn, 'control', BACKFILL_KEY))
+
+    def projection_followup_backfill_complete(self) -> bool:
+        with self.read_connection() as conn:
+            return followup_backfill_marker_complete(self.read_doc(conn, 'control', FOLLOWUP_BACKFILL_KEY))
 
 
 def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bool, budget_s: float):

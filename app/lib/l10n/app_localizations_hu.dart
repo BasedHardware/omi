@@ -7069,6 +7069,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nem sikerült bejelentkezni az Apple-lel, kérjük próbálja újra.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Az Apple-bejelentkezés nem sikerült. Próbáld újra, vagy folytasd a Google-lel.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nem sikerült lekérni a Firebase tokent, kérjük próbálja újra.';
 
   @override
@@ -13459,6 +13463,9 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Van Omi Pro kódod? Add meg a következő képernyőn.';
+
+  @override
   String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
 
   @override
@@ -15517,4 +15524,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Ma kifizetve: $price. Havonta megújul.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
 }

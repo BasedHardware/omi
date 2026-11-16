@@ -7044,6 +7044,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Không thể đăng nhập bằng Apple';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Không thể đăng nhập bằng Apple. Hãy thử lại hoặc tiếp tục với Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Không thể lấy mã thông báo';
 
   @override
@@ -13406,6 +13409,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Bạn có mã Omi Pro? Hãy nhập ở màn hình tiếp theo.';
+
+  @override
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override
@@ -15460,4 +15466,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'Đã thanh toán $price hôm nay. Gia hạn hằng tháng.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
 }

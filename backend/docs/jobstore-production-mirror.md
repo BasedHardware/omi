@@ -164,6 +164,16 @@ and measure a complete rotation within that bound. Confirm the target's backup
 retention against the owning deletion contract. Source tests do not establish
 those operating conditions or permit production copying without them.
 
+The environment-selected copy handles share process-owned pools across all
+namespaces and cold erasure calls: two normal sessions for mirror/parity/index
+work, plus one session reserved for synchronous erasure. Saturating the normal
+pool cannot consume the erasure slot. Cold calls borrow these pools rather than
+creating and closing one per invocation; errors still propagate for durable
+retry. A different PG host/database/principal requires a process restart rather
+than creating another allowance. These are per-process source ceilings, not a
+fleet cap or approved operating budget. Count every target-enabled process and
+maximum replica, including deletion executors, before accepting a fleet bound.
+
 Existing deletion seams to preserve and exercise are:
 
 - `database/batch_pipeline_purge.py::purge_batch_owner`: visits both stage

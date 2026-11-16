@@ -620,6 +620,52 @@
       ]
     },
     {
+      "id": "runtime_env_composition",
+      "risk": "high",
+      "sources": [
+        "backend/deploy/compose_runtime_env.py",
+        "backend/deploy/runtime_env/**",
+        "backend/scripts/render_backend_runtime_env.py",
+        "backend/scripts/render_gke_backend_config.py"
+      ],
+      "tests": [
+        "tests/unit/test_runtime_env_sources.py",
+        "tests/unit/test_render_backend_runtime_env.py",
+        "tests/unit/test_render_gke_backend_config.py",
+        "tests/unit/test_cross_service_deploy_contract.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_runtime_env_manifest_compat.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "source overlays compose exactly to the deployed runtime manifest",
+        "Cloud Run and GKE rendering preserve same-environment service bindings"
+      ]
+    },
+    {
+      "id": "integration_canary_transport",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/integration_canary_controller.py",
+        "backend/scripts/integration_canary_metrics.py",
+        "backend/scripts/runtime_env_canary_ops.py",
+        "backend/scripts/runtime_env_validation/**"
+      ],
+      "tests": [
+        "tests/unit/test_integration_canary_imports.py",
+        "tests/unit/test_integration_canary_controller.py",
+        "tests/unit/test_integration_canary_workflow.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_runtime_env_manifest_compat.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "controller mutations retain existing admission, exact-source, journal and rollback gates",
+        "canary composition preserves serving queue, secret and runtime environment bindings",
+        "manifest validation preserves released runtime schema compatibility"
+      ]
+    },
+    {
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [

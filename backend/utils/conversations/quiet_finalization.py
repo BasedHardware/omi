@@ -53,14 +53,16 @@ def _dispatch(check: dict[str, Any]) -> None:
 
 def arm(
     uid: str, conversation_id: str, timeout: float, *, requires_byok: bool = False, firestore_client: Any = None
-) -> None:
+) -> bool:
+    """Return whether a durable quiet check now owns this conversation's finalization."""
     if not enabled():
-        return
+        return False
     check = checks_db.arm_quiet_check(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
     if check is not None:
         _dispatch(check)
+    return check is not None
 
 
 class EmptyExitChanged(RuntimeError):

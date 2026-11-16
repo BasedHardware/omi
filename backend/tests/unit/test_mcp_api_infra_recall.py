@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import firestore_read_metrics  # noqa: F401 - retain metric ownership across isolated handler loads
+from utils.conversations import summary_delivery  # noqa: F401 - same, for the summary delivery counters
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.mcp_memories import parse_mcp_bool
 

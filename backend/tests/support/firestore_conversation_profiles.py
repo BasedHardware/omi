@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import re
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +74,7 @@ WITHOUT_PHOTOS_PROFILES = (
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
     ),
     _profile('prior-meeting-context', start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
+    _profile('ai-profile-recent', start_date=[FROZEN_NOW - timedelta(days=7)], end_date=[FROZEN_NOW]),
     _profile('wrapped-2025', statuses=[['completed']], start_date=[FROZEN_NOW], end_date=[FROZEN_LATER]),
 )
 

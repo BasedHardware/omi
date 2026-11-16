@@ -153,7 +153,7 @@ def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, mo
     s = paid_store
     # Reach the existing latency cap so the first background attempt is paid.
     assert composer.compose(UID, 'ep1', collaborators=s.c, background=True) == 'settling'
-    s.db.rows[s.episode_path]['compose_pending_since'] -= timedelta(minutes=26)
+    s.db.rows[s.episode_path]['compose_pending_since'] -= timedelta(seconds=config.COMPOSER_MAX_SETTLE_SECONDS + 60)
     composer._deferred.clear()
     if not settle:
         monkeypatch.setenv(config.EPISODE_COMPOSE_SETTLE_ENABLED_ENV, 'off')
@@ -191,4 +191,8 @@ def test_member_fence_refusal_reuses_bounded_recompose_scheduling(paid_store, mo
     assert not _episode_now(s).get('composed_fingerprint')
     assert all('composed_fingerprint' not in row for tx in s.db.transactions for _, row in tx.sets)
     if settle:
-        assert 590 < composer.settle_delay(_episode_now(s)) <= 600
+        assert (
+            config.COMPOSER_SETTLE_SECONDS - 10
+            < composer.settle_delay(_episode_now(s))
+            <= config.COMPOSER_SETTLE_SECONDS
+        )

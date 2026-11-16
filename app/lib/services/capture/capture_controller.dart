@@ -355,6 +355,10 @@ class CaptureController extends ChangeNotifier
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
   LocalSttFailure? _localSetupFailure;
+
+  /// The plan's cloud minutes are spent and this phone is transcribing the session live (S17).
+  bool _transcribingOnPhoneAtCap = false;
+  bool get transcribingOnPhoneAtCap => _transcribingOnPhoneAtCap;
   LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
   Future<void> retryLocalTranscription() async {
     final polling = customSttPollingSocket(_socket?.socket);
@@ -1835,6 +1839,7 @@ class CaptureController extends ChangeNotifier
 
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -2327,6 +2332,9 @@ class CaptureController extends ChangeNotifier
                 _recordingDevice?.type != DeviceType.omi,
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
+            deviceId: deviceId,
+            packetCounter: snapshot[0] | (snapshot[1] << 8),
+            fragmentIndex: snapshot[2],
           );
           // No wall timer: the silence end is checked as packets arrive.
           if (batched) _reportCaptureEnd(_captureEnd.packet(activeRecordingId, DateTime.now()));
@@ -2540,6 +2548,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     LocalSttCustody.selectedLocalRoute =
         decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _transcribingOnPhoneAtCap = decision.path == SttResolvedPath.onDevice;
     _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
         ? LocalSttFailure(
             FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
@@ -3428,6 +3437,7 @@ class CaptureController extends ChangeNotifier
     await _resetStateVariables();
     await _resetState();
 
+    if (deviceRequested) _commitMutedStartAsPaused();
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
       if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
     } else if (deviceRequested) {
@@ -4765,10 +4775,7 @@ class CaptureController extends ChangeNotifier
   }
 
   /// Resume the source [pauseCapture] paused.
-  Future<void> resumeCapture() async {
-    final outcome = await _dispatchWithResumeFence(const ResumeCaptureRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeCapture() => _resumeStartingIdlePendant(const ResumeCaptureRequested());
 
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
@@ -4792,10 +4799,7 @@ class CaptureController extends ChangeNotifier
     outcome.throwIfFailed();
   }
 
-  Future<void> resumeDeviceRecording() async {
-    final outcome = await _dispatchWithResumeFence(const DeviceResumeRequested());
-    outcome.throwIfFailed();
-  }
+  Future<void> resumeDeviceRecording() => _resumeStartingIdlePendant(const DeviceResumeRequested());
 
   // -- Capture coordinator wiring -------------------------------------------------------------
 

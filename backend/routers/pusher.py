@@ -1623,7 +1623,9 @@ async def _run_websocket_util_trigger(
             if private_cloud_sync_enabled and current_conversation_id and len(record_close_requests) < 128:
                 record_close_requests.add(current_conversation_id)
             uncommitted_closes = (
-                close_protocol.requests.keys() - close_protocol.committed if close_protocol is not None else set()
+                close_protocol.requests.keys() - close_protocol.committed - close_protocol.aborted
+                if close_protocol is not None
+                else set()
             )
             if uncommitted_closes:
                 logger.warning('event=record_close_uncommitted_disconnect records=%d', len(uncommitted_closes))
@@ -1771,7 +1773,7 @@ async def _run_websocket_util_trigger(
                         if (
                             not isinstance(request_id, str)
                             or not 0 < len(request_id) <= 64
-                            or phase not in {'prepare', 'commit'}
+                            or phase not in {'prepare', 'commit', 'abort'}
                             or type(watermark) is not int
                             or not 0 <= watermark < 2**63
                         ):
@@ -1786,6 +1788,23 @@ async def _run_websocket_util_trigger(
                                     await record_barrier.begin_recording(conversation_id)
                                     if conversation_id not in record_barrier.registered_sessions:
                                         status = 'producer_unavailable'
+                            elif phase == 'abort':
+                                # Only a new listener with the advertised capability
+                                # can supply its original archive + ordered relay proof.
+                                status = (
+                                    close_protocol.abort(conversation_id, request_id, watermark, accept=False)
+                                    if res.get('source_tail_durable') is True
+                                    else 'tail_not_durable'
+                                )
+                                base = watermark
+                                if status == 'aborted':
+                                    if current_conversation_id == conversation_id:
+                                        await _queue_private_cloud_chunk()
+                                        _reset_private_cloud_buffer()
+                                    # Preserve the fence across pusher custody I/O,
+                                    # just as commit does; ordinary queued closure
+                                    # may run as soon as the atomic abort wins.
+                                    status = close_protocol.abort(conversation_id, request_id, watermark)
                             else:
                                 status = close_protocol.commit(conversation_id, request_id, watermark, accept=False)
                                 base = watermark
@@ -2153,7 +2172,7 @@ async def _run_websocket_util_trigger(
             and record_worker is not None
             and all(task.done() for task in bg_main_tasks if task is not record_worker)
         ):
-            prepared = close_protocol.requests.keys() - close_protocol.committed
+            prepared = close_protocol.requests.keys() - close_protocol.committed - close_protocol.aborted
             if prepared:
                 # Actual socket/receive exit is required. A live handshake deadline
                 # has no authority to stop a source or attest its producer token.

@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ BUILD_TAG_RE = re.compile(
 # 2026-10-27 error said this parameter must not be set; keep this switch aligned
 # with the current Play response and both Codemagic publishing blocks.
 CHANGES_NOT_SENT_FOR_REVIEW = True
+PLAY_EDIT_CREATE_ATTEMPTS = 5
 
 
 def record_review_submission(platform: str, version: str, version_code: str | None = None) -> None:
@@ -425,10 +427,27 @@ def play_edit() -> tuple[object, str]:
             json.loads(credentials_raw), scopes=["https://www.googleapis.com/auth/androidpublisher"]
         )
         client = build("androidpublisher", "v3", credentials=credentials, cache_discovery=False)
-        edit_id = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()["id"]
     except Exception as exc:
         raise PromotionError("Google Play authentication failed") from exc
-    return client, edit_id
+    for attempt in range(PLAY_EDIT_CREATE_ATTEMPTS):
+        try:
+            response = client.edits().insert(packageName=PACKAGE_NAME, body={}).execute()
+            edit_id = response.get("id") if isinstance(response, dict) else None
+            if not isinstance(edit_id, str) or not edit_id:
+                raise PromotionError("Google Play edit creation returned an invalid response")
+            return client, edit_id
+        except PromotionError:
+            raise
+        except Exception as exc:
+            response = getattr(exc, "resp", None)
+            status = getattr(response, "status", None)
+            if status is None:
+                status = getattr(exc, "status_code", None)
+            if status == 409 and attempt + 1 < PLAY_EDIT_CREATE_ATTEMPTS:
+                time.sleep(2**attempt)
+                continue
+            raise PromotionError("Google Play edit creation failed") from exc
+    raise PromotionError("Google Play edit creation failed after bounded retries")
 
 
 def play_track(client: object, edit_id: str, track: str) -> object:
@@ -532,12 +551,24 @@ def promote_internal_android_to_alpha(
         raise PromotionError(f"Google Play rejected exact internal-to-alpha promotion{detail}") from exc
 
 
+def discard_play_edit(client: object, edit_id: str) -> None:
+    """Best-effort abandonment after a failed operation; preserve the root error."""
+    try:
+        client.edits().delete(packageName=PACKAGE_NAME, editId=edit_id).execute()
+    except Exception:
+        print("WARN: uncommitted Play edit cleanup failed; the edit will expire", file=sys.stderr)
+
+
 def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     client, edit_id = play_edit()
-    alpha = play_track(client, edit_id, "alpha")
-    production = play_track(client, edit_id, "production")
-    select_play_release(alpha, production, version, build_number)
-    return client, edit_id
+    try:
+        alpha = play_track(client, edit_id, "alpha")
+        production = play_track(client, edit_id, "production")
+        select_play_release(alpha, production, version, build_number)
+        return client, edit_id
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
 
 
 PLAY_RELEASE_STATUSES = ("completed", "draft", "inProgress", "halted")
@@ -550,7 +581,41 @@ def submit_android(
     build_number: str,
     notes: str,
     *,
-    status: str = "completed",
+    status: str | None = None,
+    user_fraction: float | None = None,
+    extra_codes: Sequence[str] = (),
+    base_release: dict[str, object] | None = None,
+    release_name: str | None = None,
+    retained_releases: Sequence[dict[str, object]] = (),
+) -> None:
+    """Submit production changes, abandoning their edit on any failure."""
+    try:
+        _submit_android_edit(
+            client,
+            edit_id,
+            version,
+            build_number,
+            notes,
+            status=status,
+            user_fraction=user_fraction,
+            extra_codes=extra_codes,
+            base_release=base_release,
+            release_name=release_name,
+            retained_releases=retained_releases,
+        )
+    except Exception:
+        discard_play_edit(client, edit_id)
+        raise
+
+
+def _submit_android_edit(
+    client: object,
+    edit_id: str,
+    version: str,
+    build_number: str,
+    notes: str,
+    *,
+    status: str | None = None,
     user_fraction: float | None = None,
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
@@ -562,8 +627,9 @@ def submit_android(
     status "completed" = fully live; "draft" = Play Console draft; "inProgress"
     = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
     Play Console as a post-release brake. userFraction is rejected for
-    completed/draft releases; a completed release cannot later be halted, so
-    decide the exposure path before writing. extra_codes carries any
+    completed/draft releases; when status is omitted, held-review mode writes a
+    draft and ordinary mode writes completed. A completed release cannot later
+    be halted, so decide the exposure path before writing. extra_codes carries any
     additional versionCodes an existing in-flight release already had (a
     multi-APK rollout must not lose its variants when the track is rewritten).
     base_release is that existing server-returned release: advancing it keeps
@@ -579,6 +645,8 @@ def submit_android(
     retained (one staged release per PUT), and their version codes must not
     overlap the written release's.
     """
+    if status is None:
+        status = "draft" if CHANGES_NOT_SENT_FOR_REVIEW else "completed"
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
     if user_fraction is not None and status not in ("inProgress", "halted"):

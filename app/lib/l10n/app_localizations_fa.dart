@@ -7036,6 +7036,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get authFailedToSignInWithApple => 'ورود با Apple ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'ورود با Apple انجام نشد. دوباره امتحان کنید یا با Google ادامه دهید.';
+
+  @override
   String get authFailedToRetrieveToken => 'بازیابی نشانهِ Firebase ناموفق بود، لطفاً دوباره تلاش کنید.';
 
   @override
@@ -13403,6 +13406,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'کد Omi Pro دارید؟ آن را در صفحه بعد وارد کنید.';
+
+  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
@@ -15452,4 +15458,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return 'امروز $price پرداخت شد. ماهانه تمدید می‌شود.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
 }

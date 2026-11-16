@@ -5,6 +5,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
@@ -252,8 +253,11 @@ void main() {
     final source = Wal(timerStart: 1720000000, codec: BleAudioCodec.opus, seconds: 1, device: 'device');
     const clockRun = 'abc123';
     final canonical = source.getFileNameByTimeStarts(source.timerStart, clockRun: clockRun) as String;
-    final collision = canonical.replaceFirst('_${source.timerStart}.bin', '_u0_${source.timerStart}.bin');
-    for (final name in [canonical, collision]) {
+    final legacyCollision = canonical.replaceFirst('_${source.timerStart}.bin', '_u0_${source.timerStart}.bin');
+    final collision =
+        deviceCaptureClockRepairOff ? legacyCollision : canonical.replaceFirst('_clke$clockRun', '_u0_clke$clockRun');
+    final occupied = {canonical, collision, legacyCollision};
+    for (final name in occupied) {
       await File('${dir.path}/$name').writeAsBytes([9, 9, 9]);
     }
     var seq = 0;
@@ -266,11 +270,18 @@ void main() {
         admittedGeneration: ledger.sessionGeneration,
         clockRun: clockRun,
         nextCollisionSequence: () => seq++);
-    expect(wal.filePath, canonical.replaceFirst('_${source.timerStart}.bin', '_u1_${source.timerStart}.bin'));
+    expect(
+        wal.filePath,
+        deviceCaptureClockRepairOff
+            ? canonical.replaceFirst('_${source.timerStart}.bin', '_u1_${source.timerStart}.bin')
+            : canonical.replaceFirst('_clke$clockRun', '_u1_clke$clockRun'));
+    if (!deviceCaptureClockRepairOff) {
+      expect(wal.filePath, matches(RegExp(r'_clkeabc123_[0-9]+\.bin$')));
+    }
     expect(wal.clockRun, clockRun);
     expect(wal.timerStart, source.timerStart);
     expect(await File('${dir.path}/${wal.filePath}').readAsBytes(), [1, 0, 0, 0, 42]);
-    for (final name in [canonical, collision]) {
+    for (final name in occupied) {
       expect(await File('${dir.path}/$name').readAsBytes(), [9, 9, 9]);
     }
   });

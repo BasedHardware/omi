@@ -2501,21 +2501,66 @@ def get_ai_user_profile(uid: str) -> Optional[dict]:
     return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
+def get_ai_user_profile_fresh(uid: str) -> Optional[dict]:
+    """Uncached read for read-modify-write and refresh cadence decisions."""
+    return _get_ai_user_profile_from_firestore(uid)
+
+
 def update_ai_user_profile(
-    uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
+    uid: str,
+    profile_text: str = None,
+    generated_at=None,
+    data_sources_used: int = None,
+    source: Optional[str] = None,
 ) -> dict:
-    """Update AI user profile.  Only writes non-None fields (partial update)."""
+    """Update AI user profile.  Only writes non-None fields (partial update).
+
+    ``source`` records who wrote the text (``user_edit``/``exploration`` from clients);
+    a legacy PATCH without one is recorded as ``client``.
+    """
     # Read existing profile directly from Firestore — never from cache — because
     # this is a read-modify-write path. Using a stale cached projection here
     # could overwrite newer profile fields.
     existing = _get_ai_user_profile_from_firestore(uid) or {}
     if profile_text is not None:
         existing['profile_text'] = profile_text
+        existing['source'] = source or 'client'
     if generated_at is not None:
         existing['generated_at'] = generated_at
+    elif profile_text is not None and source:
+        existing['generated_at'] = datetime.now(timezone.utc).isoformat()
     if data_sources_used is not None:
         existing['data_sources_used'] = data_sources_used
     user_ref = db.collection('users').document(uid)
     user_ref.update({'ai_user_profile': existing})
     invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing
+
+
+@transactional
+def _write_ai_user_profile_if_unchanged_txn(transaction, user_ref, expected_text: str, profile: dict) -> bool:
+    snapshot = user_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+    current = (snapshot.to_dict() or {}).get('ai_user_profile') or {}
+    if str(current.get('profile_text') or '').strip() != expected_text:
+        return False
+    transaction.update(user_ref, {'ai_user_profile': profile})
+    return True
+
+
+def write_ai_user_profile_if_unchanged(uid: str, expected_text: str, profile: dict) -> bool:
+    """Replace the generated profile only if the stored text is still the synthesis input.
+
+    A user edit or delete that lands while the model runs wins; returns False then.
+    """
+    client = get_firestore_client()
+    user_ref = client.collection('users').document(uid)
+    written = _write_ai_user_profile_if_unchanged_txn(client.transaction(), user_ref, expected_text, profile)
+    invalidate(_USER_AI_PROFILE_CACHE, uid)
+    return written
+
+
+def delete_ai_user_profile(uid: str) -> None:
+    db.collection('users').document(uid).update({'ai_user_profile': firestore.DELETE_FIELD})
+    invalidate(_USER_AI_PROFILE_CACHE, uid)

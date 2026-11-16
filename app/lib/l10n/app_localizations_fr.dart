@@ -7100,6 +7100,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Échec de la connexion avec Apple, veuillez réessayer.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'La connexion avec Apple n\'a pas fonctionné. Réessayez ou continuez avec Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Échec de la récupération du jeton Firebase, veuillez réessayer.';
 
   @override
@@ -13513,6 +13517,9 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vous avez un code Omi Pro ? Saisissez-le à l\'écran suivant.';
+
+  @override
   String get paywallTrialCancelNote => 'Annulez à tout moment. Sans frais ni pénalités.';
 
   @override
@@ -15586,4 +15593,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String monthlySwitchDoneBody(String price) {
     return '$price payés aujourd\'hui. Renouvellement mensuel.';
   }
+
+  @override
+  String get processingDeleteScopeChanged => 'La liste en cours de traitement a changé. Vérifiez-la et réessayez.';
 }

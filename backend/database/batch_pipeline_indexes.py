@@ -14,6 +14,29 @@ def _desc(field):
 BATCH_PIPELINE_INDEX_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_protected_{"ready" if ready else "retry"}',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('state'), _asc('compute_decision.outcome'))
+            + ((_asc('owner_key'), _asc('priority')) if ready else ())
+            + (_desc('capture_at'), _desc('segment_id'), _desc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+        for ready in (False, True)
+    ),
+    *(
+        FirestoreIndexRequirement(
+            f'{stage}_batch_projection_followup_due',
+            f'batch_pipeline_{stage}_results',
+            'COLLECTION',
+            tuple(
+                _asc(field) for field in ('projection_state', 'projection_followup_due_at', 'committed_at', '__name__')
+            ),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_allowance_owners',
             f'batch_pipeline_{stage}_allowance_holds',
             'COLLECTION',
