@@ -248,7 +248,7 @@ Candidate exceptions increment both the existing error denominator and
 Error classes are a closed allowlist: `deadline_exceeded`, `aborted`,
 `failed_precondition`, `permission_denied`, `resource_exhausted`,
 `service_unavailable`, `invalid_argument`, `timeout`, `value_error`, `type_error`,
-`runtime_error`, or `other`. Custom class names and exception messages are never
+`artifact_read_limit`, `runtime_error`, or `other`. Custom class names and exception messages are never
 exported. Compare errors by service and shape; a caught error has no effect on
 the live result and does not qualify a candidate. For example:
 

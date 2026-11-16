@@ -18,6 +18,7 @@ from config.plan_catalog import PlanType
 from database.batch_privacy_attempt import PrivacyAttempt, token_version
 from database.firestore_tier_context import current_tier
 from utils.async_tasks import create_named_task, drain_tasks, wait_for_event
+from utils.batch_pipeline.artifact_reads import ArtifactReadLimit
 
 logger = logging.getLogger(__name__)
 FAMILIES = frozenset({'batch', 'external', 'tombstone', 'deletion_marker'})
@@ -607,6 +608,7 @@ def owner_shadow_error(shape, error):
         (TimeoutError, 'timeout'),
         (ValueError, 'value_error'),
         (TypeError, 'type_error'),
+        (ArtifactReadLimit, 'artifact_read_limit'),
         (RuntimeError, 'runtime_error'),
     ):
         if isinstance(error, kind):

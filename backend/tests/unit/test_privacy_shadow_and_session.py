@@ -402,3 +402,32 @@ def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
     ]
     for metric in ('privacy_owner_shadow_error_total', 'privacy_ttl_cache_disabled'):
         assert any(re.fullmatch(pattern, metric) for pattern in keeps)
+
+
+def test_owner_candidate_can_exhaust_shared_artifact_deadline_after_live_allow(world, monkeypatch):
+    import time
+    from utils.batch_pipeline.artifact_reads import ArtifactReadBudget
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow', 'bpp_generation_memo', 'bpp_decision_cache')
+    budget = ArtifactReadBudget(deadline=time.monotonic() + 2, max_bytes=0, max_objects=0)
+    original = budget.timeout
+    calls = 0
+
+    def timeout(ceiling):
+        nonlocal calls
+        calls += 1
+        # Observation token + five live authority reads complete before the
+        # seventh budget check, at the candidate's token read.
+        if calls == 7:
+            budget.deadline = 0
+        return original(ceiling)
+
+    monkeypatch.setattr(budget, 'timeout', timeout)
+    counter = metrics.OWNER_SHADOW_ERRORS.labels('attempt', 'artifact_read_limit')
+    before = counter._value.get()
+    with batch_privacy_attempt():
+        assert check(db, read_budget=budget) == 7
+    assert len(reads) == 6  # Failed budget checks do not issue extra SDK reads.
+    assert calls >= 7
+    assert counter._value.get() == before + 1
