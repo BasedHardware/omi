@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 from pathlib import Path
 import tarfile
 import tempfile
@@ -18,10 +19,35 @@ import preflight
 import publish_operator
 import qualify_operator
 import registry_access
+import image_smoke
 from test_operator_ingress import inputs
 
 
 class ControlTests(unittest.TestCase):
+
+    def test_optimized_python_cannot_emit_false_source_refusal_proof(self):
+        # No image, credential, source file or child is accessed: the fake guard
+        # supplies a failed source stage that must never become a passing proof.
+        bootstrap = '''
+import sys,types
+guard=types.ModuleType('process_guard')
+guard.run_group=lambda *a,**kw: ({'result':'DEADLINE','exit_code':None}, '{"result":"HOLD","failure_stage":"source_clean"}')
+sys.modules['process_guard']=guard
+'''
+        program = image_smoke.SOURCE_REFUSAL_PROGRAM.replace('__READINESS_SHA256__', 'a' * 64)
+        result = subprocess.run(
+            [sys.executable, '-O', '-c', bootstrap + program], capture_output=True, text=True, timeout=10
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
+
+    def test_malformed_runner_hash_refuses_before_host_or_container_access(self):
+        for value in (None, True, '', 'a' * 63, 'A' * 64, "'; print('INJECTED'); #"):
+            with self.subTest(value=value), patch.object(
+                qualify_operator, 'native_host', side_effect=AssertionError('NO_HOST_ACCESS')
+            ):
+                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                    qualify_operator.qualify({'readiness_sha256': value}, None, None, None)
 
     def prepared(self):
         c, _, _ = inputs()

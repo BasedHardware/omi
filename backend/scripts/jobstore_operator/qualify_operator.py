@@ -163,6 +163,7 @@ def fixture_files(archive_path, target):
 
 
 def qualify(contract, archive, fixtures, output):
+    source_program = image_smoke.source_refusal_program(contract.get('readiness_sha256'))
     host = native_host()
     if (
         archive.stat().st_size != contract['archive_bytes']
@@ -183,7 +184,7 @@ def qualify(contract, archive, fixtures, output):
                     '--entrypoint=/opt/operator-venv/bin/python',
                     image_id,
                     '-c',
-                    image_smoke.SOURCE_REFUSAL_PROGRAM.replace('__READINESS_SHA256__', contract['readiness_sha256']),
+                    source_program,
                 ],
                 readiness=True,
             )

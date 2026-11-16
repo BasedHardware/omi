@@ -12,6 +12,10 @@ import sys
 import time
 from pathlib import Path
 
+import google.auth
+from google.auth.compute_engine.credentials import Credentials
+import psycopg
+
 SOURCE = '97074e78defa1a84b9d39c021e28aa70cf4f2e4e'
 TARGET = ('jobstore_prod', 'batch-pipeline-worker@based-hardware.iam', '172.25.29.2')
 INDEXES = ['jobs_due_leased_c', 'jobs_due_result_c', 'jobs_due_retry_c']
@@ -179,15 +183,10 @@ def main():
         ):
             raise ValueError('WORKLOAD_ADC_ONLY')
         stage, started = 'credentials', time.monotonic()
-        import google.auth
-        from google.auth.compute_engine.credentials import Credentials
-
         credentials, _ = google.auth.default(scopes=['https://www.googleapis.com/auth/sqlservice.login'])
         if not isinstance(credentials, Credentials):
             raise ValueError('WORKLOAD_ADC_TYPE')
         stage, started = 'driver', time.monotonic()
-        import psycopg
-
         if sys.version.split()[0] != '3.11.15' or psycopg.__version__ != '3.2.10':
             raise ValueError('DRIVER')
         stage, started = 'source_vector', time.monotonic()

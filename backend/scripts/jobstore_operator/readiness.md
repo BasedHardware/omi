@@ -15,6 +15,12 @@ cloud, SQL, credential or execution interface. It does not initialize state.
 Its UID-precondition DELETE request refuses deletion of a later Pod that reuses
 the name. It neither sends the request nor proves cleanup succeeded.
 
+`qualification_run` is provenance metadata, deliberately not an authorization
+input to this offline renderer/verifier. It remains null while qualification is
+pending. Rendering a manifest grants no execution permission: the existing Release
+executor must separately verify exact-candidate native qualification, publication
+and fresh packet admission before any create. An image-pull result is not that gate.
+
 Use one bare Pod created once with a fresh 128-bit random run token. It has
 no replacement controller, `restartPolicy: Never`, a 90-second active deadline
 and 15-second termination grace. The frozen process guard bounds its only
@@ -67,6 +73,8 @@ source access as a prerequisite. It is not a guarantee of cold host page cache o
 future Kubernetes startup latency. Its exact runner hash and fixed refusal proof
 are required by publication admission, in addition to all 56 native fixture tests
 without skips and exact image identity/cleanup checks.
+Proof-critical checks use explicit failures and refuse optimized Python, so `-O`
+cannot suppress them. A malformed runner hash refuses before host/container access.
 
 Any source-stage timeout holds before publication. Do not drop tracked-file
 content checks, untracked-file checks, or extend the global/Pod/waiter deadlines

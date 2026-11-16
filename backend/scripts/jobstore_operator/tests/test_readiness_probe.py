@@ -196,6 +196,9 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(probe.CONTRACT['source_sha'], artifact['source_sha'])
         self.assertEqual(probe.CONTRACT['supervisor_sha256'], artifact['supervisor_sha256'])
         self.assertEqual(probe.CONTRACT['image'], artifact['destination'] + '@' + artifact['oci_manifest_digest'])
+        self.assertEqual(
+            hashlib.sha256((package / 'runner_readiness.py').read_bytes()).hexdigest(), artifact['readiness_sha256']
+        )
         self.assertEqual([r[0] for r in probe.CONTRACT['migrations']], list(range(1, 9)))
         for version, name, checksum in probe.CONTRACT['migrations']:
             path = package.parents[1] / 'database/jobstore/migrations' / f'{version:04d}_{name}.sql'

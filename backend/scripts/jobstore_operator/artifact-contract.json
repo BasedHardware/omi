@@ -38,7 +38,7 @@
   "registry_write_authorization": null,
   "required_disposable_free_bytes": 20963938304,
   "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
-  "status": "REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION",
+  "status": "HOLD_IMPORT_REVIEW_CORRECTION_REBUILD_PENDING",
   "loaded_tag": "omi-jobstore-operator:root-97074-readiness-bounded-20261116-credentialfree",
   "registry_access_evidence": {
     "decision": "REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT",
@@ -50,5 +50,5 @@
     "wif_metadata_receipt_sha256": "9514752dee8ebf61b40a7faab48946bdaed54d21d0e3f3d274a572bc689f0aa1",
     "sa_trust_receipt_sha256": "45706b58f3972a31e7e8a9f7edb254b5a04cf9b6b0b851c359e4c50a64d69243"
   },
-  "readiness_sha256": "2fba16a333ab9eda78f94b8fbf26be2d7bf6c0173dca12d64683ef6b5ce395aa"
+  "readiness_sha256": "6eea5f87ceb3d75ef1ab86871b5652a82d6ad071897e5fcf2e2c2e21f7843b07"
 }

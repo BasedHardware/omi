@@ -3,7 +3,9 @@
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
+import time
 from datetime import datetime, timezone
 
 PROGRAM = r'''
@@ -36,11 +38,15 @@ print(json.dumps({'result':'ACTUAL_IMAGE_OFFLINE_SMOKE_PASS','uid':os.getuid(),'
 # injected seam is a credential refusal, so no ADC/network/SQL call is needed.
 SOURCE_REFUSAL_PROGRAM = r'''
 import hashlib,json,os,pathlib,sys,time
+def require(condition, category):
+    if not condition:
+        raise ValueError(category)
+require(sys.flags.optimize==0, 'SOURCE_REFUSAL_OPTIMIZATION_REFUSED')
 sys.path.insert(0,'/opt/runner')
 import process_guard
 expected='__READINESS_SHA256__'
-assert os.getuid()==1000
-assert hashlib.sha256(pathlib.Path('/opt/runner/readiness.py').read_bytes()).hexdigest()==expected
+require(os.getuid()==1000, 'SOURCE_REFUSAL_UID')
+require(hashlib.sha256(pathlib.Path('/opt/runner/readiness.py').read_bytes()).hexdigest()==expected, 'SOURCE_REFUSAL_RUNNER_HASH')
 child="""
 import sys
 sys.path.insert(0,'/opt/runner')
@@ -53,19 +59,26 @@ def refuse(*args,**kwargs):
     raise DefaultCredentialsError('OFFLINE_CREDENTIAL_REFUSAL')
 google.auth.default=refuse
 code=readiness.main()
-assert calls==[True] and code==2
+if calls!=[True] or code!=2:
+    raise ValueError('SOURCE_REFUSAL_CREDENTIAL_CALL')
 raise SystemExit(code)
 """
 started=time.monotonic()
 guard,raw=process_guard.run_group([sys.executable,'-c',child],timeout=60)
-assert guard=={'result':'COMPLETED','exit_code':2}
+require(guard=={'result':'COMPLETED','exit_code':2}, 'SOURCE_REFUSAL_GUARD')
 report=json.loads(raw)
-assert set(report)=={'result','failure_class','failure_stage','failure_stage_elapsed_ms','write_attempted','state_initialized','customer_rows_read'}
-assert report['result']=='HOLD' and report['failure_class']=='DefaultCredentialsError' and report['failure_stage']=='credentials'
-assert type(report['failure_stage_elapsed_ms']) is int and report['failure_stage_elapsed_ms']>=0
-assert all(report[k] is False for k in ('write_attempted','state_initialized','customer_rows_read'))
+require(set(report)=={'result','failure_class','failure_stage','failure_stage_elapsed_ms','write_attempted','state_initialized','customer_rows_read'}, 'SOURCE_REFUSAL_REPORT')
+require(report['result']=='HOLD' and report['failure_class']=='DefaultCredentialsError' and report['failure_stage']=='credentials', 'SOURCE_REFUSAL_STAGE')
+require(type(report['failure_stage_elapsed_ms']) is int and report['failure_stage_elapsed_ms']>=0, 'SOURCE_REFUSAL_ELAPSED')
+require(all(report[k] is False for k in ('write_attempted','state_initialized','customer_rows_read')), 'SOURCE_REFUSAL_FLAGS')
 print(json.dumps({'result':'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL','readiness_sha256':expected,'uid':1000,'full_source_check':True,'credential_refusal_injected':True,'real_credentials_used':False,'sql_called':False,'elapsed_ms':round((time.monotonic()-started)*1000)}))
 '''
+
+
+def source_refusal_program(expected_sha):
+    if not isinstance(expected_sha, str) or not re.fullmatch('[0-9a-f]{64}', expected_sha):
+        raise ValueError('LOWERCASE_HEX_READINESS_SHA256_REQUIRED')
+    return SOURCE_REFUSAL_PROGRAM.replace('__READINESS_SHA256__', expected_sha)
 
 
 def validate_source_refusal(report, expected_sha):
@@ -119,8 +132,6 @@ def run_container(arguments, *, hold=False, readiness=False):
         subprocess.run(['docker', 'start', cid], check=True, stdout=subprocess.DEVNULL, timeout=30)
         # Observe logs until the first closed-state line arrives;
         # a separate bounded docker stop owns termination of this exact CID.
-        import time
-
         deadline = time.monotonic() + 30
         while True:
             output = subprocess.check_output(['docker', 'logs', cid], text=True, timeout=5)
