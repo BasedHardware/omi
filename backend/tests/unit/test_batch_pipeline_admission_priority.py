@@ -1,3 +1,5 @@
+"""Admission urgency regressions: promotion only, with lane/trust and rollback preserved."""
+
 from types import SimpleNamespace
 
 import pytest
