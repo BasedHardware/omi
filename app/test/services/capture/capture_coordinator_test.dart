@@ -62,10 +62,12 @@ CaptureEnvironment environment(
   DateTime Function()? now,
   bool signedIn = true,
   String? accountId = 'account-1',
+  bool silencePaused = false,
 }) =>
     CaptureEnvironment(
       now: now ?? DateTime.now,
       accountId: accountId,
+      silencePaused: silencePaused,
       livenessEpoch: livenessEpoch,
       appSuspended: appSuspended,
       appSuspendedAt: appSuspendedAt,
@@ -854,6 +856,19 @@ void main() {
       expect(coordinator.state.suspended, hasLength(1));
       expect(coordinator.state.pendantSuspension!.reconnectDeadline, deadline);
     });
+    for (final paused in [false, true]) {
+      test('historical silence resume during connected grace keeps identity and mute=$paused', () async {
+        final original = await drop(paused: paused);
+        await send(DeviceUpdated(pendant));
+        final result = transitionCapture(coordinator.state, const ResumeSilencePaused(),
+            environment(coordinator.state, muted: true, silencePaused: true, now: () => now));
+        expect(result.effects.whereType<MintRecording>(), isEmpty);
+        expect(result.state.active, isNull);
+        expect(result.state.pendantSuspension!.recordingId, original.recordingId);
+        expect(result.state.pendantSuspension!.wasPaused, paused);
+        expect(result.effects.whereType<PolicyWrite>().single.muted, paused);
+      });
+    }
     test('expiry wake completes once and snapshot is sanitized at launch', () async {
       await drop();
       final restored = CaptureCoordinatorState.fromJson(coordinator.state.toJson());

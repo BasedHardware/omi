@@ -393,6 +393,22 @@ void main() {
     });
   }
 
+  test('manual intent while already disconnected cannot poison the next connection', () async {
+    const id = 'AA:AA:AA:AA:AA:14';
+    final capture = _CaptureIntent();
+    final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
+    addTearDown(provider.dispose);
+    addTearDown(capture.dispose);
+    addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
+    provider.captureProvider = capture;
+    provider.markDisconnectIntentional(id);
+    await provider.setConnectedDevice(_device(id));
+    capture.reconnectDevices.clear();
+    BleBridge.instance.onPeripheralDisconnected(id, 'connection_timeout');
+    provider.onDeviceConnectionStateChanged(id, DeviceConnectionState.disconnected);
+    expect(capture.reconnectDevices, [id]);
+  });
+
   test('unreadable diagnostics still emit with unknown reason fields', () async {
     final analytics = _RecordingAdapter();
     AnalyticsManager.configure(analytics);

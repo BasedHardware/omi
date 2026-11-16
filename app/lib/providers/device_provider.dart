@@ -368,6 +368,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         !capture.isPaused &&
         !SharedPreferencesUtil().batchModeEnabled;
     final endedSessionWasIntentional = endedDevice != null && _intentionalDisconnectDevices.remove(endedDevice.id);
+    // A manual action while already down may have no endedDevice/callback
+    // to consume its marker. A new connection begins a new intent episode.
+    if (device != null) _intentionalDisconnectDevices.remove(device.id);
     final isNewConnection = device != null && connectedDevice?.id != device.id;
     if (isNewConnection || device == null) _resetBatteryState();
     connectedDevice = device;
