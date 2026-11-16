@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 import threading
 import time
 
+from google.api_core import exceptions as google_errors
 from prometheus_client import Counter, Gauge, Histogram
 from config.plan_catalog import PlanType
 from database.batch_privacy_attempt import PrivacyAttempt, token_version
@@ -66,6 +67,11 @@ OWNER_COMPARISONS = Counter(
     'privacy_owner_comparison_total',
     'Owner candidate comparisons by bounded transactional call shape',
     ['shape', 'result', 'candidate_source'],
+)
+OWNER_SHADOW_ERRORS = Counter(
+    'privacy_owner_shadow_error_total',
+    'Owner candidate failures by bounded call shape and exception class',
+    ['shape', 'error_class'],
 )
 MEMO_REQUESTS = Counter('privacy_memo_requests_total', 'Candidate decision reuse', ['family', 'result'])
 NEGATIVE_LOOKUPS = Counter(
@@ -582,5 +588,31 @@ def owner_comparison(shape, result, source):
     source = source if source in {'owner_hit', 'fresh_read', 'session_hit', 'ttl_hit'} else 'unknown'
     try:
         OWNER_COMPARISONS.labels(shape, result, source).inc()
+    except Exception:
+        pass
+
+
+def owner_shadow_error(shape, error):
+    """Classify without exception messages, custom type names, paths or payloads."""
+    shape = shape if shape in {'attempt', 'no_attempt', 'snapshots'} else 'other'
+    error_class = 'other'
+    for kind, label in (
+        (google_errors.DeadlineExceeded, 'deadline_exceeded'),
+        (google_errors.Aborted, 'aborted'),
+        (google_errors.FailedPrecondition, 'failed_precondition'),
+        (google_errors.PermissionDenied, 'permission_denied'),
+        (google_errors.ResourceExhausted, 'resource_exhausted'),
+        (google_errors.ServiceUnavailable, 'service_unavailable'),
+        (google_errors.InvalidArgument, 'invalid_argument'),
+        (TimeoutError, 'timeout'),
+        (ValueError, 'value_error'),
+        (TypeError, 'type_error'),
+        (RuntimeError, 'runtime_error'),
+    ):
+        if isinstance(error, kind):
+            error_class = label
+            break
+    try:
+        OWNER_SHADOW_ERRORS.labels(shape, error_class).inc()
     except Exception:
         pass

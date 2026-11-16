@@ -217,6 +217,47 @@ Shadow window to run before any owner-memo enforcement admission:
   10% sampling that is about +0.5 read per check across the fleet, plus the
   baseline (no-saving) reads for the unsampled 90% until the window ends.
 
+### Diagnosing a missing owner-hit denominator
+
+Check `privacy_ttl_cache_disabled` on each Cloud Run service. It must be
+exported by that service's keep-list; a fleet `max=0` from other planes is not
+proof that a Cloud Run worker can read its switch. A switch read failure is
+fail-closed (`1`), just like an explicit disable. Neither shadow candidates nor
+enforcement may bypass it. An unreadable switch reproduces fresh-read
+candidates on no-attempt/export paths and session hits on attempt paths with
+no owner hits, even with all memo levers on.
+
+Do not admit enforcement to diagnose a zero-hit window. The candidate already
+sets `owner_candidate=True`, which bypasses enforcement admission and the
+fleet-wide shadow gate, while retaining the transaction, owner lever, kill
+switch and token eligibility checks. It stores successful live walks in the
+same owner memo used by enforcement. Neither an attempt scope nor token mint
+is required for an owner with a usable token. New conversation ids are checked
+live on an owner hit and still report `candidate_source="owner_hit"`.
+
+Inspect `privacy_memo_ineligible_total` by `reason,caller`: transactional export
+calls reporting `reason="snapshots"` mean the owner path was off at its gate,
+not that their throwaway export changed a cache key. `privacy_memo_requests_total`
+with `result="no_token"` is not a count of all unusable tokens: it only increments
+when minting is allowed by the caller and `_mintable` accepts the snapshot.
+Missing server revisions, wrong schemas, blocked tokens and non-integer
+generations can prevent eligibility without incrementing that series.
+
+Candidate exceptions increment both the existing error denominator and
+`privacy_owner_shadow_error_total{shape="attempt|no_attempt|snapshots",error_class="..."}`.
+Error classes are a closed allowlist: `deadline_exceeded`, `aborted`,
+`failed_precondition`, `permission_denied`, `resource_exhausted`,
+`service_unavailable`, `invalid_argument`, `timeout`, `value_error`, `type_error`,
+`runtime_error`, or `other`. Custom class names and exception messages are never
+exported. Compare errors by service and shape; a caught error has no effect on
+the live result and does not qualify a candidate. For example:
+
+```promql
+sum by (service_name, shape, error_class) (
+  increase(privacy_owner_shadow_error_total[30m])
+)
+```
+
 ## Deploy and ramp
 
 1. Lead deploys writer code: **listen → pusher → Cloud Run** (backend,

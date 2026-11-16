@@ -1232,7 +1232,17 @@ def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(wo
     # member of the production 10-percent comparison cohort.
     monkeypatch.setenv(
         'FIRESTORE_READ_LEVERS',
-        '{"privacy_checks_shadow":100,"privacy_negative_lookup_cache":0,"privacy_ttl60":0,"bpp_owner_memo_enforce":0}',
+        json.dumps(
+            {
+                'privacy_checks_shadow': 100,
+                'privacy_negative_lookup_cache': 0,
+                'privacy_ttl60': 0,
+                'bpp_owner_memo_enforce': 0,
+                'bpp_decision_cache': 100,
+                'bpp_generation_memo': 100,
+                # bpp_owner_memo defaults on; token mint and attempt scope default off.
+            }
+        ),
     )
     owner_counter = metrics.OWNER_COMPARISONS.labels(shape, 'match', 'owner_hit')
     owner_before = owner_counter._value.get()
@@ -1246,7 +1256,8 @@ def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(wo
     monkeypatch.setattr(metrics, 'compare', capture)
     scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
     with scope:
-        for _ in range(2):
+        for index in range(2):
+            reads.clear()
             output = {} if shape == 'snapshots' else None
             assert (
                 privacy.assert_batch_write_allowed(
@@ -1256,9 +1267,13 @@ def test_reland_comparison_only_packet_emits_positive_owner_hit_on_each_shape(wo
             )
             if output is not None:
                 assert output['conversations']['source']['record_lane_owner'] == 'batch_live_v1'
-    assert 'owner_hit' in comparisons
+            if index == 1:
+                # Live walk + observation token, followed by ONE candidate token
+                # read; the throwaway evidence/export cannot change the memo key.
+                assert reads == [TOKEN, MARKER, ('users', UID), TOKEN, TOMBSTONE, SOURCE, TOKEN]
+    assert comparisons == ['fresh_read', 'owner_hit']
     assert owner_counter._value.get() == owner_before + 1
-    assert reads.count(MARKER) >= 2  # live authority decides both calls
+    assert reads.count(MARKER) == 1  # live authority still decides the warm call
 
 
 def test_owner_comparison_metric_rejects_identifier_labels():
@@ -1269,3 +1284,101 @@ def test_owner_comparison_metric_rejects_identifier_labels():
     assert 'synthetic-user-secret' not in rendered
     assert 'synthetic-job-secret' not in rendered
     assert 'synthetic-path-secret' not in rendered
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_production_owner_shadow_reports_unrotated_revoke_and_serves_live_block(world, monkeypatch, shape):
+    from contextlib import nullcontext
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')
+    stale = metrics.DECISION_MISMATCH.labels('batch', 'stale_allow')
+    owner = metrics.OWNER_COMPARISONS.labels(shape, 'mismatch', 'owner_hit')
+    before, owner_before = stale._value.get(), owner._value.get()
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+
+        def authorize():
+            return privacy.assert_batch_write_allowed(
+                db,
+                db.transaction(),
+                UID,
+                conversation_ids=['source'],
+                snapshots={} if shape == 'snapshots' else None,
+            )
+
+        assert authorize() == 7
+        # Deliberately bypass the Commit token hook, leaving the token AND its
+        # server revision unchanged. The candidate must expose the stale ALLOW.
+        db.rows[TOMBSTONE] = {}
+        reads.clear()
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            authorize()
+        assert reads[-1] == TOKEN  # Candidate serves the warm owner decision.
+    assert stale._value.get() == before + 1
+    assert owner._value.get() == owner_before + 1
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_production_levers_enforcement_reads_one_token_for_warm_owner(world, monkeypatch, shape):
+    from contextlib import nullcontext
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_owner_memo_enforce', 'bpp_decision_cache', 'bpp_generation_memo')
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+        for index in range(2):
+            reads.clear()
+            output = {} if shape == 'snapshots' else None
+            assert (
+                privacy.assert_batch_write_allowed(
+                    db,
+                    db.transaction(),
+                    UID,
+                    conversation_ids=['source'],
+                    snapshots=output,
+                )
+                == 7
+            )
+            if index == 1:
+                assert reads == [TOKEN]
+                if output is not None:
+                    assert output == {}  # Payload consumers still read the rows they need.
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+def test_unreadable_kill_switch_reproduces_zero_owner_hits_with_production_levers(world, monkeypatch, shape):
+    from contextlib import nullcontext
+
+    db, reads, _, _ = world
+    enable(monkeypatch, 'bpp_owner_memo', 'bpp_decision_cache', 'bpp_generation_memo', 'privacy_checks_shadow')
+
+    def unavailable():
+        raise PermissionError('synthetic private kill-switch read failure')
+
+    monkeypatch.setattr(ttl_cache, '_read_kill_flag', unavailable)
+    ttl_cache.reset_for_tests()
+    comparisons = []
+    original = metrics.compare
+
+    def capture(*args, **kwargs):
+        comparisons.append(kwargs['candidate_evidence'].source)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(metrics, 'compare', capture)
+    scope = batch_privacy_attempt() if shape == 'attempt' else nullcontext()
+    with scope:
+        for _ in range(2):
+            assert (
+                privacy.assert_batch_write_allowed(
+                    db,
+                    db.transaction(),
+                    UID,
+                    conversation_ids=['source'],
+                    snapshots={} if shape == 'snapshots' else None,
+                )
+                == 7
+            )
+    assert comparisons == ['fresh_read', 'session_hit' if shape == 'attempt' else 'fresh_read']
+    assert len(privacy.PROCESS_OWNERS) == 0
+    assert metrics.TTL_KILL._value.get() == 1

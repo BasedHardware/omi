@@ -114,11 +114,14 @@ def test_shadow_fault_never_changes_live_result_or_exception(world, monkeypatch)
         raise RuntimeError('synthetic shadow failure')
 
     monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', broken)
+    counter = metrics.OWNER_SHADOW_ERRORS.labels('attempt', 'runtime_error')
+    before = counter._value.get()
     with batch_privacy_attempt():
         assert check(db) == 7
         db.rows[TOMBSTONE] = {}
         with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
             check(db)
+    assert counter._value.get() == before + 2
 
 
 def test_off_external_and_tombstone_paths_preserve_read_sequence(world):
@@ -333,3 +336,69 @@ async def test_pusher_ticker_failure_is_observable_without_ending_socket(world, 
     assert 'privacy pusher census ticker stopped unexpectedly' in caplog.text
     assert 'synthetic private exception detail' not in caplog.text
     assert metrics.session_memo() is None
+
+
+@pytest.mark.parametrize('shape', ['attempt', 'no_attempt', 'snapshots'])
+@pytest.mark.parametrize(
+    'kind,label',
+    [
+        (TimeoutError, 'timeout'),
+        (ValueError, 'value_error'),
+        (TypeError, 'type_error'),
+    ],
+)
+def test_owner_shadow_errors_preserve_live_allow_and_block(world, monkeypatch, shape, kind, label):
+    from contextlib import nullcontext
+
+    db, _, _, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+
+    def broken(*args, **kwargs):
+        raise kind('synthetic-private-owner/content')
+
+    monkeypatch.setattr(privacy, '_assert_batch_write_allowed_memo', broken)
+    counter = metrics.OWNER_SHADOW_ERRORS.labels(shape, label)
+    before = counter._value.get()
+    with batch_privacy_attempt() if shape == 'attempt' else nullcontext():
+        kwargs = {'snapshots': {}} if shape == 'snapshots' else {}
+        assert check(db, **kwargs) == 7
+        db.rows[TOMBSTONE] = {}
+        with pytest.raises(privacy.BatchPrivacyBlocked, match='conversation_deleted'):
+            check(db, **kwargs)
+    assert counter._value.get() == before + 2
+
+
+def test_owner_shadow_error_classes_are_closed_and_kept_by_cloud_run():
+    from pathlib import Path
+    import re
+    import yaml
+    from google.api_core import exceptions
+
+    class PrivateOwnerContentError(Exception):
+        pass
+
+    for error, label in (
+        (exceptions.DeadlineExceeded('private'), 'deadline_exceeded'),
+        (exceptions.Aborted('private'), 'aborted'),
+        (exceptions.FailedPrecondition('private'), 'failed_precondition'),
+        (exceptions.PermissionDenied('private'), 'permission_denied'),
+        (exceptions.ResourceExhausted('private'), 'resource_exhausted'),
+        (exceptions.ServiceUnavailable('private'), 'service_unavailable'),
+        (exceptions.InvalidArgument('private'), 'invalid_argument'),
+        (PrivateOwnerContentError('private'), 'other'),
+    ):
+        counter = metrics.OWNER_SHADOW_ERRORS.labels('other', label)
+        before = counter._value.get()
+        metrics.owner_shadow_error('private-shape', error)
+        assert counter._value.get() == before + 1
+    rendered = repr(metrics.OWNER_SHADOW_ERRORS.collect())
+    assert 'private' not in rendered.lower()
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    keeps = [
+        rule['regex']
+        for endpoint in config['spec']['endpoints']
+        for rule in endpoint['metricRelabeling']
+        if rule['action'] == 'keep' and rule['sourceLabels'] == ['__name__']
+    ]
+    for metric in ('privacy_owner_shadow_error_total', 'privacy_ttl_cache_disabled'):
+        assert any(re.fullmatch(pattern, metric) for pattern in keeps)

@@ -180,9 +180,10 @@ def assert_batch_write_allowed(
             metrics.owner_comparison(
                 comparison_shape, 'match' if reason == candidate else 'mismatch', candidate_evidence.source
             )
-        except Exception:
+        except Exception as error:
             metrics.shadow_error('batch')
             metrics.owner_comparison(comparison_shape, 'error', 'unknown')
+            metrics.owner_shadow_error(comparison_shape, error)
 
     with metrics.evidence_scope(live_evidence):
         if shadow and transaction is not None:
