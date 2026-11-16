@@ -166,6 +166,7 @@ class EpisodeProvider extends ChangeNotifier {
     required bool bootstrap,
     Set<String>? heldIds,
   }) async {
+    if (_off) return true; // v3: no episodes to read, so the overlay is complete and empty.
     if (!_enabled && !bootstrap) return false;
     final key = '${from.toIso8601String()}|${to.toIso8601String()}';
     if (!force &&
@@ -316,7 +317,13 @@ class EpisodeProvider extends ChangeNotifier {
   final LiveStartAnchor liveAnchor = LiveStartAnchor();
 
   bool _enabled = false;
-  bool get enabled => _enabled && _ownerUid == SharedPreferencesUtil().uid;
+  bool get enabled => _enabled && !_off && _ownerUid == SharedPreferencesUtil().uid;
+
+  /// True while the server runs recordings and conversations (v3) for this account: episodes are
+  /// retired for it, so the app makes no episode calls at all (the server's episode-call counter
+  /// decides when the old code can be deleted).
+  bool Function()? suppressed;
+  bool get _off => suppressed?.call() == true;
 
   Episode? _live;
   Episode? get live => _ownerUid == SharedPreferencesUtil().uid ? _live : null;
@@ -424,7 +431,7 @@ class EpisodeProvider extends ChangeNotifier {
     final uid = SharedPreferencesUtil().uid;
     final id =
         conversationId ?? (uid.isEmpty ? '' : SharedPreferencesUtil().getString('previousEpisodeConversation:$uid'));
-    if (id.isEmpty || _recovering.contains(id)) return;
+    if (_off || id.isEmpty || _recovering.contains(id)) return;
     _recovering.add(id);
     try {
       final result = await _lookup(id);
@@ -517,6 +524,14 @@ class EpisodeProvider extends ChangeNotifier {
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
   Future<void> refreshLive() async {
     _ensureOwner();
+    if (_off) {
+      if (_enabled || _live != null) {
+        _enabled = false;
+        _live = null;
+        notifyListeners();
+      }
+      return;
+    }
     final uid = _ownerUid;
     final generation = ++_generation;
     final result = await _fetchLive();
@@ -559,12 +574,13 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   /// The conversations the existing live row stands for on Home.
-  Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
+  Set<String> get liveConversationIds => enabled && live != null ? live!.conversationIds.toSet() : const {};
 
   /// The episode [conversationId] belongs to. Coalesce reads and keep only a short-lived cache:
   /// finalization can add moments even after the episode closes and another one starts.
   Future<Episode?> episodeFor(String conversationId) {
     _ensureOwner();
+    if (_off) return Future.value(null);
     final uid = _ownerUid;
     final cachedAt = _cachedAt[conversationId];
     if (_byConversation.containsKey(conversationId) &&

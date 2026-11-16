@@ -60,7 +60,12 @@ class HomeFeedProvider extends ChangeNotifier {
   Future<void> retry() =>
       _reconcileRequested ? reconcileLoadedWindow() : (_needsRefresh || _cursor == null ? refresh() : loadMore());
 
+  /// True while the account runs recordings and conversations (v3): Home reads the plain
+  /// conversation list, so the feed stays inactive and makes no calls.
+  bool Function()? suppressed;
+
   void setActive(bool active) {
+    active = active && suppressed?.call() != true;
     if (_active == active && _uid == _owner()) return;
     final resuming = !_active && active && _uid == _owner();
     _active = active;
