@@ -264,24 +264,30 @@ stamped route, and held units keep their audio.
 Selection treats GPU as always healthy, so without overflow a saturated ring
 only queues (audio kept, transcripts late) while the HPA buys on-demand nodes.
 Overflow adds one capacity input (`utils/batch_pipeline/gpu_overflow.py`). The
-ring reads **saturated** when the oldest *admissible* fresh unit (same predicate
+ring reads **saturated** per priority when its oldest *admissible* unit (same predicate
 as `ready_for_capacity`, so allowance holds and deferred retries never count)
 is at least `BATCH_VENDOR_OVERFLOW_ENTER_SECONDS` (default 1200) old **and** at
-least `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (default 300) admissible fresh
-units wait. It stops below half the age (default 600 s) or below half the unit
+least `BATCH_VENDOR_OVERFLOW_MIN_READY_UNITS` (default 300) admissible units of that
+priority wait. It stops below half the age (default 600 s) or below half the unit
 gate. The count gate exists because stuck heads look old in
 an idle ring: at 2026-11-01 18:01Z, 111 admissible fresh units from 4 parked
-owners were 42 h old with the fleet idle. Each process samples every 30 s off
-the event loop; any read failure answers "not saturated" (today's routing).
+owners were 42 h old with the fleet idle. Each process samples each priority every 30 s
+off the event loop; any read failure answers "not saturated" (today's routing).
 Before arming, check both gauges against the live
 `max by (priority)(omi_batch_pipeline_admissible_ready_units)` and raise the
 unit gate above any stuck population.
 
+`BATCH_VENDOR_OVERFLOW_PRIORITIES` selects the priorities eligible for vendor overflow.
+The default is `fresh`; unset, empty, or malformed lists keep FRESH only, and FRESH is always
+included. `fresh,recent` additionally permits RECENT overflow using RECENT's own saturation
+sample. Expansion requires a separate spend decision; the production overlay is unchanged.
+The saturation gauges use the bounded `priority=fresh|recent|deep` label.
+
 While saturated:
 
 - **Vendor overflow** (owners in the vendor-routing cohort, legacy `draining`
-  or `dark`): new fresh units that would start on GPU start on the table's next
-  healthy primary vendor instead (reason `gpu_overflow`).
+  or `dark`): new units of a configured priority that would start on GPU start on the
+  table's next healthy primary vendor instead (reason `gpu_overflow`).
 - **Legacy capacity fallback** (owners whose legacy sync is still `on`; lead
   ruling ec4a93): a new fresh upload stays on legacy sync, through the same
   intake exit heavy-owner exclusion uses, before any custody write. Counted as
@@ -291,8 +297,8 @@ While saturated:
   no table; it ends for each owner when that owner's legacy starts draining.
 
 What never overflows: the GPU floor share (`gpu_floor_percent` owners),
-backfill (recent/deep priority), a language the row has no primary vendor for,
-and anything when the only other healthy route is failover-only (Soniox stays
+priorities outside `BATCH_VENDOR_OVERFLOW_PRIORITIES` (RECENT/DEEP by default),
+a language the row has no primary vendor for, and anything when the only other healthy route is failover-only (Soniox stays
 failover). Overflow is part of vendor routing: owners must be in the
 vendor-routing cohort with legacy `draining` or `dark`, and every interlock
 above applies.
