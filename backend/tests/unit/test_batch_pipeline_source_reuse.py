@@ -723,3 +723,17 @@ def test_projection_refusal_finishes_after_temporary_canonical_artifacts_expire(
     assert reuse.current(FirestoreTransaction(store.client, NS, store.client.transaction()), copy, NOW) is None
     assert project_alias(store, copy, binding, NOW, policy=ProjectionPolicy())
     assert store.ref('results', COPY).get().to_dict()['projection']['speech_seconds'] == 0
+
+
+def test_alias_preserves_the_existing_fresh_capture_class():
+    store, original = setup_store()
+    copy = replace(original, segment_id=COPY, source_alias_of=SOURCE)
+    tx = FirestoreTransaction(store.client, NS, store.client.transaction())
+    assert reuse.enqueue_alias(
+        tx,
+        copy,
+        NOW + 1800,
+        policy=BatchUnitPolicy(),
+        proposal={'segment_id': SOURCE, 'result_uri': 'gs://synthetic/marker#1'},
+    )
+    assert tx.get('jobs', COPY)['fresh_capture'] is False

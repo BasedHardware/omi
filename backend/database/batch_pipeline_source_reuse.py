@@ -8,6 +8,7 @@ marker; it can never re-enter a paid queue, including after rollback.
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 
+from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.sync_ledger import LEDGER_RETENTION_DAYS
@@ -144,7 +145,7 @@ def enqueue_alias(tx, item, now, *, policy, proposal):
         'enqueued_at': now,
         'ready_at': now,
         'merge_pending': True,
-        'fresh_capture': now - item.capture_at - item.duration_seconds <= 6 * 3600,
+        'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         'result': WorkResult(item.segment_id, proposal['result_uri']).to_dict(),
     }
     tx.put('jobs', item.segment_id, job)
