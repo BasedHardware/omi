@@ -33,6 +33,10 @@ concurrency:
   group: grafana-dashboard-provisioning-prod
   cancel-in-progress: false
 
+env:
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   provision:
     if: github.ref == 'refs/heads/main' && github.repository == 'BasedHardware/omi'
