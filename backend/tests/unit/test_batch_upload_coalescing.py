@@ -21,14 +21,24 @@ def store():
     return result
 
 
+@pytest.fixture
+def serving_module():
+    # Shared import setup is excluded from the per-test call-phase CPU budget.
+    from utils.batch_pipeline import serving
+
+    return serving
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('pump', ['true', 'false'])
-async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump):
+async def test_supervisor_drains_existing_holds_while_producer_off(monkeypatch, pump, serving_module):
     import asyncio
     from unittest.mock import AsyncMock, Mock
     from types import SimpleNamespace
 
-    from utils.batch_pipeline import serving, upload_coalescing
+    from utils.batch_pipeline import upload_coalescing
+
+    serving = serving_module
 
     monkeypatch.setenv('BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PUMP_ENABLED', pump)
