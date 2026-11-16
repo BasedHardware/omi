@@ -262,6 +262,12 @@ async def test_completion_uses_validated_outcome_and_honors_silence_switch(follo
     result = {'outcome': 'expected_silence'}
     f.projector.store.complete = Mock(return_value=result)
     f.projector.store.prepare_accounting = Mock(return_value=None)
+    f.projector.store.completion_entries = Mock(
+        return_value={
+            sid: {'result': {'outcome': outcome}, 'projection': {**f.receipts[sid], 'state': 'ready'}}
+            for sid in f.binding.segment_ids
+        }
+    )
     f.projector.store.hold_for_quarantine = Mock()
     f.projector.publish_completion = Mock(return_value=result)
 

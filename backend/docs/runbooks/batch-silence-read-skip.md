@@ -15,6 +15,13 @@ mounts the shared routes, although its serving loop is disabled and its worker
 auth settings are empty. The dedicated GPU worker runs `diarizer.batch_pipeline_runtime`
 with a pump that commits results and requests CPU-side work; it does not construct
 `Projector` or evaluate this switch. Its chart needs no flag declaration.
+The operator cohost `scripts/batch_pipeline_projection_repair.py` also constructs
+`Projector`. For `--stage prod` it forces this process's switch to `false`, even
+when the shell inherited `true`. Only the explicit `--enable-silence-read-skip`
+CLI flag opts that invocation in. Omit that option on every prod repair during
+the hold or rollback; an environment value alone cannot enable it. Local repair
+keeps the normal environment/default behavior. Existing identity, dry-run,
+plan-SHA approval and apply requirements remain. No repair is authorized here.
 No production configuration or deployment is changed by this source-only PR.
 
 ## Receipt and fences
@@ -47,6 +54,13 @@ need to replace live-preview text in a conversation. Empty ASR and
 `no_recoverable_speech` retain their existing paths and evidence requirements.
 Mixed uploads retain ordinary speech accounting; their silent siblings can still
 skip the redundant assignment pre-check and follow-up transaction.
+Before a silent completing unit tries zero-speech completion, it reads the result
+rows that ordinary accounting would need. Known-mixed uploads go directly to
+ordinary accounting and reuse those snapshots, without a speculative transaction
+or duplicate result reads. All-silent candidates retain one classification read
+per sibling (`database.batch_pipeline_projection:completion_entries`). That scan
+is a hint only; the completion transaction still verifies every bound sibling.
+There is no persistent mixed-outcome marker or process cache to invalidate.
 
 ## Reads skipped and kept (anatomy numbering)
 
@@ -58,7 +72,7 @@ skip the redundant assignment pre-check and follow-up transaction.
 | D4/D5 redundant pre-check | Skipped for ordinary silent units: assignment immediately rechecks the same session rows, privacy authority and predecessor in its authorizing transaction. |
 | D4/D5 follow-up `ready()` transaction | Skipped: assignment already wrote the zero-output receipt as ready. |
 | D7 completion sibling rows | Kept in the completion transaction; the current unit reuses its session snapshots. |
-| D8 accounting prepare | Skipped only after every sibling is transactionally verified as silent and ready; zero usage needs no plan/hourly attribution reads. The zero-usage ledger stamp and existing post-commit observers stay. |
+| D8 accounting prepare | Full preparation is skipped for transactionally verified silence; one result classification read per sibling remains. Mixed uploads reuse those reads in ordinary accounting. The zero-usage stamp and post-commit observers stay. |
 | D9 visible/redirect walks | Skipped for verified all-silent completion; no output IDs exist. |
 | D10 additional completion guard | Skipped only for verified all-silent completion; session preparation already performed the live owner/generation/source fence in the same transaction, and no visible IDs are published. |
 | Retention and publication acknowledgement | Kept unchanged, including their reads and fences. |
@@ -100,14 +114,53 @@ claim needs isolated silent-unit tracing/billed-read attribution, or an independ
 qualified attribution measurement, in addition to the above family totals. This
 PR does not add a high-cardinality unit label or claim that this gap is solved.
 
-A strict read-before-write document fake exercises the real assignment, follow-up
-and completion functions for a two-silent-unit upload. Re-measured after the
-2026-11-14 integration with allowance observers: **89 → 40 document lookups**
-(**55.1% fewer**) before publication/retention, using no warm cache. The original
-2026-11-12 measurement was 84 → 35 (58.3% fewer). These are local path budgets,
-**not** the acceptance test’s whole-family billed-read ratio. Coalesced-original
-receipt reads, retention, publication and observers must remain included in the
-qualified production attribution where applicable.
+## Corrected local sizing (second review)
+
+The narrow cold strict-fake boundary (assignment, readiness, completion and its
+observers, before publication/retention) now measures **50 → 23** lookups for one
+ordinary silent unit. The earlier 50 → 22 receipt predates the classification
+scan; the historical two-unit 89 → 40 number used a different boundary.
+
+The real loopback Firestore emulator also runs the whole projection of a synthetic
+two-unit, 30-second-per-unit upload, with four speech seconds on its speech unit,
+`FIRESTORE_READ_LEVERS={}`, no provider calls and no injected contention. The
+existing `omi_firestore_billed_reads_by_caller_total` probe counts lookups,
+returned query documents and empty-query floors. Admission and GPU/worker work
+are outside the measurement; result discovery by `project()`, assignment,
+readiness, accounting, completion, observers, publication and retention remain.
+
+| Upload | Upload reads off → on | Reads/unit (upload ÷ 2) off → on | Completing unit off → on |
+| --- | --- | --- | --- |
+| All silent | 161 → 114 | 80.5 → 57 | 104 → 75 |
+| Mixed, completing on silence | 198 → 180 | 99 → 90 | 107 → 89 |
+| Mixed, completing on speech | 198 → 180 | 99 → 90 | 141 → 141 |
+
+Completing-unit replay is 67 → 58, 70 → 70 and 72 → 72 respectively. Both mixed
+cases make zero speculative zero-speech completion attempts, including replay.
+These are deterministic synthetic code-path counts, not production billing or
+a forecast at the production upload-size/mix distribution. The probe does not
+model extra index-entry charges. Include the new `completion_entries` caller in
+any net-read canary numerator; a fall in the old labels alone is insufficient.
+
+## Integration acceptance and coverage
+
+At reviewed head `4782fd28e0`, the unmodified pagination integration test failed
+against the emulator at line 231: status was `completed`, not `processing`.
+Silent assignment now writes ready, so the first follow-up page can complete all
+siblings. The test explicitly covers both true (new transition) and false (old
+persisted boundary), retaining restart, ordering, no-load/no-enrichment and
+publication replay assertions.
+
+Hosted CI was green because this suite was **not selected**, not because its
+assertion passed or was skipped. The unit selector excludes integration roots.
+The successful [emulator job](https://github.com/BasedHardware/omi/actions/runs/43966715147/job/133647961938)
+also omitted this file from its named proof list and log. The existing
+`run-emulator-proofs.sh` now includes the follow-up and sizing suites. No workflow
+is changed. The broader native-record suite has nine protocol-cutover failures
+also reproduced unchanged on clean main `c63c9c8d17d2`; these are documented in
+the PR rather than altering their assertions or enabling the protocol in tests. The optional slow heavy-owner simulation also
+passes its assertions but exceeds the unchanged 1s CPU guard on both the branch
+and clean main; no timing allowance is changed.
 
 ## Deployment and verification handoff
 
@@ -119,7 +172,8 @@ qualified production attribution where applicable.
    `database.batch_pipeline_projection:prepare_accounting` and
    `database.batch_pipeline_projection:commit` per silent unit must fall;
    completed audio-hours must stay at least 70% of the prior hour; no new
-   custody or T2 alarm. Record matched windows and qualified silent-only
+   custody or T2 alarm. Include `completion_entries` reads in the net numerator.
+   Record matched windows and qualified silent-only
    attribution; these caller counters have no outcome dimension by themselves.
 2. The margin-40 lead expands all roles to `true` in repo config after that
    clean hour. Complete the expansion or revert by **2026-11-18T20:00Z**.

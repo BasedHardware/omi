@@ -56,3 +56,16 @@ code default-on kill switch; replay receipts and their aggregate state now stay
 ready for silence; fast completion emits the same completion phase success/error
 logs as ordinary completion. Regression coverage observes pre-follow-up replay
 states with the switch on/off and completion logs on success and fencing failure.
+
+Second accepted review `review-20261116t223732-7480`: prod operator repair now
+forces the flag false unless `--enable-silence-read-skip` is explicit; the virtual
+simulation models ready silence and avoids the check cost. Real emulator proof
+reproduced the old first-page assertion, which now covers enabled early
+completion and disabled legacy timing. Hosted CI had omitted this integration
+suite; the existing emulator runner now includes it and the three-case sizing
+guard. Mixed completion reuses the ordinary result scan and does not start a
+speculative silent transaction. All-silent completion retains one classification
+read per sibling and still rechecks every authorizing fence transactionally.
+The runbook's corrected full-projection per-unit averages are 80.5→57 for two
+silent units and 99→90 for a mixed pair in either completion order. These are
+synthetic emulator counts with retained observers/retention, not production savings.

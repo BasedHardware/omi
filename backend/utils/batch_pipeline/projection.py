@@ -733,15 +733,30 @@ class Projector:
 
     def complete_content(self, segment_id, binding, *, policy=None, silence=False):
         policy = policy or self.store.policy(segment_id)
+        entries = None
         if silence and silence_read_skip_enabled() and not binding.record_origin and not binding.native_record:
-            # Completion verifies ALL siblings atomically. Mixed uploads and
-            # prior partial charges fall back to ordinary speech accounting.
-            with projection_phase('completion', policy):
-                result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
-            if result is not None:
-                return self.publish_completion(binding, result, policy=policy)
+            # Reuse ordinary accounting's result reads to rule out known mixed
+            # uploads before paying for a speculative completion transaction.
+            with projection_phase('completion_scan', policy):
+                entries = self.store.completion_entries(binding)
+            if len(entries) == len(binding.segment_ids) and all(
+                entry.get('result', {}).get('outcome') == 'silence'
+                and (entry.get('projection') or {}).get('state') == 'ready'
+                and not entry.get('projection_parts')
+                for entry in entries.values()
+            ):
+                # This hint never authorizes completion: ALL sibling identities,
+                # outcomes, privacy and accounting are verified transactionally.
+                with projection_phase('completion', policy):
+                    result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
+                if result is not None:
+                    return self.publish_completion(binding, result, policy=policy)
         with projection_phase('accounting', policy):
-            accounting = self.store.prepare_accounting(binding, self.clock())
+            accounting = (
+                self.store.prepare_accounting(binding, self.clock(), result_entries=entries)
+                if entries is not None
+                else self.store.prepare_accounting(binding, self.clock())
+            )
         if accounting is None:
             self.store.hold_for_quarantine(segment_id, binding, self.clock(), policy=policy)
             return None

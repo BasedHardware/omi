@@ -616,7 +616,23 @@ class ProjectionStore:
         self._mirror(binding)
         return held
 
-    def prepare_accounting(self, binding: ProjectionBinding, now: float, *, held: bool = False) -> dict | None:
+    def completion_entries(self, binding: ProjectionBinding) -> dict[str, dict]:
+        """Read accounting's result rows once to rule out a known-mixed fast attempt.
+
+        These are hints only: completion still verifies every sibling in its
+        authorizing transaction. Stop at the same unready row as accounting.
+        """
+        entries = {}
+        for sid in binding.segment_ids:
+            entry = self.ref('results', sid).get().to_dict() or {}
+            entries[sid] = entry
+            if entry.get('projection_state') != 'erased' and (entry.get('projection') or {}).get('state') != 'ready':
+                break
+        return entries
+
+    def prepare_accounting(
+        self, binding: ProjectionBinding, now: float, *, held: bool = False, result_entries: dict | None = None
+    ) -> dict | None:
         """Resolve usage attribution outside the retryable completion transaction.
 
         ``held`` accounts a partial: quarantined siblings without a receipt are
@@ -630,7 +646,9 @@ class ProjectionStore:
         source = 'sync_backfill'
         source_deleted = False
         for sid in binding.segment_ids:
-            entry = self.ref('results', sid).get().to_dict() or {}
+            entry = (
+                result_entries[sid] if result_entries is not None else self.ref('results', sid).get().to_dict() or {}
+            )
             if entry.get('projection_state') == 'erased':
                 continue
             parts = entry.get('projection_parts')
