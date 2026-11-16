@@ -780,6 +780,7 @@ JOB_STATES = tuple(entry.state for entry in JOB_ENTRIES)
 # state) payload sites that do not target a job document. A mutated job literal
 # is a new, unexcluded value and still fails the census guard.
 JOB_STATE_MODULES = (
+    'database/batch_pipeline_source_reuse.py',
     'database/batch_pipeline_allowance_hold.py',
     'utils/batch_pipeline/scheduler.py',
     'utils/batch_pipeline/live.py',
