@@ -1,7 +1,8 @@
 """Presentation-only replacement of transcript-echo minimum titles."""
 
 from datetime import datetime
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Callable, Optional
 
 from config.episodes import home_neutral_minimum_titles_enabled
 
@@ -18,7 +19,28 @@ def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
         structured['title'] = user_title
 
 
-def neutralize_minimum_title(row: dict[str, Any]) -> dict[str, Any]:
+# Loaded beside list rows so an owed summary is visible without transcripts.
+SUMMARY_DEBT_FIELDS = ('summary_due_at', 'summary_completed_at', 'summary_output_present')
+
+
+def summary_owed(row: Mapping[str, Any]) -> bool:
+    """The pipeline still owes this row a summary, so its stored title is provisional."""
+    return (
+        row.get('summary_due_at') is not None
+        and not row.get('summary_completed_at')
+        and not row.get('summary_output_present')
+    )
+
+
+def neutralize_minimum_title(
+    row: dict[str, Any], *, tz_name_provider: Optional[Callable[[], Optional[str]]] = None
+) -> dict[str, Any]:
+    """Replace transcript-echo titles that are not the row's real title yet.
+
+    Short, below-floor and summary-owed rows keep a neutral ``Recording · time``
+    title until a real one lands. ``tz_name_provider`` is called only when a
+    title is replaced; without a zone the time renders in UTC.
+    """
     if not home_neutral_minimum_titles_enabled():
         return row
     structured = row.get('structured') or {}
@@ -40,7 +62,7 @@ def neutralize_minimum_title(row: dict[str, Any]) -> dict[str, Any]:
     )
     title = structured.get('title')
     lazy = not provenance and len(first.split()) >= 8 and title == ' '.join(first.split()[:8])
-    minimum = (short or floor) and (
+    minimum = (short or floor or summary_owed(row)) and (
         provenance == 'server_minimum'
         or (not provenance and text and title == truncate_on_word_boundary(first_sentence(text)))
     )
@@ -49,14 +71,40 @@ def neutralize_minimum_title(row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
     result['structured'] = {
         **structured,
-        'title': fallback_title(row.get('started_at') or row.get('created_at')),
+        'title': fallback_title(row.get('started_at') or row.get('created_at'), tz_name=_zone(tz_name_provider)),
         'title_provenance': 'server_minimum',
     }
     return result
+
+
+def _zone(provider: Optional[Callable[[], Optional[str]]]) -> Optional[str]:
+    if provider is None:
+        return None
+    try:
+        return provider()
+    except Exception:
+        # A title label must never fail a read; UTC is the documented fallback.
+        return None
+
+
+def user_zone_provider(uid: str) -> Callable[[], Optional[str]]:
+    """Lazy, process-cached lookup of the user's stored zone for neutral titles."""
+
+    def provider() -> Optional[str]:
+        from database.notifications import get_cached_user_time_zone
+
+        return get_cached_user_time_zone(uid)
+
+    return provider
 
 
 def project_home(uid: str, row: dict[str, Any], *, firestore_client=None, read_budget=None):
     """Neutral Home titles precede the shared transcript-capability projection."""
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, neutralize_minimum_title(row), firestore_client=firestore_client, read_budget=read_budget)
+    return project(
+        uid,
+        neutralize_minimum_title(row, tz_name_provider=user_zone_provider(uid)),
+        firestore_client=firestore_client,
+        read_budget=read_budget,
+    )

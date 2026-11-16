@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+from config.pusher_record import close_notify_enabled
 from config.batch_live_preview import capture_snapshot
 from config.server_batch import owned as server_batch_owned
 from config.server_batch import capture_compatible as server_batch_capture_compatible
@@ -28,7 +29,7 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from routers.listen.policy import persist_conversation_policy
 from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
-from utils.executors import start_background_task
+from utils.executors import db_executor, run_blocking, start_background_task
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
@@ -57,6 +58,7 @@ from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 from utils.conversations.recorded_time import conversation_span
 from utils.conversations.lifecycle_clocks import speech_clock
 from utils.episodes import boundaries, boundary_runtime
+from utils.episodes.batch_close import attach_admitted_batch_capture
 from routers.listen.occasion import occasion_attach_target
 from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action
 
@@ -326,6 +328,23 @@ class LiveConversationController:
             except Exception:
                 observation.flush_failed(snapshot)
 
+    async def _notify_recording_close(self, conversation_id: str) -> None:
+        if close_notify_enabled(self.host.request.uid):
+            close_recording = getattr(self.host, 'request_recording_close', None)
+            if close_recording is not None:
+                try:
+                    await close_recording(conversation_id)
+                except Exception:
+                    logger.warning('event=record_close_notify outcome=deferred')
+                    record_fallback(
+                        component='pusher',
+                        from_mode='record_close_v2',
+                        to_mode='deferred_record_close',
+                        reason='unavailable',
+                        outcome='degraded',
+                        log=logger,
+                    )
+
     async def schedule_finalization(self, conversation_id: str) -> bool:
         observation = getattr(getattr(self.host, 'speakers', None), 'diagnostics', None)
         if observation:
@@ -342,6 +361,8 @@ class LiveConversationController:
             client_kind=self.host.client_kind,
         )
         route = finalization['route']
+        if route in {'pusher', 'cloud_tasks', 'queued', 'blocked_byok'}:
+            await self._notify_recording_close(conversation_id)
         if route == 'pusher':
             if not self.host.request_conversation_processing:
                 return False
@@ -761,6 +782,23 @@ class LiveConversationController:
             note_carry = getattr(self.host.speakers, 'note_rollover_carry', None)
             if note_carry is not None:
                 note_carry(carried_ids)
+        if server_batch_owned(self.host.batch_record_capture or {}):
+            # Give the capture its episode now, not at audio close: Home paints a
+            # member from its first appearance instead of a standalone row that
+            # folds in minutes later. Metadata only, fail-open, off this path.
+            # Scheduled after rollover so a deleted loser is never attached.
+            start_background_task(
+                run_blocking(
+                    db_executor,
+                    attach_admitted_batch_capture,
+                    request.uid,
+                    conversation_id,
+                    # The snapshot is eligibility only; the payload carries the
+                    # clocks the admission attach needs to place the member.
+                    {**payload, **(self.host.batch_record_capture or {})},
+                ),
+                name='listen_batch_admission_attach',
+            )
         await self._refresh_speakers(
             conversation_id,
             owner_carry_scope=carry_from[1] if automatic_donor and carry_from else None,
@@ -1026,6 +1064,10 @@ class LiveConversationController:
             if not conversation:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
+            if conversation.get('status') != ConversationStatus.in_progress:
+                # Cloud Tasks has no socket callback. Observe its durable
+                # boundary before calendar/occasion holds or successor awaits.
+                await self._notify_recording_close(conversation_id)
             conversation = await self._continuity_row(conversation)
             finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             if server_batch_owned(conversation) and self.host.state.last_audio_received_time is not None:

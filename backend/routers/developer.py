@@ -1353,17 +1353,16 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     folders = folders_db.get_folders(uid)
     valid_folders = []
     for folder in folders:
-        if not folder or not folder.get('id'):
+        if not folder or not folder.id:
             logger.warning('Skipping malformed folder in Developer API folder list')
             continue
         try:
-            DeveloperFolder.model_validate(folder)
-            valid_folders.append(folder)
+            DeveloperFolder.model_validate(folder.model_dump(exclude_unset=True))
+            valid_folders.append(folder.model_dump(exclude_unset=True))
         except ValidationError as e:
             invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
-                f"Skipping invalid folder doc {folder.get('id', 'unknown')} for uid {uid}: "
-                f"missing/invalid fields {invalid_fields}"
+                f"Skipping invalid folder doc {folder.id} for uid {uid}: " f"missing/invalid fields {invalid_fields}"
             )
             continue
     return valid_folders

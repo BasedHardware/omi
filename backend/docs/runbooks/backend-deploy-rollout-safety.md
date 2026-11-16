@@ -104,7 +104,42 @@ Interpretation:
 - Output contains key names, counts and value hashes only; literal values and Secret Manager payloads are never printed. Hashes of sensitive-looking keys (UIDs, allowlists, secrets, tokens) print as `redacted`.
 - `Template = serving: no` means `spec.template` (or the Deployment template) differs from what serves traffic. Never conclude a deploy reset or restored a value from the template (10-18 23:50Z).
 - `Value mismatches` are keys whose serving value hash differs from the manifest: operator-owned values set out of band, or a deploy that did not apply. `Missing live` are manifest keys absent from the serving env. Keys bound at deploy time (`env_var`) are compared by name only unless `--rendered-state` is passed.
-- `Allowlisted live-managed keys` (`LIVE_MANAGED_ENV_ALLOWLIST` in `backend/scripts/check_cloud_run_env_drift.py`) covers keys intentionally managed outside `runtime_env.yaml`: per-revision provenance (`OMI_BACKEND_RELEASE_SHA`) and live-managed canary UID allowlists (`BATCH_PIPELINE_UID_ALLOWLIST`, `FIRST_SUMMARY_UID_ALLOWLIST`, `SYNC_BACKFILL_ORDER_UID_ALLOWLIST`, `FAIR_USE_EXEMPT_UIDS`, `DREAM_AGENT_FULL_CONTEXT_UIDS`). Any feature flag whose allowlist is live-managed must fail safe (deny all at `*_PERCENT=0` when the allowlist key is absent) so a service recreate cannot widen rollout.
+- `Allowlisted live-managed keys` (`LIVE_MANAGED_ENV_ALLOWLIST` in `backend/scripts/check_cloud_run_env_drift.py`) covers keys intentionally managed outside `runtime_env.yaml`: per-revision provenance (`OMI_BACKEND_RELEASE_SHA`) and live-managed canary UID allowlists (`BATCH_PIPELINE_UID_ALLOWLIST`, `SYNC_BACKFILL_ORDER_UID_ALLOWLIST`, `FAIR_USE_EXEMPT_UIDS`, `DREAM_AGENT_FULL_CONTEXT_UIDS`). Any feature flag whose allowlist is live-managed must fail safe (deny all at `*_PERCENT=0` when the allowlist key is absent) so a service recreate cannot widen rollout.
 - `Unallowlisted live keys missing from manifest` lists keys surviving on the live service only because Cloud Run deploys merge env vars. Promote active runtime config into `backend/deploy/runtime_env/{_base,dev.overlay,prod.overlay}.yaml` (and regenerate `backend/deploy/runtime_env.yaml` with `python3 backend/deploy/compose_runtime_env.py`), or retire dead keys via `forbidden_env` / `--remove-env-vars`.
 - GKE expected env comes from `helm template` when `helm` is on PATH (`--gke-render auto`, the default), else from the chart values `env` list; `batch-pipeline-worker` builds its env in the template, so values mode reports it as `INVENTORY`.
 - `.github/actions/deploy-backend-stack/action.yml` runs `check_cloud_run_env_drift.py` as a non-blocking report step after post-deploy runtime env validation and appends the table to `$GITHUB_STEP_SUMMARY`; that step runs before the traffic shift, so it reports the pre-promotion serving revisions. Pass `--strict` when running as an enforcing gate after a train: exit 1 on drift, 2 on fetch or render errors.
+## Listen private-overlay evidence source boundary
+
+The existing listen Helm workflow has an `evidence` mode for a single protected
+Release-owned request; it is not a deployment preview followed by apply. Its
+trusted helper comes from `github.workflow_sha`, while the chart checkout is the
+exact request candidate. All deployment, rollback, ConfigMap/backend-secrets,
+Firestore, NEG, listen-edge and downstream exporter work is excluded, including
+failure/cancellation/always paths. A new unclassified step fails the contract
+test. Normal dry-run and upgrade share one canonical argv builder.
+
+Only the sanitized receipt is uploaded. Raw rendered YAML, hooks, private
+values, per-value hashes and captured command errors stay private and are never
+logged or published. Coverage includes every rendered document, all containers,
+the full live/desired environment-key union, envFrom and complete Deployment/HPA
+effects. Unsupported or partial coverage refuses. Required listen enforcement
+remains true; this does not change pusher compression or any drift disposition.
+
+The request expires within 15 minutes and binds candidate/control/chart/values,
+tool/helper identities, immutable image, public dispatch inputs, canonical argv,
+target, secret metadata version and one whole-overlay hash. The external Release
+consumer independently verifies GitHub run/attempt, actor, protected-prod
+approval/job outcome, artifact digest, coverage and fresh live identities. A
+local file or successful job alone is insufficient. No rerun is accepted.
+
+Source implementation is not operational admission: both repositories still
+require independent scoped review, exact-head checks and canonical publication.
+The 19:10Z ruling `01a1e09e` permits the same Release wrapper to serialize
+final validation, irreversible ledger consumption and one dispatch attempt.
+Read-only `wait-lock` and caller flags remain insufficient. The separately
+reviewed tools implementation and exact-head private consumer CI must be
+admitted before operational use. No evidence request or dispatch is authorized
+by this source work. Release retains all holds, drift decisions,
+freeze and deployment/rollback authority; enabled qualification and independent
+Verify on both surfaces remain required. Reverting tooling must keep opaque
+acceptance removed and incomplete evidence fail-closed.

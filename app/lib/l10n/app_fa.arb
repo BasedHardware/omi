@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "ورود با Apple انجام نشد. دوباره امتحان کنید یا با Google ادامه دهید.",
     "authFailedToRetrieveToken": "بازیابی نشانهِ Firebase ناموفق بود، لطفاً دوباره تلاش کنید.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود",
     "syncCardBackendBusy": "سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند",
     "unableToDetermineFirmwareVersion": "تعیین نسخه فعلی سفت‌افزار امکان‌پذیر نیست",
+    "applyCodeToCurrentPlan": "اعمال روی طرح فعلی",
+    "subscriptionCodeResult": "{result, select, applied{کد روی طرح فعلی شما اعمال شد.} refused{این کد قابل اعمال نیست. کد و طرح مورد نیاز را بررسی کنید.} conflict{کد قبلاً استفاده شده یا طرح شما از قبل تخفیف دارد.} rateLimited{تلاش‌های بیش از حد. صبر کنید و بعداً دوباره امتحان کنید.} other{کد اعمال نشد. دوباره امتحان کنید.}}",
     "promoCode": "کد تخفیف",
     "enterPromoCode": "کد تخفیف را وارد کنید",
     "invalidPromotionCode": "کد تخفیف نامعتبر.",
@@ -11526,6 +11529,7 @@
     "paywallTrialBilledYearly": "صورت‌حساب سالانه",
     "paywallTrialSaveAmount": "{amount} صرفه‌جویی کنید",
     "paywallTrialCta": "شروع با {price}",
+    "paywallTrialCodeHint": "کد Omi Pro دارید؟ آن را در صفحه بعد وارد کنید.",
     "paywallTrialCancelNote": "هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.",
     "paywallMonthlyFallbackTitle": "هنوز برای یک سال کامل آماده نیستید؟",
     "paywallMonthlyFallbackTrialBody": "به‌جای آن ماهانه شروع کنید. همان {days} روز رایگان، سپس ماهی {price}. هر زمان خواستید لغو کنید.",
@@ -11603,6 +11607,7 @@
     "activityAttentionStorageSubtitle": "ضبط‌ها متوقف شده‌اند",
     "activityAttentionUploadStalledTitle": "بارگذاری متوقف شده",
     "activityAttentionUploadRecordings": "{count, plural, =1{1 ضبط در انتظار} other{{count} ضبط در انتظار}}",
+    "attentionRerunNotes": "ایجاد دوباره یادداشت‌ها",
     "attentionSummaryFailed": "خلاصه‌سازی این گفتگو ممکن نشد",
     "activityAttentionSemantics": "فعالیت، نیاز به توجه",
     "connectAgentHeadline": "از حافظهٔ Omi خود در ChatGPT و عامل‌های هوش مصنوعی‌تان استفاده کنید",
@@ -11921,6 +11926,8 @@
     "chatAppsWaitingMessageIn": "پیام را در {app} ارسال کنید. به‌محض دریافت توسط Omi، این صفحه به‌روز می‌شود.",
     "chatAppsCodeExpiredMessageIn": "کد جدید بگیرید و از {app} ارسال کنید.",
     "episodeWritingNotes": "در حال نوشتن یادداشت‌ها…",
+    "homeStepTranscribing": "در حال رونویسی…",
+    "homeRecordingsCount": "{count, plural, other{{count} ضبط}}",
     "episodeWritingNotesDetail": "اول متن را کامل می‌کنیم. می‌توانید این صفحه را ترک کنید.",
     "episodeCoversUpTo": "تا {time} · یادداشت‌های کامل در پایان",
     "liveTranscribedUpTo": "رونویسی تا {time}",
@@ -12191,5 +12198,20 @@
     "referralRewardSecondDetail": "وقتی ۳ دوست دیگر بخرند",
     "referralClaimShort": "دریافت",
     "paymentDeclinedTitle": "کارت شما رد شد",
-    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید"
+    "paymentDeclinedMonthlyMessage": "کارت را به‌روزرسانی کنید یا {plan} را با ماهانه {price} برگردانید",
+    "paymentDeclinedMessage": "برای بازگرداندن {plan} کارت را به‌روزرسانی کنید",
+    "hasLinkedTasksLabel": "دارای کارهای مرتبط",
+    "hasTasksFilter": "دارای کار",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "تغییر به ماهانه",
+    "monthlySwitchPlanValue": "{plan}، ماهانه {price}",
+    "monthlySwitchNote": "جایگزین هزینه سالانه پرداخت‌نشده {yearly} می‌شود. ماهانه تمدید می‌شود. هر زمان لغو کنید.",
+    "monthlySwitchDeclined": "پرداخت رد شد. طرح شما تغییری نکرد.",
+    "monthlySwitchUnavailable": "تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.",
+    "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
+    "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
+    "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید."
 }

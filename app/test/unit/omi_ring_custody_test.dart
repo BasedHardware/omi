@@ -3,6 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
@@ -142,7 +147,10 @@ BtDevice _device(String fw) =>
 /// Probe/opt-in chains settle on the microtask queue (scripted transports
 /// reply in memory); the delay only yields the event loop, so it was pure wall
 /// time at 50 ms per call.
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 12));
+Future<void> _settle() async {
+  await Future<void>.delayed(const Duration(milliseconds: 12));
+  await PendantRingCustody.shared.flush();
+}
 
 bool _hasOp(_ScriptedTransport t, int op) => t.writes.any((w) => w[0] == op);
 
@@ -156,6 +164,26 @@ Future<void> _drainCustody(OmiDeviceConnection? conn, Iterable<PendantRingCustod
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  late Directory documents;
+  setUpAll(() async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    documents = await Directory.systemTemp.createTemp('omi_custody_documents_');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (_) async => documents.path,
+    );
+    await WalFileManager.init();
+  });
+  tearDownAll(() async {
+    await PendantRingCustody.shared.flush();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    await documents.delete(recursive: true);
+  });
   test(
     'ring firmware >= 3.0.20 probes INFO at connect; 0x14 opt-in only once a real audio listener attaches',
     () async {
@@ -300,7 +328,12 @@ void main() {
     expect(conn.ringLivePersistEnabled, isFalse);
     expect(conn.lastRingInfo, isNull);
 
+    final reenabled = Completer<void>();
+    t.onWrite = (bytes) {
+      if (bytes[0] == RingProtocol.cmdCustodyEnable && !reenabled.isCompleted) reenabled.complete();
+    };
     t.emit(DeviceTransportState.connected);
+    await reenabled.future.timeout(const Duration(seconds: 5));
     await _settle();
     expect(conn.ringCustodyEpoch, epoch1 + 1);
     expect(t.writes.where((w) => w[0] == RingProtocol.cmdInfo).length, greaterThanOrEqualTo(2));
@@ -315,9 +348,10 @@ void main() {
   test('INFO observed on the wire registers the ring incarnation with the custody manager', () async {
     const ringId = 0x1122334455667788;
     final t = _ScriptedTransport(infoPayload: _v1Info(ringId: ringId), grantedCaps: 0x0F);
-    OmiDeviceConnection(_device('3.0.21'), t);
+    final conn = OmiDeviceConnection(_device('3.0.21'), t);
     t.emit(DeviceTransportState.connected);
     await _settle();
+    await conn.ringCustodyReady;
 
     expect(PendantRingCustody.shared.currentRingId('omi-1'), ringId);
   });
@@ -342,6 +376,7 @@ void main() {
       conn = OmiDeviceConnection(_device('3.0.21'), t, custody: custody);
       t.emit(DeviceTransportState.connected);
       await _settle();
+      await conn.ringCustodyReady;
 
       final advances =
           t.writes.where((w) => w[0] == RingProtocol.cmdAdvance || w[0] == RingProtocol.cmdAdvanceId).toList();

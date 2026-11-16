@@ -707,7 +707,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   }) {
     if (!provider.pendantCaptureVerified) return '';
     if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
-    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (usage.isOutOfCredits && !provider.transcribingOnPhoneAtCap) {
+      return context.l10n.transcriptionUnavailableRecordingSaved;
+    }
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;
     }

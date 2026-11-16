@@ -1,0 +1,108 @@
+[
+  {
+    "uid": "omi-batch-staged-input-age",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pipeline drain guards",
+    "title": "Held batch staging input older than 21 days",
+    "condition": "E",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_batch_held_oldest_age_seconds{leg=\"staged_input\"} and ignoring(leg) ((max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) == scalar(max(max_over_time(omi_batch_timeliness_observed_at_seconds[20m])))) and (time() - max_over_time(omi_batch_timeliness_observed_at_seconds[20m]) < 1200)))",
+          "instant": true,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "D",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "D",
+          "type": "math",
+          "expression": "$A > 1814400"
+        }
+      },
+      {
+        "refId": "E",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "refId": "E",
+          "type": "reduce",
+          "expression": "D",
+          "reducer": "last"
+        }
+      }
+    ],
+    "updated": "2026-11-09T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A held input in batch staging is older than 21 days; deletion remains at day 30.",
+      "user_impact": "The only server input may expire before transcription or assignment recovers.",
+      "scope": "GPU-quarantined and assignment-held jobs whose audio_uri is in gs://based-hardware-batch-pipeline-staging. All epochs; audio_staged_at tracks the current replacement object, else enqueued_at proxies creation at admission. No GCS metadata read.",
+      "verification": "Require a fresh timeliness sample. Compare job audio_staged_at when present, else enqueued_at; quarantine/commit/deadline timestamps do not reset object age. Missing or stale data is unknown; use the existing sampler-stale alert.",
+      "safe_next_action": "Run the manual digest-approved held-input redrive dry-run, review aggregate results, and obtain scoped apply authorization. No lifecycle changes or automatic repair.",
+      "runbook": "backend/docs/runbooks/held-staging-inputs.md",
+      "threshold": "$A > 1814400 for 10m",
+      "review_by": "2026-11-16",
+      "evaluated_bad": "Synthetic staged-input age 1814401s with a sample younger than 900s, sustained 10m.",
+      "evaluated_good": "Synthetic age at or below 1814400s; fresh zero when no held staging inputs remain."
+    },
+    "labels": {
+      "alert_identity": "omi-batch-staged-input-age",
+      "component": "batch-pipeline",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "tier": "page",
+      "audience": "human",
+      "owner": "omi-lifecycle"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h",
+      "mute_time_intervals": []
+    },
+    "record": null,
+    "missingSeriesEvalsToResolve": 2
+  }
+]

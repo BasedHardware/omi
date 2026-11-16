@@ -13,6 +13,7 @@ from google.cloud import firestore
 from starlette.websockets import WebSocketState
 
 from database import conversation_finalization_jobs as jobs
+from database import recording_sessions
 from database import conversation_quiet_checks as checks
 from routers import conversation_finalization as worker
 from services import conversation_finalization as service
@@ -774,3 +775,200 @@ def test_stale_terminal_check_removes_even_future_checkpoint(store):
     result = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
     assert result['status'] == 'stale'
     assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('v2', ['off', 'serve'])
+@pytest.mark.parametrize('active', [False, True])
+@pytest.mark.parametrize('shape', ['unowned', 'received', 'empty', 'unknown', 'tokens'])
+def test_quiet_empty_exit_branch_matrix(store, monkeypatch, enabled, v2, active, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', str(enabled))
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', v2)
+    row = store.rows[ROW]
+    row.update(has_content=False, transcript_segments=[])
+    if shape != 'unowned':
+        row.update(record_lane_owner='batch_live_v1', server_batch_only=True, server_batch_audio_closed=True)
+        if shape != 'unknown':
+            row['server_batch_audio_received'] = shape == 'received'
+        if shape == 'tokens':
+            row['record_upload_sessions'] = {'pending': True}
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 121 if active else 301)
+    before = dict(_job(store))
+    result = checks.evaluate_quiet_check(
+        checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store, empty_storage_proof=lambda *a: True
+    )
+    if (not enabled or shape != 'empty') and not active and v2 == 'off':
+        assert result == {'status': 'done', 'reason': 'no_content'}
+        assert _job(store) == {
+            **before,
+            'status': 'quiet_done',
+            'reconcile_after_at': firestore.DELETE_FIELD,
+            'updated_at': checks._now(),
+        }
+    else:
+        parked = enabled and not active and v2 == 'serve' and shape in {'received', 'unknown'}
+        expected = 'done' if parked else ('deferred' if active else 'empty_ready')
+        assert result['status'] == expected
+        if parked:
+            assert result['exit'] == 'record_orphan_repair'
+            assert _job(store)['status'] == 'quiet_done'
+        else:
+            assert _job(store)['dispatch_generation'] == 2
+            assert _job(store)['due_at'] > checks._now()
+    assert store.rows[ROW] == row
+
+
+def test_quiet_received_never_calls_delete_even_in_v2_serve(store, monkeypatch):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_received=True,
+        server_batch_audio_closed=True,
+    )
+    cleanup = MagicMock(side_effect=AssertionError('custody must never be deleted'))
+    monkeypatch.setattr(lifecycle, 'delete_empty_recording_conversation', cleanup)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    assert _job(store)['last_failure_code'] == 'record_orphan_repair'
+    cleanup.assert_not_called()
+
+
+def test_quiet_empty_switch_is_dark_and_fail_closed(monkeypatch):
+    monkeypatch.delenv('QUIET_EMPTY_EXIT_ENABLED', raising=False)
+    assert not checks.quiet_empty_exit_enabled()
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'typo')
+    assert not checks.quiet_empty_exit_enabled()
+
+
+@pytest.mark.parametrize(
+    'change',
+    [
+        {'record_upload_sessions': {'racing': True}},
+        {'record_upload_failed': True},
+        {'server_batch_audio_received': True},
+        {'server_batch_audio_closed': False},
+    ],
+)
+def test_quiet_empty_delete_rechecks_proven_empty_after_evaluation(store, monkeypatch, change):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    row = store.rows[ROW]
+    row.update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    calls = []
+
+    def proof(*args, **kwargs):
+        calls.append(True)
+        if len(calls) == 1:
+            row.update(change)
+        return True
+
+    monkeypatch.setattr(quiet, '_empty_storage_proof', proof)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'deferred'
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('shape', ['token', 'raw_chunks'])
+def test_unowned_expired_row_takes_base_path_without_storage_or_delete(store, monkeypatch, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    store.rows[ROW].update(has_content=False, transcript_segments=[])
+    if shape == 'token':
+        store.rows[ROW]['record_upload_sessions'] = {'pending': True}
+    from utils.other import storage
+
+    retained = [{'timestamp': 100, 'path': 'synthetic-retained-chunk', 'size': 20}] if shape == 'raw_chunks' else []
+    listing = MagicMock(return_value=retained)
+    monkeypatch.setattr(storage, 'list_audio_chunks', listing)
+    raw_delete = MagicMock(side_effect=AssertionError('retained audio is immutable'))
+    monkeypatch.setattr(lifecycle, 'delete_conversation_audio_files', raw_delete)
+    proof = MagicMock(return_value=False)
+    monkeypatch.setattr(quiet, '_empty_storage_proof', proof)
+    cleanup = MagicMock(side_effect=AssertionError('base refuses this row'))
+    monkeypatch.setattr(lifecycle, 'delete_empty_recording_conversation', cleanup)
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    proof.assert_not_called()
+    listing.assert_not_called()
+    cleanup.assert_not_called()
+    raw_delete.assert_not_called()
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('shape', ['lease_unknown', 'lease_invalid', 'markerless'])
+def test_undecidable_quiet_check_has_terminal_named_exit(store, monkeypatch, shape):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=shape != 'markerless',
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    if shape in {'lease_unknown', 'markerless'}:
+        del store.rows[SESSION]
+    elif shape == 'lease_invalid':
+        store.rows[SESSION]['lease_expires_at'] = 'invalid'
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    jid = checks.quiet_check_id('synthetic', 'old')
+    result = checks.evaluate_quiet_check(jid, 1, firestore_client=store)
+    assert result == {'status': 'done', 'reason': 'operator_review', 'exit': 'record_orphan_repair'}
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['dispatch_generation'] == 1
+    # The narrow fixture retains DELETE_FIELD; production removes this index.
+    assert _job(store).pop('reconcile_after_at') is firestore.DELETE_FIELD
+    assert not checks.ensure_quiet_check_progress(jid, firestore_client=store)
+    assert ROW in store.rows
+
+
+def test_owned_empty_storage_refusal_restores_base_off_exit(store, monkeypatch):
+    monkeypatch.setenv('QUIET_EMPTY_EXIT_ENABLED', 'true')
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    store.rows[ROW].update(
+        has_content=False,
+        transcript_segments=[],
+        record_lane_owner='batch_live_v1',
+        server_batch_only=True,
+        server_batch_audio_closed=True,
+        server_batch_audio_received=False,
+    )
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    proof = MagicMock(return_value=False)
+    result = checks.evaluate_quiet_check(
+        checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store, empty_storage_proof=proof
+    )
+    assert result == {'status': 'done', 'reason': 'no_content'}
+    proof.assert_called_once()
+    assert ROW in store.rows
+
+
+@pytest.mark.parametrize('objects', [[], [{'timestamp': 100, 'path': 'synthetic-raw', 'size': 20}]])
+def test_quiet_empty_storage_proof_reads_archive_and_raw(store, monkeypatch, objects):
+    from utils.other import storage
+
+    store.rows[('users', 'synthetic')] = {'private_cloud_sync_enabled': True}
+    store.rows[ROW].update(record_lane_owner='batch_live_v1', private_cloud_sync_enabled=True)
+    listing = MagicMock(return_value=objects)
+    monkeypatch.setattr(storage, 'list_audio_chunks', listing)
+    assert quiet._empty_storage_proof(store.transaction(), 'synthetic', 'old', firestore_client=store) is (not objects)
+    listing.assert_called_once_with(
+        'synthetic', 'old', max_count=4096, require_archive=True, include_raw=True, source_metadata=True
+    )

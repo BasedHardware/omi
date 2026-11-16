@@ -12,7 +12,7 @@ def not_applicable_reason(family, fault):
     return None
 
 
-def fault_applied(fault, evidence):
+def fault_applied(fault, evidence, *, family=None):
     injected = evidence.get('injected', {})
     if fault == 'redis_down':
         return sum(injected.values()) > 0
@@ -26,5 +26,21 @@ def fault_applied(fault, evidence):
             and evidence.get('overlap_reads') == 1
         )
     if fault == 'request_memo':
+        if family == 'deletion_marker':
+            reads = evidence.get('request_redis_probe_reads', [])
+            return (
+                all(
+                    evidence.get(key)
+                    for key in (
+                        'request_memo_absent',
+                        'independent_writer_scope',
+                        'reader_scope_preserved',
+                        'request_deletion_observed',
+                    )
+                )
+                and evidence.get('request_redis_warm_reads') == 2
+                and bool(reads)
+                and all(count == 1 for count in reads)
+            )
         return all(evidence.get(key) for key in ('request_memo_warmed', 'request_memo_hit', 'request_memo_cleared'))
     return False  # Baselines are useful controls, never verified fault samples.

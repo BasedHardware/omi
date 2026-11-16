@@ -231,8 +231,14 @@ def test_failed_reads_never_publish_partial_decisions(monkeypatch, reads, failur
 
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     with batch_privacy_attempt():
-        with pytest.raises(RuntimeError, match='unavailable'):
-            check(db)
+        if failure == TOKEN_PATH:
+            # An unavailable certificate cannot authorize reuse. A successful
+            # full authority read may still ALLOW, without memoizing the result.
+            assert check(db) == 7
+            assert len(reads) == 5
+        else:
+            with pytest.raises(RuntimeError, match='unavailable'):
+                check(db)
         reads.clear()
         check(db)
         assert len(reads) == 5
@@ -397,16 +403,6 @@ def test_missing_or_malformed_server_revision_never_reuses_token(monkeypatch, re
     assert len(reads) == 10
 
 
-def test_cached_hit_preserves_foreign_wq12_memo_validation(monkeypatch, reads):
-    monkeypatch.setattr(privacy, 'lever_enabled', lambda *a: True)
-    db = database()
-    with batch_privacy_attempt():
-        check(db)
-        foreign = privacy.BatchPrivacyMemo(db, db.transaction())
-        with pytest.raises(ValueError, match='another transaction'):
-            check(db, memo=foreign)
-
-
 @pytest.mark.parametrize('export_snapshots', [False, True])
 def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypatch, reads, export_snapshots):
     from types import SimpleNamespace
@@ -421,7 +417,9 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
         db = database()
         store = SimpleNamespace(client=db)
         reads.clear()
-        reads_before = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        reads_before = sum(
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
+        )
         with batch_privacy_attempt():
             outputs = []
             for i in range(20):
@@ -431,7 +429,9 @@ def test_actual_artifact_authorize_path_read_counts_and_exact_off_order(monkeypa
                 if snapshots is not None:
                     assert snapshots['conversations']['source']['title'] == f'live-{i}'
         counts.append(len(reads))
-        reads_after = sum(metrics.READS.labels('batch', 'live', result)._value.get() for result in ('hit', 'miss'))
+        reads_after = sum(
+            metrics.READS.labels('batch', 'live', result, 'unattributed')._value.get() for result in ('hit', 'miss')
+        )
         assert reads_after - reads_before == len(reads)
         results.append(outputs)
         if not on:

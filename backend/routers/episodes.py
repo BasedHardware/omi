@@ -1,12 +1,12 @@
 """Episodes API: the live occasion overlay the mobile app lists and opens.
 
 ``enabled`` in every read is the server capability. With ``EPISODES_ENABLED``
-off (or outside the ramp cohort) it is false and the app keeps today's
+off it is false and the app keeps today's
 per-conversation UI; a server that predates this router answers 404, which
 the app treats the same way.
 
-A call is admitted when the uid is in the cohort *and* the request's
-``X-Omi-App-Channel`` is in ``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
+A call is admitted when the request's ``X-Omi-App-Channel`` is in
+``EPISODES_CLIENT_CHANNELS`` (default ``beta``). A
 store, missing or unknown channel answers ``enabled: false`` (404 for writes),
 so that client keeps today's UI. Every admitted call is also the
 client-capability signal: it leaves the sticky ``episodes:client_seen:{uid}``
@@ -29,8 +29,11 @@ from models.recording_speakers import (
 from fastapi import BackgroundTasks, APIRouter, Depends, Header, HTTPException, Query
 
 from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from config.home_feed import home_feed_enabled
 from config.episodes import client_channel_admitted, episodes_enabled_for
 from utils.episodes import home_read
+from database import home_feed as compact_home
+from models.home_feed import HomeFeedResponse, HomeFeedPreparationResponse
 from models.episode import (
     EpisodeListResponse,
     Episode,
@@ -134,6 +137,8 @@ def get_episode(
     projected = home_read.project_episode(uid, episode)
     if projected is None:
         raise HTTPException(status_code=404, detail='Episode not found')
+    # Opening the page is the trigger for a late episode's deferred compose.
+    home_read.schedule_opened_compose(uid, episode)
     return projected
 
 
@@ -188,3 +193,40 @@ def assign_episode_speaker(
         raise HTTPException(status_code=404, detail='Episode not found')
     anchor = body.selections[0].conversation_id if body.selections else episode['conversation_ids'][0]
     return edit(uid, anchor, body, background_tasks, episode_id=episode_id)
+
+
+@router.get('/v1/home/feed', response_model=HomeFeedResponse, tags=['home'])
+def get_home_feed(
+    limit: int = Query(50, ge=1, le=100),
+    cursor: Optional[str] = Query(None, max_length=4096),
+    uid: str = Depends(auth.get_current_user_uid),
+    channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.feed(uid, limit=limit, cursor=cursor, episodes_admitted=_admitted(uid, channel))
+    except compact_home.AccountUnavailable as error:
+        compact_home.FEED_OUTCOME.labels(outcome='denied').inc()
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationRequired as error:
+        compact_home.FEED_OUTCOME.labels(outcome='preparation_required').inc()
+        raise HTTPException(status_code=409, detail='home_feed_preparation_required') from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail='Invalid Home feed cursor') from error
+
+
+@router.post('/v1/home/feed/prepare', response_model=HomeFeedPreparationResponse, tags=['home'])
+def prepare_home_feed(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'home:prepare')),
+):
+    if not home_feed_enabled():
+        raise HTTPException(status_code=404, detail='Home feed is unavailable')
+    try:
+        return compact_home.prepare(uid)
+    except compact_home.AccountUnavailable as error:
+        raise HTTPException(status_code=403, detail='Home feed account unavailable') from error
+    except compact_home.PreparationTooLarge as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except compact_home.PreparationRequired as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error

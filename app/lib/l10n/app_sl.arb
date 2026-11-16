@@ -8695,6 +8695,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava z Applom ni uspela. Poskusite znova ali nadaljujte z Googlom.",
     "authFailedToRetrieveToken": "Pridobivanje Firebase žetona ni uspelo, prosimo, poskusite ponovno.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -10366,6 +10367,8 @@
     "syncCardThrottlePaused": "Sinhronizacija je za kratek čas ustavljena — samodejno se bo nadaljevala",
     "syncCardBackendBusy": "Strežniki Omi so obremenjeni — vaši posnetki se bodo sinhronizirali, ko se sprosti zmogljivost",
     "unableToDetermineFirmwareVersion": "Trenutne različice vdelane programske opreme ni mogoče določiti",
+    "applyCodeToCurrentPlan": "Uporabi za trenutni paket",
+    "subscriptionCodeResult": "{result, select, applied{Koda je uporabljena za vaš trenutni paket.} refused{Te kode ni mogoče uporabiti. Preverite kodo in zahtevani paket.} conflict{Koda je že uporabljena ali pa vaš paket že ima popust.} rateLimited{Preveč poskusov. Počakajte in poskusite pozneje.} other{Kode ni bilo mogoče uporabiti. Poskusite znova.}}",
     "promoCode": "Promocijska koda",
     "enterPromoCode": "Vnesite promocijsko kodo",
     "invalidPromotionCode": "Neveljavna promocijska koda.",
@@ -11526,6 +11529,7 @@
     "paywallTrialBilledYearly": "Letno zaračunavanje",
     "paywallTrialSaveAmount": "Prihranite {amount}",
     "paywallTrialCta": "Začnite za {price}",
+    "paywallTrialCodeHint": "Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.",
     "paywallTrialCancelNote": "Prekličite kadar koli. Brez stroškov, brez kazni.",
     "paywallMonthlyFallbackTitle": "Celo leto je za zdaj preveč?",
     "paywallMonthlyFallbackTrialBody": "Začnite z mesečnim paketom. Enakih {days} dni brezplačno, nato {price} na mesec. Prekličite kadar koli.",
@@ -11603,6 +11607,7 @@
     "activityAttentionStorageSubtitle": "Posnetki so pavzirani",
     "activityAttentionUploadStalledTitle": "Nalaganje se je ustavilo",
     "activityAttentionUploadRecordings": "{count, plural, =1{Čaka 1 posnetek} other{Čaka {count} posnetkov}}",
+    "attentionRerunNotes": "Znova ustvari zapiske",
     "attentionSummaryFailed": "Tega pogovora ni bilo mogoče povzeti",
     "activityAttentionSemantics": "Dejavnost, zahteva pozornost",
     "connectAgentHeadline": "Uporabljajte svoj spomin Omi v ChatGPT in svojih agentih UI",
@@ -11921,6 +11926,8 @@
     "chatAppsWaitingMessageIn": "Pošljite sporočilo v aplikaciji {app}. Ta zaslon se posodobi, takoj ko ga Omi prejme.",
     "chatAppsCodeExpiredMessageIn": "Pridobite novo kodo in jo pošljite iz aplikacije {app}.",
     "episodeWritingNotes": "Pišemo zapiske…",
+    "homeStepTranscribing": "Prepisujemo…",
+    "homeRecordingsCount": "{count, plural, one{{count} posnetek} two{{count} posnetka} few{{count} posnetki} other{{count} posnetkov}}",
     "episodeWritingNotesDetail": "Najprej dokončujemo prepis. To stran lahko zapustite.",
     "episodeCoversUpTo": "Do {time} · popolni zapiski ob koncu",
     "liveTranscribedUpTo": "Prepisano do {time}",
@@ -12191,5 +12198,20 @@
     "referralRewardSecondDetail": "Ko kupijo še 3 prijatelji",
     "referralClaimShort": "Prevzemi",
     "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
-    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}"
+    "paymentDeclinedMonthlyMessage": "Posodobite kartico ali znova dobite {plan} za {price} na mesec",
+    "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}",
+    "hasLinkedTasksLabel": "Ima povezane naloge",
+    "hasTasksFilter": "Z nalogami",
+    "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
+    "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
+    "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Preklopi na mesečno",
+    "monthlySwitchPlanValue": "{plan}, {price} na mesec",
+    "monthlySwitchNote": "Nadomesti neplačano letno bremenitev {yearly}. Obnavlja se mesečno. Prekličite kadar koli.",
+    "monthlySwitchDeclined": "Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.",
+    "monthlySwitchUnavailable": "Preklop trenutno ni na voljo. Namesto tega posodobite kartico.",
+    "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
+    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
+    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova."
 }

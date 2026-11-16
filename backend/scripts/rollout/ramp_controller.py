@@ -48,6 +48,7 @@ from google.cloud import firestore
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from database import rollout_cohorts as store  # noqa: E402
 from utils.observability.reasons import RampReason  # noqa: E402
+from scripts.rollout import live_preflight  # noqa: E402
 from utils.rollout.runtime_percent import RampSnapshot, clamp_nesting, write_ramp  # noqa: E402
 
 logger = logging.getLogger('ramp_controller')
@@ -65,7 +66,7 @@ FIVE_PERCENT_MIN_COMPLETED = 150
 CONTROLLED_NAMES = ('batch-pipeline', 'first-summary')
 LEAD_NAME = 'batch-pipeline'
 # Quality guarantees, not ramp knobs: a rollback never lowers them. Every tested rollback set in the
-# workspace's infra/rollout/ramp_env.json keeps FIRST_SUMMARY_DEADLINE_PERCENT=100 (prod's live value), and
+# workspace's historical infra/rollout/ramp_env.json kept first-summary admission at 100, and
 # a rollback set that turned a recovery-quality flag off stranded 28 units in failed_held (2026-10-20).
 # The value is the floor the operator CLI refuses to write below without --allow-quality-decrease.
 QUALITY_FLOOR = {'first-summary': 100.0}
@@ -554,6 +555,8 @@ class Effects:
     # Serving-revision preflight, consulted only before an ADVANCE (never blocks a rollback): (percent) ->
     # (ok, token). Prod --apply requires it (ramp5.sh's lesson: check the revision that serves, not the source).
     preflight: Callable[[float], tuple[bool, str]] | None = None
+    live_preflight: Callable[[str, float], tuple[bool, str, dict]] | None = None
+    accept_not_live: str | None = None
 
 
 @dataclass
@@ -610,7 +613,12 @@ def tick(
         resumed_after_gap=resumed_after_gap,
     )
     decisions = decide_all(snapshot, verdict, names=names, now=now, context=context)
-    if effects.preflight is not None and any(item.action is Action.ADVANCE for item in decisions):
+    # Classify the entire atomic write before either evidence gate can run.
+    widening = live_preflight.widens_exposure(
+        {'percents': dict(snapshot.percents)},
+        {'percents': {item.name: item.to_percent for item in decisions if item.action in WRITE_ACTIONS}},
+    )
+    if effects.preflight is not None and widening:
         ok, token = effects.preflight(current if current is not None else 0.0)
         if not ok:
             decisions = [
@@ -629,6 +637,34 @@ def tick(
                 )
                 for item in decisions
             ]
+    if apply and env == 'prod':
+        checked = []
+        for item in decisions:
+            if widening and item.action is Action.ADVANCE:
+                prover = effects.live_preflight or live_preflight.preflight
+                result = prover(item.name, item.to_percent)
+                live_preflight.report(result)
+                if not result[0]:
+                    if effects.accept_not_live is None:
+                        item = Decision(
+                            Action.HOLD,
+                            item.name,
+                            item.from_percent,
+                            item.from_percent,
+                            RampReason.HOLD_INCOMPLETE,
+                            'preflight:' + result[1],
+                            item.name == LEAD_NAME,
+                        )
+                    else:
+                        live_preflight.report(
+                            (
+                                True,
+                                'override',
+                                {'key': item.name, 'reason': effects.accept_not_live, 'failure': result[1]},
+                            )
+                        )
+            checked.append(item)
+        decisions = checked
     writes = [item for item in decisions if item.action in WRITE_ACTIONS]
     new_revision = snapshot.revision
     wrote = False
@@ -641,7 +677,10 @@ def tick(
                 change,
                 expected_revision=revision,
                 actor=ACTOR,
-                reason=lead.reason.value,
+                reason=live_preflight.override_reason(
+                    lead.reason.value,
+                    effects.accept_not_live if any(w.action is Action.ADVANCE for w in writes) else None,
+                ),
                 gate_verdict={
                     'status': verdict.status,
                     'reason': verdict.reason,
@@ -781,6 +820,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Serving-revision preflight run before any ADVANCE with the current percent appended; exit 0 = ok '
         '(prod: the workspace infra/rollout/bin/controller_preflight.sh)',
     )
+    parser.add_argument('--accept-not-live')
     parser.add_argument('--state-file', default=STATE_FILE_DEFAULT)
     parser.add_argument('--anx-card', default=ANX_CARD_DEFAULT)
     parser.add_argument('--no-anx', action='store_true', help='Skip anx notes (rehearsal on a host without anx)')
@@ -819,6 +859,11 @@ def main(
 ) -> int:
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     args = build_parser().parse_args(argv)
+    try:
+        live_preflight.override_reason('', args.accept_not_live)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 2
     problem = validate_args(args)
     if problem:
         print('ramp_controller refused: ' + problem, file=sys.stderr)
@@ -832,6 +877,7 @@ def main(
     parity_cmd = shlex.split(args.parity_cmd) if args.parity_cmd else None
     state_path = Path(args.state_file)
     effects = Effects(
+        accept_not_live=args.accept_not_live,
         read_document=lambda: store.read_ramp(firestore_client=client, timeout=store.OPERATOR_READ_TIMEOUT_SECONDS),
         read_history=lambda revisions: store.read_ramp_history(revisions, firestore_client=client),
         write=lambda env, change, **kw: write_ramp(env, change, firestore_client=client, **kw),
@@ -868,6 +914,9 @@ def main(
                 errors = 0
                 lead = next((item for item in result.decisions if item.name == LEAD_NAME), None)
                 last_percent = lead.to_percent if lead is not None else last_percent
+            except live_preflight.MixedWrite as error:
+                print(str(error), file=sys.stderr)
+                return 2
             except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
                 errors += 1
                 logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
@@ -939,6 +988,9 @@ def _tick_once(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> T
 def _one_tick(args: argparse.Namespace, effects: Effects, heartbeat: Path) -> int:
     try:
         _tick_once(args, effects, heartbeat)
+    except live_preflight.MixedWrite as error:
+        print(str(error), file=sys.stderr)
+        return 2
     except Exception as error:  # noqa: BLE001 - a failed tick writes nothing; log the class only
         logger.warning('event=ramp_controller_tick outcome=error error=%s', type(error).__name__)
         return 1

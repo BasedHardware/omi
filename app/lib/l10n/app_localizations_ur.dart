@@ -7043,6 +7043,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple کے ساتھ سائن ان میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple کے ساتھ سائن ان نہیں ہو سکا۔ دوبارہ کوشش کریں یا Google کے ساتھ جاری رکھیں۔';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase ٹوکن حاصل کرنے میں ناکام، براہ کرم دوبارہ کوشش کریں۔';
 
   @override
@@ -9187,6 +9191,24 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'موجودہ فرم ویئر ورژن کا تعین نہیں کیا جا سکا';
+
+  @override
+  String get applyCodeToCurrentPlan => 'موجودہ پلان پر لاگو کریں';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'کوڈ آپ کے موجودہ پلان پر لاگو ہو گیا۔',
+        'refused': 'یہ کوڈ لاگو نہیں ہو سکتا۔ کوڈ اور مطلوبہ پلان چیک کریں۔',
+        'conflict': 'کوڈ پہلے استعمال ہو چکا ہے یا آپ کے پلان پر پہلے سے رعایت ہے۔',
+        'rateLimited': 'بہت زیادہ کوششیں۔ انتظار کریں اور بعد میں دوبارہ کوشش کریں۔',
+        'other': 'کوڈ لاگو نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'پرومو کوڈ';
@@ -13398,6 +13420,9 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro کوڈ ہے؟ اسے اگلی اسکرین پر درج کریں۔';
+
+  @override
   String get paywallTrialCancelNote => 'کسی بھی وقت منسوخ کریں۔ کوئی فیس نہیں، کوئی جرمانہ نہیں۔';
 
   @override
@@ -13665,6 +13690,9 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'نوٹس دوبارہ بنائیں';
 
   @override
   String get attentionSummaryFailed => 'اس گفتگو کا خلاصہ نہیں بن سکا';
@@ -14833,6 +14861,20 @@ class AppLocalizationsUr extends AppLocalizations {
   String get episodeWritingNotes => 'نوٹس لکھے جا رہے ہیں…';
 
   @override
+  String get homeStepTranscribing => 'ٹرانسکرائب ہو رہا ہے…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ریکارڈنگز',
+      one: '$count ریکارڈنگ',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'پہلے ٹرانسکرپٹ مکمل کر رہے ہیں۔ آپ یہ صفحہ چھوڑ سکتے ہیں۔';
 
   @override
@@ -15374,7 +15416,63 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paymentDeclinedTitle => 'آپ کا کارڈ مسترد ہو گیا';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'کارڈ اپ ڈیٹ کریں، یا $plan ماہانہ $price میں واپس حاصل کریں';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan واپس حاصل کرنے کے لیے کارڈ اپ ڈیٹ کریں';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'منسلک کام موجود ہیں';
+
+  @override
+  String get hasTasksFilter => 'کام والے';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'ماہانہ پر منتقل کریں';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan، ماہانہ $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly کی غیر ادا شدہ سالانہ فیس کی جگہ۔ ہر ماہ تجدید ہوتی ہے۔ کسی بھی وقت منسوخ کریں۔';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'ادائیگی مسترد ہو گئی۔ آپ کا پلان تبدیل نہیں ہوا۔';
+
+  @override
+  String get monthlySwitchUnavailable => 'اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔';
+
+  @override
+  String get monthlySwitchDoneTitle => 'اب آپ ماہانہ پلان پر ہیں';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'آج $price ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
 }

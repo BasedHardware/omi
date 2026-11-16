@@ -60,11 +60,11 @@ def external(db, transaction=None):
 
 def test_counters_measure_live_check_reads_walks_and_absent_user_default(world):
     db, reads, _, _ = world
-    checks = metrics.CHECKS.labels('batch', 'live', 'allow')._value.get()
+    checks = metrics.CHECKS.labels('batch', 'live', 'allow', 'unattributed')._value.get()
     walks = metrics.WALKS.labels('live')._value.get()
     assert check(db) == 7
     assert len(reads) == 5
-    assert metrics.CHECKS.labels('batch', 'live', 'allow')._value.get() == checks + 1
+    assert metrics.CHECKS.labels('batch', 'live', 'allow', 'unattributed')._value.get() == checks + 1
     assert metrics.WALKS.labels('live')._value.get() == walks + 1
 
 
@@ -91,13 +91,6 @@ def test_instrumentation_preserves_closed_historical_sdk_caller_labels(world, mo
         'database.conversation_tombstones:is_deleted',
     ]
     assert metrics.current_read_caller() is None
-    callers.clear()
-    enable(monkeypatch, 'batch_privacy_memoize')
-    transaction = db.transaction()
-    privacy.assert_batch_write_allowed(
-        db, transaction, UID, conversation_ids=['source'], memo=privacy.BatchPrivacyMemo(db, transaction)
-    )
-    assert callers == ['database.batch_pipeline_privacy:get'] * 5
 
 
 def test_shadow_detects_unfenced_writer_and_keeps_live_block(world, monkeypatch):

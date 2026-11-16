@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-irreversible-terminal-hide",
+  "violated_contract": "A terminal hide for a stale capture must preserve every audio byte and every content field, record the prior lifecycle fields, and expose an undo that restores them exactly. A hide that drops the prior state, enters a deletion pipeline, or cannot be undone turns a near-empty capture into unrecoverable data loss.",
+  "canonical_prevention": "Close only through the lifecycle owner's snapshot-fenced storage primitive: stamp the reviewed hidden terminal shape, save the prior status/discarded/terminal_no_derived_effects values in a marker, and restore them exactly on operator undo. Never call a deletion helper, never remove an audio object, and refuse a row that another owner retired, locked, merged or admitted to finalization.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_no_speech_terminal.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/no_speech_terminal.py"
+  ],
+  "status": "open"
+}

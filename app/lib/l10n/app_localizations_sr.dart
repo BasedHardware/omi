@@ -7034,6 +7034,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Неуспешна пријава са Apple, молим покушајте поново.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Пријава преко Apple-а није успела. Покушајте поново или наставите са Google-ом.';
+
+  @override
   String get authFailedToRetrieveToken => 'Неуспешно преузимање firebase токена, молим покушајте поново.';
 
   @override
@@ -9177,6 +9181,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Није могуће одредити тренутну верзију фирмвера';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Примени на тренутни план';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код је примењен на ваш тренутни план.',
+        'refused': 'Овај код није могуће применити. Проверите код и потребан план.',
+        'conflict': 'Код је већ искоришћен или ваш план већ има попуст.',
+        'rateLimited': 'Превише покушаја. Сачекајте и покушајте касније.',
+        'other': 'Код није примењен. Покушајте поново.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промо код';
@@ -13393,6 +13415,9 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Имате Omi Pro код? Унесите га на следећем екрану.';
+
+  @override
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez penala.';
 
   @override
@@ -13660,6 +13685,9 @@ class AppLocalizationsSr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Поново генериши белешке';
 
   @override
   String get attentionSummaryFailed => 'Овај разговор није могуће сажети';
@@ -14828,6 +14856,21 @@ class AppLocalizationsSr extends AppLocalizations {
   String get episodeWritingNotes => 'Пишемо белешке…';
 
   @override
+  String get homeStepTranscribing => 'Транскрибујемо…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count снимака',
+      few: '$count снимка',
+      one: '$count снимак',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Прво завршавамо транскрипт. Можете напустити ову страницу.';
 
   @override
@@ -15369,7 +15412,63 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ваша картица је одбијена';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ажурирајте картицу или вратите $plan за $price месечно';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ажурирајте картицу да бисте вратили $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Има повезане задатке';
+
+  @override
+  String get hasTasksFilter => 'Са задацима';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Пређите на месечно';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price месечно';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замењује неплаћену годишњу наплату од $yearly. Обнавља се месечно. Откажите било када.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Плаћање је одбијено. Ваш план се није променио.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Прелазак тренутно није доступан. Уместо тога ажурирајте картицу.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Сада плаћате месечно';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Данас плаћено $price. Обнавља се месечно.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
 }

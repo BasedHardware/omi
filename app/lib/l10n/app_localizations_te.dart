@@ -7073,6 +7073,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple సాથে సైన్ ఇన్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.';
+
+  @override
   String get authFailedToRetrieveToken => 'firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
 
   @override
@@ -9220,6 +9224,24 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'ప్రస్తుత ఫర్మ్‌వేర్ సంస్కరణను నిర్ధారించలేకపోయాము';
+
+  @override
+  String get applyCodeToCurrentPlan => 'ప్రస్తుత ప్లాన్‌కు వర్తింపజేయండి';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'మీ ప్రస్తుత ప్లాన్‌కు కోడ్ వర్తింపజేయబడింది.',
+        'refused': 'ఈ కోడ్ వర్తింపజేయలేము. కోడ్ మరియు అవసరమైన ప్లాన్‌ను తనిఖీ చేయండి.',
+        'conflict': 'కోడ్ ఇప్పటికే ఉపయోగించబడింది లేదా మీ ప్లాన్‌కు ఇప్పటికే తగ్గింపు ఉంది.',
+        'rateLimited': 'చాలా ప్రయత్నాలు. వేచి ఉండి తర్వాత మళ్లీ ప్రయత్నించండి.',
+        'other': 'కోడ్ వర్తింపజేయలేకపోయాము. మళ్లీ ప్రయత్నించండి.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'ప్రోమో కోడ్';
@@ -13437,6 +13459,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro కోడ్ ఉందా? తదుపరి స్క్రీన్‌లో దాన్ని నమోదు చేయండి.';
+
+  @override
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
@@ -13704,6 +13729,9 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'గమనికలను మళ్లీ సృష్టించండి';
 
   @override
   String get attentionSummaryFailed => 'ఈ సంభాషణను సంగ్రహించలేకపోయాం';
@@ -14884,6 +14912,20 @@ class AppLocalizationsTe extends AppLocalizations {
   String get episodeWritingNotes => 'నోట్స్ రాస్తున్నాం…';
 
   @override
+  String get homeStepTranscribing => 'ట్రాన్స్‌క్రైబ్ చేస్తున్నాం…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count రికార్డింగ్‌లు',
+      one: '$count రికార్డింగ్',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'ముందు ట్రాన్స్‌క్రిప్ట్ పూర్తి చేస్తున్నాం. మీరు ఈ పేజీ వదిలి వెళ్లవచ్చు.';
 
   @override
@@ -15425,7 +15467,63 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'కార్డును అప్‌డేట్ చేయండి, లేదా $planను నెలకు $priceతో తిరిగి పొందండి';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'లింక్ చేసిన పనులు ఉన్నాయి';
+
+  @override
+  String get hasTasksFilter => 'పనులు ఉన్నాయి';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'నెలవారీకి మారండి';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, నెలకు $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'చెల్లించని $yearly వార్షిక ఛార్జీకి బదులుగా. ప్రతి నెలా పునరుద్ధరించబడుతుంది. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'చెల్లింపు తిరస్కరించబడింది. మీ ప్లాన్ మారలేదు.';
+
+  @override
+  String get monthlySwitchUnavailable => 'ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ఈరోజు $price చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
 }

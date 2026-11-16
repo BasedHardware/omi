@@ -21,7 +21,9 @@ import 'package:omi/services/on_device/on_device_projection.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/on_device_tuning.dart';
+import 'package:omi/services/on_device/on_device_usage.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -63,13 +65,15 @@ class OnDeviceRunner with WidgetsBindingObserver {
       required this.publish,
       this.transcribeChunk,
       this.send,
-      this.cloudBaseUrl});
+      this.cloudBaseUrl,
+      this.emitUsage});
   final LocalWalSyncImpl sync;
   final OnDeviceTranscriptionController controller;
   final void Function(ServerConversation) publish;
   final Future<OnDeviceBatchResult> Function(Uint8List, String)? transcribeChunk;
   final ApiSend? send;
   final String? cloudBaseUrl;
+  final void Function(RegisteredEvent event)? emitUsage;
   Timer? _timer;
   bool _busy = false;
   Completer<void>? _runDone;
@@ -366,6 +370,9 @@ class OnDeviceRunner with WidgetsBindingObserver {
           controller.settings.saveLiveHours ? OnDeviceReason.savingLiveHours.name : OnDeviceReason.liveHoursUsed.name
     };
     if (!await sync.persistOnDeviceConversation(wal, json, generation)) return;
+    OnDeviceUsageTracker(route: OnDeviceUsageRoute.offlineBatch, emit: emitUsage)
+      ..record(audioMs: wal.seconds * 1000, segmentCount: segments.length)
+      ..flush();
     final stored = ServerConversation.fromJson(json);
     controller.recordProvenance(id, OnDeviceProvenance.fromConversation(stored)!);
     if (wal.filePath != null) controller.completedRecordingNames.add(wal.filePath!);

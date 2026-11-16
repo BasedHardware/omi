@@ -326,12 +326,18 @@
         "backend/routers/task_integrations.py",
         "backend/utils/task_sync.py",
         "app/lib/providers/task_integration_provider.dart",
+        "app/lib/services/integrations/automatic_apple_reminders_export.dart",
         "desktop/macos/Desktop/Sources/CalendarReaderService.swift",
         "desktop/macos/Desktop/Sources/GmailReaderService.swift",
         "desktop/macos/Desktop/Sources/MemoryExportExecutor.swift"
       ],
       "test_adapter": "direct_command_contract",
       "writer_anchors": [
+        {
+          "path": "app/lib/services/integrations/automatic_apple_reminders_export.dart",
+          "symbol": "client.updateActionItem",
+          "discover": true
+        },
         {
           "path": "backend/utils/task_sync.py",
           "symbol": "action_items_db.update_action_item",

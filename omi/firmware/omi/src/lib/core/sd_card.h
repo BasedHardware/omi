@@ -17,11 +17,22 @@ typedef struct {
     uint64_t read_seq;
     uint64_t write_seq;
     uint64_t dropped_packets;
+    uint64_t ring_id;
     uint32_t capacity_packets;
 } sd_ring_info_t;
 
 int app_sd_init(void);
 int app_sd_off(void);
+
+/**
+ * @brief Stop all SD mount attempts for the rest of this boot.
+ *
+ * Waits (bounded) for an in-flight attempt to finish. Shutdown calls it even
+ * when the card is already off: a failing card sits powered off between
+ * backoff retries, and a retry must not power it during System OFF entry.
+ * app_sd_off() calls it too.
+ */
+void sd_begin_shutdown(void);
 void sd_write_pause(bool pause);
 bool is_sd_on(void);
 /** @brief True when the SD is powered AND mounted (ring reads/writes will work). */
@@ -40,11 +51,21 @@ void sd_request_power(bool on);
 
 uint32_t write_to_file(uint8_t *data, uint32_t length);
 
+/** @brief Ring state after writing any buffered records to the card. */
 int sd_ring_get_info(sd_ring_info_t *info);
+/**
+ * @brief Ring state for status reporting, without writing the card.
+ *
+ * write_seq includes records still buffered in RAM. Use sd_ring_get_info()
+ * before reading or reclaiming, which need the committed state.
+ */
+int sd_ring_peek_info(sd_ring_info_t *info);
 int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read);
 int sd_ring_advance(uint64_t new_read_seq);
-int sd_ring_advance_async(uint64_t new_read_seq);
+int sd_ring_advance_id(uint64_t ring_id, uint64_t new_read_seq);
 int sd_ring_clear(void);
+
+uint32_t sd_ring_write_record(const uint8_t *data, uint32_t length, uint32_t live_session, uint16_t live_index);
 
 uint32_t get_file_size(void);
 int get_current_filename(char *buf, size_t buf_size);

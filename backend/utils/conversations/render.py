@@ -128,7 +128,7 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
         return
 
     all_folders = folders_db.get_folders(uid)
-    folder_map: Dict[str, str] = {str(f['id']): str(f['name']) for f in all_folders}
+    folder_map: Dict[str, str] = {str(f.id): str(f.name) for f in all_folders}
 
     for conv in conversations:
         folder_id = conv.get('folder_id')

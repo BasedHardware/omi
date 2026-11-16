@@ -135,7 +135,9 @@ def test_batch_pipeline_adapter_is_the_scoped_freshness_contract():
     assert 'stage="worker_flight"' in chain_query and 'rate(' in chain_query and '[10m])' in chain_query
     # Two scrape jobs read every worker pod: one series per pod, or demand doubles.
     assert 'max by (namespace, pod) (' in chain_query
+    assert 'sampler_observed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
     assert 'metrics_refreshed_at_seconds{<<.LabelMatchers>>} < 60' in chain_query
+    assert 'or' in chain_query  # old-worker clock remains valid during rollback/mixed fleets
     assert 'or vector(0)' not in chain_query
     # Stage timers export only the stage label; requiring worker_release here
     # (or in the HPA selector) would match zero series and pin the floor.

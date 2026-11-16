@@ -119,14 +119,12 @@ def test_first_summary_owner_stamps_creation_and_keeps_stamp_on_coalescing(monke
     monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
     monkeypatch.setattr(reprocess, '_enqueue', lambda row: None)
     monkeypatch.setenv('K_SERVICE', 'summary-owner')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     reprocess.mark('owner', 'conversation', 'en', now=1, mutate=mutate, snapshot_summary=True)
     first = saved['first_summary_policy']
-    assert first['source_role'] == 'summary-owner' and not first['first_summary_enabled']
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
+    assert first['source_role'] == 'summary-owner' and first['first_summary_enabled']
     reprocess.mark('owner', 'conversation', 'en', now=2, mutate=mutate, snapshot_summary=True)
-    assert saved['first_summary_policy'] == first and not first_summary_pending(saved)
+    assert saved['first_summary_policy'] == first and first_summary_pending(saved)
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_SECONDS', '60')
     saved['dormant'] = True  # A new obligation may use the owner's new policy.
     reprocess.mark('owner', 'conversation', 'en', now=3, mutate=mutate, snapshot_summary=True)
     assert first_summary_pending(saved) and saved['first_summary_policy']['policy_id'] != first['policy_id']

@@ -59,7 +59,7 @@ Process Now, ladder debit and the full dark soak, are unchanged.
 | Mode | Upload admission | Sequencer | In flight |
 |---|---|---|---|
 | `on` | today | today | today |
-| `draining` | no new legacy job: `admit_or_legacy` admits batch, `legacy_fresh.admit` is skipped, intake never falls back to legacy (BYOK and unsupported languages go to `provider_stt`) | dispatches only already-accepted `sync_backfill_pending` entries; registers no new owner | running legacy tasks finish; `sr-` rows on the old binding drain |
+| `draining` | no new legacy job: `admit_or_legacy` admits batch, recent unbound fresh promotion is disabled, intake never falls back to legacy (BYOK and unsupported languages go to `provider_stt`) | dispatches only already-accepted `sync_backfill_pending` entries; registers no new owner | running legacy tasks finish; `sr-` rows on the old binding drain |
 | `dark` | as `draining` | sweep and wake return 200 `legacy_dark` without claiming or dispatching; the sweep still runs enrichment repair (`reprocess.sweep`) and `summary_debt_repair.tick` until C4 moves them to `enrichment-maintenance` (lead ruling 10-19) | none (entry precondition) |
 
 Any failure to read the mode serves `on`. During the soak the legacy image, queues and scheduler job are untouched, so `on` is always the safe direction.

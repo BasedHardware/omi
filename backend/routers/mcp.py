@@ -15,6 +15,8 @@ import database.phone_calls as phone_calls_db
 from firebase_admin import auth as firebase_auth
 
 # from database.vector_db import query_vectors_by_metadata
+from config.mcp_scopes import CONNECTOR_ACCESS_REGISTRY
+from models.connector_access import ConnectorAccess, connector_access
 from models.memories import Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from models.conversation import AppResult
@@ -197,6 +199,7 @@ class McpStatusResponse(BaseModel):
 
 class McpOauthGrantsResponse(BaseModel):
     grants: List[Dict[str, Any]] = []
+    connector_access: Dict[str, ConnectorAccess] = {}
 
 
 class McpScreenActivityRow(BaseModel):
@@ -222,7 +225,10 @@ class McpScreenActivitySummaryResponse(BaseModel):
 
 @router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
 def get_oauth_grants(uid: str = Depends(get_current_user_id)):
-    return {"grants": mcp_oauth_db.list_user_grants(uid)}
+    return {
+        "grants": mcp_oauth_db.list_user_grants(uid),
+        "connector_access": {name: connector_access(name) for name in CONNECTOR_ACCESS_REGISTRY},
+    }
 
 
 @router.delete("/v1/mcp/oauth/grants/{grant_id}", status_code=204, tags=["mcp"])

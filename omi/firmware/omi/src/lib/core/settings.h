@@ -92,4 +92,40 @@ int app_settings_save_lsm6dsl_time_base(uint64_t epoch_s, uint32_t imu_timestamp
  */
 int app_settings_get_lsm6dsl_time_base(uint64_t *epoch_s, uint32_t *imu_timestamp);
 
+/**
+ * @brief Persist the capture mute/pause flag (issue #5054).
+ *
+ * This is the pendant's source of truth. Disconnect must not clear it.
+ * 0 = capturing, 1 = muted.
+ */
+int app_settings_save_muted(uint8_t muted);
+
+/**
+ * @brief Get the persisted capture mute/pause flag.
+ *
+ * Fails closed: 1 until app_settings_init() has loaded the omi subtree, and
+ * after any init/load failure that leaves the stored value unknown.
+ *
+ * @return 1 when muted, 0 otherwise.
+ */
+uint8_t app_settings_get_muted(void);
+
+#define MAX_DEVICE_NAME_PAYLOAD_LEN 25
+#define MAX_DEVICE_NAME_LEN (MAX_DEVICE_NAME_PAYLOAD_LEN + 1) /* 26 bytes including null-terminator */
+
+/**
+ * @brief Save the device name setting to onboard persistent storage.
+ *
+ * @param name The new device name (null-terminated string, up to 25 UTF-8 bytes payload).
+ * @return 0 on success, negative error code otherwise.
+ */
+int app_settings_save_device_name(const char *name);
+
+/**
+ * @brief Get the current persisted device name.
+ *
+ * @return The current device name string, or empty string if not set.
+ */
+const char *app_settings_get_device_name(void);
+
 #endif // SETTINGS_H

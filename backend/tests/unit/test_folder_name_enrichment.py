@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from database.ports.folders import FolderEntity
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -72,8 +73,8 @@ class TestAddFolderNamesToConversations:
 
     def test_conversations_with_folder_id_get_folder_name(self, render):
         _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
-            {'id': 'folder2', 'name': 'Personal'},
+            FolderEntity(id='folder1', name='Work'),
+            FolderEntity(id='folder2', name='Personal'),
         ]
         conversations = [
             {'id': 'conv1', 'folder_id': 'folder1'},
@@ -98,7 +99,7 @@ class TestAddFolderNamesToConversations:
 
     def test_folder_id_not_found_in_db_returns_none(self, render):
         _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
+            FolderEntity(id='folder1', name='Work'),
         ]
         conversations = [
             {'id': 'conv1', 'folder_id': 'deleted_folder'},
@@ -109,7 +110,7 @@ class TestAddFolderNamesToConversations:
 
     def test_mixed_conversations_with_and_without_folder_id(self, render):
         _mock_get_folders.return_value = [
-            {'id': 'folder1', 'name': 'Work'},
+            FolderEntity(id='folder1', name='Work'),
         ]
         conversations = [
             {'id': 'conv1', 'folder_id': 'folder1'},
@@ -132,8 +133,8 @@ class TestAddFolderNamesToConversations:
     def test_batch_fetches_all_folders_once(self, render):
         """Verify N+1 avoidance: get_folders is called only once regardless of conversation count."""
         _mock_get_folders.return_value = [
-            {'id': 'f1', 'name': 'Work'},
-            {'id': 'f2', 'name': 'Personal'},
+            FolderEntity(id='f1', name='Work'),
+            FolderEntity(id='f2', name='Personal'),
         ]
         conversations = [
             {'id': 'conv1', 'folder_id': 'f1'},
@@ -152,7 +153,7 @@ class TestAddFolderNamesWebhookPayload:
         _mock_get_folders.reset_mock()
 
     def test_payload_with_folder_id_gets_folder_name(self, render):
-        _mock_get_folders.return_value = [{'id': 'folder1', 'name': 'Work'}]
+        _mock_get_folders.return_value = [FolderEntity(id='folder1', name='Work')]
         payload = {'folder_id': 'folder1'}
 
         render.populate_folder_names('uid1', [payload])

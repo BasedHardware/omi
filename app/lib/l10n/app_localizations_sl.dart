@@ -7045,6 +7045,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Prijava s Apple ni uspela, prosimo, poskusite ponovno.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Prijava z Applom ni uspela. Poskusite znova ali nadaljujte z Googlom.';
+
+  @override
   String get authFailedToRetrieveToken => 'Pridobivanje Firebase žetona ni uspelo, prosimo, poskusite ponovno.';
 
   @override
@@ -9196,6 +9199,24 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Trenutne različice vdelane programske opreme ni mogoče določiti';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Uporabi za trenutni paket';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koda je uporabljena za vaš trenutni paket.',
+        'refused': 'Te kode ni mogoče uporabiti. Preverite kodo in zahtevani paket.',
+        'conflict': 'Koda je že uporabljena ali pa vaš paket že ima popust.',
+        'rateLimited': 'Preveč poskusov. Počakajte in poskusite pozneje.',
+        'other': 'Kode ni bilo mogoče uporabiti. Poskusite znova.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promocijska koda';
@@ -13413,6 +13434,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.';
+
+  @override
   String get paywallTrialCancelNote => 'Prekličite kadar koli. Brez stroškov, brez kazni.';
 
   @override
@@ -13681,6 +13705,9 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Znova ustvari zapiske';
 
   @override
   String get attentionSummaryFailed => 'Tega pogovora ni bilo mogoče povzeti';
@@ -14849,6 +14876,22 @@ class AppLocalizationsSl extends AppLocalizations {
   String get episodeWritingNotes => 'Pišemo zapiske…';
 
   @override
+  String get homeStepTranscribing => 'Prepisujemo…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count posnetkov',
+      few: '$count posnetki',
+      two: '$count posnetka',
+      one: '$count posnetek',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Najprej dokončujemo prepis. To stran lahko zapustite.';
 
   @override
@@ -15390,7 +15433,63 @@ class AppLocalizationsSl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaša kartica je bila zavrnjena';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Posodobite kartico ali znova dobite $plan za $price na mesec';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Posodobite kartico, da znova dobite $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ima povezane naloge';
+
+  @override
+  String get hasTasksFilter => 'Z nalogami';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Preklopi na mesečno';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price na mesec';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Nadomesti neplačano letno bremenitev $yearly. Obnavlja se mesečno. Prekličite kadar koli.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Preklop trenutno ni na voljo. Namesto tega posodobite kartico.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Zdaj plačujete mesečno';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Danes plačano $price. Obnavlja se mesečno.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.';
 }

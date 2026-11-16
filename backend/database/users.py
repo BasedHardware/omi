@@ -48,7 +48,7 @@ from database.person_aliases import (
 from database.read_boundary import parse_payload_strict, parse_snapshot_or_none, parse_snapshot_strict
 from database.speaker_learning_fields import project_person_learning, speech_sample_source, voice_learning_fields
 from database.speaker_profile_authority import person_teaching_authorized
-from database import speaker_auto_enroll as auto_enroll_db
+from database import speaker_auto_enroll as auto_enroll_db, transcript_pointer
 from database.redis_db import (
     delete_cached_user_geolocation,
     try_acquire_client_device_write_lock,
@@ -389,17 +389,21 @@ def clear_byok_active(uid: str):
 
 @cache_writer('deletion_marker_cache')
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
-    # Stored in a top-level collection so it survives the user record being deleted.
-    # Use merge=True so a retried delete request does not erase a durable wipe marker
-    # (pending/failed/retrying/deleting_auth) already written to the same document.
-    account_deletion_document(uid).set(
+    """Attach deletion feedback to an existing wipe marker. Never creates one.
+
+    The feedback fields used to be merge-written before the wipe intent. A failed
+    intent then left a marker with only feedback fields and no wipe_status, which
+    blocks sign-in with no restore path. Update-only fails when no marker exists,
+    so feedback can no longer create a marker. Callers run after the intent write
+    and treat a failure as best-effort.
+    """
+    account_deletion_document(uid).update(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        },
-        merge=True,
+        }
     )
 
 
@@ -1147,8 +1151,9 @@ def replace_person_speech_profile(
         'speech_sample_source': speech_sample_source(conversation_id, segment_ids, expected_receipt_generation),
         **voice_learning_fields('learned', 'stored', speech_seconds),
     }
-    return _replace_speech_profile_transaction(
-        db.transaction(),
+    return transcript_pointer.run_preloaded_transactional(
+        db,
+        _replace_speech_profile_transaction,
         ref,
         expected_updated_at,
         profile,

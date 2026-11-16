@@ -102,6 +102,10 @@ async def modulate_batch_async(
         raise ModulateBatchError('credit_refusal' if breaker_budget_exhausted(ENDPOINT_STT) else 'breaker_open')
     client = get_batch_vendor_client() if client is None else client
     burn_seconds = wav_duration_seconds(audio_bytes)
+    from utils.stt.allowance_watch import observe_async
+    from utils.byok import get_byok_uid
+
+    await observe_async(get_byok_uid(), 'prerecorded', 'modulate', burn_seconds)
     try:
         response = await client.post(
             MODULATE_BATCH_URL,

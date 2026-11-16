@@ -399,6 +399,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/80/9d/027b9bf61a44422bc
 wheels = [{ url = "https://files.pythonhosted.org/packages/0a/03/94755c64a2fb85cba734ac05a4f80096b8c0acfab0508c9d52c57f571687/google_cloud_firestore-2.21.0-py3-none-any.whl", upload-time = 2025-06-03T19:28:25Z, size = 368813, hashes = { sha256 = "bf33ccc38a27afc60748d1f9bb7c46b078d0d39d288636bdfd967611d7b3f17f" } }]
 
 [[packages]]
+name = "google-cloud-kms"
+version = "3.6.0"
+sdist = { url = "https://files.pythonhosted.org/packages/73/8a/ee0569d6dd4f4bb99fdf2a28466f1914a3f2849506c75b620c213feb043b/google_cloud_kms-3.6.0.tar.gz", upload-time = 2025-09-22T16:51:16Z, size = 329923, hashes = { sha256 = "c0f7f2474e35e99e6a36651520a26fdba4bb8e73b7cd0d9bff8c8bd92737afcc" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/7c/82/686bde4666b72e821f724dc2d143ad0b9a50af7c145ecba1e57ccb9aeb97/google_cloud_kms-3.6.0-py3-none-any.whl", upload-time = 2025-09-22T16:51:00Z, size = 272683, hashes = { sha256 = "1dc389f327cce288ac3091860497ab50b2d166fb71603e632bc4bfd1b2b74cd5" } }]
+
+[[packages]]
 name = "google-cloud-storage"
 version = "3.4.1"
 sdist = { url = "https://files.pythonhosted.org/packages/bd/ef/7cefdca67a6c8b3af0ec38612f9e78e5a9f6179dd91352772ae1a9849246/google_cloud_storage-3.4.1.tar.gz", upload-time = 2025-10-08T18:43:39Z, size = 17238203, hashes = { sha256 = "6f041a297e23a4b485fad8c305a7a6e6831855c208bcbe74d00332a909f82268" } }

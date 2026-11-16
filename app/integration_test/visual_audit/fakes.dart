@@ -148,7 +148,7 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   String get currentFirmwareVersion => 'Unknown';
   @override
-  Future<void> getDeviceInfo() async {}
+  Future<void> getDeviceInfo({bool forceRefresh = false}) async {}
   @override
   Future<void> refreshRingStorageStatus() async {}
   @override

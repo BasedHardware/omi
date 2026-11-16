@@ -860,10 +860,9 @@ def resolve_speakers_for_processing(
     evidence_token = None if skip_automatic else speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:
-        if match_scores.enabled():
-            updates = [s.speaker_match_scores for s in conversation.transcript_segments if s.speaker_match_scores]
-            if updates:
-                conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
+        updates = [s.speaker_match_scores for s in conversation.transcript_segments if s.speaker_match_scores]
+        if updates:
+            conversation.speaker_match_scores = match_scores.merge(conversation.speaker_match_scores, updates)
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
     began = time.monotonic()
@@ -1508,9 +1507,8 @@ def _resolve(
     )
 
     try:
-        if match_scores.enabled():
-            retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
-            conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
+        retained = [r for r in (conversation.speaker_match_scores or []) if r['stage'] != 'resolution']
+        conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
     speaker_evidence.capture_resolution(resolution)

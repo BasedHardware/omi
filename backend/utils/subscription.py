@@ -46,6 +46,7 @@ from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 from config import ladder_v1 as ladder_policy
+from config.refactor_modes import default_on as refactor_default_on
 from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
@@ -849,17 +850,8 @@ def get_chat_quota_snapshot(
 
     Platform is retained for callers; all platforms use the real plan quota.
     """
-    # Flagged quota display and admission share one authority on Free and paid tiers.
-    enforcing = ladder_policy.budget_enforcement_enabled()
-    subscription = None
-    shared_budget = None
-    if enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
-
-    if not enforcing:
-        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
-        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
@@ -1630,6 +1622,19 @@ def _processing_closed(reason: str) -> ConversationProcessingAllowance:
     return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
 
 
+# Ops kill (default on): once a plan's monthly listening allowance is spent,
+# transcripts made on the phone (on-device / custom STT) still get Omi's
+# summary, memories and tasks. David 2026-11-16: keep summaries on for free
+# users past the cap until free-user cost is re-measured. false/0/off/no
+# restores the cap (`plan_allowance_exhausted` skip).
+PROCESSING_PAST_CAP_ENV = 'CONVERSATION_PROCESSING_PAST_CAP_ENABLED'
+PROCESSING_PAST_CAP_REASON = 'plan_allowance_exhausted_kept_on'
+
+
+def conversation_processing_past_cap_enabled() -> bool:
+    return refactor_default_on(PROCESSING_PAST_CAP_ENV)
+
+
 def _usage_speech_seconds(usage: Any) -> Optional[int]:
     """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
 
@@ -1667,7 +1672,11 @@ def resolve_conversation_processing_allowance(
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
         if byok_active is _UNRESOLVED:
             byok_active = users_db.is_byok_active(uid)
-        if byok_active and _request_has_llm_byok_key():
+        from utils.stt.allowance_watch import observe
+
+        customer_funded = bool(byok_active and _request_has_llm_byok_key())
+        observe(uid, 'processing', 'llm', customer_funded=customer_funded)
+        if customer_funded:
             return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
         if subscription is _UNRESOLVED:
             subscription = users_db.get_user_valid_subscription(uid)
@@ -1699,6 +1708,10 @@ def resolve_conversation_processing_allowance(
         if remaining > 0:
             return ConversationProcessingAllowance(
                 CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        if conversation_processing_past_cap_enabled():
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, None, PROCESSING_PAST_CAP_REASON
             )
         return _processing_closed('plan_allowance_exhausted')
     except Exception as exc:

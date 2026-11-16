@@ -7093,6 +7093,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Nabigo ang pag-sign in gamit ang Apple, mangyaring subukan ulit.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Hindi gumana ang pag-sign in gamit ang Apple. Subukang muli o magpatuloy gamit ang Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nabigo ang pagkuha ng firebase token, mangyaring subukan ulit.';
 
   @override
@@ -9254,6 +9258,24 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Hindi matukoy ang kasalukuyang bersyon ng firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Ilapat sa Kasalukuyang Plan';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Nailapat ang code sa kasalukuyan mong plan.',
+        'refused': 'Hindi mailapat ang code na ito. Suriin ang code at kinakailangang plan.',
+        'conflict': 'Nagamit na ang code o may diskuwento na ang plan mo.',
+        'rateLimited': 'Masyadong maraming pagsubok. Maghintay at subukan ulit mamaya.',
+        'other': 'Hindi mailapat ang code. Pakisubukang muli.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Promo code';
@@ -13490,6 +13512,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'May Omi Pro code ka? Ilagay ito sa susunod na screen.';
+
+  @override
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override
@@ -13757,6 +13782,9 @@ class AppLocalizationsTl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Bumuo muli ng mga tala';
 
   @override
   String get attentionSummaryFailed => 'Hindi ma-summarize ang usapang ito';
@@ -14940,6 +14968,20 @@ class AppLocalizationsTl extends AppLocalizations {
   String get episodeWritingNotes => 'Isinusulat ang mga tala…';
 
   @override
+  String get homeStepTranscribing => 'Tinatranscribe…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na recording',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Tinatapos muna ang transcript. Maaari kang umalis sa pahinang ito.';
 
   @override
@@ -15484,7 +15526,64 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paymentDeclinedTitle => 'Tinanggihan ang iyong card';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'I-update ang card, o ibalik ang $plan sa $price bawat buwan';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'I-update ang card para maibalik ang $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'May mga naka-link na gawain';
+
+  @override
+  String get hasTasksFilter => 'May mga gawain';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Lumipat sa Buwanan';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price bawat buwan';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Papalitan ang hindi pa nababayarang taunang singil na $yearly. Nire-renew buwan-buwan. Kanselahin anumang oras.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Tinanggihan ang bayad. Hindi nagbago ang plan mo.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Buwanan ka na';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Nabayaran ang $price ngayon. Nire-renew buwan-buwan.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged =>
+      'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
 }

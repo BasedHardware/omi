@@ -990,6 +990,48 @@ def release_byok_llm_error_notification_lock(uid: str, provider: str, reason: st
     r.delete(f'users:{uid}:byok_llm_error:{provider}:{reason}')
 
 
+PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS = 90 * 24 * 60 * 60
+
+
+def claim_payment_recovery_notification(uid: str, invoice_id: str) -> bool:
+    """Atomically claim one recovery push per owner and current Stripe invoice.
+
+    The 90-day bound comfortably covers Stripe webhook retries and dunning while
+    allowing a distinct later invoice its own notification. Unlike the optional
+    webhook event ledger, this marker also dedupes different event IDs for the
+    same invoice. Redis errors deliberately propagate so the webhook remains
+    retryable and cannot send without a confirmed claim.
+    """
+    return bool(
+        r.set(
+            f'users:{uid}:payment_recovery_notification:{invoice_id}',
+            '1',
+            nx=True,
+            ex=PAYMENT_RECOVERY_NOTIFICATION_TTL_SECONDS,
+        )
+    )
+
+
+TRIAL_ENDING_NOTIFICATION_TTL_SECONDS = 60 * 24 * 60 * 60
+
+
+def claim_trial_ending_notification(uid: str, subscription_id: str, trial_end: int) -> bool:
+    """Atomically claim one trial-ending reminder per subscription and trial end.
+
+    Stripe retries and replays of the same `trial_will_end` event send nothing twice; an
+    extended trial (new `trial_end`) earns its own reminder. Redis errors propagate so the
+    webhook stays retryable and never sends without a confirmed claim.
+    """
+    return bool(
+        r.set(
+            f'users:{uid}:trial_ending_notification:{subscription_id}:{trial_end}',
+            '1',
+            nx=True,
+            ex=TRIAL_ENDING_NOTIFICATION_TTL_SECONDS,
+        )
+    )
+
+
 # ******************************************************
 # ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
 # ******************************************************

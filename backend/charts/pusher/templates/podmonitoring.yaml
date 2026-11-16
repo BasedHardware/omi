@@ -1,0 +1,25 @@
+{{- if .Values.podMonitoring.enabled }}
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: {{ include "pusher.fullname" . }}
+  labels:
+    {{- include "pusher.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "pusher.selectorLabels" . | nindent 6 }}
+  targetLabels:
+    fromPod:
+      - {from: service_name, to: service_name}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.podMonitoring.interval }}
+      authorization:
+        type: Bearer
+        credentials:
+          secret:
+            name: metrics-scrape-token
+            key: token
+{{- end }}

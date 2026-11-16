@@ -35,16 +35,30 @@ def test_cpu_placement_ceiling_and_identity():
     assert metric['metric']['name'] == 'omi_record_seal_backlog'
     assert metric['target'] == {'type': 'AverageValue', 'averageValue': '4'}
     env = {e['name']: e.get('value') for e in container['env']}
-    assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'false'
     # Only repair has IO in prod: an empty worker policy map refuses IO, so the two never race on one row.
     assert json.loads(env['RECORD_SEAL_REPAIR_SERVER_FLAGS']) == {}
     assert env['RECORD_SEAL_OVERLAP_TRIM_ENABLED'] == env['RECORD_SEAL_UPLOAD_FAILED_REPAIR_ENABLED'] == 'true'
+    assert container['ports'] == [{'name': 'metrics', 'containerPort': 8080}]
+    assert container['readinessProbe']['httpGet'] == {'path': '/metrics', 'port': 'metrics'}
+    assert docs[('PodMonitoring', 'record-seal-worker')]['spec']['endpoints'] == [
+        {'port': 'metrics', 'path': '/metrics', 'interval': '15s'}
+    ]
+    repair_env = {
+        e['name']: e.get('value') for e in cron['jobTemplate']['spec']['template']['spec']['containers'][0]['env']
+    }
+    assert repair_env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
+    assert json.loads(repair_env['RECORD_SEAL_REPAIR_SERVER_FLAGS'])
+    # Only the worker Deployment changes from the former production runtime setting.
+    running = documents('--set', 'recordSealWorker.runtimeEnabled=true')
+    assert set(docs) == set(running)
+    assert {key for key in docs if docs[key] != running[key]} == {('Deployment', 'record-seal-worker')}
 
 
 def test_rollback_and_overlap_are_explicit_and_preserve_gpu_resources():
     # Start from the rollback state explicitly, since prod values now run repair (suspend: false).
-    before = documents('--set', 'recordSealRepair.suspend=true')
-    overlap = documents('--set', 'recordSealRepair.suspend=false')
+    before = documents('--set', 'recordSealWorker.runtimeEnabled=true,recordSealRepair.suspend=true')
+    overlap = documents('--set', 'recordSealWorker.runtimeEnabled=true,recordSealRepair.suspend=false')
     after = documents('--set', 'recordSealWorker.runtimeEnabled=false,recordSealRepair.suspend=false')
     assert overlap[('CronJob', 'record-seal-repair')]['spec']['suspend'] is False
     assert {key for key in before if before[key] != after[key]} == {
@@ -93,3 +107,39 @@ def test_other_stages_never_create_workers():
         assert result.returncode == 0, result.stderr
         docs = {(doc['kind'], doc['metadata']['name']): doc for doc in yaml.safe_load_all(result.stdout) if doc}
         assert ('Deployment', 'record-seal-worker') not in docs
+
+
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_fresh_switch_controls_both_repair_cron_and_continuous_worker(enabled):
+    docs = documents('--set', f'recordSealRepair.freshEnabled={enabled}')
+    worker = docs[('Deployment', 'record-seal-worker')]['spec']['template']['spec']
+    repair = docs[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    for pod in (worker, repair):
+        env = {entry['name']: entry.get('value') for entry in pod['containers'][0]['env']}
+        assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == enabled
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod', 'staging'])
+@pytest.mark.parametrize('enabled', ['true', 'false'])
+def test_fresh_switch_reaches_every_gpu_worker_without_changing_the_image(environment, enabled):
+    result = render(
+        '-f',
+        str(CHART / f'{environment}_omi_batch-pipeline-worker_values.yaml'),
+        '--set',
+        f'recordSealRepair.freshEnabled={enabled}',
+        namespace='staging' if environment == 'staging' else f'{environment}-omi-backend',
+    )
+    assert result.returncode == 0, result.stderr
+    workers = [
+        container
+        for doc in yaml.safe_load_all(result.stdout)
+        if doc and doc['kind'] == 'Deployment'
+        for container in doc['spec']['template']['spec']['containers']
+        if container['name'] == 'worker'
+    ]
+    assert workers
+    for worker in workers:
+        env = {entry['name']: entry.get('value') for entry in worker['env']}
+        assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == enabled
+        assert env['BATCH_HELD_DEAD_LETTER_ENABLED'] == 'true'
+        assert worker['image'].endswith('@sha256:' + 'a' * 64)

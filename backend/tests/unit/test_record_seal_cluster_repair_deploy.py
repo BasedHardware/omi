@@ -24,15 +24,17 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert repair['concurrencyPolicy'] == 'Forbid'
     assert sweep['jobTemplate']['spec']['activeDeadlineSeconds'] == 240
     assert repair['jobTemplate']['spec']['activeDeadlineSeconds'] == 1680
-    assert repair['jobTemplate']['spec']['backoffLimit'] == 0
+    assert repair['jobTemplate']['spec']['backoffLimit'] == 5
+    assert repair['jobTemplate']['spec']['backoffLimitPerIndex'] == 0
+    assert repair['jobTemplate']['spec']['maxFailedIndexes'] == 5
     pod = repair['jobTemplate']['spec']['template']['spec']
     worker = next(doc for (kind, _), doc in docs.items() if kind == 'Deployment')['spec']['template']['spec']
     assert pod['serviceAccountName'] == worker['serviceAccountName']
     assert pod['containers'][0]['image'] == worker['containers'][0]['image']
     assert pod['containers'][0]['command'] == ['python', 'scripts/record_seal_repair_job.py']
     env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
-    # Prod runs repair at 16 workers: 48 saturated per-row I/O (2026-11-05, #24729 rolled back).
-    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '16'
+    # Match the live per-pod worker count; five independent CPU pods supply the extra capacity.
+    assert env['RECORD_SEAL_REPAIR_WORKERS'] == '8'
     assert env['RECORD_SEAL_REPAIR_ROW_SECONDS'] == '270'
     assert env['RECORD_SEAL_REPAIR_ENABLED'] == 'true'
     assert env['RECORD_SEAL_REPAIR_JOBS'] == 'on'
@@ -54,6 +56,55 @@ def test_independent_job_uses_worker_identity_and_has_separate_deadline():
     assert not any('ALLOWLIST' in key for key in flags)
     assert 'nvidia.com/gpu' not in pod['containers'][0]['resources']['limits']
     assert pod['containers'][0]['securityContext']['readOnlyRootFilesystem']
+
+
+def test_repair_pod_runs_on_cpu_only_pool_with_three_requested_cores():
+    pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+    assert terms == [
+        {
+            'matchExpressions': [
+                {
+                    'key': 'cloud.google.com/gke-nodepool',
+                    'operator': 'In',
+                    'values': ['api-pool'],
+                }
+            ]
+        }
+    ]
+    assert 'tolerations' not in pod  # The CPU pool has no GPU/batch taint.
+    resources = pod['containers'][0]['resources']
+    # Leave capacity for node daemons on n2-standard-4; limit stays four CPU.
+    assert resources['requests']['cpu'] == '3'
+    assert resources['limits']['cpu'] == '4'
+    assert 'nvidia.com/gpu' not in resources['limits']
+
+
+def test_repair_placement_rolls_back_to_the_old_exclusion_from_values_only():
+    pod = documents('--set', 'recordSealRepair.nodePool=', '--set-json', 'recordSealRepair.tolerations=[]')[
+        ('CronJob', 'record-seal-repair')
+    ]['spec']['jobTemplate']['spec']['template']['spec']
+    terms = pod['affinity']['nodeAffinity']['requiredDuringSchedulingIgnoredDuringExecution']['nodeSelectorTerms']
+    assert terms == [
+        {
+            'matchExpressions': [
+                {'key': 'cloud.google.com/gke-accelerator', 'operator': 'DoesNotExist'},
+                {
+                    'key': 'cloud.google.com/gke-nodepool',
+                    'operator': 'NotIn',
+                    'values': ['batch-pipeline-pool', 'batch-pipeline-pool-spot', 'parakeet-pool'],
+                },
+            ]
+        }
+    ]
+    assert 'tolerations' not in pod
+
+
+def test_repair_row_process_may_read_precompiled_bytecode():
+    pod = documents()[('CronJob', 'record-seal-repair')]['spec']['jobTemplate']['spec']['template']['spec']
+    env = {e['name']: e.get('value') for e in pod['containers'][0]['env']}
+    # The image precompiles .pyc at build; the row must be allowed to use it.
+    assert 'PYTHONDONTWRITEBYTECODE' not in env
 
 
 def test_seal_rules_have_independent_chart_rollback_switches():
@@ -166,7 +217,13 @@ def test_log_metrics_use_only_allowlisted_row_counts_and_numeric_age():
     assert all('jsonPayload.logger="record-seal-repair"' in metric['filter'] for metric in metrics)
     assert all('jsonPayload.message' in metric['filter'] for metric in metrics)
     assert extract(metrics[1]['valueExtractor'], {'seal_age_seconds': 1801}) == '1801'
+    assert 'jsonPayload.message:"\\\"seal_age_seconds\\\""' in metrics[1]['filter']
     assert extract(metrics[2]['valueExtractor'], {'oldest_unsealed_seconds': 1802}) == '1802'
+    invalid = next(metric for metric in metrics if metric['name'].endswith('_invalid_clock_rows'))
+    assert invalid['filter'] == metrics[2]['filter']
+    assert invalid['metricDescriptor'] == {'metricKind': 'DELTA', 'valueType': 'INT64', 'unit': '1'}
+    assert extract(invalid['valueExtractor'], {'invalid_clock_rows': 2}) == '2'
+
     proof = next(metric for metric in metrics if metric['name'].endswith('_proof_refused'))
     assert list(proof['labelExtractors']) == ['proof_reason']
     assert 'proof_refused' in proof['filter']
@@ -236,3 +293,54 @@ def test_pusher_flag_can_arrive_unshadowed_from_existing_runtime_configmap():
     container = deployment['spec']['template']['spec']['containers'][0]
     assert {'configMapRef': {'name': 'projection-debt-test-config'}} in container['envFrom']
     assert not any(item['name'] == 'PUSHER_PROJECTION_DEBT_DURABLE_ENABLED' for item in container.get('env', []))
+
+
+def test_worker_deploy_gates_selected_source_before_build_or_helm():
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[3] / '.github/workflows/gcp_diarizer.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    gate_index, gate = next(
+        (i, step) for i, step in enumerate(steps) if step.get('name') == 'Verify serving Firestore indexes'
+    )
+    assert 'if' not in gate
+    assert gate['uses'] == './.github/firestore-workflow/.github/actions/firestore-readiness'
+    assert not gate.get('continue-on-error', False)
+    assert gate['with']['source_sha'] == '${{ steps.vars.outputs.source_sha }}'
+    assert gate['with']['project_id'] == '${{ vars.RUNTIME_GCP_PROJECT_ID }}'
+    # The optional worker helper has its own checkout; the Firestore gate owns
+    # this path, not whichever step happens to be immediately before the gate.
+    control_checkouts = [
+        (i, step)
+        for i, step in enumerate(steps)
+        if step.get('uses', '').startswith('actions/checkout@')
+        and step.get('with', {}).get('path') == '.github/firestore-workflow'
+    ]
+    assert len(control_checkouts) == 1
+    controls_index, controls = control_checkouts[0]
+    assert controls_index < gate_index
+    assert 'if' not in controls
+    assert controls['with']['ref'] == '${{ github.workflow_sha }}'
+    assert controls['with']['path'] == '.github/firestore-workflow'
+    source = next(step for step in steps if step.get('id') == 'vars')
+    assert 'source_sha=$(git rev-parse HEAD)' in source['run']
+    mutations = [
+        i
+        for i, step in enumerate(steps)
+        if step.get('name') in {'Build and Push Docker image', 'Verify promoted worker digest'}
+        or 'upgrade --install' in step.get('run', '')
+        or 'worker_image_only.py deploy' in step.get('run', '')
+    ]
+    assert len(mutations) == 4 and all(i > gate_index for i in mutations)
+
+
+def test_fresh_lane_has_minute_cadence_and_explicit_rollback():
+    repair = documents()[('CronJob', 'record-seal-repair')]['spec']
+    assert repair['schedule'] == '* * * * *'
+    assert repair['concurrencyPolicy'] == 'Forbid'
+    env = {e['name']: e.get('value') for e in repair['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'true'
+    old = documents(
+        '--set', 'recordSealRepair.freshEnabled=false', '--set-string', 'recordSealRepair.schedule=*/5 * * * *'
+    )[('CronJob', 'record-seal-repair')]['spec']
+    assert old['schedule'] == '*/5 * * * *'
+    env = {e['name']: e.get('value') for e in old['jobTemplate']['spec']['template']['spec']['containers'][0]['env']}
+    assert env['RECORD_SEAL_REPAIR_FRESH_ENABLED'] == 'false'

@@ -13,6 +13,7 @@ covers:
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/ArmedCaptureRecoveryPolicy.swift
+  - desktop/macos/Desktop/Sources/AppState/SleepCaptureRearmPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/ArmedMicrophoneRecoveryCoordinator.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SilentMicDiagnostics.swift
   - desktop/macos/Desktop/Sources/AppState/SilentMicDiagnostics.swift

@@ -15,7 +15,9 @@ import logging
 import time
 from typing import Any, Optional
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
+
+from utils.observability.reasons import ListenNoAudioCloseReason
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +40,54 @@ LISTEN_WS_CLOSE_FINALIZE_SECONDS = Histogram(
     buckets=(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0, 120.0),
 )
 
+# Named differently from omi_listen_no_audio_teardown_total on purpose: that family keeps its own
+# labels (transcription_source), and one metric name cannot carry two label sets. Its client_platform
+# values mirror utils.observability.transcription._PLATFORMS; a test pins the two sets together.
+# Reuse the registered collector when a test reloads this module.
+OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL: Counter = getattr(REGISTRY, '_names_to_collectors', {}).get(
+    'omi_listen_no_audio_close_reason_total'
+) or Counter(
+    'omi_listen_no_audio_close_reason_total',
+    'Accepted /v4/listen sessions that tore down before any first audio byte, by the close the server observed',
+    ['client_platform', 'close_reason'],
+)
+
 # Zero-initialise every series so ramp gates read 0, not absent, before the first close.
 for _initiator in INITIATORS:
     for _held in HELD:
         LISTEN_WS_CLOSE_FINALIZE_SECONDS.labels(initiator=_initiator, held=_held)
         for _code_class in CODE_CLASSES:
             LISTEN_WS_CLOSE_TOTAL.labels(code_class=_code_class, initiator=_initiator, held=_held)
+for _platform in ('android', 'desktop', 'ios', 'linux', 'macos', 'mobile', 'unknown', 'web', 'windows'):
+    for _close_reason in ListenNoAudioCloseReason:
+        OMI_LISTEN_NO_AUDIO_CLOSE_REASON_TOTAL.labels(client_platform=_platform, close_reason=_close_reason.value)
+
+
+def no_audio_close_reason(state: Any) -> ListenNoAudioCloseReason:
+    """Bucket the first close the server observed for a session that never sent audio. Never raises.
+
+    A client frame with 1000/1001 is a normal close; any other client code (1005, 1006, 1011, app
+    codes) is abnormal. A server-initiated close is one the server issued. With no observed frame
+    and no server close, the bucket is no_close_frame. ``never_accepted`` is not decided here: the
+    teardown seam only runs for sessions that reached the runtime.
+    """
+    try:
+        initiator = getattr(state, 'ws_close_initiator', None)
+        code = getattr(state, 'ws_close_code', None)
+        if initiator == 'client':
+            normal = not isinstance(code, bool) and code in (1000, 1001)
+            return (
+                ListenNoAudioCloseReason.CLIENT_CLOSE_NORMAL
+                if normal
+                else ListenNoAudioCloseReason.CLIENT_CLOSE_ABNORMAL
+            )
+        if initiator == 'server':
+            return ListenNoAudioCloseReason.SERVER_CLOSE
+        if initiator is None:
+            return ListenNoAudioCloseReason.NO_CLOSE_FRAME
+        return ListenNoAudioCloseReason.UNKNOWN
+    except Exception:
+        return ListenNoAudioCloseReason.UNKNOWN
 
 
 def close_code_class(code: Any) -> str:

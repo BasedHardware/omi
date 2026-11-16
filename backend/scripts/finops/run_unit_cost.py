@@ -43,6 +43,7 @@ if AUTH_MODE == "cloudrun":
     import cloudrun as gcpauth  # noqa: E402
 else:
     import gcpauth  # noqa: E402
+import pull_vendor_balance  # noqa: E402
 
 RUN_ROOT = pathlib.Path(
     os.environ.get("FINOPS_RUN_ROOT", os.environ.get("SCRATCH_ROOT", "/Volumes/scratch") + "/finops-runs")
@@ -60,13 +61,61 @@ def pull_log_tail(log: pathlib.Path, n: int = 80) -> str:
     return "\n".join(lines[-n:])
 
 
+# Bounded tokens this job may copy into Cloud Logging for a balance skip: the
+# puller's own vocabulary plus orchestrator-local states. Anything else in the
+# artifact is reported as `reason_unrecognized`, never echoed.
+def vendor_balance_skip(raw: pathlib.Path) -> tuple[str, int | None] | None:
+    """Bounded skip reason from the balance artifact; None when ready or absent.
+
+    Only a fixed token (and an integer HTTP status) leaves this function, so a
+    tampered or unexpected artifact can never inject free text into the log.
+    """
+    path = raw / "vendor_balance_snapshot.json"
+    if not path.exists():
+        return None
+    try:
+        document = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return ("artifact_unreadable", None)
+    if not isinstance(document, dict) or document.get("status") != "skipped":
+        return None
+    reason = document.get("reason")
+    # A JSON array/object reason is unhashable: membership would raise TypeError
+    # and abort the daily job. Type-check first so any non-string is bounded.
+    if not isinstance(reason, str) or reason not in pull_vendor_balance.SKIP_REASONS:
+        return ("reason_unrecognized", None)
+    status = document.get("http_status")
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        status = None
+    return (reason, status)
+
+
+def log_vendor_balance_skip(raw: pathlib.Path, skipped: set[str]) -> None:
+    """Surface the balance skip reason in Cloud Logging (pull.log is ephemeral)."""
+    skip = vendor_balance_skip(raw)
+    if skip:
+        reason, http_status = skip
+        sys.stderr.write(
+            "WARNING: Soniox balance snapshot skipped: %s%s; see pull.log\n"
+            % (reason, " http_status=%d" % http_status if http_status is not None else "")
+        )
+    elif "balance" not in skipped and not (raw / "vendor_balance_snapshot.json").exists():
+        sys.stderr.write("WARNING: Soniox balance snapshot skipped: artifact_missing; see pull.log\n")
+
+
 def sh(argv: list[str], log: pathlib.Path, label: str, required: bool = True) -> bool:
     t0 = time.time()
     sys.stderr.write("[%s] %s\n" % (label, " ".join(str(x) for x in argv)))
     with open(log, "a") as fh:
         fh.write("\n===== %s: %s\n" % (label, " ".join(str(x) for x in argv)))
         fh.flush()
+        offset = fh.tell()
         p = subprocess.run([sys.executable] + argv, stdout=fh, stderr=subprocess.STDOUT)
+    with open(log) as fh:
+        fh.seek(offset)
+        for line in fh:
+            if line.startswith("WARNING:"):
+                sys.stderr.write(line)
     ok = p.returncode == 0
     sys.stderr.write("[%s] %s in %.0fs\n" % (label, "ok" if ok else "FAILED rc=%d" % p.returncode, time.time() - t0))
     if not ok and required:
@@ -173,7 +222,7 @@ def settlement_frontier(raw: pathlib.Path) -> str | None:
 
 
 def main() -> None:
-    today = dt.date.today()
+    today = dt.datetime.now(dt.timezone.utc).date()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument(
         "--date",
@@ -290,9 +339,7 @@ def main() -> None:
     if stripe_fees.exists() and json.loads(stripe_fees.read_text()).get("status") == "skipped":
         sys.stderr.write("WARNING: Stripe fee line unavailable; see pull.log\n")
 
-    vendor_balance = raw / "vendor_balance_snapshot.json"
-    if vendor_balance.exists() and json.loads(vendor_balance.read_text()).get("status") == "skipped":
-        sys.stderr.write("WARNING: Soniox balance snapshot unavailable; see pull.log\n")
+    log_vendor_balance_skip(raw, skip)
 
     modulate_modelled = raw / "stt_modulate_modelled_daily.json"
     if modulate_modelled.exists() and json.loads(modulate_modelled.read_text()).get("status") == "skipped":
@@ -317,6 +364,9 @@ def main() -> None:
         sys.stderr.write(p.stderr[-3000:])
         raise SystemExit("assembly failed")
 
+    from assemble_spend_daily import assemble as assemble_spend
+
+    assemble_spend(raw, derived, start, end, frontier)
     recon = validate(derived, raw, a.recon_tolerance_pct, dates)
     manifest = {
         "run_id": run_id,

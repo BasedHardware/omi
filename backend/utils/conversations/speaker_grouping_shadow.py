@@ -190,9 +190,9 @@ def compare_and_select(
         segment.speaker_grouping_shadow = None
         segment.speaker_grouping_shadow_expires_at = None
     config = configuration(uid)
-    if not config.shadow and config.mode == 'incumbent':
+    if not config.shadow:
         return incumbent
-    variants = VARIANTS if config.shadow else (config.mode,)
+    variants = VARIANTS
     selected = incumbent
     deadline = time.monotonic() + MAX_SECONDS
     try:
@@ -271,8 +271,6 @@ def compare_and_select(
             raise TimeoutError('grouping budget')
         # Publish only a complete comparison. No partial receipt survives failure.
         for variant, result, decisions, summary in pending:
-            if variant == config.mode:
-                selected = result
             if not config.shadow:
                 continue
             count(variant, summary['outcome'])

@@ -196,6 +196,14 @@ def test_quarantine_hold_settles_ready_sibling_hints_in_one_transaction(monkeypa
     for sid in binding.segment_ids:
         assert client.rows[('batch_pipeline_dev_jobs', sid)] == before[('batch_pipeline_dev_jobs', sid)]
     assert other['projection'] == before[('batch_pipeline_dev_results', 'other')]['projection']
+    # CI writer invariant: only pre-fix legacy hints may be held without a
+    # quarantined receipt/part. This transaction must never create a new ghost.
+    for (collection, *_), row in client.rows.items():
+        if collection == 'batch_pipeline_dev_results' and row.get('projection_state') == 'quarantine_held':
+            assert any(
+                part.get('state') == 'quarantined'
+                for part in [row.get('projection') or {}, *(row.get('projection_parts') or {}).values()]
+            )
     assert client.rows[('users', binding.owner_id, 'sync_content_ledger', 'content')]['status'] == 'processing'
     assert all(not t.creates and not t.sets for t in client.transactions)
 

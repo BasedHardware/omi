@@ -86,20 +86,66 @@ class Blob:
 
 @pytest.fixture
 def bucket(monkeypatch):
-    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
     return Bucket()
 
 
 def capture(bucket, owner='alice', data=b'encoded-opus', conv='one', day='2020-10-14'):
-    return packs.archive_capture(
-        bucket,
-        owner,
-        data,
-        format='opus',
-        provenance={'capture_day': day, 'device': 'test'},
-        conversation_ranges=[{'conversation_id': conv, 'start': 1, 'end': 2}],
-        identity=packs._sha(data),
+    # Synthetic pre-existing captures: no production writer is exercised here.
+    packs.assert_capture_allowed(bucket, owner, [{'conversation_id': conv}])
+    target = packs.conversation_chain(bucket, owner, conv)[-1]
+    key = packs._sha(data + conv.encode())
+    path = f'{packs.owner_prefix(packs.SOURCE_PREFIX, owner)}{day}/{key}'
+    blob = bucket.blob(path)
+    blob.metadata = {
+        'capture': json.dumps(
+            {
+                'format': 'opus',
+                'provenance': {'capture_day': day, 'device': 'test'},
+                'conversation_ranges': [{'conversation_id': target, 'start': 1, 'end': 2}],
+            }
+        )
+    }
+    blob.upload_from_string(data)
+    return path
+
+
+def seed_existing_pack(bucket, owner, day):
+    """Fixture for already-packed bytes that privacy/merge readers must still serve."""
+    sources = bucket.list_blobs(f'{packs.owner_prefix(packs.SOURCE_PREFIX, owner)}{day}/')
+    entries, payloads = [], []
+    for index, blob in enumerate(sources):
+        data = blob.download_as_bytes()
+        entries.append(
+            {
+                **json.loads(blob.metadata['capture']),
+                'source': blob.name,
+                'generation': str(blob.generation),
+                'member': f'{index:06d}.audio',
+                'sha256': packs._sha(data),
+                'size': len(data),
+            }
+        )
+        payloads.append(data)
+    data = packs._tar(entries, payloads)
+    pack = f'{packs.owner_prefix(packs.PACK_PREFIX, owner)}{day}/fixture.tar'
+    blob = bucket.blob(pack)
+    blob.upload_from_string(data)
+    manifest = {
+        'version': 1,
+        'owner': owner,
+        'day': day,
+        'state': 'complete',
+        'pack': pack,
+        'pack_generation': str(blob.generation),
+        'sha256': packs._sha(data),
+        'entries': entries,
+    }
+    bucket.blob(f'{packs.owner_prefix(packs.INDEX_PREFIX, owner)}{day}/fixture.json').upload_from_string(
+        packs._json(manifest)
     )
+    for source in sources:
+        source.delete()
+    return 1
 
 
 def manifests(bucket, owner='alice'):
@@ -111,69 +157,10 @@ def manifests(bucket, owner='alice'):
     ]
 
 
-def test_default_off(monkeypatch):
-    monkeypatch.delenv('AUDIO_CANONICAL_PACKING_ENABLED', raising=False)
-    bucket = Bucket()
-    assert capture(bucket) is None
-    assert packs.pack_owner_day(bucket, 'alice', '2020-10-14') == 0
-    assert bucket.objects == {}
-
-
-def test_byte_roundtrip_and_owner_isolation(bucket):
-    source = capture(bucket)
-    other = capture(bucket, owner='bob')
-    legacy = bucket.blob('raw-mobile-batch/alice/old')
-    legacy.upload_from_string(b'old')
-    assert packs.pack_owner_day(bucket, 'alice', '2020-10-14') == 1
-    assert source not in bucket.objects
-    assert other in bucket.objects
-    assert legacy.name in bucket.objects
-    manifest = manifests(bucket)[0]
-    packs.verify_pack(bucket.blob(manifest['pack']).download_as_bytes(), manifest)
-    assert manifest['entries'][0]['provenance']['device'] == 'test'
-    assert packs.pack_owner_day(bucket, 'alice', '2020-10-14') == 0
-    capture(bucket)
-    assert source not in bucket.objects  # receipt prevents retry resurrection
-
-
-def test_resume_after_partial_delete(bucket):
-    first = capture(bucket, data=b'first')
-    second = capture(bucket, data=b'second')
-    bucket.fail_delete = True
-    with pytest.raises(RuntimeError):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert manifests(bucket)[0]['state'] == 'verified'
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert first not in bucket.objects and second not in bucket.objects
-    assert len(manifests(bucket)) == 1
-
-
-def test_no_source_deletion_until_verified_index(bucket):
-    source = capture(bucket)
-    bucket.fail_verified = True
-    with pytest.raises(RuntimeError):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert source in bucket.objects
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert source not in bucket.objects
-
-
-def test_corrupt_pack_never_deletes_source(bucket):
-    source = capture(bucket)
-    bucket.fail_verified = True
-    with pytest.raises(RuntimeError):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    manifest = manifests(bucket)[0]
-    bucket.blob(manifest['pack']).upload_from_string(b'corrupt')
-    with pytest.raises(ValueError, match='hash mismatch'):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert source in bucket.objects
-
-
 def test_conversation_rewrite_resumes_after_pack_replaced(bucket):
     capture(bucket, data=b'one', conv='one')
     capture(bucket, data=b'two', conv='two')
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     bucket.fail_verified = True
     with pytest.raises(RuntimeError):
         packs.delete_conversation(bucket, 'alice', 'one')
@@ -187,30 +174,9 @@ def test_conversation_rewrite_resumes_after_pack_replaced(bucket):
     assert not bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice'))
 
 
-def test_day_and_size_boundaries(bucket, monkeypatch):
-    monkeypatch.setattr(packs, 'TARGET_BYTES', 6)
-    capture(bucket, data=b'1111')
-    capture(bucket, data=b'2222')
-    next_day = capture(bucket, data=b'3333', day='2020-10-13')
-    assert packs.pack_owner_day(bucket, 'alice', '2020-10-14') == 1
-    assert packs.pack_owner_day(bucket, 'alice', '2020-10-14') == 1
-    assert next_day in bucket.objects
-
-
-def test_generation_conflict_blocks_cleanup(bucket):
-    source = capture(bucket)
-    bucket.fail_verified = True
-    with pytest.raises(RuntimeError):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    bucket.blob(source).upload_from_string(b'new generation')
-    with pytest.raises(PreconditionFailed):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert source in bucket.objects
-
-
 def test_cross_owner_index_fails_closed(bucket):
     capture(bucket)
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     index = next(
         b
         for b in bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, 'alice'))
@@ -226,7 +192,7 @@ def test_cross_owner_index_fails_closed(bucket):
 
 def test_merged_capture_survives_and_can_be_erased_via_survivor(bucket):
     capture(bucket, conv='one')
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     before = manifests(bucket)[0]
     old_bytes = bucket.blob(before['pack']).download_as_bytes()
     packs.link_conversations(bucket, 'alice', ['one'], 'merged')
@@ -240,30 +206,6 @@ def test_merged_capture_survives_and_can_be_erased_via_survivor(bucket):
     assert manifests(bucket)[0]['entries'] == []
     with pytest.raises(ValueError, match='blocked'):
         capture(bucket, data=b'late', conv='one')
-
-
-@pytest.mark.parametrize('phase', ['source', 'receipt'])
-def test_deletion_racing_intake_leaves_no_capture(bucket, monkeypatch, phase):
-    original = Blob.upload_from_string
-    triggered = False
-
-    def racing_upload(blob, data, **kwargs):
-        nonlocal triggered
-        result = original(blob, data, **kwargs)
-        is_source = blob.name.startswith(packs.SOURCE_PREFIX)
-        is_receipt = '/captures/' in blob.name
-        if not triggered and ((phase == 'source' and is_source) or (phase == 'receipt' and is_receipt)):
-            triggered = True
-            packs.delete_conversation(bucket, 'alice', 'one')
-        return result
-
-    monkeypatch.setattr(Blob, 'upload_from_string', racing_upload)
-    with pytest.raises(ValueError, match='blocked'):
-        capture(bucket)
-    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice')) == []
-    assert bucket.list_blobs(packs.owner_prefix(packs.PACK_PREFIX, 'alice')) == []
-    with pytest.raises(ValueError, match='blocked'):
-        capture(bucket, data=b'new retry')
 
 
 def test_pcm_capture_range_uses_full_tail_and_authoritative_span():
@@ -280,30 +222,6 @@ def test_pcm_capture_range_uses_full_tail_and_authoritative_span():
     )
     assert result[1]['end'] == 102.5
     assert result[1]['plaintext_byte_start'] == 32000
-
-
-def test_post_upload_authority_failure_never_accepts_or_discards_capture(bucket, monkeypatch):
-    calls = 0
-
-    def authority(*args):
-        nonlocal calls
-        calls += 1
-        if calls == 2:
-            raise RuntimeError('authority unavailable')
-
-    monkeypatch.setattr(packs, 'assert_capture_allowed', authority)
-    with pytest.raises(RuntimeError, match='authority unavailable'):
-        capture(bucket)
-    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice'))
-    assert bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, 'alice')) == []
-
-
-def test_packer_refuses_a_pending_privacy_erasure(bucket):
-    capture(bucket)
-    bucket.blob(packs.control_path('alice', 'deletions', 'one')).upload_from_string(b'{}')
-    with pytest.raises(ValueError, match='blocked'):
-        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
-    assert bucket.list_blobs(packs.owner_prefix(packs.PACK_PREFIX, 'alice')) == []
 
 
 def test_competing_merge_cannot_orphan_the_first_survivor(bucket):
@@ -324,13 +242,13 @@ def test_merge_retargets_unpacked_and_late_capture_without_erasing_bytes(bucket)
     assert (
         json.loads(bucket.get_blob(late).metadata['capture'])['conversation_ranges'][0]['conversation_id'] == 'merged'
     )
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     assert {e['conversation_ranges'][0]['conversation_id'] for e in manifests(bucket)[0]['entries']} == {'merged'}
 
 
 def test_merge_retarget_resumes_interrupted_manifest_publication(bucket):
     capture(bucket)
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     bucket.fail_verified = True
     with pytest.raises(RuntimeError, match='publication'):
         packs.link_conversations(bucket, 'alice', ['one'], 'merged')
@@ -363,10 +281,10 @@ def test_privacy_erasure_refuses_unindexed_pack(bucket):
 
 def test_privacy_relist_does_not_retrieve_unaffected_archive_pack(bucket, monkeypatch):
     capture(bucket, conv='keep', day='2020-10-13')
-    packs.pack_owner_day(bucket, 'alice', '2020-10-13')
+    seed_existing_pack(bucket, 'alice', '2020-10-13')
     unaffected = manifests(bucket)[0]['pack']
     capture(bucket, conv='erase', data=b'erase')
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     original = Blob.download_as_bytes
 
     def download(blob, **kwargs):
@@ -381,7 +299,7 @@ def test_privacy_relist_does_not_retrieve_unaffected_archive_pack(bucket, monkey
 
 def test_privacy_relist_refuses_changed_pack_generation(bucket, monkeypatch):
     capture(bucket, conv='keep')
-    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    seed_existing_pack(bucket, 'alice', '2020-10-14')
     name = manifests(bucket)[0]['pack']
     bucket.blob(name).upload_from_string(bucket.blob(name).download_as_bytes())
     with pytest.raises(RuntimeError, match='changed pack generation'):

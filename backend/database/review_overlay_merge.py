@@ -1,5 +1,7 @@
 """Explicit conversation merge moves correction anchors and their Undo receipts atomically."""
 
+from database import transcript_pointer
+
 from copy import deepcopy
 from datetime import datetime, timezone
 from google.cloud import firestore
@@ -162,4 +164,7 @@ def transfer(
         seal()
         return True
 
-    return commit(database.transaction())
+    try:
+        return transcript_pointer.run_preloaded_transactional(database, commit)
+    except (transcript_pointer.TranscriptBlobAbsent, transcript_pointer.TranscriptShredded):
+        raise store.ReviewConflict('Merged correction destination/source unavailable') from None

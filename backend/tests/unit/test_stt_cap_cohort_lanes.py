@@ -41,9 +41,7 @@ def test_execution_scope_matrix(monkeypatch, dispatch, ladder, uid, lane, lanes,
     configured = {'live'} if lanes is None or not lanes.strip() else set(lanes.split(','))
     lane_selected = configured <= {'live', 'sync', 'batch'} and lane in configured and lane != 'batch'
     assert policy.selected(uid, lane) is bool(owner_selected and lane_selected)
-    assert policy.execution_admission_enabled(uid, lane) is bool(
-        (dispatch or ladder) and owner_selected and lane_selected
-    )
+    assert policy.execution_admission_enabled(uid, lane) is bool(dispatch and owner_selected and lane_selected)
     assert policy.enabled_for(uid, lane) is bool(dispatch and owner_selected and lane_selected)
 
 

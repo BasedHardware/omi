@@ -16,6 +16,7 @@ import threading
 from datetime import datetime, timezone
 from typing import List, Dict, Any
 from collections import defaultdict
+from contextlib import ExitStack
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from firebase_admin import firestore
@@ -26,9 +27,10 @@ logger = logging.getLogger(__name__)
 # Add project root to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Standalone writer: must go through database._client so action-item write fences
-# and the list-serving/memory projection heads stay maintained on every write.
+# Standalone writer: use the shared client for projection heads and explicit
+# task commit tickets for every owner touched by a migration batch.
 from database._client import db
+from database.action_item_fence import fenced_action_item_commit
 
 # Configuration
 BATCH_SIZE = 500  # Number of conversations to process per batch
@@ -103,6 +105,13 @@ def safe_firestore_operation(operation_func, operation_name="Firestore operation
     return retry_with_backoff(wrapped_operation, max_retries=3)
 
 
+def _commit_action_item_batch(batch, owners):
+    with ExitStack() as fences:
+        for uid in sorted(owners):
+            fences.enter_context(fenced_action_item_commit(uid))
+        return batch.commit()
+
+
 def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_num: int) -> Dict[str, int]:
     """
     Process a batch of conversations and migrate their action items.
@@ -120,6 +129,7 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
     # Prepare batch write for action items
     batch_write = db.batch()
     batch_operations = 0
+    batch_owners = set()
 
     for conv_data in conversations_batch:
         try:
@@ -180,14 +190,19 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
                 new_doc_ref = action_items_ref.document()  # Auto-generate ID
 
                 batch_write.set(new_doc_ref, action_item_data)
+                batch_owners.add(uid)
                 batch_operations += 1
                 batch_action_items += 1
                 batch_user_items[uid] += 1
 
                 if batch_operations >= FIRESTORE_BATCH_SIZE:
-                    safe_firestore_operation(lambda: batch_write.commit(), f"Batch commit for batch {batch_num}")
+                    safe_firestore_operation(
+                        lambda: _commit_action_item_batch(batch_write, batch_owners),
+                        f"Batch commit for batch {batch_num}",
+                    )
                     batch_write = db.batch()
                     batch_operations = 0
+                    batch_owners.clear()
                     time.sleep(0.2)
 
             batch_conversations += 1
@@ -199,7 +214,10 @@ def process_conversation_batch(conversations_batch: List[Dict[str, Any]], batch_
     # Commit remaining operations
     if batch_operations > 0:
         try:
-            safe_firestore_operation(lambda: batch_write.commit(), f"Final batch commit for batch {batch_num}")
+            safe_firestore_operation(
+                lambda: _commit_action_item_batch(batch_write, batch_owners),
+                f"Final batch commit for batch {batch_num}",
+            )
         except Exception as e:
             log_progress(f"Error committing final batch: {str(e)}")
             batch_errors += 1

@@ -6921,6 +6921,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
 
   @override
+  String get authAppleSignInFailedUseGoogle => '无法通过 Apple 登录。请重试，或使用 Google 继续。';
+
+  @override
   String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
 
   @override
@@ -9027,6 +9030,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '无法确定当前固件版本';
+
+  @override
+  String get applyCodeToCurrentPlan => '应用于当前套餐';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '代码已应用于您当前的套餐。',
+        'refused': '无法应用此代码。请检查代码及其适用套餐。',
+        'conflict': '代码已使用，或您的套餐已有折扣。',
+        'rateLimited': '尝试次数过多。请稍后重试。',
+        'other': '无法应用此代码。请重试。',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => '促销代码';
@@ -13177,6 +13198,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '有 Omi Pro 兑换码？请在下一个页面输入。';
+
+  @override
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
@@ -13442,6 +13466,9 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => '重新生成笔记';
 
   @override
   String get attentionSummaryFailed => '无法总结这段对话';
@@ -14590,6 +14617,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get episodeWritingNotes => '正在撰写笔记…';
 
   @override
+  String get homeStepTranscribing => '正在转录…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '正在先完成转录。你可以离开此页面。';
 
   @override
@@ -15113,7 +15153,63 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '更新银行卡，或恢复使用 $plan，每月 $price';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '包含关联任务';
+
+  @override
+  String get hasTasksFilter => '有任务';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '改为按月付费';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan，每月 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '替代未支付的年费 $yearly。按月续订。可随时取消。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '付款被拒。你的计划没有变化。';
+
+  @override
+  String get monthlySwitchUnavailable => '目前无法切换。请改为更新银行卡。';
+
+  @override
+  String get monthlySwitchDoneTitle => '已改为按月付费';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '今日已支付 $price。按月续订。';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
 }

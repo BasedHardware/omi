@@ -23,6 +23,10 @@ from zoneinfo import ZoneInfo
 from config.episodes import (
     INCREMENTAL_FEATURE,
     INCREMENTAL_TIMEOUT_SECONDS,
+    F_JOIN_JEV_LANE,
+    F_JOIN_NEW_CHARS,
+    F_JOIN_PREVIOUS_CHARS,
+    F_JOIN_TIMEOUT_SECONDS,
     JEV_LANE,
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
@@ -432,4 +436,54 @@ def ask_same_occasion(state: str, *, ask=None) -> Optional[float]:
         return value if 0.0 <= value <= 1.0 else None
     except Exception as error:
         logger.warning('event=episode_boundary outcome=jev_error exception_type=%s', type(error).__name__)
+        return None
+
+
+def render_f_transcript(segments: Sequence[Mapping[str, Any]]) -> str:
+    """Variant F rendering: time order, ``You`` for the owner, a name or voice label otherwise,
+    consecutive lines from one label merged. Matches the offline F run's ``render``."""
+    rows = sorted(
+        (s for s in segments if str(s.get('text') or '').strip()),
+        key=lambda s: float(s.get('start') or 0.0),
+    )
+    lines: list[list[str]] = []
+    for segment in rows:
+        if segment.get('is_user'):
+            label = 'You'
+        else:
+            label = str(
+                segment.get('person_name') or segment.get('speaker_label') or segment.get('speaker') or 'Others'
+            )
+        text = str(segment['text']).strip()
+        if lines and lines[-1][0] == label:
+            lines[-1][1] += ' ' + text
+        else:
+            lines.append([label, text])
+    return '\n'.join(f'{label}: {text}' for label, text in lines)
+
+
+def f_boundary_state(previous: str, new: str) -> str:
+    """Variant F state: the previous member's transcript tail and the new speech's head, nothing else."""
+    previous = previous[-F_JOIN_PREVIOUS_CHARS:] if len(previous) > F_JOIN_PREVIOUS_CHARS else previous
+    new = new[:F_JOIN_NEW_CHARS]
+    return (
+        'EPISODE so far (full transcript of its last conversation):\n'
+        + (previous or '(no speech captured)')
+        + '\n\nNEW speech (full transcript):\n'
+        + (new or '(no speech captured)')
+    )
+
+
+def ask_same_occasion_f(state: str, *, ask=None) -> Optional[float]:
+    """Variant F: P(same occasion) on its own Jev lane, so its errors and timeouts are measured apart."""
+    try:
+        answers = (ask or ask_jev)(
+            state, BOUNDARY_QUESTIONS, lane=F_JOIN_JEV_LANE, timeout_seconds=F_JOIN_TIMEOUT_SECONDS, max_attempts=1
+        )
+        if answers is None:
+            return None
+        value = answers.noul(BOUNDARY_QUESTION)
+        return value if 0.0 <= value <= 1.0 else None
+    except Exception as error:
+        logger.warning('event=episode_boundary_f outcome=jev_error exception_type=%s', type(error).__name__)
         return None

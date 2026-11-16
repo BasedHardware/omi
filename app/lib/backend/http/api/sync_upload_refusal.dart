@@ -66,3 +66,31 @@ ApiResult<SyncUploadRefusalBody> decodeSyncUploadRefusal(http.Response response)
     return ApiFailure(ApiProblem(ApiProblemKind.decode, statusCode: response.statusCode));
   }
 }
+
+/// A 5xx that holds one recording, never the account: the server still waits
+/// for that conversation's registered record before it can prove coverage.
+bool isRecordingScopedSyncWaitReasonCode(String? reasonCode) => reasonCode == 'record_capture_pending';
+
+/// The closed recording-scoped wait code from a 5xx upload body, else null.
+String? syncUploadServerWaitReasonCode(http.Response response) {
+  try {
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final code = decoded['code'];
+      if (code is String && isRecordingScopedSyncWaitReasonCode(code)) return code;
+    }
+  } catch (_) {}
+  return null;
+}
+
+/// The server's per-recording pacing for a recording-scoped 5xx wait, else null.
+int? syncUploadServerWaitSeconds(http.Response response) {
+  try {
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic> && isRecordingScopedSyncWaitReasonCode(decoded['code'] as String?)) {
+      final seconds = decoded['retry_after_seconds'];
+      if (seconds is int && seconds > 0) return seconds;
+    }
+  } catch (_) {}
+  return null;
+}

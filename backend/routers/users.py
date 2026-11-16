@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import uuid
 from typing import Annotated, List, Dict, Any, Literal, Union, Optional
+import functools
 import hashlib
 import os
 import asyncio
@@ -142,8 +143,10 @@ from utils.cloud_tasks import (
     AccountDeletionTaskAuthentication,
     get_account_deletion_tasks_max_attempts,
     verify_account_deletion_cloud_tasks_oidc,
+    verify_conversation_batch_purge_cloud_tasks_oidc,
 )
-from utils.executors import db_executor, llm_executor, run_blocking
+from database import conversation_batch_purge_jobs
+from utils.executors import db_executor, erasure_executor, llm_executor, run_blocking
 from utils.http_client import UnsafeWebhookURLError, safe_request_target
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
@@ -166,6 +169,7 @@ from utils.daily_summary_validation import (
 )
 from utils.other.daily_recap import delivery_allowed as daily_summary_delivery_allowed
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
+from utils.memory.recap_review import refresh_recap_learning_refs
 from utils.other import endpoints as auth
 from utils.other.list_budget import finish_list_budget
 from utils.other.storage import (
@@ -394,6 +398,46 @@ async def run_account_deletion_wipe(
     finally:
         if release_lock:
             await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
+
+
+# Rides the conversation-erasure queue with the account-deletion invoker identity; dispatched by the purge reconciler.
+# Path must equal utils.cloud_tasks.CONVERSATION_BATCH_PURGE_PATH (pinned by its test).
+@router.post('/v1/conversations/deletion-batch-purges/run', include_in_schema=False)
+async def run_conversation_batch_purge(
+    request: Request,
+    retry_count: int = Depends(verify_conversation_batch_purge_cloud_tasks_oidc),
+):
+    try:
+        payload = await request.json()
+        job_id = payload.get('job_id') if isinstance(payload, dict) else None
+        generation = payload.get('generation') if isinstance(payload, dict) else None
+        kind = payload.get('kind', 'batch_purge') if isinstance(payload, dict) else None
+        if not isinstance(job_id, str) or not job_id or not isinstance(generation, int) or generation < 1:
+            raise ValueError('job_id and a positive generation are required')
+        if kind not in {'batch_purge', 'erasure'}:
+            raise ValueError('unknown obligation kind')
+    except Exception as e:
+        logger.error(f'conversation_batch_purge handler: invalid payload, dropping task: {sanitize(str(e))}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    if kind == 'erasure':
+        # An accepted delete's cascade erasure; the eraser is the delete route's own cascade.
+        from routers.conversations import erase_accepted_conversation
+
+        run = functools.partial(conversation_batch_purge_jobs.run_erasure_job, erase=erase_accepted_conversation)
+    else:
+        run = conversation_batch_purge_jobs.run_job
+    try:
+        outcome = await run_blocking(erasure_executor, run, job_id, generation)
+    except Exception as e:
+        # The obligation stays durable; the queue retries and the reconciler redrives.
+        logger.warning(
+            f'conversation_batch_purge handler: attempt {retry_count + 1} failed kind={kind} job={job_id} '
+            f'generation={generation}: {type(e).__name__}: {sanitize(str(e))}'
+        )
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    logger.info('conversation_batch_purge handler: job=%s generation=%d outcome=%s', job_id, generation, outcome)
+    return JSONResponse(status_code=200, content={'status': 'done', 'outcome': outcome})
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
@@ -634,7 +678,7 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
         'created_at': datetime.now(timezone.utc),
         'updated_at': datetime.now(timezone.utc),
     }
-    return people_db.get_or_create_person_by_name(uid, person_data)
+    return people_db.get_or_create_person_by_name(uid, person_data).model_dump(exclude_unset=True)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)
@@ -2040,7 +2084,8 @@ def get_daily_summaries(
     Returns summaries in reverse chronological order.
     """
     try:
-        return {'summaries': read_daily_summary_page(uid, limit=limit, offset=offset, request=request)}
+        summaries = read_daily_summary_page(uid, limit=limit, offset=offset, request=request)
+        return {'summaries': refresh_recap_learning_refs(uid, summaries)}
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 
@@ -2140,7 +2185,8 @@ def search_daily_summaries(
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
     filtered = filter_daily_summaries([item.model_dump() for item in valid], query, limit)
-    return {'summaries': [DailySummaryResponse.model_validate(item) for item in filtered]}
+    matches = [DailySummaryResponse.model_validate(item) for item in filtered]
+    return {'summaries': refresh_recap_learning_refs(uid, matches)}
 
 
 @router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
@@ -2152,7 +2198,8 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
     try:
-        return require_daily_summary(summary, uid=uid, operation='detail')
+        validated = require_daily_summary(summary, uid=uid, operation='detail')
+        return refresh_recap_learning_refs(uid, [validated])[0]
     except DailySummaryUnavailable:
         raise HTTPException(status_code=503, detail='Daily recap data is temporarily unavailable') from None
 

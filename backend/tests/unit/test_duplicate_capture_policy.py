@@ -86,7 +86,7 @@ def harness(monkeypatch):
     monkeypatch.setattr(
         finalizer.lifecycle_service,
         'claim_finalization_fanout',
-        lambda *a: {'status': 'claimed', 'fanout_key': 'fixture'},
+        lambda *a, **kw: {'status': 'claimed', 'fanout_key': 'fixture'},
     )
     monkeypatch.setattr(finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *a: True)
     monkeypatch.delenv('CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS', raising=False)
@@ -209,7 +209,6 @@ def test_discovery_links_recorded_overlap_despite_skew_and_delayed_ingest(harnes
     decoy = dict(primary, id='far', recorded_start=T0 - timedelta(hours=3), recorded_end=T0 - timedelta(hours=2))
     harness.rows.update({path('pendant'): primary, path('desktop'): secondary, path('far'): decoy})
     monkeypatch.setattr(policy, 'reconcile_cross_device', lambda *a: False)
-    monkeypatch.setattr(policy, 'shared_speech_mode', lambda uid: 'off')
     monkeypatch.setattr(policy, '_group_confirmed_captures', lambda *a: None)
 
     policy.link_duplicate_captures(UID, SimpleNamespace(**secondary))
@@ -387,7 +386,9 @@ def test_confirmed_group_notifies_episode_attachment_for_both_sources(harness, m
 async def test_completed_fanout_replay_still_delivers_grouped_row_to_episode_hook(harness, monkeypatch):
     capture = row('desktop', 'desktop', capture_group={'id': 'g', 'primary_id': 'pendant'})
     harness.rows[path('desktop')] = capture
-    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a: {'status': 'completed'})
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'claim_finalization_fanout', lambda *a, **kw: {'status': 'completed'}
+    )
     seen = []
 
     async def after(uid, cid, latest, trigger):

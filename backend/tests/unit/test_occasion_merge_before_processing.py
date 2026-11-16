@@ -231,7 +231,7 @@ def test_merge_hold_kill_switch_is_independent_and_drains_existing_wake(state, m
     monkeypatch.delenv('CONVERSATION_MERGE_BEFORE_PROCESSING', raising=False)
     outbox.mark('u', 'p', 'en', now=100, sync_hold=True, merge_hold=True)
     key = outbox.key('u', 'p')
-    process = Mock()
+    process = Mock(return_value=None)
     assert outbox.run(key, tasks[-1]['task_token'], process, now=101) == 'deferred'
     process.assert_not_called()
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', 'false')
@@ -519,12 +519,12 @@ def test_proven_server_minimum_title_still_merges_before_first_notes(world):
 
 
 @pytest.mark.parametrize(
-    'merge_enabled,uid,expected', [('true', 'owner', 'server_minimum'), ('false', 'owner', None), ('true', None, None)]
+    'merge_enabled,uid,expected',
+    [('true', 'owner', 'server_minimum'), ('false', 'owner', 'server_minimum'), ('true', None, None)],
 )
-def test_minimum_provenance_is_available_outside_first_summary_cohort(monkeypatch, merge_enabled, uid, expected):
+def test_minimum_provenance_is_stamped_for_every_known_owner(monkeypatch, merge_enabled, uid, expected):
     from utils.conversations import deterministic_minimum as minimum
 
-    monkeypatch.setattr(minimum, 'enabled', lambda _: False)
     monkeypatch.setenv('CONVERSATION_MERGE_BEFORE_PROCESSING', merge_enabled)
     conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='Raw synthetic speech.')])
     result = minimum.build_deterministic_minimum_structured(conversation, uid=uid)

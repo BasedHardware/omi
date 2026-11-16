@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 import database.action_items_cache as action_items_cache
+import database.action_item_versions as action_item_versions
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
@@ -27,6 +28,8 @@ def _no_outbound_reminders(monkeypatch):
 
 @pytest.fixture
 def fake_db(monkeypatch):
+    ticket_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(action_item_versions, '_redis', lambda: ticket_redis)
     database = StrictFirestore()
     database.rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
         'workflow_mode': 'read',

@@ -7049,6 +7049,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Не вдалося ўвайсці праз Apple, спрабуйце яшчэ раз.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Не атрымалася ўвайсці праз Apple. Паспрабуйце яшчэ раз або працягніце з Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Не вдалося атрымаць токен firebase, спрабуйце яшчэ раз.';
 
   @override
@@ -9197,6 +9201,24 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Не ўдалося вызначыць бягучую версію прашыўкі';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Ужыць да бягучага плана';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Код ужыты да вашага бягучага плана.',
+        'refused': 'Немагчыма ўжыць код. Праверце код і патрэбны план.',
+        'conflict': 'Код ужо выкарыстаны або план ужо мае зніжку.',
+        'rateLimited': 'Зашмат спроб. Пачакайце і паспрабуйце пазней.',
+        'other': 'Не ўдалося ўжыць код. Паспрабуйце яшчэ раз.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Промакод';
@@ -13418,6 +13440,9 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ёсць код Omi Pro? Увядзіце яго на наступным экране.';
+
+  @override
   String get paywallTrialCancelNote => 'Адмяніць у любы час. Без камісій і штрафаў.';
 
   @override
@@ -13685,6 +13710,9 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Стварыць нататкі зноў';
 
   @override
   String get attentionSummaryFailed => 'Не ўдалося падсумаваць гэту размову';
@@ -14855,6 +14883,22 @@ class AppLocalizationsBe extends AppLocalizations {
   String get episodeWritingNotes => 'Пішам нататкі…';
 
   @override
+  String get homeStepTranscribing => 'Расшыфроўваем…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count запісу',
+      many: '$count запісаў',
+      few: '$count запісы',
+      one: '$count запіс',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Спачатку завяршаем транскрыпцыю. Можаце пакінуць гэту старонку.';
 
   @override
@@ -15396,7 +15440,63 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paymentDeclinedTitle => 'Вашу картку адхілілі';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Абнавіце картку або вярніце $plan за $price у месяц';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Абнавіце картку, каб вярнуць $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Ёсць звязаныя задачы';
+
+  @override
+  String get hasTasksFilter => 'З задачамі';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Перайсці на штомесячны';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price у месяц';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Замяняе неаплачаны гадавы плацёж $yearly. Падаўжаецца штомесяц. Скасаваць можна ў любы час.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Аплата адхілена. Ваш план не змяніўся.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Пераход зараз недаступны. Замест гэтага абнавіце картку.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Цяпер у вас штомесячная аплата';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Сёння аплачана $price. Падаўжаецца штомесяц.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
 }

@@ -37,7 +37,14 @@ class Structured {
   /// 'highlight' or 'background' from the notes pass (Episodes M3); null on legacy notes.
   String? salience;
 
-  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other', this.salience});
+  /// Server-authored `title_provenance`: 'server_minimum' while [title] is a stand-in
+  /// (first transcript sentence or a neutral "Recording · time") and no summary has landed.
+  String? titleProvenance;
+
+  Structured(this.title, this.overview,
+      {this.id = 0, this.emoji = '', this.category = 'other', this.salience, this.titleProvenance});
+
+  bool get hasProvisionalTitle => titleProvenance == 'server_minimum';
 
   bool get isBackground => salience == 'background';
 
@@ -58,6 +65,7 @@ class Structured {
       emoji: emojiSource is String && emojiSource.trim().isNotEmpty ? emojiSource : neutralEmoji,
       category: json['category'] ?? 'other',
       salience: json['salience'] is String ? json['salience'] as String : null,
+      titleProvenance: json['title_provenance'] is String ? json['title_provenance'] as String : null,
     );
     final sections = json['sections'];
     if (sections is List) {
@@ -177,6 +185,7 @@ class Structured {
           .toList(),
       'events': events.map((event) => event.toJson()).toList(),
       if (salience != null) 'salience': salience,
+      if (titleProvenance != null) 'title_provenance': titleProvenance,
     };
   }
 

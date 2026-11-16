@@ -16,8 +16,32 @@ overlay:
   gke:
     backend-listen:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+        RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+        RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+        RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -31,11 +55,8 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -78,6 +99,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -103,8 +128,29 @@ overlay:
           value: '0'
     pusher:
       env:
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+        PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+        PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_WAKE_ENABLED: {value: 'true', category: ops_kill}
+        # Dev-only canary (lead2 2afa3e): byte-budgeted custody admission. Prod stays '0'. Rollback: '0'.
+        EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+        HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+        EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+        CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_STORAGE_PCM_BUDGET_MB: {value: '512', category: ops_kill}
         HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
         HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+        HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+        PUSHER_RECORD_SEAL_PENDING_RETRY_BOUND_ENABLED: {value: 'true', category: ops_kill}
+        HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+        HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
         # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
         # changed-source and duplicate-task checks before prod.
         PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -112,11 +158,8 @@ overlay:
           value: '0'
         AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
-          value: '0'
         AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
           value: '0'
-        AUDIO_ARCHIVE_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
           value: 'false'
         LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS:
@@ -132,6 +175,10 @@ overlay:
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: ''
+        BUCKET_OBJECT_LAKE:
+          value: 'omi-dev-object-lake-uc1'
+        OBJECT_LAKE_KMS_KEY:
+          value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
         BUCKET_SCREEN_FRAMES:
           value: based-hardware-prod-screen-frames
         TRANSCRIPTION_SHADOW_ENABLED:
@@ -222,6 +269,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          value: 'true'
+          category: rollout
         STT_SERVICE_MODELS:
           value: modulate-velma-2,soniox
           category: stt_policy
@@ -299,6 +349,9 @@ overlay:
         STT_PRERECORDED_MODEL:
           source: literal
           value: parakeet,modulate-velma-2
+        PRERECORDED_SONIOX_FAILOVER_ENABLED:
+          source: literal
+          value: 'true'
         TYPESENSE_HOST:
           source: environment
         TWILIO_ACCOUNT_SID:
@@ -342,8 +395,32 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -357,7 +434,6 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
-            value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
@@ -369,6 +445,10 @@ overlay:
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           OMI_CUSTOMER_DATA_PROJECT:
@@ -415,8 +495,32 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -434,28 +538,23 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
-            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
+          BUCKET_OBJECT_LAKE:
+            value: 'omi-dev-object-lake-uc1'
+          OBJECT_LAKE_KMS_KEY:
+            value: 'projects/based-hardware-dev/locations/us-central1/keyRings/object-lake/cryptoKeys/space-deks'
           BUCKET_SCREEN_FRAMES:
             value: based-hardware-prod-screen-frames
           TRANSCRIPTION_SHADOW_ENABLED:
@@ -509,8 +608,32 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -524,23 +647,14 @@ overlay:
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'
-            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://diarizer.omiapi.com:80
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'false'
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'false'
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '0'
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '60'
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '10'
           POSTHOG_HOST:
             value: https://app.posthog.com
           OMI_SHAPED_AGENT_MODE:
@@ -585,8 +699,32 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
+          PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
+          PUSHER_RECORD_CLOSE_FAST_PATH_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DEFAULT_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_CONTEXT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSER_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
+          EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
+          CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_FRESH_MERGE_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_NOTES_EAGER_ENABLED: {value: 'false', category: ops_kill}
+          RECORD_FOLLOWUP_WAKE_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_SEAL_WAKE_PRESERVED_ENABLED: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_PRESENTATION_GATE: {value: 'true', category: ops_kill}
           HOME_TRANSCRIPTION_DEADLINE_SECONDS: {value: '7200', category: config}
+          HOME_TRANSCRIPTION_QUEUE_HOLD_ENABLED: {value: 'true', category: ops_kill}
+          SYNC_FUTURE_CAPTURE_CLAMP_ENABLED: {value: 'false', category: rollout}
+          RECORD_SEAL_REPAIR_FRESH_ENABLED: {value: 'true', category: ops_kill}
+          RECORD_INTAKE_AGE_PRIORITY_ENABLED: {value: 'true', category: ops_kill}
+          HOME_TRANSCRIPTION_MAX_AGE_SECONDS: {value: '86400', category: config}
+          HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           # Dev qualification for the David-approved graduation (DEC-BTR-004): open/play/download,
           # changed-source and duplicate-task checks before prod.
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
@@ -606,7 +744,6 @@ overlay:
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
-            value: '0'
             value: '0'
           AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT:
             value: '0'

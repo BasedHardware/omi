@@ -7033,6 +7033,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Kunde inte logga in med Apple, försök igen.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Det gick inte att logga in med Apple. Försök igen eller fortsätt med Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Kunde inte hämta Firebase-token, försök igen.';
 
   @override
@@ -9175,6 +9179,24 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Det gick inte att fastställa aktuell firmwareversion';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Tillämpa på nuvarande abonnemang';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Koden har tillämpats på ditt nuvarande abonnemang.',
+        'refused': 'Koden kan inte tillämpas. Kontrollera koden och det abonnemang som krävs.',
+        'conflict': 'Koden har redan använts, eller ditt abonnemang har redan rabatt.',
+        'rateLimited': 'För många försök. Vänta och försök igen senare.',
+        'other': 'Koden kunde inte tillämpas. Försök igen.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Kampanjkod';
@@ -13390,6 +13412,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Har du en Omi Pro-kod? Ange den på nästa skärm.';
+
+  @override
   String get paywallTrialCancelNote => 'Avbryt när som helst. Inga avgifter, inga påföljder.';
 
   @override
@@ -13657,6 +13682,9 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Skapa anteckningar igen';
 
   @override
   String get attentionSummaryFailed => 'Det gick inte att sammanfatta samtalet';
@@ -14830,6 +14858,20 @@ class AppLocalizationsSv extends AppLocalizations {
   String get episodeWritingNotes => 'Skriver anteckningar…';
 
   @override
+  String get homeStepTranscribing => 'Transkriberar…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar',
+      one: '$count inspelning',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Vi gör först klart transkriptionen. Du kan lämna den här sidan.';
 
   @override
@@ -15371,7 +15413,63 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Ditt kort nekades';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Uppdatera kortet, eller få tillbaka $plan för $price i månaden';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Uppdatera kortet för att få tillbaka $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Har länkade uppgifter';
+
+  @override
+  String get hasTasksFilter => 'Med uppgifter';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Byt till månadsvis';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price i månaden';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Ersätter den obetalda årsavgiften på $yearly. Förnyas varje månad. Avsluta när du vill.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Betalningen nekades. Ditt abonnemang har inte ändrats.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Bytet är inte tillgängligt just nu. Uppdatera kortet i stället.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Du betalar nu månadsvis';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price betalt i dag. Förnyas varje månad.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
 }

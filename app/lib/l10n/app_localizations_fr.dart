@@ -7095,6 +7095,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Échec de la connexion avec Apple, veuillez réessayer.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'La connexion avec Apple n\'a pas fonctionné. Réessayez ou continuez avec Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Échec de la récupération du jeton Firebase, veuillez réessayer.';
 
   @override
@@ -9254,6 +9258,24 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Impossible de déterminer la version actuelle du firmware';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Appliquer à l\'offre actuelle';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Code appliqué à votre offre actuelle.',
+        'refused': 'Ce code ne peut pas être appliqué. Vérifiez le code et l\'offre requise.',
+        'conflict': 'Code déjà utilisé, ou votre offre bénéficie déjà d\'une réduction.',
+        'rateLimited': 'Trop de tentatives. Patientez et réessayez plus tard.',
+        'other': 'Impossible d\'appliquer ce code. Réessayez.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Code promo';
@@ -13490,6 +13512,9 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vous avez un code Omi Pro ? Saisissez-le à l\'écran suivant.';
+
+  @override
   String get paywallTrialCancelNote => 'Annulez à tout moment. Sans frais ni pénalités.';
 
   @override
@@ -13760,6 +13785,9 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Régénérer les notes';
 
   @override
   String get attentionSummaryFailed => 'Impossible de résumer cette conversation';
@@ -14944,6 +14972,20 @@ class AppLocalizationsFr extends AppLocalizations {
   String get episodeWritingNotes => 'Rédaction des notes…';
 
   @override
+  String get homeStepTranscribing => 'Transcription en cours…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements',
+      one: '$count enregistrement',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'On termine d\'abord la transcription. Vous pouvez quitter cette page.';
 
   @override
@@ -15489,7 +15531,64 @@ class AppLocalizationsFr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Votre carte a été refusée';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Mettez-la à jour ou retrouvez $plan pour $price par mois';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Mettez-la à jour pour retrouver $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Contient des tâches liées';
+
+  @override
+  String get hasTasksFilter => 'Avec des tâches';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Passer au mensuel';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price par mois';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Remplace le paiement annuel impayé de $yearly. Renouvellement mensuel. Résiliable à tout moment.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Paiement refusé. Votre forfait n\'a pas changé.';
+
+  @override
+  String get monthlySwitchUnavailable =>
+      'Le changement n\'est pas disponible pour le moment. Mettez plutôt votre carte à jour.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Vous êtes passé au mensuel';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price payés aujourd\'hui. Renouvellement mensuel.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'La liste en cours de traitement a changé. Vérifiez-la et réessayez.';
 }

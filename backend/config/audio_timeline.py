@@ -45,19 +45,12 @@ def live_speaker_capture_clock_enabled() -> bool:
     )
 
 
-def live_capture_window_retention_enabled() -> bool:
-    """Retain more observed capture anchors/send spans for delayed finals. Default off."""
-    return rollout_default_off(
-        'LIVE_CAPTURE_WINDOW_RETENTION', os.getenv('LIVE_CAPTURE_WINDOW_RETENTION', '').strip().lower() in _TRUTHY
-    )
-
-
 def capture_anchor_limit() -> int:
-    return 512 if live_capture_window_retention_enabled() else 64
+    return 64
 
 
 def capture_send_span_limit() -> int:
-    return 16384 if live_capture_window_retention_enabled() else 4096
+    return 4096
 
 
 def live_capture_window_merge_preservation_enabled() -> bool:
@@ -65,14 +58,6 @@ def live_capture_window_merge_preservation_enabled() -> bool:
     return rollout_default_off(
         'LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION',
         os.getenv('LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION', '').strip().lower() in _TRUTHY,
-    )
-
-
-def live_capture_window_strict_projection_enabled() -> bool:
-    """Reject legacy windows across observed wall hiatuses. Default off for parity."""
-    return rollout_default_off(
-        'LIVE_CAPTURE_WINDOW_STRICT_PROJECTION',
-        os.getenv('LIVE_CAPTURE_WINDOW_STRICT_PROJECTION', '').strip().lower() in _TRUTHY,
     )
 
 

@@ -11,6 +11,7 @@ on every platform.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -258,7 +259,14 @@ class RenamePairingTests(unittest.TestCase):
 
     def git(self, *args: str) -> str:
         return subprocess.check_output(
-            ["git", "-c", "user.email=desktop-changelog-test@example.invalid", "-c", "user.name=desktop-changelog-test", *args],
+            [
+                "git",
+                "-c",
+                "user.email=desktop-changelog-test@example.invalid",
+                "-c",
+                "user.name=desktop-changelog-test",
+                *args,
+            ],
             text=True,
             cwd=self.repo,
         ).strip()
@@ -286,7 +294,9 @@ class RenamePairingTests(unittest.TestCase):
         self.git("mv", self.SOURCE, renamed)
         head = self.commit({})
 
-        requiring = [path for path in checker.changed_files(base, head) if checker.is_desktop_change_requiring_changelog(path)]
+        requiring = [
+            path for path in checker.changed_files(base, head) if checker.is_desktop_change_requiring_changelog(path)
+        ]
         self.assertEqual(requiring, [renamed])
 
 
@@ -302,6 +312,54 @@ class NoneKindFragmentIOTests(unittest.TestCase):
             path = Path(tmp) / "20260818-dead-code.json"
             changelog.write_json(path, {"kind": "none"})
             self.assertEqual(changelog.read_unreleased_fragment(path), [])
+
+
+class BundledNodeRuntimeReleaseNoteTests(unittest.TestCase):
+    def test_runtime_note_uses_verified_artifact_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            receipt = Path(tmp) / "smoke.json"
+            receipt.write_text(json.dumps({"ok": True, "bundled_node_version": "v22.23.5"}))
+            self.assertEqual(changelog.verified_runtime_version(receipt), "v22.23.5")
+            for result in (
+                {"ok": False, "bundled_node_version": "v22.23.5"},
+                {"ok": True},
+                {"ok": True, "bundled_node_version": "v24.0.0"},
+                [],
+            ):
+                receipt.write_text(json.dumps(result))
+                with self.assertRaises(changelog.ChangelogError):
+                    changelog.verified_runtime_version(receipt)
+            receipt.write_text("broken")
+            with self.assertRaises(changelog.ChangelogError):
+                changelog.verified_runtime_version(receipt)
+
+    def test_reads_pinned_bundled_node_runtime_version_from_prepare_script(self) -> None:
+        self.assertEqual(changelog.bundled_node_runtime_version(), "v22.23.5")
+
+    def test_with_bundled_runtime_note_replaces_stale_runtime_note(self) -> None:
+        notes = changelog.with_bundled_runtime_note(
+            ["Fixed audio routing", "Bundled Node.js runtime: v22.19.0"],
+            runtime_version="v22.23.5",
+        )
+        self.assertEqual(
+            notes,
+            ["Fixed audio routing", "Bundled Node.js runtime: v22.23.5"],
+        )
+        self.assertEqual(
+            changelog.with_bundled_runtime_note(notes, runtime_version="v22.23.5"),
+            notes,
+        )
+
+    def test_latest_release_changes_publishes_bundled_runtime_version(self) -> None:
+        with unittest.mock.patch.object(
+            changelog,
+            "release_entries",
+            return_value=[{"version": "0.12.99", "date": "2026-11-06", "changes": ["Improved desktop stability"]}],
+        ):
+            self.assertEqual(
+                changelog.latest_release_changes(),
+                ["Improved desktop stability", "Bundled Node.js runtime: v22.23.5"],
+            )
 
 
 if __name__ == "__main__":

@@ -1,0 +1,11 @@
+id: button/hold-boundary-3200ms-poweroff
+summary: A 3.2 s hold crosses the 3 s power-off threshold.
+tags: [guard]
+timeline:
+  - {t: 5000, hold: 3200}
+end: 20000
+expect:
+  boot_count: 1
+  final: "off"
+  boots:
+    - {exit: poweroff, log: ["long press detected"]}

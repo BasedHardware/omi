@@ -97,7 +97,16 @@ def api_get(path: str, params: dict[str, Any] | None = None) -> Any:
         except Exception:
             parsed = body
         raise SystemExit(
-            json.dumps({"error": "http_error", "status": exc.code, "path": path, "body": parsed}, indent=2)
+            json.dumps(
+                {
+                    "error": "http_error",
+                    "status": exc.code,
+                    "retry_after": exc.headers.get("Retry-After"),
+                    "path": path,
+                    "body": parsed,
+                },
+                indent=2,
+            )
         )
 
 

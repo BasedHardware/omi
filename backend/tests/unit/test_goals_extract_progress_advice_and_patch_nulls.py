@@ -97,6 +97,13 @@ def test_update_goal_ignores_explicit_none_legacy_metric_keys_and_rejects_invert
         stored.update(patch)
 
     ref.update.side_effect = fake_update
+    # Reference operations are stubbed below; repository construction uses the same fake client.
+    fake_client = object()
+    monkeypatch.setattr(
+        goals_db,
+        '_get_db',
+        lambda firestore_client=None: firestore_client if firestore_client is not None else fake_client,
+    )
     monkeypatch.setattr(goals_db, '_goal_ref', lambda uid, goal_id, firestore_client=None: ref)
     monkeypatch.setattr(goals_db, 'get_goal_by_id', lambda uid, goal_id, firestore_client=None: dict(stored))
 

@@ -80,6 +80,10 @@ spec:
           */}}
           {{- $privateEnv := .Values.privateEnv | default dict }}
           env:
+            # Immutable rollout exporter identity, including supervised GPU children.
+            - name: ROLLOUT_POD_TEMPLATE_HASH
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.labels['pod-template-hash']"}
             {{- if (.Values.parakeetShapeCanary | default dict).enabled }}
             - name: PARAKEET_SHAPE_CANARY_FILE
               value: /var/run/parakeet-shape/route.json

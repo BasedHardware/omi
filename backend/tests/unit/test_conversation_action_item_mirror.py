@@ -145,6 +145,7 @@ def router():
         "utils.other.endpoints": endpoints,
         "utils.other.list_budget": list_budget_real,
         "utils.other.storage": _pkg("utils.other.storage"),
+        "utils.episodes.member_notes": _pkg("utils.episodes.member_notes"),
         **package_submodule_stubs("utils.conversations"),
         "utils.llm": _pkg("utils.llm"),
         "utils.llm.conversation_processing": _pkg("utils.llm.conversation_processing"),

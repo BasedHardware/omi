@@ -2,6 +2,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
+import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
@@ -130,23 +131,29 @@ class ActionItemExportService {
 
   static Future<ExportResult> _exportAppleReminders(ActionItemWithMetadata item) async {
     if (!PlatformService.isApple) return ExportResult.failed;
+    final auth = AuthService.instance;
+    final owner = auth.captureSessionSnapshot();
+    if (owner == null) return ExportResult.failed;
+    bool current() => auth.isSessionSnapshotCurrent(owner);
 
     final service = AppleRemindersService();
     try {
-      final hasPermission = await service.hasPermission() || await service.requestPermission();
-      if (!hasPermission) return ExportResult.failed;
+      final hasPermission = await service.hasPermission() || (current() && await service.requestPermission());
+      if (!hasPermission || !current()) return ExportResult.failed;
 
-      final calendarItemId = await service.addReminder(title: item.description, notes: 'From Omi', dueDate: item.dueAt);
-      if (calendarItemId == null) return ExportResult.failed;
+      final calendarItemId = await service.exportTaskReminder(item, ownerUid: owner.ownerUid);
+      if (calendarItemId == null || !current()) return ExportResult.failed;
 
       final exportTime = DateTime.now();
-      await updateActionItem(
+      final saved = await updateActionItem(
         item.id,
         exported: true,
         exportDate: exportTime,
         exportPlatform: 'apple_reminders',
         appleReminderId: calendarItemId,
+        canSend: current,
       );
+      if (saved == null || !current()) return ExportResult.failed;
       PlatformManager.instance.analytics.actionItemExported(
         actionItemId: item.id,
         appName: 'Apple Reminders',

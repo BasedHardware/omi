@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-grafana-memory-limit-below-burst-peak",
+  "violated_contract": "A container's memory limit must cover its measured burst peak, not its steady state. Grafana in prod-omi-monitoring held a 2Gi limit sized from a 260-510Mi steady state; overlapping Omi TV dashboard loads (each about +140Mi for two minutes) and other bursts reached 2048Mi on 2026-11-12 09:02Z and OOM-killed the pod, taking monitor.omi.me (both orgs) offline for the restart. A Go service in the pod should also carry a soft memory limit below the container limit so the runtime collects before the kernel kills.",
+  "canonical_prevention": "The prod values pin Grafana's limit above the measured burst peak and set GOMEMLIMIT below the limit; the monitoring contract test asserts both so a later trim cannot silently reopen the window.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_monitoring_cost_contract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/charts/monitoring/kube-prometheus-stack/prod_omi_monitoring_values.yaml"
+  ],
+  "status": "open"
+}

@@ -34,23 +34,11 @@
       "why": "Dispatch mode is set only on the running service (gcloud keeps undeclared env across deploys); declare it in the manifest to make this hop verifiable."
     },
     {
-      "key": "no-uid-literals|dev|gke/backend-listen/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
-    },
-    {
-      "key": "no-uid-literals|dev|gke/pusher/AUDIO_ARCHIVE_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
-    },
-    {
       "key": "no-uid-literals|prod|cloud_run/backend/OMI_REFERRAL_CAMPAIGN_PREVIEW_UIDS|uids=3",
       "why": "Reviewed exception, Nik's order 2026-11-05: his own three accounts preview the read-only referral campaign on TestFlight against prod. Delete with the key once the TestFlight-channel preview gate ships."
     },
     {
       "key": "no-uid-literals|prod|gke/backend-listen/DREAM_AGENT_UID_ALLOWLIST|uids=1",
-      "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
-    },
-    {
-      "key": "no-uid-literals|prod|gke/backend-listen/MOBILE_STANDARD_BATCH_UIDS|uids=1",
       "why": "Cohort UIDs predate this suite; moving cohorts to Firestore is in flight (#22075). Ratchet: no new keys."
     },
     {

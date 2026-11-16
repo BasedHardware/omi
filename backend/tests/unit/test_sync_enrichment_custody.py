@@ -13,12 +13,9 @@ from utils.sync import reprocess
 
 @pytest.fixture
 def admitted(state, monkeypatch):
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '100')
     monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
     monkeypatch.setenv('DEMAND_PROCESSING_ENABLED', 'false')
     reprocess.mark('u', 'c', 'en', now=0)
-    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_PERCENT', '0')
     return state
 
 

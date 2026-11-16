@@ -7063,6 +7063,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Autentificarea cu Apple a eșuat, vă rugăm încercați din nou.';
 
   @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Conectarea cu Apple nu a reușit. Încearcă din nou sau continuă cu Google.';
+
+  @override
   String get authFailedToRetrieveToken => 'Nu s-a putut obține tokenul Firebase, vă rugăm încercați din nou.';
 
   @override
@@ -9217,6 +9221,24 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => 'Nu se poate determina versiunea curentă a firmware-ului';
+
+  @override
+  String get applyCodeToCurrentPlan => 'Aplică planului actual';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': 'Cod aplicat planului actual.',
+        'refused': 'Acest cod nu poate fi aplicat. Verifică codul și planul necesar.',
+        'conflict': 'Codul a fost deja folosit sau planul tău are deja o reducere.',
+        'rateLimited': 'Prea multe încercări. Așteaptă și încearcă mai târziu.',
+        'other': 'Codul nu a putut fi aplicat. Încearcă din nou.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => 'Cod promoțional';
@@ -13441,6 +13463,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Ai un cod Omi Pro? Introdu-l pe ecranul următor.';
+
+  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
@@ -13708,6 +13733,9 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => 'Generează din nou notițele';
 
   @override
   String get attentionSummaryFailed => 'Conversația nu a putut fi rezumată';
@@ -14884,6 +14912,21 @@ class AppLocalizationsRo extends AppLocalizations {
   String get episodeWritingNotes => 'Scriem notițele…';
 
   @override
+  String get homeStepTranscribing => 'Se transcrie…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count de înregistrări',
+      few: '$count înregistrări',
+      one: '$count înregistrare',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => 'Mai întâi terminăm transcrierea. Poți părăsi această pagină.';
 
   @override
@@ -15426,7 +15469,63 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paymentDeclinedTitle => 'Cardul dvs. a fost refuzat';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Actualizați cardul sau recuperați $plan pentru $price pe lună';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Actualizați cardul pentru a recupera $plan';
   }
+
+  @override
+  String get hasLinkedTasksLabel => 'Are sarcini asociate';
+
+  @override
+  String get hasTasksFilter => 'Cu sarcini';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Treci la lunar';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price pe lună';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Înlocuiește plata anuală neachitată de $yearly. Se reînnoiește lunar. Anulezi oricând.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Plată refuzată. Planul tău nu s-a schimbat.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Trecerea nu este disponibilă acum. Actualizează cardul în schimb.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Acum plătești lunar';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '$price plătiți azi. Se reînnoiește lunar.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
 }

@@ -1,0 +1,18 @@
+id: button/jammed-button-on-charger-wakes-normally
+summary: >
+  Review finding on the 3.0.24 power-off wait: a button jammed for longer than
+  the 60 s release wait, on the charger. Power-off arms wake on release rather
+  than on press, so the pendant does not wake at once into a held power-on
+  (which on the charger would be the manual SAFE gesture); it wakes when the
+  jam clears and boots normally.
+tags: [fix]
+initial: {charging: true}
+timeline:
+  - {t: 5000, hold: 75000}
+end: 110000
+expect:
+  boot_count: 2
+  boots:
+    - {exit: poweroff, button_held_at_poweroff: true, log: ["waking on release instead", "Entering system off"]}
+    - {reset: off-wake, start_ms: 80000, safe: false, log: ["Device initialized successfully"]}
+  invariants: [no-stuck-safe, poweroff-waits-release, manual-entry-needs-charger]

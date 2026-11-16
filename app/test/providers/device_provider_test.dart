@@ -90,6 +90,39 @@ void main() {
     });
   }
 
+  test('missing transport cannot publish persisted metadata as a fresh DIS observation', () async {
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async => null);
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice()..firmwareRevision = '3.1.0';
+    provider.connectedDevice = device;
+    provider.pairedDevice = device;
+    final observations = <String>[];
+    final subscription = provider.firmwareRevisions.listen((reading) => observations.add(reading.version));
+    addTearDown(subscription.cancel);
+    await provider.getDeviceInfo(forceRefresh: true);
+    expect(device.reads, 0);
+    expect(provider.pairedDevice!.firmwareRevision, 'Unknown');
+    expect(observations, isEmpty);
+  });
+
+  test('reconnect bypasses cached pairing revision and publishes a fresh same-device DIS read', () async {
+    final provider = DeviceProvider(deviceInfoConnectionLoader: (_) async => _InfoConnection());
+    addTearDown(provider.dispose);
+    final device = _RetryInfoDevice()..resolvedFirmware = '3.1.0';
+    await provider.setConnectedDevice(device);
+    expect(device.reads, 1);
+    final observations = <String>[];
+    final subscription = provider.firmwareRevisions.listen((reading) => observations.add(reading.version));
+    addTearDown(subscription.cancel);
+    await provider.setConnectedDevice(null);
+    device.firmwareRevision = '3.1.0'; // discovery/persistence still reports the old version
+    device.resolvedFirmware = '3.2.0';
+    await provider.setConnectedDevice(device);
+    expect(device.reads, 2);
+    expect(provider.pairedDevice!.firmwareRevision, '3.2.0');
+    expect(observations, ['3.2.0']);
+  });
+
   test('onboarding connection emits Device Connected exactly once', () async {
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);
@@ -227,6 +260,7 @@ void main() {
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
     final provider = DeviceProvider(
+      deviceInfoConnectionLoader: (_) async => _InfoConnection(),
       bleDiagnosticsLoader: (_) async => BleDeviceDiagnostics(
         disconnectHistory: [
           BleDisconnectEvent(
@@ -250,14 +284,9 @@ void main() {
       ),
     );
     addTearDown(provider.dispose);
-    final device = BtDevice(
-      id: 'AA:AA:AA:AA:AA:03',
-      name: 'Omi',
-      type: DeviceType.omi,
-      rssi: -50,
-      modelNumber: 'Omi DevKit 2',
-      firmwareRevision: '3.0.20',
-    );
+    final device = _RetryInfoDevice()
+      ..modelNumber = 'Omi DevKit 2'
+      ..resolvedFirmware = '3.0.20';
 
     await provider.setConnectedDevice(device);
     await provider.setConnectedDevice(null);
@@ -567,4 +596,9 @@ class _TestAnalyticsAdapter implements AnalyticsAdapter {
 
   @override
   void reset() {}
+}
+
+class _InfoConnection implements DeviceConnection {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

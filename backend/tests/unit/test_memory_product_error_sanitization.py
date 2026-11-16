@@ -9,6 +9,7 @@ Verifies that:
 
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 import re
@@ -39,6 +40,9 @@ class MemoryProductErrorSanitizationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
+
+        # Resolve the import-pure codec before this legacy fixture closes SDK paths.
+        importlib.import_module("database.transcript_pointer")
 
         # Stubs for hermetic execution without GCP / Firebase / Redis libraries
         google_mod = sys.modules.get("google") or ModuleType("google")

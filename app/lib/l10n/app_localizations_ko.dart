@@ -6928,6 +6928,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authFailedToSignInWithApple => 'Apple로 로그인하지 못했습니다. 다시 시도해 주세요.';
 
   @override
+  String get authAppleSignInFailedUseGoogle => 'Apple로 로그인하지 못했습니다. 다시 시도하거나 Google로 계속하세요.';
+
+  @override
   String get authFailedToRetrieveToken => 'Firebase 토큰을 가져오지 못했습니다. 다시 시도해 주세요.';
 
   @override
@@ -9039,6 +9042,24 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get unableToDetermineFirmwareVersion => '현재 펌웨어 버전을 확인할 수 없습니다';
+
+  @override
+  String get applyCodeToCurrentPlan => '현재 요금제에 적용';
+
+  @override
+  String subscriptionCodeResult(String result) {
+    String _temp0 = intl.Intl.selectLogic(
+      result,
+      {
+        'applied': '현재 요금제에 코드가 적용되었습니다.',
+        'refused': '이 코드를 적용할 수 없습니다. 코드와 대상 요금제를 확인하세요.',
+        'conflict': '이미 사용된 코드이거나 요금제에 이미 할인이 적용되어 있습니다.',
+        'rateLimited': '시도 횟수가 너무 많습니다. 기다린 후 다시 시도하세요.',
+        'other': '코드를 적용하지 못했습니다. 다시 시도하세요.',
+      },
+    );
+    return '$_temp0';
+  }
 
   @override
   String get promoCode => '프로모 코드';
@@ -13200,6 +13221,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro 코드가 있나요? 다음 화면에서 입력하세요.';
+
+  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -13466,6 +13490,9 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get attentionRerunNotes => '노트 다시 생성';
 
   @override
   String get attentionSummaryFailed => '이 대화를 요약하지 못했습니다';
@@ -14615,6 +14642,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get episodeWritingNotes => '메모 작성 중…';
 
   @override
+  String get homeStepTranscribing => '음성 변환 중…';
+
+  @override
+  String homeRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get episodeWritingNotesDetail => '먼저 대화 내용을 마무리하고 있어요. 이 페이지를 나가도 됩니다.';
 
   @override
@@ -15143,7 +15183,63 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paymentDeclinedTitle => '카드가 거절되었습니다';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '카드를 업데이트하거나 $plan을 월 $price에 다시 이용하세요';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan을 다시 이용하려면 카드를 업데이트하세요';
   }
+
+  @override
+  String get hasLinkedTasksLabel => '연결된 작업 있음';
+
+  @override
+  String get hasTasksFilter => '작업 있음';
+
+  @override
+  String firmwareUpdateNotInstalledMessage(String version) {
+    return 'The update didn\'t install. Your pendant is still on $version. Please try again.';
+  }
+
+  @override
+  String get firmwareUpdateUnconfirmedMessage =>
+      'Couldn\'t confirm the update. Your pendant hasn\'t reconnected yet. Keep it nearby and check its firmware version before trying again.';
+
+  @override
+  String get firmwareUpdateUnconfirmedTitle => 'Update Not Confirmed';
+
+  @override
+  String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '월간 결제로 전환';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, 월 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '미결제된 연간 요금 $yearly을 대신합니다. 매월 갱신됩니다. 언제든지 해지할 수 있습니다.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '결제가 거절되었습니다. 플랜은 변경되지 않았습니다.';
+
+  @override
+  String get monthlySwitchUnavailable => '지금은 전환할 수 없습니다. 대신 카드를 업데이트하세요.';
+
+  @override
+  String get monthlySwitchDoneTitle => '월간 결제로 전환되었습니다';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '오늘 $price이 결제되었습니다. 매월 갱신됩니다.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
 }
