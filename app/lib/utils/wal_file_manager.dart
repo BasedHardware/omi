@@ -12,9 +12,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/wal_write_intent.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_index_worker.dart';
+import 'package:omi/utils/wal_index_codec.dart';
 import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
@@ -50,7 +52,8 @@ class WalFileManager {
 
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
-    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+    final recovered = await WalWriteIntent.recover(_walFile!.parent, indexed);
+    return MobileBatchBuffer.recover(_walFile!.parent, recovered);
   }
 
   static Future<List<Wal>> _loadIndexedWals() async {
@@ -59,35 +62,42 @@ class WalFileManager {
     }
 
     final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
-    return loaded ?? await _loadFromBackup();
+    final indexed = loaded ?? await _loadFromBackup();
+    final retained = await WalWriteIntent.prepareIndexedRead(_walFile!.parent, indexed);
+    if (retained.length == indexed.length) return indexed;
+    // Exceptional shared-file deletion recovery needs a real commit before
+    // old rows disappear from strict readers or worker token assignment.
+    await _saveWals(retained);
+    return (await _loadIndex(_walFile!))!;
   }
 
   /// Null means the index is unusable; a partially valid index retains every
   /// readable entry and archives the original bytes before writing the repair.
   static Future<List<Wal>?> _loadIndex(File file) async {
+    late ({List<Wal> wals, bool invalid}) result;
     try {
       final content = await file.readAsString();
       final path = file.path;
-      final result = await offUiIsolate(() => _decodeIndex(content, path),
+      result = await offUiIsolate(() => decodeWalIndex(content, path),
           size: content.length, threshold: 0, debugName: 'wal_index_decode');
-      final loaded = result.wals;
-      final invalid = result.invalid;
-      if (invalid) {
-        await _quarantineIndex(file, 'invalid_entry');
-        if (identical(file, _walFile)) {
-          try {
-            await _saveWals(loaded);
-          } catch (_) {
-            // The archived source remains available for another recovery.
-          }
-        }
-      }
-      return loaded;
     } catch (error) {
       await _quarantineIndex(
           file, error is FormatException && error.message == 'invalid_schema' ? 'invalid_schema' : 'unreadable');
       return null;
     }
+    if (result.invalid) {
+      // No repair or backup fallback may drop references until the original
+      // bytes are durably retired. A preservation failure fails load closed.
+      await _quarantineIndex(file, 'invalid_entry');
+      if (identical(file, _walFile)) {
+        try {
+          await _saveWals(result.wals);
+        } catch (_) {
+          // The archived source remains available for another recovery.
+        }
+      }
+    }
+    return result.wals;
   }
 
   static Future<WalIndexWorker> createIndexWorker({
@@ -107,89 +117,30 @@ class WalFileManager {
                 }));
       });
 
-  static ({List<Wal> wals, bool invalid}) _decodeIndex(String content, String path) {
-    final decoded = jsonDecode(content);
-    if (decoded is! Map<String, dynamic> || decoded['wals'] is! List) {
-      throw const FormatException('invalid_schema');
-    }
-    final loaded = <Wal>[];
-    var invalid = false;
-    for (final entry in decoded['wals'] as List) {
-      try {
-        if (entry is! Map<String, dynamic>) throw const FormatException();
-        // Old indices can omit new optional fields, but a WAL without its
-        // identity or with a wrong scalar type must never enter sync admission.
-        if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
-        for (final key in [
-          'channel',
-          'sample_rate',
-          'seconds',
-          'storage_offset',
-          'storage_total_bytes',
-          'file_num',
-          'total_frames',
-          'synced_frame_offset',
-          'retry_count',
-          'last_retry_at',
-          'uploaded_at',
-          'source_frame_start',
-          'source_clock_epoch',
-          'live_ring_id',
-          'live_ordinal_start',
-          'live_ordinal_end',
-          'download_ring_id',
-          'download_seq_start',
-          'download_seq_end',
-          'download_file_bytes',
-        ]) {
-          if (entry[key] != null && entry[key] is! int) throw const FormatException();
-        }
-        for (final key in [
-          'file_path',
-          'device',
-          'device_model',
-          'conversation_id',
-          'recording_session_id',
-          'owner_uid',
-          'capture_root',
-          'job_id',
-          'batch_live_session',
-          'live_device_id',
-        ]) {
-          if (entry[key] != null && entry[key] is! String) throw const FormatException();
-        }
-        loaded.add(Wal.fromJson(entry));
-      } catch (_) {
-        invalid = true;
-      }
-    }
-    if (!invalid) {
-      for (var i = 0; i < loaded.length; i++) {
-        loaded[i].loadedIndexToken = i;
-        loaded[i].loadedIndexSource = path;
-      }
-    }
-    return (wals: loaded, invalid: invalid);
-  }
-
   @visibleForTesting
   static Future<void> Function(File file)? quarantineRenameForTesting;
 
+  @visibleForTesting
+  static Future<void> Function()? beforeLegacyMigrationSaveForTesting;
+
   static Future<void> _quarantineIndex(File file, String reason) async {
     _indexRevision++;
+    if (!await file.exists()) return;
+    final archive = '${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}';
     try {
-      if (await file.exists()) {
-        final rename = quarantineRenameForTesting;
-        if (rename != null) {
-          await rename(file);
-        } else {
-          await file.rename('${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}');
-        }
+      final rename = quarantineRenameForTesting;
+      if (rename != null) {
+        await rename(file);
+      } else {
+        await file.rename(archive);
       }
-      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);
     } catch (_) {
-      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', 'rename_failed');
+      // Rename can fail while the source is still readable. Preserve an
+      // fsynced copy before any later repair/save can overwrite its rows.
+      // If this also fails, propagate: backup fallback is not safe to publish.
+      await File(archive).writeAsBytes(await file.readAsBytes(), flush: true);
     }
+    await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);
   }
 
   /// Indexes at or above this size are JSON-encoded on a background isolate.
@@ -303,7 +254,7 @@ class WalFileManager {
         final content = await walFile.readAsString();
         if (content.isEmpty) return;
         await offUiIsolate(() {
-          jsonDecode(content);
+          if (visitWalIndex(content, (_, __) {})) throw const FormatException('invalid_entry');
           return true;
         }, size: content.length, threshold: 0, debugName: 'wal_backup_validate');
       }
@@ -336,16 +287,16 @@ class WalFileManager {
     return success;
   }
 
-  static Future<void> clearAll() async {
-    _indexRevision++;
-    if (_walFile != null && _walFile!.existsSync()) {
-      await _walFile!.delete();
-    }
-    if (_walBackupFile != null && _walBackupFile!.existsSync()) {
-      await _walBackupFile!.delete();
-    }
-    Logger.debug('Cleared all WAL files');
-  }
+  /// Account deletion already purged that owner's files through the ledger.
+  /// Keep any remaining rows (foreign owners or failed file deletions) so a
+  /// session wipe cannot silently turn their audio into unreferenced files.
+  static Future<void> clearAll() => _saveLock.withResource(() async {
+        if ((await _loadIndexedWals()).isNotEmpty) return;
+        _indexRevision++;
+        if (_walFile != null && await _walFile!.exists()) await _walFile!.delete();
+        if (_walBackupFile != null && await _walBackupFile!.exists()) await _walBackupFile!.delete();
+        Logger.debug('Cleared empty WAL index files');
+      });
 
   static Future<Map<String, int>> getFileInfo() async {
     int mainFileSize = 0;
@@ -456,6 +407,7 @@ class WalFileManager {
     // Save migrated WALs
     if (newWals.isNotEmpty) {
       final allWals = List<Wal>.from(existingWals)..addAll(newWals);
+      await beforeLegacyMigrationSaveForTesting?.call();
       await saveWals(allWals);
       Logger.debug('WalFileManager: Saved ${newWals.length} migrated WALs');
     }

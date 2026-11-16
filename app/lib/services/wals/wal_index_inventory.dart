@@ -1,6 +1,7 @@
 import 'dart:collection';
 
 import 'wal.dart';
+import 'wal_write_intent.dart';
 
 /// Tracks all custody buckets together. Moving a row between buckets is not a
 /// deletion. Only changed identities are visited when taking a disk delta.
@@ -8,6 +9,31 @@ class WalIndexInventory {
   final _uploaded = LinkedHashSet<Wal>.identity();
   Iterable<Wal> get uploaded => _uploaded;
   final _members = HashMap<Wal, int>.identity();
+  // Names stay reserved across all custody buckets, even if bytes are missing.
+  // Mutation listeners maintain this without scanning history per device chunk.
+  final _fileNames = <String, int>{};
+  final _walFileNames = Expando<String>('walReservedFileName');
+  bool referencesFile(String name) => _fileNames.containsKey(name);
+
+  void _releaseName(String name) {
+    final count = _fileNames[name]!;
+    if (count == 1) {
+      _fileNames.remove(name);
+    } else {
+      _fileNames[name] = count - 1;
+    }
+  }
+
+  void _updateName(Wal wal) {
+    final path = wal.filePath;
+    final name = path != null && path.isNotEmpty ? path.split('/').last : wal.getFileName() as String;
+    final old = _walFileNames[wal];
+    if (old == name) return;
+    if (old != null) _releaseName(old);
+    _walFileNames[wal] = name;
+    _fileNames.update(name, (count) => count + 1, ifAbsent: () => 1);
+  }
+
   final _tokens = Expando<int>('walIndexToken');
   final _dirty = LinkedHashSet<Wal>.identity();
   final _removed = <int>{};
@@ -34,6 +60,7 @@ class WalIndexInventory {
   }
 
   void _changed(Wal wal) {
+    _updateName(wal);
     _dirty.add(wal);
     if (wal.status == WalStatus.uploaded) {
       _uploaded.add(wal);
@@ -46,9 +73,10 @@ class WalIndexInventory {
     final count = _members[wal] ?? 0;
     _members[wal] = count + 1;
     if (count != 0) return;
+    _updateName(wal);
     _tokens[wal] ??= _nextToken++;
     _removed.remove(_tokens[wal]);
-    if (!_seeded.remove(wal) || wal.storage == WalStorage.mem) _dirty.add(wal);
+    if (!_seeded.remove(wal) || wal.storage == WalStorage.mem || WalWriteIntent.isRecovered(wal)) _dirty.add(wal);
     if (wal.status == WalStatus.uploaded) _uploaded.add(wal);
     wal.addChangeListener(_changed);
   }
@@ -60,6 +88,8 @@ class WalIndexInventory {
       return;
     }
     _members.remove(wal);
+    _releaseName(_walFileNames[wal]!);
+    _walFileNames[wal] = null;
     _uploaded.remove(wal);
     wal.removeChangeListener(_changed);
     _dirty.remove(wal);

@@ -6,6 +6,17 @@ part of 'local_wal_sync.dart';
 /// New default collision names keep the capture timestamp as the last token,
 /// which is the server's filename wire contract. Existing files are untouched.
 extension DeviceChunkPersistence on LocalWalSync {
+  Future<bool> _deviceNameOccupied(Directory directory, String name) async {
+    final ledger = this;
+    if (ledger is LocalWalSyncImpl) {
+      // Only the concrete custody owner has the device-wide hidden buckets.
+      // Wait for admission before consulting its incremental name inventory.
+      await ledger._indexLoadInFlight;
+      if (ledger._indexInventory.referencesFile(name)) return true;
+    }
+    return await File('${directory.path}/$name').exists() || await WalWriteIntent.exists(directory, name);
+  }
+
   Future<Wal> persistEmptyRingRecords(
       {required Wal source,
       required int ringId,
@@ -31,7 +42,6 @@ extension DeviceChunkPersistence on LocalWalSync {
     final dir = await getApplicationDocumentsDirectory();
     final name = 'custody_empty_${const Uuid().v4()}.ring-empty';
     try {
-      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
       final marker = Wal(
           codec: source.codec,
           timerStart: source.timerStart,
@@ -47,6 +57,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadSeqEnd: end,
           downloadFileBytes: data.length,
           fileSha256: sha256.convert(data).toString());
+      await WalWriteIntent.write(dir, marker, data);
       await addExternalWal(marker, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(marker, admittedGeneration: admittedGeneration)) {
         throw StateError('empty marker index not durable');
@@ -77,6 +88,9 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? downloadSeqEnd,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
+    final uid = SharedPreferencesUtil().uid;
+    final owner = uid.isEmpty ? source.ownerUid : uid;
+    if (owner == null || owner.isEmpty) throw StateError('device chunk has no captured owner');
     final data = encodeWalFrames(frames);
     if (!await ensureStorageAdmission(bytes: data.length, admittedGeneration: admittedGeneration)) {
       throw StateError('storage admission refused (cap/disk reserve)');
@@ -85,10 +99,10 @@ extension DeviceChunkPersistence on LocalWalSync {
       final dir = await getApplicationDocumentsDirectory();
       var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
       if (fileName != null) {
-        while (await File('${dir.path}/$name').exists()) {
+        while (await _deviceNameOccupied(dir, name)) {
           name = fileName();
         }
-      } else if (await File('${dir.path}/$name').exists()) {
+      } else if (await _deviceNameOccupied(dir, name)) {
         final dot = name.lastIndexOf('.');
         final stem = dot > 0 ? name.substring(0, dot) : name;
         final ext = dot > 0 ? name.substring(dot) : '';
@@ -100,9 +114,8 @@ extension DeviceChunkPersistence on LocalWalSync {
           name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
               ? '${stem}_u$nonce$ext'
               : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
-        } while (await File('${dir.path}/$name').exists());
+        } while (await _deviceNameOccupied(dir, name));
       }
-      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
       final fps = source.codec.getFramesPerSecond();
       final wal = Wal(
           codec: codec ?? source.codec,
@@ -110,6 +123,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           sampleRate: sampleRate ?? source.sampleRate,
           timerStart: timerStart,
           filePath: name,
+          ownerUid: owner,
           storage: WalStorage.disk,
           status: WalStatus.miss,
           device: source.device,
@@ -123,6 +137,8 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadFileBytes: downloadRingId != null ? data.length : null,
           fileSha256: downloadRingId != null ? sha256.convert(data).toString() : null,
           clockRun: clockRun);
+      if (sessionGeneration != admittedGeneration) throw StateError('WAL owner changed before write');
+      await WalWriteIntent.write(dir, wal, data);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
         throw StateError('WAL not durable after registration');

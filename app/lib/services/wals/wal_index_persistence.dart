@@ -1,7 +1,68 @@
 part of 'local_wal_sync.dart';
 
 extension _WalIndexPersistence on LocalWalSyncImpl {
+  /// Admission owns the index token namespace before any producer/save can
+  /// start a worker. A slow Documents recovery must never look like an empty
+  /// ledger to a timer or stop/codec-change flush.
+  Future<List<Wal>> _loadAndAdmitIndex(int generation, {bool useOverride = true, bool migrateLegacy = false}) {
+    final load = () async {
+      await WalFileManager.init();
+      final override = useOverride ? _loadWalsOverride : null;
+      var loaded = override != null ? await override() : await WalFileManager.loadWals();
+      if (migrateLegacy && _isCurrent(generation)) {
+        final count = await WalFileManager.migrateLegacyLimitlessFiles(loaded);
+        if (count > 0) {
+          loaded = override != null ? await override() : await WalFileManager.loadWals();
+          DebugLogManager.logInfo('WAL migration completed', {'migratedCount': count, 'totalAfter': loaded.length});
+        }
+      }
+      // The index is device-wide. A stale UI generation must still establish
+      // its token namespace; park those rows until current-owner reconciliation.
+      _admitLoadedWals(loaded, publishCurrent: _isCurrent(generation));
+      return loaded;
+    }();
+    _indexLoadInFlight = load;
+    return load.then((loaded) {
+      if (identical(_indexLoadInFlight, load)) _indexLoadInFlight = null;
+      return loaded;
+    }, onError: (Object error, StackTrace stack) {
+      if (identical(_indexLoadInFlight, load)) {
+        // Keep the failed gate: empty admission must never overwrite unknown
+        // durable rows. Consumers fail fast instead of waiting indefinitely.
+        _chunkingTimer?.cancel();
+        _flushingTimer?.cancel();
+        _pendantTimer?.cancel();
+        if (!_walReady.isCompleted) {
+          _walReady.future.ignore();
+          _walReady.completeError(error, stack);
+        }
+        DebugLogManager.logError('WAL index admission failed closed', stack, error.toString());
+      }
+      Error.throwWithStackTrace(error, stack);
+    });
+  }
+
+  Future<String> _uniqueStorageFileName(Wal wal) async {
+    final claimable = captureEvidenceWalClaimable(wal);
+    final planned = wal.filePath;
+    var name = claimable && planned != null && planned.isNotEmpty ? planned.split('/').last : wal.getFileName();
+    if (!_fileReferencedByOtherWal(wal, name) && !await _localFileExistsByName(name)) return name;
+    for (;;) {
+      final candidate = walCollisionName(name, _storageFileSeq++, claimable);
+      if (!_fileReferencedByOtherWal(wal, candidate) && !await _localFileExistsByName(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  Future<bool> _localFileExistsByName(String fileName) async {
+    final path = await Wal.getFilePath(fileName);
+    if (path == null) return false;
+    return await File(path).exists() || await WalWriteIntent.exists(File(path).parent, fileName);
+  }
+
   Future<bool> _saveWalsToFile(int generation) async {
+    await _indexLoadInFlight;
     if (!_isCurrent(generation)) return false;
     // A save joins all earlier disk writes. After a failure the next caller
     // retries dirty identities; no caller can claim durable before rename.
@@ -18,7 +79,26 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
     _forceIndexWrite = false;
     // Capture keys at admission, never from mutable rows after an await.
     final confirmedKeys = delta.disk.map(_durableKey).toList();
-    final write = _writeIndexDelta(delta);
+    final intents = [
+      for (final wal in delta.disk.where(WalWriteIntent.hasPending))
+        (wal: wal, fileName: wal.filePath, transactionId: wal.fileWriteId),
+    ];
+    final write = () async {
+      await _writeIndexDelta(delta);
+      for (final intent in intents) {
+        // Cleanup is best effort AFTER commit; retrying a leftover intent is
+        // idempotent. Never turn a committed write into a failed index delta.
+        try {
+          if (intent.fileName != null && !intent.fileName!.contains('/')) {
+            final directory = await getApplicationDocumentsDirectory();
+            await WalWriteIntent.retire(directory, intent.wal,
+                fileName: intent.fileName, transactionId: intent.transactionId);
+          }
+        } on FileSystemException catch (e) {
+          Logger.debug('WAL intent retirement deferred: $e');
+        }
+      }
+    }();
     _indexWriteInFlight = write;
     try {
       await write;

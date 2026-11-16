@@ -3,14 +3,16 @@ part of 'local_wal_sync.dart';
 /// Recordings of accounts deleted from this phone, and the file-ownership checks
 /// every deletion of a recording goes through.
 extension _WalAccountPurge on LocalWalSyncImpl {
-  bool _fileReferencedByOtherWal(Wal wal, String fileName) {
+  bool _fileReferencedByOtherWal(Wal wal, String fileName) => _otherWalReferencingFile(wal, fileName) != null;
+
+  Wal? _otherWalReferencingFile(Wal wal, String fileName, {bool diskOnly = false}) {
     for (final other in [..._retiredWals, ..._foreignWals, ..._wals]) {
-      if (identical(other, wal)) continue;
+      if (identical(other, wal) || (diskOnly && other.storage != WalStorage.disk)) continue;
       final otherPath = other.filePath;
       final otherName = (otherPath != null && otherPath.isNotEmpty) ? otherPath.split('/').last : other.getFileName();
-      if (otherName == fileName) return true;
+      if (otherName == fileName) return other;
     }
-    return false;
+    return null;
   }
 
   bool _isTrackedWal(Wal wal) =>
@@ -49,12 +51,19 @@ extension _WalAccountPurge on LocalWalSyncImpl {
     final current = _currentWalOwnerUid();
     bool owned(Wal wal) => wal.ownerUid == uid || (wal.ownerUid == null && uid == current);
     final doomed = [..._wals, ..._retiredWals, ..._foreignWals].where(owned).toList();
+    var stampedOwner = false;
+    for (final wal in doomed) {
+      if (wal.ownerUid == null) {
+        wal.ownerUid = uid;
+        stampedOwner = true;
+      }
+    }
     var removed = 0;
     for (final wal in doomed) {
       if (!_isCurrent(generation)) break;
       if (await _deleteWal(wal, generation: generation)) removed++;
     }
-    if (removed > 0 && _isCurrent(generation)) {
+    if ((removed > 0 || stampedOwner) && _isCurrent(generation)) {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
     }
