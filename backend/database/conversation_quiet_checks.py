@@ -23,6 +23,7 @@ from database import conversation_finalization_jobs as jobs_db
 from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for, quiet_empty_exit_enabled
 from config.server_batch import owned, proven_empty
+from config import listen_reconnect
 from utils.conversations.lifecycle_clocks import speech_clock
 
 QUIET_CHECK_KIND = 'listen_quiet_check'
@@ -61,7 +62,9 @@ def quiet_deadline(conversation: dict[str, Any], timeout: Any = 120, *, uid: str
     if not isinstance(finish, datetime):
         return None
     finish = finish if finish.tzinfo else finish.replace(tzinfo=timezone.utc)
-    return finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout)))
+    return listen_reconnect.deadline(
+        conversation, finish + timedelta(seconds=continuation_timeout(conversation, quiet_timeout(timeout))), now=_now()
+    )
 
 
 def arm_quiet_check(
@@ -272,14 +275,22 @@ def _evaluate_quiet_check(
             'reconcile_after_at': due,
             'updated_at': now,
         }
+        if ready and owned(row) and listen_reconnect.end_due(row, now):
+            patch: dict[str, Any] = {'server_batch_audio_closed': True}
+            if not listen_reconnect.enabled():
+                patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
+            transaction.update(row_ref, patch)
         transaction.set(job_ref, updated)
         return updated | {
             'job_id': job_id,
             'status': ('empty_ready' if empty else 'ready') if ready else 'deferred',
             **({'empty_exit': 'proven_empty_storage'} if empty_exit else {}),
             'recording_session_id': (row.get('external_data') or {}).get('recording_session_id'),
-            'recovery_cutoff': now
-            - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds')))),
+            'recovery_cutoff': (
+                now
+                if listen_reconnect.end_due(row, now)
+                else now - timedelta(seconds=continuation_timeout(row, quiet_timeout(job.get('quiet_timeout_seconds'))))
+            ),
         }
 
     return evaluate(client.transaction())

@@ -38,6 +38,7 @@ from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled, mobile_standard_batch_rollout_enabled
 from config.server_batch import owned as server_batch_owned
+from routers.listen.batch_close import resumable_after_drop
 from routers.listen.local_preview import renew_local_preview, restore_non_preview_path
 from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
@@ -1470,9 +1471,10 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    quiet_armed = False
                     if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
                         try:
-                            await self.persistence.call(
+                            quiet_armed = await self.persistence.call(
                                 quiet_finalization.arm,
                                 self.request.uid,
                                 conversation_id,
@@ -1482,19 +1484,36 @@ class ListenSessionRuntime:
                         except Exception as error:
                             logger.error('Quiet disconnect check persistence failed type=%s', type(error).__name__)
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
-                    if conversation and finalization_reason:
+                    batch_disconnect = 'legacy'
+                    if conversation and server_batch_owned(conversation):
+                        batch_disconnect = await self.conversations.disconnect_batch_producer(
+                            conversation_id, reason=finalization_reason
+                        )
+                    if conversation and finalization_reason and batch_disconnect != 'fenced':
                         await self.persistence.call(
                             conversations_db.update_conversation,
                             self.request.uid,
                             conversation_id,
                             {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                    if conversation and (
-                        server_batch_owned(conversation)
-                        or (
-                            self.state.close_code == 1000
-                            and getattr(conversation.get('source'), 'value', conversation.get('source')) == 'desktop'
-                            and (conversation.get('transcript_segments') or conversation.get('photos'))
+                    if batch_disconnect == 'held':
+                        await self.transcripts.flush_speaker_assignments(conversation_id)
+                    elif batch_disconnect == 'legacy' and await resumable_after_drop(
+                        self, conversation_id, conversation, quiet_owned=quiet_armed
+                    ):
+                        # Preserve main's drop recovery for older/identity-less sessions.
+                        await self.transcripts.flush_speaker_assignments(conversation_id)
+                    elif (
+                        conversation
+                        and batch_disconnect != 'fenced'
+                        and (
+                            server_batch_owned(conversation)
+                            or (
+                                self.state.close_code == 1000
+                                and getattr(conversation.get('source'), 'value', conversation.get('source'))
+                                == 'desktop'
+                                and (conversation.get('transcript_segments') or conversation.get('photos'))
+                            )
                         )
                     ):
                         await self.transcripts.flush_speaker_assignments(conversation_id)

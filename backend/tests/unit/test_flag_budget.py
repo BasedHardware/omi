@@ -91,6 +91,7 @@ SCOPE = (
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
     'config/batch_language_recovery.py',
+    'config/listen_reconnect.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
     'parakeet/language_gate.py',
@@ -487,3 +488,18 @@ if __name__ == '__main__':
     for env_name, files in inventory.items():
         print(f'{env_name}\t{", ".join(files)}')
     print(f'{len(inventory)} names in scope', file=sys.stderr)
+
+
+def test_reconnect_dark_rollout_has_a_dated_release_ramp():
+    root = Path(__file__).resolve().parents[3]
+    budget = json.loads((root / 'backend/config/flag_budget.json').read_text())
+    # Same safe semantics as safe_load; the C loader keeps this inside the fast-unit CPU budget.
+    flags = yaml.load(
+        (root / 'config/feature-flags.yaml').read_text(), Loader=getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+    )
+    flag = next(item for item in flags['flags'] if item['key'] == 'LISTEN_BATCH_RECONNECT_ENABLED')
+    assert flag['lifecycle'] == 'rollout'
+    assert flag['fail'] == 'closed'
+    assert flag['review_by'] == budget['names'][flag['key']]['review_by'] == '2026-11-20'
+    assert flag['ramp']['done_by'] == '2026-11-20'
+    assert 'Release' in flag['ramp']['expander'] and 'Quality' in flag['ramp']['expander']
