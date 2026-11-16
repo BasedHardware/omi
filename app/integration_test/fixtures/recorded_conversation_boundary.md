@@ -25,5 +25,6 @@ Without that define, it is explicitly skipped. The target uses real providers,
 HTTP decoding, Home and detail widgets. The HTTP server is hermetic. Transcript
 export reaches a mocked native-share boundary; no outbound share is sent.
 The repeated checks cover Summary, Transcript, Select, export and return to Home.
-Audio playback remains covered by the separate audio regressions because these
-observed source rows contain no audio files.
+The sanitizer deliberately removes audio metadata from this fixture. The original
+source rows contain audio metadata; this replay does not qualify its playback.
+Audio behavior is covered separately by the existing audio regressions.
