@@ -55,6 +55,44 @@ async def test_competing_writer_returns_pollable_error(monkeypatch):
     assert error.value.detail == 'summary_in_progress'
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exhausted', [True, False])
+async def test_on_open_respects_the_custom_stt_paid_notes_allowance(monkeypatch, exhausted):
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: exhausted)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: 'token')
+    row = {'id': 'c', 'uses_custom_stt': True, 'source': 'omi', 'transcript_segments': [{'text': 'word ' * 400}]}
+    assert await summary.prepare('u', row) == (None if exhausted else 'token')
+
+
+@pytest.mark.asyncio
+async def test_refused_custom_stt_stream_serves_stored_row_without_model_work(monkeypatch):
+    """The route hands stream() the refused prepare() result; consuming it must spend no notes call."""
+
+    async def blocking(pool, fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(summary, 'run_blocking', blocking)
+    monkeypatch.setattr(summary, 'should_skip_omi_paid_postprocessing', lambda *a, **kw: True)
+    monkeypatch.setattr(leases, 'acquire', lambda *a: pytest.fail('refused summary acquired a writer'))
+    monkeypatch.setattr(summary, 'write', lambda *a, **kw: pytest.fail('refused summary ran the notes model'))
+    row = {
+        'id': 'c',
+        'uses_custom_stt': True,
+        'source': 'omi',
+        'finished_at': AT,
+        'structured': {'title': 'Stored'},
+        'transcript_segments': [{'text': 'word ' * 400}],
+    }
+    token = await summary.prepare('u', row)
+    frames = [frame async for frame in summary.stream('u', row, token=token)]
+    assert len(frames) == 1 and frames[0].startswith('done: ')
+    assert json.loads(base64.b64decode(frames[0][6:].strip()))['structured']['title'] == 'Stored'
+
+
 def test_on_open_done_uses_the_locked_row_title(monkeypatch):
     monkeypatch.setattr(
         process, '_get_structured', lambda *a, **kw: (Structured(title='Model replacement', emoji='🔧'), False)
