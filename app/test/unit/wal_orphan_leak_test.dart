@@ -842,4 +842,61 @@ void main() {
         reason: 'a failed purge must not publish old unstamped audio to the next owner');
     expect(restarted.testForeignWals.single.ownerUid, 'owner-a');
   });
+  test('an initialization repair failure completes readiness instead of hanging', () async {
+    final wal = Wal(
+        timerStart: 1,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        storage: WalStorage.flashPage,
+        ownerUid: 'owner-a',
+        filePath: 'audio_repair.bin');
+    await File('${documents.path}/${wal.filePath}').writeAsBytes([1, 2]);
+    await WalFileManager.saveWals([wal]);
+    final sync = failingLedger();
+    addTearDown(() async {
+      try {
+        await sync.stop();
+      } catch (_) {}
+    });
+    sync.start();
+    await expectLater(sync.walReady.timeout(const Duration(seconds: 1)), throwsA(isA<FileSystemException>()));
+    expect(await File('${documents.path}/${wal.filePath}').exists(), isTrue);
+  });
+
+  for (final deltaWriter in [false, true]) {
+    test('invalid-schema main cannot replace the good backup before a failed write (delta=$deltaWriter)', () async {
+      final wal = Wal(
+          timerStart: 1,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          storage: WalStorage.disk,
+          ownerUid: 'owner-a',
+          filePath: 'audio_backup_only.bin');
+      await File('${documents.path}/${wal.filePath}').writeAsBytes([1, 2]);
+      final backup = File('${documents.path}/wals_backup.json');
+      final original = jsonEncode({
+        'version': 1,
+        'wals': [wal.toJson()]
+      });
+      await backup.writeAsString(original);
+      await File('${documents.path}/wals.json').writeAsString('{"version":1,"wals":"invalid"}');
+      await Directory('${documents.path}/wals.json.tmp').create();
+      if (deltaWriter) {
+        WalFileManager.quarantineRenameForTesting = (_) async => throw const FileSystemException('rename denied');
+        addTearDown(() => WalFileManager.quarantineRenameForTesting = null);
+        final sync = LocalWalSyncImpl(_Listener(), deltaIndexAllowed: () async => true);
+        await sync.loadForOnDeviceWorker();
+        sync.testWals.single.retryCount = 1;
+        await expectLater(sync.persistRetryMetadata(sync.testWals.single), throwsA(isA<FileSystemException>()));
+        addTearDown((await sync.indexWorkerForTesting)!.close);
+      } else {
+        await expectLater(WalFileManager.saveWals([wal]), throwsA(isA<FileSystemException>()));
+      }
+      expect(await backup.readAsString(), original,
+          reason: 'the admitted backup is the only surviving index until main commit');
+      final restarted = LocalWalSyncImpl(_Listener());
+      await restarted.loadForOnDeviceWorker();
+      expect(restarted.testWals.single.filePath, wal.filePath);
+    });
+  }
 }

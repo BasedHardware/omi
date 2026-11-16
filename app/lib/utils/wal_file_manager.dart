@@ -16,6 +16,7 @@ import 'package:omi/services/wals/wal_write_intent.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_index_worker.dart';
+import 'package:omi/utils/wal_index_codec.dart';
 import 'package:omi/startup/boot_journal.dart';
 
 class WalFileManager {
@@ -71,7 +72,7 @@ class WalFileManager {
     try {
       final content = await file.readAsString();
       final path = file.path;
-      result = await offUiIsolate(() => _decodeIndex(content, path),
+      result = await offUiIsolate(() => decodeWalIndex(content, path),
           size: content.length, threshold: 0, debugName: 'wal_index_decode');
     } catch (error) {
       await _quarantineIndex(
@@ -109,81 +110,6 @@ class WalFileManager {
                   await write();
                 }));
       });
-
-  static ({List<Wal> wals, bool invalid}) _decodeIndex(String content, String path) {
-    final decoded = jsonDecode(content);
-    if (decoded is! Map<String, dynamic> || decoded['wals'] is! List) {
-      throw const FormatException('invalid_schema');
-    }
-    final loaded = <Wal>[];
-    var invalid = false;
-    for (final entry in decoded['wals'] as List) {
-      try {
-        if (entry is! Map<String, dynamic>) throw const FormatException();
-        // Old indices can omit new optional fields, but a WAL without its
-        // identity or with a wrong scalar type must never enter sync admission.
-        if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
-        // A file-backed row must not fall through from an unknown/missing
-        // storage enum to mem: the next flush would replace its reference
-        // with a newly named empty file. Retire the raw row in quarantine.
-        final storage = WalStorage.values.asNameMap()[entry['storage']];
-        if (entry['storage'] != null && storage == null ||
-            entry['file_path'] is String &&
-                (entry['file_path'] as String).isNotEmpty &&
-                (storage == null || storage == WalStorage.mem)) {
-          throw const FormatException();
-        }
-        for (final key in [
-          'channel',
-          'sample_rate',
-          'seconds',
-          'storage_offset',
-          'storage_total_bytes',
-          'file_num',
-          'total_frames',
-          'synced_frame_offset',
-          'retry_count',
-          'last_retry_at',
-          'uploaded_at',
-          'source_frame_start',
-          'source_clock_epoch',
-          'live_ring_id',
-          'live_ordinal_start',
-          'live_ordinal_end',
-          'download_ring_id',
-          'download_seq_start',
-          'download_seq_end',
-          'download_file_bytes',
-        ]) {
-          if (entry[key] != null && entry[key] is! int) throw const FormatException();
-        }
-        for (final key in [
-          'file_path',
-          'device',
-          'device_model',
-          'conversation_id',
-          'recording_session_id',
-          'owner_uid',
-          'capture_root',
-          'job_id',
-          'batch_live_session',
-          'live_device_id',
-        ]) {
-          if (entry[key] != null && entry[key] is! String) throw const FormatException();
-        }
-        loaded.add(Wal.fromJson(entry));
-      } catch (_) {
-        invalid = true;
-      }
-    }
-    if (!invalid) {
-      for (var i = 0; i < loaded.length; i++) {
-        loaded[i].loadedIndexToken = i;
-        loaded[i].loadedIndexSource = path;
-      }
-    }
-    return (wals: loaded, invalid: invalid);
-  }
 
   @visibleForTesting
   static Future<void> Function(File file)? quarantineRenameForTesting;
@@ -322,7 +248,7 @@ class WalFileManager {
         final content = await walFile.readAsString();
         if (content.isEmpty) return;
         await offUiIsolate(() {
-          jsonDecode(content);
+          if (visitWalIndex(content, (_, __) {})) throw const FormatException('invalid_entry');
           return true;
         }, size: content.length, threshold: 0, debugName: 'wal_backup_validate');
       }

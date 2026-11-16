@@ -516,8 +516,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   void start() {
     unawaited(_initializeWals().catchError((Object error, StackTrace stack) {
-      // Admission reports the failure through walReady and keeps its failed
-      // write gate. Do not also throw from this fire-and-forget lifecycle hook.
+      // Admission already reports its own failures. Repairs after admission
+      // can fail too; settle readiness instead of leaving consumers suspended.
+      if (!_walReady.isCompleted) {
+        _chunkingTimer?.cancel();
+        _flushingTimer?.cancel();
+        _pendantTimer?.cancel();
+        _walReady.future.ignore();
+        _walReady.completeError(error, stack);
+        DebugLogManager.logError('WAL initialization failed closed', stack, error.toString());
+      }
     }));
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _runNativeIntake();

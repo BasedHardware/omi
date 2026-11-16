@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
-import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/wal_index_codec.dart';
 
 /// Owns serialized index state and all whole-index work off the UI isolate.
 /// Requests are serial; success is sent only after flush + atomic rename.
@@ -104,14 +104,12 @@ void _runIndexWorker((String, String?, SendPort, SendPort?) args) async {
   final rows = <int, Map<String, dynamic>>{};
   final file = File(path);
   final backup = File('${file.parent.path}/wals_backup.json');
+  ({int length, DateTime modified})? lastWritten;
   if (seedPath != null) {
     try {
       final source = File(seedPath);
-      final decoded = jsonDecode(await source.readAsString()) as Map<String, dynamic>;
-      final entries = decoded['wals'] as List;
-      for (var i = 0; i < entries.length; i++) {
-        rows[i] = Wal.fromJson(Map<String, dynamic>.from(entries[i] as Map)).toJson();
-      }
+      final invalid = visitWalIndex(await source.readAsString(), (i, wal) => rows[i] = wal.toJson());
+      if (invalid) throw const FormatException('invalid_entry');
     } catch (error) {
       events.send('startup: $error');
       requests.close();
@@ -138,7 +136,12 @@ void _runIndexWorker((String, String?, SendPort, SendPort?) args) async {
       // copying also stay on this isolate, including first save after restart.
       try {
         if (await file.exists()) {
-          jsonDecode(await file.readAsString());
+          final stat = await file.stat();
+          if (lastWritten != (length: stat.size, modified: stat.modified)) {
+            if (visitWalIndex(await file.readAsString(), (_, __) {})) {
+              throw const FormatException('invalid_entry');
+            }
+          }
           final tmp = File('${backup.path}.tmp');
           await file.copy(tmp.path);
           await tmp.rename(backup.path);
@@ -160,6 +163,12 @@ void _runIndexWorker((String, String?, SendPort, SendPort?) args) async {
       final tmp = File('$path.tmp');
       await tmp.writeAsString(content, flush: true);
       await tmp.rename(path);
+      try {
+        final stat = await file.stat();
+        lastWritten = (length: stat.size, modified: stat.modified);
+      } on FileSystemException {
+        lastWritten = null; // An unmeasured file must be validated next time.
+      }
       events.send((id, null));
     } catch (error) {
       events.send((id, error.toString()));

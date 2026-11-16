@@ -25,7 +25,14 @@ Live and device producers also have a distinct file-before-index window. Their
 length-prefixed `audio_<device>_...bin` file can be fsynced before an index failure
 or process exit loses the row. The regressions reproduce live flush, device
 registration interruption and failed commits. New write intents close that gap.
-Both mechanisms match the reported filename family; repeated startup loss can
+A third reproduced path destroys the last good backup: a schema-invalid but
+JSON-readable main index could replace the valid backup before a failing main
+write, particularly after a quarantine rename failed. Both writers now use the
+same row validator as admission before replacing a backup. An unchanged snapshot
+written by that writer is trusted by size/mtime; validation visits one row at a
+time off the UI isolate and does not retain a second typed history.
+
+These mechanisms match the reported filename family; repeated startup loss can
 strand an entire interval of captures rather than requiring one write failure
 per orphan file.
 
@@ -43,8 +50,8 @@ Paths below are in `app/lib/` unless specified otherwise.
 | --- | --- |
 | `services/wals/local_wal_sync.dart::_flush` | Confirmed gap: audio fsync precedes index commit. New per-file intent precedes creation and carries exact row metadata, owner, length and SHA-256. Incomplete/uncertain files remain tracked by the intent. |
 | `services/wals/device_chunk_persistence.dart::persistDeviceChunk`, `persistEmptyRingRecords` | Same confirmed gap, including interruption before `addExternalWal`. Both now use the same intent transaction. Device chunks refuse an unknown owner before creating bytes. Device ACK still requires a real index commit. |
-| `utils/wal_file_manager.dart::_decodeIndex`, `_loadIndex`, `_quarantineIndex` | Invalid rows are omitted from active admission and retired in the original `wals*.json.corrupt-*` archive. Previously a failed rename allowed repair and later saves to overwrite the only references. A flushed copy fallback is now mandatory; if both fail, load fails without publishing a partial repair. Unknown/missing storage on a file-backed row is quarantined rather than silently converted to an empty memory WAL whose next flush replaces the old filename. |
-| `utils/wal_file_manager.dart::_loadFromBackup` | Valid backup rows remain indexed; rejected main/backup bytes are archived before fallback. No arbitrary merge from old archives: that could resurrect user-deleted or completed rows. New write intents recover only exact complete new transactions, alongside existing index tokens. |
+| `utils/wal_index_codec.dart::decodeWalIndex`, `utils/wal_file_manager.dart::_loadIndex`, `_quarantineIndex` | Invalid rows are omitted from active admission and retired in the original `wals*.json.corrupt-*` archive. Previously a failed rename allowed repair and later saves to overwrite the only references. A flushed copy fallback is now mandatory; if both fail, load fails without publishing a partial repair. Unknown/missing storage on a file-backed row is quarantined rather than silently converted to an empty memory WAL whose next flush replaces the old filename. |
+| `utils/wal_file_manager.dart::_loadFromBackup` | Valid backup rows remain indexed; rejected main/backup bytes are archived before fallback. Both writers reject unreadable or invalid-schema/invalid-entry main snapshots before they may replace a good backup, including when the subsequent main write fails. No arbitrary merge from old archives: that could resurrect user-deleted or completed rows. New write intents recover only exact complete new transactions, alongside existing index tokens. |
 | `services/wals/wal_index_inventory.dart`, `wal_index_persistence.dart` | Confirmed startup race: saves could establish an empty worker before load admission. Admission now fences producers and saves, preserving the loaded token namespace. Repaired/token-less rows remain dirty and dead-worker rebuild includes every bucket; the 70k-history, mixed-token and blocked-startup tests exercise these boundaries. |
 | `services/wals/local_wal_sync.dart::_admitLoadedWals`, `wal_account_purge.dart::_reconcileCurrentOwnerSync`, `clearUserData` | Owner partition/reconciliation/logout move rows across active, foreign and retired buckets, all included by the index owner. Replayed intents retain their captured owner and foreign records stay parked. Deduped restoration keeps a matching file reference. |
 | `services/wals/local_wal_sync.dart::_removeExpiredSyncedCopies`, `_deleteWal`; `wal_discard.dart`; `wal_account_purge.dart` | Indexed retention, explicit user discard and account purge use `_deleteWal`: delete file before row, preserve rows on failure, protect shared references. Audio deletion precedes intent retirement; a failed audio delete retains both row and intent. A failed retirement retains the row and missing-file retry retires only metadata. Replay never publishes an intent whose audio is missing. Public delete and account purge join the buffer queue so an in-flight memory-row flush cannot resurrect a delete. For a shared file, recovery ownership transfers to the surviving row under a new transaction ID, including when its index save fails. |
