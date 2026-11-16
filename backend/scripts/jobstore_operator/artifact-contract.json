@@ -2,44 +2,44 @@
   "repository": "BasedHardware/omi",
   "source_sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
   "source_tree": "25c38ee2fa9caff96ce6b920fd4f0843e80d6ad0",
-  "build_inputs_sha256": "cf6d520e6a0939bbd3d15429b366477da8719aba58af629521984b4bf1052d90",
+  "build_inputs_sha256": "05596f68ed8f3c3d06fb47b20b76ed7b95e2649a975f51c20593000edbcb6088",
   "supervisor_sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",
-  "oci_manifest_digest": "sha256:8b0bf0de13348de53700dee40b5f83f02c5edf3db184345f5c0769601efaefd0",
-  "archive_sha256": "b9a0b9cd859f8ef022e4cb44692b5641c3ddb576f80d6780da1a8982c7ae2d0b",
-  "archive_bytes": 3514967040,
+  "oci_manifest_digest": "sha256:705ef99502261ae8b9a68c7336c77285aa75cbd79d72c119d6b112cbede2f245",
+  "archive_sha256": "b05571285ca615227af0c3430d0f10f76cc2d1efd133113077a36acb28913684",
+  "archive_bytes": 3514958848,
   "parts": [
     {
       "name": "operator.oci.tar.part-000",
       "bytes": 1800000000,
-      "sha256": "a9877d1695b08b02d124988e2af965a38065d5388b44971a8248820e76a65bc8",
-      "asset_id": 753807644
+      "sha256": "460feaca6857e6ca0d22dd3c24805bd55bc26f91a3f4d00fce7895beacbc43ea",
+      "asset_id": 755548592
     },
     {
       "name": "operator.oci.tar.part-001",
-      "bytes": 1714967040,
-      "sha256": "ea422336d28478b4d2305f5316e9573f961c81534b2c3cd9b855e2b80d304130",
-      "asset_id": 753807638
+      "bytes": 1714958848,
+      "sha256": "50752b60cde697d2e736d924e0c47876d48c11327180ccf00906bbf5a49a37c3",
+      "asset_id": 755548595
     }
   ],
   "fixture": {
     "name": "operator-fixtures.tar.gz",
-    "bytes": 48361,
-    "sha256": "7c6f052598369cc55ce759cf7543914cfc473b52c0a0e276c7b7f9c6f83bf201",
-    "asset_id": 753807641
+    "bytes": 38733,
+    "sha256": "13cbdc9acdb2502503c1f89840e3b761f8343d76f06c2504692a82a6b062ac83",
+    "asset_id": 755548589
   },
-  "release_tag": "jobstore-operator-input-8b0bf0de1334",
-  "release_id": 446696207,
+  "release_tag": "jobstore-operator-input-705ef9950226",
+  "release_id": 447289525,
   "asset_ids": [
-    753807644,
-    753807638,
-    753807641
+    755548592,
+    755548595,
+    755548589
   ],
   "native_qualification": null,
   "registry_write_authorization": null,
   "required_disposable_free_bytes": 20963938304,
   "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
   "status": "REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION",
-  "loaded_tag": "omi-jobstore-operator:root-97074-20261115-isolated-venv",
+  "loaded_tag": "omi-jobstore-operator:root-97074-readiness-bounded-20261116-credentialfree",
   "registry_access_evidence": {
     "decision": "REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT",
     "repository": "gcr.io/based-hardware/jobstore-reconcile-operator",

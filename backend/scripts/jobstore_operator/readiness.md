@@ -2,9 +2,11 @@
 # One metadata-only readiness probe
 
 This is preparation for one exact session, not a runtime or serving admission.
-The published image in `readiness_contract.py` passed native AMD64 qualification
-and publication in [Actions run 43851897045](https://github.com/BasedHardware/omi/actions/runs/43851897045).
-Its frozen source expects the exact migration 0001..0008 vector. Main also has
+The candidate image in `readiness_contract.py` has a verified local OCI export.
+Its `qualification_run` remains null until the existing Release executor supplies
+actual native AMD64 qualification and immutable publication receipts for this
+exact digest. The prior image passed [Actions run 43851897045](https://github.com/BasedHardware/omi/actions/runs/43851897045);
+that receipt does not qualify the new candidate. Its frozen source expects the exact migration 0001..0008 vector. Main also has
 0009 for a separate PostgreSQL-primary worker roll; never run migrations,
 rebuild the image or substitute main's vector to make this probe pass.
 

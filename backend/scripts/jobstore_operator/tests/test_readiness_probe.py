@@ -190,7 +190,7 @@ class ReadinessTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.validate(mutated, report)
 
-    def test_contract_matches_published_image_and_first_eight_source_migrations(self):
+    def test_contract_matches_pinned_image_and_first_eight_source_migrations(self):
         package = Path(probe.__file__).parent
         artifact = json.loads((package / 'artifact-contract.json').read_text())
         self.assertEqual(probe.CONTRACT['source_sha'], artifact['source_sha'])
