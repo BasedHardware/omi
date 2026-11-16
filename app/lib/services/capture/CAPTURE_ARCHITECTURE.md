@@ -145,7 +145,7 @@ awaited, against `CaptureEffectPorts` — one method per primitive:
 |---|---|
 | `writePolicy(muted)` | `_setCaptureMuted` durable admission write; returns `PolicyWriteOutcome` and a superseded policy aborts the rest of the transition. |
 | `stopBleStream` / `startBleStream` | `_closeBleStream` / `_initiateDeviceAudioStreaming`. |
-| `openSocket(spec)` / `closeSocket(reason)` | `_initiateWebsocket` / `_socket?.stop`. |
+| `openSocket(spec)` / `closeSocket(reason, userStop)` | `_initiateWebsocket` / `_socket?.stop`; `userStop` sends `finalization_reason: user_stop` first. |
 | `startNativeMic(mode)` / `stopNativeMic()` | live → `_resumeMicRecording`; batch → `_startPhoneMicBatchBody`; stop → `_phoneMic.stop()`. |
 | `setNativeWriterGate(source, admitted)` | `CaptureNativeWriterGate` interface. **Interface only**: no native per-source gate exists, so production uses `NoopCaptureNativeWriterGate` and batch handoffs stay refused rather than silently unsafe. |
 | `finalizeWal` | `_wal.getSyncs().phone.finalizeCurrentSession()`. |

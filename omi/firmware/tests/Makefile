@@ -20,6 +20,7 @@ test:
 	$(BUILD_DIR)/test_boot_telemetry
 	$(CC) $(CFLAGS) -I../omi/src ../omi/tests/diagnostics_packet_test.c ../omi/src/diagnostics_packet.c -o $(BUILD_DIR)/test_diagnostics_packet
 	$(BUILD_DIR)/test_diagnostics_packet
+	TMPDIR=$(BUILD_DIR) python3 ../omi/tests/run_host_regressions.py
 	python3 check_ota_slot_geometry.py
 	python3 test_build_guard.py
 	python3 test_rc_integration.py
