@@ -1,5 +1,7 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
+from utils.conversations.v3 import visibility
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from uuid import NAMESPACE_URL, uuid5
@@ -140,11 +142,21 @@ def build(uid, window, recordings, existing=None):
     title = (
         (existing or {}).get('structured', {}).get('title') if (existing or {}).get('title_locked') else window['title']
     )
-    hidden = window['kind'] in {'media', 'background'} or sum(len(s.get('text', '').split()) for s in segments) < 300
+    manual_end = bool(window.get('manual_end') or (existing or {}).get('manual_end'))
+    outline_kind = window.get('outline_kind', window['kind'])
+    kind, hidden, reason = visibility.project(
+        outline_kind,
+        recordings,
+        {line['conversation_id'] for line in lines},
+        words=sum(len(s.get('text', '').split()) for s in segments),
+        finished=window['finished'],
+        manual_end=manual_end,
+    )
     row: dict[str, Any] = {
         **(existing or {}),
         'id': cid,
         'v3_derived': True,
+        'manual_end': manual_end,
         'created_at': start,
         'started_at': start,
         'finished_at': end,
@@ -159,11 +171,13 @@ def build(uid, window, recordings, existing=None):
         ),
         'status': 'processing' if window['finished'] else 'in_progress',
         'discarded': bool((existing or {}).get('discarded')),
-        'kind': window['kind'],
-        'home_hidden': hidden if window['finished'] else window['kind'] in {'media', 'background'},
+        'kind': kind,
+        'outline_kind': outline_kind,
+        'home_hidden_reason': reason,
+        'home_hidden': hidden,
         'title_locked': bool(
             (existing or {}).get('title_locked')
-            or (title and (not hidden or not window['finished']) and window['kind'] not in {'media', 'background'})
+            or (title and (not hidden or not window['finished']) and kind not in {'media', 'background'})
         ),
         'tile_state': 'writing' if window['finished'] else 'live',
         'v3_recording_ids': list(dict.fromkeys(l['conversation_id'] for l in lines)),
@@ -247,7 +261,7 @@ def preserve_finished_windows(planned, existing, recordings=None):
                         'lines': [],
                         'finished': True,
                         'title': owner.get('structured', {}).get('title', ''),
-                        'kind': owner.get('kind', 'conversation'),
+                        'kind': owner.get('outline_kind') or owner.get('kind', 'conversation'),
                         'emoji': owner.get('structured', {}).get('emoji', '💬'),
                         'existing_id': owner['id'],
                     },

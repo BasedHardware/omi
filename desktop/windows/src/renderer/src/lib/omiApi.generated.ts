@@ -1547,12 +1547,14 @@ export interface Conversation {
   geolocation?: Geolocation | null;
   geolocation_scope?: "owner" | null;
   home_hidden?: boolean | null;
+  home_hidden_reason?: string | null;
   id: string;
   imported?: boolean;
   is_call?: boolean | null;
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  manual_end?: boolean | null;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
   meeting_treatment_eligible?: boolean;
@@ -1582,7 +1584,7 @@ export interface Conversation {
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
-  tile_state?: "live" | "transcribing" | "writing" | "done" | null;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
   title_locked?: boolean | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
@@ -1773,12 +1775,14 @@ export interface ConversationSearchItem {
   geolocation?: Geolocation | null;
   geolocation_scope?: "owner" | null;
   home_hidden?: boolean | null;
+  home_hidden_reason?: string | null;
   id: string;
   imported?: boolean;
   is_call?: boolean | null;
   is_locked?: boolean;
   kind?: "conversation" | "voice_work" | "media" | "background" | null;
   language?: string | null;
+  manual_end?: boolean | null;
   match_snippets?: Array<TranscriptMatchSnippet>;
   meeting_dedup_speech_s?: number | null;
   meeting_duration_s?: number | null;
@@ -1809,7 +1813,7 @@ export interface ConversationSearchItem {
   summary_retryable?: boolean | null;
   sync_content_revision?: number | null;
   sync_relevance?: "keep" | "review" | null;
-  tile_state?: "live" | "transcribing" | "writing" | "done" | null;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
   title_locked?: boolean | null;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
@@ -3442,7 +3446,7 @@ export interface LiveConversation {
   started_at: string;
   status: ConversationStatus;
   structured: Structured;
-  tile_state?: "live" | "transcribing" | "writing" | "done" | null;
+  tile_state?: "live" | "transcribing" | "writing" | "done" | "failed" | null;
 }
 
 export interface LlmTotalCostResponse {

@@ -18,12 +18,22 @@ backend-listen/pusher through the generated shared ConfigMap. The uninstalled
 sync-backfill-worker pilot references that ConfigMap. STT-only parakeet workers
 do not create/finalize/read conversation documents. A stage edit must be composed
 and deployed to every relevant role; no runtime source was changed outside this
-worktree. `CONVERSATIONS_V3_FIRST_APP_BUILD` is the lead's first v3 release build;
-unset/invalid yields unknown and cannot qualify deletion evidence.
+worktree. Leave `CONVERSATIONS_V3_FIRST_APP_BUILD` unset in source. At rollout,
+lead2 sets it through the shared runtime source from the first TestFlight build
+containing this PR; unset/invalid yields unknown and cannot qualify deletion evidence.
 
 Only new `omi`/`phone` capture/sync creates become recordings. Existing documents
 keep their layer through stage changes. A recording is not a product item;
 `home_hidden` only removes a conversation from unfiltered Home and its count.
+A manually ended window with any speech is Home-visible regardless of length,
+unless media or positively recognized background; no speech creates no window.
+The persisted manual_end follows late rewrites, merges and backfill and requires
+full notes even below 20 words. Background hides only with positive wearer
+recognition somewhere in the contributing recordings: is_user:true or a
+segment-bound wearer label from the authoritative speaker-evidence projection.
+Without it, background becomes conversation and uses the normal 300-word rule
+(or the manual-end override). Media stays hidden. home_hidden_reason records
+this decision and outline_kind retains the original classification.
 Search and agent reads retain short and hidden conversations. The exact reader
 classification is `../conversations-v3-readers.json`; run
 `python backend/scripts/check_conversation_readers.py --inventory` for every site.
@@ -45,13 +55,20 @@ gate before admission. The builder and request summary share conversation leases
 
 Cached outlines are encrypted; transcript copies use the existing storage codec.
 Finished-window copies retain user edits and stable titles. Recordings never
-enter model processing, apps, memories or webhooks. Short speech of at least 20
+enter model processing, apps, memories or webhooks. Automatically ended short speech of at least 20
 words uses the existing task extraction rules and memory processing without a
 summary call. Media/background have no derived processing. Summaries reuse the
 existing notes prompt; the v3 background lane is Luna/low, gateway Flex-first,
 then Standard. The on-open lane is Standard. Metering stays in the gateway and
 usage tracker. The section stream uses the chat `data:` / base64 `done:` /
 JSON `error:` protocol and stores only a complete revision-fenced result.
+Terminal processing/outline retry exhaustion and affirmative transcription
+failure show tile_state:failed, status:completed and summary_retryable when
+copied speech can be retried. Locked presentation is retained. Partial/unproven
+capture alone stays transcribing. Explicit reprocess owns the copied window,
+resets the retry budget, bypasses short/covered-summary reuse and writes
+writing -> done/failed; its notes use Standard. Home feed follows home_hidden
+for v3, including failed rows, while retaining deleted/discarded/recording guards.
 
 For recording-piece conversations, `/urls` and plugin backup return only the
 conversation-level dense MP3 or pending, never covering per-file playback URLs.
@@ -67,7 +84,9 @@ the recording before physical deletion; failed erases remain owed.
 Metrics: episode calls by route template, X-App-Build bucket (pre_v3/v3_capable/unknown), app channel and
 v3; episode compose attempts by v3; daily active pendant owners with latest
 legacy capture; builder outcomes, pending age, first speech to visible, end to
-summary, first/rewrite writes and model calls. Gateway usage supplies actual cost
+summary, first/rewrite writes and model calls. The builder's
+omi_conversations_v3_uncertain_recognition_shown_total counts committed exposure
+transitions caused by uncertain recognition (no owner labels). Gateway usage supplies actual cost
 and per-owner accounting; aggregate Prometheus labels never contain owner IDs.
 The daily gauge refuses a truncated scan rather than publishing a partial count.
 
@@ -78,7 +97,9 @@ existing silent-backfill policy. The initial implementation refuses a user
 window over 128 documents; operator partitioning is required before enabling
 for larger histories (follow-up V3-BACKFILL-30D-PARTITIONS). Do not describe a blocked or partial backfill as complete.
 
-Rollout owner: lead2. Step 0: dev named accounts, live/sync/late qualification and
+Rollout owner: lead2. Step 0: set CONVERSATIONS_V3_FIRST_APP_BUILD through the shared runtime source
+from the first TestFlight build containing this PR. Then dev named accounts,
+live/sync/late qualification and
 current App Store/TestFlight fallback acceptance; prod named cohort only. Step 1:
 beta in prod after that acceptance. Step 2: all within 12 hours if first-speech
 visibility, end-to-summary latency, conversations/calls/cost per user-day,
@@ -88,7 +109,7 @@ new intake only; previously marked recordings continue draining.
 
 Delete the old episode implementation in a follow-up only after stage all for
 14 days, kill switch unused for seven days, episode calls below 1% of active
-mobile sessions by app version, and completed/sample-verified 30-day backfill
+mobile sessions by app-build bucket, and completed/sample-verified 30-day backfill
 for every active pendant owner. Episode routes continue returning disabled.
 No source test, green CI, or generated client check is device acceptance or a
 measured production outcome.

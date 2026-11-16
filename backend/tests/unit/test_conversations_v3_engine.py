@@ -178,3 +178,68 @@ def test_outline_fallback_is_valid_and_deterministic():
     entries = outline.fallback(group)
     assert entries == outline.fallback(group)
     assert outline.parse(json.dumps({'conversations': entries}), group)
+
+
+@pytest.mark.parametrize('words', [5, 40])
+def test_manual_end_with_any_speech_is_visible_and_sticky(words):
+    row = recording(
+        segments=[{'text': 'speech ' * words, 'start': 0, 'end': 10}],
+        finished_at=NOW + timedelta(seconds=10),
+        v3_manual_end=True,
+    )
+    group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
+    window = planner.windows([group], [[entry()]])[0]
+    built = planner.build('u', window, {'r': row})
+    assert built['manual_end'] is True and built['home_hidden'] is False
+    built['status'] = 'completed'
+    window['manual_end'] = False  # late audio no longer carries the original cut
+    rebuilt = planner.build('u', window, {'r': row}, built)
+    assert rebuilt['manual_end'] is True and rebuilt['home_hidden'] is False
+
+
+@pytest.mark.parametrize('kind', ['media', 'background'])
+def test_manual_end_does_not_promote_recognized_media_or_background(kind):
+    row = recording(finished_at=NOW + timedelta(seconds=10), v3_manual_end=True)
+    group = outline.stretches([row], NOW + timedelta(seconds=11))[0]
+    built = planner.build('u', planner.windows([group], [[entry(kind=kind)]])[0], {'r': row})
+    assert built['manual_end'] is True and built['home_hidden'] is True
+
+
+def test_manual_end_without_speech_creates_no_window():
+    row = recording(finished_at=NOW, v3_manual_end=True)
+    row['transcript_segments'] = []
+    assert planner.windows(outline.stretches([row], NOW), []) == []
+
+
+@pytest.mark.parametrize(
+    'recognized,words,expected_hidden', [(False, 300, False), (True, 300, True), (False, 40, True)]
+)
+def test_background_visibility_requires_wearer_recognition(recognized, words, expected_hidden):
+    row = recording(segments=[{'id': 's', 'text': 'speech ' * words, 'start': 0, 'end': 10, 'is_user': recognized}])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    result = planner.build('u', planner.windows([group], [[entry(kind='background')]])[0], {'r': row})
+    assert result['home_hidden'] is expected_hidden
+    assert result['kind'] == ('background' if recognized else 'conversation')
+    assert result['home_hidden_reason'] == (
+        'background_wearer_recognized'
+        if recognized
+        else 'wearer_recognition_uncertain' if words >= 300 else 'below_word_minimum'
+    )
+
+
+def test_uncertain_background_manual_end_uses_intent_without_word_minimum():
+    row = recording(
+        segments=[{'text': 'five words about a plan', 'start': 0, 'end': 10, 'is_user': False}],
+        v3_manual_end=True,
+        finished_at=NOW + timedelta(seconds=10),
+    )
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    result = planner.build('u', planner.windows([group], [[entry(kind='background')]])[0], {'r': row})
+    assert result['manual_end'] and not result['home_hidden'] and result['kind'] == 'conversation'
+
+
+def test_media_stays_hidden_without_recognition():
+    row = recording(segments=[{'text': 'television ' * 300, 'start': 0, 'end': 10, 'is_user': False}])
+    group = outline.stretches([row], NOW + timedelta(hours=1))[0]
+    result = planner.build('u', planner.windows([group], [[entry(kind='media')]])[0], {'r': row})
+    assert result['home_hidden'] and result['kind'] == 'media' and result['home_hidden_reason'] == 'media'

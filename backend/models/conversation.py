@@ -496,9 +496,12 @@ class Conversation(BaseModel):
     recording: Optional[bool] = None
     kind: Optional[Literal['conversation', 'voice_work', 'media', 'background']] = None
     home_hidden: Optional[bool] = None
-    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done']] = None
+    home_hidden_reason: Optional[str] = None
+    outline_kind: SkipJsonSchema[Optional[str]] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
     title_locked: Optional[bool] = None
     recording_pieces: Optional[List[RecordingPiece]] = None
+    manual_end: Optional[bool] = None
     summary_covers_through: Optional[datetime] = None
     v3_pending: SkipJsonSchema[Optional[bool]] = Field(default=None, exclude=True)
     v3_derived: SkipJsonSchema[Optional[bool]] = None
@@ -1108,7 +1111,7 @@ class LiveConversation(BaseModel):
     started_at: datetime
     created_at: datetime
     status: ConversationStatus
-    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done']] = None
+    tile_state: Optional[Literal['live', 'transcribing', 'writing', 'done', 'failed']] = None
 
 
 class ConversationsLiveResponse(BaseModel):

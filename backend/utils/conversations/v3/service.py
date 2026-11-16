@@ -19,7 +19,7 @@ from utils.conversations.v3.triggers import enqueue, changed
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
-from utils.conversations.v3 import outline, planner, models, metrics
+from utils.conversations.v3 import outline, planner, models, metrics, policy, visibility
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.executors import run_blocking, db_executor, llm_executor, postprocess_executor, storage_executor
 
@@ -31,16 +31,9 @@ def recording_short_path(fn):
     def guarded(uid, language_code, conversation, *args, **kwargs):
         if not getattr(conversation, 'recording', False):
             if getattr(conversation, 'v3_derived', False) and not fence.current():
-                token = leases.acquire(uid, 'summary-' + conversation.id)
-                if not token:
-                    raise RuntimeError('v3_summary_busy')
-                try:
-                    with leases.keepalive(uid, 'summary-' + conversation.id, token), fence.writer(
-                        uid, conversation.id, token
-                    ), models.notes_mode(uid):
-                        return fn(uid, language_code, conversation, *args, **kwargs)
-                finally:
-                    leases.release(uid, 'summary-' + conversation.id, token)
+                from utils.conversations.v3.processing import run_external
+
+                return run_external(fn, uid, language_code, conversation, *args, **kwargs)
             return fn(uid, language_code, conversation, *args, **kwargs)
         # Import the lifecycle owner lazily: lifecycle also calls this module at
         # intake. No model, entitlement, notes, derived side effect or webhook.
@@ -143,9 +136,10 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                         entries = outline.parse(content, group)
                     except (ValueError, KeyError, TypeError):
                         entries = outline.fallback(group)
+                        entries = [{**entry, '_outline_failed': True} for entry in entries]
                         metrics.RECONCILES.labels('outline_fallback').inc()
                 else:
-                    entries = outline.fallback(group)
+                    entries = [{**entry, '_outline_failed': True} for entry in outline.fallback(group)]
             else:
                 # First speech is visible without a paid call. Outline on open
                 # or at the five-minute deadline provides the first real title.
@@ -164,7 +158,12 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
             if group['finished'] or on_open:
                 cache.append({'fingerprint': group['fingerprint'], 'entries': entries})
         rows, used = [], set()
-        for window in planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings):
+        windows = planner.preserve_finished_windows(planner.windows(groups, outlines), existing, recordings)
+        await run_blocking(db_executor, visibility.hydrate_recognition, uid, recordings, windows)
+        for window in windows:
+            # An affirmative transcription failure is terminal even before the silence deadline.
+            if any(policy.transcription_failed(recordings[line['conversation_id']]) for line in window['lines']):
+                window['finished'] = True
             prior = existing.get(window.get('existing_id')) or _match(window, existing, used)
             if prior:
                 used.add(prior['id'])
@@ -177,6 +176,18 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
             new_words = max(0, sum(len(s.get('text', '').split()) for s in row['transcript_segments']) - before)
             ended = window['finished']
             was_ended = prior and prior.get('status') != 'in_progress'
+            promoted = bool(
+                prior
+                and not row.get('home_hidden')
+                and (
+                    row.get('manual_end')
+                    and not prior.get('manual_end')
+                    or prior.get('kind') == 'background'
+                    and row['kind'] == 'conversation'
+                )
+            )
+            if promoted:
+                row['summary_covers_through'] = None
             rewrite = bool(
                 prior is not None
                 and was_ended
@@ -188,10 +199,15 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     rewrites=prior.get('v3_rewrites', 0),
                 )
             )
-            if prior is not None and was_ended and not rewrite:
+            if prior is not None and was_ended and not rewrite and not promoted:
                 row['status'] = prior['status']
                 row['tile_state'] = prior.get('tile_state', 'done')
-            waiting = any(recordings[l['conversation_id']].get('record_audio_partial') for l in window['lines'])
+            transcription_failed = any(
+                policy.transcription_failed(recordings[l['conversation_id']]) for l in window['lines']
+            )
+            waiting = not transcription_failed and any(
+                recordings[l['conversation_id']].get('record_audio_partial') for l in window['lines']
+            )
             if ended and waiting:
                 row['tile_state'] = 'transcribing'
                 row['v3_process_pending'] = False
@@ -199,10 +215,19 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
             if (
                 ended
                 and not waiting
-                and (not was_ended or rewrite or (prior or {}).get('tile_state') == 'transcribing')
+                and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing')
             ):
                 row['v3_process_pending'] = True
                 row['v3_rewrites'] = int((prior or {}).get('v3_rewrites') or 0) + int(rewrite)
+            if ended and (not was_ended or rewrite or promoted or (prior or {}).get('tile_state') == 'transcribing'):
+                if not row.get('is_locked') and (transcription_failed or window.get('_outline_failed')):
+                    row.update(
+                        await run_blocking(
+                            db_executor,
+                            writers.failure_patch,
+                            reason='transcription' if transcription_failed else 'outline',
+                        )
+                    )
             rows.append(row)
         await run_blocking(db_executor, leases.renew, uid, 'builder', token)
         await run_blocking(
@@ -216,6 +241,13 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     db_executor, enqueue, uid, at=max(group['end'] + outline.SILENCE, now + timedelta(minutes=1))
                 )
         for row in rows:
+            prior = existing.get(row['id']) or {}
+            if (
+                not row.get('home_hidden')
+                and row.get('home_hidden_reason') == 'wearer_recognition_uncertain'
+                and (prior.get('home_hidden') or prior.get('home_hidden_reason') != 'wearer_recognition_uncertain')
+            ):
+                metrics.UNCERTAIN_SHOWN.inc()
             if row['id'] not in existing:
                 metrics.VISIBLE_LATENCY.observe(max(0, (now - row['started_at']).total_seconds()))
         metrics.RECONCILES.labels('committed').inc()
@@ -293,10 +325,22 @@ def _process(uid, row, token):
     if row.get('deleted') or row.get('is_locked'):
         writers.settle_processing(uid, row['id'], token, row.get('sync_content_revision'), None, skipped=True)
         return
+    if policy.transcription_failed(row):
+        writers.fail_processing(
+            uid,
+            row['id'],
+            token,
+            row.get('sync_content_revision'),
+            content_hash=writers.processing_hash(row),
+            retryable=bool(row.get('transcript_segments')),
+        )
+        return
     if not writers.begin_processing(uid, row, token):
         return
     words = sum(len(s.get('text', '').split()) for s in row.get('transcript_segments') or [])
-    if row.get('kind') in {'media', 'background'} or words < 20 or (row.get('backfilled') and words < 600):
+    if row.get('kind') in {'media', 'background'} or (
+        not policy.manual_intent(row) and (words < 20 or (row.get('backfilled') and words < 600))
+    ):
         lifecycle.complete(uid, row['id'])
     else:
         persisted = []
@@ -308,6 +352,11 @@ def _process(uid, row, token):
                 persistence_observer=persisted.append,
                 trigger=(ProcessingTrigger.SILENT_BACKFILL if row.get('backfilled') else ProcessingTrigger.CAPTURE_END),
             )
+        if getattr(result.status, 'value', result.status) == 'failed':
+            writers.fail_processing(
+                uid, row['id'], token, row.get('sync_content_revision'), content_hash=writers.processing_hash(row)
+            )
+            return
         if not persisted or not persisted[-1] or getattr(result.status, 'value', result.status) != 'completed':
             raise RuntimeError('v3_processing_not_completed')
         metrics.SUMMARY_WRITES.labels('rewrite' if row.get('v3_rewrites') else 'first').inc()

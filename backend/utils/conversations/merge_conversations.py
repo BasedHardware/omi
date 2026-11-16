@@ -396,12 +396,13 @@ def perform_merge_async(
             **(
                 {
                     'v3_derived': True,
+                    'manual_end': any(c.get('manual_end') for c in sorted_convs),
                     'recording_pieces': v3_pieces,
                     'v3_recording_ids': list(
                         dict.fromkeys(rid for c in sorted_convs for rid in c.get('v3_recording_ids') or [])
                     ),
                     'kind': 'conversation',
-                    'tile_state': 'writing',
+                    'tile_state': 'writing' if reprocess or any(c.get('manual_end') for c in sorted_convs) else 'done',
                     'home_hidden': False,
                 }
                 if v3_merge
@@ -434,7 +435,7 @@ def perform_merge_async(
         # 8. Process conversation to generate title, summary, action items, memories, etc.
         # Its created webhook is held until a failure can no longer roll the record back.
         created_webhook_sends: List[Callable[[], None]] = []
-        if reprocess:
+        if reprocess or new_conversation.manual_end:
             try:
                 with lifecycle_service.processing_admission_guard(uid, new_conversation_id, rollback_on_failure=False):
                     processed_conversation = process_conversation(

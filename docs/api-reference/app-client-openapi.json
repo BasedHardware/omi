@@ -9854,6 +9854,17 @@
             ],
             "title": "Home Hidden"
           },
+          "home_hidden_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Hidden Reason"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -9906,6 +9917,17 @@
               }
             ],
             "title": "Language"
+          },
+          "manual_end": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual End"
           },
           "meeting_dedup_speech_s": {
             "anyOf": [
@@ -10195,7 +10217,8 @@
                   "live",
                   "transcribing",
                   "writing",
-                  "done"
+                  "done",
+                  "failed"
                 ],
                 "type": "string"
               },
@@ -11399,6 +11422,17 @@
             ],
             "title": "Home Hidden"
           },
+          "home_hidden_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Hidden Reason"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -11451,6 +11485,17 @@
               }
             ],
             "title": "Language"
+          },
+          "manual_end": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual End"
           },
           "match_snippets": {
             "default": [],
@@ -11748,7 +11793,8 @@
                   "live",
                   "transcribing",
                   "writing",
-                  "done"
+                  "done",
+                  "failed"
                 ],
                 "type": "string"
               },
@@ -21679,7 +21725,8 @@
                   "live",
                   "transcribing",
                   "writing",
-                  "done"
+                  "done",
+                  "failed"
                 ],
                 "type": "string"
               },

@@ -48,6 +48,11 @@ def store_summary(uid, cid, token, revision, structured, covers, *, firestore_cl
                 **patch,
                 'summary_covers_through': covers,
                 **(
+                    {'tile_state': 'done', 'v3_process_failed': False, 'summary_retryable': False}
+                    if current.get('v3_derived') and current.get('status') != 'in_progress'
+                    else {}
+                ),
+                **(
                     {'title_locked': True}
                     if current.get('v3_derived') and not current.get('home_hidden') and patch['structured'].get('title')
                     else {}
@@ -81,7 +86,15 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
             {
                 'v3_process_pending': False,
                 'tile_state': 'done',
+                'v3_process_failed': False,
+                'v3_process_failure_reason': None,
+                'summary_retryable': False,
                 **({'summary_covers_through': covers} if not skipped and not row.get('deleted') else {}),
+                **(
+                    {'title_locked': True}
+                    if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')
+                    else {}
+                ),
             },
         )
 
@@ -90,11 +103,19 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
 
 def processing_hash(row):
     return hashlib.sha256(
-        json.dumps((row or {}).get('transcript_segments') or [], sort_keys=True, default=str).encode()
+        json.dumps(
+            {
+                'segments': (row or {}).get('transcript_segments') or [],
+                'manual_end': bool((row or {}).get('manual_end')),
+                'kind': (row or {}).get('kind') or 'conversation',
+            },
+            sort_keys=True,
+            default=str,
+        ).encode()
     ).hexdigest()
 
 
-def begin_processing(uid, row, token, *, firestore_client=None):
+def begin_processing(uid, row, token, *, force=False, firestore_client=None):
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(row['id'])
     held = leases.lease_ref(client, uid, 'summary-' + row['id'])
@@ -108,14 +129,66 @@ def begin_processing(uid, row, token, *, firestore_client=None):
             timezone.utc
         ):
             raise Conflict('lease_lost')
-        attempts = current.get('v3_process_attempts', 0) if current.get('v3_process_fingerprint') == fingerprint else 0
+        if not current or current.get('deleted') or current.get('is_locked'):
+            return False
+        attempts = (
+            current.get('v3_process_attempts', 0)
+            if not force and current.get('v3_process_fingerprint') == fingerprint
+            else 0
+        )
         if attempts >= 2:
-            tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': True})
+            tx.update(ref, failure_patch(retryable=bool(row.get('transcript_segments')), reason='attempts_exhausted'))
             return False
         tx.update(
             ref,
-            {'v3_process_fingerprint': fingerprint, 'v3_process_attempts': attempts + 1, 'v3_process_failed': False},
+            {
+                'v3_process_fingerprint': fingerprint,
+                'v3_process_attempts': attempts + 1,
+                'v3_process_failed': False,
+                'v3_process_failure_reason': None,
+                'summary_retryable': False,
+                'tile_state': 'writing',
+                'status': 'processing',
+                'v3_process_pending': True,
+            },
         )
         return True
 
     return begin(client.transaction())
+
+
+def failure_patch(*, retryable=True, reason='processing'):
+    return {
+        'status': 'completed',
+        'tile_state': 'failed',
+        'summary_retryable': retryable,
+        'v3_process_pending': False,
+        'v3_process_failed': True,
+        'v3_process_failure_reason': reason,
+    }
+
+
+def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=True, firestore_client=None):
+    client = firestore_client or store.get_firestore_client()
+    ref = store.user_conversations(client, uid).document(cid)
+    held = leases.lease_ref(client, uid, 'summary-' + cid)
+
+    @firestore.transactional
+    def fail(tx):
+        snapshot = ref.get(transaction=tx)
+        row = snapshot.to_dict() or {}
+        lease = held.get(transaction=tx).to_dict() or {}
+        if lease.get('token') != token or not lease.get('until') or lease['until'] <= datetime.now(timezone.utc):
+            raise Conflict('lease_lost')
+        if not row or row.get('deleted'):
+            return False
+        if row.get('is_locked'):
+            tx.update(ref, {'v3_process_pending': False, 'tile_state': 'done', 'v3_process_failed': False})
+            return False
+        if row.get('sync_content_revision') != revision:
+            if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
+                raise Conflict('processing_source_changed')
+        tx.update(ref, failure_patch(retryable=retryable))
+        return True
+
+    return fail(client.transaction())
