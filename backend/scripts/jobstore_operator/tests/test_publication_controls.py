@@ -17,6 +17,7 @@ from unittest.mock import patch
 import preflight
 import publish_operator
 import qualify_operator
+import registry_access
 from test_operator_ingress import inputs
 
 
@@ -32,11 +33,16 @@ class ControlTests(unittest.TestCase):
             destination=publish_operator.DESTINATION,
             required_disposable_free_bytes=100,
             status='REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION',
-            registry_write_authorization={
+            registry_write_authorization=None,
+            registry_access_evidence={
                 'repository': publish_operator.DESTINATION,
-                'principal': 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com',
-                'existing_authorization_verified': True,
-                'evidence_sha256': 'f' * 64,
+                'principal': registry_access.PRINCIPAL,
+                'iam_resource': registry_access.RESOURCE,
+                'decision': registry_access.DECISION,
+                'effective_authorization': 'UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS',
+                'allow_policy_receipt_sha256': 'f' * 64,
+                'wif_metadata_receipt_sha256': 'a' * 64,
+                'sa_trust_receipt_sha256': 'b' * 64,
             },
         )
         e = {
@@ -87,7 +93,7 @@ class ControlTests(unittest.TestCase):
                 preflight.check(c, e, 100)
 
     def test_missing_ingress_permission_or_space_refused(self):
-        for key, value in (('release_id', None), ('registry_write_authorization', None)):
+        for key, value in (('release_id', None), ('registry_access_evidence', None)):
             c, e, _ = self.prepared()
             c[key] = value
             with self.assertRaises(ValueError):
