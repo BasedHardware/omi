@@ -27,6 +27,7 @@ import 'package:omi/models/stt_request_credentials.dart';
 import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/settings/transcription/json_editor_page.dart';
 import 'package:omi/pages/settings/transcription/stt_language.dart';
+import 'package:omi/pages/settings/transcription/transcription_phone_setup.dart';
 import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
 import 'package:omi/pages/settings/transcription/transcription_fields.dart';
 import 'package:omi/pages/settings/transcription/transcription_sections.dart';
@@ -956,27 +957,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: OmiSpacing.sm),
-        if (_switchBackMinutes(usage) case final minutes?) ...[
-          OmiSettingsGroup(
-            children: [
-              OmiSettingsRow(
-                key: const Key('transcription_switch_back'),
-                title: l10n.cloudMinutesAvailable(minutes),
-                trailing: OmiButton(
-                  label: l10n.switchBack,
-                  size: OmiButtonSize.compact,
-                  onPressed: () => _selectMode(TranscriptionMode.omi),
-                ),
-              ),
-            ],
-          ),
+        if (switchBackMinutes(usage.subscription,
+                pinnedOnPhone:
+                    mode == TranscriptionMode.onDevice && PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()))
+            case final minutes?) ...[
+          TranscriptionSwitchBackGroup(minutes: minutes, onSwitchBack: () => _selectMode(TranscriptionMode.omi)),
           const SizedBox(height: OmiSpacing.lg),
         ],
         OmiSettingsGroup(
           header: l10n.transcribeWith,
           children: [
             row(TranscriptionMode.omi, l10n.omiCloud,
-                subtitle: _cloudUsageLine(usage), key: const Key('transcription_source_omi')),
+                subtitle: cloudUsageLine(context, usage.subscription, showSubscriptionUI: usage.showSubscriptionUI),
+                key: const Key('transcription_source_omi')),
             row(TranscriptionMode.onDevice, l10n.thisPhone,
                 subtitle: mode == TranscriptionMode.onDevice && _phoneReady ? l10n.onDeviceReady : null,
                 key: const Key('transcription_source_phone')),
@@ -999,31 +992,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         ),
       ],
     );
-  }
-
-  /// "258 of 300 min left · resets Dec 1" for a plan with a monthly cloud allowance.
-  String? _cloudUsageLine(UsageProvider usage) {
-    if (!usage.showSubscriptionUI) return null;
-    final subscription = usage.subscription;
-    if (subscription == null || subscription.subscription.plan.hasUnlimitedTranscription) return null;
-    final limit = subscription.transcriptionSecondsLimit;
-    if (limit <= 0) return null;
-    final left = ((limit - subscription.transcriptionSecondsUsed).clamp(0, limit) / 60).floor();
-    return context.l10n.cloudMinutesLeft(
-      left,
-      (limit / 60).round(),
-      OmiDateFormat.of(context).date(onDeviceUsageResetsOn(DateTime.now())),
-    );
-  }
-
-  /// Cloud minutes the pinned phone choice could use again after the monthly reset, or null.
-  int? _switchBackMinutes(UsageProvider usage) {
-    if (_currentMode != TranscriptionMode.onDevice || !PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil()))
-      return null;
-    final allowance = usage.subscription?.transcriptionAllowance;
-    final remaining = allowance?.remainingSeconds;
-    if (allowance == null || !allowance.isManaged || remaining == null || remaining < 60) return null;
-    return (remaining / 60).floor();
   }
 
   Widget _buildCodecWarning() {
@@ -1303,7 +1271,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   /// "Set up this phone": what is still missing before the phone can transcribe, then its language.
   Widget _buildOnDeviceWhisperConfig() {
-    final l10n = context.l10n;
     if (Theme.of(context).platform == TargetPlatform.iOS) {
       final readiness = _iosReadiness;
       final needsPermission =
@@ -1312,21 +1279,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (needsPermission) ...[
-            OmiSettingsGroup(
-              header: l10n.setUpThisPhone,
-              children: [
-                OmiSettingsRow(
-                  key: const Key('transcription_phone_permission'),
-                  title: l10n.speechRecognition,
-                  subtitle: l10n.audioStaysOnPhone,
-                  trailing: OmiButton(
-                    label: readiness.status == 'permission_required' ? l10n.allow : l10n.openSettings,
-                    size: OmiButtonSize.compact,
-                    onPressed: _allowSpeechRecognition,
-                  ),
-                ),
-              ],
-            ),
+            PhoneSpeechPermissionGroup(
+                canAsk: readiness.status == 'permission_required', onPressed: _allowSpeechRecognition),
             const SizedBox(height: OmiSpacing.lg),
           ] else if (readiness != null && !readiness.ready) ...[
             LocalSttRecoveryNotice(
@@ -1345,53 +1299,12 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (waiting && SharedPreferencesUtil().phoneModelOnWifiPending.isEmpty)
-          OmiSettingsGroup(
-            header: l10n.setUpThisPhone,
-            children: [
-              OmiSettingsRow(
-                key: const Key('transcription_phone_model'),
-                title: l10n.onDeviceSpeechModel,
-                subtitle: l10n.onDeviceModelDownloadSize(_estimatedModelMegabytes(_currentModel).round()),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: OmiButton(
-                        key: const Key('transcription_phone_download_now'),
-                        label: l10n.downloadNow,
-                        onPressed: () => _downloadModel(confirm: false),
-                      ),
-                    ),
-                    const SizedBox(width: OmiSpacing.sm),
-                    Expanded(
-                      child: OmiButton.secondary(
-                        key: const Key('transcription_phone_download_wifi'),
-                        label: l10n.onWifiLater,
-                        onPressed: _downloadOnWifiLater,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          )
-        else if (waiting)
-          OmiSettingsGroup(
-            header: l10n.setUpThisPhone,
-            children: [
-              OmiSettingsRow(
-                title: l10n.onDeviceSpeechModel,
-                value: l10n.onDeviceWaitingForWifi,
-                trailing: OmiButton.tertiary(
-                  label: l10n.downloadNow,
-                  size: OmiButtonSize.compact,
-                  onPressed: () => _downloadModel(confirm: false),
-                ),
-              ),
-            ],
+        if (waiting)
+          PhoneModelSetupGroup(
+            megabytes: _estimatedModelMegabytes(_currentModel).round(),
+            waitingForWifi: SharedPreferencesUtil().phoneModelOnWifiPending.isNotEmpty,
+            onDownloadNow: () => _downloadModel(confirm: false),
+            onWifiLater: _downloadOnWifiLater,
           )
         else
           WhisperModelStatus(
