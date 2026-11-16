@@ -29,6 +29,9 @@ Every title and chapter/moment heading must be non-empty and describe supported 
 In the same response emit quality_flags: [] when no availability narration remains. If any output field
 still states that THIS capture cannot be summarized/processed because its transcript/audio/recording is
 unavailable, emit an entry in quality_flags with field set to that.field.path and kind set to capture_availability.
+A flag without statement classifies the WHOLE field as availability-only. If a field mixes real notes
+with availability narration, also set statement to the EXACT availability-only sentence or bullet;
+never classify the real notes as availability. Preserve every other supported sentence/bullet.
 Classify meaning in EVERY output language, including Japanese. Paths use zero-based array indices, e.g.
 sections.0.body_markdown, bullets.0, chapters.0.points.0.text. Never flag subject-matter evidence,
 scientific/legal uncertainty, or work on transcription/audio products; these are useful notes.
@@ -73,6 +76,18 @@ def capture_availability(value: Any) -> bool:
     )
 
 
+def _drop_flagged_text(value: str, flag: Mapping[str, Any]) -> str:
+    statement = flag.get('statement')
+    if statement is None:
+        return ''
+    if not isinstance(statement, str) or not statement.strip() or len(statement) > 4000 or statement not in value:
+        return value
+    # Exact spans only: a paraphrase or invalid offset cannot erase useful content.
+    return '\n'.join(
+        line for line in value.replace(statement, '').splitlines() if line.strip() not in {'-', '*', '•'}
+    ).strip()
+
+
 def filter_output(data: Mapping[str, Any]) -> dict[str, Any]:
     """Consume generated field-path classifications; they never reach client/storage models."""
     out = deepcopy(dict(data))
@@ -91,11 +106,11 @@ def filter_output(data: Mapping[str, Any]) -> dict[str, Any]:
             if isinstance(node, list):
                 index = int(parts[-1])
                 if isinstance(node[index], str):
-                    node[index] = ''
+                    node[index] = _drop_flagged_text(node[index], flag)
             elif isinstance(node, dict):
                 name = parts[-1]
                 if isinstance(node.get(name), str):
-                    node[name] = ''
+                    node[name] = _drop_flagged_text(node[name], flag)
         except (KeyError, IndexError, TypeError, ValueError):
             continue
     return out

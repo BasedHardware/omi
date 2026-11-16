@@ -34,6 +34,11 @@ __all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 class QualityFlag(BaseModel):
     field: str = Field(max_length=120, description='Zero-based dot path of an output prose field')
     kind: Literal['capture_availability']
+    statement: Optional[str] = Field(
+        default=None,
+        max_length=4000,
+        description='Exact availability-only sentence/bullet if this field also contains real notes; omit only when the whole field is availability narration',
+    )
 
 
 class NotesOutput(BaseModel):

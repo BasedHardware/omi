@@ -401,3 +401,34 @@ def test_matched_chapter_growth_allows_a_new_heading_with_an_audit_reason():
     assert result['moments'][0]['heading'] == 'Launch decision'
     assert result['moments'][0]['title_change_reason'] == 'material_content_growth'
     assert result['moments'][0]['id'] == 'm'
+
+
+def test_generic_signal_preserves_real_facts_in_a_mixed_non_english_section():
+    from utils.llm.notes_output import NotesOutput
+
+    availability = 'No se puede resumir esta grabación.'
+    output = NotesOutput.model_validate(
+        {
+            'title': 'Presupuesto',
+            'sections': [
+                {
+                    'heading': 'Plan',
+                    'body_markdown': '- El presupuesto es de 8.000 euros.\n- '
+                    + availability
+                    + '\n- La aprobación vence el viernes.',
+                }
+            ],
+            'quality_flags': [
+                {'field': 'sections.0.body_markdown', 'kind': 'capture_availability', 'statement': availability}
+            ],
+        }
+    )
+    assert output.sections[0].body_markdown == '- El presupuesto es de 8.000 euros.\n- La aprobación vence el viernes.'
+    invalid_span = NotesOutput.model_validate(
+        {
+            'title': 'Evidence',
+            'overview': 'There is insufficient evidence to approve the claim.',
+            'quality_flags': [{'field': 'overview', 'kind': 'capture_availability', 'statement': 'not an exact span'}],
+        }
+    )
+    assert invalid_span.overview == 'There is insufficient evidence to approve the claim.'

@@ -67,7 +67,7 @@ PINNED: dict[str, dict[str, str]] = {
         'notes-2': 'da38487a9fb7cc52ef0508b6fa3639c6724b42666c5b38600e5235fa9fbc7437',
         'notes-3': '5307871ec67f0f81cafbca8d9aa209dd4fdc3fe9eec9d13139156fd0706ac766',
         'notes-4': '018b0f5c72af37d0ccb23f8a492ebfd88d8f8c28d30024042ad7ce0114efddc8',
-        'notes-5': 'e723605654ae287f8b083f431bb9d49b1ecf5c601092935596b49b846d71c6f3',
+        'notes-5': '531ef0449fc7d3a6bfe3da32d9a7de012ea53d0a864a45755608019002076bf5',
     },
     'l1': {'l1-1': '0ad51076315481003b05af2a90ce18797539846e35f4970680dff906c00b7d70'},
 }
