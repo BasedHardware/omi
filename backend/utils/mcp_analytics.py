@@ -592,6 +592,11 @@ def _normalize_operation(tool_name: object) -> str:
     return _TOOL_OPERATIONS.get(normalized_tool, "other")
 
 
+def mcp_client_family(auth_type: object, client_id: Optional[str]) -> str:
+    """Bounded client family (chatgpt, claude, other_registered, api_key, unknown) for metric labels."""
+    return _normalize_client(auth_type, client_id)
+
+
 def _normalize_client(auth_type: object, client_id: Optional[str]) -> str:
     if auth_type == "legacy_mcp_key":
         return "api_key"

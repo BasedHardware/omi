@@ -29,6 +29,7 @@ from utils.mcp_analytics import (
     schedule_mcp_tool_use_succeeded,
 )
 from utils.mcp_context import MCP_SERVER_INSTRUCTIONS
+from utils.mcp_server import tool_metrics
 from utils.mcp_server.auth import MCPAuthContext, authenticate_mcp_request, invalid_mcp_auth_exception
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
 from utils.mcp_server.errors import ToolExecutionError, stable_error_code, tool_error_from_http
@@ -145,6 +146,14 @@ def _tool_call_analytics(
     effective_version: str,
 ) -> None:
     spec = spec_for_tool(tool_name)
+    tool_metrics.record_tool_call(
+        tool_name,
+        auth_type=auth_context.auth_type,
+        client_id=auth_context.client_id,
+        outcome=outcome,
+        error_category=error_category,
+        duration_ms=duration_ms,
+    )
     schedule_mcp_tool_call(
         uid=auth_context.uid,
         tool_name=tool_name,
@@ -357,6 +366,7 @@ def _handle_tool_call(
         effective_version=effective_version,
     )
     payload = _tool_result_payload(result or {})
+    tool_metrics.record_tool_result(tool_name, result or {}, payload)
     if daily is not None and daily['state'] == 'nudge':
         payload['_meta'] = dict(payload.get('_meta') or {}, omi_usage={**daily, 'trigger': 'mcp_daily_cap'})
     return create_mcp_response(msg_id, _complete_result(payload, effective_version))
