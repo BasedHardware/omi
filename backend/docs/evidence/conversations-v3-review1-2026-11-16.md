@@ -56,12 +56,12 @@ new product-read and per-request dependency seams changed; two host-sensitive
 listen subprocess tests passed on rerun. This is composite coverage, not one
 all-green invocation of the entire 394-file inventory at the final head.
 
-Final touched/focused file run: 592 passed across 17 files. Follow-up audio and
-heartbeat assertions initially brought JUnit coverage to 616 passed across 18 files
-(including the 21 existing plugin transport tests); no test failure/skip/error.
-The last isolated stream rerun moves a heavy router import to collection so its
-call-phase CPU guard passes. The final single 19-file run at e1e57ff3a7d passes 649 tests with no errors,
-failures or skips, including the outside-query witness and 133 focused v3 tests.
+Final touched/focused run at 8a45d7ff204: **651 passed across 19 files**, zero
+failures/errors/skips, including **133 focused v3** and 21 existing plugin
+transport tests. Exact selection: conversations-v3-review1-final-tests.txt.
+The outside-query witness is included. A heavy stream-test router import moved
+to collection so its existing call-phase CPU guard stays meaningful. Deployment
+boundary fixtures: 15 passed; name-classification check passes against origin/main.
 Current-source Dart fallback decoders: 3 passed. Slow Firestore digest: 1 passed,
 606 deselected; fast query-shape guard: 606 passed, 1 deselected. Pyright: 0 errors.
 App-client OpenAPI additive gate and all generated-client freshness checks pass.
@@ -79,6 +79,8 @@ omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/re
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-small-tests.txt BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-stream-last-tests.txt BACKEND_PYTEST_WORKERS=1 bash backend/test.sh
 omi-heavy run -- env PYTHON=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-pytest-xml BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/review1-final-head-tests.txt BACKEND_PYTEST_WORKERS=2 bash backend/test.sh
+omi-heavy run -- backend/.venv/bin/python .github/scripts/test_check_deployment_secret_boundary.py
+omi-heavy run -- backend/.venv/bin/python .github/scripts/check_deployment_secret_boundary.py --base origin/main
 omi-heavy run -- env BACKEND_PYTEST_MARK_EXPR=slow BACKEND_PYTEST_WORKERS=1 BACKEND_UNIT_TEST_FILE_LIST=/Volumes/Ephemeral/scratch/episode-dayparts-brief/TESTS-DIGEST-V3.txt bash backend/test.sh
 backend/scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check
 backend/.venv/bin/python backend/scripts/generate_dart_models.py --all --check
@@ -153,3 +155,12 @@ CONVERSATIONS_V3_STAGE and CONVERSATIONS_V3_FIRST_APP_BUILD as config in
 config/deployment-setting-classification.json. Two parameterized source tests
 pin config classification and regular environment placement for every service.
 No deployment or external configuration was changed.
+
+
+The next preflight found whitespace in the copied diff inside the scope brief,
+and the primary agent had updated this report while the check runner was
+watching tracked files. Those were verification-record errors, not additional
+product failures. The brief whitespace is stripped and all records committed
+before the final run. The worktree stays frozen during that run. Its final
+exit/check count is recorded in the requested PR-BODY-V3.md and the ANX artifact;
+the immutable source/test checkpoint is 8a45d7ff204 (651 component tests).

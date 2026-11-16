@@ -61,12 +61,12 @@ index 532f5ad8ee5..40eb76dddea 100644
 +        ):
 +            data['input_membership_sha256'] = self.input_membership_sha256
 +        return data
- 
- 
+
+
  class CaptureEvidenceMetadata(BaseModel):
 @@ -464,6 +479,8 @@ class RecordAudioPartial(BaseModel):
- 
- 
+
+
  class Conversation(BaseModel):
 +    title_content_units: float = Field(default=0, exclude=True)
 +    notes_quality_filter_input_hash: Optional[str] = Field(default=None, exclude=True)
@@ -144,7 +144,7 @@ index eabae58f3f2..30289f5f19a 100644
          # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
 @@ -2637,6 +2674,14 @@ def process_conversation(
          )
- 
+
      def _observe_owner_recognition_completion(completed: Conversation) -> None:
 +        # Keep current-revision observation inside the telemetry boundary:
 +        # importing or emitting optional metrics must not interrupt persistence.
