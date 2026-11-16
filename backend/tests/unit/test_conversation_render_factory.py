@@ -26,7 +26,10 @@ def _ensure_stub(name):
 
 # Stub database chain so render.py can import at module level without Firestore
 _ensure_stub("database")
-sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", [])
+# Unstubbed submodules (database.fsr_cache_telemetry, reached via utils.metrics) load from the real package.
+sys.modules["database"].__path__ = getattr(sys.modules["database"], "__path__", None) or [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "database")
+]
 for _sub in ["_client", "redis_db", "users", "folders", "auth"]:
     _ensure_stub(f"database.{_sub}")
 sys.modules["database._client"].db = MagicMock()
