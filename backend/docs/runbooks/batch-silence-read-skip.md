@@ -6,8 +6,16 @@ has not activated production or established the issue’s production acceptance 
 `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED` defaults **on**. Set `false`, `off`, or
 `0` to restore the full processing path for subsequent silent projections. Existing
 ready receipts remain valid on rollback. There is no storage format migration.
-Before deploying broadly, the deploy lane must explicitly hold the flag off outside
-the canary. No runtime overlay or Helm activation is included in this PR.
+Production source explicitly holds the switch `false` on backend, backend-sync,
+backend-sync-backfill and backend-integration. These Cloud Run hosts evaluate it
+in `Projector._assign` and `Projector.complete_content`, through the shared
+`serving_for_stage` composition and reconcile/metrics routes or serving loop.
+The listen overlay and chart also hold it `false` defensively: the legacy image
+mounts the shared routes, although its serving loop is disabled and its worker
+auth settings are empty. The dedicated GPU worker runs `diarizer.batch_pipeline_runtime`
+with a pump that commits results and requests CPU-side work; it does not construct
+`Projector` or evaluate this switch. Its chart needs no flag declaration.
+No production configuration or deployment is changed by this source-only PR.
 
 ## Receipt and fences
 
@@ -103,22 +111,22 @@ qualified production attribution where applicable.
 
 ## Deployment and verification handoff
 
-1. Merge through review; deploy lane records the merge SHA and serving image/revision
-   of both the GPU batch worker and integration/projection service. Verify both
-   contain the merge; merging alone does not finish SCA-1757.
-2. Hold the flag off elsewhere; canary a small cohort on one plane, then 50%, then
-   100%, with owner approval at the normal stages. Record exact UTC matched-hour
-   windows, eligible/noneligible unit counts and the proportion of mixed/record units.
-   Do not infer a percent cohort from this boolean switch alone.
-3. Repeat the above queries with matching `[1h]` windows before/after, and record
-   an attributable silent-unit numerator. Gate on at least 50% fewer billed reads
-   per true silent unit, not per artifact download or per projection attempt.
-4. Over those same windows, record existing T2 lost-speech signals, capture-to-episode
-   latency for speech units, erasure proofs and artifact cleanup deadlines. Stop
-   the ramp if any guard regresses; restore the flag to false. No threshold changes.
-5. At D+2 record settled Firestore charges and net effect, accounting for simultaneous
-   changes and traffic. Until those checks are recorded, the issue remains open in
-   its review/merge/verify workflow; no settled savings are claimed.
+1. Once the image serves, the release owner hand-enables
+   `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED=true` only on backend-integration.
+   Require one clean hour: `omi_firestore_billed_reads_by_caller_total` for
+   `database.batch_pipeline_projection_session:prepare`,
+   `database.batch_pipeline_privacy:read`,
+   `database.batch_pipeline_projection:prepare_accounting` and
+   `database.batch_pipeline_projection:commit` per silent unit must fall;
+   completed audio-hours must stay at least 70% of the prior hour; no new
+   custody or T2 alarm. Record matched windows and qualified silent-only
+   attribution; these caller counters have no outcome dimension by themselves.
+2. The margin-40 lead expands all roles to `true` in repo config after that
+   clean hour. Complete the expansion or revert by **2026-11-18T20:00Z**.
+   Rollback value: `false` on every affected role, including the listen hold.
+3. Record serving image/revision identity, retention/erasure and speech-latency
+   evidence. At D+2 record settled Firestore charges, including simultaneous
+   changes and traffic. No production savings are claimed by this PR.
 
 Owner log: prepared flag `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED`; rollback is
 `false`. Production activation, matched-hour attribution, serving-revision proof

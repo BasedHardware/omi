@@ -311,3 +311,33 @@ def test_silent_completion_preserves_coalesced_original_receipts(lane, mismatch)
     before = deepcopy(lane.client.rows)
     assert lane.store.complete('b', lane.binding, 11000, None, policy=lane.policy) == result
     assert lane.client.rows == before  # Replays do not extend original retention.
+
+
+@pytest.mark.parametrize('failure', [False, True])
+def test_silent_completion_emits_completion_phase(lane, caplog, monkeypatch, failure):
+    monkeypatch.setenv('BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED', 'true')
+    for sid in lane.binding.segment_ids:
+        assign(lane, sid)
+    projector = Projector.__new__(Projector)
+    projector.store, projector.clock = lane.store, lambda: 10000
+    projector.publish_completion = lambda binding, result, **kw: result
+    if failure:
+
+        def blocked(*args, **kwargs):
+            raise ProjectionBlocked('synthetic completion fence')
+
+        monkeypatch.setattr(lane.store, 'complete', blocked)
+    caplog.set_level('INFO', logger='utils.batch_pipeline.projection')
+    policy = replace(lane.policy, projection_timing=True)
+    if failure:
+        with pytest.raises(ProjectionBlocked):
+            projector.complete_content('b', lane.binding, policy=policy, silence=True)
+    else:
+        assert (
+            projector.complete_content('b', lane.binding, policy=policy, silence=True)['outcome'] == 'expected_silence'
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert any('phase=completion outcome=started' in message for message in messages)
+    outcome = 'error' if failure else 'completed'
+    assert any(f'phase=completion outcome={outcome}' in message for message in messages)
+    assert not any('phase=accounting ' in message for message in messages)

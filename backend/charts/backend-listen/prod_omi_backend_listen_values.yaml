@@ -245,6 +245,9 @@ env:
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
+  # Shared backend routes remain held off until the margin-40 lead expands.
+  - name: BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED

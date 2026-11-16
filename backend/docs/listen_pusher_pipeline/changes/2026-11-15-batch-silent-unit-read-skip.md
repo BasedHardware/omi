@@ -17,9 +17,10 @@ Audio retention, erasure and T2 alarm thresholds are unchanged. False silence ca
 be reprocessed from retained audio under the existing privacy and retention rules.
 
 `BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED` defaults on; `false`, `off` or `0`
-restores full silent-unit processing. Deployment must explicitly pin it false
-outside the approved small-percent/50/100 canary. This PR performs no deployment
-or production flag change.
+restores full silent-unit processing. Prod source pins it false on the four Cloud Run services and defensively on
+listen. The release owner canaries integration for one clean hour; the margin-40
+lead expands all roles in repo or reverts by 2026-11-18T20:00Z, under the runbook
+guards. This PR performs no deployment or production flag change.
 
 Validation for the async correction uses file-isolated Python 3.11 pytest runs
 from `backend/` (`.venv/bin/python -m pytest -p no:langsmith_plugin -q <file>`):
@@ -49,3 +50,9 @@ The runbook's 89 to 40 local document-lookup result is not a production billing
 claim. Serving-revision proof, matched-hour silent-only billed-read reduction,
 T2/retention/erasure/speech-latency guards and D+2 settled billing remain release
 and verification requirements.
+
+Accepted review `review-20261116t211959-ad39`: explicit prod holds preserve the
+code default-on kill switch; replay receipts and their aggregate state now stay
+ready for silence; fast completion emits the same completion phase success/error
+logs as ordinary completion. Regression coverage observes pre-follow-up replay
+states with the switch on/off and completion logs on success and fencing failure.

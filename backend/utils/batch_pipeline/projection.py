@@ -736,7 +736,8 @@ class Projector:
         if silence and silence_read_skip_enabled() and not binding.record_origin and not binding.native_record:
             # Completion verifies ALL siblings atomically. Mixed uploads and
             # prior partial charges fall back to ordinary speech accounting.
-            result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
+            with projection_phase('completion', policy):
+                result = self.store.complete(segment_id, binding, self.clock(), None, policy=policy)
             if result is not None:
                 return self.publish_completion(binding, result, policy=policy)
         with projection_phase('accounting', policy):
