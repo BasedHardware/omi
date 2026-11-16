@@ -655,7 +655,8 @@ def search_conversation_hits(
     if len(conversations) < limit and len(ranked) > limit:
         # Stale index ids (deleted or moved records) leave room for the next hits.
         conversations += hydrate(ranked[limit : limit + limit - len(conversations)])
-    if not any(str(c.get('id')) in set(vector_ids) for c in conversations):
+    # Degraded when either index could not be asked, or no semantic hit survived hydration.
+    if not (vectors_ok and keyword_ok) or not any(str(c.get('id')) in set(vector_ids) for c in conversations):
         record_fallback(
             component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
         )

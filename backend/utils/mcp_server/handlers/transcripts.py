@@ -18,9 +18,11 @@ from utils.conversations.search import conversation_matches_date_range
 from utils.mcp_dates import local_date_window, localize_timestamps
 from utils.mcp_memories import parse_mcp_int
 from utils.mcp_server import search_views
+from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.handlers.conversations import fetch_conversation_for_detail
 from utils.mcp_server.helpers import public_transcript_timing
+from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.observability.fallback import record_fallback
 from utils.other.list_budget import ListReadBudget
@@ -120,13 +122,19 @@ def search_transcripts(
         if len(matches) >= limit:
             stopped_early = True
             break
-        examined += 1
-        next_cursor = row_cursor or next_cursor
         if not _searchable(row, start_ts, end_ts, scoped=bool(conversation_id)):
+            examined += 1
+            next_cursor = row_cursor or next_cursor
             continue
         match = _conversation_match(transcribing_hold.project(row), query)
         if match is not None:
+            if matches and _serialized_chars(matches + [match]) > _RESPONSE_BUDGET_CHARS:
+                # Not examined: the cursor still points before this conversation.
+                stopped_early = True
+                break
             matches.append(match)
+        examined += 1
+        next_cursor = row_cursor or next_cursor
 
     complete = exhausted and not stopped_early
     result: Dict[str, Any] = {
@@ -138,6 +146,14 @@ def search_transcripts(
         'search_coverage': 'literal_transcript_scan' + ('' if complete else '_partial'),
     }
     return localize_timestamps(result, zone)
+
+
+# Headroom under the serialized cap for the envelope fields and timestamp localization.
+_RESPONSE_BUDGET_CHARS = MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS - 4_000
+
+
+def _serialized_chars(matches: List[Dict[str, Any]]) -> int:
+    return tool_response_serialized_chars({'matches': matches})
 
 
 def _searchable(row: Optional[Dict[str, Any]], start_ts: Optional[float], end_ts: Optional[float], *, scoped: bool):

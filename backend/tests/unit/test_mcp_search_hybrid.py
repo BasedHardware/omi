@@ -13,7 +13,9 @@ from google.api_core.exceptions import FailedPrecondition
 from database.transcript_search import InvalidTranscriptCursor, TranscriptScanPage, TranscriptScanRow
 from utils.mcp_server import search_views
 from utils.mcp_server.errors import ToolExecutionError
+from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
 from utils.mcp_server.handlers import conversations, transcripts
+from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.registry import TOOLS_BY_NAME
 
 NOW = datetime(2026, 11, 17, tzinfo=timezone.utc)
@@ -113,6 +115,17 @@ def test_a_vector_index_still_building_falls_back_to_keyword(indexes):
     with pytest.raises(ToolExecutionError) as error:
         search()
     assert error.value.code == -32009 and 'index is still being built' in error.value.message
+
+
+def test_keyword_index_down_is_counted_as_a_fallback_even_with_vector_hits(indexes, monkeypatch):
+    fallbacks = []
+    monkeypatch.setattr(conversations, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    indexes['rows'], indexes['vector'] = {'v1': conversation('v1')}, ['v1']
+    search()
+    assert fallbacks == []
+    indexes['keyword_error'] = RuntimeError('typesense down')
+    search()
+    assert len(fallbacks) == 1 and fallbacks[0]['outcome'] == 'degraded'
 
 
 def test_no_hits_with_the_keyword_index_down_is_an_actionable_503(indexes):
@@ -220,6 +233,19 @@ def test_many_hits_in_one_conversation_are_capped_and_flagged(scan):
     scan['rows'] = [conversation('dense', count=20, words={i: f'series a point {i}' for i in range(0, 20, 2)})]
     (match,) = find()['matches']
     assert len(match['hits']) == search_views.TRANSCRIPT_HITS_PER_CONVERSATION and match['more_hits'] is True
+
+
+def test_a_page_of_large_hits_stays_inside_the_serialized_budget_and_resumes(scan):
+    cjk = '系列A轮融资' * 64  # escapes to six characters each on the wire
+    scan['rows'] = [
+        conversation(f'c{i}', count=10, words={j: f'series a {cjk}' for j in range(0, 10, 2)}) for i in range(10)
+    ]
+    result = find()
+    served = [m['conversation']['id'] for m in result['matches']]
+    assert 0 < len(served) < 10 and result['complete'] is False
+    assert tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
+    # The cursor points at the last served conversation, so the next page starts with the first one left out.
+    assert result['next_cursor'] == f'cursor-{len(served) - 1}' and result['examined'] == len(served)
 
 
 def test_transcript_search_in_one_conversation(monkeypatch, scan):
