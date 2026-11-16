@@ -865,8 +865,10 @@ def resolve_speakers_for_processing(
         if resolution.status == 'resolved' and resolution.input_membership_sha256 != membership:
             # A terminal whole-pass obligation may suppress new inference, but
             # its old snapshot cannot certify newly appended/rebased text.
-            resolution.status = 'unavailable'
-            resolution.participant_speaker_ids = []
+            # This is speaker-result metadata, not a conversation lifecycle state.
+            conversation.speaker_resolution = resolution = ConversationSpeakers(
+                status='unavailable', version=resolution.version
+            )
         resolution.input_membership_sha256 = membership
     evidence_token = None if skip_automatic else speaker_evidence.begin(conversation)
     resolver_reason('disabled')

@@ -10,6 +10,13 @@ from typing import Any, cast
 
 import config.owner_recognition_diagnostics as contract
 from utils.observability.owner_identity_retry import resolver_trace
+from utils.observability.reasons import (
+    OwnerRecognitionBatchEmbeddingOutcome,
+    OwnerRecognitionFinalPassOutcome,
+    OwnerRecognitionProofReason,
+    ReasonFamily,
+    reason_label,
+)
 
 logger = logging.getLogger(__name__)
 _LIVE_PROGRESS = frozenset(('enqueued', 'published', 'profile_loaded', 'scores_generated', 'comparison'))
@@ -222,7 +229,11 @@ def live_comparison(distances, evidence_seconds):
 
 def resolver_reason(reason):
     if reason in contract.PROOF_REASONS:
-        PROOF_REFUSALS.labels(reason=reason).inc()
+        PROOF_REFUSALS.labels(
+            reason=reason_label(
+                ReasonFamily.OWNER_RECOGNITION, OwnerRecognitionProofReason(reason), OwnerRecognitionProofReason
+            )
+        ).inc()
     row = _RESOLVER.get()
     if row is not None:
         row['reason'] = reason if reason in contract.REASONS else 'other'
@@ -306,14 +317,28 @@ FINAL_PASS_AVAILABILITY = _counter(
     'outcome',
 )
 for _reason in contract.PROOF_REASONS:
-    PROOF_REFUSALS.labels(reason=_reason)
+    PROOF_REFUSALS.labels(
+        reason=reason_label(
+            ReasonFamily.OWNER_RECOGNITION, OwnerRecognitionProofReason(_reason), OwnerRecognitionProofReason
+        )
+    )
 for _outcome in ('disabled', 'ineligible', 'admitted', 'dependency_unavailable'):
-    FINAL_PASS_AVAILABILITY.labels(outcome=_outcome)
+    FINAL_PASS_AVAILABILITY.labels(
+        outcome=reason_label(
+            ReasonFamily.OWNER_RECOGNITION, OwnerRecognitionFinalPassOutcome(_outcome), OwnerRecognitionFinalPassOutcome
+        )
+    )
 
 
 def final_pass_availability(outcome):
     if outcome in {'disabled', 'ineligible', 'admitted', 'dependency_unavailable'}:
-        FINAL_PASS_AVAILABILITY.labels(outcome=outcome).inc()
+        FINAL_PASS_AVAILABILITY.labels(
+            outcome=reason_label(
+                ReasonFamily.OWNER_RECOGNITION,
+                OwnerRecognitionFinalPassOutcome(outcome),
+                OwnerRecognitionFinalPassOutcome,
+            )
+        ).inc()
 
 
 BATCH_EMBEDDINGS = _counter(
@@ -322,9 +347,21 @@ BATCH_EMBEDDINGS = _counter(
     'outcome',
 )
 for _outcome in ('attempted', 'successful', 'cached'):
-    BATCH_EMBEDDINGS.labels(outcome=_outcome)
+    BATCH_EMBEDDINGS.labels(
+        outcome=reason_label(
+            ReasonFamily.OWNER_RECOGNITION,
+            OwnerRecognitionBatchEmbeddingOutcome(_outcome),
+            OwnerRecognitionBatchEmbeddingOutcome,
+        )
+    )
 
 
 def batch_embedding(outcome):
     if outcome in {'attempted', 'successful', 'cached'}:
-        BATCH_EMBEDDINGS.labels(outcome=outcome).inc()
+        BATCH_EMBEDDINGS.labels(
+            outcome=reason_label(
+                ReasonFamily.OWNER_RECOGNITION,
+                OwnerRecognitionBatchEmbeddingOutcome(outcome),
+                OwnerRecognitionBatchEmbeddingOutcome,
+            )
+        ).inc()

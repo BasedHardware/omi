@@ -236,3 +236,53 @@ def test_returned_final_pass_dependency_failure_is_observed(original_lane, monke
     )
     assert result['outcome'] == 'failed_batch_audio'
     assert counter._value.get() == before + 1
+
+
+def test_attempt_metrics_use_enum_members_and_preserve_closed_values(monkeypatch):
+    from utils.observability.reasons import (
+        OwnerRecognitionBatchEmbeddingOutcome,
+        OwnerRecognitionFinalPassOutcome,
+        OwnerRecognitionProofReason,
+        ReasonFamily,
+        reason_values,
+    )
+    import config.owner_recognition_diagnostics as contract
+
+    assert reason_values(OwnerRecognitionProofReason) == contract.PROOF_REASONS
+    observed = []
+    original = diagnostics.reason_label
+
+    def checked(family, value, enum):
+        assert family == ReasonFamily.OWNER_RECOGNITION
+        assert isinstance(value, enum)
+        observed.append((value, enum))
+        return original(family, value, enum)
+
+    monkeypatch.setattr(diagnostics, 'reason_label', checked)
+    for emit, counter, label, enum in (
+        (diagnostics.resolver_reason, diagnostics.PROOF_REFUSALS, 'reason', OwnerRecognitionProofReason),
+        (
+            diagnostics.final_pass_availability,
+            diagnostics.FINAL_PASS_AVAILABILITY,
+            'outcome',
+            OwnerRecognitionFinalPassOutcome,
+        ),
+        (diagnostics.batch_embedding, diagnostics.BATCH_EMBEDDINGS, 'outcome', OwnerRecognitionBatchEmbeddingOutcome),
+    ):
+        for value in reason_values(enum):
+            child = counter.labels(**{label: value})
+            before = child._value.get()
+            emit(value)
+            assert child._value.get() == before + 1
+        before = list(counter.collect())[0].samples
+        for value in ('unknown', 'synthetic-private-value'):
+            emit(value)
+        assert list(counter.collect())[0].samples == before
+    assert len(observed) == sum(
+        len(reason_values(enum))
+        for enum in (
+            OwnerRecognitionProofReason,
+            OwnerRecognitionFinalPassOutcome,
+            OwnerRecognitionBatchEmbeddingOutcome,
+        )
+    )

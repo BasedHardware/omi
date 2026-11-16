@@ -257,3 +257,23 @@ def test_terminal_final_pass_snapshot_cannot_certify_late_membership(original):
     assert lane.conversation.speaker_resolution.input_membership_sha256 == transcript_membership(
         lane.conversation.transcript_segments
     )
+
+
+def test_stale_membership_resets_only_typed_speaker_result_when_inference_is_skipped(original):
+    lane, cache, calls = original
+    later = deepcopy(lane.conversation.transcript_segments[1:])
+    lane.conversation.transcript_segments = lane.conversation.transcript_segments[:1]
+    resolve(lane)
+    conversation = lane.conversation
+    conversation.speaker_resolution.version = 7
+    lifecycle_status = conversation.status
+    conversation.transcript_segments.extend(later)
+    assert stage.resolve_speakers_for_processing(UID, conversation, skip_automatic=True)
+    assert conversation.status == lifecycle_status
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert conversation.speaker_resolution.version == 7
+    assert conversation.speaker_resolution.participant_speaker_ids == []
+    assert conversation.speaker_resolution.input_membership_sha256 == transcript_membership(
+        conversation.transcript_segments
+    )
+    assert len(calls) == 1
