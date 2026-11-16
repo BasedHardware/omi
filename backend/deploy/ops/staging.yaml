@@ -62,6 +62,10 @@ cloud_run:
     max_instances: {owner: none, floor: 8, ceiling: 40}
   backend-integration-staging:
     env:
+      # Mirror production ops keys; applying staging remains a separate train.
+      BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: '100'
+      BATCH_PIPELINE_SERVING_TICK_SECONDS: '20'
+      BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: '16'
       SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
       SUMMARY_DEBT_REPAIR_ENABLED: 'true'
       # live-only on prod, 2026-10-20 inventory (see prod.yaml)
