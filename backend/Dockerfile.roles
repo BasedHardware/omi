@@ -124,6 +124,7 @@ RUN mkdir -p _temp _samples _segments _speech_profiles \
     && usermod -d /app omi
 
 # Whitelist-copy only the modules pusher reaches
+COPY backend/deploy/storage-lifecycle/retention_contract.json ./deploy/storage-lifecycle/retention_contract.json
 COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/models/ ./models/

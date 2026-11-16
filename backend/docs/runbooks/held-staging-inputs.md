@@ -1,6 +1,8 @@
 # Held staging inputs approaching expiry
 
-Lead2 ruling `9a5190`: retain the staging bucket's **30-day privacy ceiling**.
+The reviewed `deploy/storage-lifecycle/retention_contract.json` configures the staging
+bucket lifecycle at **60 days** (production extended on 2026-11-16). It supersedes
+the former 30-day lead2 ruling `9a5190` for this bucket.
 This change does not alter or apply a bucket lifecycle. Audio is never deleted
 by dead-lettering. A terminal row does **not** preserve an object past its
 existing lifecycle; recover it or obtain the original client bundle before then.
@@ -19,7 +21,7 @@ The existing timeliness exporter emits
 and committed assignment holds across all epochs, using the current object
 anchor above. A fresh restage cannot mask an older legacy input; an incomplete
 bounded age scan fails the sample rather than publishing a healthy age. The new
-warning `omi-batch-staged-input-age` fires above 21 days for 10 minutes. A sample
+warning `omi-batch-staged-input-age` fires above 51 days for 10 minutes. A sample
 must be younger than 900 seconds; absent/stale data is unknown, covered by the
 existing sampler-stale alert. No GCS reads or additional timer are introduced.
 
@@ -28,14 +30,14 @@ in completed bounded age samples and existing held sweep pages, including rows
 with neither clock usable. Name-ordered held pages also observe missing clock
 fields that age-ordered queries cannot discover.
 Repeated observations count again; this is not a distinct-row fleet census.
-A valid admission clock still contributes its conservative age and the 21-day
+A valid admission clock still contributes its conservative age and the 51-day
 warning. When neither clock is usable, the row cannot enter `input_expiring`.
 When an age sample observes such a row,
 `omi_batch_timeliness_scan_truncated{leg="staged_input"}` is 1 so the existing
 scan-blind warning exposes the incomplete age sample. Failed scans retain the
 existing sample-error/staleness path. No IDs or clock values become labels.
 
-The existing held dead-letter sweep checks these same inputs at age **>=29 days**
+The existing held dead-letter sweep checks these same inputs at age **>=59 days**
 and writes job `state=dead`, `dead_letter_reason=input_expiring`, plus its prior
 leg and transition time. It retains audio, result receipts, intent/attempt
 history, binding and privacy generation. It refuses active tokens/leases,
@@ -114,7 +116,7 @@ audio or GCS. Dry-run makes only Firestore reads and prints aggregate counts and
 the plan SHA-256, never IDs, URIs, transcripts or exception bodies. It examines
 at most 128 rows per page, ordered by `enqueued_at`, then document name. It selects
 GPU/assignment staging holds (including retained `input_expiring` terminals)
-at age **>=21 days**. Other examined rows are skipped, not authorized for writes.
+at age **>=51 days**. Other examined rows are skipped, not authorized for writes.
 The existing `(state, recovery_state, enqueued_at, __name__)` index serves it.
 Missing indexes fail closed; no fallback or index deployment occurs here.
 
@@ -164,3 +166,29 @@ contain private document references, are mode 0600, and must never enter Git or
 logs. A null output ends that pass. Begin another pass after remediating refusals;
 advancing the cursor does not prove skipped inputs safe. The CLI has no scheduler,
 no implicit loop, no lifecycle/IAM writes and no provider execution.
+
+## Lifecycle configuration and deployment coupling
+
+`batch_staging_delete_age_days` in `deploy/storage-lifecycle/retention_contract.json`
+is the runtime source, read by `utils/batch_pipeline/input_retention.py` at startup.
+There is no environment override. Warning is lifecycle minus nine days (51 days),
+terminal is lifecycle minus one day (59 days). Sweep discovery, transactional
+expiry, provider hold recheck timing and manual redrive selection import these
+thresholds. The warning alert artifact is checked against the same value in tests.
+The production ceiling declaration must match; the separately declared development
+bucket ceiling is unchanged, and this input-expiry path matches the production
+bucket URI only.
+
+A lifecycle extension must reach the bucket before deploying a longer runtime
+threshold. A shortening requires deploying the earlier terminal first and proving
+all affected eligible holds settled before shortening the bucket policy. Recheck
+bucket metadata and the release lifecycle prerequisite; a code constant cannot
+prove live storage policy. Never lower the bucket to roll back this PR. Rolling
+back code restores the earlier terminal and can prematurely dead-letter retained
+inputs; the existing input-expiry kill may stop new transitions while the lead
+coordinates rollback. Neither action resurrects existing dead letters.
+
+Deploy the shared runtime to the five held-sweep services (`backend`, `backend-sync`,
+`backend-sync-backfill`, `backend-listen`, `backend-integration`) and the batch/provider
+workers that import retention timing, including the GPU batch image, plus the monitoring alert bundle. Confirm
+actual deployment bindings with the release owner. This PR performs no rollout.

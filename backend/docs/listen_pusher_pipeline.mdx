@@ -9922,13 +9922,13 @@ for rollout and local verification.
 ### Held staging input expiry
 
 `BATCH_INPUT_EXPIRING_ENABLED` defaults on via `config/refactor_modes.py`;
-`false` is the kill for new day-29 transitions in the existing held sweep.
+`false` is the kill for new day-59 transitions in the existing held sweep.
 Eligible GPU-quarantined and assignment-held staging inputs use `audio_staged_at`
 for replacement objects with a finite positive numeric clock, else `enqueued_at`
 as the earlier admission/staging proxy, including when the replacement clock is
 present but malformed. Two unusable clocks never authorize `input_expiring`.
 Exact-bundle repair stamps the new object time without changing original enqueue.
-The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 29 days the job retains its audio,
+The kill is explicitly true in base/prod runtime bindings and listen/worker charts. At 59 days the job retains its audio,
 results and paid history as `state=dead`, `dead_letter_reason=input_expiring`,
 with `input_expiring_at` and `input_expiring_leg` (`gpu` or `assignment`).
 Before the ordinary held name page, two indexed urgency streams (legacy enqueue
@@ -9943,8 +9943,9 @@ custody-repair protocol carry needs-attention and GPU re-upload; legacy readers
 retain their existing custody-safe response. Checked operator GPU requeue or
 target-restorable assignment release is the manual exit, even with the new kill
 off. Status polling and nightly held-expired redrive never reopen this reason.
-`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 21 days with
-fresh sample evidence. The 30-day privacy ceiling is unchanged. See the
+`omi_batch_held_oldest_age_seconds{leg="staged_input"}` warns above 51 days with
+fresh sample evidence. Both thresholds derive from the retention contract's
+60-day production staging lifecycle (extended 2026-11-16). See the
 [operator runbook](runbooks/held-staging-inputs.md) for approved manual execution.
 `omi_batch_staged_input_clock_invalid_total` counts malformed clock observations
 in completed bounded age samples and existing held sweep pages, including

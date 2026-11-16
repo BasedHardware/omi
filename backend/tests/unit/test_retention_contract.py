@@ -211,3 +211,21 @@ def test_canonical_voice_ceiling_forbids_automatic_live_expiry():
     bucket = 'canonical-audio (BUCKET_CANONICAL_AUDIO, not provisioned)'
     metadata = {'lifecycle': {'rule': [delete(365)]}, 'soft_delete_seconds': '0', 'versioning': False}
     assert rc.ceiling_findings(CONTRACT, bucket, metadata) == ['ceiling_user_content_expiry']
+
+
+def test_input_expiry_is_derived_from_the_declared_production_lifecycle():
+    from utils.batch_pipeline.input_retention import LIFECYCLE_DAYS, TERMINAL_SECONDS, WARNING_SECONDS
+
+    assert LIFECYCLE_DAYS == CONTRACT['batch_staging_delete_age_days'] == 60
+    assert WARNING_SECONDS == (LIFECYCLE_DAYS - 9) * 86400 == 51 * 86400
+    assert TERMINAL_SECONDS == (LIFECYCLE_DAYS - 1) * 86400 == 59 * 86400
+    assert 0 < WARNING_SECONDS < TERMINAL_SECONDS < LIFECYCLE_DAYS * 86400
+    assert CONTRACT['buckets'][BATCH]['ceiling']['max_age_days'][''] == LIFECYCLE_DAYS
+
+
+def test_selective_pusher_images_include_the_runtime_retention_contract():
+    for path in ('pusher/Dockerfile', 'Dockerfile.roles', 'diarizer/Dockerfile.batch-pipeline'):
+        assert (
+            'COPY backend/deploy/storage-lifecycle/retention_contract.json ./deploy/storage-lifecycle/retention_contract.json'
+            in (BACKEND / path).read_text()
+        )

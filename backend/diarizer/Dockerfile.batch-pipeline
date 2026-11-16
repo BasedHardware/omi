@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 libgomp1 build-essential git && rm -rf /var/lib/apt/lists/*
 COPY backend/diarizer/pylock.batch-pipeline.toml /app/pylock.batch-pipeline.toml
 RUN pip install --no-cache-dir uv==0.11.13 && uv pip sync --system /app/pylock.batch-pipeline.toml
+COPY backend/deploy/storage-lifecycle/retention_contract.json ./deploy/storage-lifecycle/retention_contract.json
 COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/diarizer/ ./diarizer/

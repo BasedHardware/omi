@@ -1,10 +1,18 @@
 """Current staging-input age; legacy admission uses enqueue time, never GCS metadata."""
 
+import json
 import math
+from pathlib import Path
 
 STAGING_BUCKET = 'based-hardware-batch-pipeline-staging'
-WARNING_SECONDS = 21 * 86400
-TERMINAL_SECONDS = 29 * 86400
+# This reviewed contract is also consumed by lifecycle validation/drift tools.
+# No environment override: changing a bucket requires updating this contract first.
+_CONTRACT = Path(__file__).resolve().parents[2] / 'deploy/storage-lifecycle/retention_contract.json'
+LIFECYCLE_DAYS = json.loads(_CONTRACT.read_text())['batch_staging_delete_age_days']
+if type(LIFECYCLE_DAYS) is not int or LIFECYCLE_DAYS <= 9:
+    raise ValueError('batch staging lifecycle must exceed the nine-day warning margin')
+WARNING_SECONDS = (LIFECYCLE_DAYS - 9) * 86400
+TERMINAL_SECONDS = (LIFECYCLE_DAYS - 1) * 86400
 REASON = 'input_expiring'
 
 
