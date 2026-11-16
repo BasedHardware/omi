@@ -44,8 +44,12 @@ void main() {
   });
   test('v3 Home uses the existing closed kind vocabulary', () {
     final card = feed.GeneratedHomeFeedCard.fromJson({
-      'id': 'c', 'kind': 'conversation', 'detail_id': 'c', 'sort_at': base['created_at'],
-      'status': 'completed', 'revision': 'synthetic',
+      'id': 'c',
+      'kind': 'conversation',
+      'detail_id': 'c',
+      'sort_at': base['created_at'],
+      'status': 'completed',
+      'revision': 'synthetic',
     });
     expect(card.kind, 'conversation');
   });

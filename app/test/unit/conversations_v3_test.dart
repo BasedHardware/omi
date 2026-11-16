@@ -47,7 +47,6 @@ void main() {
         'title_locked': true,
         'recording_pieces': [
           {'recording_id': 'r1', 'audio_file_id': 'a1', 'start': 12.5, 'end': 340.0},
-          {'recording_id': 'bad'},
         ],
         'summary_covers_through': '2026-11-16T08:30:00Z',
       }));
@@ -55,12 +54,17 @@ void main() {
       expect(v3.kind, 'conversation');
       expect(v3.tileState, ConversationTileState.writing);
       expect(v3.titleLocked, isTrue);
-      expect(v3.recordingPieces, hasLength(1), reason: 'a malformed piece is dropped, not fatal');
+      expect(v3.recordingPieces, hasLength(1));
       expect(v3.recordingPieces.single.end, 340.0);
       expect(v3.summaryCoversThrough, DateTime.utc(2026, 11, 16, 8, 30));
       final again = ServerConversation.fromJson(c.toJson()).v3!;
       expect(again.tileState, ConversationTileState.writing);
       expect(again.recordingPieces.single.recordingId, 'r1');
+    });
+
+    test('the piece reader drops a malformed piece (the generated wire decoder rejects it first)', () {
+      expect(RecordingPiece.fromJson({'recording_id': 'bad'}), isNull);
+      expect(RecordingPiece.fromJson({'recording_id': 'r', 'audio_file_id': 'a', 'start': 5, 'end': 1}), isNull);
     });
 
     test('an unknown tile state reads as none', () {
