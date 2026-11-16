@@ -168,6 +168,11 @@ def test_lines_keep_two_speakers_who_share_a_label_apart():
         {'speaker_key': 'person:b', 'speaker_label': 'Alex', 'start': 5, 'text': 'two'},
     ]
     assert detail_views.render_lines(items) == '[0:00:00] Alex: one\n[0:00:05] Alex: two'
+    corrected = [
+        {'speaker_key': 'speaker:0', 'speaker_label': 'You', 'start': 0, 'text': 'mine'},
+        {'speaker_key': 'speaker:0', 'speaker_label': 'Speaker A', 'start': 4, 'text': 'not mine'},
+    ]
+    assert detail_views.render_lines(corrected) == '[0:00:00] You: mine\n[0:00:04] Speaker A: not mine'
 
 
 def test_lines_page_only_the_text_they_render(monkeypatch):

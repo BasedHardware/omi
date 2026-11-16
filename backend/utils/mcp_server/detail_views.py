@@ -185,8 +185,9 @@ def _clock(seconds: Any) -> str:
 def render_lines(items: List[Dict[str, Any]]) -> str:
     """One line per speaker turn: consecutive segments of one speaker are joined.
 
-    Turns join on the canonical ``speaker_key``, so two people who share a label
-    (two contacts with one name, two unresolved speakers) stay separate lines. A
+    Turns join only when both the canonical ``speaker_key`` and the label match:
+    two people who share a label (two contacts with one name) stay apart, and so
+    do rows of one diarization cluster whose names were corrected per segment. A
     continued fragment of an oversized segment joins the previous line, so a
     reassembled page reads as the speaker said it.
     """
@@ -194,7 +195,7 @@ def render_lines(items: List[Dict[str, Any]]) -> str:
     for item in items:
         label = str(item.get('speaker_label') or 'Unknown')
         key = item.get('speaker_key')
-        key = key if key is not None else ('label', label)
+        key = (key, label)
         text = str(item.get('text') or '').strip()
         if turns and turns[-1][0] == key:
             turns[-1][3] = (turns[-1][3] + ' ' + text).strip()
