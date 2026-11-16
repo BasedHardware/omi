@@ -3633,6 +3633,8 @@ routes:
       deprecation:
         state: active
       owner: backend
+  # Deletion feed for clients that keep copies: tombstone ids and deleted_at only, keyset paged.
+  - {route_type: http, method: GET, path: /v1/mcp/conversations/deleted, policy: {review_status: reviewed, auth: {mechanisms: [mcp_api_key], placement: dependency, scopes: [conversations.read]}, byok: not_applicable, rate_limit: {policy_name: "mcp:read", key_subject: app_key, enforcement: fail_closed, placement: dependency}, timeout_class: default_method, surface: mcp, visibility: public_documented, data_domain: conversations, deprecation: {state: active}, owner: backend}}
   - route_type: http
     method: PATCH
     path: /v1/mcp/people/{person_id}/name
