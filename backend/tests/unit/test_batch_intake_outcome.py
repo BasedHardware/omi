@@ -6,6 +6,7 @@
 owner carries no fresh decision and must not be counted.
 """
 
+import time
 from unittest.mock import AsyncMock, Mock, patch
 from types import SimpleNamespace
 
@@ -69,7 +70,11 @@ def _router():
 
 async def _upload(module, BytesIO, *, conversation_id=None):
     return await module.sync_local_files_v2(
-        files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+        # Freshness doctrine: the fixture filename's epoch is validated
+        # against the admission plausibility window, so it must ride the
+        # clock — a frozen epoch ages out of the window and 422s the upload.
+        # Now minus one minute is always inside it.
+        files=[UploadFile(filename=f'{int(time.time()) - 60}.bin', file=BytesIO(b'\x00' * 10))],
         uid=UID,
         conversation_id=conversation_id,
     )

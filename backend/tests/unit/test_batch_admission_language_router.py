@@ -1,5 +1,6 @@
 """The router must exclude unsafe new uploads before reserving batch ownership."""
 
+import time
 from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -103,7 +104,11 @@ async def test_actual_sync_router_excludes_before_claim_and_batch_intake(monkeyp
         staging = Mock(side_effect=AssertionError('unsafe bound upload entered batch staging'))
         monkeypatch.setattr(intake, 'artifacts_for', staging)
         response = await module.sync_local_files_v2(
-            files=[UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))],
+            # Freshness doctrine: the fixture filename's epoch is validated
+            # against the admission plausibility window, so it must ride the
+            # clock — a frozen epoch ages out of the window and 422s the upload.
+            # Now minus one minute is always inside it.
+            files=[UploadFile(filename=f'{int(time.time()) - 60}.bin', file=BytesIO(b'\x00' * 10))],
             uid=UID,
             conversation_id=CID,
         )

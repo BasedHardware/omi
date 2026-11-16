@@ -2124,7 +2124,12 @@ def test_unconditional_demotion_family_is_exact():
     )
 
     assert VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS == frozenset(
-        {'staged_audio_invalid', 'retained_audio_invalid', 'decoded_duration_mismatch'}
+        {
+            'staged_audio_invalid',
+            'retained_audio_invalid',
+            'decoded_duration_mismatch',
+            'decode_payload_invalid',
+        }
     )
 
 

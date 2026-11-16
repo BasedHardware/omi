@@ -5,6 +5,7 @@ fast-unit duration allowlist next to test_sync_cloud_tasks.py.
 """
 
 import json
+import time
 import sys
 
 import pytest
@@ -36,7 +37,11 @@ def _restore(saved):
 async def _upload(module, BytesIO):
     from starlette.datastructures import UploadFile
 
-    upload = UploadFile(filename='omi_1792152000.bin', file=BytesIO(b'\x00' * 10))
+    # Freshness doctrine: the fixture filename's epoch is validated
+    # against the admission plausibility window, so it must ride the
+    # clock — a frozen epoch ages out of the window and 422s the upload.
+    # Now minus one minute is always inside it.
+    upload = UploadFile(filename=f'{int(time.time()) - 60}.bin', file=BytesIO(b'\x00' * 10))
     return await module.sync_local_files_v2(files=[upload], uid='test-uid')
 
 

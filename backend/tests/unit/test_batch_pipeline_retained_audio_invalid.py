@@ -568,17 +568,19 @@ def test_worker_vad_bounds_terminal_route_still_reachable(monkeypatch):
     assert not words.calls and not saved
 
 
-def test_worker_plain_value_error_still_failed_work(monkeypatch):
+def test_worker_plain_value_error_ends_chain_with_typed_custody(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(ValueError('different decode failure')))
     results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
-def test_worker_plain_value_error_yields_no_work_without_safety_net(monkeypatch):
+def test_worker_plain_value_error_disposes_without_safety_net(monkeypatch):
+    # The poison arm's chain end is unconditional on the pinned bytes, like
+    # the typed decode trio: the safety-net gate never decides it.
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(ValueError('different decode failure')))
-    assert worker.process_batch([item()]) == []
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_worker_typed_error_ends_chain_without_safety_net(monkeypatch):

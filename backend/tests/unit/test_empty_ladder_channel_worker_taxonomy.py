@@ -1056,7 +1056,7 @@ def test_decoded_duration_mismatch_reports_the_disposition_handoff(monkeypatch, 
     assert "stage=fetch_decode segment_id=a reason=decoded_duration_mismatch" in disposition[0].getMessage()
 
 
-def test_unclassified_decode_valueerror_stays_error(monkeypatch, caplog):
+def test_unclassified_decode_valueerror_joins_the_disposition_channel(monkeypatch, caplog):
     caplog.set_level(logging.INFO)
 
     def decode(work):
@@ -1064,9 +1064,16 @@ def test_unclassified_decode_valueerror_stays_error(monkeypatch, caplog):
 
     worker, results, saved, failures = _empty_worker(monkeypatch, caplog, decode=decode)
     ladder, fault, guard, shadow = _split(caplog)
-    assert not ladder and not guard and len(fault) == 1
-    assert fault[0].levelno == logging.ERROR
-    assert "error_class=ValueError stage=fetch_decode segment_id=a reason=unclassified" in fault[0].getMessage()
+    disposition = [r for r in caplog.records if "event=batch_validation_disposition" in r.getMessage()]
+    # The bare fetch_decode ValueError is the poison custody arm: it leaves
+    # the ERROR fault channel for the typed INFO transition, with the closed
+    # token and the ValueError class name, still message-free.
+    assert not ladder and not guard and not fault and len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert (
+        "error_class=ValueError stage=fetch_decode segment_id=a reason=decode_payload_invalid"
+        in disposition[0].getMessage()
+    )
     assert "synthetic-private-must-not-be-logged" not in caplog.text
 
 

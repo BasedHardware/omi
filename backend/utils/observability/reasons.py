@@ -606,6 +606,28 @@ class WorkerValidationReason(StrEnum):
     #
     # Failure-Class: FC-deterministic-persist-refusal-walks-gpu-retry-ladder-as-unclassified-invalidargument
     PERSIST_PAYLOAD_INVALID = 'persist_payload_invalid'
+    # A fetch_decode decode/parse poison: a bare builtin ``ValueError`` the
+    # fetch/decode arm raised while materializing or decoding the unit's
+    # pinned stored bytes that is NOT one of the typed decode-family classes
+    # — the admitted duration being NaN so ``round()`` refuses it inside the
+    # retained manifest builder, a storage client refusing a malformed
+    # request argument, a text decode raising ``UnicodeDecodeError``. Every
+    # retry re-reads the same bytes and reproduces the fault, so the boundary
+    # ends the chain with this typed token and retains custody for the fenced
+    # recovery lane instead of walking the GPU ladder on input that cannot
+    # change — five anonymous
+    # ``batch_worker_failed error_class=ValueError stage=fetch_decode`` ERROR
+    # lines per drive plus an anonymous terminal quarantine for a fault no
+    # retry can repair (the sensor's bare-ValueError cohort at fetch_decode).
+    # The typed decode family — ``StagedAudioInvalid`` /
+    # ``StagedArtifactInvalid`` / ``RetainedAudioInvalid`` (and its
+    # ``InvalidRetainedManifest`` subclass) /
+    # ``RetainedAudioOutsideAdmittedSource`` / ``DecodedDurationMismatch`` /
+    # ``BatchValidationError`` — keeps its own tokens; only the bare builtin
+    # joins the closed vocabulary.
+    #
+    # Failure-Class: FC-fetch-decode-valueerror-poison-walks-gpu-ladder-as-anonymous-per-attempt
+    DECODE_PAYLOAD_INVALID = 'decode_payload_invalid'
 
 
 class RecoveryFailureStage(StrEnum):

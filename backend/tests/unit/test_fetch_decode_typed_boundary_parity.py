@@ -4,9 +4,11 @@ Failure-Class: FC-deterministic-staged-decode-failure-walks-gpu-retry-ladder-as-
 
 Parity contract at the worker boundary: every ``StagedAudioInvalid`` and
 ``DecodedDurationMismatch`` at ``fetch_decode`` takes the typed terminal
-handoff with its closed reason, every untyped exception at any stage
-keeps the ordinary retry ladder, and the mapping is scoped to the stage
-that owns decode faults. Message matching is gone — a boundary that
+handoff with its closed reason, the bare builtin ``ValueError`` at
+``fetch_decode`` takes the typed poison custody handoff
+(``decode_payload_invalid``), every exception outside those families at any
+stage keeps the ordinary retry ladder, and the mapping is scoped to the
+stage that owns decode faults. Message matching is gone — a boundary that
 matched messages would silently return every new deterministic decode
 fault to the ladder this change retires it from.
 """
@@ -163,10 +165,10 @@ def test_duration_mismatch_type_at_the_vad_stage_stays_on_the_ladder(monkeypatch
 # --- untyped exceptions keep the ordinary ladder -------------------------------------
 
 
-def test_untyped_value_error_at_fetch_decode_stays_retryable():
+def test_bare_value_error_at_fetch_decode_takes_the_poison_custody():
     worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('different decode failure')))
     results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_wave_error_raised_by_a_non_decoder_callable_stays_retryable():
@@ -207,18 +209,19 @@ def test_permission_error_at_fetch_decode_stays_retryable():
     assert len(results) == 1 and isinstance(results[0], FailedWork)
 
 
-def test_untyped_message_colliding_with_a_retired_string_stays_retryable():
-    # The retired string list must not resurface: a BARE ValueError that
-    # happens to carry an old message is not proof of determinism.
+def test_message_colliding_with_a_retired_string_decides_nothing():
+    # The retired string list must not resurface: the TYPE decides. A bare
+    # ValueError carrying an old staged message is the poison family; the
+    # same message on a foreign class keeps the ladder.
     worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('staging requires 16kHz mono PCM16 WAV')))
-    results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
+    ladder, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('staging requires 16kHz mono PCM16 WAV')))
+    assert all(isinstance(r, FailedWork) for r in ladder.process_batch([item()]))
 
 
-def test_untyped_duration_message_stays_retryable():
+def test_duration_message_on_the_bare_class_is_poison_not_ladder():
     worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('decoded duration differs from admitted capture')))
-    results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_key_error_at_fetch_decode_stays_retryable():
@@ -305,8 +308,10 @@ def test_boundary_does_not_match_any_message_for_the_staged_family():
     # decides. Each message with a foreign exception class stays retryable;
     # each message with the staged type terminalizes.
     for message in STAGED_MESSAGES:
-        retryable = setup_worker(decode=Mock(side_effect=ValueError(message)))[0]
+        retryable = setup_worker(decode=Mock(side_effect=RuntimeError(message)))[0]
         assert all(isinstance(r, FailedWork) for r in retryable.process_batch([item()]))
+        poison = setup_worker(decode=Mock(side_effect=ValueError(message)))[0]
+        assert poison.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
         terminal = setup_worker(decode=Mock(side_effect=StagedAudioInvalid(message)))[0]
         assert terminal.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'staged_audio_invalid')]
 
@@ -499,16 +504,18 @@ def test_typed_duration_fault_terminalizes_with_the_safety_net_off(monkeypatch):
     assert results == [ValidationFailureWork('a', 'fetch_decode', 'decoded_duration_mismatch')]
 
 
-def test_untyped_fault_with_the_safety_net_off_emits_no_result(monkeypatch):
+def test_poison_fault_terminalizes_with_the_safety_net_off(monkeypatch):
+    # The poison custody is unconditional on the pinned bytes: the safety
+    # net never decides it.
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'false')
     results = results_for(decode=Mock(side_effect=ValueError('transient decode fault')))
-    assert results == []
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
-def test_untyped_fault_with_the_safety_net_on_emits_failed_work(monkeypatch):
+def test_poison_fault_terminalizes_with_the_safety_net_on(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     results = results_for(decode=Mock(side_effect=ValueError('transient decode fault')))
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_empty_asr_reason_is_assemble_words_scoped(monkeypatch):
@@ -525,9 +532,9 @@ def test_empty_asr_reason_is_assemble_words_scoped(monkeypatch):
 # --- evidence parity for the untyped control -----------------------------------------
 
 
-def test_untyped_fault_carries_stage_evidence_with_unknown_reason(monkeypatch):
+def test_genuinely_untyped_fault_carries_stage_evidence_with_unknown_reason(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     result = worker.process_batch([item()])[0]
     assert isinstance(result, FailedWork)
     assert result.worker_failure == {'stage': 'fetch_decode', 'reason': 'unknown'}
@@ -544,7 +551,9 @@ def test_typed_terminal_result_has_no_evidence_field_while_untyped_does(monkeypa
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     terminal = results_for(decode=Mock(side_effect=StagedAudioInvalid('invalid staged WAV container')))[0]
     assert isinstance(terminal, ValidationFailureWork) and not hasattr(terminal, 'worker_failure')
-    retryable = results_for(decode=Mock(side_effect=ValueError('transient decode fault')))[0]
+    poison = results_for(decode=Mock(side_effect=ValueError('transient decode fault')))[0]
+    assert isinstance(poison, ValidationFailureWork) and not hasattr(poison, 'worker_failure')
+    retryable = results_for(decode=Mock(side_effect=RuntimeError('transient decode fault')))[0]
     assert isinstance(retryable, FailedWork) and retryable.worker_failure is not None
 
 

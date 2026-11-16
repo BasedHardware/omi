@@ -98,10 +98,19 @@ def test_admitted_source_refusal_cannot_fire_the_handoff_line(monkeypatch, caplo
     assert isinstance(results[0], FailedWork)
 
 
-def test_unclassified_decode_fault_cannot_fire_the_handoff_line(monkeypatch, caplog):
-    """A raw decode ValueError keeps the fault channel under the disposition switch."""
+def test_poison_decode_valueerror_fires_the_handoff_line(monkeypatch, caplog):
+    """The bare fetch_decode ValueError is the poison family: it fires the handoff line."""
     results, handoff, fault, ladder, guard, failures = _run(
         monkeypatch, caplog, decode=_raising(ValueError("synthetic"))
+    )
+    assert len(handoff) == 1 and not fault
+    assert "reason=decode_payload_invalid" in handoff[0]
+
+
+def test_genuinely_untyped_decode_fault_cannot_fire_the_handoff_line(monkeypatch, caplog):
+    """A fault outside every typed family keeps the fault channel."""
+    results, handoff, fault, ladder, guard, failures = _run(
+        monkeypatch, caplog, decode=_raising(RuntimeError("synthetic"))
     )
     assert not handoff and len(fault) == 1
 

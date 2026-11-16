@@ -1072,6 +1072,13 @@ def raw_decode(message='invalid batch artifact envelope'):
     return decode
 
 
+def raw_runtime(message='transient decode fault'):
+    def decode(work):
+        raise RuntimeError(message)
+
+    return decode
+
+
 def terminal(monkeypatch, decode, safety_net='true', disposition='true'):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', safety_net)
     monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', disposition)
@@ -1265,24 +1272,43 @@ def test_typed_failure_after_a_silence_unit(monkeypatch):
     assert len(results) == 2
 
 
-def test_plain_value_error_takes_the_safety_lane(monkeypatch):
+def test_poison_value_error_takes_the_typed_custody(monkeypatch):
+    # The bare fetch_decode ValueError is the poison family: it ends the
+    # chain with the typed terminal instead of the ladder's safety lane.
     worker, words, saved, _ = terminal(monkeypatch, raw_decode(), safety_net='true')
+    results = worker.process_batch([item()])
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
+    assert not words.calls and not saved
+
+
+def test_genuinely_untyped_fault_takes_the_safety_lane(monkeypatch):
+    # A fault outside every typed family (a RuntimeError) keeps the ladder's
+    # safety lane; the bare ValueError class joined the poison arm.
+    worker, words, saved, _ = terminal(monkeypatch, raw_runtime(), safety_net='true')
     results = worker.process_batch([item()])
     assert results == [FailedWork('a', None, None, worker_failure={'stage': 'fetch_decode', 'reason': 'unknown'})]
     assert not words.calls and not saved
 
 
-def test_plain_value_error_yields_no_work_without_the_safety_net(monkeypatch):
-    worker, words, saved, _ = terminal(monkeypatch, raw_decode(), safety_net='false')
+def test_genuinely_untyped_fault_yields_no_work_without_the_safety_net(monkeypatch):
+    worker, words, saved, _ = terminal(monkeypatch, raw_runtime(), safety_net='false')
     assert worker.process_batch([item()]) == []
     assert not words.calls and not saved
 
 
-def test_plain_value_error_still_rides_the_ladder_economics(monkeypatch):
-    """The unclassified fault keeps today's transient disposition: the burn this fixes."""
+def test_poison_value_error_terminalizes_without_the_safety_net(monkeypatch):
+    # The poison custody is unconditional on the pinned bytes: the safety
+    # net gate never decides it.
+    worker, words, saved, _ = terminal(monkeypatch, raw_decode(), safety_net='false')
+    assert worker.process_batch([item()]) == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
+    assert not words.calls and not saved
+
+
+def test_poison_value_error_skips_the_ladder_economics(monkeypatch):
+    """The typed poison ends the chain at attempt one — the burn this fixes."""
     worker, *_ = terminal(monkeypatch, raw_decode(), safety_net='true')
     result = worker.process_batch([item()])[0]
-    assert isinstance(result, FailedWork)
+    assert isinstance(result, ValidationFailureWork)
 
 
 def test_typed_failure_ends_the_chain_without_the_safety_net(monkeypatch):

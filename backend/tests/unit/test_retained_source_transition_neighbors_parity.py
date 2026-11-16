@@ -331,7 +331,10 @@ def test_the_token_count_grew_by_exactly_two():
     # 13 historical tokens (including the evidence-only unknown) plus
     # outside_admitted_source and persist_payload_invalid: the vocabulary
     # grew by exactly two named members.
-    assert len(WORKER_VALIDATION_REASON_TOKENS) == 15
+    # The token vocabulary rides the enum's own growth: 16 members now —
+    # decode_payload_invalid joined for the fetch_decode bare-ValueError
+    # poison's typed custody handoff.
+    assert len(WORKER_VALIDATION_REASON_TOKENS) == 16
 
 
 # --- Docs deep parity ----------------------------------------------------------------------

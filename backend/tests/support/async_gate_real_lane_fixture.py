@@ -87,6 +87,27 @@ def ABLATED_effect_summary(rel: str, name: str):
     return _file_effect_summaries("ABLATED", rel).get(name, ())
 
 
+def _prewarm_effect_summaries():
+    """Fill the per-file effect caches at import time.
+
+    Each cache's first reader otherwise pays the file's AST parse and
+    helper-effect analysis (hundreds of milliseconds on the larger lane
+    modules), and under a loaded file-isolated lane that cold start crosses
+    the per-test CPU budget and fails the file's first cell on that file.
+    Import time is outside the per-test accounting, so warming here costs
+    nothing and every cell stays a cache lookup.
+    """
+
+    rels = [str(path.relative_to(BACKEND_DIR)) for path in sorted(LANE_DIR.glob("*.py"))]
+    rels.append(str(RETRY_FILE.relative_to(BACKEND_DIR)))
+    for rel in rels:
+        _file_effect_summaries("FIXED", rel)
+        _file_effect_summaries("ABLATED", rel)
+
+
+_prewarm_effect_summaries()
+
+
 def finding_for(results, file_suffix: str, function: str):
     for finding in results["async_helpers_with_blocking"]:
         if finding["file"].endswith(file_suffix) and finding["function"] == function:

@@ -140,6 +140,10 @@ def test_hop_the_token_rides_the_reason_vocabulary_growth():
     current = {reason.value for reason in WorkerValidationReason}
     # outside_admitted_source joined for the retained-source contract;
     # persist_payload_invalid joined for the deterministic persist
-    # refusal's typed custody handoff.
-    assert current - legacy == {TOKEN, 'persist_payload_invalid'}
+    # refusal's typed custody handoff; decode_payload_invalid joined for
+    # the fetch_decode bare-ValueError poison's typed custody handoff.
+    # The delta grows WITH the closed vocabulary in the same diff: a new
+    # custody token always lands together with the family rule that
+    # admits it.
+    assert current - legacy == {TOKEN, 'persist_payload_invalid', 'decode_payload_invalid'}
     assert legacy - current == set()

@@ -99,8 +99,10 @@ def test_matrix_reasons_cover_the_named_token():
     assert 'outside_admitted_source' in _matrix_reasons()
 
 
-def test_matrix_covers_fourteen_distinct_reasons_plus_unknown():
-    assert len(_matrix_reasons()) == 15
+def test_matrix_covers_fifteen_distinct_reasons_plus_unknown():
+    # decode_payload_invalid joined for the fetch_decode bare-ValueError
+    # poison's typed custody handoff; the matrix grows with the vocabulary.
+    assert len(_matrix_reasons()) == 16
 
 
 def test_the_unknown_reason_stays_evidence_only_in_the_matrix():

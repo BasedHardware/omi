@@ -15,7 +15,7 @@ import pytest
 from config.batch_pipeline import worker_io_concurrency
 from diarizer import batch_pipeline
 from diarizer.batch_pipeline import PipelineWorker
-from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult, FailedWork
+from utils.batch_pipeline.contracts import Priority, WorkItem, WorkResult, FailedWork, ValidationFailureWork
 from utils.batch_pipeline.errors import FatalGpuError
 
 
@@ -218,9 +218,18 @@ def test_fetch_and_persist_failures_stay_per_item_and_in_order(monkeypatch):
     worker = model.worker(3, decode=decode, persist=persist, on_failure=lambda i, e: failures.append(i.segment_id))
     results = worker.process_batch(flight())
     assert [r.segment_id for r in results if isinstance(r, WorkResult)] == ['s0', 's2', 's3', 's5', 's6']
+    # The fetch_decode bare-ValueError poison ends its unit's chain as the
+    # typed custody handoff instead of a ladder fault: no retry can repair
+    # the same pinned bytes raising the same ValueError. The persist stage's
+    # ValueError keeps the ladder's FailedWork custody — the poison arm is
+    # fetch_decode-scoped and never claims another stage's fault.
+    disposed = {r.segment_id: r for r in results if isinstance(r, ValidationFailureWork)}
     failed = {r.segment_id: r for r in results if isinstance(r, FailedWork)}
-    assert set(failed) == {'s1', 's4'}
-    assert failed['s1'].measured_held_vad_speech_seconds is None  # fetch never reached VAD
+    assert set(disposed) == {'s1'}
+    assert disposed['s1'].stage == 'fetch_decode'
+    assert disposed['s1'].reason == 'decode_payload_invalid'
+    assert disposed['s1'].measured_held_vad_speech_seconds is None  # fetch never reached VAD
+    assert set(failed) == {'s4'}
     assert failed['s4'].measured_held_vad_speech_seconds == flight()[4].duration_seconds
     assert failed['s4'].worker_vad_receipt['captured_samples'] == round(flight()[4].duration_seconds * 16000)
     assert sorted(failures) == ['s1', 's4']

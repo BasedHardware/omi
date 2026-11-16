@@ -13,6 +13,7 @@ reaches the evidence or the logs.
 Failure-Class: FC-batch-transient-worker-failure-quarantines-blind-without-stage-or-reason-evidence
 """
 
+import logging
 import struct
 import wave
 from unittest.mock import Mock
@@ -277,22 +278,29 @@ def test_fatal_cuda_error_leaves_no_evidence_payload():
     assert worker._unavailable is True
 
 
-def test_worker_failed_log_keeps_its_shape_and_stays_message_free(monkeypatch, caplog):
+def test_fetch_decode_valueerror_poison_log_keeps_its_shape_and_stays_message_free(monkeypatch, caplog):
     marker = 'synthetic-private-content-must-not-be-logged'
     worker, *_ = setup_worker(decode=Mock(side_effect=ValueError(marker)))
     with caplog.at_level(0):
-        result = _first_failed_work(worker.process_batch([item()]))
-    records = [record for record in caplog.records if 'event=batch_worker_failed' in record.getMessage()]
+        result = worker.process_batch([item()])[0]
+    # The bare fetch_decode ValueError is the poison arm's custody: the
+    # typed terminal replaces the ladder fault, the report keeps the fault
+    # line's diagnostic shape (class, stage, segment, reason, shape counts)
+    # and still never carries the exception message.
+    assert isinstance(result, ValidationFailureWork)
+    assert result.reason == 'decode_payload_invalid'
+    records = [record for record in caplog.records if 'event=batch_validation_disposition' in record.getMessage()]
     assert len(records) == 1
+    assert records[0].levelno == logging.INFO
     assert (
         records[0]
         .getMessage()
         .startswith(
-            'event=batch_worker_failed error_class=ValueError stage=fetch_decode segment_id=a reason=unclassified '
+            'event=batch_validation_disposition outcome=recovery_handoff error_class=ValueError stage=fetch_decode segment_id=a reason=decode_payload_invalid '
         )
     )
+    assert 'event=batch_worker_failed' not in caplog.text
     assert marker not in caplog.text
-    assert result.worker_failure == {'stage': 'fetch_decode', 'reason': 'unknown'}
 
 
 def test_closed_reason_log_keeps_its_shape(monkeypatch, caplog):

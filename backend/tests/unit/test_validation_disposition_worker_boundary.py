@@ -337,12 +337,23 @@ def test_outside_admitted_source_keeps_error_under_switch_off(monkeypatch, caplo
     assert not disposition and len(fault) == 1
 
 
-def test_raw_decode_valueerror_keeps_the_fault_channel(monkeypatch, caplog):
+def test_raw_decode_valueerror_joins_the_poison_handoff(monkeypatch, caplog):
     worker, results, failures = _run(monkeypatch, caplog, decode=_raise(ValueError("private")))
+    disposition, fault, ladder, guard, shadow_line = _split(caplog)
+    assert len(disposition) == 1 and not fault
+    assert disposition[0].levelno == logging.INFO
+    assert (
+        "error_class=ValueError stage=fetch_decode segment_id=a reason=decode_payload_invalid"
+        in disposition[0].getMessage()
+    )
+
+
+def test_genuinely_untyped_decode_fault_keeps_the_fault_channel(monkeypatch, caplog):
+    worker, results, failures = _run(monkeypatch, caplog, decode=_raise(RuntimeError("private")))
     disposition, fault, ladder, guard, shadow_line = _split(caplog)
     assert not disposition and len(fault) == 1
     assert fault[0].levelno == logging.ERROR
-    assert "error_class=ValueError stage=fetch_decode segment_id=a reason=unclassified" in fault[0].getMessage()
+    assert "error_class=RuntimeError stage=fetch_decode segment_id=a reason=unclassified" in fault[0].getMessage()
 
 
 def test_raw_decode_valueerror_message_never_reaches_the_log(monkeypatch, caplog):

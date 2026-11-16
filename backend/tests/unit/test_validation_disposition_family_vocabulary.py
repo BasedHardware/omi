@@ -21,6 +21,7 @@ import utils.batch_pipeline.scheduler as scheduler_module
 import utils.batch_pipeline.source_audio as source_module
 import utils.batch_pipeline.word_validation as word_validation_module
 from config.batch_pipeline import worker_validation_disposition_enabled
+from utils.observability.reasons import WorkerValidationReason
 from utils.batch_pipeline.errors import (
     VALIDATION_DISPOSITION_FLAGGED_REASONS,
     VALIDATION_DISPOSITION_REASONS,
@@ -103,6 +104,17 @@ def test_family_retained_audio_invalid_is_in_the_disposition_family():
 def test_family_decoded_duration_mismatch_is_in_the_disposition_family():
     """decoded_duration_mismatch belongs to VALIDATION_DISPOSITION_REASONS."""
     assert "decoded_duration_mismatch" in VALIDATION_DISPOSITION_REASONS
+
+
+def test_family_decode_payload_invalid_is_a_closed_worker_validation_token():
+    """The poison token joins the closed worker validation vocabulary."""
+    assert WorkerValidationReason.DECODE_PAYLOAD_INVALID.value == "decode_payload_invalid"
+    assert "decode_payload_invalid" in WORKER_VALIDATION_REASONS
+
+
+def test_family_decode_payload_invalid_is_in_the_disposition_family():
+    """decode_payload_invalid belongs to VALIDATION_DISPOSITION_REASONS."""
+    assert "decode_payload_invalid" in VALIDATION_DISPOSITION_REASONS
 
 
 def test_family_word_shape_is_in_the_disposition_family():

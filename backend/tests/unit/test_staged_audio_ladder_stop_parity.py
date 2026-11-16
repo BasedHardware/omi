@@ -154,10 +154,12 @@ async def test_typed_quarantine_does_not_emit_the_blind_signature(caplog):
 
 
 @pytest.mark.asyncio
-async def test_untyped_decode_fault_is_deferred_not_quarantined():
+async def test_genuinely_untyped_decode_fault_is_deferred_not_quarantined():
+    # A fault outside every typed family (a RuntimeError) keeps the ladder;
+    # the bare ValueError class joined the poison arm and is pinned below.
     store = MemoryStore()
     queue, lease = enqueue_and_lease(store)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('different decode failure')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('different decode failure')))
     results = worker.process_batch([lease.item])
     assert len(results) == 1 and isinstance(results[0], FailedWork)
     assert await run_publish(queue, worker, lease, results[0])
@@ -167,6 +169,20 @@ async def test_untyped_decode_fault_is_deferred_not_quarantined():
     due = job['available_at']
     assert queue.recover(due) == 1
     assert queue.pull(due) != []
+
+
+@pytest.mark.asyncio
+async def test_poison_decode_fault_quarantines_on_attempt_one_with_the_typed_diagnosis():
+    store = MemoryStore()
+    queue, lease = enqueue_and_lease(store)
+    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('different decode failure')))
+    results = worker.process_batch([lease.item])
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
+    assert await run_publish(queue, worker, lease, results[0])
+    job = store.rows['jobs', lease.item.segment_id]
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'decode_payload_invalid'}
+    assert queue.pull(NOW + 60000) == []
 
 
 @pytest.mark.asyncio
@@ -185,7 +201,7 @@ async def test_ladder_escalates_untyped_faults_to_the_attempt_ceiling_then_quara
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     segment = 'a'
     at = NOW
     for attempt in range(1, 5):
@@ -213,7 +229,7 @@ async def test_ladder_escalation_evidence_keeps_the_last_diagnosis():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     at = NOW
     for attempt in range(1, 6):
         assert queue.recover(at) >= 0
@@ -283,7 +299,7 @@ async def test_untyped_ladder_attempts_emit_retry_not_quarantine_metrics():
     metrics = Mock()
     queue.metrics = metrics
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     lease = queue.pull(NOW)[0]
     results = worker.process_batch([lease.item])
     await run_publish(queue, worker, lease, results[0])
@@ -357,7 +373,7 @@ async def test_deferred_untyped_attempt_records_retry_correctness(monkeypatch):
     monkeypatch.setattr(scheduler_module, 'record_correctness', lambda event, **kwargs: seen.append(event))
     store = MemoryStore()
     queue, lease = enqueue_and_lease(store)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     results = worker.process_batch([lease.item])
     await run_publish(queue, worker, lease, results[0])
     assert 'failed' not in seen
@@ -465,7 +481,7 @@ async def test_blind_quarantine_log_still_says_unknown_unclassified(caplog):
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     with caplog.at_level(logging.DEBUG, logger='utils.batch_pipeline.scheduler'):
         await escalate_to_quarantine(queue, store, worker)
     # The ladder's carried diagnosis names the stage with the closed
@@ -497,7 +513,7 @@ async def test_typed_fault_terminalizes_a_pre_attempted_job():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     at = NOW
     for _ in range(2):
         assert queue.recover(at) >= 0
@@ -717,7 +733,7 @@ async def test_deferred_untyped_attempt_logs_the_retry_event(caplog):
 
     store = MemoryStore()
     queue, lease = enqueue_and_lease(store)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     results = worker.process_batch([lease.item])
     with caplog.at_level(logging.DEBUG, logger='utils.batch_pipeline.scheduler'):
         await run_publish(queue, worker, lease, results[0])
@@ -741,7 +757,7 @@ async def test_duration_family_pre_attempted_job_terminalizes():
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item(), NOW)
-    worker, *_ = setup_worker(decode=Mock(side_effect=ValueError('transient decode fault')))
+    worker, *_ = setup_worker(decode=Mock(side_effect=RuntimeError('transient decode fault')))
     at = NOW
     for _ in range(2):
         assert queue.recover(at) >= 0

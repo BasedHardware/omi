@@ -303,9 +303,11 @@ def test_named_fault_evidence_pair_has_exactly_two_keys():
 
 
 def test_genuinely_untyped_faults_stay_anonymous():
-    # A bare ValueError that is NOT the named class keeps the historical
-    # unknown evidence shape — the taxonomy widens, it does not mislabel.
-    worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(ValueError('mystery')))
+    # A fault genuinely outside every typed family — a RuntimeError at
+    # decode — keeps the historical unknown evidence shape; the taxonomy
+    # widens, it does not mislabel. The bare ValueError class joined the
+    # poison arm (decode_payload_invalid) and is pinned in the poison grids.
+    worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(RuntimeError('mystery')))
     results = worker.process_batch([item()])
     assert results[0].worker_failure == {'stage': 'fetch_decode', 'reason': 'unknown'}
 

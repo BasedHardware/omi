@@ -234,7 +234,6 @@ async def test_invalid_staged_audio_quarantines_first_attempt(monkeypatch, caplo
 @pytest.mark.parametrize(
     'stage,error',
     [
-        ('fetch_decode', ValueError('different decode failure')),
         ('fetch_decode', wave.Error('truncated staged WAV')),
         ('fetch_decode', RuntimeError('truncated staged WAV')),
         ('persist', ValueError('truncated staged WAV')),
@@ -265,6 +264,44 @@ async def test_other_worker_errors_still_retry(monkeypatch, stage, error):
     assert 'worker_failure' not in job
     queue.recover(job['available_at'])
     assert queue.pull(job['available_at'])[0].item.segment_id == 'a'
+    # The bare ValueError at fetch_decode left this ladder: the poison arm
+    # (decode_payload_invalid) owns that class now and is pinned below. A
+    # wave.Error or RuntimeError at the same stage keeps the ladder custody
+    # because the poison verdict reads the exception type only.
+
+
+@pytest.mark.asyncio
+async def test_fetch_decode_valueerror_poison_ends_the_chain_with_typed_custody(monkeypatch, caplog):
+    monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
+    broken = Mock(side_effect=ValueError('different decode failure'))
+    worker, words, saved, _, diarized, _ = setup_worker(decode=broken)
+    caplog.set_level(logging.INFO)
+    results = worker.process_batch([item()])
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
+    # The typed poison custody reports the disposition handoff at INFO — the
+    # sensor's bare ``batch_worker_failed error_class=ValueError
+    # stage=fetch_decode`` ERROR cohort is gone, and the exception message
+    # never reaches the report.
+    assert 'event=batch_validation_disposition outcome=recovery_handoff' in caplog.text
+    assert 'reason=decode_payload_invalid samples=-1' in caplog.text
+    assert 'event=batch_worker_failed' not in caplog.text
+    assert 'reason=unclassified' not in caplog.text
+    assert 'different decode failure' not in caplog.text
+    assert not words.calls and not saved and not diarized
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item(), time.time())
+    lease = queue.pull(time.time())[0]
+    fail = Mock(wraps=queue.fail)
+    monkeypatch.setattr(queue, 'fail', fail)
+    assert await Pump(queue, worker)._publish(lease, {'a': results[0]}, set())
+    assert fail.call_args.kwargs['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'decode_payload_invalid'}
+    assert 'quarantine' not in fail.call_args.kwargs
+    job = store.rows['jobs', 'a']
+    assert job['state'] == 'quarantined' and job['attempt'] == 1
+    assert job['worker_failure'] == {'stage': 'fetch_decode', 'reason': 'decode_payload_invalid'}
+    assert job['recovery_state'] == 'held' and not job['merge_pending']
+    assert queue.pull(time.time() + 600) == []
 
 
 @pytest.mark.parametrize(
@@ -299,33 +336,39 @@ def test_item_failures_log_class_and_stage_without_callback_or_private_content(s
     worker, *_ = setup_worker(**settings)
     caplog.set_level(logging.INFO)
     results = worker.process_batch([item(duration=60)])
-    expected_reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage)
+    expected_reason = {
+        'word_clocks': 'word_clock',
+        'assemble_words': 'empty_asr',
+        'fetch_decode': 'decode_payload_invalid',
+    }.get(stage)
     assert results == ([ValidationFailureWork('a', stage, expected_reason)] if expected_reason else [])
     events = (
         'event=batch_empty_ladder'
         if stage == 'assemble_words'
-        else ('event=batch_validation_disposition' if stage == 'word_clocks' else 'event=batch_worker_failed')
+        else (
+            'event=batch_validation_disposition'
+            if stage in {'word_clocks', 'fetch_decode'}
+            else 'event=batch_worker_failed'
+        )
     )
     records = [record for record in caplog.records if events in record.getMessage()]
     assert len(records) == worker.counts['failed'] == 1
-    reason = {'word_clocks': 'word_clock', 'assemble_words': 'empty_asr'}.get(stage, 'unclassified')
-    error_class = 'ValueError' if reason == 'unclassified' else 'BatchValidationError'
-    if stage == 'assemble_words':
+    reason = {
+        'word_clocks': 'word_clock',
+        'assemble_words': 'empty_asr',
+        'fetch_decode': 'decode_payload_invalid',
+    }.get(stage, 'unclassified')
+    error_class = 'BatchValidationError' if stage in {'word_clocks', 'assemble_words'} else 'ValueError'
+    if stage in {'assemble_words', 'word_clocks', 'fetch_decode'}:
+        # The designed custody handoffs (empty ladder, word validation,
+        # fetch_decode poison) all report the transition at INFO; the poison
+        # arm keeps the ValueError class name the fault channel carried.
         assert records[0].levelno == logging.INFO
         assert (
             records[0]
             .getMessage()
             .startswith(
-                f'event=batch_empty_ladder outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
-            )
-        )
-    elif stage == 'word_clocks':
-        assert records[0].levelno == logging.INFO
-        assert (
-            records[0]
-            .getMessage()
-            .startswith(
-                f'event=batch_validation_disposition outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
+                f'{events} outcome=recovery_handoff error_class={error_class} stage={stage} segment_id=a reason={reason} '
             )
         )
     else:
@@ -355,11 +398,20 @@ def test_raising_failure_logger_cannot_drop_healthy_sibling(monkeypatch, capsys)
         active_exceptions.append(sys.exc_info()[0])
         raise RuntimeError('synthetic-logger-error')
 
-    monkeypatch.setattr(batch_pipeline.logger, 'error', broken_logger)
+    # The fetch_decode bare-ValueError poison reports the typed custody
+    # handoff at INFO, so the poison unit's own report rides logger.info —
+    # an observability failure in that channel must still never discard the
+    # healthy sibling.
+    monkeypatch.setattr(batch_pipeline.logger, 'info', broken_logger)
     worker, *_ = setup_worker(decode=decode, on_failure=None)
-    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    results = worker.process_batch([item('bad'), item('good')])
+    # The poison unit keeps its typed custody result while its own report
+    # channel is broken; the healthy sibling still completes and persists.
+    assert [result.segment_id for result in results] == ['bad', 'good']
     assert worker.counts['failed'] == 1
-    assert active_exceptions == [None]
+    # Every ride through the broken channel ran outside any except context:
+    # the observability failure never leaks an exception into the report.
+    assert active_exceptions and all(value is None for value in active_exceptions)
     captured = capsys.readouterr()
     assert private_marker not in captured.out + captured.err
 
@@ -383,12 +435,17 @@ def test_raising_handler_stream_cannot_leak_worker_error_or_drop_sibling(monkeyp
             pass
 
     stream = BrokenStream()
-    isolated_logger = logging.Logger('batch_worker_broken_stream', logging.ERROR)
+    isolated_logger = logging.Logger('batch_worker_broken_stream', logging.INFO)
     isolated_logger.addHandler(logging.StreamHandler(stream))
     monkeypatch.setattr(batch_pipeline, 'logger', isolated_logger)
     monkeypatch.setattr(logging, 'raiseExceptions', True)
     worker, *_ = setup_worker(decode=decode, on_failure=None)
-    assert [result.segment_id for result in worker.process_batch([item('bad'), item('good')])] == ['good']
+    results = worker.process_batch([item('bad'), item('good')])
+    # The poison unit's own report (the typed custody handoff at INFO) is the
+    # write that hits the broken stream; a stream failure inside it still
+    # leaks neither the worker error nor drops the healthy sibling, and the
+    # poison unit keeps its typed custody result.
+    assert [result.segment_id for result in results] == ['bad', 'good']
     assert worker.counts['failed'] == stream.writes == 1
     captured = capsys.readouterr()
     assert 'OSError: synthetic-handler-stream-error' in captured.err

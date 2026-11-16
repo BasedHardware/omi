@@ -639,16 +639,20 @@ def test_generic_ValueError_at_vad_stays_error(monkeypatch, caplog):
     assert 'error_class=ValueError' in fault[0].getMessage()
 
 
-def test_generic_ValueError_at_decode_stays_error(monkeypatch, caplog):
-    """A generic ValueError at decode keeps the fault channel."""
+def test_generic_ValueError_at_decode_joins_the_disposition_channel(monkeypatch, caplog):
+    """A generic ValueError at decode rides the poison custody handoff, not the fault channel."""
     caplog.set_level(logging.INFO)
 
     def decode(arg):
         raise ValueError("x")
 
     worker, results, words, saved, guard, fault = _run(monkeypatch, caplog, decode=decode)
-    assert not guard and len(fault) == 1
-    assert 'error_class=ValueError' in fault[0].getMessage()
+    assert not guard and not fault
+    disposition = [r for r in caplog.records if 'event=batch_validation_disposition' in r.getMessage()]
+    assert len(disposition) == 1
+    assert disposition[0].levelno == logging.INFO
+    assert 'error_class=ValueError' in disposition[0].getMessage()
+    assert 'reason=decode_payload_invalid' in disposition[0].getMessage()
 
 
 def test_generic_RuntimeError_at_vad_stays_error(monkeypatch, caplog):

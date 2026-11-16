@@ -1138,9 +1138,9 @@ def test_boundary_plain_value_error_decode_safety_true_disposition_true(monkeypa
 
     worker, words, saved, *_ = setup_worker(decode=raise_fault)
     results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
-    assert results[0].segment_id == 'a'
-    assert results[0].worker_failure == {'stage': 'fetch_decode', 'reason': 'unknown'}
+    # The poison custody is unconditional on the pinned bytes: neither the
+    # safety net nor the disposition switch decides it.
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_boundary_plain_value_error_decode_safety_true_disposition_false(monkeypatch):
@@ -1152,9 +1152,7 @@ def test_boundary_plain_value_error_decode_safety_true_disposition_false(monkeyp
 
     worker, words, saved, *_ = setup_worker(decode=raise_fault)
     results = worker.process_batch([item()])
-    assert len(results) == 1 and isinstance(results[0], FailedWork)
-    assert results[0].segment_id == 'a'
-    assert results[0].worker_failure == {'stage': 'fetch_decode', 'reason': 'unknown'}
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_boundary_plain_value_error_decode_safety_false_disposition_true(monkeypatch):
@@ -1166,7 +1164,7 @@ def test_boundary_plain_value_error_decode_safety_false_disposition_true(monkeyp
 
     worker, words, saved, *_ = setup_worker(decode=raise_fault)
     results = worker.process_batch([item()])
-    assert results == []
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_boundary_plain_value_error_decode_safety_false_disposition_false(monkeypatch):
@@ -1178,7 +1176,7 @@ def test_boundary_plain_value_error_decode_safety_false_disposition_false(monkey
 
     worker, words, saved, *_ = setup_worker(decode=raise_fault)
     results = worker.process_batch([item()])
-    assert results == []
+    assert results == [ValidationFailureWork('a', 'fetch_decode', 'decode_payload_invalid')]
 
 
 def test_boundary_plain_value_error_vad_safety_true_disposition_true(monkeypatch):
@@ -1889,11 +1887,15 @@ def test_log_channel_plain_value_error_decode(monkeypatch, caplog):
 
     worker, words, saved, *_ = setup_worker(decode=raise_fault)
     worker.process_batch([item()])
-    assert 'event=batch_worker_failed' in caplog.text
-    assert 'event=batch_validation_disposition' not in caplog.text
+    # The poison custody demotes the ERROR fault channel: the transition
+    # line keeps the ValueError class and the typed token, never the
+    # anonymous unclassified reason.
+    assert 'event=batch_worker_failed' not in caplog.text
+    assert 'event=batch_validation_disposition' in caplog.text
     assert 'error_class=ValueError' in caplog.text
     assert 'stage=fetch_decode' in caplog.text
-    assert 'reason=unclassified' in caplog.text
+    assert 'reason=decode_payload_invalid' in caplog.text
+    assert 'reason=unclassified' not in caplog.text
 
 
 def test_log_channel_plain_value_error_vad(monkeypatch, caplog):
@@ -2365,7 +2367,10 @@ def test_fault_line_site_field_is_static_source_location(monkeypatch, caplog):
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_SAFETY_NET_ENABLED', 'true')
     caplog.set_level(logging.INFO)
 
-    worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(ValueError('different decode failure')))
+    # A genuinely untyped fault (a RuntimeError is outside the poison arm's
+    # ValueError class) keeps the ERROR fault line, whose site field is the
+    # static source location — never the exception message.
+    worker, *_ = setup_worker(decode=lambda work: (_ for _ in ()).throw(RuntimeError('different decode failure')))
     worker.process_batch([item()])
     match = re.search(r'site=[A-Za-z0-9_.]+\.py:\d+', caplog.text)
     assert match, caplog.text

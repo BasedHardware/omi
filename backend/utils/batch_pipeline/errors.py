@@ -129,12 +129,18 @@ def empty_ladder_recovery_failure(failure: object) -> bool:
 # at the worker boundary: the typed staged/retained/decoded-extent trio fails
 # identically on the pinned bytes on every attempt and ends the chain
 # unconditionally, and under the worker-validation disposition switch every
-# closed vad/word validation verdict ends it the same way. Each hands the
-# unit to the fenced independent-recognizer recovery lane with its measured
-# VAD evidence and receipt intact. Nothing about the unit is faulted and no
-# GPU retry can change the verdict, so booking each disposition on the ERROR
-# fault channels misbooks a designed platform outcome as a production error:
-# the vad_windows vad_bounds family and the word_clocks word_* family are top
+# closed vad/word validation verdict ends it the same way. The fetch_decode
+# bare-ValueError poison joins the unconditional arm beside the trio: the
+# payload or admitted metadata itself cannot be parsed or decoded, identical
+# input reproduces the fault on every attempt, and the worker ends the chain
+# at its first occurrence with custody retained for the fenced recovery lane
+# (see ``diarizer.batch_pipeline.decode_payload_is_deterministic``). Each
+# hands the unit to the fenced independent-recognizer recovery lane with its
+# measured VAD evidence and receipt intact. Nothing about the unit is faulted
+# and no GPU retry can change the verdict, so booking each disposition on the
+# ERROR fault channels misbooks a designed platform outcome as a production
+# error: the vad_windows vad_bounds family, the word_clocks word_* family and
+# the bare ``error_class=ValueError stage=fetch_decode`` cohort are top
 # sensor signatures purely because the disposition handoff reuses the ERROR
 # worker-fault lines (the worker's ``batch_worker_failed
 # error_class=BatchValidationError stage=word_clocks`` and the scheduler's
@@ -146,7 +152,9 @@ def empty_ladder_recovery_failure(failure: object) -> bool:
 # same ``worker_validation_disposition_enabled`` switch that decided the
 # durable disposition is on — a ladder still walking its retries keeps its
 # fault lines — while the fetch_decode trio's chain end is unconditional on
-# pinned bytes, so its demotion is too. The deliberately-retryable
+# pinned bytes, so its demotion is too — and the poison arm's chain end is
+# equally unconditional, because the bare ValueError is the pinned bytes'
+# own parse failure. The deliberately-retryable
 # ``outside_admitted_source`` and every unclassified fault keep their ERROR
 # lines. The demotion rechannels the report only: durable state, evidence,
 # metrics, custody and the awaiting-fenced-recovery warning are unchanged.
@@ -158,6 +166,7 @@ VALIDATION_DISPOSITION_UNCONDITIONAL_REASONS = frozenset(
         WorkerValidationReason.STAGED_AUDIO_INVALID.value,
         WorkerValidationReason.RETAINED_AUDIO_INVALID.value,
         WorkerValidationReason.DECODED_DURATION_MISMATCH.value,
+        WorkerValidationReason.DECODE_PAYLOAD_INVALID.value,
     }
 )
 # The persist tail's deterministic refusal is the persist sibling of the
@@ -192,9 +201,10 @@ def validation_disposition_failure(failure: object, *, disposition_enabled: bool
 
     Accepts exactly the closed shapes the scheduler stores on a job: the
     two-key ``{'stage', 'reason'}`` dicts the store validators admit. The
-    unconditional trio answers only at the fetch_decode stage the typed
-    classes raise nowhere else; the persist refusal answers only at the
-    persist stage its API raises at; the flagged verdicts answer at any
+    unconditional fetch_decode family — the typed trio and the bare
+    ValueError poison — answers only at the stage its classes raise; the
+    persist refusal answers only at the persist stage its API raises at; the
+    flagged verdicts answer at any
     closed worker stage, mirroring the boundary's stage-agnostic flag-gated
     arm, and only while ``disposition_enabled`` carries the same switch the
     durable path read. Anything anonymous (empty diagnosis, extra fields,

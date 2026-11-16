@@ -341,6 +341,68 @@ def persist_loss_is_deterministic(error: BaseException) -> bool:
     return not persist_loss_is_contention(error)
 
 
+_DECODE_PAYLOAD_TYPED_FAMILY = (
+    StagedAudioInvalid,
+    StagedArtifactInvalid,
+    RetainedAudioInvalid,
+    RetainedAudioOutsideAdmittedSource,
+    DecodedDurationMismatch,
+    BatchValidationError,
+)
+
+
+def decode_payload_is_deterministic(error: BaseException) -> bool:
+    """True for a bare ``ValueError`` poison the fetch_decode retry cannot heal.
+
+    The fetch/decode arm raises a bare builtin ``ValueError`` when the unit's
+    own stored payload or admitted metadata cannot be parsed or decoded: a
+    NaN admitted duration ``round()`` refuses inside the retained manifest
+    builder, a storage client refusing a malformed request argument, a text
+    decode surfacing ``UnicodeDecodeError``. Identical input reproduces the
+    fault on every attempt — the same pinned bytes and the same request — so
+    the bounded GPU ladder cannot heal it and each walked attempt books one
+    more anonymous ``batch_worker_failed error_class=ValueError
+    stage=fetch_decode`` ERROR line before the anonymous terminal quarantine.
+
+    The typed decode family keeps its own tokens and its own custody:
+    ``StagedAudioInvalid`` / ``StagedArtifactInvalid`` /
+    ``RetainedAudioInvalid`` (whose ``InvalidRetainedManifest`` subclass
+    rides the same verdict) / ``RetainedAudioOutsideAdmittedSource`` /
+    ``DecodedDurationMismatch`` / ``BatchValidationError`` all answer False
+    here — the boundary's typed arms claim them before this verdict is
+    consulted, and rebooking a typed class under this token would erase its
+    evidence. The verdict reads the exception type only — never an exception
+    message — so the split cannot drift with payload wording, mirroring the
+    persist tail's deterministic refusal verdict. Everything else — the
+    transport families, contention, the vad/word validation verdicts at
+    their own stages — answers False and keeps its existing attribution and
+    custody unchanged.
+
+    Failure-Class: FC-fetch-decode-valueerror-poison-walks-gpu-ladder-as-anonymous-per-attempt
+    """
+    if not isinstance(error, ValueError):
+        return False
+    return not isinstance(error, _DECODE_PAYLOAD_TYPED_FAMILY)
+
+
+def decode_payload_failure_reason(error: BaseException, stage: str, untyped_reason: str) -> str | None:
+    """The typed poison token for a fetch_decode ValueError, else None.
+
+    The worker's ``fail()`` boundary consults this after its typed decode
+    arms have claimed their classes: only a fault still carrying the
+    anonymous ``unclassified`` attribution at the ``fetch_decode`` stage can
+    join the poison arm, so the typed classes, the persist tail's verdict and
+    every other stage's attribution are untouched. Stage-scoped like the
+    typed trio: the same exception class raised by a provider call at a later
+    stage is that stage's fault, not a fetch read loss.
+    """
+    if stage != WorkerValidationStage.FETCH_DECODE.value or untyped_reason != 'unclassified':
+        return None
+    if not decode_payload_is_deterministic(error):
+        return None
+    return WorkerValidationReason.DECODE_PAYLOAD_INVALID.value
+
+
 def transient_failure_evidence(stage: str, reason: str) -> dict | None:
     """Close a transient failure into durable evidence, or None when the stage has no closed token.
 
@@ -1027,6 +1089,29 @@ class PipelineWorker:
                 )
                 if persist_payload_invalid:
                     reason = WorkerValidationReason.PERSIST_PAYLOAD_INVALID.value
+                # A bare ValueError the fetch/decode arm raised while parsing
+                # or decoding this unit's pinned stored bytes (a NaN admitted
+                # duration ``round()`` refuses in the retained manifest
+                # builder, a storage client refusing a malformed request
+                # argument, a text decode) is deterministic on identical
+                # input: every retry re-reads the same bytes and reproduces
+                # the fault, so it must end the chain with the typed custody
+                # handoff instead of walking the bounded retry ladder on
+                # bytes that cannot change — five anonymous
+                # ``error_class=ValueError stage=fetch_decode`` worker-fault
+                # ERROR lines per drive plus an anonymous terminal quarantine
+                # (the sensor's bare-ValueError cohort at fetch_decode). The
+                # verdict reads the type through this module's poison
+                # classifier — the typed decode family is claimed by the
+                # arms above before this arm is consulted — and the boundary
+                # books the same terminal route the decode trio rides.
+                #
+                # Failure-Class: FC-fetch-decode-valueerror-poison-walks-gpu-ladder-as-anonymous-per-attempt
+                decode_payload_invalid = (
+                    stage == WorkerValidationStage.FETCH_DECODE.value and decode_payload_is_deterministic(exc)
+                )
+                if decode_payload_invalid:
+                    reason = WorkerValidationReason.DECODE_PAYLOAD_INVALID.value
                 state = states.get(item.segment_id, {})
                 measured_vad = state.get('speech_seconds', strict_measurements.get(item.segment_id))
                 receipt = (
@@ -1062,6 +1147,7 @@ class PipelineWorker:
                     or retained_audio_invalid
                     or decoded_duration_mismatch
                     or persist_payload_invalid
+                    or decode_payload_invalid
                     or (
                         isinstance(exc, BatchValidationError)
                         and (reason == 'unsupported_language' or worker_validation_disposition_enabled())

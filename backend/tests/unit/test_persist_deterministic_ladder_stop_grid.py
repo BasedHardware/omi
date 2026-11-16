@@ -230,11 +230,15 @@ STAGES = sorted(reason_values(WorkerValidationStage))
 REASONS = sorted(reason_values(WorkerValidationReason))
 
 TRIO = {'staged_audio_invalid', 'retained_audio_invalid', 'decoded_duration_mismatch'}
+# The fetch_decode bare-ValueError poison rides the same unconditional
+# fetch_decode arm as the trio: the pinned bytes' own parse failure, no
+# retry can repair it, both flags demote together.
+POISON = {'decode_payload_invalid'}
 FLAGGED = {'vad_nonfinite', 'vad_order', 'vad_bounds', 'word_shape', 'word_clock', 'word_sequence'}
 
 
 def _expected_disposition(stage, reason, disposition_enabled):
-    if stage == 'fetch_decode' and reason in TRIO:
+    if stage == 'fetch_decode' and (reason in TRIO or reason in POISON):
         return True
     if stage == 'persist' and reason == 'persist_payload_invalid':
         return True
