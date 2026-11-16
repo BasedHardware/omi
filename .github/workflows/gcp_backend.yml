@@ -48,6 +48,7 @@ on:
           - deploy
           - build-only
           - repair-traffic-only
+          - operator-qualify-publish
       deploy_targets:
         description: 'Deploy all backend surfaces or Cloud Run only'
         required: true
@@ -894,3 +895,87 @@ jobs:
           python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_firestore_missing_index_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS"
+
+  # SOURCE-ONLY PROPOSAL: contract remains closed until approved ingress IDs
+  # and existing repository authorization evidence are reviewed and committed.
+  operator-qualify-publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.environment == 'prod' &&
+      github.event.inputs.mode == 'operator-qualify-publish'
+    environment: prod
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      # Draft release visibility requires push access. This ephemeral write
+      # scope is proposed explicitly, never replaced with a new PAT/secret.
+      contents: write
+      actions: read
+      id-token: write
+    steps:
+      - name: Checkout immutable workflow controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check operator publication controls without external services
+        run: python3 -m unittest discover -s backend/scripts/jobstore_operator/tests -v
+      - name: Validate mode, protected source, and available scratch
+        env:
+          REQUESTED_SOURCE: ${{ inputs.release_sha }}
+          SKIP_PROOF: ${{ inputs.skip_eligibility_proof }}
+          BREAK_GLASS_LOCK: ${{ inputs.break_glass_lock }}
+          SERVICE_IMAGES: ${{ inputs.service_images }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          test "$SKIP_PROOF" = false
+          test "$BREAK_GLASS_LOCK" = false
+          test -z "$SERVICE_IMAGES"
+          python3 backend/scripts/jobstore_operator/preflight.py
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          for source in "$REQUESTED_SOURCE" "$GITHUB_WORKFLOW_SHA"; do
+            git merge-base --is-ancestor "$source" origin/main
+            gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${source}&per_page=100" > "$RUNNER_TEMP/operator-proof.json"
+            python3 .github/scripts/verify_backend_release_admission.py --sha "$source" --repository "$GITHUB_REPOSITORY" --workflow-runs "$RUNNER_TEMP/operator-proof.json"
+          done
+      - name: Fetch only approved private draft asset identities
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 backend/scripts/jobstore_operator/operator_ingress.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input"
+      - name: Qualify the exact image on the native AMD64 runner
+        env:
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/qualify_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --output "$RUNNER_TEMP/operator-native-qualification.json"
+      - name: Google Auth only after native qualification (existing WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up existing gcloud client
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Preserve and verify the dedicated operator digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          python3 backend/scripts/jobstore_operator/publish_operator.py --contract backend/scripts/jobstore_operator/artifact-contract.json --directory "$RUNNER_TEMP/operator-input" --qualification "$RUNNER_TEMP/operator-native-qualification.json" --output "$RUNNER_TEMP/operator-publication.json"
+      - name: Retain only bounded qualification and publication receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jobstore-operator-evidence-${{ github.run_id }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/operator-native-qualification.json
+            ${{ runner.temp }}/operator-native-qualification.log
+            ${{ runner.temp }}/operator-native-qualification.failure.json
+            ${{ runner.temp }}/operator-native-qualification.failure.log
+            ${{ runner.temp }}/operator-native-qualification.cleanup.json
+            ${{ runner.temp }}/operator-publication.json
+            ${{ runner.temp }}/operator-proof.json

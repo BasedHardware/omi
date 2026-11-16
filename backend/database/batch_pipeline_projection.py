@@ -591,13 +591,24 @@ class ProjectionStore:
                         or result.get('segment_id') != sibling
                     ):
                         raise ProjectionBlocked('ready sibling binding mismatch')
-                    ready.append(self.ref('results', sibling))
+                    ready.append(
+                        (
+                            self.ref('results', sibling),
+                            ProjectionPolicy.from_dict((job.get('policy_parts') or {}).get('projection') or {}),
+                        )
+                    )
             if held:
                 # Ready receipts have completed their follow-ups even when a
                 # sibling is held. Settle their hints without inventing holds.
-                for ref in ready if group_ready else [session.result_ref]:
+                for ref, ready_policy in ready if group_ready else [(session.result_ref, policy)]:
                     transaction.update(
-                        ref, {'projection_state': 'ready', **projection_finish_state_fields('ready', now)}
+                        ref,
+                        {
+                            'projection_state': 'ready',
+                            **projection_finish_state_fields(
+                                'ready', now, async_projection=ready_policy.async_projection
+                            ),
+                        },
                     )
             return held
 
@@ -734,6 +745,7 @@ class ProjectionStore:
             )
             receipts = []
             live_siblings = []
+            sibling_policies = {}
             erased_count = 0
             captured_seconds = 0.0
             terminal_empty_count = 0
@@ -753,6 +765,9 @@ class ProjectionStore:
                 if entry.get('result', {}).get('outcome') == 'no_recoverable_speech':
                     terminal_empty_count += 1
                 live_siblings.append(sibling)
+                sibling_policies[sibling] = ProjectionPolicy.from_dict(
+                    (job.get('policy_parts') or {}).get('projection') or {}
+                )
                 captured_seconds += job.get('duration_seconds', 0.0)
                 if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
                     raise ProjectionBlocked('sibling binding mismatch')
@@ -956,7 +971,12 @@ class ProjectionStore:
                 # before client publication or completion retention.
                 transaction.update(
                     self.ref('results', sibling),
-                    {'projection_state': 'ready', **projection_finish_state_fields('ready', now)},
+                    {
+                        'projection_state': 'ready',
+                        **projection_finish_state_fields(
+                            'ready', now, async_projection=sibling_policies[sibling].async_projection
+                        ),
+                    },
                 )
                 transaction.update(self.ref('jobs', sibling), {'client_status': 'completed', 'client_result': result})
             return result, True, captured_seconds

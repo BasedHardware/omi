@@ -1,6 +1,13 @@
 {
   "entries": [
     {
+      "path": "utils/ai_profile_refresh.py",
+      "function": "schedule_refresh",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "AI profile refresh (2026-11-16), at most MAX_CONCURRENT_AUTOMATIC per process: a daily, idempotent rewrite of a derived summary; losing it at SIGKILL only leaves the profile stale until the next trigger once its hourly cooldown expires"
+    },
+    {
       "path": "utils/sync/worker_runtime.py",
       "function": "Runtime.execute",
       "kind": "start_background_task",

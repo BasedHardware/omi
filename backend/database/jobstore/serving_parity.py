@@ -28,6 +28,7 @@ from database.jobstore.cohort import production_policy_applies
 STORE_QUERIES = frozenset(
     {
         'due',
+        'protected_retries',
         'oldest',
         'oldest_retry',
         'oldest_admissible_ready',
@@ -51,11 +52,13 @@ STORE_QUERIES = frozenset(
 TRANSACTION_QUERIES = frozenset(
     {
         'get',
+        'get_existing',
         'first_pending',
         'first_ready_pending',
         'fresh_first_pending',
         'fresh_first_ready_pending',
         'ready_predecessor',
+        'protected_ready',
         'service_frontier',
     }
 )
@@ -116,7 +119,7 @@ def query_value(store, query: str, args: tuple, kwargs: dict, *, transaction: bo
     allowed = TRANSACTION_QUERIES if transaction else STORE_QUERIES
     if query not in allowed:
         raise ValueError('only enumerated serving reads may be compared')
-    if query == 'get':
+    if query in {'get', 'get_existing'}:
         from database.jobstore.dual_store import MIRRORED_TABLES
 
         if (args[0] if args else kwargs.get('table')) not in MIRRORED_TABLES:
@@ -170,7 +173,7 @@ def compare_serving_query(
 
         def read(store):
             value = query_value(store, query, args, kwargs, transaction=transaction, budget_s=budget_s)
-            if query == 'get' and store is primary and isinstance(value, dict):
+            if query in {'get', 'get_existing'} and store is primary and isinstance(value, dict):
                 # Only the table's own exception (a GPU reservation's segment id) is taken off, and only from
                 # the primary side: a copy that still holds it must read as a mismatch. The fields the mirror
                 # omits for every table (repair_lineage) stay in: that omission is a serving mismatch and an

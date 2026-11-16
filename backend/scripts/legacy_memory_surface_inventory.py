@@ -117,12 +117,14 @@ RULES: tuple[InventoryRule, ...] = (
         "consolidation_symbol",
         ("reader", "writer", "job"),
     ),
+    # The backend owner of users/{uid}.ai_user_profile (routers/users.py,
+    # database/users.py, utils/llm/ai_user_profile.py, utils/ai_profile_refresh.py)
+    # is not tracked: David ruled on 2026-11-16 that the backend owns the one
+    # profile for every client. Client-side generation and storage stay tracked
+    # and keep shrinking.
     InventoryRule(
         "profile_synthesis",
         (
-            "backend/routers/users.py",
-            "backend/database/users.py",
-            "backend/utils/llm/ai_user_profile.py",
             "backend/routers/mcp.py",
             "backend/routers/mcp_sse.py",
             "desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift",

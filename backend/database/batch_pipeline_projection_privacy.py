@@ -137,7 +137,11 @@ def resume(store, segment_id, binding, now, *, policy):
         entry.pop(PROJECTION_FINISH_STEP_FIELD, None)
         if entry.get('projection'):
             entry.update(protocol_version=saved['protocol_before'], projection_state=saved['state_before'])
-            entry.update(projection_finish_entry_fields(saved['state_before'], now))
+            entry.update(
+                projection_finish_entry_fields(
+                    saved['state_before'], now, async_projection=session.policy.async_projection
+                )
+            )
             entry.pop('projection_privacy_checkpoint')
             entry.pop('privacy_quarantine_version')
         else:

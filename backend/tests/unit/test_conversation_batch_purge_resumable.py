@@ -76,6 +76,8 @@ class BatchPlane:
         monkeypatch.setattr(purge, '_delete_job', self.delete_job)
         monkeypatch.setattr(purge, 'mirror_refresh', lambda *a: None)
         monkeypatch.setattr(purge, 'purge_jobstore_owner', lambda *args: 0)
+        # Gate/segment fixtures own no WAL originals; WAL emulator tests cover real prefix discovery.
+        monkeypatch.setattr(purge, 'conversation_objects', lambda *args, **kwargs: [])
         from tests.unit.test_conversation_delete_gate_wait import _Transaction
 
         monkeypatch.setattr(purge, '_in_transaction', lambda _client, body: body(_Transaction(client)))

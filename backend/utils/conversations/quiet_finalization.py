@@ -53,14 +53,16 @@ def _dispatch(check: dict[str, Any]) -> None:
 
 def arm(
     uid: str, conversation_id: str, timeout: float, *, requires_byok: bool = False, firestore_client: Any = None
-) -> None:
+) -> bool:
+    """Return whether a durable quiet check now owns this conversation's finalization."""
     if not enabled():
-        return
+        return False
     check = checks_db.arm_quiet_check(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
     if check is not None:
         _dispatch(check)
+    return check is not None
 
 
 class EmptyExitChanged(RuntimeError):
@@ -73,7 +75,7 @@ def _empty_storage_proof(transaction: Any, uid: str, cid: str, *, firestore_clie
 
     client = firestore_client if firestore_client is not None else get_firestore_client()
     try:
-        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(cid,), snapshots={})
+        assert_batch_write_allowed(client, transaction, uid, conversation_ids=(cid,))
         return not list_audio_chunks(
             uid, cid, max_count=4096, require_archive=True, include_raw=True, source_metadata=True
         )

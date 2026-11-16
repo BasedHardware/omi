@@ -10,6 +10,7 @@ import pytest
 from config.batch_pipeline import admit_or_legacy, enabled_for, priority_for, scheduler_control_key
 from database.batch_pipeline_shadow import pool_busy
 from tests.unit.fixtures.batch_shadow_metadata_query import metadata_client
+from testing.pipeline_sim.store import protected_page
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
 from utils.batch_pipeline.merge import OrderedMerge
@@ -23,11 +24,17 @@ class MemoryTransaction:
     def get(self, table, key):
         return deepcopy(self.rows.get((table, key), {}))
 
+    def get_existing(self, table, key):
+        return deepcopy(self.rows.get((table, key)))
+
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
     def patch(self, table, key, fields):
         self.rows[(table, key)].update(deepcopy(fields))
+
+    def protected_ready(self, owner_key, priority, now, *, after=None):
+        return protected_page(self.rows, 'ready', now, 8, owner_key=owner_key, priority=priority, after=after)
 
     def service_frontier(self, priority):
         return max(
@@ -102,6 +109,9 @@ class MemoryStore:
         return [
             key for (table, key), v in self.rows.items() if table == 'jobs' and v['state'] == state and v[field] <= now
         ][:limit]
+
+    def protected_retries(self, now, limit, *, after=None):
+        return protected_page(self.rows, 'retry', now, min(100, limit), after=after)
 
     def allowance_owners(self, now, limit):
         rows = sorted(

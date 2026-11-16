@@ -6,11 +6,18 @@ import wave
 
 import pytest
 
+
 from config.policy import BatchUnitPolicy
 from database import sync_record_wait_cache as cache
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import live_upload
 from utils.sync.content_id import compute_sync_content_id
+
+
+@pytest.fixture(autouse=True)
+def strict_coverage_rollback(monkeypatch):
+    """These regressions exercise the strict path retained by the kill switch."""
+    monkeypatch.setenv('RECORD_WAL_HANDOFF_ENABLED', 'false')
 
 
 class ExpiringRedis:

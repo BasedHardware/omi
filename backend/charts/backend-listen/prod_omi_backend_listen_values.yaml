@@ -125,6 +125,11 @@ env:
     value: "true"
   - name: EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED
     value: "false"
+  # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set "on".
+  - name: EPISODES_ENABLED
+    value: "off"
+  - name: OCCASION_CONVERSATIONS_ENABLED
+    value: "off"
   - name: HOME_SETTLED_EMPTY_WIRE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED

@@ -26,6 +26,7 @@ with metrics.mode_scope('shadow'):
     metrics.walked()
     metrics.read_snapshot('batch', SimpleNamespace(get=lambda: SimpleNamespace(exists=False)))
 metrics.compare('batch', 'allow', 'allow')
+metrics.owner_comparison('snapshots', 'match', 'owner_hit')
 metrics.compare('batch', 'account_deleted', 'allow')
 metrics.memo_result('batch', 'hit')
 metrics.negative_lookup('conversations', 'shadow', 'mismatch')
@@ -64,6 +65,15 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
             before = samples(metrics)
             assert before[('privacy_check_calls_total', (('family', 'batch'), ('mode', 'live')))] == attempt
             assert before[('privacy_check_calls_total', (('family', 'batch'), ('mode', 'shadow')))] == attempt
+            assert (
+                before[
+                    (
+                        'privacy_owner_comparison_total',
+                        (('candidate_source', 'owner_hit'), ('result', 'match'), ('shape', 'snapshots')),
+                    )
+                ]
+                == attempt
+            )
             assert before[('privacy_shadow_checks_total', (('family', 'batch'), ('result', 'match')))] == attempt
             assert before[('privacy_memo_requests_total', (('family', 'batch'), ('result', 'hit')))] == attempt
             assert (
@@ -95,6 +105,8 @@ async def test_child_counters_survive_reaping_without_double_count_or_file_growt
                 'privacy_check_reads_total',
                 'privacy_conversations_walked_total',
                 'privacy_decision_mismatch_total',
+                'privacy_decision_comparison_total',
+                'privacy_owner_comparison_total',
                 'privacy_shadow_checks_total',
                 'privacy_memo_requests_total',
                 'privacy_negative_lookup_total',

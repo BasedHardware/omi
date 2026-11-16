@@ -8,6 +8,7 @@ import logging
 import os
 import time
 
+from config import batch_pipeline_protected_share as protected_share
 from config.batch_pipeline import (
     held_partial_enabled,
     owner_chain_projection_enabled,
@@ -80,6 +81,9 @@ class Serving:
     ):
         self.store = store
         self.metrics = metrics
+        # Bounded process state: retry cursors and small-pull share cadence
+        # must survive queue() calls on the serving/maintenance plane too.
+        self._queues = {pool: Scheduler(store, metrics=metrics, pool=pool) for pool in ('batch', 'live')}
         self.projector = projector
         self.cleanup = cleanup
         self.reap_staging = reap_staging
@@ -109,7 +113,11 @@ class Serving:
         self.held_pass_segments = 0
 
     def queue(self, pool='batch'):
-        return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if not protected_share.enabled():
+            return Scheduler(self.store, metrics=self.metrics, pool=pool)
+        if pool not in self._queues:
+            raise ValueError('pool must be batch or live')
+        return self._queues[pool]
 
     def pull(self, limit: int, capacity: PoolCapacity, *, pool: str = 'batch'):
         return self.queue(pool).pull(time.time(), limit, capacity=capacity)
@@ -447,6 +455,27 @@ def _metrics() -> QueueMetrics:
     return QueueMetrics(min_refresh_seconds=serving_metrics_min_refresh_seconds())
 
 
+async def _supervise_backlog_heartbeat(stop):
+    from utils.batch_pipeline.backlog_heartbeat import HeartbeatAuthority, TICK_SECONDS
+
+    authority = None
+    while not stop.is_set():
+        try:
+            if authority is None:
+                service = await run_blocking(db_executor, serving_for_stage, current_stage())
+                authority = HeartbeatAuthority(service.store)
+            await run_blocking(db_executor, authority.tick)
+        except Exception as error:
+            logging.getLogger(__name__).error(
+                'event=batch_backlog_heartbeat outcome=stopped exception_type=%s', type(error).__name__
+            )
+            return  # Fail closed until restart, even for config/ambiguous-commit errors.
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=TICK_SECONDS)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def _supervise_fresh_guard(stop):
     # General maintenance (and its sync executor) may be occupied for minutes.
     # Keep the same maintenance leader, but borrow a DB thread only for this
@@ -609,7 +638,12 @@ def start_serving_from_env():
                 await asyncio.gather(projection_pump(), drain_upload_holds())
             else:
                 await asyncio.gather(
-                    supervise(), drain(), dispatch_recovery(), drain_upload_holds(), _supervise_fresh_guard(stop)
+                    supervise(),
+                    drain(),
+                    dispatch_recovery(),
+                    drain_upload_holds(),
+                    _supervise_fresh_guard(stop),
+                    _supervise_backlog_heartbeat(stop),
                 )
         finally:
             set_recurring_sweep(None)

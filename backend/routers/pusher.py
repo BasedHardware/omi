@@ -51,6 +51,7 @@ from config.batch_pipeline_projection_rebuild import enabled as projection_debt_
 from utils.pusher_protocol import record_close_ack_frame
 from utils.pusher_record_close import VERSION as RECORD_CLOSE_VERSION, PusherCloseState, result_frame
 from utils.pusher_protocol import (
+    AudioBackpressure,
     BUFFERED_AUDIO_MAX_BYTES,
     MAX_SAMPLE_RATE,
     MIN_SAMPLE_RATE,
@@ -572,6 +573,7 @@ async def _run_websocket_util_trigger(
     # chunk for one user is strictly better than killing the pod.
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
+    audio_bytes_capacity = asyncio.Event()
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
     durable_audio = audio_outbox_enabled()
     log_closed_record_drain_cap()
@@ -1356,6 +1358,7 @@ async def _run_websocket_util_trigger(
             # Process all queued items
             batch: List[AudioBytesQueueItem] = list(audio_bytes_queue)
             audio_bytes_queue.clear()
+            audio_bytes_capacity.set()
 
             for item in batch:
                 try:
@@ -1370,6 +1373,22 @@ async def _run_websocket_util_trigger(
 
     # The conversation this session last streamed, for the episode moment flush at teardown.
     episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
+
+    async def enqueue_audio_bytes(item: AudioBytesQueueItem) -> None:
+        # Optional app/webhook work must not throw AudioBackpressure out of the
+        # capture receiver when its bounded queue fills. Keep the charged PCM
+        # with this producer and wait for the consumer instead of evicting it.
+        if durable_audio and len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
+            BACKPRESSURE.labels(stage='pusher_queue').inc()
+            async with asyncio.timeout(WS_RECEIVE_TIMEOUT):
+                while len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
+                    audio_bytes_capacity.clear()
+                    audio_bytes_event.set()
+                    await audio_bytes_capacity.wait()
+        append_bounded(
+            audio_bytes_queue, item, 'audio_bytes', byte_budget=audio_budget, size_of=lambda entry: len(entry['data'])
+        )
+        audio_bytes_event.set()
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
@@ -1993,16 +2012,12 @@ async def _run_websocket_util_trigger(
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
-                        audio_bytes_queue,
+                    await enqueue_audio_bytes(
                         {
                             'type': 'app',
                             'sample_rate': sample_rate,
                             'data': trigger_audiobuffer.copy(),
                         },
-                        'audio_bytes',
-                        byte_budget=audio_budget,
-                        size_of=lambda item: len(item['data']),
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     trigger_audiobuffer = bytearray()
@@ -2012,16 +2027,12 @@ async def _run_websocket_util_trigger(
                 ):
                     if len(audio_bytes_queue) >= AUDIO_BYTES_QUEUE_WARN_SIZE:
                         logger.warning(f"Warning: audio_bytes_queue size {len(audio_bytes_queue)} {uid}")
-                    append_bounded(
-                        audio_bytes_queue,
+                    await enqueue_audio_bytes(
                         {
                             'type': 'webhook',
                             'sample_rate': sample_rate,
                             'data': audiobuffer.copy(),
                         },
-                        'audio_bytes',
-                        byte_budget=audio_budget,
-                        size_of=lambda item: len(item['data']),
                     )
                     audio_bytes_event.set()  # Wake consumer immediately
                     audiobuffer = bytearray()
@@ -2058,10 +2069,23 @@ async def _run_websocket_util_trigger(
             logger.info("WebSocket disconnected")
         except Exception as e:
             observation.reason = 'application_error'
-            logger.error(f'Could not process audio: error {e}')
+            stage = e.stage if isinstance(e, AudioBackpressure) else 'other'
+            logger.error(
+                'event=pusher_receive_failed exception_type=%s stage=%s',
+                type(e).__name__,
+                stage if stage in {'pusher_queue', 'pusher_budget', 'pusher_pending'} else 'other',
+            )
             websocket_close_code = 1011
             application_failed = True
         finally:
+            if application_failed and websocket.client_state == WebSocketState.CONNECTED:
+                # Stop transport acceptance immediately. Draining storage/apps
+                # can take 30 seconds; leaving the socket open during that time
+                # let listen successfully send audio nobody would consume.
+                try:
+                    await websocket.close(code=websocket_close_code)
+                except Exception:
+                    pass  # Storage/producer fences still drain below.
             await finish_receive()
 
     bg_main_tasks: List[asyncio.Task[Any]] = []
