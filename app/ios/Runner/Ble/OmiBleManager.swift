@@ -11,6 +11,7 @@ import UIKit
 final class OmiBleManager: NSObject {
     static let shared = OmiBleManager()
     private let healthStore = OmiDeviceHealthStore()
+    private let ringReadDiagnostics = OmiRingReadDiagnostics()
     func setDeviceHealthPolicy(enabled: Bool, epoch: Int64, retire: Bool) {
         let changed = healthStore.epoch != epoch
         healthStore.setPolicy(enabled: enabled, epoch: epoch, retire: retire)
@@ -1428,6 +1429,8 @@ final class OmiBleManager: NSObject {
         isManual: Bool,
         eventType: String
     ) {
+        let ringRead = eventType == "disconnect"
+            ? ringReadDiagnostics.disconnected(uuid, now: ProcessInfo.processInfo.systemUptime) : [:]
         guard healthStore.enabled else { return }
         if eventType == "disconnect" { healthStore.end(uuid, at: CheckedIntegerConversion.epochMs()) }
         let defaults = UserDefaults.standard
@@ -1454,6 +1457,7 @@ final class OmiBleManager: NSObject {
             "timeToReconnectMs": 0,
             "rssiTrend": trend,
         ]
+        event.merge(ringRead) { _, observed in observed }
         event["identity_epoch"] = healthStore.epoch
         event["app_build"] = OmiDeviceHealthStore.build
         event["firmware"] = defaults.string(forKey: "ble_observed_firmware_\(uuid)")
@@ -1795,6 +1799,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
         logBle(uuid: uuid, event: "connect_completed", detail: "pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
         endSavedScan(uuid, reason: "connected")
         diagnosticScanStarted.remove(uuid)
+        ringReadDiagnostics.connected(uuid)
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
 
         // Track reconnections (not first connect)
@@ -2070,6 +2075,7 @@ extension OmiBleManager: CBPeripheralDelegate {
               let data = characteristic.value, !data.isEmpty else { return }
 
         guard peripherals[uuid] === peripheral else { return }
+        ringReadDiagnostics.received(uuid, characteristic: charUuid, data: data, now: ProcessInfo.processInfo.systemUptime)
         let wasTransferring = captureStorageProgress.isActive(uuid, now: ProcessInfo.processInfo.systemUptime)
         captureStorageProgress.received(uuid, characteristic: charUuid, now: ProcessInfo.processInfo.systemUptime)
         if !wasTransferring && captureStorageProgress.isActive(uuid, now: ProcessInfo.processInfo.systemUptime) {

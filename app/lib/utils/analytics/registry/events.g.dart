@@ -3529,3 +3529,18 @@ final class SubscriptionPaymentIssueMonthlyFailed extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"reason": reason.wireName};
 }
+
+final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
+  const MobileDeviceHealthDailyRingRead({required this.disconnectsDuringRingRead, required this.disconnectsWithRingReadState, required this.rssiBelowMinus90, required this.rssiMinus90ToMinus80, required this.rssiMinus80ToMinus60, required this.rssiAtLeastMinus60, required this.rssiUnknown});
+  final int disconnectsDuringRingRead;
+  final int disconnectsWithRingReadState;
+  final int rssiBelowMinus90;
+  final int rssiMinus90ToMinus80;
+  final int rssiMinus80ToMinus60;
+  final int rssiAtLeastMinus60;
+  final int rssiUnknown;
+  @override
+  String get wireName => "Mobile Device Health Daily";
+  @override
+  Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
+}

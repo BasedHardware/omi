@@ -166,3 +166,38 @@ struct OmiBleReconnectDiagnostics {
         return result
     }
 }
+
+/// Metadata only: firmware READ_BEGIN (0x05) through DONE (0x04, including STOP).
+/// Uses monotonic time, never retains notification bodies, and never grants custody.
+/// An unobserved/restored link stays unknown until a protocol boundary is seen.
+final class OmiRingReadDiagnostics {
+    static let characteristic = "30295781-4301-eabd-2904-2849adfeae43"
+    private var known = Set<String>()
+    private var beganAt: [String: TimeInterval] = [:]
+
+    func connected(_ uuid: String) {
+        known.insert(uuid)
+        beganAt.removeValue(forKey: uuid)
+    }
+
+    func received(_ uuid: String, characteristic: String, data: Data, now: TimeInterval) {
+        guard characteristic.lowercased() == Self.characteristic else { return }
+        if data.count >= 13, data.first == 0x05 {
+            known.insert(uuid)
+            beganAt[uuid] = now
+        } else if data.count >= 10, data.first == 0x04 {
+            connected(uuid)
+        }
+    }
+
+    /// Consume before link teardown; a later reconnect starts a new observation.
+    func disconnected(_ uuid: String, now: TimeInterval) -> [String: Any] {
+        let began = beganAt.removeValue(forKey: uuid)
+        guard known.remove(uuid) != nil else { return [:] }
+        var fields: [String: Any] = ["ring_read_active": began != nil]
+        if let began {
+            fields["ring_read_age_ms"] = Int64(max(0, (now - began) * 1000).rounded(.down))
+        }
+        return fields
+    }
+}

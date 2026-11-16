@@ -36,6 +36,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 class OmiBleManager private constructor(private val application: Application) {
 
     internal val savedReconnect = BleSavedReconnect()
+    internal val ringReadDiagnostics = RingReadDiagnostics()
 
     companion object {
         private const val TAG = "OmiBle"
@@ -835,6 +836,7 @@ class OmiBleManager private constructor(private val application: Application) {
                     Log.i(TAG, "Connected to $address, discovering services")
                     connectedGatts[address] = gatt
                     lastAudioNotification.begin(address, gatt)
+                    ringReadDiagnostics.connected(address, gatt)
 
                     // Discover services
                     enqueueCommand {
@@ -929,6 +931,7 @@ class OmiBleManager private constructor(private val application: Application) {
                 persistBatteryReading(address, value[0].toInt() and 0xFF)
             }
 
+            ringReadDiagnostics.received(address, gatt, charUuid, value, SystemClock.elapsedRealtime())
             characteristicValueListener?.onCharacteristicValue(address, serviceUuid, charUuid, value.copyOf())
             if (isFlutterAlive) {
                 mainHandler.post {

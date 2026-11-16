@@ -83,3 +83,12 @@ example executes both APIs through the actual queue and checks literal names;
 each batch must retain independent pre-migration goldens so editing both paths
 cannot hide drift. Add a file to adopted_files only when every emission in it is
 migrated and trigger coverage exists. No regression after adoption; unadopted files (including new ones) stay free. Do not mark the 2,226-line manager adopted piecemeal.
+
+`mobileDeviceHealthDailyRingRead` registers the new scalar ring-read extension
+of the existing `Mobile Device Health Daily` envelope. Its generated properties
+are merged by `DeviceHealthTelemetry.rollup` into the existing daily event;
+there is no second emission. The pre-existing map/double/string rollup fields
+remain legacy and the file is not marked adopted. This is not full C7 adoption
+of the daily envelope. RSSI ranges are [-90,-80), [-80,-60), >=-60 and <-90;
+nonnegative/missing RSSI is unknown. `disconnects_with_ring_read_state` counts
+only explicit booleans; older/missing observations are never inferred inactive.
