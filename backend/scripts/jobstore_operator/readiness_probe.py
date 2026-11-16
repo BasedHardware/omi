@@ -141,6 +141,8 @@ def cleanup_request(token, uid):
 
 def validate_manifest(pod, token, node):
     """Check server-dry-run mutations before any Pod is allowed to execute."""
+    if set(pod) - {'apiVersion', 'kind', 'metadata', 'spec', 'status'}:
+        raise ValueError('UNREVIEWED_POD_FIELD')
     expected = render(token, node)
     metadata = pod.get('metadata', {})
     if metadata.get('ownerReferences') or metadata.get('deletionTimestamp') or metadata.get('finalizers'):
@@ -165,6 +167,10 @@ def validate_manifest(pod, token, node):
         raise ValueError('NO_ADDITIONAL_CONTAINERS_ALLOWED')
     # Native KSA token projection can be injected by the API. No other added mounts/volumes.
     candidate = json.loads(json.dumps(pod))
+    # These non-pointer Kubernetes bools are omitted when false in API JSON.
+    # Normalize absence only; true, null and numeric substitutions still refuse.
+    for field in ('hostNetwork', 'hostPID', 'hostIPC'):
+        candidate.setdefault('spec', {}).setdefault(field, False)
     volumes = candidate.get('spec', {}).get('volumes', [])
     mounts = candidate.get('spec', {}).get('containers', [{}])[0].get('volumeMounts', [])
     injected = [v for v in volumes if v.get('name', '').startswith('kube-api-access-')]

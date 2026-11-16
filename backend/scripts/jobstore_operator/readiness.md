@@ -50,7 +50,9 @@ or a collision holds the attempt. No server dry-run is implicit in these tools.
 Labels and annotations must match exactly, and nonempty finalizers refuse.
 Only enumerated API defaults are normalized: the KSA mirror, default scheduler,
 zero priority, default preemption policy, the two standard 300-second NoExecute
-tolerations, and false container stdin/tty flags. Other spec fields hold the
+tolerations, false container stdin/tty flags, false container `privileged`,
+false mount `readOnly`, empty `emptyDir.medium`, and omitted false-valued
+`hostNetwork`/`hostPID`/`hostIPC` fields. Other spec fields hold the
 attempt until reviewed; no admission annotation is implicitly trusted.
 
 Render locally with a new output file:
@@ -111,7 +113,7 @@ timeout or unfinished termination leaves cleanup UNVERIFIED and blocks another
 attempt. Retain the receipt and ownership until resolved. No server, watcher,
 Pod or temporary file created by this attempt may be abandoned.
 
-The local acceptance result is deliberately `CLEANUP_PENDING`. Only Release's
+The local acceptance result is deliberately `READINESS_PROBE_ONLY_CLEANUP_PENDING`. Only Release's
 separate verified absence receipt can close that step. Even complete probe
 success proves only this image/identity/session. Later persistent placement
 needs its own readiness and retained-state first-install/fencing acceptance.

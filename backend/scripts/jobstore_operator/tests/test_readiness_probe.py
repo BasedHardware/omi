@@ -66,6 +66,29 @@ class ReadinessTests(unittest.TestCase):
         self.assertFalse(result['serving_proven'])
         self.assertEqual(result['runtime_admission'], 'CLOSED')
 
+    def test_independent_api_receipt_accepts_omitted_false_host_fields_without_relaxing_identity(self):
+        pod = json.loads((Path(__file__).parent / 'fixtures/pod-api-response.json').read_text())
+        report = completed()[1]
+        for field in ('hostNetwork', 'hostPID', 'hostIPC'):
+            self.assertNotIn(field, pod['spec'])
+        self.assertEqual(probe.validate_manifest(pod, TOKEN, NODE)['result'], 'REVIEWED_PROBE_MANIFEST_ONLY')
+        self.assertFalse(self.validate(pod, report)['serving_proven'])
+        mutations = [
+            lambda p: p['metadata'].update(name='another-pod'),
+            lambda p: p['metadata'].update(namespace='another-namespace'),
+            lambda p: p.update(unreviewed='extra'),
+        ]
+        for field in ('hostNetwork', 'hostPID', 'hostIPC'):
+            for value in (True, 0, None, 'false'):
+                mutations.append(lambda p, field=field, value=value: p['spec'].update({field: value}))
+        for mutate in mutations:
+            changed = copy.deepcopy(pod)
+            mutate(changed)
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                probe.validate_manifest(changed, TOKEN, NODE)
+            with self.assertRaises(ValueError):
+                self.validate(changed, report)
+
     def test_no_retry_controller_or_persistent_ledger_is_rendered(self):
         pod = probe.render(TOKEN, NODE)
         self.assertEqual(pod['kind'], 'Pod')
