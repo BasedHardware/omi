@@ -42,6 +42,13 @@ def test_recording_that_just_finished_stays_fresh_even_if_its_obligation_is_old(
     assert rows[KEY]['dispatch']['queue'] == 'enrichment-fresh' and not tasks
 
 
+def test_incomplete_primary_binding_never_unbinds_the_row(fresh_row, monkeypatch):
+    rows, tasks = fresh_row
+    monkeypatch.setenv('ENRICHMENT_TASKS_QUEUE', '')
+    assert not fresh_demotion.demote_if_stale(KEY, rows[KEY]['task_token'], now=10_000)
+    assert rows[KEY]['dispatch']['queue'] == 'enrichment-fresh' and not tasks
+
+
 def test_young_fresh_work_is_never_demoted(fresh_row):
     rows, tasks = fresh_row
     assert not fresh_demotion.demote_if_stale(KEY, rows[KEY]['task_token'], now=1600)
@@ -100,7 +107,7 @@ def test_route_demotes_only_fresh_queue_deliveries(fresh_row, client, monkeypatc
     rows, tasks = fresh_row
     process = Mock(side_effect=AssertionError('an aged fresh delivery must not run on a fresh slot'))
     monkeypatch.setattr(consumer_module.EnrichmentConsumer, '_callback', lambda _: process)
-    monkeypatch.setattr(fresh_demotion.time, 'time', lambda: 10_000.0)
+    monkeypatch.setattr(fresh_demotion, '_now', lambda: 10_000.0)
     token = rows[KEY]['task_token']
     response = client.post(
         '/v2/enrichment/run',
@@ -124,3 +131,15 @@ def test_route_without_fresh_header_never_reads_for_demotion(fresh_row, client, 
         headers={'X-CloudTasks-QueueName': 'enrichment'},
     )
     demote.assert_not_called()
+
+
+def test_demoted_counter_passes_the_gmp_sync_allowlist():
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    config = yaml.safe_load((Path(__file__).parents[2] / 'deploy' / 'cloud_run_gmp_sync.yaml').read_text())
+    rules = config['spec']['endpoints'][0]['metricRelabeling']
+    keep = [row['regex'] for row in rules if row['action'] == 'keep' and row['sourceLabels'] == ['__name__']]
+    assert any(re.fullmatch(pattern, 'omi_enrichment_fresh_demoted_total') for pattern in keep)

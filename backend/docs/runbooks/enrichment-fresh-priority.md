@@ -39,11 +39,13 @@ contains both background work and stale deliveries that must drain normally.
 
 Demotion (2026-11-16): a binding is otherwise sticky, so under a backlog the
 fresh queue filled with hours-old work while primary sat idle. When
-`enrichment-fresh` delivers a pending first summary whose conversation
-finished more than `ENRICHMENT_FRESH_DEMOTE_AFTER_MIN` ago (default: the
-promotion window), the route re-binds it to the primary queue under a new token
+`enrichment-fresh` delivers a pending first summary whose obligation
+(`first_pending_at`) and conversation finish time are both more than
+`ENRICHMENT_FRESH_DEMOTE_AFTER_MIN` old (default: the promotion window), the route re-binds it to the primary queue under a new token
 and answers 200 `fresh_demoted`; it never runs on a fresh slot. Only fresh-queue
-deliveries (`X-CloudTasks-QueueName`) pay the read. Leased, dormant or
+deliveries (`X-CloudTasks-QueueName`) pay one row read; only aged candidates
+also read the conversation and write. An incomplete primary binding leaves the
+row in place. Leased, dormant or
 re-tokened rows are untouched, unreadable metadata keeps the row in place, and
 `fresh_demoted` stops the sweep from promoting it back. Metric:
 `omi_enrichment_fresh_demoted_total`. Kill switch: `ENRICHMENT_FRESH_DEMOTE_AFTER_MIN=0`.

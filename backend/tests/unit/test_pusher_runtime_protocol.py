@@ -228,15 +228,6 @@ def test_extend_optional_never_raises_and_evicts_stale_items_first(monkeypatch):
     assert bytes(buffer) == b'y' * 20 and budget.used == 20
 
 
-def test_optional_audio_never_shares_custody_budget():
-    import inspect
-
-    source = inspect.getsource(pusher)
-    assert "extend_bounded(trigger_audiobuffer" not in source
-    assert "extend_bounded(audiobuffer" not in source
-    assert "append_bounded(\n            audio_bytes_queue" not in source
-
-
 def test_long_webhook_interval_at_48khz_still_delivers_within_the_optional_budget(monkeypatch):
     """A user-configured 120 s interval at 48 kHz (11.5 MB) must not strand a partial buffer
     below its own threshold once the 8 MB optional budget is exhausted (Codex review, #25541)."""

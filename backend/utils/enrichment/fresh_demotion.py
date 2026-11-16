@@ -45,6 +45,10 @@ def _counter() -> Counter:
 DEMOTED = _counter()
 
 
+def _now() -> float:
+    return time.time()
+
+
 def demote_after_seconds() -> float:
     """Obligation age after which a fresh-queue delivery is demoted; 0 disables demotion."""
     return enrichment_config.fresh_demote_after_seconds()
@@ -87,7 +91,7 @@ def demote_if_stale(row_id: str, token: str, *, now: float | None = None, client
     re-enqueued task keeps the row's own ``due_at`` (a held row stays held). The row is marked
     ``fresh_demoted`` so the sweep never promotes it back.
     """
-    current = time.time() if now is None else now
+    current = _now() if now is None else now
     after = demote_after_seconds()
     if after <= 0 or not enrichment_config.fresh_queue():
         return False
@@ -98,6 +102,8 @@ def demote_if_stale(row_id: str, token: str, *, now: float | None = None, client
     if not _finished_long_ago(candidate, now=current, after=after):
         return False
     primary = enrichment_config.dispatch_binding(recent=False)
+    if not valid_dispatch_binding(primary):
+        return False  # Incomplete primary config: never write an unbound row.
 
     def update(old):
         if old is None or old.get('dormant') or old.get('task_token') != token:
