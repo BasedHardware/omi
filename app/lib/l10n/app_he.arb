@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "מקליט בטלפון שלך",
+    "wrapUp": "סכם",
+    "recordingDiscarded": "ההקלטה בוטלה",
     "undo": "בטל",
     "@undo": {
         "description": "Undo button text"

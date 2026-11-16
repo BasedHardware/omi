@@ -1996,6 +1996,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
+  String get recordingWithYourPhone => 'Ieraksta ar tālruni';
+
+  @override
+  String get wrapUp => 'Pabeigt';
+
+  @override
+  String get recordingDiscarded => 'Ieraksts atmests';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override

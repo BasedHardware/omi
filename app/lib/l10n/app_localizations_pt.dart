@@ -1972,6 +1972,15 @@ class AppLocalizationsPt extends AppLocalizations {
   String get memoryHistory => 'Histórico';
 
   @override
+  String get recordingWithYourPhone => 'Gravando com seu telefone';
+
+  @override
+  String get wrapUp => 'Concluir';
+
+  @override
+  String get recordingDiscarded => 'Gravação descartada';
+
+  @override
   String get undo => 'Desfazer';
 
   @override

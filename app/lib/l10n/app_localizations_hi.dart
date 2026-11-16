@@ -1967,6 +1967,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get memoryHistory => 'इतिहास';
 
   @override
+  String get recordingWithYourPhone => 'आपके फ़ोन से रिकॉर्ड हो रहा है';
+
+  @override
+  String get wrapUp => 'समाप्त करें';
+
+  @override
+  String get recordingDiscarded => 'रिकॉर्डिंग हटा दी गई';
+
+  @override
   String get undo => 'पूर्ववत करें';
 
   @override

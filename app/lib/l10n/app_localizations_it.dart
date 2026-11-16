@@ -1999,6 +1999,15 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryHistory => 'Cronologia';
 
   @override
+  String get recordingWithYourPhone => 'Registrazione con il telefono';
+
+  @override
+  String get wrapUp => 'Concludi';
+
+  @override
+  String get recordingDiscarded => 'Registrazione scartata';
+
+  @override
   String get undo => 'Annulla';
 
   @override

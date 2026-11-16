@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "در حال ضبط با تلفن شما",
+    "wrapUp": "جمع‌بندی",
+    "recordingDiscarded": "ضبط حذف شد",
     "undo": "بازگشت",
     "@undo": {
         "description": "Undo button text"

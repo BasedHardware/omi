@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "আপনার ফোনে রেকর্ড হচ্ছে",
+    "wrapUp": "শেষ করুন",
+    "recordingDiscarded": "রেকর্ডিং বাতিল হয়েছে",
     "undo": "পূর্বাবস্থা",
     "@undo": {
         "description": "Undo button text"

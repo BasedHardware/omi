@@ -1987,6 +1987,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get memoryHistory => 'تاریخچه';
 
   @override
+  String get recordingWithYourPhone => 'در حال ضبط با تلفن شما';
+
+  @override
+  String get wrapUp => 'جمع‌بندی';
+
+  @override
+  String get recordingDiscarded => 'ضبط حذف شد';
+
+  @override
   String get undo => 'بازگشت';
 
   @override

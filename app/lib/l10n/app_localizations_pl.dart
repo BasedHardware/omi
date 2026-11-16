@@ -1992,6 +1992,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get memoryHistory => 'Historia';
 
   @override
+  String get recordingWithYourPhone => 'Nagrywanie telefonem';
+
+  @override
+  String get wrapUp => 'Zakończ';
+
+  @override
+  String get recordingDiscarded => 'Nagranie odrzucone';
+
+  @override
   String get undo => 'Cofnij';
 
   @override

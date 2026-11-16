@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Nagre-record gamit ang iyong phone",
+    "wrapUp": "Tapusin",
+    "recordingDiscarded": "Itinapon ang recording",
     "undo": "Undo",
     "@undo": {
         "description": "Undo button text"

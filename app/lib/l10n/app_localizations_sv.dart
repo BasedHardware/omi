@@ -1993,6 +1993,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryHistory => 'Historik';
 
   @override
+  String get recordingWithYourPhone => 'Spelar in med telefonen';
+
+  @override
+  String get wrapUp => 'Avsluta';
+
+  @override
+  String get recordingDiscarded => 'Inspelningen har slängts';
+
+  @override
   String get undo => 'Ångra';
 
   @override

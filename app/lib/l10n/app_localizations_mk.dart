@@ -1997,6 +1997,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get memoryHistory => 'Историја';
 
   @override
+  String get recordingWithYourPhone => 'Снима со телефонот';
+
+  @override
+  String get wrapUp => 'Заврши';
+
+  @override
+  String get recordingDiscarded => 'Снимката е отфрлена';
+
+  @override
   String get undo => 'Врати';
 
   @override

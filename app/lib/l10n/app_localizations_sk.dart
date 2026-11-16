@@ -1996,6 +1996,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get memoryHistory => 'História';
 
   @override
+  String get recordingWithYourPhone => 'Nahráva sa telefónom';
+
+  @override
+  String get wrapUp => 'Uzavrieť';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahodená';
+
+  @override
   String get undo => 'Vrátiť späť';
 
   @override

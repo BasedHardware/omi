@@ -218,6 +218,25 @@ void main() {
     expect(events.last.properties['failure_class'], 'pipeline_closed');
   });
 
+  test('Undo reports a discard whether or not the mic had started', () {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-discarded',
+    );
+
+    telemetry.prepare(source: 'phone_mic');
+    telemetry.complete(reason: 'user_discarded');
+    expect(events.last.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.last.properties['failure_class'], 'user_discarded', reason: 'not a broken pipeline');
+
+    telemetry.prepare(source: 'phone_mic');
+    telemetry.markStarted();
+    telemetry.complete(reason: 'user_discarded');
+    expect(events.last.name, RecordingLifecycleTelemetry.completedEvent);
+    expect(events.last.properties['reason'], 'user_discarded');
+  });
+
   test('silent capture remains an attempted recording and repeated prepare is idempotent', () {
     final events = <String>[];
     final telemetry = RecordingLifecycleTelemetry(emitter: (name, _) => events.add(name));

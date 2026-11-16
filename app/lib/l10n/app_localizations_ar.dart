@@ -1972,6 +1972,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryHistory => 'السجل';
 
   @override
+  String get recordingWithYourPhone => 'يسجّل بهاتفك';
+
+  @override
+  String get wrapUp => 'إنهاء';
+
+  @override
+  String get recordingDiscarded => 'تم تجاهل التسجيل';
+
+  @override
   String get undo => 'تراجع';
 
   @override

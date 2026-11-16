@@ -2008,6 +2008,15 @@ class AppLocalizationsEl extends AppLocalizations {
   String get memoryHistory => 'Ιστορικό';
 
   @override
+  String get recordingWithYourPhone => 'Εγγραφή με το τηλέφωνό σας';
+
+  @override
+  String get wrapUp => 'Ολοκλήρωση';
+
+  @override
+  String get recordingDiscarded => 'Η εγγραφή απορρίφθηκε';
+
+  @override
   String get undo => 'Αναίρεση';
 
   @override
