@@ -29,6 +29,12 @@ The immutable first-resolver diagnosis is retained alongside `current_resolver`.
 
 ## Measurements
 
+Read the revision and attempt families below directly from GMP's
+`omi-cloud-run-application-metrics` job. The sync profile retains these explicit
+families; the shared backend profile already retains `omi_.*`. They have no
+in-cluster dashboard or alert consumer, so the Stackdriver exporter bridge does
+not import them. Its existing owner-recognition conversation family is unchanged.
+
 The existing completion observer and identity-only CAS observer re-read the
 latest committed row. A row-local digest and one of 16 durable aggregate shards
 commit together. Duplicate delivery, restart and summary-only enrichment do not

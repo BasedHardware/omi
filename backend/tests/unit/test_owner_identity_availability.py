@@ -2,8 +2,10 @@
 
 from copy import deepcopy
 from pathlib import Path
+import re
 
 import pytest
+import yaml
 
 from database import owner_identity_availability as storage
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -132,24 +134,48 @@ def test_processing_membership_fence_rejects_late_append_and_rebased_merge(monke
     )
 
 
-def test_labels_are_closed_and_all_exporters_keep_the_denominators():
+def test_labels_are_closed_and_denominators_use_direct_gmp():
     for value in ('synthetic-user-id', 'gs://synthetic/private', 'PRIVATE words'):
         before = list(diagnostics.PROOF_REFUSALS.collect())[0].samples
         diagnostics.resolver_reason(value)
         diagnostics.final_pass_availability(value)
         assert list(diagnostics.PROOF_REFUSALS.collect())[0].samples == before
     root = Path(__file__).resolve().parents[2]
+    families = {f'omi_owner_recognition_identity_{measure}_total' for measure in metrics.AVAILABILITY_MEASURES}
+    families.update(
+        {
+            'omi_owner_recognition_identity_observed_at_seconds',
+            'omi_owner_recognition_batch_embeddings_total',
+            'omi_owner_recognition_proof_refusals_total',
+            'omi_owner_recognition_final_pass_availability_total',
+        }
+    )
+    for profile in ('cloud_run_gmp_sidecar.yaml', 'cloud_run_gmp_sync.yaml'):
+        config = yaml.safe_load((root / 'deploy' / profile).read_text())
+        rules = config['spec']['endpoints'][0]['metricRelabeling']
+
+        def kept(name):
+            labels = {'__name__': name, 'component': ''}
+            for rule in rules:
+                matched = re.fullmatch(rule['regex'], ';'.join(labels.get(k, '') for k in rule['sourceLabels']))
+                if (rule['action'] == 'keep' and not matched) or (rule['action'] == 'drop' and matched):
+                    return False
+            return True
+
+        assert all(kept(family) for family in families)
+        assert kept('omi_owner_recognition_conversations_total')
+        if profile == 'cloud_run_gmp_sync.yaml':
+            assert not kept('omi_owner_recognition_unregistered_total')
+
     exporters = list(
         (root / 'charts/monitoring/prometheus-stackdriver-exporter').glob('*omi_cloud_run_metrics_exporter.yaml')
     )
     assert len(exporters) == 4
     for exporter in exporters:
-        text = exporter.read_text()
-        for measure in metrics.AVAILABILITY_MEASURES:
-            assert f'omi_owner_recognition_identity_{measure}_total/' in text
-        assert 'omi_owner_recognition_identity_observed_at_seconds/' in text
-        assert 'omi_owner_recognition_proof_refusals_total/' in text
-        assert 'omi_owner_recognition_final_pass_availability_total/' in text
+        prefixes = yaml.safe_load(exporter.read_text())['stackdriver']['metrics']['prefixes']
+        for family in families:
+            metric_type = f'prometheus.googleapis.com/{family}/'
+            assert not any(metric_type.startswith(prefix) for prefix in prefixes)
 
 
 def test_explicit_final_pass_disabled_and_dependency_unavailable(original_lane, monkeypatch):
