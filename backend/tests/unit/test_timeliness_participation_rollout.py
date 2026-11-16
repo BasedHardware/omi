@@ -1,0 +1,352 @@
+"""Operator helper for the SCA-1649 participation control: CLI, plan and refusals.
+
+The real apply/restore/conflict behaviour is proven against a loopback Firestore
+emulator in ``tests/integration/test_timeliness_participation_emulator.py``.
+These tests cover the argument surface, the lossless typed codec, the plan
+bounds and the CAS refusal logic through an explicit in-memory double.
+"""
+
+import datetime as dt
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+from google.cloud import firestore
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'rollout' / 'timeliness_participation.py'
+SPEC = importlib.util.spec_from_file_location('timeliness_participation_rollout', SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+
+NOW = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+
+@pytest.fixture
+def helper(monkeypatch):
+    module = importlib.util.module_from_spec(SPEC)
+    monkeypatch.setitem(sys.modules, SPEC.name, module)
+    SPEC.loader.exec_module(module)
+    return module
+
+
+# --- explicit in-memory double ----------------------------------------------------
+
+
+class _Doc:
+    def __init__(self):
+        self.data = None
+        self.update_time = None
+        self._clock = 0
+
+    def _touch(self):
+        self._clock += 1
+        moment = NOW + dt.timedelta(seconds=self._clock)
+        self.update_time = DatetimeWithNanoseconds(
+            moment.year,
+            moment.month,
+            moment.day,
+            moment.hour,
+            moment.minute,
+            moment.second,
+            moment.microsecond,
+            tzinfo=dt.timezone.utc,
+        )
+
+
+class _Snapshot:
+    def __init__(self, doc):
+        self.exists = doc.data is not None
+        self.update_time = doc.update_time
+        self._doc = doc
+
+    def to_dict(self):
+        return dict(self._doc.data or {})
+
+
+class _Ref:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def get(self):
+        return _Snapshot(self._doc)
+
+    def _check(self, option):
+        if option is None:
+            return
+        if self._doc.data is None:
+            raise RuntimeError('NotFound')
+        if option._last_update_time != self._doc.update_time:
+            raise RuntimeError('FailedPrecondition: update_time mismatch')
+
+    def update(self, values, option=None, retry=None):
+        self._check(option)
+        for name, value in values.items():
+            if value is firestore.DELETE_FIELD:
+                self._doc.data.pop(name, None)
+            else:
+                self._doc.data[name] = value
+        self._doc._touch()
+
+    def create(self, values, retry=None):
+        if self._doc.data is not None:
+            raise RuntimeError('AlreadyExists')
+        self._doc.data = dict(values)
+        self._doc._touch()
+
+    def delete(self, option=None, retry=None):
+        self._check(option)
+        self._doc.data = None
+        self._doc._touch()
+
+
+class _Collection:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def document(self, name=None):
+        return _Ref(self._doc)
+
+
+class _Client:
+    def __init__(self, doc):
+        self._doc = doc
+
+    def collection(self, name):
+        return _Collection(self._doc)
+
+
+class _Store:
+    def __init__(self, namespace='batch_pipeline_prod', data=None):
+        self.namespace = namespace
+        self._doc = _Doc()
+        self._doc.data = data
+        if data is not None:
+            self._doc._touch()
+        self.client = _Client(self._doc)
+
+    def seed(self, data):
+        self._doc.data = dict(data)
+        self._doc._touch()
+
+
+@pytest.fixture
+def store():
+    return _Store()
+
+
+def _prior(helper, store, *, plane='prod-omi-backend'):
+    return helper.capture(store, plane=plane)
+
+
+def _plan(helper, prior, *, operation_id='sca1649-op-1', until_seconds=900):
+    return helper.build_plan(
+        prior,
+        operation_id=operation_id,
+        created_at=NOW,
+        until=NOW + dt.timedelta(seconds=until_seconds),
+    )
+
+
+# --- codec ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        None,
+        True,
+        False,
+        0,
+        -7,
+        2**53 + 1,
+        0.5,
+        float('inf'),
+        'text',
+        b'\x00\xff',
+        [1, 'two', None],
+        {'nested': {'flag': True, 'count': 3}},
+        dt.datetime(2026, 11, 16, 5, 0, 1, 123456, tzinfo=dt.timezone.utc),
+        DatetimeWithNanoseconds(2026, 11, 16, 5, 0, tzinfo=dt.timezone.utc, nanosecond=123),
+        firestore.GeoPoint(1.5, -2.5),
+    ],
+)
+def test_tag_round_trip_is_lossless_and_type_preserving(helper, value):
+    encoded = helper.tag(value)
+    decoded = helper.untag(encoded)
+    assert helper.tag(decoded) == encoded
+    assert type(decoded) is type(value)
+
+
+def test_tag_distinguishes_int_from_bool(helper):
+    assert helper.tag(1) != helper.tag(True)
+    assert helper.tag(True)['t'] == 'bool'
+
+
+def test_unsupported_value_is_refused(helper):
+    with pytest.raises(TypeError):
+        helper.tag(object())
+
+
+# --- argument surface -------------------------------------------------------------
+
+
+def test_server_dry_run_is_rejected(helper, capsys):
+    with pytest.raises(SystemExit):
+        helper.main(['apply', '--plan', 'p.json', '--dry-run=server'])
+    assert 'no server-side dry-run' in capsys.readouterr().err
+
+
+def test_non_loopback_emulator_host_is_refused(helper):
+    with pytest.raises(helper.Refused, match='loopback'):
+        helper.resolve_store('batch_pipeline_test_x', emulator_host='10.0.0.5:8085')
+
+
+def test_emulator_mode_requires_a_test_namespace(helper):
+    with pytest.raises(helper.Refused, match='batch_pipeline_test_'):
+        helper.resolve_store('batch_pipeline_prod', emulator_host='127.0.0.1:8085')
+
+
+def test_test_namespace_requires_emulator_mode(helper):
+    with pytest.raises(helper.Refused, match='--dry-run=emulator'):
+        helper.resolve_store('batch_pipeline_test_x')
+
+
+def test_production_apply_requires_a_receipt(helper, store, tmp_path, monkeypatch):
+    prior = _prior(helper, store)
+    plan_path = tmp_path / 'plan.json'
+    plan_path.write_text(json.dumps(_plan(helper, prior)))
+    monkeypatch.setattr(helper, 'resolve_store', lambda namespace, emulator_host=None: store)
+    assert helper.main(['apply', '--plan', str(plan_path)]) == helper.EXIT_REFUSED
+
+
+# --- plan bounds ------------------------------------------------------------------
+
+
+def test_plan_refuses_a_window_longer_than_1800s(helper, store):
+    prior = _prior(helper, store)
+    with pytest.raises(helper.Refused, match='1800'):
+        _plan(helper, prior, until_seconds=1801)
+
+
+def test_plan_refuses_a_non_increasing_window(helper, store):
+    prior = _prior(helper, store)
+    with pytest.raises(helper.Refused, match='after created_at'):
+        _plan(helper, prior, until_seconds=0)
+
+
+def test_plan_refuses_an_oversized_operation_id(helper, store):
+    prior = _prior(helper, store)
+    with pytest.raises(helper.Refused, match='128'):
+        _plan(helper, prior, operation_id='x' * 129)
+
+
+def test_plan_refuses_a_future_created_at_beyond_skew(helper, store):
+    prior = _prior(helper, store)
+    with pytest.raises(helper.Refused, match='clock-skew'):
+        helper.build_plan(
+            prior,
+            operation_id='op',
+            created_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=61),
+            until=dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=900),
+        )
+
+
+# --- apply / restore / verify -----------------------------------------------------
+
+
+def test_present_prior_apply_and_restore_are_exact(helper, store):
+    extra = {
+        'operator_note': 'prior',
+        'count': 3,
+        'flag': True,
+        'stamp': DatetimeWithNanoseconds(2026, 1, 1, tzinfo=dt.timezone.utc, nanosecond=42),
+        'blob': b'\x01',
+        'nested': {'a': [1, None]},
+    }
+    store.seed(extra)
+    prior = _prior(helper, store)
+    plan = _plan(helper, prior)
+    applied = helper.apply_plan(store, plan, mode='emulator')
+    assert store._doc.data['operation_id'] == 'sca1649-op-1'
+    assert store._doc.data['operator_note'] == 'prior'
+    restored = helper.restore_prior(store, prior, applied, mode='emulator')
+    assert restored['exact'] is True
+    assert helper.verify_restored(store, prior)['restored'] is True
+    assert store._doc.data == extra
+
+
+def test_absent_prior_apply_creates_and_restore_deletes(helper, store):
+    prior = _prior(helper, store)
+    assert prior['exists'] is False
+    plan = _plan(helper, prior)
+    applied = helper.apply_plan(store, plan, mode='emulator')
+    assert store._doc.data['target_plane'] == 'prod-omi-backend'
+    restored = helper.restore_prior(store, prior, applied, mode='emulator')
+    assert restored['exact'] is True
+    assert store._doc.data is None
+    assert helper.verify_restored(store, prior)['restored'] is True
+
+
+def test_restore_removes_fields_added_after_apply(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    store._doc.data['injected'] = 'concurrent'
+    store._doc._touch()
+    with pytest.raises(helper.Refused, match='update_time mismatch'):
+        helper.restore_prior(store, prior, applied, mode='emulator')
+    assert store._doc.data['injected'] == 'concurrent'
+
+
+def test_apply_refuses_a_concurrent_writer_before_the_write(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    plan = _plan(helper, prior)
+    store.seed({'kept': 2})
+    with pytest.raises(helper.Refused, match='update_time mismatch'):
+        helper.apply_plan(store, plan, mode='production')
+    assert store._doc.data == {'kept': 2}
+
+
+def test_apply_refuses_a_create_when_the_document_appeared(helper, store):
+    prior = _prior(helper, store)
+    plan = _plan(helper, prior)
+    store.seed({'kept': 1})
+    with pytest.raises(helper.Refused, match='existence changed'):
+        helper.apply_plan(store, plan, mode='production')
+
+
+def test_restore_refuses_an_absent_document(helper, store):
+    store.seed({'kept': 1})
+    prior = _prior(helper, store)
+    applied = helper.apply_plan(store, _plan(helper, prior), mode='emulator')
+    store._doc.data = None
+    with pytest.raises(helper.Refused, match='absent'):
+        helper.restore_prior(store, prior, applied, mode='emulator')
+
+
+def test_verify_restored_reports_exact_differences(helper, store):
+    store.seed({'kept': 1, 'nested': {'a': True}})
+    prior = _prior(helper, store)
+    store.seed({'kept': 1, 'nested': {'a': False}})
+    result = helper.verify_restored(store, prior)
+    assert result['restored'] is False
+    assert result['differences'] == ['nested']
+
+
+def test_verify_restored_detects_existence_drift(helper, store):
+    prior = _prior(helper, store)
+    store.seed({'kept': 1})
+    result = helper.verify_restored(store, prior)
+    assert result['restored'] is False
+    assert result['differences'] == ['existence']
+
+
+def test_plan_binds_exactly_the_contracted_field_set(helper, store):
+    prior = _prior(helper, store)
+    plan = _plan(helper, prior)
+    assert set(plan['fields']) == {'version', 'target_plane', 'created_at', 'suppressed_until', 'operation_id'}
+    assert plan['fields']['target_plane'] == {'t': 'str', 'v': 'prod-omi-backend'}
+    assert plan['prior']['exists'] is False

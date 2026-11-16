@@ -32,6 +32,7 @@ from utils.lifecycle_metrics import PhaseMetrics
 from utils.batch_pipeline import vendor_route_metrics as vendor_metrics, record_wal_metrics
 from utils.batch_pipeline.fresh_guard import FreshGuard
 from utils.batch_pipeline.delivered_share import DeliveredShare
+from utils.batch_pipeline import timeliness_participation as participation
 
 PROJECTION_FINISH_READS = Counter(
     'omi_batch_projection_finish_reads_total',
@@ -292,6 +293,11 @@ class QueueMetrics:
             registry=registry,
         )
         self._timeliness_due = 0.0
+        # Operator participation control (SCA-1649): one cached control read per
+        # process per 60s, gating only the elected acquire. Disabled paths never
+        # touch the transport.
+        self._participation = participation.ParticipationCache()
+        self._participation_suppressed = False
         self.record_pending = PhaseMetrics('omi_batch_record_pending', ['state'], registry=registry)
         self.nojob = PhaseMetrics('omi_record_seal_nojob', ['kind'], registry=registry)
         self.oldest_age = _FreshQueueGauge(
@@ -580,7 +586,38 @@ class QueueMetrics:
     def refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         """One fleet sample per interval; errors preserve the last successful timestamp."""
         with self._timeliness_lock:
+            # The control read runs on every supervised tick even when the
+            # sample interval is longer, so a suppression applied by the
+            # operator is observed within its 90s propagation bound. It is
+            # skipped entirely in alarm-disabled and election-disabled paths.
+            self._refresh_participation(store, now)
             self._refresh_timeliness(store, now)
+
+    def _refresh_participation(self, store: FirestoreStore, now: float) -> None:
+        """At most one point read per process per 60s; never raises."""
+        if not batch_timeliness_alarm_enabled() or not lever_enabled('batch_timeliness_leader'):
+            return
+        try:
+            plane = participation.timeliness_plane(getattr(store, 'namespace', ''))
+            suppressed = self._participation.suppressed(
+                store,
+                plane=plane,
+                now_wall=now,
+                now_monotonic=participation.monotonic(),
+            )
+        except Exception as error:  # A control failure never fails the sampler.
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_participation outcome=unavailable exception_type=%s',
+                type(error).__name__,
+            )
+            return
+        if suppressed != self._participation_suppressed:
+            logging.getLogger(__name__).warning(
+                'event=batch_timeliness_participation outcome=%s operation_id=%s',
+                'suppressed' if suppressed else 'participating',
+                self._participation.operation_id or 'none',
+            )
+        self._participation_suppressed = suppressed
 
     def _refresh_timeliness(self, store: FirestoreStore, now: float) -> None:
         if now < self._timeliness_due:
@@ -595,6 +632,14 @@ class QueueMetrics:
         lease_seconds = interval + TIMELINESS_LEASE_GRACE_SECONDS
         sample_expires = time.monotonic() + lease_seconds
         if elected:
+            if self._participation_suppressed:
+                # Operator suppression: withdraw exactly like a follower at
+                # :607-610, without acquire/renew, producer sampling, companion
+                # counts or a lease release/delete. Expiry resumes participation.
+                self._timeliness_due = now + min(interval, TIMELINESS_LEASE_GRACE_SECONDS)
+                self._timeliness_visible = False
+                record_wal_metrics.deactivate()
+                return
             if self.timeliness_leader is None:
                 # Lazy and shared by both planes, using the data namespace, not
                 # pod/release identity. No import-time or disabled-path IO.

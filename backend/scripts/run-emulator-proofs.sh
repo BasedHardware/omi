@@ -91,6 +91,12 @@ run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
   tests/integration/test_batch_projection_ghost_holds_firestore.py
 
+# SCA-1649: the operator helper's forward apply and exact typed restoration are
+# only proven against a real emulator; CAS conflicts must preserve the writer.
+run_proof "timeliness participation apply/restore (typed CAS, conflicts)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider \
+  tests/integration/test_timeliness_participation_emulator.py
+
 run_proof "record replay (capture, admission, titling and scoped receipts)" \
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_replay_harness_firestore.py \
   tests/integration/test_replay_harness_titling_firestore.py
