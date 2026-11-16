@@ -246,6 +246,7 @@ class MemoryQuery:
                         return False
                     if not {
                         '==': lambda: actual == expected,
+                        '>': lambda: actual > expected,
                         '>=': lambda: actual >= expected,
                         '<=': lambda: actual <= expected,
                     }[op]():
@@ -625,3 +626,120 @@ async def test_transcription_failure_does_not_wait_for_silence_deadline(builder,
     await service.reconcile('u')
     row = committed[0][4][0]
     assert row['tile_state'] == 'failed' and row['status'] == 'completed' and row['summary_retryable']
+
+
+@pytest.mark.parametrize('count', [20, 40])
+def test_hour_long_continuous_talk_crosses_anchor_and_pending_page(monkeypatch, count):
+    from utils.conversations.v3 import outline, planner
+
+    rows = {
+        '/users/u/conversations/'
+        + str(i): source(
+            str(i),
+            started_at=AT + timedelta(seconds=i * 180),
+            finished_at=AT + timedelta(seconds=i * 180 + 10),
+            v3_pending_since=AT + timedelta(seconds=i),
+            transcript_segments=[{'text': f'synthetic speech number {i}', 'start': 0, 'end': 10}],
+        )
+        for i in range(count)
+    }
+    client = MemoryQuery(rows)
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
+    monkeypatch.setattr(
+        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+    )
+    existing_id = None
+    processed = set()
+    for _ in range(8):
+        recordings, existing, _ = store.load('u', firestore_client=client)
+        pending = {rid for rid, row in recordings.items() if row.get('v3_pending')}
+        if not pending:
+            break
+        assert len(pending) <= 32
+        assert min(pending, key=int) == str(len(processed))
+        groups = outline.stretches(list(recordings.values()), AT + timedelta(hours=2))
+        windows = planner.preserve_finished_windows(
+            planner.windows(groups, [outline.fallback(g) for g in groups]), existing, recordings
+        )
+        prior = existing.get(existing_id)
+        built = planner.build('u', windows[0], recordings, prior)
+        if existing_id:
+            assert built['id'] == existing_id
+        existing_id = built['id']
+        rows['/users/u/conversations/' + existing_id] = built
+        for rid in pending:
+            rows['/users/u/conversations/' + rid]['v3_pending'] = False
+        processed.update(pending)
+    assert len(processed) == count
+    assert len(rows['/users/u/conversations/' + existing_id]['transcript_segments']) == count
+
+
+@pytest.mark.parametrize('next_minute', [100, 103])
+def test_page_continuation_uses_capture_chronology_not_pending_order(monkeypatch, next_minute):
+    rows = {}
+    for i in range(33):
+        minute = 100 if i == 0 else 0 if i == 31 else next_minute if i == 32 else i * 3
+        rows['/users/u/conversations/' + str(i)] = source(
+            str(i),
+            started_at=AT + timedelta(minutes=minute),
+            finished_at=AT + timedelta(minutes=minute, seconds=10),
+            v3_pending_since=AT + timedelta(seconds=i),
+        )
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
+    monkeypatch.setattr(
+        store, 'decode_row', lambda uid, snap: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
+    )
+    recordings, _, _ = store.load('u', firestore_client=MemoryQuery(rows))
+    assert recordings['0']['_v3_page_continues']
+    assert not recordings['31'].get('_v3_page_continues')
+    assert len(recordings) == 32
+
+
+@pytest.mark.asyncio
+async def test_missing_transcript_blob_is_unreadable_and_settles_without_a_window(builder, monkeypatch):
+    from database.transcript_pointer import TranscriptBlobAbsent
+
+    committed, _ = builder
+    client = MemoryQuery({'/users/u/conversations/r': source(v3_pending_since=AT)})
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
+    monkeypatch.setattr(
+        store.conversations,
+        'decode_transcript_segments_verified',
+        lambda *a: (_ for _ in ()).throw(TranscriptBlobAbsent('gone')),
+    )
+    await service.reconcile('u')
+    assert committed[0][2]['r']['_v3_unreadable']
+    assert committed[0][4] == []
+
+
+@pytest.mark.asyncio
+async def test_processing_and_purge_sweeps_cursor_past_errors_and_1000_rows(monkeypatch):
+    rows = {}
+    for i in range(1001):
+        rows[f'/users/u{i:04}/conversations/process'] = {'v3_process_pending': True}
+        rows[f'/users/u{i:04}/conversations/purge'] = {'v3_audio_purge_pending': True}
+    client = MemoryQuery(rows)
+
+    async def blocking(pool, fn, *args, **kw):
+        return fn(*args, **kw)
+
+    enqueued, purged, retries = [], [], []
+
+    def purge(uid, cid):
+        purged.append(uid)
+        if uid == 'u0000':
+            raise OSError('synthetic transient storage error')
+
+    monkeypatch.setattr(service, 'run_blocking', blocking)
+    monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(service, 'enqueue', lambda uid: enqueued.append(uid))
+    monkeypatch.setattr(service, 'purge_audio', purge)
+    monkeypatch.setattr(service.conversations_db, 'update_conversation', lambda *a: retries.append(a))
+    assert await service.sweep() == 1001
+    assert len(enqueued) == len(purged) == 1001
+    assert retries[0][2]['v3_audio_purge_pending']
+    assert retries[0][2]['v3_audio_purge_attempts'] == 1
+    for field in ['v3_process_pending', 'v3_audio_purge_pending']:
+        pages = [c for c in client.calls if any(f[0] == field for f in c[0])]
+        assert len(pages) == 2 and pages[1][2] is not None

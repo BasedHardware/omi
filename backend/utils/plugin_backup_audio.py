@@ -48,5 +48,5 @@ def backup_audio_manifest(app_id: str, conversation_id: str, authorization: str,
         if artifact.get('status') == 'cached' and artifact.get('signed_url'):
             identity = hashlib.sha256(urlsplit(artifact['signed_url']).path.encode()).hexdigest()[:16]
             return {**result, 'audio_files': [{'id': 'conversation-' + identity, **artifact}]}
-        return {**result, 'audio_files': []}
+        return result
     return result

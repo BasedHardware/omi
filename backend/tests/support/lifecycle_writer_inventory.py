@@ -4390,6 +4390,7 @@ FIELD_SITES = {
         ),
         ('download_audio_file_response', 'status', "'pending'", ('poll_after_ms', 'status')),
         ('download_audio_file_response', 'status', "entry['status']", ('poll_after_ms', 'status')),
+        ('get_audio_signed_urls', 'status', "entry['status']", ('duration', 'id', 'signed_url', 'status')),
         ('precache_audio_files', 'status', "'no_audio'", ('message', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),
         ('precache_audio_files', 'status', "'started'", ('audio_file_count', 'status')),

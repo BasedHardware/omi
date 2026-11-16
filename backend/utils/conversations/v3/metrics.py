@@ -27,3 +27,14 @@ UNCERTAIN_SHOWN = Counter(
     "omi_conversations_v3_uncertain_recognition_shown_total",
     "Committed windows shown because wearer recognition is uncertain",
 )
+
+
+TERMINAL_FAILURES = Counter(
+    'omi_conversations_v3_terminal_failures_total', 'Committed v3 failure transitions', ['reason']
+)
+
+
+def terminal_failure(reason):
+    TERMINAL_FAILURES.labels(
+        reason if reason in {'outline', 'transcription', 'attempts_exhausted'} else 'processing'
+    ).inc()

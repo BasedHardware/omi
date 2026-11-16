@@ -2,6 +2,7 @@
 // Current source coverage does not certify a distributed released build.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/gen/home_feed_wire.g.dart' as feed;
 
 // Current-source decoders; distribution-attested released replay remains pending.
@@ -44,9 +45,39 @@ void main() {
   });
   test('v3 Home uses the existing closed kind vocabulary', () {
     final card = feed.GeneratedHomeFeedCard.fromJson({
-      'id': 'c', 'kind': 'conversation', 'detail_id': 'c', 'sort_at': base['created_at'],
-      'status': 'completed', 'revision': 'synthetic',
+      'id': 'c',
+      'kind': 'conversation',
+      'detail_id': 'c',
+      'sort_at': base['created_at'],
+      'status': 'completed',
+      'revision': 'synthetic',
     });
     expect(card.kind, 'conversation');
+  });
+  test('compact live row decodes with a nullable finished_at key', () {
+    final row = ServerConversation.fromJson({
+      'id': 'live',
+      'created_at': base['created_at'],
+      'started_at': base['started_at'],
+      'finished_at': null,
+      'status': 'in_progress',
+      'tile_state': 'live',
+      'structured': {'title': 'A plan', 'emoji': '🌳'},
+    });
+    expect(row.id, 'live');
+    expect(row.finishedAt, isNull);
+  });
+  test('pending v3 aliases keep playback and export polling without a source URL', () {
+    final response = AudioUrlsResponse.fromJson({
+      'audio_files': [
+        {'id': 'alias', 'status': 'pending', 'signed_url': null, 'duration': 10}
+      ],
+      'conversation_audio': {'status': 'pending', 'signed_url': null, 'spans': []},
+      'poll_after_ms': 5000,
+    });
+    expect(response.files, isNotEmpty);
+    expect(response.hasPending, true);
+    expect(response.playbackReady, false);
+    expect(response.files.single.signedUrl, isNull);
   });
 }

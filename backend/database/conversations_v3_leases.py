@@ -5,6 +5,7 @@ from uuid import uuid4
 from contextlib import contextmanager
 import logging
 import threading
+from time import monotonic
 from google.cloud import firestore
 from database._client import get_firestore_client
 from utils.conversations.v3.errors import Conflict
@@ -67,13 +68,16 @@ def renew(uid, key, token, *, firestore_client=None):
 def keepalive(uid, key, token):
     """Own and join the heartbeat of synchronous reprocess/merge writers."""
     stop = threading.Event()
+    deadline = monotonic() + 900
 
     def heartbeat():
-        failures = 0
-        while not stop.wait(LEASE_SECONDS / 3):
+        failures, delay = 0, LEASE_SECONDS / 3
+        while not stop.wait(delay):
+            if monotonic() >= deadline:
+                return
             try:
                 renew(uid, key, token)
-                failures = 0
+                failures, delay = 0, LEASE_SECONDS / 3
             except Exception as exc:
                 # Persistence still checks the token and expiry. A transient
                 # read fault must not cancel a paid call while its lease holds.
@@ -81,6 +85,7 @@ def keepalive(uid, key, token):
                 failures += 1
                 if isinstance(exc, Conflict) or failures >= 3:
                     return
+                delay = 2 ** (failures - 1)
 
     worker = threading.Thread(target=heartbeat, name='v3-writer-lease', daemon=True)
     worker.start()

@@ -274,7 +274,7 @@ def _conversation_audio_urls_entry(
     retry_epoch = None
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
         retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, fingerprint=fingerprint)
-        if retry_epoch is None and not v3:
+        if retry_epoch is None:
             return {"status": "unavailable", "signed_url": None, "spans": []}
     epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
     enqueue_conversation_artifact_build(
@@ -452,7 +452,14 @@ def get_audio_signed_urls(
         owner = playback_snapshot(uid, owner)
         entry = _conversation_audio_urls_entry(uid, conversation_id, owner.get('audio_files') or [], owner)
         return {
-            'audio_files': [],
+            'audio_files': (
+                [
+                    {'id': af['id'], 'status': entry['status'], 'signed_url': None, 'duration': af.get('duration', 0)}
+                    for af in owner.get('audio_files') or []
+                ]
+                if entry['status'] != 'cached'
+                else []
+            ),
             'conversation_audio': entry,
             'poll_after_ms': AUDIO_URLS_POLL_AFTER_MS if entry['status'] == 'pending' else None,
         }

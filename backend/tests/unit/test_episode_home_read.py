@@ -599,3 +599,19 @@ def test_home_24_hour_hold_and_composer_transcript_wait_are_independent(monkeypa
     home_read.project_episode('u', episode, members={'c': row})
     assert composer.needs_compose(episode)  # Compose expiry never flips the Home label to failed.
     assert home_read.project_episode('u', episode, members={'c': row})['members'][0]['title'] == 'Transcribing…'
+
+
+def test_member_read_mask_preserves_recording_guard_after_rollback(store, monkeypatch):
+    row = {
+        'recording': True,
+        'home_hidden': True,
+        'status': 'completed',
+        'started_at': START,
+        'finished_at': START + timedelta(minutes=1),
+        'structured': {'title': 'Raw capture'},
+    }
+    store.collection('users').document('u').collection('conversations').document('r').set(row)
+    monkeypatch.setattr(home_read.conversations, 'prepare_conversation_for_read', lambda row, uid: row)
+    members = home_read._read_members('u', [{'conversation_ids': ['r']}], firestore_client=store)
+    assert members['r']['recording'] and members['r']['home_hidden']
+    assert home_read.project_episode('u', _episode('r'), members=members) is None

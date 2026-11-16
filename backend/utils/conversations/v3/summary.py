@@ -67,6 +67,8 @@ async def prepare(uid, row):
 
 async def stream(uid: str, row: dict[str, Any], *, token=None):
     if fresh(row) or not summary_eligible(row):
+        if token:
+            await run_blocking(db_executor, leases.release, uid, 'summary-' + row['id'], token)
         yield done(row)
         return
     token = token or await prepare(uid, row)

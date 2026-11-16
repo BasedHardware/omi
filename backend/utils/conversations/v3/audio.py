@@ -3,12 +3,13 @@
 import hashlib
 import io
 import json
+from typing import Any
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 
 from database import conversations as conversations_db
-from utils.conversations.v3.outline import utc
+from utils.conversations.v3.outline import utc, playback_origin
 
 
 def resolve(uid, conversation, audio_file):
@@ -39,7 +40,7 @@ def _resolve(uid, conversation, audio_file):
     return rid, original, recording
 
 
-def playback_snapshot(uid, conversation):
+def playback_snapshot(uid, conversation) -> dict[str, Any]:
     """Resolve current owner-scoped pieces, including deletion/source revisions.
 
     Missing pieces do not authorize playing their covering file. They contribute
@@ -65,9 +66,7 @@ def playback_snapshot(uid, conversation):
                 raise HTTPException(404)
             rid, original, recording = _resolve(uid, owner, alias)
             stamps = original.get('chunk_timestamps') or []
-            origin = utc(original.get('started_at')) or (
-                datetime.fromtimestamp(min(stamps), timezone.utc) if stamps else utc(recording.get('started_at'))
-            )
+            origin = playback_origin(original, recording)
             if origin is not None and stamps:
                 deleted = [
                     ((utc(s['start']) - origin).total_seconds(), (utc(s['end']) - origin).total_seconds())
@@ -79,13 +78,15 @@ def playback_snapshot(uid, conversation):
                     origin=origin,
                     intervals=subtract_spans(piece['start'], piece['end'], deleted),
                 )
+            else:
+                part['pending'] = True
         except HTTPException as exc:
             if exc.status_code != 404:
                 raise
         parts.append(part)
     fingerprint = hashlib.sha256(
         json.dumps(
-            {'format': 'v3-window-pcm-v1', 'origin': owner.get('started_at'), 'parts': parts},
+            {'format': 'v3-window-pcm-v2', 'origin': owner.get('started_at'), 'parts': parts},
             sort_keys=True,
             default=str,
         ).encode()
@@ -104,7 +105,9 @@ def build_artifact(uid, conversation):
         key=lambda p: (str(p.get('origin') or ''), p['piece']['start'], p['piece']['recording_id']),
     )
     for part in parts:
-        if 'source' not in part:
+        if part.get('pending'):
+            raise RuntimeError('v3_piece_not_ready')
+        if 'source' not in part or not part.get('intervals'):
             continue
         af = part['source']
         try:
@@ -120,11 +123,13 @@ def build_artifact(uid, conversation):
                 playback.validate_sources(
                     [af], playback.list_audio_chunks(uid, part['recording_id'], source_identity=True)
                 )
-        except FileNotFoundError:
-            continue
+        except FileNotFoundError as exc:
+            raise RuntimeError('v3_piece_not_ready') from exc
         for left, right in part['intervals']:
             # Align slices to PCM16 sample boundaries, never encoder padding.
             a, b = int(left * playback.AUDIO_SAMPLE_RATE) * 2, int(right * playback.AUDIO_SAMPLE_RATE) * 2
+            if b > len(pcm):
+                raise RuntimeError('v3_piece_not_ready')
             clipped = pcm[a:b]
             if not clipped:
                 continue
@@ -198,10 +203,7 @@ def manifest(uid, conversation):
         url = url_info.get('signed_url')
         if not url:
             continue
-        stamps = original.get('chunk_timestamps') or []
-        origin = utc(original.get('started_at')) or (
-            datetime.fromtimestamp(min(stamps), timezone.utc) if stamps else utc(recording.get('started_at'))
-        )
+        origin = playback_origin(original, recording)
         if origin is None:
             raise HTTPException(503, 'Audio clock metadata is being prepared')
         deleted = []

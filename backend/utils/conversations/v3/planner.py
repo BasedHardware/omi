@@ -1,14 +1,13 @@
 """Pure boundary and late-speech policy. No switch reads and no IO."""
 
 from utils.conversations.v3 import visibility
+from utils.conversations.v3.outline import playback_origin
 
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 from difflib import SequenceMatcher
 from typing import Any
-
-from utils.conversations.v3.outline import utc
 
 CAP = timedelta(hours=2)
 RESUME = timedelta(minutes=20)
@@ -92,11 +91,7 @@ def build(uid, window, recordings, existing=None):
         owned = [line for line in lines if line['conversation_id'] == rid]
         left, right = min(l['start'] for l in owned), max(l['end'] for l in owned)
         for af in recording.get('audio_files') or []:
-            # Audio file timestamps are epoch seconds on the recorded clock.
-            stamps = af.get('chunk_timestamps') or []
-            origin = utc(af.get('started_at')) or (
-                utc(recording.get('started_at')) if not stamps else datetime.fromtimestamp(min(stamps), timezone.utc)
-            )
+            origin = playback_origin(af, recording)
             duration = float(af.get('duration') or 0)
             a, b = max(0.0, (left - origin).total_seconds()), min(duration, (right - origin).total_seconds())
             if b > a:

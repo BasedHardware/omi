@@ -435,3 +435,29 @@ def test_failure_never_replaces_a_locked_presentation(strict):
     token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, None, firestore_client=strict)
     assert strict.rows[path]['is_locked'] and strict.rows[path]['tile_state'] != 'failed'
+
+
+def test_multiple_open_rows_are_rejected_before_any_batch_or_codec_write(strict, monkeypatch):
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    monkeypatch.setattr(
+        store.conversations,
+        '_prepare_conversation_for_write',
+        lambda *a, **kw: pytest.fail('codec/offload ran before global open check'),
+    )
+    rows = [{'id': cid, 'status': 'in_progress', 'padding': 'x' * 2100000} for cid in ['a', 'b']]
+    with pytest.raises(store.Conflict, match='multiple_open'):
+        store.commit_projection('synthetic', token, {}, {}, rows, [], firestore_client=strict)
+    assert not any(p[2] == 'conversations' for p in strict.rows)
+
+
+def test_terminal_failure_counter_counts_committed_transitions_once(strict):
+    from utils.conversations.v3 import metrics
+
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {'id': 'c', 'v3_derived': True, 'sync_content_revision': 1, 'transcript_segments': [{'text': 'speech'}]}
+    strict.rows[path] = dict(row)
+    token = leases.acquire('synthetic', 'summary-c', firestore_client=strict)
+    before = metrics.TERMINAL_FAILURES.labels('processing')._value.get()
+    assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
+    assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
+    assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1

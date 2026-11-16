@@ -442,7 +442,14 @@ def test_v3_urls_only_serves_conversation_artifact(monkeypatch, cached):
     enqueues = []
     monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', lambda *a, **kw: enqueues.append(a))
     result = playback.get_audio_signed_urls('u', 'c', row['audio_files'], row)
-    assert result['audio_files'] == []
+    assert result['audio_files'] == (
+        [] if cached else [{'id': 'alias', 'status': 'pending', 'signed_url': None, 'duration': 10}]
+    )
+    if not cached:
+        assert result['audio_files'] and all(
+            f['status'] == 'pending' and not f['signed_url'] for f in result['audio_files']
+        )
+        assert result['poll_after_ms']
     assert result['conversation_audio']['status'] == ('cached' if cached else 'pending')
     assert bool(enqueues) is not cached
 
@@ -471,7 +478,9 @@ def test_backup_manifest_uses_exact_artifact_or_pending(monkeypatch):
     monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *a: None)
     monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', lambda *a, **kw: None)
     result = backup.backup_audio_manifest('plugin', 'c', 'Bearer synthetic')
-    assert result['audio_files'] == []
+    assert result['audio_files'][0]['status'] == 'pending'
+    assert result['audio_files'][0]['signed_url'] is None
+    assert result['poll_after_ms']
     assert result['conversation_audio']['status'] == 'pending'
 
 
@@ -525,3 +534,74 @@ def test_cached_backup_artifact_keeps_legacy_audio_files_protocol(monkeypatch):
     assert result['audio_files'][0]['content_type'] == 'audio/mpeg'
     assert result['audio_files'][0]['id'].startswith('conversation-')
     assert result['audio_files'][0]['id'] != 'alias'
+
+
+def test_v3_permanent_unavailable_stops_poll_enqueues_and_piece_change_heals(monkeypatch):
+    audio, row, _ = _v3_fixture(monkeypatch)
+    fingerprint = audio.playback_snapshot('u', row)['_v3_playback_fingerprint']
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *a: fingerprint)
+    enqueued = []
+    monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', lambda *a, **kw: enqueued.append(a))
+    for _ in range(2):
+        result = playback.get_audio_signed_urls('u', 'c', row['audio_files'], row)
+        assert result['audio_files'][0]['status'] == 'unavailable'
+        assert result['conversation_audio']['status'] == 'unavailable'
+    assert not enqueued
+    row['recording_pieces'][0]['end'] = 2
+    assert playback.get_audio_signed_urls('u', 'c', row['audio_files'], row)['audio_files'][0]['status'] == 'pending'
+    assert len(enqueued) == 1
+
+
+@pytest.mark.parametrize('missing', ['metadata', 'chunks', 'short_pcm'])
+def test_v3_temporarily_missing_piece_never_exports_partial_artifact(monkeypatch, missing):
+    audio, row, recording = _v3_fixture(monkeypatch)
+    second = {'id': 'later', 'chunk_timestamps': [1010.0], 'duration': 5}
+    recording['audio_files'].append(second)
+    row['audio_files'].append({**second, 'id': 'later-alias', 'recording_id': 'r', 'recording_file_id': 'later'})
+    row['recording_pieces'].append({'recording_id': 'r', 'audio_file_id': 'later', 'start': 0, 'end': 2})
+    monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
+    ready = False
+
+    def pcm(uid, rid, timestamps, *args):
+        if timestamps == [1010.0] and not ready:
+            if missing == 'chunks':
+                raise FileNotFoundError('not ready')
+            if missing == 'short_pcm':
+                return b'\0' * 32000
+        return b'\0' * 320000
+
+    monkeypatch.setattr(playback, '_merge_playback_sources', pcm)
+    if missing == 'metadata':
+        second['chunk_timestamps'] = []
+    snapshot = audio.playback_snapshot('u', row)
+    with pytest.raises(RuntimeError, match='v3_piece_not_ready'):
+        audio.build_artifact('u', snapshot)
+    ready = True
+    second['chunk_timestamps'] = [1010.0]
+    _mp3, spans = audio.build_artifact('u', audio.playback_snapshot('u', row))
+    assert sum(s['len'] for s in spans) == 6
+
+
+def test_v3_artifact_wall_clock_uses_normalized_playback_start(monkeypatch):
+    audio, row, recording = _v3_fixture(monkeypatch)
+    recording['audio_files'][0].update(chunk_timestamps=[1171.0], playback_start=1000.0)
+    monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
+    monkeypatch.setattr(playback, '_merge_playback_sources', lambda *a: b'\0' * 320000)
+    _, spans = audio.build_artifact('u', audio.playback_snapshot('u', row))
+    assert [s['wall_offset'] for s in spans] == [1.0, 6.0]
+
+
+def test_v3_fully_deleted_piece_needs_no_source_download(monkeypatch):
+    audio, row, _ = _v3_fixture(monkeypatch)
+    snapshot = audio.playback_snapshot('u', row)
+    snapshot['_v3_playback_parts'][0]['intervals'] = []
+    snapshot['_v3_playback_parts'][0]['source'] = {'id': 'gone', 'chunk_timestamps': [999.0]}
+
+    def merge(uid, rid, timestamps, *args):
+        assert timestamps != [999.0], 'fully deleted piece must not require source bytes'
+        return b'\0' * 320000
+
+    monkeypatch.setattr(playback, '_merge_playback_sources', merge)
+    monkeypatch.setattr(playback, 'AudioSegment', _FakeAudioSegment)
+    _, spans = audio.build_artifact('u', snapshot)
+    assert sum(s['len'] for s in spans) == 2

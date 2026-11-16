@@ -1,6 +1,7 @@
 """Conversation summary persistence and content-scoped retry fences."""
 
 from database import conversations_v3_leases as leases
+from utils.conversations.v3 import metrics
 
 import hashlib
 import json
@@ -138,7 +139,7 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         )
         if attempts >= 2:
             tx.update(ref, failure_patch(retryable=bool(row.get('transcript_segments')), reason='attempts_exhausted'))
-            return False
+            return 'failed' if not current.get('v3_process_failed') else False
         tx.update(
             ref,
             {
@@ -154,7 +155,10 @@ def begin_processing(uid, row, token, *, force=False, firestore_client=None):
         )
         return True
 
-    return begin(client.transaction())
+    result = begin(client.transaction())
+    if result == 'failed':
+        metrics.terminal_failure('attempts_exhausted')
+    return result is True
 
 
 def failure_patch(*, retryable=True, reason='processing'):
@@ -189,6 +193,9 @@ def fail_processing(uid, cid, token, revision, *, content_hash=None, retryable=T
             if not content_hash or processing_hash(store.decode_row(uid, snapshot)) != content_hash:
                 raise Conflict('processing_source_changed')
         tx.update(ref, failure_patch(retryable=retryable))
-        return True
+        return not row.get('v3_process_failed')
 
-    return fail(client.transaction())
+    changed = fail(client.transaction())
+    if changed:
+        metrics.terminal_failure('processing')
+    return changed

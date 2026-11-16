@@ -193,6 +193,8 @@ def get_live_conversation(
         if row
         else None
     )
+    if compact is not None:
+        compact['finished_at'] = row.get('finished_at')
     if compact and 'structured' in compact:
         compact['structured'] = {
             key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
@@ -2808,9 +2810,14 @@ async def conversation_summary_stream(conversation_id: str, uid: str = Depends(a
         from utils.conversations.v3.service import reconcile
 
         try:
-            await asyncio.wait_for(reconcile(uid, on_open=True, conversation_id=conversation_id), timeout=8)
-        except asyncio.TimeoutError:
-            pass
+            from utils.executors import start_background_task
+
+            work = start_background_task(
+                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+            )
+            await asyncio.wait_for(asyncio.shield(work), timeout=8)
+        except Exception as exc:
+            logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
         conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
     token = await v3_summary.prepare(uid, conversation)
     return StreamingResponse(

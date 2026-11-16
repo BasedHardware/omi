@@ -21703,6 +21703,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -21741,6 +21753,7 @@
           "id",
           "structured",
           "started_at",
+          "finished_at",
           "created_at",
           "status"
         ],
