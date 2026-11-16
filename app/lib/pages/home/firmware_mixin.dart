@@ -418,8 +418,9 @@ mixin FirmwareMixin<T extends StatefulWidget> on State<T> {
     }
   }
 
-  Future<(String, bool, String)> shouldUpdateFirmware({required String currentFirmware}) async {
-    return DeviceUtils.shouldUpdateFirmware(
+  Future<({FirmwareUpdateCheck status, String message, String version})> checkFirmwareUpdate(
+      {required String currentFirmware}) async {
+    return DeviceUtils.checkFirmwareUpdate(
       currentFirmware: currentFirmware,
       latestFirmwareDetails: latestFirmwareDetails,
     );

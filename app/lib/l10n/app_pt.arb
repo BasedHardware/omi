@@ -4691,5 +4691,6 @@
     "monthlySwitchUnavailable": "A mudança não está disponível agora. Atualize seu cartão.",
     "monthlySwitchDoneTitle": "Agora você está no plano mensal",
     "monthlySwitchDoneBody": "{price} pagos hoje. Renova todo mês.",
-    "processingDeleteScopeChanged": "A lista de processamento mudou. Revise-a e tente novamente."
+    "processingDeleteScopeChanged": "A lista de processamento mudou. Revise-a e tente novamente.",
+    "firmwareUpdateCheckUnavailable": "Não foi possível confirmar o firmware mais recente para o seu dispositivo. Verifique sua conexão com a internet e certifique-se de que o app Omi está atualizado; depois tente novamente."
 }

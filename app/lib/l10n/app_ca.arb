@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Ara no es pot canviar. Actualitza la targeta.",
     "monthlySwitchDoneTitle": "Ara pagues mensualment",
     "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes.",
-    "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar."
+    "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar.",
+    "firmwareUpdateCheckUnavailable": "No s'ha pogut confirmar el firmware més recent per al teu dispositiu. Comprova la connexió a internet i assegura't que l'app Omi està actualitzada; després torna-ho a provar."
 }

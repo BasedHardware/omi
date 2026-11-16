@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Prechod teraz nie je dostupný. Aktualizujte namiesto toho kartu.",
     "monthlySwitchDoneTitle": "Teraz platíte mesačne",
     "monthlySwitchDoneBody": "Dnes zaplatené {price}. Obnovuje sa mesačne.",
-    "processingDeleteScopeChanged": "Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova."
+    "processingDeleteScopeChanged": "Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.",
+    "firmwareUpdateCheckUnavailable": "Nepodarilo sa overiť najnovší firmvér pre vaše zariadenie. Skontrolujte pripojenie na internet a uistite sa, že aplikácia Omi je aktuálna, a potom to skúste znova."
 }

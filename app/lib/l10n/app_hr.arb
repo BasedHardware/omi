@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.",
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
     "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
-    "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno."
+    "processingDeleteScopeChanged": "Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.",
+    "firmwareUpdateCheckUnavailable": "Nije moguće potvrditi najnoviji firmver za vaš uređaj. Provjerite internetsku vezu i provjerite je li aplikacija Omi ažurirana, a zatim pokušajte ponovno."
 }

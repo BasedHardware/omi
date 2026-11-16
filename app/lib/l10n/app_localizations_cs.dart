@@ -15463,4 +15463,8 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nepodařilo se ověřit nejnovější firmware pro vaše zařízení. Zkontrolujte připojení k internetu a ujistěte se, že je aplikace Omi aktuální, a zkuste to znovu.';
 }

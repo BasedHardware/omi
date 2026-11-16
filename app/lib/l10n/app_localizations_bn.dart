@@ -15458,4 +15458,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'আপনার ডিভাইসের সর্বশেষ ফার্মওয়্যার নিশ্চিত করা যায়নি। আপনার ইন্টারনেট সংযোগ পরীক্ষা করুন এবং Omi অ্যাপটি আপডেট করা আছে কিনা নিশ্চিত করুন, তারপর আবার চেষ্টা করুন।';
 }

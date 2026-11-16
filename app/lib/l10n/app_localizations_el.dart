@@ -15565,4 +15565,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Δεν ήταν δυνατή η επιβεβαίωση του πιο πρόσφατου υλικολογισμικού για τη συσκευή σας. Ελέγξτε τη σύνδεσή σας στο διαδίκτυο και βεβαιωθείτε ότι η εφαρμογή Omi είναι ενημερωμένη και, στη συνέχεια, δοκιμάστε ξανά.';
 }

@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.",
     "monthlySwitchDoneTitle": "Buwanan ka na",
     "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
-    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli."
+    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.",
+    "firmwareUpdateCheckUnavailable": "Hindi makumpirma ang pinakabagong firmware para sa iyong device. Tingnan ang iyong koneksyon sa internet at tiyaking updated ang Omi app, pagkatapos ay subukang muli."
 }

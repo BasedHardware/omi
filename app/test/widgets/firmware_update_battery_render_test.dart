@@ -31,6 +31,8 @@ import '../helpers/sfpro_font_fixtures.dart';
 
 bool _offerZip = false;
 void Function()? _onDownload;
+int _lookupStatus = 200;
+Map<String, dynamic> _lookupBody = const {};
 
 class _EnvFields implements EnvFields {
   const _EnvFields();
@@ -104,6 +106,8 @@ void main() {
   setUp(() {
     _offerZip = false;
     _onDownload = null;
+    _lookupStatus = 200;
+    _lookupBody = const {};
   });
 
   Future<void> pumpPage(WidgetTester tester, _DeviceProvider provider,
@@ -204,6 +208,48 @@ void main() {
         rollback: true, firmwareVersion: '3.0.1', expectOffer: false);
     expect(find.text(en.alreadyOnStableFirmware), findsOneWidget);
     await capture(tester, 'ota-already-stable.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  // #25375: a lookup that cannot confirm the latest firmware must not render the green
+  // "up to date" status, which reads as a successful check.
+  testWidgets('failed firmware lookup is not reported as up to date', (tester) async {
+    _lookupStatus = 503;
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+    expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+    expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
+    await capture(tester, '001-mobile-ios-firmware-check-unavailable.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  for (final (name, body) in [
+    ('draft release', <String, dynamic>{'draft': true}),
+    ('missing minimum version', <String, dynamic>{'min_version': null}),
+    ('below minimum version', <String, dynamic>{'min_version': '2.5.0'}),
+    ('newer app required', <String, dynamic>{'min_app_version': '99.0.0', 'min_app_version_code': '999999'}),
+  ]) {
+    testWidgets('$name is not reported as up to date', (tester) async {
+      _lookupBody = body;
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.text(en.firmwareUpdateCheckUnavailable), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
+  testWidgets('firmware at the latest version is still reported as up to date', (tester) async {
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: '3.0.1', expectOffer: false);
+    expect(find.text(en.yourDeviceIsUpToDate), findsOneWidget);
+    expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
+    await capture(tester, '002-mobile-ios-firmware-up-to-date.png');
+    debugDefaultTargetPlatformOverride = null;
+  });
+
+  testWidgets('failed stable lookup during rollback is not reported as already stable', (tester) async {
+    _lookupStatus = 503;
+    await pumpPage(tester, _DeviceProvider(batteryLevel: 80), rollback: true, expectOffer: false);
+    expect(find.text(en.alreadyOnStableFirmware), findsNothing);
+    expect(find.text(en.noStableFirmwareFound), findsOneWidget);
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -497,11 +543,13 @@ class _FirmwareRequest implements HttpClientRequest {
       _onDownload?.call();
       return _FirmwareResponse([1, 2, 3]);
     }
+    if (_lookupStatus != 200) return _FirmwareResponse(utf8.encode('{"detail": "unavailable"}'), _lookupStatus);
     return _FirmwareResponse(utf8.encode(jsonEncode({
       'version': '3.0.1',
       'min_version': '2.0.0',
       'draft': false,
       if (_offerZip) 'zip_url': 'http://firmware.test/firmware.zip',
+      ..._lookupBody,
     })));
   }
 
@@ -514,10 +562,10 @@ class _FirmwareRequest implements HttpClientRequest {
 }
 
 class _FirmwareResponse extends Stream<List<int>> implements HttpClientResponse {
-  _FirmwareResponse(this._body);
+  _FirmwareResponse(this._body, [this.statusCode = 200]);
   final List<int> _body;
   @override
-  int get statusCode => 200;
+  final int statusCode;
   @override
   int get contentLength => _body.length;
   @override

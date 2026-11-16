@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.",
     "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
     "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi.",
-    "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz."
+    "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.",
+    "firmwareUpdateCheckUnavailable": "Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz."
 }

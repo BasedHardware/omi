@@ -15528,4 +15528,8 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списокот за обработка се промени. Прегледајте го и обидете се повторно.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не можевме да го потврдиме најновиот фирмвер за вашиот уред. Проверете ја интернет-врската и уверете се дека апликацијата Omi е ажурирана, а потоа обидете се повторно.';
 }

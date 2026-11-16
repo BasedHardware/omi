@@ -15492,4 +15492,8 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova.';
 }

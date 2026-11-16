@@ -15491,4 +15491,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A lista de processamento mudou. Revise-a e tente novamente.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Não foi possível confirmar o firmware mais recente para o seu dispositivo. Verifique sua conexão com a internet e certifique-se de que o app Omi está atualizado; depois tente novamente.';
 }

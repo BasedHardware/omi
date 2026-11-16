@@ -15472,4 +15472,8 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Det gick inte att bekräfta den senaste firmwaren för din enhet. Kontrollera internetanslutningen och se till att Omi-appen är uppdaterad, och försök sedan igen.';
 }

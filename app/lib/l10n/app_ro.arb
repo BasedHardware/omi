@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Trecerea nu este disponibilă acum. Actualizează cardul în schimb.",
     "monthlySwitchDoneTitle": "Acum plătești lunar",
     "monthlySwitchDoneBody": "{price} plătiți azi. Se reînnoiește lunar.",
-    "processingDeleteScopeChanged": "Lista de procesare s-a schimbat. Verifică lista și încearcă din nou."
+    "processingDeleteScopeChanged": "Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.",
+    "firmwareUpdateCheckUnavailable": "Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou."
 }

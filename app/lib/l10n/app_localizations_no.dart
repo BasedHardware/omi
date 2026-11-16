@@ -15467,4 +15467,8 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Kunne ikke bekrefte den nyeste fastvaren for enheten din. Sjekk internettforbindelsen og sørg for at Omi-appen er oppdatert, og prøv deretter på nytt.';
 }

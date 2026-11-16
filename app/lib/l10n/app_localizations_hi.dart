@@ -15446,4 +15446,8 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'आपके डिवाइस के लिए नवीनतम फ़र्मवेयर की पुष्टि नहीं हो सकी। अपना इंटरनेट कनेक्शन जाँचें और सुनिश्चित करें कि Omi ऐप अपडेट है, फिर दोबारा कोशिश करें।';
 }

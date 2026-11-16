@@ -6,6 +6,9 @@ import 'package:version/version.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 
+/// Outcome of a firmware lookup, as far as the firmware update page may claim it.
+enum FirmwareUpdateCheck { updateAvailable, upToDate, notConfirmed }
+
 class DeviceUtils {
   /// Closed, analysis-safe hardware family used by product telemetry.
   static String analyticsHardwareFamily(BtDevice device) {
@@ -50,29 +53,45 @@ class DeviceUtils {
     required String currentFirmware,
     required Map latestFirmwareDetails,
   }) async {
+    final check = await checkFirmwareUpdate(
+      currentFirmware: currentFirmware,
+      latestFirmwareDetails: latestFirmwareDetails,
+    );
+    return (check.message, check.status == FirmwareUpdateCheck.updateAvailable, check.version);
+  }
+
+  /// Classifies a firmware lookup. Only [FirmwareUpdateCheck.upToDate] means the lookup confirmed the
+  /// device already runs the latest release; every other outcome without an offer is
+  /// [FirmwareUpdateCheck.notConfirmed] (failed or empty lookup, draft or unparsable release metadata,
+  /// a device below the release's minimum version, or a release that needs a newer app).
+  static Future<({FirmwareUpdateCheck status, String message, String version})> checkFirmwareUpdate({
+    required String currentFirmware,
+    required Map latestFirmwareDetails,
+  }) async {
+    const notConfirmed = FirmwareUpdateCheck.notConfirmed;
     if (currentFirmware.isEmpty) {
-      return ('Unable to determine current firmware version', false, '');
+      return (status: notConfirmed, message: 'Unable to determine current firmware version', version: '');
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
-      return ('Latest Version Not Available', false, '');
+      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
     }
     if (latestFirmwareDetails['draft'] == true) {
-      return ('Latest Version Not Available', false, '');
+      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
     }
 
     Version? currentVersion = _tryParseVersion(currentFirmware);
     if (currentVersion == null) {
-      return ('Unable to determine current firmware version', false, '');
+      return (status: notConfirmed, message: 'Unable to determine current firmware version', version: '');
     }
     String latestVersionStr = latestFirmwareDetails['version'];
     Version? latestVersion = _tryParseVersion(latestVersionStr);
     Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
     if (latestVersion == null || minVersion == null) {
-      return ('Latest Version Not Available', false, '');
+      return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
     }
 
     if (currentVersion < minVersion) {
-      return ('0', false, latestVersionStr);
+      return (status: notConfirmed, message: '0', version: latestVersionStr);
     } else {
       if (latestVersion > currentVersion) {
         PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -87,15 +106,24 @@ class DeviceUtils {
             appVersion <= minAppVersion &&
             buildNumber < minBuildNumber) {
           return (
-            'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
-            false,
-            latestVersionStr,
+            status: notConfirmed,
+            message:
+                'The latest version of firmware is not compatible with this version of App (${packageInfo.version}+${packageInfo.buildNumber}). Please update the app from ${Platform.isAndroid ? 'Play Store' : 'App Store'}',
+            version: latestVersionStr,
           );
         } else {
-          return ('A new version is available! Update your Omi now.', true, latestVersionStr);
+          return (
+            status: FirmwareUpdateCheck.updateAvailable,
+            message: 'A new version is available! Update your Omi now.',
+            version: latestVersionStr,
+          );
         }
       } else {
-        return ('You are already on the latest version', false, latestVersionStr);
+        return (
+          status: FirmwareUpdateCheck.upToDate,
+          message: 'You are already on the latest version',
+          version: latestVersionStr,
+        );
       }
     }
   }

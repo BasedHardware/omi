@@ -15456,4 +15456,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'تأیید آخرین فریم‌ور دستگاه شما ممکن نشد. اتصال اینترنت خود را بررسی کنید و مطمئن شوید برنامه Omi به‌روز است، سپس دوباره امتحان کنید.';
 }

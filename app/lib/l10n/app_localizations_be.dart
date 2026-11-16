@@ -15499,4 +15499,8 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не ўдалося праверыць апошнюю прашыўку для вашай прылады. Праверце падключэнне да інтэрнэту і пераканайцеся, што праграма Omi абноўлена, затым паспрабуйце яшчэ раз.';
 }

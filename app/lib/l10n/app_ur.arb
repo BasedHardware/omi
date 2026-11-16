@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
-    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔"
+    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
+    "firmwareUpdateCheckUnavailable": "آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔"
 }

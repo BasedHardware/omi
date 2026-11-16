@@ -15498,4 +15498,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Neizdevās apstiprināt jaunāko programmaparatūru jūsu ierīcei. Pārbaudiet interneta savienojumu un pārliecinieties, ka lietotne Omi ir atjaunināta, pēc tam mēģiniet vēlreiz.';
 }

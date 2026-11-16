@@ -15459,4 +15459,8 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nepodarilo sa overiť najnovší firmvér pre vaše zariadenie. Skontrolujte pripojenie na internet a uistite sa, že aplikácia Omi je aktuálna, a potom to skúste znova.';
 }

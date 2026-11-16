@@ -9,6 +9,7 @@ import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/firmware_update_battery.dart';
 import 'package:omi/utils/firmware_install_verification.dart';
@@ -28,6 +29,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   bool shouldUpdate = false;
   String updateMessage = '';
   bool isLoading = false;
+
+  /// Whether the lookup positively confirmed the device needs nothing (latest, or already on stable).
+  /// A failed or inconclusive lookup leaves this false so the page never reports it as success.
+  bool isConfirmedCurrent = false;
 
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
@@ -50,6 +55,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         if (mounted) {
           setState(() {
             shouldUpdate = isKnownFirmwareVersion(stableVersion) && !alreadyStable;
+            isConfirmedCurrent = alreadyStable;
             updateMessage = alreadyStable
                 ? context.l10n.alreadyOnStableFirmware
                 : shouldUpdate
@@ -66,12 +72,14 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           manufacturerName: device.manufacturerName,
           serialNumber: device.serialNumber,
         );
-        var result = await shouldUpdateFirmware(currentFirmware: widget.device!.firmwareRevision);
+        var result = await checkFirmwareUpdate(currentFirmware: widget.device!.firmwareRevision);
         if (mounted) {
           setState(() {
-            shouldUpdate = result.$2;
-            updateMessage =
-                widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
+            shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
+            isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
+            updateMessage = widget.device!.firmwareRevision.isEmpty
+                ? context.l10n.unableToDetermineFirmwareVersion
+                : result.message;
             isLoading = false;
           });
         }
@@ -383,8 +391,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Up to date status (only when not needing update)
-        if (!shouldUpdate) ...[
+        // Up to date status (only when the lookup confirmed it), otherwise say the check was inconclusive
+        if (!shouldUpdate && isConfirmedCurrent) ...[
           Padding(
             padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
             child: Row(
@@ -397,6 +405,28 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                 ),
                 const SizedBox(width: OmiSpacing.xs),
                 FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success, size: 14),
+              ],
+            ),
+          ),
+        ] else if (!shouldUpdate) ...[
+          Padding(
+            key: const Key('firmware_update_check_not_confirmed'),
+            padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: OmiSpacing.sm),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.isRollback
+                        ? context.l10n.noStableFirmwareFound
+                        : widget.device!.firmwareRevision.isEmpty
+                            ? context.l10n.unableToDetermineFirmwareVersion
+                            : context.l10n.firmwareUpdateCheckUnavailable,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+                const SizedBox(width: OmiSpacing.xs),
+                FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.warning, size: 14),
               ],
             ),
           ),

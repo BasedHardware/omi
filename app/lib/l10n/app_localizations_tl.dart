@@ -15586,4 +15586,8 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Hindi makumpirma ang pinakabagong firmware para sa iyong device. Tingnan ang iyong koneksyon sa internet at tiyaking updated ang Omi app, pagkatapos ay subukang muli.';
 }

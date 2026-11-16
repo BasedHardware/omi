@@ -15500,4 +15500,8 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi.';
 }

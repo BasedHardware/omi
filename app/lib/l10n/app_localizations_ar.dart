@@ -15375,4 +15375,8 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'تعذّر التحقق من أحدث برنامج ثابت لجهازك. تحقّق من اتصالك بالإنترنت وتأكّد من تحديث تطبيق Omi، ثم حاول مرة أخرى.';
 }

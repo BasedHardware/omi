@@ -15526,4 +15526,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'మీ పరికరానికి తాజా ఫర్మ్‌వేర్‌ను నిర్ధారించలేకపోయాము. మీ ఇంటర్నెట్ కనెక్షన్‌ను తనిఖీ చేసి, Omi యాప్ నవీకరించబడిందని నిర్ధారించుకోండి, ఆపై మళ్లీ ప్రయత్నించండి.';
 }

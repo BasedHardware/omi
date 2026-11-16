@@ -27128,6 +27128,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
+
+  /// Firmware update page: the check could not confirm the latest firmware (lookup failed, release metadata missing or a newer app is required), so the device is not reported as up to date.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t confirm the latest firmware for your device. Check your internet connection and make sure the Omi app is up to date, then try again.'**
+  String get firmwareUpdateCheckUnavailable;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

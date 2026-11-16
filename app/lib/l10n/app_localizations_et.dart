@@ -15456,4 +15456,8 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti.';
 }

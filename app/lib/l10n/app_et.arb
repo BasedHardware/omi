@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Üleminek pole praegu saadaval. Uuenda selle asemel kaarti.",
     "monthlySwitchDoneTitle": "Maksad nüüd igakuiselt",
     "monthlySwitchDoneBody": "Täna makstud {price}. Uueneb igakuiselt.",
-    "processingDeleteScopeChanged": "Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti."
+    "processingDeleteScopeChanged": "Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.",
+    "firmwareUpdateCheckUnavailable": "Sinu seadme uusimat püsivara ei õnnestunud kinnitada. Kontrolli internetiühendust ja veendu, et Omi rakendus on ajakohane, seejärel proovi uuesti."
 }

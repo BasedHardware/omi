@@ -15541,4 +15541,8 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'L\'elenco in elaborazione è cambiato. Controllalo e riprova.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Impossibile confermare il firmware più recente per il tuo dispositivo. Controlla la connessione a Internet e assicurati che l\'app Omi sia aggiornata, poi riprova.';
 }

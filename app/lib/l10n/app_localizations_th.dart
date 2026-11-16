@@ -15389,4 +15389,8 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'ไม่สามารถยืนยันเฟิร์มแวร์ล่าสุดสำหรับอุปกรณ์ของคุณได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตและตรวจสอบให้แน่ใจว่าแอป Omi เป็นเวอร์ชันล่าสุด แล้วลองอีกครั้ง';
 }

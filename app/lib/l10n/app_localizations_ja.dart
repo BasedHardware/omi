@@ -15235,4 +15235,8 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'お使いのデバイスの最新ファームウェアを確認できませんでした。インターネット接続を確認し、Omiアプリが最新であることを確かめてから、もう一度お試しください。';
 }

@@ -15475,4 +15475,8 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'آپ کے آلے کے لیے تازہ ترین فرم ویئر کی تصدیق نہیں ہو سکی۔ اپنا انٹرنیٹ کنکشن چیک کریں اور یقینی بنائیں کہ Omi ایپ اپ ڈیٹ ہے، پھر دوبارہ کوشش کریں۔';
 }

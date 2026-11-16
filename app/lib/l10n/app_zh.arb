@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "目前无法切换。请改为更新银行卡。",
     "monthlySwitchDoneTitle": "已改为按月付费",
     "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。",
-    "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。"
+    "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。",
+    "firmwareUpdateCheckUnavailable": "无法确认你的设备的最新固件。请检查网络连接并确保 Omi 应用为最新版本，然后重试。"
 }

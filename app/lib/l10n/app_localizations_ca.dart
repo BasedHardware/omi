@@ -15540,4 +15540,8 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'No s\'ha pogut confirmar el firmware més recent per al teu dispositiu. Comprova la connexió a internet i assegura\'t que l\'app Omi està actualitzada; després torna-ho a provar.';
 }

@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.",
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
     "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
-    "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại."
+    "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.",
+    "firmwareUpdateCheckUnavailable": "Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại."
 }

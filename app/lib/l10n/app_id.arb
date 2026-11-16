@@ -4691,5 +4691,6 @@
     "monthlySwitchUnavailable": "Peralihan belum tersedia saat ini. Perbarui kartu Anda saja.",
     "monthlySwitchDoneTitle": "Anda sekarang bayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperpanjang tiap bulan.",
-    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi."
+    "processingDeleteScopeChanged": "Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.",
+    "firmwareUpdateCheckUnavailable": "Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi."
 }

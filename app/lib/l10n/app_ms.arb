@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Pertukaran tidak tersedia sekarang. Kemas kini kad anda sebaliknya.",
     "monthlySwitchDoneTitle": "Anda kini membayar bulanan",
     "monthlySwitchDoneBody": "{price} dibayar hari ini. Diperbaharui setiap bulan.",
-    "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi."
+    "processingDeleteScopeChanged": "Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.",
+    "firmwareUpdateCheckUnavailable": "Tidak dapat mengesahkan perisian tegar terkini untuk peranti anda. Semak sambungan internet anda dan pastikan apl Omi dikemas kini, kemudian cuba lagi."
 }

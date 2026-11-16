@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "Preklop trenutno ni na voljo. Namesto tega posodobite kartico.",
     "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
     "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
-    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova."
+    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.",
+    "firmwareUpdateCheckUnavailable": "Najnovejše vdelane programske opreme za vašo napravo ni bilo mogoče potrditi. Preverite internetno povezavo in se prepričajte, da je aplikacija Omi posodobljena, nato poskusite znova."
 }

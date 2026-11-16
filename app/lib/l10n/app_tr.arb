@@ -4691,5 +4691,6 @@
     "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
-    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin."
+    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
+    "firmwareUpdateCheckUnavailable": "Cihazınız için en son donanım yazılımı doğrulanamadı. İnternet bağlantınızı kontrol edin ve Omi uygulamasının güncel olduğundan emin olun, ardından tekrar deneyin."
 }

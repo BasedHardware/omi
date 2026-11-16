@@ -15522,4 +15522,8 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nem sikerült ellenőrizni az eszközöd legújabb firmware-ét. Ellenőrizd az internetkapcsolatot, és győződj meg róla, hogy az Omi alkalmazás naprakész, majd próbáld újra.';
 }

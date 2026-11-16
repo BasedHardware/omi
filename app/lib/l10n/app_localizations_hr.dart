@@ -15500,4 +15500,8 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nije moguće potvrditi najnoviji firmver za vaš uređaj. Provjerite internetsku vezu i provjerite je li aplikacija Omi ažurirana, a zatim pokušajte ponovno.';
 }

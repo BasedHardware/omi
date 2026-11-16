@@ -15567,4 +15567,8 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'உங்கள் சாதனத்திற்கான சமீபத்திய ஃபர்ம்வேரை உறுதிப்படுத்த முடியவில்லை. உங்கள் இணைய இணைப்பைச் சரிபார்த்து, Omi ஆப் புதுப்பிக்கப்பட்டுள்ளதா என உறுதிசெய்து, மீண்டும் முயலவும்.';
 }

@@ -15528,4 +15528,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nu am putut confirma cel mai recent firmware pentru dispozitivul tău. Verifică conexiunea la internet și asigură-te că aplicația Omi este actualizată, apoi încearcă din nou.';
 }

@@ -15464,4 +15464,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Không thể xác nhận firmware mới nhất cho thiết bị của bạn. Hãy kiểm tra kết nối internet và đảm bảo ứng dụng Omi đã được cập nhật, sau đó thử lại.';
 }

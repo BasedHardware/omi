@@ -15468,4 +15468,8 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Laitteesi uusinta laiteohjelmistoa ei voitu vahvistaa. Tarkista internetyhteys ja varmista, että Omi-sovellus on ajan tasalla, ja yritä sitten uudelleen.';
 }

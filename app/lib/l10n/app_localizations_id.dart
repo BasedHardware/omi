@@ -15478,4 +15478,8 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Tidak dapat memastikan firmware terbaru untuk perangkat Anda. Periksa koneksi internet Anda dan pastikan aplikasi Omi sudah diperbarui, lalu coba lagi.';
 }

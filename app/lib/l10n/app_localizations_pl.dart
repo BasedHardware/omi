@@ -15508,4 +15508,8 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Nie udało się potwierdzić najnowszego oprogramowania układowego dla Twojego urządzenia. Sprawdź połączenie z internetem i upewnij się, że aplikacja Omi jest aktualna, a następnie spróbuj ponownie.';
 }

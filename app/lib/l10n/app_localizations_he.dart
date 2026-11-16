@@ -15351,4 +15351,8 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'לא ניתן היה לאמת את הקושחה העדכנית ביותר למכשיר שלך. בדוק את החיבור לאינטרנט וודא שאפליקציית Omi מעודכנת, ואז נסה שוב.';
 }

@@ -15513,4 +15513,8 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Список обработки изменился. Проверьте его и попробуйте снова.';
+
+  @override
+  String get firmwareUpdateCheckUnavailable =>
+      'Не удалось проверить последнюю прошивку для вашего устройства. Проверьте подключение к интернету и убедитесь, что приложение Omi обновлено, затем повторите попытку.';
 }
