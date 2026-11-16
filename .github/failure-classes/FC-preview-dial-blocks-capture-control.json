@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-preview-dial-blocks-capture-control",
-  "family": "txn-purity",
+  "family": "deadline-budget",
   "violated_contract": "An optional live preview must not await its provider connection in the sole audio/control receive loop. Otherwise a slow dial prevents that loop from observing visibility loss and delays independent original-audio custody, allowing stale visibility to admit paid audio or preview text.",
   "canonical_prevention": "Open the optional provider in a supervised background task, fence adoption and callbacks by the visibility generation, and cancel and collect that task at teardown. Keep current-frame custody independent. Exercise the real WebSocket receive path with a blocked provider: process hide and retain the next raw/PCM frame before releasing the dial, then assert no preview audio was sent.",
   "canonical_prevention_artifact": [
@@ -9,6 +9,11 @@
     "backend/testing/e2e/test_desktop_batch_only.py"
   ],
   "evidence_prs": [],
-  "scope_hints": ["backend/tests/unit/test_visible_restore.py"],
+  "scope_hints": [
+    "backend/routers/listen/receiver.py",
+    "backend/routers/listen/local_preview.py",
+    "backend/routers/listen/preview_custody.py",
+    "backend/tests/unit/test_visible_restore.py"
+  ],
   "status": "open"
 }
