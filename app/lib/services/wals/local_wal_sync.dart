@@ -1590,13 +1590,17 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
-            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
             await File(fullPath).delete();
+            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
             final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
             if (await sidecar.exists()) await sidecar.delete();
             if (!_isCurrent(generation)) return false;
           }
-        } else if (type != FileSystemEntityType.notFound) {
+        } else if (type == FileSystemEntityType.notFound) {
+          if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
+          }
+        } else {
           return false;
         }
       } catch (e) {

@@ -22,6 +22,19 @@ class _UnwritableArchive implements File {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _UndeletableAudio implements File {
+  final File real;
+  _UndeletableAudio(this.real);
+  @override
+  Directory get parent => real.parent;
+  @override
+  Future<bool> exists() => real.exists();
+  @override
+  Future<File> delete({bool recursive = false}) => throw const FileSystemException('audio delete denied');
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _Listener implements IWalSyncListener {
   @override
   void onWalUpdated() {}
@@ -416,5 +429,65 @@ void main() {
     expect(await WalFileManager.loadWals(), isEmpty);
     expect(await intent.exists(), isTrue);
     expect(await File('${documents.path}/${wal.filePath}').readAsBytes(), [1, 2, 3]);
+  });
+  test('failed audio deletion keeps its only durable write intent for restart', () async {
+    final sync = failingLedger();
+    sync.testWals = [
+      Wal(
+          timerStart: 1,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          device: 'pendant',
+          ownerUid: 'owner-a',
+          totalFrames: 1,
+          data: [
+            [1, 2]
+          ])
+    ];
+    await expectLater(sync.stop(), throwsA(isA<FileSystemException>()));
+    final wal = sync.testWals.single;
+    final name = wal.filePath!;
+    expect(await File('${documents.path}/$name').exists(), isTrue);
+    await IOOverrides.runZoned(() => sync.deleteWal(wal),
+        createFile: (path) {
+          final real = Zone.root.run(() => File(path));
+          return path.endsWith('/$name') ? _UndeletableAudio(real) : real;
+        },
+        fseGetType: (path, followLinks) => Zone.root.run(() => FileSystemEntity.type(path, followLinks: followLinks)));
+    expect(await WalWriteIntent.exists(documents, name), isTrue);
+    await expectRestartRetainsFile(wal);
+  });
+
+  test('intent retirement failure after audio deletion retains the row and retries on a missing file', () async {
+    final sync = failingLedger();
+    sync.testWals = [
+      Wal(
+          timerStart: 1,
+          codec: BleAudioCodec.opus,
+          seconds: 10,
+          device: 'pendant',
+          ownerUid: 'owner-a',
+          totalFrames: 1,
+          data: [
+            [1, 2]
+          ])
+    ];
+    await expectLater(sync.stop(), throwsA(isA<FileSystemException>()));
+    final wal = sync.testWals.single;
+    final name = wal.filePath!;
+    await IOOverrides.runZoned(() => sync.deleteWal(wal),
+        createFile: (path) {
+          final real = Zone.root.run(() => File(path));
+          return path.endsWith('/.wal-pending/$name.json') ? _UndeletableAudio(real) : real;
+        },
+        fseGetType: (path, followLinks) => Zone.root.run(() => FileSystemEntity.type(path, followLinks: followLinks)));
+    expect(sync.testWals, hasLength(1));
+    expect(await File('${documents.path}/$name').exists(), isFalse);
+    expect(await WalWriteIntent.exists(documents, name), isTrue);
+    expect(await WalFileManager.loadWals(), isEmpty, reason: 'a missing file cannot be resurrected by an intent');
+    // The retry retires the intent before removing its row, without deleting audio twice.
+    await expectLater(sync.deleteWal(wal), throwsA(isA<FileSystemException>()));
+    expect(sync.testWals, isEmpty);
+    expect(await WalWriteIntent.exists(documents, name), isFalse);
   });
 }
