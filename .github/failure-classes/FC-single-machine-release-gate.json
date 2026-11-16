@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-single-machine-release-gate",
+  "family": "ci-merge-integrity",
   "violated_contract": "Only the dedicated M1 Studio may execute automatic macOS Beta qualification; every passing qualification path must require its explicit runner label and immutable evidence.",
   "canonical_prevention": "The dedicated qualification lane is removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [

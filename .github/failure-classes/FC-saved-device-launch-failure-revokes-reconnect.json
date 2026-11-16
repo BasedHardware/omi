@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-saved-device-launch-failure-revokes-reconnect",
+  "family": "state-single-owner",
   "violated_contract": "A saved BLE pairing retains reconnect intent across a cold-start adapter or transport failure until the user disconnects, forgets, or a pairing-loss block requires recovery. Error cleanup must not masquerade as a manual disconnect and leave the process with no owner or retry path.",
   "canonical_prevention": "Retain one service/transport owner for pre-readiness failures; authorize native retry only from the saved pairing, ensure it on resume and adapter-on, and keep one capped backoff timer. Persist explicit user suppression before teardown, fence queued retries, and prove recovery and suppression through the real provider/service/native bridge path.",
   "canonical_prevention_artifact": [

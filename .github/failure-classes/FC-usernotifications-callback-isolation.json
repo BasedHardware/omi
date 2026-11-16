@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-usernotifications-callback-isolation",
+  "family": "vendor-platform-behavior",
   "violated_contract": "UserNotifications completion handlers must not inherit MainActor isolation because the framework invokes them on a private XPC queue.",
   "canonical_prevention": "Register every completion-handler UserNotifications API through UserNotificationCallbackBridge, copy only Sendable callback values, then explicitly hand off to MainActor.",
   "evidence_prs": [10072],

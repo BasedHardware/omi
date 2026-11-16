@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-shared-runner-checkout-residue",
+  "family": "ci-merge-integrity",
   "violated_contract": "A self-hosted release gate must not inspect or reuse mutable repository state from an earlier run before it has established a run-isolated source and cleanup boundary.",
   "canonical_prevention": "The dedicated qualification lane is removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [

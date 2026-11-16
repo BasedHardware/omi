@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-workflow-control-source-identity",
+  "family": "identity-qualifier",
   "violated_contract": "A deployment workflow's control-plane scripts must execute from the immutable workflow revision that selected their behavior, while application and image inputs remain pinned to the admitted runtime release revision.",
   "canonical_prevention": "Stage the workflow revision's deployment-control scripts before checking out the admitted runtime source, execute every workflow-owned control-script invocation from that staging directory, and cover the ordering and source boundary with a deployment contract test.",
   "canonical_prevention_artifact": [
