@@ -185,23 +185,80 @@ def test_terminal_child_group_cleanup_reaps_and_closes_without_fallback(group_er
 
 
 def test_actual_descendant_holding_pipe_cannot_extend_deadline_or_emit_private_stderr(capfd):
-    children, real = [], subprocess.Popen
-
-    def start(*args, **kwargs):
-        child = real(*args, **kwargs)
-        children.append(child)
-        return child
-
     code = (
         'import subprocess,sys;sys.stderr.write("PRIVATE_RUNTIME_CANARY");'
         'subprocess.Popen([sys.executable,"-c","import time;time.sleep(20)"])'
     )
-    with patch.object(runtime.subprocess, 'Popen', side_effect=start):
-        with pytest.raises(runtime.Refused, match='runtime_process_timeout'):
-            runtime.run([sys.executable, '-c', code], dict(runtime.os.environ), timeout=0.1)
-    assert len(children) == 1 and children[0].returncode is not None
-    assert children[0].stdout.closed
-    assert 'PRIVATE_RUNTIME_CANARY' not in str(capfd.readouterr())
+    for readiness_failure in (False, True):
+        children, real = [], subprocess.Popen
+        collected_groups, real_killpg = set(), runtime.os.killpg
+
+        def kill_group(pid, sig):
+            try:
+                real_killpg(pid, sig)
+            except ProcessLookupError:
+                collected_groups.add(pid)
+                raise
+            collected_groups.add(pid)
+
+        # Replace only runtime's binding; subprocess/selector retain real clocks.
+        fake_clock = SimpleNamespace(monotonic=MagicMock(side_effect=[0, 1, 1]))
+
+        def start(*args, **kwargs):
+            child = real(*args, **kwargs)
+            children.append(child)  # Fixture owns cleanup before runtime custody.
+            child.wait(timeout=5)
+            assert child.returncode == 0
+            with runtime.selectors.DefaultSelector() as probe:
+                probe.register(child.stdout, runtime.selectors.EVENT_READ)
+                assert probe.select(timeout=0) == []  # Idle open pipe, not EOF.
+            if readiness_failure:
+                raise RuntimeError('fixture_readiness_failure')
+            return child
+
+        try:
+            with (
+                patch.object(runtime.subprocess, 'Popen', side_effect=start),
+                patch.object(runtime, 'time', fake_clock),
+                patch.object(runtime.os, 'killpg', side_effect=kill_group),
+            ):
+                if readiness_failure:
+                    with pytest.raises(RuntimeError, match='^fixture_readiness_failure$'):
+                        runtime.run([sys.executable, '-c', code], dict(runtime.os.environ), timeout=0.1)
+                    fake_clock.monotonic.assert_not_called()
+                else:
+                    with pytest.raises(runtime.Refused, match='runtime_process_timeout'):
+                        runtime.run([sys.executable, '-c', code], dict(runtime.os.environ), timeout=0.1)
+                    assert fake_clock.monotonic.call_args_list == [(), (), ()]
+                    # Assert production cleanup before fixture cleanup can help.
+                    assert len(children) == 1 and children[0].returncode is not None
+                    assert children[0].stdout.closed
+                    assert 'PRIVATE_RUNTIME_CANARY' not in str(capfd.readouterr())
+        finally:
+            cleanup_errors = []
+            for child in children:
+                try:
+                    if child.pid not in collected_groups:
+                        kill_group(child.pid, runtime.signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except OSError:
+                    cleanup_errors.append('fixture_group_cleanup_failed')
+                try:
+                    if child.poll() is None:
+                        child.kill()
+                    child.wait(timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    cleanup_errors.append('fixture_child_reap_failed')
+                finally:
+                    try:
+                        child.stdout.close()
+                    except OSError:
+                        cleanup_errors.append('fixture_pipe_close_failed')
+            assert not cleanup_errors, cleanup_errors
+        assert len(children) == 1 and children[0].returncode is not None
+        assert children[0].stdout.closed
+        assert 'PRIVATE_RUNTIME_CANARY' not in str(capfd.readouterr())
 
 
 def test_runtime_manifest_and_bootstrap_failure_output_is_fixed_not_payload(tmp_path):
