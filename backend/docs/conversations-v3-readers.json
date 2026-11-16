@@ -103,6 +103,10 @@
     "policy": "storage",
     "reason": "Transaction-fenced builder, summary and recording claims; all data is owner scoped."
   },
+  "backend/database/conversations_v3_context.py:collection": {
+    "policy": "conversations",
+    "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
+  },
   "backend/database/conversations_v3_processing.py:user_conversations": {
     "policy": "both",
     "reason": "Owner-scoped v3 projection/summary/pending transactions through the explicit recording-aware storage helper."

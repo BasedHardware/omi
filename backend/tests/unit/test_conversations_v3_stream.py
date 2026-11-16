@@ -239,6 +239,9 @@ def test_persisted_title_lock_wins_after_generated_title_cleanup(monkeypatch, lo
 
 @pytest.fixture
 def real_notes_seam(monkeypatch):
+    from utils.conversations.v3 import context
+
+    monkeypatch.setattr(context, 'summary', lambda *a: 'synthetic background')
     from contextlib import nullcontext
     from utils.conversations.relevance import RelevanceDecision
     from utils.conversations import llm_input_dedupe

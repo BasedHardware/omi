@@ -35,6 +35,7 @@ def source(cid='r', **updates):
 @pytest.fixture
 def builder(monkeypatch):
     committed, messages = [], []
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
 
     async def blocking(pool, fn, *args, **kwargs):
         return fn(*args, **kwargs)
