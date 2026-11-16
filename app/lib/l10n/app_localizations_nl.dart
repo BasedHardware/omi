@@ -15503,4 +15503,7 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.';
+
+  @override
+  String get conversationWritingSummary => 'Je samenvatting wordt geschreven…';
 }

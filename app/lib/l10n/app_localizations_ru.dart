@@ -15513,4 +15513,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Список обработки изменился. Проверьте его и попробуйте снова.';
+
+  @override
+  String get conversationWritingSummary => 'Пишем ваше резюме…';
 }

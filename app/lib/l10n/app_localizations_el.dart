@@ -15565,4 +15565,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
+
+  @override
+  String get conversationWritingSummary => 'Γράφεται η σύνοψή σας…';
 }

@@ -15454,4 +15454,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
+
+  @override
+  String get conversationWritingSummary => 'Skriver dit resumé…';
 }

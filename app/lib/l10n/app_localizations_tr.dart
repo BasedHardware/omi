@@ -15474,4 +15474,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
+
+  @override
+  String get conversationWritingSummary => 'Özetiniz yazılıyor…';
 }

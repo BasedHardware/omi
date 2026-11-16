@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "Пераход зараз недаступны. Замест гэтага абнавіце картку.",
     "monthlySwitchDoneTitle": "Цяпер у вас штомесячная аплата",
     "monthlySwitchDoneBody": "Сёння аплачана {price}. Падаўжаецца штомесяц.",
-    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў."
+    "processingDeleteScopeChanged": "Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.",
+    "conversationWritingSummary": "Пішам ваша рэзюмэ…"
 }

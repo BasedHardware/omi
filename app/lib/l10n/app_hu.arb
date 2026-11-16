@@ -4752,5 +4752,6 @@
     "monthlySwitchUnavailable": "A váltás most nem érhető el. Inkább frissítse a kártyát.",
     "monthlySwitchDoneTitle": "Mostantól havonta fizet",
     "monthlySwitchDoneBody": "Ma kifizetve: {price}. Havonta megújul.",
-    "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra."
+    "processingDeleteScopeChanged": "A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.",
+    "conversationWritingSummary": "Összefoglaló írása…"
 }

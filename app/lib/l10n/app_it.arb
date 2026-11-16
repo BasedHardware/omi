@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Il passaggio non è disponibile ora. Aggiorna invece la carta.",
     "monthlySwitchDoneTitle": "Ora sei sul mensile",
     "monthlySwitchDoneBody": "{price} pagati oggi. Si rinnova ogni mese.",
-    "processingDeleteScopeChanged": "L'elenco in elaborazione è cambiato. Controllalo e riprova."
+    "processingDeleteScopeChanged": "L'elenco in elaborazione è cambiato. Controllalo e riprova.",
+    "conversationWritingSummary": "Sto scrivendo il tuo riepilogo…"
 }

@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Ara no es pot canviar. Actualitza la targeta.",
     "monthlySwitchDoneTitle": "Ara pagues mensualment",
     "monthlySwitchDoneBody": "{price} pagats avui. Es renova cada mes.",
-    "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar."
+    "processingDeleteScopeChanged": "La llista de processament ha canviat. Revisa-la i torna-ho a provar.",
+    "conversationWritingSummary": "Escrivint el teu resum…"
 }

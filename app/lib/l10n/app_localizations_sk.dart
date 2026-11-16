@@ -15459,4 +15459,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Zoznam spracovania sa zmenil. Skontrolujte ho a skúste to znova.';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše zhrnutie…';
 }

@@ -15497,4 +15497,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Список обробки змінився. Перевірте його та спробуйте знову.';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш підсумок…';
 }

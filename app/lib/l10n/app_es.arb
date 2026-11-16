@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "El cambio no está disponible ahora mismo. Actualiza tu tarjeta.",
     "monthlySwitchDoneTitle": "Ya pagas al mes",
     "monthlySwitchDoneBody": "{price} pagados hoy. Se renueva cada mes.",
-    "processingDeleteScopeChanged": "La lista de procesamiento ha cambiado. Revísala e inténtalo de nuevo."
+    "processingDeleteScopeChanged": "La lista de procesamiento ha cambiado. Revísala e inténtalo de nuevo.",
+    "conversationWritingSummary": "Escribiendo tu resumen…"
 }

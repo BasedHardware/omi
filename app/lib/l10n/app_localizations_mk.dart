@@ -15528,4 +15528,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списокот за обработка се промени. Прегледајте го и обидете се повторно.';
+
+  @override
+  String get conversationWritingSummary => 'Го пишуваме вашето резиме…';
 }

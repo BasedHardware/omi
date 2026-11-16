@@ -15464,4 +15464,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
+
+  @override
+  String get conversationWritingSummary => 'Đang viết bản tóm tắt của bạn…';
 }

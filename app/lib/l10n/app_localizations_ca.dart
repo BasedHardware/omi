@@ -15540,4 +15540,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
+
+  @override
+  String get conversationWritingSummary => 'Escrivint el teu resum…';
 }

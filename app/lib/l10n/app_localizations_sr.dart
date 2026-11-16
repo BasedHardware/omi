@@ -15471,4 +15471,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Листа обраде се променила. Прегледајте је и покушајте поново.';
+
+  @override
+  String get conversationWritingSummary => 'Пишемо ваш сажетак…';
 }

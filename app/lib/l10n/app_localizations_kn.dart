@@ -15514,4 +15514,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get conversationWritingSummary => 'ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
 }

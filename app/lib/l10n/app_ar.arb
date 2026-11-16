@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "التبديل غير متاح حاليًا. حدّث بطاقتك بدلًا من ذلك.",
     "monthlySwitchDoneTitle": "أصبحت على الدفع الشهري",
     "monthlySwitchDoneBody": "تم دفع {price} اليوم. يتجدد شهريًا.",
-    "processingDeleteScopeChanged": "تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى."
+    "processingDeleteScopeChanged": "تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.",
+    "conversationWritingSummary": "جارٍ كتابة ملخصك…"
 }

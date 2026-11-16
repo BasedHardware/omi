@@ -15508,4 +15508,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.';
+
+  @override
+  String get conversationWritingSummary => 'Piszemy podsumowanie…';
 }

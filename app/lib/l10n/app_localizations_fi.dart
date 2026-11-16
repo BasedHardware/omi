@@ -15468,4 +15468,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
 }

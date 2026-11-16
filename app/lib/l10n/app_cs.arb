@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Přechod teď není dostupný. Aktualizujte místo toho kartu.",
     "monthlySwitchDoneTitle": "Teď platíte měsíčně",
     "monthlySwitchDoneBody": "Dnes zaplaceno {price}. Obnovuje se měsíčně.",
-    "processingDeleteScopeChanged": "Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu."
+    "processingDeleteScopeChanged": "Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.",
+    "conversationWritingSummary": "Píšeme vaše shrnutí…"
 }

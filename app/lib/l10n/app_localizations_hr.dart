@@ -15500,4 +15500,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš sažetak…';
 }

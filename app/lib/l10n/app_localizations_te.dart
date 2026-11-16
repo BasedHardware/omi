@@ -15526,4 +15526,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get conversationWritingSummary => 'మీ సారాంశం రాస్తున్నాం…';
 }

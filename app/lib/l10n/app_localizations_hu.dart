@@ -15522,4 +15522,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
+
+  @override
+  String get conversationWritingSummary => 'Összefoglaló írása…';
 }

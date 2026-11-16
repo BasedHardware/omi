@@ -15498,4 +15498,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
 }

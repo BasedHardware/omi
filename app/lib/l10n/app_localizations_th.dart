@@ -15389,4 +15389,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
 }

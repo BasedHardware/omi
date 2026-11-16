@@ -15446,4 +15446,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रोसेसिंग की सूची बदल गई है। सूची देखें और फिर कोशिश करें।';
+
+  @override
+  String get conversationWritingSummary => 'आपका सारांश लिखा जा रहा है…';
 }

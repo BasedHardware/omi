@@ -15467,4 +15467,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
+
+  @override
+  String get conversationWritingSummary => 'Skriver sammendraget ditt…';
 }

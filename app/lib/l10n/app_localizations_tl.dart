@@ -15586,4 +15586,7 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
+
+  @override
+  String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
 }

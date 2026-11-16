@@ -15541,4 +15541,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'L\'elenco in elaborazione è cambiato. Controllalo e riprova.';
+
+  @override
+  String get conversationWritingSummary => 'Sto scrivendo il tuo riepilogo…';
 }

@@ -15472,4 +15472,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
+
+  @override
+  String get conversationWritingSummary => 'Skriver din sammanfattning…';
 }

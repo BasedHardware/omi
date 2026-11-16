@@ -4656,5 +4656,6 @@
     "monthlySwitchUnavailable": "Vaihto ei ole juuri nyt saatavilla. Päivitä kortti sen sijaan.",
     "monthlySwitchDoneTitle": "Maksat nyt kuukausittain",
     "monthlySwitchDoneBody": "{price} maksettu tänään. Uusiutuu kuukausittain.",
-    "processingDeleteScopeChanged": "Käsittelylista muuttui. Tarkista lista ja yritä uudelleen."
+    "processingDeleteScopeChanged": "Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.",
+    "conversationWritingSummary": "Kirjoitetaan yhteenvetoasi…"
 }

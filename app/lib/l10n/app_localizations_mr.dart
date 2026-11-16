@@ -15471,4 +15471,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get conversationWritingSummary => 'तुमचा सारांश लिहित आहे…';
 }

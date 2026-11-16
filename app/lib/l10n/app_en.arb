@@ -18873,5 +18873,9 @@
     "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
+    },
+    "conversationWritingSummary": "Writing your summary…",
+    "@conversationWritingSummary": {
+        "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
     }
 }

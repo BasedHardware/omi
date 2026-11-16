@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "सध्या स्विच उपलब्ध नाही. त्याऐवजी कार्ड अपडेट करा.",
     "monthlySwitchDoneTitle": "तुम्ही आता मासिक प्लॅनवर आहात",
     "monthlySwitchDoneBody": "आज {price} भरले. दर महिन्याला नूतनीकरण होते.",
-    "processingDeleteScopeChanged": "प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा."
+    "processingDeleteScopeChanged": "प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.",
+    "conversationWritingSummary": "तुमचा सारांश लिहित आहे…"
 }

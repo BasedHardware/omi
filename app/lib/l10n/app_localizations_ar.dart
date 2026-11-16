@@ -15375,4 +15375,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
+
+  @override
+  String get conversationWritingSummary => 'جارٍ كتابة ملخصك…';
 }

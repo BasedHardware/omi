@@ -15500,4 +15500,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan anda…';
 }

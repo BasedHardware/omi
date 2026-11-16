@@ -27128,6 +27128,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

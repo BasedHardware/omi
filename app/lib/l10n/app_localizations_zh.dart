@@ -15212,4 +15212,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
 }

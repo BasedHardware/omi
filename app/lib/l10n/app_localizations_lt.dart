@@ -15487,4 +15487,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.';
+
+  @override
+  String get conversationWritingSummary => 'Rašoma jūsų santrauka…';
 }

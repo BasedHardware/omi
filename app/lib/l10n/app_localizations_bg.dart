@@ -15514,4 +15514,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
+
+  @override
+  String get conversationWritingSummary => 'Пишем вашето резюме…';
 }

@@ -15235,4 +15235,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
+
+  @override
+  String get conversationWritingSummary => '要約を作成しています…';
 }

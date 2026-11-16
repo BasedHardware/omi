@@ -15351,4 +15351,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
+
+  @override
+  String get conversationWritingSummary => 'כותבים את הסיכום שלך…';
 }

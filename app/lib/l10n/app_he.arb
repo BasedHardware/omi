@@ -12213,5 +12213,6 @@
     "monthlySwitchUnavailable": "המעבר אינו זמין כרגע. עדכנו את הכרטיס במקום.",
     "monthlySwitchDoneTitle": "עברת לתשלום חודשי",
     "monthlySwitchDoneBody": "{price} שולמו היום. מתחדש מדי חודש.",
-    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב."
+    "processingDeleteScopeChanged": "רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.",
+    "conversationWritingSummary": "כותבים את הסיכום שלך…"
 }

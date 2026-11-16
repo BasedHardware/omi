@@ -15528,4 +15528,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
+
+  @override
+  String get conversationWritingSummary => 'Se scrie rezumatul tău…';
 }

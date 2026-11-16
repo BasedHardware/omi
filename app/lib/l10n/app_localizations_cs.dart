@@ -15463,4 +15463,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get conversationWritingSummary => 'Píšeme vaše shrnutí…';
 }

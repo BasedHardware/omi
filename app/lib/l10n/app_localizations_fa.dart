@@ -15456,4 +15456,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
 }

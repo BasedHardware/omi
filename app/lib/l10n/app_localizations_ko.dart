@@ -15242,4 +15242,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get conversationWritingSummary => '요약을 작성하는 중…';
 }

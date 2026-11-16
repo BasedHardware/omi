@@ -15475,4 +15475,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get conversationWritingSummary => 'آپ کا خلاصہ لکھا جا رہا ہے…';
 }

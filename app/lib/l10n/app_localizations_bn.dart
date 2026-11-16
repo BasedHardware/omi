@@ -15458,4 +15458,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
 }

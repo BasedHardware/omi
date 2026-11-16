@@ -15447,4 +15447,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Processing changed. Review the list and try again.';
+
+  @override
+  String get conversationWritingSummary => 'Writing your summary…';
 }

@@ -15478,4 +15478,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
+
+  @override
+  String get conversationWritingSummary => 'Menulis ringkasan Anda…';
 }
