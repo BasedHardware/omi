@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/conversations_v3.dart';
@@ -107,11 +109,11 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
       case SummarySection(:final markdown):
         if (markdown.trim().isEmpty) return;
         setState(() => _sections.add(markdown));
-      case SummaryDone():
+      case SummaryDone(:final structured):
         // The page shows the stored summary once it re-reads the conversation. If that read fails,
-        // keep the streamed sections up rather than dropping a summary that was written.
-        unawaited(widget.refresh().then((ok) => ok || _sections.isEmpty ? _finish() : _written(),
-            onError: (Object _) => _sections.isEmpty ? _finish() : _written()));
+        // keep what was written up: the streamed sections, or the summary the done frame carried.
+        unawaited(widget.refresh().then((ok) => ok ? _finish() : _keep(structured.overview),
+            onError: (Object _) => _keep(structured.overview)));
       case SummaryInProgress():
         _startPolling();
       case SummaryFailed():
@@ -122,25 +124,30 @@ class _LiveSummarySectionState extends State<LiveSummarySection> {
   void _startPolling() {
     if (_phase == _Phase.polling) return;
     setState(() => _phase = _Phase.polling);
-    // Counted, one read at a time: the next read is scheduled only after the previous one returns.
-    final polls = widget.pollFor.inMilliseconds ~/ widget.pollInterval.inMilliseconds;
-    var done = 0;
+    // One read at a time, inside a wall-clock window: each read is bounded by the time left.
+    final deadline = clock.now().add(widget.pollFor);
     void next() {
       _poll = Timer(widget.pollInterval, () async {
         if (!mounted || _phase != _Phase.polling) return;
-        if (done >= polls) {
-          _finish();
+        final left = deadline.difference(clock.now());
+        if (left <= Duration.zero) {
+          // Nothing landed in time: an older summary shows; with none, offer to try again.
+          _fail();
           return;
         }
-        done++;
         try {
-          await widget.refresh();
+          await widget.refresh().timeout(left);
         } catch (_) {}
         if (mounted && _phase == _Phase.polling) next();
       });
     }
 
     next();
+  }
+
+  void _keep(String overview) {
+    if (_sections.isEmpty && overview.trim().isNotEmpty) _sections.add(overview);
+    _sections.isEmpty ? _finish() : _written();
   }
 
   void _written() {

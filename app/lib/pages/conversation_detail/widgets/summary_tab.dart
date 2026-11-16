@@ -65,8 +65,9 @@ class SummaryTab extends StatefulWidget {
 class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMixin {
   bool _isEditing = false;
 
-  /// v3: the summary written on open stands in for the stored one until it is stored.
-  bool _liveSummaryActive = false;
+  /// v3: the summary written on open stands in for the stored one until it is stored. Null until the
+  /// section first reports, so the stored summary does not flash in its first frame.
+  bool? _liveSummaryActive;
   @override
   bool get wantKeepAlive => true;
 
@@ -95,6 +96,10 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
         builder: (context, provider, child) {
           final conversation = provider.conversationOrNull;
           final discarded = conversation?.discarded ?? true;
+          final liveWanted = conversation != null &&
+              !discarded &&
+              context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
+              LiveSummarySection.wants(conversation);
           // Base the surrounding tab state on the summary the user is actually looking at
           // (the displayed source chip), not the canonical server selection.
           final summarySelection = provider.getDisplayedSummarySelection();
@@ -142,10 +147,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         // Redo with Omi Cloud waits on a re-transcription endpoint.
                         if (conversation != null && !discarded)
                           SliverToBoxAdapter(child: OnDeviceProvenanceSection(conversationId: conversation.id)),
-                        if (conversation != null &&
-                            !discarded &&
-                            context.select<ConversationsV3Provider?, bool>((p) => p?.v3 ?? false) &&
-                            LiveSummarySection.wants(conversation))
+                        if (liveWanted)
                           LiveSummarySection(
                             key: ValueKey('live-summary-${conversation.id}'),
                             conversation: conversation,
@@ -158,7 +160,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                           ),
                         discarded
                             ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
-                            : _liveSummaryActive && LiveSummarySection.wants(conversation)
+                            : liveWanted && (_liveSummaryActive ?? true)
                                 ? const SliverToBoxAdapter(child: SizedBox.shrink())
                                 : GetAppsWidgets(
                                     onOpenSource: widget.onOpenSource,

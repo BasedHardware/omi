@@ -240,6 +240,21 @@ void main() {
       }
       expect(refreshes, 2, reason: 'a 5 s window at 2 s holds two reads');
       expect(find.text('Writing your summary…'), findsNothing);
+      expect(find.byKey(const Key('live_summary_failed')), findsOneWidget,
+          reason: 'nothing landed and nothing is stored: offer to try again');
+    });
+
+    testWidgets('a summary that arrives whole stays up when the follow-up read fails', (tester) async {
+      await tester.pumpWidget(_sliver(LiveSummarySection(
+        conversation: _conversation(state: ConversationTileState.live),
+        stream: (_) => Stream.value(SummaryDone(Structured('Planning', 'You set the launch for Thursday.'), null)),
+        refresh: () async => false,
+        onActiveChanged: (_) {},
+      )));
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('launch for Thursday'), findsOneWidget);
+      expect(find.text('Writing your summary…'), findsNothing);
     });
 
     testWidgets('a failure with no stored summary offers to try again', (tester) async {
