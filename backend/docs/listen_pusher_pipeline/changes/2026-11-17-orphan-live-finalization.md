@@ -49,3 +49,12 @@ with synthetic records, including default/false/malformed flags, closed unleased
 capture enqueue, no-finish/live/unknown leases, non-target lanes, explicit false
 markers, cursor continuation, and the shared per-tick bounds. This proves local
 behavior, not deployed throughput or episode recovery.
+
+## Review metadata
+
+The existing oversized finalization module grows by 31 lines to keep the bounded
+query and authoritative lease exception beside their current owners. This is the
+repository's explicit review exception, not a disabled check; use it in the eventual
+PR body (against the prescribed base) so the size tradeoff stays visible:
+
+Line-Count-Exception: backend/database/conversation_finalization_jobs.py | 3639 -> 3670 | Keep the bounded query and authoritative closed/unleased admission guard beside their existing owners; splitting the outbox transaction is outside this scoped recovery fix.
