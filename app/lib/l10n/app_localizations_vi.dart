@@ -15464,4 +15464,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.';
+
+  @override
+  String get recordingWithYourPhone => 'Đang ghi âm bằng điện thoại';
+
+  @override
+  String get wrapUp => 'Kết thúc';
+
+  @override
+  String get recordingDiscarded => 'Đã hủy bản ghi';
 }

@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Hiện chưa thể chuyển. Hãy cập nhật thẻ thay vào đó.",
     "monthlySwitchDoneTitle": "Bạn đã chuyển sang trả theo tháng",
     "monthlySwitchDoneBody": "Đã thanh toán {price} hôm nay. Gia hạn hằng tháng.",
-    "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại."
+    "processingDeleteScopeChanged": "Danh sách đang xử lý đã thay đổi. Hãy kiểm tra danh sách rồi thử lại.",
+    "recordingWithYourPhone": "Đang ghi âm bằng điện thoại",
+    "wrapUp": "Kết thúc",
+    "recordingDiscarded": "Đã hủy bản ghi"
 }

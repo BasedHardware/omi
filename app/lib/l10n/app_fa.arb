@@ -12213,5 +12213,8 @@
     "monthlySwitchUnavailable": "تغییر اکنون در دسترس نیست. به‌جای آن کارت را به‌روزرسانی کنید.",
     "monthlySwitchDoneTitle": "اکنون ماهانه پرداخت می‌کنید",
     "monthlySwitchDoneBody": "امروز {price} پرداخت شد. ماهانه تمدید می‌شود.",
-    "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید."
+    "processingDeleteScopeChanged": "فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.",
+    "recordingWithYourPhone": "در حال ضبط با تلفن شما",
+    "wrapUp": "جمع‌بندی",
+    "recordingDiscarded": "ضبط حذف شد"
 }

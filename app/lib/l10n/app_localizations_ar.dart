@@ -15375,4 +15375,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'تغيّرت قائمة المعالجة. راجع القائمة وحاول مرة أخرى.';
+
+  @override
+  String get recordingWithYourPhone => 'يسجّل بهاتفك';
+
+  @override
+  String get wrapUp => 'إنهاء';
+
+  @override
+  String get recordingDiscarded => 'تم تجاهل التسجيل';
 }

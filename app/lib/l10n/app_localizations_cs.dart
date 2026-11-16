@@ -15463,4 +15463,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Seznam zpracování se změnil. Zkontrolujte jej a zkuste to znovu.';
+
+  @override
+  String get recordingWithYourPhone => 'Nahrává se telefonem';
+
+  @override
+  String get wrapUp => 'Uzavřít';
+
+  @override
+  String get recordingDiscarded => 'Nahrávka zahozena';
 }

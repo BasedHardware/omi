@@ -15454,4 +15454,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Listen under behandling er ændret. Gennemgå den, og prøv igen.';
+
+  @override
+  String get recordingWithYourPhone => 'Optager med din telefon';
+
+  @override
+  String get wrapUp => 'Afslut';
+
+  @override
+  String get recordingDiscarded => 'Optagelsen er kasseret';
 }

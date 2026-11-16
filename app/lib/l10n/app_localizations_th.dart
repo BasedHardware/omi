@@ -15389,4 +15389,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'รายการที่กำลังประมวลผลเปลี่ยนไป โปรดตรวจสอบรายการแล้วลองอีกครั้ง';
+
+  @override
+  String get recordingWithYourPhone => 'กำลังบันทึกด้วยโทรศัพท์ของคุณ';
+
+  @override
+  String get wrapUp => 'สรุป';
+
+  @override
+  String get recordingDiscarded => 'ทิ้งการบันทึกแล้ว';
 }

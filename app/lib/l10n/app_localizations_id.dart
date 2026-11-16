@@ -15478,4 +15478,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Daftar pemrosesan berubah. Tinjau daftar dan coba lagi.';
+
+  @override
+  String get recordingWithYourPhone => 'Merekam dengan ponsel Anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rekaman dibuang';
 }

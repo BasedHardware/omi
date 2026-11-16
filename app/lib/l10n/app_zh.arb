@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "目前无法切换。请改为更新银行卡。",
     "monthlySwitchDoneTitle": "已改为按月付费",
     "monthlySwitchDoneBody": "今日已支付 {price}。按月续订。",
-    "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。"
+    "processingDeleteScopeChanged": "处理列表已更改。请检查列表后重试。",
+    "recordingWithYourPhone": "正在用手机录音",
+    "wrapUp": "结束",
+    "recordingDiscarded": "已舍弃录音"
 }

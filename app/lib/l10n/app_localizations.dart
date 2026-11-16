@@ -27128,6 +27128,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Processing changed. Review the list and try again.'**
   String get processingDeleteScopeChanged;
+
+  /// Home's recording bar, line 1: this phone is recording a live conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recording with your phone'**
+  String get recordingWithYourPhone;
+
+  /// Button on Home's recording bar: end the phone recording and process it
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap Up'**
+  String get wrapUp;
+
+  /// Confirmation after Undo on Home's recording bar: the accidental recording was thrown away
+  ///
+  /// In en, this message translates to:
+  /// **'Recording discarded'**
+  String get recordingDiscarded;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -15565,4 +15565,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Η λίστα επεξεργασίας άλλαξε. Ελέγξτε τη και δοκιμάστε ξανά.';
+
+  @override
+  String get recordingWithYourPhone => 'Εγγραφή με το τηλέφωνό σας';
+
+  @override
+  String get wrapUp => 'Ολοκλήρωση';
+
+  @override
+  String get recordingDiscarded => 'Η εγγραφή απορρίφθηκε';
 }

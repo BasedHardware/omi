@@ -245,7 +245,7 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+        'user_stopped' || 'user_discarded' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
         _ => 'unknown',
       };
 

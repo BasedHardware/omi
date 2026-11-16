@@ -1716,6 +1716,32 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await _enqueueBuffer(() => _finalizeCurrentSession(generation));
   }
 
+  /// Throws away a phone recording the reader discarded (Undo on Home's recording bar): the live
+  /// frames still in memory, when they belong to [recordingSessionId], and every WAL tagged with
+  /// it, in memory or on disk. Offline sync can then never turn the recording into a conversation.
+  /// A WAL that is uploading right now is left alone; the server-side delete covers what reaches
+  /// the server. Returns how many WALs were removed.
+  Future<int> discardRecording(String recordingSessionId) {
+    final generation = _sessionGeneration;
+    return _enqueueBuffer(() async {
+      if (!_isCurrent(generation) || recordingSessionId.isEmpty) return 0;
+      if (_activeRecordingSessionId == recordingSessionId && _deviceId == 'phone-mic') {
+        _frames = [];
+        _frameSynced = [];
+        _pendingPhoneOnly = false;
+      }
+      var removed = 0;
+      for (final wal in List<Wal>.of(_wals)) {
+        if (wal.recordingSessionId != recordingSessionId || wal.isSyncing) continue;
+        if (await _deleteWal(wal, generation: generation)) removed++;
+      }
+      if (removed > 0) await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
+      Logger.debug('discardRecording: removed $removed WALs of the discarded recording');
+      return removed;
+    });
+  }
+
   Future<void> _finalizeCurrentSession(int generation) async {
     if (_frames.isEmpty) return;
 

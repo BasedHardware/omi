@@ -15567,4 +15567,13 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'செயலாக்கப் பட்டியல் மாறிவிட்டது. பட்டியலைச் சரிபார்த்து மீண்டும் முயலவும்.';
+
+  @override
+  String get recordingWithYourPhone => 'உங்கள் ஃபோனில் பதிவாகிறது';
+
+  @override
+  String get wrapUp => 'முடி';
+
+  @override
+  String get recordingDiscarded => 'பதிவு நிராகரிக்கப்பட்டது';
 }

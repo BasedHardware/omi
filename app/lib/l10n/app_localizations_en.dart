@@ -15447,4 +15447,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Processing changed. Review the list and try again.';
+
+  @override
+  String get recordingWithYourPhone => 'Recording with your phone';
+
+  @override
+  String get wrapUp => 'Wrap Up';
+
+  @override
+  String get recordingDiscarded => 'Recording discarded';
 }

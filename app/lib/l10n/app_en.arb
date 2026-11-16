@@ -18873,5 +18873,17 @@
     "processingDeleteScopeChanged": "Processing changed. Review the list and try again.",
     "@processingDeleteScopeChanged": {
         "description": "Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again."
+    },
+    "recordingWithYourPhone": "Recording with your phone",
+    "@recordingWithYourPhone": {
+        "description": "Home's recording bar, line 1: this phone is recording a live conversation"
+    },
+    "wrapUp": "Wrap Up",
+    "@wrapUp": {
+        "description": "Button on Home's recording bar: end the phone recording and process it"
+    },
+    "recordingDiscarded": "Recording discarded",
+    "@recordingDiscarded": {
+        "description": "Confirmation after Undo on Home's recording bar: the accidental recording was thrown away"
     }
 }

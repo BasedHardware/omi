@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Преминаването в момента не е достъпно. Вместо това обновете картата.",
     "monthlySwitchDoneTitle": "Вече плащате месечно",
     "monthlySwitchDoneBody": "Днес са платени {price}. Подновява се всеки месец.",
-    "processingDeleteScopeChanged": "Списъкът за обработка се промени. Прегледайте го и опитайте отново."
+    "processingDeleteScopeChanged": "Списъкът за обработка се промени. Прегледайте го и опитайте отново.",
+    "recordingWithYourPhone": "Записва с телефона ви",
+    "wrapUp": "Приключи",
+    "recordingDiscarded": "Записът е отхвърлен"
 }

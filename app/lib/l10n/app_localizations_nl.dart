@@ -15503,4 +15503,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'De verwerkingslijst is gewijzigd. Controleer de lijst en probeer het opnieuw.';
+
+  @override
+  String get recordingWithYourPhone => 'Opnemen met je telefoon';
+
+  @override
+  String get wrapUp => 'Afronden';
+
+  @override
+  String get recordingDiscarded => 'Opname verwijderd';
 }

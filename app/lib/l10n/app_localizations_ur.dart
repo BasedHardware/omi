@@ -15475,4 +15475,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔';
+
+  @override
+  String get recordingWithYourPhone => 'آپ کے فون سے ریکارڈنگ ہو رہی ہے';
+
+  @override
+  String get wrapUp => 'ختم کریں';
+
+  @override
+  String get recordingDiscarded => 'ریکارڈنگ رد کر دی گئی';
 }

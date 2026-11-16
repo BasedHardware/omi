@@ -4691,5 +4691,8 @@
     "monthlySwitchUnavailable": "Geçiş şu anda kullanılamıyor. Bunun yerine kartınızı güncelleyin.",
     "monthlySwitchDoneTitle": "Artık aylık ödüyorsunuz",
     "monthlySwitchDoneBody": "Bugün {price} ödendi. Her ay yenilenir.",
-    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin."
+    "processingDeleteScopeChanged": "İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.",
+    "recordingWithYourPhone": "Telefonunla kaydediliyor",
+    "wrapUp": "Bitir",
+    "recordingDiscarded": "Kayıt silindi"
 }

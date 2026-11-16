@@ -15351,4 +15351,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'רשימת העיבוד השתנתה. יש לבדוק את הרשימה ולנסות שוב.';
+
+  @override
+  String get recordingWithYourPhone => 'מקליט בטלפון שלך';
+
+  @override
+  String get wrapUp => 'סכם';
+
+  @override
+  String get recordingDiscarded => 'ההקלטה בוטלה';
 }

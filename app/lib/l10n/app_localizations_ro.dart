@@ -15528,4 +15528,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista de procesare s-a schimbat. Verifică lista și încearcă din nou.';
+
+  @override
+  String get recordingWithYourPhone => 'Se înregistrează cu telefonul';
+
+  @override
+  String get wrapUp => 'Încheie';
+
+  @override
+  String get recordingDiscarded => 'Înregistrare renunțată';
 }

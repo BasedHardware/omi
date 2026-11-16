@@ -307,6 +307,12 @@ class CaptureReplayWorld {
 
   /// When set, Process Now returns this outcome instead of a transport miss.
   Future<InProgressProcessOutcome> Function()? processOutcome;
+
+  /// Server deletes of discarded recordings, by recording id, in order.
+  final List<String> discardDeletes = [];
+
+  /// The answer to each discard delete; null answers deleted.
+  bool Function(String id)? deleteDiscardedResult;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -442,6 +448,10 @@ class CaptureReplayWorld {
       deviceMuteWriter: deviceMuteWriter,
       deviceMuteReader: deviceMuteReader,
       omiCallState: omiCall,
+      deleteDiscardedConversation: (id) async {
+        discardDeletes.add(id);
+        return deleteDiscardedResult?.call(id) ?? true;
+      },
       processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
@@ -649,6 +659,7 @@ class _ReplayCaptureController extends CaptureController {
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
     super.processInProgressOutcome,
+    super.deleteDiscardedConversation,
     super.omiCallState,
     super.calendarGapMonitor,
     super.deviceMuteWriter,

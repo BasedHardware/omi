@@ -15468,4 +15468,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Käsittelylista muuttui. Tarkista lista ja yritä uudelleen.';
+
+  @override
+  String get recordingWithYourPhone => 'Tallennetaan puhelimella';
+
+  @override
+  String get wrapUp => 'Päätä';
+
+  @override
+  String get recordingDiscarded => 'Tallenne hylätty';
 }

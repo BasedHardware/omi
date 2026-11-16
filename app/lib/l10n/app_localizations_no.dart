@@ -15467,4 +15467,13 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Behandlingslisten er endret. Se gjennom listen og prøv igjen.';
+
+  @override
+  String get recordingWithYourPhone => 'Tar opp med telefonen';
+
+  @override
+  String get wrapUp => 'Avslutt';
+
+  @override
+  String get recordingDiscarded => 'Opptaket er forkastet';
 }

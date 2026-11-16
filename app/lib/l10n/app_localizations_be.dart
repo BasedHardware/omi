@@ -15499,4 +15499,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Спіс апрацоўкі змяніўся. Праверце яго і паспрабуйце зноў.';
+
+  @override
+  String get recordingWithYourPhone => 'Запіс на тэлефон';
+
+  @override
+  String get wrapUp => 'Завяршыць';
+
+  @override
+  String get recordingDiscarded => 'Запіс адменены';
 }

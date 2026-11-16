@@ -4691,5 +4691,8 @@
     "monthlySwitchUnavailable": "Zmiana jest teraz niedostępna. Zamiast tego zaktualizuj kartę.",
     "monthlySwitchDoneTitle": "Płacisz teraz co miesiąc",
     "monthlySwitchDoneBody": "Zapłacono dziś {price}. Odnawia się co miesiąc.",
-    "processingDeleteScopeChanged": "Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie."
+    "processingDeleteScopeChanged": "Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.",
+    "recordingWithYourPhone": "Nagrywanie telefonem",
+    "wrapUp": "Zakończ",
+    "recordingDiscarded": "Nagranie odrzucone"
 }

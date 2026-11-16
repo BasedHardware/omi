@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Perėjimas šiuo metu negalimas. Geriau atnaujinkite kortelę.",
     "monthlySwitchDoneTitle": "Dabar mokate kas mėnesį",
     "monthlySwitchDoneBody": "Šiandien sumokėta {price}. Atnaujinama kas mėnesį.",
-    "processingDeleteScopeChanged": "Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą."
+    "processingDeleteScopeChanged": "Apdorojimo sąrašas pasikeitė. Peržiūrėkite jį ir bandykite dar kartą.",
+    "recordingWithYourPhone": "Įrašoma telefonu",
+    "wrapUp": "Užbaigti",
+    "recordingDiscarded": "Įrašas atmestas"
 }

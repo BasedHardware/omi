@@ -15540,4 +15540,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La llista de processament ha canviat. Revisa-la i torna-ho a provar.';
+
+  @override
+  String get recordingWithYourPhone => 'S\'està gravant amb el telèfon';
+
+  @override
+  String get wrapUp => 'Tanca';
+
+  @override
+  String get recordingDiscarded => 'S\'ha descartat l\'enregistrament';
 }

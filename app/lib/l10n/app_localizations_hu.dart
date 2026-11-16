@@ -15522,4 +15522,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'A feldolgozási lista megváltozott. Ellenőrizd, és próbáld újra.';
+
+  @override
+  String get recordingWithYourPhone => 'Felvétel a telefonnal';
+
+  @override
+  String get wrapUp => 'Lezárás';
+
+  @override
+  String get recordingDiscarded => 'Felvétel elvetve';
 }

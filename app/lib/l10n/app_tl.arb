@@ -12213,5 +12213,8 @@
     "monthlySwitchUnavailable": "Hindi pa available ang paglipat ngayon. I-update na lang ang card mo.",
     "monthlySwitchDoneTitle": "Buwanan ka na",
     "monthlySwitchDoneBody": "Nabayaran ang {price} ngayon. Nire-renew buwan-buwan.",
-    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli."
+    "processingDeleteScopeChanged": "Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.",
+    "recordingWithYourPhone": "Nagre-record gamit ang iyong phone",
+    "wrapUp": "Tapusin",
+    "recordingDiscarded": "Itinapon ang recording"
 }

@@ -15500,4 +15500,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Senarai pemprosesan telah berubah. Semak senarai dan cuba lagi.';
+
+  @override
+  String get recordingWithYourPhone => 'Merakam dengan telefon anda';
+
+  @override
+  String get wrapUp => 'Selesaikan';
+
+  @override
+  String get recordingDiscarded => 'Rakaman dibuang';
 }

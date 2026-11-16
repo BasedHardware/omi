@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Wechsel gerade nicht verfügbar. Aktualisieren Sie stattdessen Ihre Karte.",
     "monthlySwitchDoneTitle": "Sie zahlen jetzt monatlich",
     "monthlySwitchDoneBody": "{price} heute bezahlt. Verlängert sich monatlich.",
-    "processingDeleteScopeChanged": "Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut."
+    "processingDeleteScopeChanged": "Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut.",
+    "recordingWithYourPhone": "Aufnahme mit deinem Handy",
+    "wrapUp": "Abschließen",
+    "recordingDiscarded": "Aufnahme verworfen"
 }

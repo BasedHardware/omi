@@ -15500,4 +15500,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
+
+  @override
+  String get recordingWithYourPhone => 'Snima se telefonom';
+
+  @override
+  String get wrapUp => 'Završi';
+
+  @override
+  String get recordingDiscarded => 'Snimka odbačena';
 }

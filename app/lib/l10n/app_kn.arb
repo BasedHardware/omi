@@ -12213,5 +12213,8 @@
     "monthlySwitchUnavailable": "ಈಗ ಬದಲಾವಣೆ ಲಭ್ಯವಿಲ್ಲ. ಬದಲಿಗೆ ಕಾರ್ಡ್ ನವೀಕರಿಸಿ.",
     "monthlySwitchDoneTitle": "ನೀವು ಈಗ ಮಾಸಿಕ ಯೋಜನೆಯಲ್ಲಿದ್ದೀರಿ",
     "monthlySwitchDoneBody": "ಇಂದು {price} ಪಾವತಿಸಲಾಗಿದೆ. ಪ್ರತಿ ತಿಂಗಳು ನವೀಕರಿಸಲಾಗುತ್ತದೆ.",
-    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."
+    "processingDeleteScopeChanged": "ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "recordingWithYourPhone": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
+    "wrapUp": "ಮುಗಿಸಿ",
+    "recordingDiscarded": "ರೆಕಾರ್ಡಿಂಗ್ ತ್ಯಜಿಸಲಾಗಿದೆ"
 }

@@ -2269,4 +2269,76 @@ void main() {
     coordinator.dispose();
     expect((await coordinator.dispatch(const PauseCaptureRequested())).admitted, isFalse);
   });
+
+  group('PhoneDiscardRequested (Undo on Home\'s recording bar)', () {
+    List<Type> stages(CaptureTransition t) => t.effects.whereType<RunStage>().map((e) => e.stage.runtimeType).toList();
+
+    test('a live phone recording ends like a user stop, with a teardown that keeps nothing', () {
+      final model = SequenceModel()..step(const ScriptStep(2));
+      expect(model.state.phase, CapturePhase.phoneLive);
+      final env = environment(model.state, muted: model.muted);
+      final stop =
+          transitionCapture(model.state, const PhoneStopRequested(reason: 'user_stopped', userStop: true), env);
+      final discard = transitionCapture(model.state, const PhoneDiscardRequested(), env);
+
+      expect(discard.state.encode(), stop.state.encode());
+      expect(discard.state.phase, CapturePhase.idle);
+      expect(stages(discard), contains(DiscardPhoneLiveStage));
+      expect(stages(discard), isNot(contains(StopPhoneLiveStage)));
+      expect(stages(discard), isNot(contains(ProcessConversationStage)));
+      // Everything but the teardown is the user stop's, in the same order.
+      expect(
+        stages(discard).map((t) => t == DiscardPhoneLiveStage ? StopPhoneLiveStage : t).toList(),
+        stages(stop),
+      );
+      expect(discard.effects.whereType<PolicyWrite>().map((e) => e.muted).toList(),
+          stop.effects.whereType<PolicyWrite>().map((e) => e.muted).toList());
+    });
+
+    test('a paused phone recording can be discarded too', () {
+      final model = SequenceModel()
+        ..step(const ScriptStep(2))
+        ..step(const ScriptStep(4));
+      expect(model.state.phase, CapturePhase.phonePaused);
+      final discard =
+          transitionCapture(model.state, const PhoneDiscardRequested(), environment(model.state, muted: model.muted));
+      expect(discard.state.phase, CapturePhase.idle);
+      expect(stages(discard), contains(DiscardPhoneLiveStage));
+    });
+
+    test('a pendant the phone took over from resumes, as after a user stop', () {
+      final model = SequenceModel()
+        ..step(const ScriptStep(0))
+        ..step(const ScriptStep(2));
+      expect(model.state.phase, CapturePhase.phoneLive);
+      expect(model.state.pendantSuspension, isNotNull);
+      final env = environment(model.state, muted: model.muted);
+      final stop =
+          transitionCapture(model.state, const PhoneStopRequested(reason: 'user_stopped', userStop: true), env);
+      final discard = transitionCapture(model.state, const PhoneDiscardRequested(), env);
+      expect(discard.state.phase, stop.state.phase);
+      expect(discard.state.phase, CapturePhase.pendantLive);
+      expect(discard.state.suspended, isEmpty);
+      expect(discard.effects.whereType<MintRecording>(), hasLength(1));
+      expect(stages(discard), contains(StartDeviceSessionStage));
+    });
+
+    test('Transcribe Later, a pendant and idle are left alone', () {
+      final batch = SequenceModel()..step(const ScriptStep(26));
+      expect(batch.state.phoneOwns, isTrue);
+      final onBatch = transitionCapture(batch.state, const PhoneDiscardRequested(), environment(batch.state));
+      expect(onBatch.state.encode(), batch.state.encode());
+      expect(onBatch.effects, isEmpty);
+
+      final pendantOnly = SequenceModel()..step(const ScriptStep(0));
+      final onPendant =
+          transitionCapture(pendantOnly.state, const PhoneDiscardRequested(), environment(pendantOnly.state));
+      expect(onPendant.state.encode(), pendantOnly.state.encode());
+      expect(onPendant.effects, isEmpty);
+
+      final idle = CaptureCoordinatorState.idle();
+      final onIdle = transitionCapture(idle, const PhoneDiscardRequested(), environment(idle));
+      expect(onIdle.effects, isEmpty);
+    });
+  });
 }

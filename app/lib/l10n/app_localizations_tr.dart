@@ -15474,4 +15474,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'İşleme listesi değişti. Listeyi gözden geçirip yeniden deneyin.';
+
+  @override
+  String get recordingWithYourPhone => 'Telefonunla kaydediliyor';
+
+  @override
+  String get wrapUp => 'Bitir';
+
+  @override
+  String get recordingDiscarded => 'Kayıt silindi';
 }

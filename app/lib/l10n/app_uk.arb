@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Перехід зараз недоступний. Натомість оновіть картку.",
     "monthlySwitchDoneTitle": "Тепер ви платите щомісяця",
     "monthlySwitchDoneBody": "Сьогодні сплачено {price}. Подовжується щомісяця.",
-    "processingDeleteScopeChanged": "Список обробки змінився. Перевірте його та спробуйте знову."
+    "processingDeleteScopeChanged": "Список обробки змінився. Перевірте його та спробуйте знову.",
+    "recordingWithYourPhone": "Запис на телефон",
+    "wrapUp": "Завершити",
+    "recordingDiscarded": "Запис скасовано"
 }

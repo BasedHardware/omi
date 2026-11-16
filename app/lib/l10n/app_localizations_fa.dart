@@ -15456,4 +15456,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'فهرست پردازش تغییر کرده است. فهرست را بررسی کنید و دوباره تلاش کنید.';
+
+  @override
+  String get recordingWithYourPhone => 'در حال ضبط با تلفن شما';
+
+  @override
+  String get wrapUp => 'جمع‌بندی';
+
+  @override
+  String get recordingDiscarded => 'ضبط حذف شد';
 }

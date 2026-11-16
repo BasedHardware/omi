@@ -15508,4 +15508,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Lista przetwarzania się zmieniła. Sprawdź ją i spróbuj ponownie.';
+
+  @override
+  String get recordingWithYourPhone => 'Nagrywanie telefonem';
+
+  @override
+  String get wrapUp => 'Zakończ';
+
+  @override
+  String get recordingDiscarded => 'Nagranie odrzucone';
 }

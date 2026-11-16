@@ -15472,4 +15472,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Bearbetningslistan har ändrats. Granska listan och försök igen.';
+
+  @override
+  String get recordingWithYourPhone => 'Spelar in med telefonen';
+
+  @override
+  String get wrapUp => 'Avsluta';
+
+  @override
+  String get recordingDiscarded => 'Inspelningen har slängts';
 }

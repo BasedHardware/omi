@@ -15514,4 +15514,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Списъкът за обработка се промени. Прегледайте го и опитайте отново.';
+
+  @override
+  String get recordingWithYourPhone => 'Записва с телефона ви';
+
+  @override
+  String get wrapUp => 'Приключи';
+
+  @override
+  String get recordingDiscarded => 'Записът е отхвърлен';
 }

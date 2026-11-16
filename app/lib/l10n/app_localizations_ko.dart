@@ -15242,4 +15242,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '처리 중인 목록이 변경되었습니다. 목록을 확인하고 다시 시도하세요.';
+
+  @override
+  String get recordingWithYourPhone => '휴대폰으로 녹음 중';
+
+  @override
+  String get wrapUp => '마무리';
+
+  @override
+  String get recordingDiscarded => '녹음을 삭제했습니다';
 }

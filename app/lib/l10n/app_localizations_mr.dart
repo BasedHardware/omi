@@ -15471,4 +15471,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'प्रक्रियेची यादी बदलली आहे. यादी तपासा आणि पुन्हा प्रयत्न करा.';
+
+  @override
+  String get recordingWithYourPhone => 'तुमच्या फोनवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get wrapUp => 'पूर्ण करा';
+
+  @override
+  String get recordingDiscarded => 'रेकॉर्डिंग रद्द केले';
 }

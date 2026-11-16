@@ -15514,4 +15514,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ಪ್ರಕ್ರಿಯೆಯ ಪಟ್ಟಿ ಬದಲಾಗಿದೆ. ಪಟ್ಟಿಯನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
+
+  @override
+  String get recordingWithYourPhone => 'ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
+
+  @override
+  String get wrapUp => 'ಮುಗಿಸಿ';
+
+  @override
+  String get recordingDiscarded => 'ರೆಕಾರ್ಡಿಂಗ್ ತ್ಯಜಿಸಲಾಗಿದೆ';
 }

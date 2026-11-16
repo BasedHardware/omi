@@ -15513,4 +15513,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Список обработки изменился. Проверьте его и попробуйте снова.';
+
+  @override
+  String get recordingWithYourPhone => 'Запись на телефон';
+
+  @override
+  String get wrapUp => 'Завершить';
+
+  @override
+  String get recordingDiscarded => 'Запись удалена';
 }

@@ -15212,4 +15212,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get recordingWithYourPhone => '正在用手机录音';
+
+  @override
+  String get wrapUp => '结束';
+
+  @override
+  String get recordingDiscarded => '已舍弃录音';
 }

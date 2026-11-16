@@ -15456,4 +15456,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'Töötlemise loend on muutunud. Vaata see üle ja proovi uuesti.';
+
+  @override
+  String get recordingWithYourPhone => 'Salvestab telefoniga';
+
+  @override
+  String get wrapUp => 'Lõpeta';
+
+  @override
+  String get recordingDiscarded => 'Salvestis loobutud';
 }

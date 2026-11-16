@@ -15526,4 +15526,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get recordingWithYourPhone => 'మీ ఫోన్‌తో రికార్డ్ అవుతోంది';
+
+  @override
+  String get wrapUp => 'ముగించు';
+
+  @override
+  String get recordingDiscarded => 'రికార్డింగ్ తీసివేయబడింది';
 }

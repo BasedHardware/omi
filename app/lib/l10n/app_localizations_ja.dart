@@ -15235,4 +15235,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => '処理中の一覧が変更されました。一覧を確認してもう一度お試しください。';
+
+  @override
+  String get recordingWithYourPhone => 'スマホで録音中';
+
+  @override
+  String get wrapUp => 'まとめる';
+
+  @override
+  String get recordingDiscarded => '録音を破棄しました';
 }

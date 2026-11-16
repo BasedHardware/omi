@@ -15578,4 +15578,13 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Die Verarbeitungsliste hat sich geändert. Prüfe sie und versuche es erneut.';
+
+  @override
+  String get recordingWithYourPhone => 'Aufnahme mit deinem Handy';
+
+  @override
+  String get wrapUp => 'Abschließen';
+
+  @override
+  String get recordingDiscarded => 'Aufnahme verworfen';
 }

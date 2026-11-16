@@ -12213,5 +12213,8 @@
     "monthlySwitchUnavailable": "اس وقت تبدیلی دستیاب نہیں۔ اس کے بجائے کارڈ اپ ڈیٹ کریں۔",
     "monthlySwitchDoneTitle": "اب آپ ماہانہ پلان پر ہیں",
     "monthlySwitchDoneBody": "آج {price} ادا ہو گئے۔ ہر ماہ تجدید ہوتی ہے۔",
-    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔"
+    "processingDeleteScopeChanged": "پروسیسنگ کی فہرست بدل گئی ہے۔ فہرست دیکھیں اور دوبارہ کوشش کریں۔",
+    "recordingWithYourPhone": "آپ کے فون سے ریکارڈنگ ہو رہی ہے",
+    "wrapUp": "ختم کریں",
+    "recordingDiscarded": "ریکارڈنگ رد کر دی گئی"
 }

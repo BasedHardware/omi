@@ -15586,4 +15586,13 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get processingDeleteScopeChanged =>
       'Nagbago ang listahan ng pinoproseso. Suriin ang listahan at subukang muli.';
+
+  @override
+  String get recordingWithYourPhone => 'Nagre-record gamit ang iyong phone';
+
+  @override
+  String get wrapUp => 'Tapusin';
+
+  @override
+  String get recordingDiscarded => 'Itinapon ang recording';
 }

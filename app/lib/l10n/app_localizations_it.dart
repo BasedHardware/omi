@@ -15541,4 +15541,13 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'L\'elenco in elaborazione è cambiato. Controllalo e riprova.';
+
+  @override
+  String get recordingWithYourPhone => 'Registrazione con il telefono';
+
+  @override
+  String get wrapUp => 'Concludi';
+
+  @override
+  String get recordingDiscarded => 'Registrazione scartata';
 }

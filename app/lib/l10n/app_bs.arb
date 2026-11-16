@@ -12213,5 +12213,8 @@
     "monthlySwitchUnavailable": "Prelazak trenutno nije dostupan. Umjesto toga ažuriraj karticu.",
     "monthlySwitchDoneTitle": "Sada plaćate mjesečno",
     "monthlySwitchDoneBody": "Danas plaćeno {price}. Obnavlja se mjesečno.",
-    "processingDeleteScopeChanged": "Lista obrade se promijenila. Pregledajte je i pokušajte ponovo."
+    "processingDeleteScopeChanged": "Lista obrade se promijenila. Pregledajte je i pokušajte ponovo.",
+    "recordingWithYourPhone": "Snima se telefonom",
+    "wrapUp": "Završi",
+    "recordingDiscarded": "Snimak odbačen"
 }

@@ -4656,5 +4656,8 @@
     "monthlySwitchUnavailable": "Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.",
     "monthlySwitchDoneTitle": "Tagad jūs maksājat katru mēnesi",
     "monthlySwitchDoneBody": "Šodien samaksāts {price}. Atjaunojas katru mēnesi.",
-    "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz."
+    "processingDeleteScopeChanged": "Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.",
+    "recordingWithYourPhone": "Ieraksta ar tālruni",
+    "wrapUp": "Pabeigt",
+    "recordingDiscarded": "Ieraksts atmests"
 }

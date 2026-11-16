@@ -15591,4 +15591,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'La liste en cours de traitement a changé. Vérifiez-la et réessayez.';
+
+  @override
+  String get recordingWithYourPhone => 'Enregistrement avec votre téléphone';
+
+  @override
+  String get wrapUp => 'Terminer';
+
+  @override
+  String get recordingDiscarded => 'Enregistrement supprimé';
 }

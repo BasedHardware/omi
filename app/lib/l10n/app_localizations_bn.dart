@@ -15458,4 +15458,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get recordingWithYourPhone => 'আপনার ফোনে রেকর্ড হচ্ছে';
+
+  @override
+  String get wrapUp => 'শেষ করুন';
+
+  @override
+  String get recordingDiscarded => 'রেকর্ডিং বাতিল হয়েছে';
 }
