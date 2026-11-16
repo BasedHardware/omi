@@ -5,6 +5,7 @@ codec; cached outlines are encrypted. Nothing is cleared after a lost race.
 """
 
 import json
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -181,6 +182,9 @@ def mark_pending(uid, cid, *, manual_end=False, firestore_client=None):
 
 
 def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True, firestore_client=None):
+    from database import conversations_v3_quiet
+    from utils.conversations.v3 import policy
+
     client = firestore_client or get_firestore_client()
     coll = user_conversations(client, uid)
     held = leases.lease_ref(client, uid, 'builder')
@@ -190,9 +194,14 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     failure_transitions = {
         r['id']: r.get('v3_process_failed') and not (existing.get(r['id']) or {}).get('v3_process_failed') for r in rows
     }
-    prepared = []
+    prepared, unchanged = [], set()
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
+        prior = existing.get(row['id'])
+        if prior is not None and clean == {
+            k: v for k, v in prior.items() if not k.startswith('_v3_') and k != 'updated_at'
+        }:
+            unchanged.add(row['id'])
         prepared.append(
             conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
                 clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=True
@@ -202,7 +211,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
 
     @firestore.transactional
     def commit(tx, batch_rows, batch_prepared, final):
-        observed = {}
+        observed, quiet_patches, quiet_outbox = {}, {}, {}
         now = datetime.now(timezone.utc)
         lease = held.get(transaction=tx).to_dict() or {}
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
@@ -218,7 +227,19 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             if not snapshot.exists or snapshot.update_time != row['_v3_revision']:
                 raise Conflict('source_changed')
             observed[rid] = snapshot.to_dict() or {}
+            if rid in recordings and observed[rid].get('recording') and not observed[rid].get('deleted'):
+                # Recovery is atomic with settling v3_pending: accepted content
+                # cannot lose its quiet obligation if changed() never ran.
+                quiet_patches[rid] = conversations_v3_quiet.source_patch(
+                    uid, snapshot, now=now, decoded=recordings[rid]
+                )
         for row in batch_rows:
+            if not clear_pending:
+                summary_lease = (
+                    leases.lease_ref(client, uid, 'summary-' + row['id']).get(transaction=tx).to_dict() or {}
+                )
+                if summary_lease.get('token') and summary_lease.get('until') and summary_lease['until'] > now:
+                    raise Conflict('summary_busy')
             tombstone = (
                 client.collection('users')
                 .document(uid)
@@ -235,12 +256,18 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         from database.recurring_voice_privacy import filter_processing_write
 
         user = client.collection('users').document(uid)
-        for row in batch_prepared:
-            filter_processing_write(tx, user, row)
+        privacy_changed = set()
         for raw, row in zip(batch_rows, batch_prepared):
-            if raw.get('deleted'):
+            transcript_before = deepcopy(row.get('transcript_segments'))
+            filter_processing_write(tx, user, row)
+            if row.get('transcript_segments') != transcript_before:
+                privacy_changed.add(raw['id'])
+        written = set()
+        for raw, row in zip(batch_rows, batch_prepared):
+            if raw.get('deleted') or raw['id'] in unchanged and raw['id'] not in privacy_changed:
                 continue
             tx.set(coll.document(row['id']), row)
+            written.add(raw['id'])
         for rid, recording in recordings.items():
             if recording.get('deleted') or recording.get('sync_merged_into'):
                 tx.update(coll.document(rid), {'v3_pending': False, 'v3_pending_since': None})
@@ -252,36 +279,36 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                     continue
                 spans = row.get('_v3_claims', {}).get(rid, [{'start': row['started_at'], 'end': row['finished_at']}])
                 claims.extend({'conversation_id': row['id'], **span} for span in spans)
-            tx.update(
-                coll.document(rid),
-                {
-                    'claims': claims,
-                    # A backfill conversion hides its donor as a recording in the first batch; until the
-                    # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
-                    # by the ordinary builder (backfill's loader skips recordings).
-                    'v3_pending': (
-                        False
-                        if final and clear_pending
-                        else bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
-                    ),
-                    'v3_pending_since': (
-                        None
-                        if final and clear_pending
-                        else recording.get('v3_pending_since')
-                        or (datetime.now(timezone.utc) if recording.get('_v3_derive') and not final else None)
-                    ),
-                    'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
-                    and final
-                    and clear_pending
-                    and not claims
-                    and recording.get('status') == 'completed',
-                    **(
-                        {'recording': True, 'structured': {}, 'backfill_superseded': True}
-                        if recording.get('_v3_derive')
-                        else {}
-                    ),
-                },
+            waiting = policy.transcription_pending(recording)
+            pending = (
+                waiting
+                or not (final and clear_pending)
+                and bool(recording.get('v3_pending') or (recording.get('_v3_derive') and not final))
             )
+            patch = {
+                **quiet_patches.get(rid, {}),
+                'claims': claims,
+                # A backfill conversion hides its donor as a recording in the first batch; until the
+                # final batch commits, it keeps a durable obligation so an interrupted run is rebuilt
+                # by the ordinary builder (backfill's loader skips recordings).
+                'v3_pending': pending,
+                'v3_pending_since': (recording.get('v3_pending_since') or now) if pending else None,
+                'v3_audio_purge_pending': bool(recording.get('deleted_spans'))
+                and final
+                and clear_pending
+                and not claims
+                and recording.get('status') == 'completed',
+                **(
+                    {'recording': True, 'structured': {}, 'backfill_superseded': True}
+                    if recording.get('_v3_derive')
+                    else {}
+                ),
+            }
+            if any(observed[rid].get(key) != value for key, value in patch.items()):
+                tx.update(coll.document(rid), patch)
+            quiet = {**observed[rid], **patch}
+            if quiet.get('v3_quiet_pending') and quiet.get('v3_quiet_generation') and quiet.get('v3_quiet_due'):
+                quiet_outbox[rid] = {key: quiet[key] for key in ('v3_quiet_generation', 'v3_quiet_due')}
         tx.update(
             held,
             {
@@ -293,7 +320,7 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
                 ),
             },
         )
-        return observed
+        return observed, quiet_outbox, written
 
     batches, current, size = [], [], 0
     for raw, encoded in zip(rows, prepared):
@@ -305,8 +332,12 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
         size += amount
     if current or not batches:
         batches.append(current)
+    quiet_outbox = {}
     for index, batch in enumerate(batches):
-        observed = commit(client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1)
+        observed, due, written = commit(
+            client.transaction(), [r for r, _ in batch], [r for _, r in batch], index == len(batches) - 1
+        )
+        quiet_outbox.update(due)
         from utils.conversations.v3 import metrics
 
         for row, _encoded in batch:
@@ -319,7 +350,16 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             for rid in recordings:
                 snapshot = coll.document(rid).get()
                 current = snapshot.to_dict() or {}
-                owned = {'claims', 'v3_pending', 'v3_pending_since', 'v3_audio_purge_pending', 'backfill_superseded'}
+                owned = {
+                    'claims',
+                    'v3_pending',
+                    'v3_pending_since',
+                    'v3_audio_purge_pending',
+                    'backfill_superseded',
+                    'v3_quiet_pending',
+                    'v3_quiet_generation',
+                    'v3_quiet_due',
+                }
                 if recordings[rid].get('_v3_derive'):
                     # Our own committed conversion, not an external change.
                     owned |= {'recording', 'structured'}
@@ -335,10 +375,15 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
             for raw, encoded in batch:
                 snapshot = coll.document(raw['id']).get()
                 if snapshot.exists:
+                    if raw['id'] not in written:
+                        if snapshot.update_time != existing[raw['id']]['_v3_revision']:
+                            raise Conflict('source_changed')
+                        continue
                     current = snapshot.to_dict() or {}
                     if any(current.get(k) != value for k, value in encoded.items()):
                         raise Conflict('source_changed')
                     existing[raw['id']] = {**raw, '_v3_revision': snapshot.update_time}
+    return quiet_outbox
 
 
 def release_claims(uid, row, *, firestore_client=None):

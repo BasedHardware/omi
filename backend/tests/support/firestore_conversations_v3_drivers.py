@@ -50,8 +50,19 @@ def entries():
         DriverEntry('utils.conversations.v3.quiet.sweep'),
         DriverEntry(
             'database.conversations_v3_quiet.sources_current',
-            base={'uid': SHAPE_UID, 'tx': None, 'row': {'v3_recording_ids': ['source']}},
-            domains={'quiet': [False, True]},
+            base={'uid': SHAPE_UID, 'tx': None},
+            domains={
+                'quiet': [False, True],
+                'row': [
+                    {
+                        'v3_recording_ids': ['source'],
+                        'status': status,
+                        'started_at': FROZEN_NOW,
+                        'finished_at': FROZEN_LATER,
+                    }
+                    for status in ('in_progress', 'completed')
+                ],
+            },
         ),
         DriverEntry('utils.conversations.v3.service.measure_legacy_users'),
     )

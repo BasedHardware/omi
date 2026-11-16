@@ -358,6 +358,7 @@ def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
     client = StrictFirestore({path: deepcopy(original)})
     monkeypatch.setattr(leases, 'get_firestore_client', lambda: client)
     monkeypatch.setattr(store, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(store, 'decode_row', lambda uid, snapshot: snapshot.to_dict())
     monkeypatch.setattr(writers.firestore, 'transactional', lambda body: lambda tx: body(tx))
     monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda uid, cid: deepcopy(client.rows[path]))
     monkeypatch.setattr(processing_attention, 'generation', lambda row: 1)
@@ -385,6 +386,7 @@ def test_product_retry_uses_own_window_and_settles_tile(monkeypatch, outcome):
     if outcome == 'done':
         result = routes.reprocess_conversation('window', uid='synthetic')
         assert result.tile_state == 'done' and not result.summary_retryable
+        assert client.rows[path]['summary_is_snapshot'] is False
     else:
         with pytest.raises(RuntimeError):
             routes.reprocess_conversation('window', uid='synthetic')

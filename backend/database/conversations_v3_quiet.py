@@ -14,16 +14,19 @@ from database import conversations_v3 as store, conversations_v3_leases as lease
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.conversations.v3 import Conflict, policy, summary_input
+from utils.conversations.v3.outline import SILENCE
 
 QUIET = timedelta(seconds=30)
 
 
-def source_patch(uid, snapshot, *, now):
+def source_patch(uid, snapshot, *, now, decoded=None):
     row = snapshot.to_dict() or {}
     if row.get('v3_manual_end') or row.get('data_protection_level') == 'private' or row.get('is_locked'):
         return {'v3_quiet_pending': False}
-    decoded = store.decode_row(uid, snapshot)
-    if not decoded or not decoded.get('transcript_segments'):
+    if not row.get('transcript_segments'):
+        return {}
+    decoded = decoded if decoded is not None else store.decode_row(uid, snapshot)
+    if not decoded or decoded.get('_v3_unreadable') or not decoded.get('transcript_segments'):
         return {}
     generation = summary_input.fingerprint(decoded)
     if generation == row.get('v3_quiet_generation'):
@@ -73,9 +76,16 @@ def sources_current(tx, client, uid, row, *, quiet=False):
     snapshots = {rid: coll.document(rid).get(transaction=tx) for rid in ids}
     # A new recording can arrive before the canonical builder projects it. The
     # query participates in this transaction, so that phantom also fences commit.
-    pending = list(
-        coll.where(filter=FieldFilter('v3_pending', '==', True)).limit(store.LIMIT + 1).stream(transaction=tx)
-    )
+    query = coll.where(filter=FieldFilter('v3_pending', '==', True))
+    if not quiet and row.get('status') != 'in_progress':
+        if not row.get('started_at') or not row.get('finished_at'):
+            return None
+        # A later live capture cannot extend an already closed window. Keep
+        # nearby pending sources fenced, using the existing pending/start index.
+        query = query.where(filter=FieldFilter('started_at', '>=', row['started_at'] - SILENCE)).where(
+            filter=FieldFilter('started_at', '<', row['finished_at'] + SILENCE)
+        )
+    pending = list(query.limit(store.LIMIT + 1).stream(transaction=tx))
     if len(pending) > store.LIMIT:
         return None
     snapshots.update({snap.id: snap for snap in pending})

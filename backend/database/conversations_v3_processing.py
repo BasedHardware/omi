@@ -76,7 +76,9 @@ def store_summary(
     persist(client.transaction())
 
 
-def settle_processing(uid, cid, token, revision, covers, *, skipped=False, content_hash=None, firestore_client=None):
+def settle_processing(
+    uid, cid, token, revision, covers, *, skipped=False, content_hash=None, input_hash=None, firestore_client=None
+):
     client = firestore_client or store.get_firestore_client()
     ref = store.user_conversations(client, uid).document(cid)
     held = leases.lease_ref(client, uid, 'summary-' + cid)
@@ -94,6 +96,11 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
             decoded = store.decode_row(uid, snapshot)
             if not content_hash or processing_hash(decoded) != content_hash:
                 raise Conflict('processing_source_changed')
+        if input_hash and not skipped and not row.get('deleted'):
+            from utils.conversations.v3 import summary_input
+
+            if summary_input.fingerprint(store.decode_row(uid, snapshot)) != input_hash:
+                raise Conflict('processing_source_changed')
         tx.update(
             ref,
             {
@@ -103,6 +110,11 @@ def settle_processing(uid, cid, token, revision, covers, *, skipped=False, conte
                 'v3_process_failure_reason': None,
                 'summary_retryable': False,
                 **({'summary_covers_through': covers} if not skipped and not row.get('deleted') else {}),
+                **(
+                    {'summary_input_hash': input_hash, 'summary_is_snapshot': False}
+                    if input_hash and not skipped and not row.get('deleted')
+                    else {}
+                ),
                 **(
                     {'title_locked': True}
                     if not skipped and not row.get('home_hidden') and (row.get('structured') or {}).get('title')

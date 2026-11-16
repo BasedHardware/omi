@@ -2,7 +2,7 @@
 
 from database import conversations_v3_fence as fence, conversations_v3_leases as leases
 from database import conversations_v3_processing as writers
-from utils.conversations.v3 import models, policy
+from utils.conversations.v3 import models, policy, summary_input
 
 
 def run_external(fn, uid, language, conversation, *args, **kwargs):
@@ -11,6 +11,7 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
         raise RuntimeError('v3_summary_busy')
     row = conversation.model_dump()
     revision, content_hash = row.get('sync_content_revision'), writers.processing_hash(row)
+    input_hash = summary_input.fingerprint(conversation)
     persisted = []
     observer = kwargs.pop('persistence_observer', None)
 
@@ -37,7 +38,13 @@ def run_external(fn, uid, language, conversation, *args, **kwargs):
                 writers.fail_processing(uid, conversation.id, token, revision, content_hash=content_hash)
                 raise
             writers.settle_processing(
-                uid, conversation.id, token, revision, conversation.finished_at, content_hash=content_hash
+                uid,
+                conversation.id,
+                token,
+                revision,
+                conversation.finished_at,
+                content_hash=content_hash,
+                input_hash=input_hash,
             )
             result.tile_state = 'done'
             if not result.home_hidden and result.structured.title:

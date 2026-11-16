@@ -5,9 +5,13 @@ queries, reservation and summary writer run unchanged against Firestore.
 """
 
 import os
+import asyncio
+import json
+from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
+from threading import Event
 
 import pytest
 from google.auth.credentials import AnonymousCredentials
@@ -114,6 +118,24 @@ def persist(seeded, token, permit):
     )
 
 
+@pytest.fixture
+def builder_path(monkeypatch):
+    from utils.conversations.v3 import visibility
+
+    dispatched = []
+    monkeypatch.setattr(service.context, 'outline_sources', lambda *a: ({}, [], []))
+    monkeypatch.setattr(visibility, 'hydrate_recognition', lambda *a: None)
+    monkeypatch.setattr(service, 'enqueue', lambda *a, **kw: None)
+    monkeypatch.setattr(service, 'dispatch_quiet', lambda *a, **kw: dispatched.append((a, kw)), raising=False)
+    monkeypatch.setattr(
+        service.models,
+        'outline',
+        lambda *a: '{"conversations":[{"first_line":1,"title":"Plan","line":"You planned Friday.","kind":"conversation","sections":[]}]}',
+    )
+    monkeypatch.setattr(quiet, 'require_generated_compute', lambda *a, **kw: None)
+    return dispatched
+
+
 def test_contending_deliveries_on_open_and_replay_reserve_one_paid_snapshot(seeded):
     client, uid, cid, _, coll = seeded
     token = leases.acquire(uid, 'summary-' + cid, firestore_client=client)
@@ -134,6 +156,200 @@ def test_contending_deliveries_on_open_and_replay_reserve_one_paid_snapshot(seed
     assert not result.get('v3_process_pending') and not result.get('v3_process_attempts')
     assert summary.fresh(result)
     assert len(leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict()['snapshot_inputs']) == 1
+
+
+@pytest.mark.parametrize('gap_seconds', [300, 900])
+def test_finished_on_open_ignores_unrelated_pending_recording_at_reserve_and_store(seeded, gap_seconds):
+    client, uid, cid, rid, coll = seeded
+    coll.document(cid).update({'status': 'completed', 'tile_state': 'done'})
+    leases.lease_ref(client, uid, 'builder').update({'open_id': 'another-conversation'})
+    end = coll.document(cid).get().to_dict()['finished_at']
+    unrelated_start = end + timedelta(seconds=gap_seconds)
+    coll.document('unrelated-pending').set(
+        {
+            'recording': True,
+            'v3_pending': True,
+            'status': 'in_progress',
+            'started_at': unrelated_start,
+            'finished_at': unrelated_start + timedelta(seconds=10),
+            'transcript_segments': [
+                {'text': 'A separate ongoing conversation.', 'start': 0, 'end': 10, 'is_user': True}
+            ],
+        }
+    )
+    token = leases.acquire(uid, 'summary-' + cid, firestore_client=client)
+    revision = coll.document(cid).get().update_time
+    permit = attempts.reserve(uid, cid, token, revision, firestore_client=client)
+    assert permit is not None
+    assert set(permit['sources']) == {rid}
+    # A further unrelated append during generation cannot revoke the older window's write.
+    coll.document('unrelated-pending').update({'finished_at': unrelated_start + timedelta(seconds=20)})
+    persist(seeded, token, permit)
+    result = store.decode_row(uid, coll.document(cid).get())
+    assert result['structured']['sections'][0]['body_markdown'] == 'Ship Friday.'
+    assert result['status'] == 'completed' and result['tile_state'] == 'done'
+
+
+def test_finished_on_open_still_fences_nearby_pending_source_at_commit(seeded):
+    client, uid, cid, rid, coll = seeded
+    coll.document(cid).update({'status': 'completed', 'tile_state': 'done'})
+    token = leases.acquire(uid, 'summary-' + cid, firestore_client=client)
+    permit = attempts.reserve(uid, cid, token, coll.document(cid).get().update_time, firestore_client=client)
+    assert permit
+    start = permit['row']['finished_at'] + timedelta(seconds=299)
+    coll.document('nearby-pending').set({'recording': True, 'v3_pending': True, 'started_at': start})
+    with pytest.raises(store.Conflict, match='summary_source_changed'):
+        persist(seeded, token, permit)
+
+
+def test_noop_projection_batches_keep_encrypted_doc_revisions_unchanged(seeded):
+    client, uid, cid, rid, coll = seeded
+    original = coll.document(cid).get().to_dict()
+    rows, existing, revisions, encoded_size = [], {}, {}, 0
+    for index in range(4):
+        row = {
+            **deepcopy(original),
+            'id': f'closed-{index}',
+            'status': 'completed',
+            'tile_state': 'done',
+            'data_protection_level': 'enhanced',
+            'structured': {
+                'title': 'Large retained notes',
+                'emoji': '💬',
+                'sections': [{'heading': 'Retained', 'body_markdown': 'Synthetic. ' * 53000}],
+            },
+        }
+        encoded = store.conversations._prepare_conversation_for_write(row, uid, 'enhanced', allow_offload=False)
+        encoded_size += len(json.dumps(encoded, default=str).encode())
+        coll.document(row['id']).set(encoded)
+        snapshot = coll.document(row['id']).get()
+        decoded = store.decode_row(uid, snapshot)
+        existing[row['id']] = decoded
+        rows.append(deepcopy(decoded))
+        revisions[row['id']] = snapshot.update_time
+    assert encoded_size > 2 * 1024 * 1024
+    token = leases.acquire(uid, 'builder', firestore_client=client)
+    store.commit_projection(uid, token, {}, existing, rows, [], firestore_client=client)
+    assert {key: coll.document(key).get().update_time for key in revisions} == revisions
+
+
+@pytest.mark.asyncio
+async def test_competing_quiet_and_on_open_catchup_preserve_inflight_paid_result(seeded, builder_path, monkeypatch):
+    client, uid, cid, rid, coll = seeded
+    await service.reconcile(uid, on_open=True, conversation_id=cid)
+    entered, resume = Event(), Event()
+    paid = []
+
+    def write(owner, row, emit):
+        paid.append(row['id'])
+        entered.set()
+        assert resume.wait(15)
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'The paid result survived.'}]}
+
+    monkeypatch.setattr(summary, 'write', write)
+    generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
+    first = asyncio.create_task(quiet.run(uid, rid, generation))
+    try:
+        assert await asyncio.to_thread(entered.wait, 10)
+        before = coll.document(cid).get().update_time, coll.document(rid).get().update_time
+        assert await quiet.run(uid, rid, generation) == 'retry'
+        assert await service.reconcile(uid, on_open=True, conversation_id=cid) in {'busy', 'committed'}
+        assert (coll.document(cid).get().update_time, coll.document(rid).get().update_time) == before
+    finally:
+        resume.set()
+        await first
+    current = store.decode_row(uid, coll.document(cid).get())
+    assert current['structured']['sections'][0]['body_markdown'] == 'The paid result survived.'
+    assert paid == [cid]
+
+
+@pytest.mark.asyncio
+async def test_catchup_preserves_discovery_of_unprojected_partial_tail(seeded, builder_path, monkeypatch):
+    client, uid, cid, rid, coll = seeded
+    start = coll.document(cid).get().to_dict()['finished_at'] + timedelta(seconds=1)
+    coll.document('pending-tail').set(
+        {
+            'id': 'pending-tail',
+            'recording': True,
+            'status': 'in_progress',
+            'v3_pending': True,
+            'v3_pending_since': start,
+            'created_at': start,
+            'started_at': start,
+            'finished_at': start,
+            'record_audio_partial': {'generation': 2, 'applied_generation': 1},
+            'transcript_segments': [],
+        }
+    )
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('known pending tail bought notes'))
+    generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
+    assert await quiet.run(uid, rid, generation) == 'settled'
+    assert coll.document('pending-tail').get().to_dict()['v3_pending']
+    assert not coll.document(cid).get().to_dict().get('summary_covers_through')
+    assert not leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict().get('snapshot_inputs')
+
+
+@pytest.mark.asyncio
+async def test_reconcile_recovers_quiet_obligation_after_accepted_content_trigger_crash(
+    seeded, builder_path, monkeypatch
+):
+    client, uid, cid, rid, coll = seeded
+    # Accepted transcript custody committed v3_pending, then the process died before changed().
+    coll.document(rid).update(
+        {
+            'v3_pending': True,
+            'v3_pending_since': datetime.now(timezone.utc),
+            'v3_quiet_pending': firestore.DELETE_FIELD,
+            'v3_quiet_generation': firestore.DELETE_FIELD,
+            'v3_quiet_due': firestore.DELETE_FIELD,
+        }
+    )
+    await service.reconcile(uid)
+    source = coll.document(rid).get().to_dict()
+    assert source['v3_pending'] is False and source['v3_quiet_pending'] is True
+    assert source['v3_quiet_generation'] == summary_input.fingerprint(store.decode_row(uid, coll.document(rid).get()))
+    assert any(args[:2] == (uid, rid) for args, _kw in builder_path)
+    coll.document(rid).update({'v3_quiet_due': datetime.now(timezone.utc) - timedelta(seconds=1)})
+    monkeypatch.setattr(
+        summary, 'write', lambda *a: {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'Recovered.'}]}
+    )
+    assert await quiet.run(uid, rid, source['v3_quiet_generation']) == 'settled'
+    assert store.decode_row(uid, coll.document(cid).get())['structured']['sections'][0]['body_markdown'] == 'Recovered.'
+
+
+@pytest.mark.asyncio
+async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_permit(seeded, monkeypatch):
+    from types import SimpleNamespace
+    from utils.conversations import process_conversation
+
+    client, uid, cid, rid, coll = seeded
+    coll.document(cid).update({'v3_process_pending': True, 'status': 'processing'})
+    full_calls = []
+
+    def process(owner, language, row, **kw):
+        full_calls.append(row.id)
+        coll.document(cid).update(
+            {
+                'status': 'completed',
+                'structured': {
+                    'title': 'Final',
+                    'emoji': '💬',
+                    'sections': [{'heading': 'Plan', 'body_markdown': 'Authoritative final notes.'}],
+                },
+            }
+        )
+        kw['persistence_observer'](True)
+        return SimpleNamespace(status='completed')
+
+    monkeypatch.setattr(process_conversation, 'process_conversation', process)
+    await service.drain_processing(uid)
+    current = store.decode_row(uid, coll.document(cid).get())
+    assert summary.fresh(current) and current['summary_is_snapshot'] is False
+    monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('final notes bought another on-open call'))
+    assert await summary.prepare(uid, current) is None
+    assert [frame async for frame in summary.stream(uid, current)][0].startswith('done: ')
+    assert full_calls == [cid]
+    assert not leases.lease_ref(client, uid, 'summary-' + cid).get().to_dict().get('snapshot_inputs')
 
 
 @pytest.mark.parametrize(

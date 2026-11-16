@@ -57,6 +57,14 @@ notes do not authorize final reuse. This costs one additional final notes call w
 an early snapshot succeeded. Thirty seconds is the quiet dispatch target, not a
 completion guarantee: queue/executor time, first section and full model latency must
 be measured separately (the existing model deadline remains 90 seconds).
+Unchanged catch-up retains the canonical/source document revisions, and on-open
+outlining waits for an active summary owner, so competing wakes cannot discard
+the sole paid result. Unprojected partial transcription tails keep their durable
+capture marker. Before clearing accepted capture work, projection atomically
+repairs and returns any missing quiet obligation for dispatch. Normally finalized
+notes receive their checked input fingerprint and final designation at settlement;
+opening those notes reuses them without spending a speculative permit. Pending
+captures outside an already closed window do not block its on-open summary.
 The recording-speaker picker for a derived conversation reads and edits only
 that copied window. Shared source scopes cannot expand it into other product
 conversations. Legacy recording-wide naming keeps its existing behavior.

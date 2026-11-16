@@ -18,6 +18,12 @@ def lease_ref(client, uid, key):
     return client.collection('users').document(uid).collection('conversation_v3_leases').document(key)
 
 
+def busy(uid, key, *, firestore_client=None):
+    client = firestore_client or get_firestore_client()
+    row = lease_ref(client, uid, key).get().to_dict() or {}
+    return bool(row.get('token') and row.get('until') and row['until'] > datetime.now(timezone.utc))
+
+
 def acquire(uid, key, *, now=None, firestore_client=None):
     client = firestore_client or get_firestore_client()
     now = now or datetime.now(timezone.utc)

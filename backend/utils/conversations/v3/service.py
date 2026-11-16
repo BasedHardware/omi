@@ -15,7 +15,7 @@ from functools import wraps
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from utils.conversations.v3.triggers import enqueue, changed
+from utils.conversations.v3.triggers import enqueue, changed, dispatch_quiet
 from utils.conversations.v3.renewal import renew_until_done, leased_work
 from database import conversations as conversations_db, conversations_v3 as store, conversations_v3_fence as fence
 from models.conversation import Conversation
@@ -80,6 +80,8 @@ def _match(window, existing, used):
 
 
 async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _pass=0):
+    if on_open and conversation_id and await run_blocking(db_executor, leases.busy, uid, 'summary-' + conversation_id):
+        return 'busy'
     token = await run_blocking(db_executor, leases.acquire, uid, 'builder')
     if token is None:
         metrics.RECONCILES.labels('busy').inc()
@@ -252,9 +254,11 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
                     )
             rows.append(row)
         await run_blocking(db_executor, leases.renew, uid, 'builder', token)
-        await run_blocking(
+        quiet_outbox = await run_blocking(
             db_executor, _commit, uid, token, recordings, existing, rows, cache[-128:], clear_pending=not on_open
         )
+        for rid, obligation in (quiet_outbox or {}).items():
+            await run_blocking(db_executor, dispatch_quiet, uid, rid, obligation)
         for group in groups:
             if not group['finished']:
                 # A different minute than the currently executing task avoids
@@ -293,7 +297,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
 def _commit(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
     from utils.conversations import lifecycle
 
-    lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache, clear_pending=clear_pending)
+    return lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache, clear_pending=clear_pending)
 
 
 async def drain_processing(uid):
@@ -382,6 +386,7 @@ def _process(uid, row, token):
         row.get('sync_content_revision'),
         row['finished_at'],
         content_hash=writers.processing_hash(row),
+        input_hash=summary_input.fingerprint(row),
     )
 
 

@@ -499,3 +499,24 @@ def test_terminal_failure_counter_counts_committed_transitions_once(strict):
     assert writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert not writers.fail_processing('synthetic', 'c', token, 1, firestore_client=strict)
     assert metrics.TERMINAL_FAILURES.labels('processing')._value.get() == before + 1
+
+
+def test_noop_projection_still_persists_authoritative_privacy_filter_change(strict, monkeypatch):
+    from database import recurring_voice_privacy
+
+    path = ('users', 'synthetic', 'conversations', 'c')
+    row = {
+        'id': 'c',
+        'status': 'completed',
+        'transcript_segments': [{'text': 'Private pointer', 'recurring_voice_id': 'revoked'}],
+    }
+    strict.rows[path] = deepcopy(row)
+    prior = {**deepcopy(row), '_v3_revision': 1}
+
+    def privacy_filter(tx, user, prepared):
+        prepared['transcript_segments'][0].pop('recurring_voice_id')
+
+    monkeypatch.setattr(recurring_voice_privacy, 'filter_processing_write', privacy_filter)
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    store.commit_projection('synthetic', token, {}, {'c': prior}, [deepcopy(prior)], [], firestore_client=strict)
+    assert 'recurring_voice_id' not in strict.rows[path]['transcript_segments'][0]
