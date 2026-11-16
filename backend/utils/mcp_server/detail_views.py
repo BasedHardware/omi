@@ -66,9 +66,9 @@ LINES_OUTPUT: Dict[str, Any] = {
     'description': 'This page of transcript as one line per speaker turn (format=lines)',
 }
 RANGE_OUTPUT: Dict[str, Any] = {
-    'type': 'array',
+    'type': ['array', 'null'],
     'items': {'type': 'integer'},
-    'description': 'First and last segment index on this page (format=lines)',
+    'description': 'First and last segment index on this page, null when the page is empty (format=lines)',
 }
 
 _PAGES_LABELS = ['tool', 'view', 'format', 'position', 'more']
@@ -149,6 +149,10 @@ def outline_sections(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
         first: Optional[int] = positions[0] if positions else None
         last: Optional[int] = positions[-1] if positions else None
         kind = section.get('kind')
+        # Cited segments can overlap or be stored out of time order, so the window
+        # spans every cited segment rather than the first and last index.
+        starts = [t for t in (_seconds(source[p].get('start')) for p in positions) if t is not None]
+        ends = [t for t in (_seconds(source[p].get('end')) for p in positions) if t is not None]
         result.append(
             {
                 'index': number,
@@ -156,8 +160,8 @@ def outline_sections(conversation: Dict[str, Any]) -> List[Dict[str, Any]]:
                 'kind': kind if isinstance(kind, str) else None,
                 'first_segment': first,
                 'segment_count': (last - first + 1) if first is not None and last is not None else None,
-                'start': _seconds(source[first].get('start')) if first is not None else None,
-                'end': _seconds(source[last].get('end')) if last is not None else None,
+                'start': min(starts) if starts else None,
+                'end': max(ends) if ends else None,
             }
         )
     return result
@@ -181,18 +185,22 @@ def _clock(seconds: Any) -> str:
 def render_lines(items: List[Dict[str, Any]]) -> str:
     """One line per speaker turn: consecutive segments of one speaker are joined.
 
-    A continued fragment of an oversized segment (``text_offset`` > 0) joins the
-    previous line, so a reassembled page reads as the speaker said it.
+    Turns join on the canonical ``speaker_key``, so two people who share a label
+    (two contacts with one name, two unresolved speakers) stay separate lines. A
+    continued fragment of an oversized segment joins the previous line, so a
+    reassembled page reads as the speaker said it.
     """
     turns: List[List[Any]] = []
     for item in items:
         label = str(item.get('speaker_label') or 'Unknown')
+        key = item.get('speaker_key')
+        key = key if key is not None else ('label', label)
         text = str(item.get('text') or '').strip()
-        if turns and turns[-1][1] == label:
-            turns[-1][2] = (turns[-1][2] + ' ' + text).strip()
+        if turns and turns[-1][0] == key:
+            turns[-1][3] = (turns[-1][3] + ' ' + text).strip()
         else:
-            turns.append([item.get('start'), label, text])
-    return '\n'.join(f'[{_clock(start)}] {label}: {text}' for start, label, text in turns)
+            turns.append([key, item.get('start'), label, text])
+    return '\n'.join(f'[{_clock(start)}] {label}: {text}' for _key, start, label, text in turns)
 
 
 def lines_fields(items: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -200,7 +208,25 @@ def lines_fields(items: List[Dict[str, Any]]) -> Dict[str, Any]:
     indexes = [item['segment_index'] for item in items if isinstance(item.get('segment_index'), int)]
     return {
         'transcript': render_lines(items),
-        **({'transcript_range': [indexes[0], indexes[-1]]} if indexes else {}),
+        'transcript_range': [indexes[0], indexes[-1]] if indexes else None,
+    }
+
+
+def rendered_segments(conversation: Dict[str, Any], fmt: str) -> Dict[str, Any]:
+    """The conversation as the chosen format pages it.
+
+    ``lines`` renders ``text`` only, so it pages over ``text`` only: otherwise a page
+    boundary inside ``original_text`` would spend continuation calls on lines with
+    no speech. Returns a shallow copy; the fetched document is not changed.
+    """
+    segments = conversation.get('transcript_segments')
+    if fmt != 'lines' or not isinstance(segments, list):
+        return conversation
+    return {
+        **conversation,
+        'transcript_segments': [
+            {k: v for k, v in s.items() if k != 'original_text'} if isinstance(s, dict) else s for s in segments
+        ],
     }
 
 

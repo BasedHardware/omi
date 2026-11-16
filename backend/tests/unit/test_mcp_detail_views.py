@@ -162,6 +162,41 @@ def test_lines_pages_continue_in_lines_and_the_cursor_is_bound_to_the_format(sto
         read({'max_segments': 100, 'cursor': first['next_cursor']})
 
 
+def test_lines_keep_two_speakers_who_share_a_label_apart():
+    items = [
+        {'speaker_key': 'person:a', 'speaker_label': 'Alex', 'start': 0, 'text': 'one'},
+        {'speaker_key': 'person:b', 'speaker_label': 'Alex', 'start': 5, 'text': 'two'},
+    ]
+    assert detail_views.render_lines(items) == '[0:00:00] Alex: one\n[0:00:05] Alex: two'
+
+
+def test_lines_page_only_the_text_they_render(monkeypatch):
+    row = long_conversation(count=1, text='short')
+    row['transcript_segments'][0]['original_text'] = 'x' * 500
+    monkeypatch.setattr(conversations, 'fetch_conversation_for_detail', lambda *a, **k: dict(row))
+    page = read({'format': 'lines', 'max_chars': 5})
+    assert page['conversation']['transcript'] == '[0:00:00] You: 0 sho'
+    pages = 1
+    while page['next_cursor']:
+        page = read({'format': 'lines', 'max_chars': 5, 'cursor': page['next_cursor']})
+        assert page['conversation']['transcript'].split(': ', 1)[1]
+        pages += 1
+    assert pages == 2
+
+
+def test_empty_lines_page_reports_a_null_range_and_can_be_projected(stored):
+    page = read({'format': 'lines', 'offset': 1300, 'fields': ['transcript', 'transcript_range']})
+    assert page['conversation']['transcript'] == '' and page['conversation']['transcript_range'] is None
+
+
+def test_outline_window_spans_every_cited_segment(stored):
+    stored['transcript_segments'][3].update(start=8, end=27)
+    stored['transcript_segments'][4].update(start=0, end=8)
+    stored['structured']['sections'] = [{'heading': 'h', 'source_segment_ids': ['seg-3', 'seg-4']}]
+    (section,) = read({'view': 'outline'})['sections']
+    assert (section['start'], section['end']) == (0.0, 27.0)
+
+
 def test_lines_join_consecutive_turns_of_one_speaker():
     items = [
         {'speaker_label': 'You', 'start': 0, 'text': 'hello'},

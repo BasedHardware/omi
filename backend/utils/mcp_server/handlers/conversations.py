@@ -293,6 +293,7 @@ def get_conversation_by_id(
             f'offset {offset} is past the end of the transcript (total_segments={total}).', code=-32602
         )
 
+    conversation = detail_views.rendered_segments(conversation, fmt)
     # JSON-RPC carries both text and structuredContent, and SSE escapes Unicode.
     # If metadata/encoding consumes the wire budget, return a smaller lossless
     # page, with a cursor bound to the original requested options.
@@ -486,7 +487,11 @@ def get_conversations_by_ids(
             }
         return {
             'id': cid,
-            **_conversation_detail_page(uid, conversation, {**detail_filters, 'conversation_id': cid}),
+            **_conversation_detail_page(
+                uid,
+                detail_views.rendered_segments(conversation, detail_filters.get('format', 'segments')),
+                {**detail_filters, 'conversation_id': cid},
+            ),
             'truncated_fields': [],
         }
 
