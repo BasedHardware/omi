@@ -12,6 +12,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/mobile_batch_buffer.dart';
+import 'package:omi/services/wals/wal_write_intent.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/utils/wal_index_worker.dart';
@@ -50,7 +51,8 @@ class WalFileManager {
 
   static Future<List<Wal>> _loadWals() async {
     final indexed = await _loadIndexedWals();
-    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
+    final recovered = await WalWriteIntent.recover(_walFile!.parent, indexed);
+    return MobileBatchBuffer.recover(_walFile!.parent, recovered);
   }
 
   static Future<List<Wal>> _loadIndexedWals() async {
@@ -65,29 +67,30 @@ class WalFileManager {
   /// Null means the index is unusable; a partially valid index retains every
   /// readable entry and archives the original bytes before writing the repair.
   static Future<List<Wal>?> _loadIndex(File file) async {
+    late ({List<Wal> wals, bool invalid}) result;
     try {
       final content = await file.readAsString();
       final path = file.path;
-      final result = await offUiIsolate(() => _decodeIndex(content, path),
+      result = await offUiIsolate(() => _decodeIndex(content, path),
           size: content.length, threshold: 0, debugName: 'wal_index_decode');
-      final loaded = result.wals;
-      final invalid = result.invalid;
-      if (invalid) {
-        await _quarantineIndex(file, 'invalid_entry');
-        if (identical(file, _walFile)) {
-          try {
-            await _saveWals(loaded);
-          } catch (_) {
-            // The archived source remains available for another recovery.
-          }
-        }
-      }
-      return loaded;
     } catch (error) {
       await _quarantineIndex(
           file, error is FormatException && error.message == 'invalid_schema' ? 'invalid_schema' : 'unreadable');
       return null;
     }
+    if (result.invalid) {
+      // No repair or backup fallback may drop references until the original
+      // bytes are durably retired. A preservation failure fails load closed.
+      await _quarantineIndex(file, 'invalid_entry');
+      if (identical(file, _walFile)) {
+        try {
+          await _saveWals(result.wals);
+        } catch (_) {
+          // The archived source remains available for another recovery.
+        }
+      }
+    }
+    return result.wals;
   }
 
   static Future<WalIndexWorker> createIndexWorker({
@@ -120,6 +123,16 @@ class WalFileManager {
         // Old indices can omit new optional fields, but a WAL without its
         // identity or with a wrong scalar type must never enter sync admission.
         if (entry['timer_start'] is! int || entry['codec'] is! String) throw const FormatException();
+        // A file-backed row must not fall through from an unknown/missing
+        // storage enum to mem: the next flush would replace its reference
+        // with a newly named empty file. Retire the raw row in quarantine.
+        final storage = WalStorage.values.asNameMap()[entry['storage']];
+        if (entry['storage'] != null && storage == null ||
+            entry['file_path'] is String &&
+                (entry['file_path'] as String).isNotEmpty &&
+                (storage == null || storage == WalStorage.mem)) {
+          throw const FormatException();
+        }
         for (final key in [
           'channel',
           'sample_rate',
@@ -177,19 +190,22 @@ class WalFileManager {
 
   static Future<void> _quarantineIndex(File file, String reason) async {
     _indexRevision++;
+    if (!await file.exists()) return;
+    final archive = '${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}';
     try {
-      if (await file.exists()) {
-        final rename = quarantineRenameForTesting;
-        if (rename != null) {
-          await rename(file);
-        } else {
-          await file.rename('${file.path}.corrupt-${DateTime.now().microsecondsSinceEpoch}');
-        }
+      final rename = quarantineRenameForTesting;
+      if (rename != null) {
+        await rename(file);
+      } else {
+        await file.rename(archive);
       }
-      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);
     } catch (_) {
-      await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', 'rename_failed');
+      // Rename can fail while the source is still readable. Preserve an
+      // fsynced copy before any later repair/save can overwrite its rows.
+      // If this also fails, propagate: backup fallback is not safe to publish.
+      await File(archive).writeAsBytes(await file.readAsBytes(), flush: true);
     }
+    await BootJournal.instance.record('quarantine:${file.uri.pathSegments.last}', reason);
   }
 
   /// Indexes at or above this size are JSON-encoded on a background isolate.
@@ -336,16 +352,16 @@ class WalFileManager {
     return success;
   }
 
-  static Future<void> clearAll() async {
-    _indexRevision++;
-    if (_walFile != null && _walFile!.existsSync()) {
-      await _walFile!.delete();
-    }
-    if (_walBackupFile != null && _walBackupFile!.existsSync()) {
-      await _walBackupFile!.delete();
-    }
-    Logger.debug('Cleared all WAL files');
-  }
+  /// Account deletion already purged that owner's files through the ledger.
+  /// Keep any remaining rows (foreign owners or failed file deletions) so a
+  /// session wipe cannot silently turn their audio into unreferenced files.
+  static Future<void> clearAll() => _saveLock.withResource(() async {
+        if ((await _loadIndexedWals()).isNotEmpty) return;
+        _indexRevision++;
+        if (_walFile != null && await _walFile!.exists()) await _walFile!.delete();
+        if (_walBackupFile != null && await _walBackupFile!.exists()) await _walBackupFile!.delete();
+        Logger.debug('Cleared empty WAL index files');
+      });
 
   static Future<Map<String, int>> getFileInfo() async {
     int mainFileSize = 0;

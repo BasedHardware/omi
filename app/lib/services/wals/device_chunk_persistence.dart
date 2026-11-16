@@ -31,7 +31,6 @@ extension DeviceChunkPersistence on LocalWalSync {
     final dir = await getApplicationDocumentsDirectory();
     final name = 'custody_empty_${const Uuid().v4()}.ring-empty';
     try {
-      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
       final marker = Wal(
           codec: source.codec,
           timerStart: source.timerStart,
@@ -47,6 +46,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadSeqEnd: end,
           downloadFileBytes: data.length,
           fileSha256: sha256.convert(data).toString());
+      await WalWriteIntent.write(dir, marker, data);
       await addExternalWal(marker, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(marker, admittedGeneration: admittedGeneration)) {
         throw StateError('empty marker index not durable');
@@ -77,6 +77,7 @@ extension DeviceChunkPersistence on LocalWalSync {
     int? downloadSeqEnd,
   }) async {
     if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
+    final owner = SharedPreferencesUtil().uid;
     final data = encodeWalFrames(frames);
     if (!await ensureStorageAdmission(bytes: data.length, admittedGeneration: admittedGeneration)) {
       throw StateError('storage admission refused (cap/disk reserve)');
@@ -85,10 +86,10 @@ extension DeviceChunkPersistence on LocalWalSync {
       final dir = await getApplicationDocumentsDirectory();
       var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
       if (fileName != null) {
-        while (await File('${dir.path}/$name').exists()) {
+        while (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name)) {
           name = fileName();
         }
-      } else if (await File('${dir.path}/$name').exists()) {
+      } else if (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name)) {
         final dot = name.lastIndexOf('.');
         final stem = dot > 0 ? name.substring(0, dot) : name;
         final ext = dot > 0 ? name.substring(dot) : '';
@@ -100,9 +101,8 @@ extension DeviceChunkPersistence on LocalWalSync {
           name = const bool.fromEnvironment('OMI_DEVICE_COLLISION_TIMESTAMP_LAST_OFF')
               ? '${stem}_u$nonce$ext'
               : '${deviceClockCollisionPrefix(prefix, nonce)}_$timestamp$ext';
-        } while (await File('${dir.path}/$name').exists());
+        } while (await File('${dir.path}/$name').exists() || await WalWriteIntent.exists(dir, name));
       }
-      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
       final fps = source.codec.getFramesPerSecond();
       final wal = Wal(
           codec: codec ?? source.codec,
@@ -110,6 +110,7 @@ extension DeviceChunkPersistence on LocalWalSync {
           sampleRate: sampleRate ?? source.sampleRate,
           timerStart: timerStart,
           filePath: name,
+          ownerUid: owner.isEmpty ? source.ownerUid : owner,
           storage: WalStorage.disk,
           status: WalStatus.miss,
           device: source.device,
@@ -123,6 +124,8 @@ extension DeviceChunkPersistence on LocalWalSync {
           downloadFileBytes: downloadRingId != null ? data.length : null,
           fileSha256: downloadRingId != null ? sha256.convert(data).toString() : null,
           clockRun: clockRun);
+      if (sessionGeneration != admittedGeneration) throw StateError('WAL owner changed before write');
+      await WalWriteIntent.write(dir, wal, data);
       await addExternalWal(wal, admittedGeneration: admittedGeneration);
       if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
         throw StateError('WAL not durable after registration');

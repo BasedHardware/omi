@@ -18,7 +18,21 @@ extension _WalIndexPersistence on LocalWalSyncImpl {
     _forceIndexWrite = false;
     // Capture keys at admission, never from mutable rows after an await.
     final confirmedKeys = delta.disk.map(_durableKey).toList();
-    final write = _writeIndexDelta(delta);
+    final write = () async {
+      await _writeIndexDelta(delta);
+      for (final wal in delta.disk.where((w) => w.hasWriteIntent)) {
+        // Cleanup is best effort AFTER commit; retrying a leftover intent is
+        // idempotent. Never turn a committed write into a failed index delta.
+        try {
+          if (wal.filePath != null && !wal.filePath!.contains('/')) {
+            final directory = await getApplicationDocumentsDirectory();
+            await WalWriteIntent.retire(directory, wal);
+          }
+        } on FileSystemException catch (e) {
+          Logger.debug('WAL intent retirement deferred: $e');
+        }
+      }
+    }();
     _indexWriteInFlight = write;
     try {
       await write;

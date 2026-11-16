@@ -21,6 +21,7 @@ import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:math';
 import 'wal_index_inventory.dart';
+import 'wal_write_intent.dart';
 import 'package:omi/utils/wal_index_worker.dart';
 
 import 'package:disk_space_2/disk_space_2.dart';
@@ -264,7 +265,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       ..addAll(foreign);
     _confirmedDurableWalKeys
       ..clear()
-      ..addAll(loaded.where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal).map(_durableKey));
+      ..addAll(loaded
+          .where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal && !w.recoveredWriteIntent)
+          .map(_durableKey));
   }
 
   void _notifyUpdated(int generation) {
@@ -1104,7 +1107,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<bool> _localFileExistsByName(String fileName) async {
     final path = await Wal.getFilePath(fileName);
     if (path == null) return false;
-    return File(path).exists();
+    return await File(path).exists() || await WalWriteIntent.exists(File(path).parent, fileName);
   }
 
   Future _flush(int generation) async {
@@ -1141,7 +1144,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
         final file = File(filePath);
         try {
-          await file.writeAsBytes(data, flush: true);
+          final row = Wal.fromJson(wal.toJson()
+            ..['file_path'] = fileName
+            ..['storage'] = WalStorage.disk.name);
+          await WalWriteIntent.write(file.parent, row, data);
+          wal.hasWriteIntent = true;
         } catch (e) {
           Logger.debug('LocalWalSync: flush write failed for ${wal.id}: $e');
           _releaseAdmission(data.length);
@@ -1607,6 +1614,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
+            await WalWriteIntent.retireFile(File(fullPath).parent, fullPath.split('/').last);
             await File(fullPath).delete();
             final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
             if (await sidecar.exists()) await sidecar.delete();

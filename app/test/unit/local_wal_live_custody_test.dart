@@ -226,7 +226,9 @@ void main() {
     await pump();
     expect(conn.advances, isEmpty, reason: 'index save still gated — no ADVANCE may leak ahead of it');
     expect(saves, 1);
-    expect(await WalFileManager.loadWals(), isEmpty);
+    expect(await WalFileManager.loadIndexedWals(), isEmpty);
+    expect((await WalFileManager.loadWals()).single.recoveredWriteIntent, isTrue,
+        reason: 'intent replay recovers bytes but cannot authorize device reclaim');
     expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
     expect(custody.advanceTarget('dev', 1), isNull);
     barrier.complete();
@@ -366,7 +368,9 @@ void main() {
     await pump();
     expect(conn.advances, isEmpty, reason: 'no durable index — no ADVANCE');
     expect(saves, 1);
-    expect(await WalFileManager.loadWals(), isEmpty);
+    expect(await WalFileManager.loadIndexedWals(), isEmpty);
+    expect((await WalFileManager.loadWals()).single.recoveredWriteIntent, isTrue,
+        reason: 'intent replay recovers bytes but cannot authorize device reclaim');
     expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
     expect(custody.advanceTarget('dev', 1), isNull);
 
