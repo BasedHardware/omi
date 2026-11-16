@@ -61,7 +61,10 @@ def dedupe_donor(incoming: list[dict], donor: dict, live: dict) -> DonorDedupe:
             incoming_limit=MAX_LIVE_SEGMENTS,
             # Long chapters overflow the old 30-minute candidate pool. Keep
             # the same lexical/negation/number guards, searching locally.
+            # Unproved long-pool matches additionally need an unambiguous
+            # occurrence: exact placement or ordered clock-consistent neighbours.
             midpoint_distance_seconds=(90.0 if max(len(incoming), len(stored)) > MAX_INCOMING_SEGMENTS else 1800.0),
+            require_occurrence_alignment=max(len(incoming), len(stored)) > MAX_INCOMING_SEGMENTS,
         )
         reference = [dict(segment, timestamp=origin + segment['start']) for segment in stored]
         lexical_kept_ids = {id(segment) for segment in lexical}

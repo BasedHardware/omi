@@ -64,6 +64,83 @@ def test_over_budget_donor_remains_intact():
     assert dedupe_donor(incoming, {}, recording(1)).kept == incoming
 
 
+def test_review_reproduction_later_utterance_in_long_donor_is_not_a_repeat():
+    live = recording(65)
+    donor = dict(chunk('donor', 1000), transcript_segments=[paragraph(i, scope='final:batch:sync') for i in range(65)])
+    for index, segment in enumerate(donor['transcript_segments']):
+        segment.update(start=1000 + index * 4, end=1003 + index * 4, text=f'Novel donor speech for detail{index}')
+    donor['transcript_segments'][0].update(start=60, end=63, text=live['transcript_segments'][0]['text'])
+    incoming = [dict(segment, timestamp=1000 + segment['start']) for segment in donor['transcript_segments']]
+    report = dedupe_donor(incoming, donor, live)
+    assert report.kept == incoming
+    assert report.capture == report.lexical == report.exact_retry == 0
+
+
+@pytest.mark.parametrize('skew', [-26.4, 26.4])
+def test_long_donor_true_copies_with_realistic_clock_skew_have_ordered_neighbours(skew):
+    live = recording(65)
+    incoming = [dict(paragraph(i, scope='final:batch:sync'), timestamp=1000 + i * 4 + skew) for i in range(65)]
+    before = deepcopy((incoming, live))
+    report = dedupe_donor(incoming, {}, live)
+    assert not report.kept and report.lexical == 65 and report.capture == 0
+    assert (incoming, live) == before
+
+
+@pytest.mark.parametrize('repeat_in', ['incoming', 'live', 'live_duration_mismatch'])
+def test_repeated_phrase_within_discovery_window_abstains_even_at_nearest_time(repeat_in):
+    live = recording(65)
+    incoming = [dict(paragraph(i, scope='final:batch:sync'), timestamp=1000 + i * 4) for i in range(65)]
+    repeated = incoming[10]['text']
+    if repeat_in == 'incoming':
+        incoming[25]['text'] = repeated
+    else:
+        live['transcript_segments'][25]['text'] = repeated
+        if repeat_in == 'live_duration_mismatch':
+            live['transcript_segments'][25]['end'] = 200
+    report = dedupe_donor(incoming, {}, live)
+    assert incoming[10] in report.kept
+    if repeat_in == 'incoming':
+        assert incoming[25] in report.kept
+
+
+def test_shifted_isolated_or_reordered_matches_cannot_establish_an_occurrence():
+    live = recording(65)
+    incoming = [dict(paragraph(i, scope='final:batch:sync'), timestamp=1000 + i * 4 + 26.4) for i in (1, 0, 2)]
+    assert dedupe_donor(incoming, {}, live).kept == incoming
+    assert dedupe_donor(incoming[:1], {}, live).kept == incoming[:1]
+    incoming[0]['timestamp'] = 1000 + incoming[0]['start'] + 1
+    assert dedupe_donor(incoming[:1], {}, live).kept == incoming[:1]
+
+
+def test_neighbour_offsets_must_agree_and_cannot_explain_a_sixty_second_repeat():
+    live = recording(65)
+    for offsets in ([26.4, 27, 30.4], [60, 60, 60]):
+        incoming = [
+            dict(paragraph(i, scope='final:batch:sync'), timestamp=1000 + i * 4 + skew)
+            for i, skew in enumerate(offsets)
+        ]
+        assert dedupe_donor(incoming, {}, live).kept == incoming
+
+
+def test_reworded_incoming_occurrences_cannot_share_one_reference_occurrence():
+    live = recording(65)
+    incoming = [dict(paragraph(i, scope='final:batch:sync'), timestamp=1000 + i * 4) for i in range(65)]
+    incoming[11]['text'] = 'Well ' + incoming[10]['text']
+    report = dedupe_donor(incoming, {}, live)
+    assert incoming[10] in report.kept and incoming[11] in report.kept
+
+
+def test_frame_proof_still_certifies_a_later_match_without_lexical_clock_inference(monkeypatch):
+    from utils.sync import donor_dedupe
+
+    live = recording(65)
+    incoming = [dict(paragraph(0, scope='final:batch:sync'), timestamp=1060)]
+    monkeypatch.setattr(donor_dedupe, 'capture_covered_indices', lambda *a: frozenset({0}))
+    monkeypatch.setattr(donor_dedupe, 'covered_indices', lambda *a: frozenset())
+    report = dedupe_donor(incoming, {}, live)
+    assert not report.kept and report.capture == 1 and report.lexical == 0
+
+
 def test_long_donor_merge_keeps_one_copy_and_ancestry():
     store = StrictFirestore()
     live = recording()
