@@ -114,6 +114,7 @@ _RESULT_LIST_KEY_BY_TOOL = {
     "search_memories": "memories",
     "create_memories": "results",
     "get_conversations": "conversations",
+    "get_deleted_conversations": "deleted",
     "get_conversations_by_ids": "conversations",
     "search_conversations": "conversations",
     "search_x_posts": "posts",
