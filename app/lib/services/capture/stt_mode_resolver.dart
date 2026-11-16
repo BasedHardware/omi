@@ -5,8 +5,10 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/transcription_allowance.dart';
 import 'package:omi/services/capture/free_tier_on_device_stt_flag.dart';
 import 'package:omi/services/capture/on_device_stt_preparer.dart';
+import 'package:omi/services/capture/phone_transcription_choice.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 
@@ -54,6 +56,11 @@ class SttModeDecision {
 /// transcribe yet (no snapshot, a transient server reason, model not ready, unsupported codec,
 /// no config) keeps today's Omi socket: the server still enforces the cap there, so the user is
 /// never worse off than with the flag off. A not-ready phone is asked to prepare its model.
+///
+/// The first on-device decision at the cap is persisted as the free plan's phone choice
+/// ([PhoneTranscriptionChoice]); from then on the persisted config is honored like any Custom STT
+/// (blocked, never billed, when the phone is not ready) until the reader switches back or upgrades.
+/// The kill switch returns a pinned choice to the Omi socket.
 class SttModeResolver {
   static const freemiumOnDeviceId = 'freemium:on-device';
 
@@ -76,6 +83,12 @@ class SttModeResolver {
   final Future<FreemiumReadiness> Function({String? language}) readinessReader;
   final CustomSttConfig? Function() onDeviceConfigBuilder;
 
+  /// True when the persisted config is the free plan's pinned phone choice ([PhoneTranscriptionChoice]).
+  final bool Function() pinnedReader;
+
+  /// Persists the automatic switch at the cap as the phone choice and returns the persisted config.
+  final Future<CustomSttConfig> Function(CustomSttConfig config) adoptPhoneChoice;
+
   SttModeResolver({
     bool Function()? flagReader,
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
@@ -83,7 +96,12 @@ class SttModeResolver {
     CustomSttConfig? Function()? onDeviceConfigBuilder,
     Future<bool> Function()? killSwitchReader,
     void Function({String? language})? prepareOnDevice,
+    bool Function()? pinnedReader,
+    Future<CustomSttConfig> Function(CustomSttConfig config)? adoptPhoneChoice,
   })  : flagReader = flagReader ?? _defaultFlag,
+        pinnedReader = pinnedReader ?? (() => PhoneTranscriptionChoice.isPinned(SharedPreferencesUtil())),
+        adoptPhoneChoice =
+            adoptPhoneChoice ?? ((config) => PhoneTranscriptionChoice.adopt(config, SharedPreferencesUtil())),
         killSwitchReader = killSwitchReader ?? FreeTierOnDeviceSttFlag.killed,
         prepareOnDevice = prepareOnDevice ?? OnDeviceSttPreparer.prepare,
         allowanceReader = allowanceReader ?? _defaultAllowance,
@@ -122,7 +140,14 @@ class SttModeResolver {
 
   Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
-    final flag = flagReader() && !persistedCustomStt.isEnabled && !await killSwitchReader();
+    final pinned = pinnedReader();
+    // The kill switch never governs a Custom STT the reader set up themselves; only read it when
+    // the free-tier route (or its pinned phone choice) is in play.
+    final freeTierOn = flagReader() && (pinned || !persistedCustomStt.isEnabled) && !await killSwitchReader();
+    // The kill switch also returns a pinned phone choice to today's Omi socket (the server holds
+    // the audio at the cap); the pin itself is kept for when the switch is lifted.
+    if (pinned && !freeTierOn) persistedCustomStt = CustomSttConfig.defaultConfig;
+    final flag = freeTierOn && !persistedCustomStt.isEnabled;
     final allowance = allowanceReader();
     if ((persistedCustomStt.provider == SttProvider.onDeviceWhisper &&
             !kIsWeb &&
@@ -143,6 +168,17 @@ class SttModeResolver {
     if (decision.reason == reasonNotReady && !persistedCustomStt.isEnabled) {
       // Fire and forget: the next socket picks the model up once it is ready.
       prepareOnDevice();
+    }
+    if (decision.path == SttResolvedPath.onDevice && decision.customSttConfig != null) {
+      // The switch at the cap is permanent (David, 2026-11-16): persist it now, before the socket
+      // opens, so every later decision is the same persisted config and never flips mid-session.
+      final persisted = await adoptPhoneChoice(decision.customSttConfig!);
+      return SttModeDecision(
+        path: SttResolvedPath.onDevice,
+        customSttConfig: persisted,
+        reason: decision.reason,
+        allowanceOnDevice: true,
+      );
     }
     return decision;
   }
