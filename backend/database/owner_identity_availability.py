@@ -67,7 +67,9 @@ def observe(uid, conversation_id, *, client=None):
         transaction.set(counter, counts)
         return True
 
-    return transcript_pointer.run_preloaded_transactional(client, commit)
+    return transcript_pointer.run_preloaded_transactional(
+        client, commit, attempts=1, initial_transaction=client.transaction(max_attempts=1)
+    )
 
 
 def observe_safely(uid, conversation_id):
