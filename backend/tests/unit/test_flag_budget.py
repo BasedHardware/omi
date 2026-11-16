@@ -90,6 +90,7 @@ SCOPE = (
     'diarizer/batch_pipeline*.py',
     'config/batch_pipeline*.py',
     'config/batch_language_recovery.py',
+    'config/listen_reconnect.py',
     'utils/sync/**/*.py',
     'utils/stt/**/*.py',
     'parakeet/language_gate.py',

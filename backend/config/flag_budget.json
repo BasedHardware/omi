@@ -6,6 +6,7 @@
     "diarizer/batch_pipeline*.py",
     "config/batch_pipeline*.py",
     "config/batch_language_recovery.py",
+    "config/listen_reconnect.py",
     "utils/sync/**/*.py",
     "utils/stt/**/*.py",
     "parakeet/language_gate.py",
@@ -1177,6 +1178,14 @@
     },
     "VAD_GATE_MODE": {
       "seeded": "2026-10-25"
+    },
+    "LISTEN_BATCH_RECONNECT_ENABLED": {
+      "owner": "capture-quality / Release",
+      "review_by": "2026-11-30"
+    },
+    "LISTEN_BATCH_RECONNECT_GRACE_SECONDS": {
+      "owner": "capture-quality / Release",
+      "review_by": "2026-11-30"
     }
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",

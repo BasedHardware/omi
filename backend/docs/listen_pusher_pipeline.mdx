@@ -10106,3 +10106,31 @@ No metric label contains an identity. Phase 2 will map source frames, prove
 redundancy/missing intervals, reserve only missing work under the canonical
 owner, and settle status after projection. Custody acceptance alone proves no
 recovered speech.
+
+### Mobile server-batch reconnect grace
+
+For mono mobile `omi`/`phone` server-batch captures with a known device and client
+recording origin, `LISTEN_BATCH_RECONNECT_ENABLED=true` (default) holds a drained
+producer's conversation `in_progress` after transport loss.
+`LISTEN_BATCH_RECONNECT_GRACE_SECONDS=120` (default, clamped to 1..120) bounds this
+hold. The existing durable quiet-check outbox admits normal finalization at the
+earlier of this fixed deadline and the real quiet/calendar/day/span boundary;
+dispatch and processing retain their existing queue latency. Explicit user/end
+provenance bypasses the grace. Setting the kill switch false restores immediate
+finalization at socket teardown; existing indexed holds still drain on upgraded
+workers.
+
+`listen_batch_producer` is server-owned metadata: version, producer token, origin,
+session binding, phase, lease expiry, hard boundary, drain proof, and optional
+fixed deadline. It contains no audio/transcript. Claim, renewal, drain release,
+quiet expiry and normal finalization conflict on the same parent document. Only
+the current token may publish audio bounds, close the archive, or release its
+lease. A new socket never clears `server_batch_audio_closed`, a batch job ID,
+revision, generation or terminal status. Archive capture-session IDs keep each
+socket's packs immutable; custody ACKs still require their committed receipts.
+
+Upgrade finalization/reconciler/backend readers before listen and drain old
+versions before relying on the grace bound. Old workers use the old quiet deadline;
+old listen retains its close-as-end behavior. Roll back with the kill switch,
+keeping upgraded workers until outstanding holds drain. Details and limits:
+[change note](listen_pusher_pipeline/changes/2026-11-16-batch-reconnect-grace.md).

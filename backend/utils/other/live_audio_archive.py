@@ -49,6 +49,12 @@ class LiveAudioArchive:
             self._admitted_snapshot[phase] = admitted(uid, phase)
         return self._admitted_snapshot[phase]
 
+    def _producer_kwargs(self, conversation_id):
+        controller = getattr(self.host, 'conversations', None)
+        lookup = getattr(controller, 'batch_producer_token', None)
+        token = lookup(conversation_id) if callable(lookup) else None
+        return {'producer_token': token} if isinstance(token, str) else {}
+
     async def append(
         self,
         raw: bytes,
@@ -111,7 +117,13 @@ class LiveAudioArchive:
             # The bytes are already retained in the active pack if this write fails;
             # teardown can still commit them. Only a proven never-received row may
             # be reclaimed by an expired recording lease.
-            if not await run_blocking(db_executor, note_server_batch_audio_received, request.uid, conversation_id):
+            if not await run_blocking(
+                db_executor,
+                note_server_batch_audio_received,
+                request.uid,
+                conversation_id,
+                **self._producer_kwargs(conversation_id),
+            ):
                 raise RuntimeError('server batch capture owner unavailable before first audio')
             self._server_audio_marked.add(conversation_id)
         # Queue bounded commits ahead of pusher's batched upload without
@@ -311,6 +323,7 @@ class LiveAudioArchive:
                         pack.conversation_id,
                         min(start for start, _ in spans),
                         max(end for _, end in spans),
+                        **self._producer_kwargs(pack.conversation_id),
                     ):
                         raise RuntimeError('desktop batch capture owner unavailable')
             # A failed/disconnected delivery leaves the producer unacknowledged;

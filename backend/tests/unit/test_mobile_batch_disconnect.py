@@ -98,7 +98,10 @@ class Teardown:
             clear=MagicMock(),
             raw_archive=SimpleNamespace(close=close),
         )
-        runtime.conversations = SimpleNamespace(process_conversation=AsyncMock(return_value=True))
+        runtime.conversations = SimpleNamespace(
+            process_conversation=AsyncMock(return_value=True),
+            disconnect_batch_producer=AsyncMock(return_value='legacy'),
+        )
         runtime._flush_usage = AsyncMock()
         runtime.is_multi_channel = False
         runtime.language_observations = runtime.pusher_close = runtime.onboarding_handler = None
