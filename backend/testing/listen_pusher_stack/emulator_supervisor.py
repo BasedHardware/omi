@@ -50,7 +50,11 @@ GAUNTLET_PYTHON = REPO_ROOT / 'backend' / '.venv' / 'bin' / 'python'
 DEFAULT_PROJECT = 'demo-omi-listen-stack'
 DEFAULT_MAX_ATTEMPTS = 3
 MAX_ATTEMPTS_CEILING = 3
-DEFAULT_MAX_TOTAL_SECONDS = 1200.0
+# The CI job that runs this gauntlet has timeout-minutes: 25 (1500s) for
+# checkout, dependency sync and the run itself. 900s of retry budget leaves
+# 10 minutes of headroom for the parts this process does not time, so a slow
+# attempt fails cleanly here instead of being cancelled by the job ceiling.
+DEFAULT_MAX_TOTAL_SECONDS = 900.0
 MAX_TOTAL_SECONDS_CEILING = 1800.0
 DEFAULT_READINESS_TIMEOUT_SECONDS = 120.0
 FIREBASE_COMMAND = ('npx', '--no-install', 'firebase')

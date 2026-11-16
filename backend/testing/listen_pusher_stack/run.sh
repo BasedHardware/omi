@@ -67,7 +67,7 @@ lifecycle_command="PYTHONPATH=backend backend/.venv/bin/python -m testing.lifecy
 # gauntlet starts, and retries only that startup class (max 3 attempts / 20 min).
 emulator_args=(
   --project demo-omi-listen-stack
-  --max-total-seconds "${OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS:-1200}"
+  --max-total-seconds "${OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS:-900}"
   --readiness-timeout "${OMI_STACK_EMULATOR_READINESS_TIMEOUT:-120}"
 )
 if [[ -n "$lifecycle_state" ]]; then

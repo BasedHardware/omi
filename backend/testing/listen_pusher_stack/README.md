@@ -33,7 +33,7 @@ nothing. Each attempt therefore:
 * proves the emulator answers a real Firestore RPC (`emulator_readiness.py`)
   before any scenario starts;
 * retries only emulator/connection/protocol startup failures, capped at three
-  attempts and `OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS` (default 1200s);
+  attempts and `OMI_STACK_EMULATOR_MAX_TOTAL_SECONDS` (default 900s);
 * never retries a scenario assertion, a pytest failure, or any other non-zero
   exit from the gauntlet itself, so a real regression stays red;
 * prints the emulator log tail and the loopback listeners in use when every
