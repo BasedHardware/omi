@@ -89,6 +89,11 @@ class WorkItem:
     # Privacy-only source authority; never an assignment target or ordering hint.
     capture_source_conversation_id: str | None = None
 
+    # Server-derived exact original-file and decoded-range proof; never client supplied.
+    source_reuse_key: str | None = None
+    source_alias_of: str | None = None
+    source_conversation_ids: tuple[str, ...] = ()
+
     def to_dict(self, *, include_nulls: bool = False):
         """Preserve old envelope nulls on request; trust is absent unless explicitly set."""
         from dataclasses import asdict
@@ -100,9 +105,31 @@ class WorkItem:
             value.pop('capture_time_trust')
         if self.capture_source_conversation_id is None:
             value.pop('capture_source_conversation_id')
+        if self.source_reuse_key is None:
+            value.pop('source_reuse_key')
+        if self.source_alias_of is None:
+            value.pop('source_alias_of')
+        if not self.source_conversation_ids:
+            value.pop('source_conversation_ids')
         return value
 
     def __post_init__(self):
+        if self.source_alias_of is not None and (
+            not self.source_reuse_key
+            or len(self.source_alias_of) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_alias_of)
+        ):
+            raise ValueError('bounded source alias owner required')
+        if len(self.source_conversation_ids) > 256 or any(
+            type(cid) is not str or not cid or '/' in cid or len(cid) > 128 for cid in self.source_conversation_ids
+        ):
+            raise ValueError('bounded same-owner source dependencies required')
+        if self.source_reuse_key is not None and (
+            type(self.source_reuse_key) is not str
+            or len(self.source_reuse_key) != 64
+            or any(c not in '0123456789abcdef' for c in self.source_reuse_key)
+        ):
+            raise ValueError('bounded server source identity required')
         if self.timing_store not in {None, 'batch', 'sync'}:
             raise ValueError('invalid audio timing store')
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:

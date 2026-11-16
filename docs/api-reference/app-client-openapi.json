@@ -67,6 +67,28 @@
               }
             ],
             "title": "Profile Text"
+          },
+          "refreshed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refreshed At"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           }
         },
         "title": "AIUserProfileResponse",
@@ -38735,6 +38757,21 @@
               }
             ],
             "title": "Profile Text"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user_edit",
+                  "exploration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           }
         },
         "title": "UpdateAIUserProfileRequest",
@@ -75680,7 +75717,77 @@
       }
     },
     "/v1/users/ai-profile": {
+      "delete": {
+        "description": "Forget the profile; the backend builds a new one on the next refresh trigger.",
+        "operationId": "delete_ai_profile_v1_users_ai_profile_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Delete Ai Profile",
+        "tags": [
+          "users"
+        ]
+      },
       "get": {
+        "description": "The backend-owned profile. Never blocks on generation; a stale one is refreshed in the background.",
         "operationId": "get_ai_profile_v1_users_ai_profile_get",
         "parameters": [
           {
@@ -75849,9 +75956,87 @@
         ]
       }
     },
+    "/v1/users/ai-profile/refresh": {
+      "post": {
+        "description": "Regenerate the profile now from the owner's backend data (Generate Now / Regenerate).",
+        "operationId": "refresh_ai_profile_v1_users_ai_profile_refresh_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIUserProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Refresh Ai Profile",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/v1/users/ai-profile/synthesize": {
       "post": {
-        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
+        "description": "Return-only two-stage AI user profile synthesis through the managed memories feature.\n\nDeprecated: kept only for released desktop builds that still generate locally; current\nclients use the backend-owned profile (GET/PATCH/DELETE and POST /refresh). Remove once\nthe minimum supported macOS and Windows builds no longer call it.\n\nDoes not write Firestore. Desktop clients send their formatted source lines plus up to\nfive past profiles (oldest first) instead of carrying the prompts and calling Anthropic\nHaiku themselves, then persist through PATCH /v1/users/ai-profile.",
         "operationId": "synthesize_ai_profile_v1_users_ai_profile_synthesize_post",
         "parameters": [
           {

@@ -276,3 +276,27 @@ def test_completed_boundary_finalizes_salience(stack, processing, monkeypatch, m
 def _isolated_relevance_policy(monkeypatch):
     # This legacy model/input fixture has no episode or neighbor database.
     monkeypatch.setenv('CONVERSATION_OCCASION_RELEVANCE_ENABLED', 'false')
+
+
+@pytest.mark.parametrize('marked', [False, True])
+def test_first_open_summary_replaces_preview_in_returned_conversation(stack, processing, monkeypatch, marked):
+    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    speech = 'We should review the pilot budget before Friday'
+    row = stack.models.Conversation(
+        id='synthetic-preview',
+        created_at=now,
+        started_at=now,
+        finished_at=now,
+        transcript_segments=[stack.segments.TranscriptSegment(text=speech, is_user=False, start=0, end=5)],
+        structured=stack.structured.Structured(
+            title=' '.join(speech.split()[:8]),
+            **({'title_provenance': 'server_minimum'} if marked else {}),
+        ),
+    )
+    monkeypatch.setattr(processing, 'finish_home_salience', lambda uid, note, *args, **kw: note)
+    note = stack.structured.Structured(title='Pilot budget approval', overview='Approval is due Friday.')
+    result = processing._get_conversation_obj('synthetic-account', note, row, relevance_discarded=False)
+    assert result.structured.title == 'Pilot budget approval'
+    changed = stack.structured.Structured(title='New headline wording', overview='Approval is due Friday.')
+    result = processing._get_conversation_obj('synthetic-account', changed, result, relevance_discarded=False)
+    assert result.structured.title == 'Pilot budget approval'

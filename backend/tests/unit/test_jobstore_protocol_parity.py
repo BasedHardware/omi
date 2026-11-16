@@ -9,6 +9,7 @@ This guard runs in the unit shards, without a database, so the next new read fai
 from __future__ import annotations
 
 import inspect
+from contextlib import contextmanager
 from unittest.mock import MagicMock, Mock
 
 import pytest
@@ -24,6 +25,10 @@ from testing.pipeline_sim.postgres_store import PgSimStore
 from testing.pipeline_sim.store import SimStore, SimTransaction
 from testing.pipeline_sim.projection_drain import ChainLog
 from tests.unit.test_batch_pipeline_owner_chain_projection import ResultLog
+from tests.unit.test_jobstore_postgres_locking import Conn
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from database.jobstore.serving_parity import compare_serving_query, query_value
+from testing.pipeline_sim.store import CustomerData
 
 
 def _public(cls) -> set[str]:
@@ -255,3 +260,76 @@ def test_postgres_selected_clock_governs_filter_order_and_cursor(clock, field, a
         f'{selected} >= %s' if len(after) == 1 else f'({selected}, committed_at, key COLLATE "C") > (%s, %s, %s)'
     ) in statement
     assert params == (store.namespace, ['ready'], 10.0, *expected_params, 1)
+
+
+@pytest.fixture
+def existence_stores(monkeypatch):
+    """Real adapter reads; only the Postgres transport is a hermetic SQL fixture."""
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    primary = firestore_store.FirestoreStore('batch_pipeline_dev', firestore_client=StrictFirestore())
+    documents = {'present': {'revision': 1}, 'empty': {}}
+    for key, document in documents.items():
+        primary.run(lambda tx: tx.put('owners', key, document))
+    conn = Conn(docs=documents)
+
+    class Pool:
+        @contextmanager
+        def connection(self, timeout=30.0, *, existing_only=False):
+            assert existing_only is True  # Observations cannot initiate connections.
+            yield conn
+
+    postgres = PostgresStore(primary.namespace, pool=Pool(), customer_client=None)
+    simulator = SimStore(CustomerData(), namespace=primary.namespace)
+    simulator.rows.update({('owners', key): value for key, value in documents.items()})
+    return primary, postgres, simulator
+
+
+@pytest.mark.parametrize('key,expected', [('present', {'revision': 1}), ('absent', None), ('empty', {})])
+def test_get_existing_executable_parity_preserves_document_existence(existence_stores, key, expected):
+    primary, postgres, simulator = existence_stores
+    for store in existence_stores:
+        assert query_value(store, 'get_existing', ('owners', key), {}, transaction=True, budget_s=5) == expected
+    for copy in (postgres, simulator):
+        assert (
+            compare_serving_query(primary, copy, 'get_existing', 'owners', key, transaction=True, budget_s=5) == 'match'
+        )
+
+
+@pytest.mark.parametrize('copy_index', [1, 2], ids=['postgres', 'simulator'])
+def test_get_existing_parity_detects_empty_document_versus_absence(existence_stores, copy_index):
+    primary = existence_stores[0]
+    primary.run(lambda tx: tx.put('owners', 'absent', {}))
+    assert (
+        compare_serving_query(
+            primary, existence_stores[copy_index], 'get_existing', 'owners', 'absent', transaction=True, budget_s=5
+        )
+        == 'mismatch'
+    )
+    # The legacy read still intentionally normalizes both to {}.
+    assert (
+        compare_serving_query(
+            primary, existence_stores[copy_index], 'get', 'owners', 'absent', transaction=True, budget_s=5
+        )
+        == 'match'
+    )
+
+
+@pytest.mark.parametrize('table', ['conversations', 'backlog_release'])
+def test_get_existing_observation_refuses_unmirrored_documents(existence_stores, table):
+    for store in existence_stores:
+        with pytest.raises(ValueError, match='only mirrored batch documents'):
+            query_value(store, 'get_existing', (table, 'synthetic'), {}, transaction=True, budget_s=5)
+
+
+def test_get_existing_retains_only_the_existing_gpu_primary_field_exception(existence_stores):
+    primary, _, simulator = existence_stores
+    primary.run(lambda tx: tx.put('gpus', 'g', {'token': 't', 'segment_id': 'synthetic'}))
+    simulator.rows['gpus', 'g'] = {'token': 't'}
+    assert (
+        compare_serving_query(primary, simulator, 'get_existing', 'gpus', 'g', transaction=True, budget_s=5) == 'match'
+    )
+    simulator.rows['gpus', 'g']['segment_id'] = 'synthetic'
+    assert (
+        compare_serving_query(primary, simulator, 'get_existing', 'gpus', 'g', transaction=True, budget_s=5)
+        == 'mismatch'
+    )
