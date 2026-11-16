@@ -216,7 +216,7 @@ def _conversation_audio_urls_entry(
     """
     v3 = bool(conversation and 'recording_pieces' in conversation)
     if v3:
-        fingerprint = conversation_merge_fingerprint(conversation, demand=True)
+        fingerprint = conversation_merge_fingerprint(conversation or {}, demand=True)
     elif playback_on_demand():
         fingerprint = compute_audio_files_fingerprint(
             audio_files, origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at')
@@ -274,7 +274,7 @@ def _conversation_audio_urls_entry(
     retry_epoch = None
     if get_conversation_playback_unavailable_fingerprint(uid, conversation_id) == fingerprint:
         retry_epoch = get_playback_failure_retry_epoch(uid, conversation_id, fingerprint=fingerprint)
-        if retry_epoch is None:
+        if retry_epoch is None and not v3:
             return {"status": "unavailable", "signed_url": None, "spans": []}
     epoch = (conversation or {}).get('playback_eager_epoch') or (stamped if immutable else None)
     enqueue_conversation_artifact_build(

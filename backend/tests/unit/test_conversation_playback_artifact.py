@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import database.conversations as conversations_db
+from utils import plugin_backup_audio as backup
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -50,7 +51,8 @@ def _load_playback(request):
     with stub_modules({"utils.cloud_tasks": cloud_tasks_module, "utils.other.storage": storage_module}):
         module = load_module_fresh("utils.sync.playback", os.path.join(str(BACKEND), "utils", "sync", "playback.py"))
         request.module.playback = module
-        yield
+        with stub_modules({'utils.sync.playback': module}):
+            yield
 
 
 class _FakeAudioSegment:
@@ -455,7 +457,6 @@ def test_v3_missing_recording_piece_does_not_hide_playable_piece(monkeypatch):
 
 
 def test_backup_manifest_uses_exact_artifact_or_pending(monkeypatch):
-    from utils import plugin_backup_audio as backup
     from types import SimpleNamespace
 
     _, row, _ = _v3_fixture(monkeypatch)
@@ -485,3 +486,42 @@ def test_v3_download_never_returns_covering_recording(monkeypatch):
         'u', 'c', 'alias', row['audio_files'][0], SimpleNamespace(headers={}), 'wav'
     )
     assert result.status_code == 202
+
+
+def test_manifest_skips_missing_piece_without_hiding_available_audio(monkeypatch):
+    audio, row, _ = _v3_fixture(monkeypatch)
+    row['recording_pieces'].append({'recording_id': 'gone', 'audio_file_id': 'gone', 'start': 0, 'end': 2})
+    monkeypatch.setattr(
+        playback,
+        'get_audio_signed_urls',
+        lambda *a, **kw: {'audio_files': [{'id': 'file', 'signed_url': 'https://synthetic-window-source'}]},
+    )
+    result = audio.manifest('u', row)
+    assert [(p['start'], p['end']) for p in result['pieces']] == [(1, 3), (6, 8)]
+
+
+def test_cached_backup_artifact_keeps_legacy_audio_files_protocol(monkeypatch):
+    from types import SimpleNamespace
+
+    audio, row, _ = _v3_fixture(monkeypatch)
+    fingerprint = audio.playback_snapshot('u', row)['_v3_playback_fingerprint']
+    row.update(
+        conversation_audio={'audio_files_fingerprint': fingerprint, 'spans': []},
+        conversation_audio_artifact_fingerprint=fingerprint,
+    )
+    monkeypatch.setattr(backup, 'get_conversation', lambda *a: row)
+    monkeypatch.setattr(
+        backup, 'plugin_transport', lambda *a: SimpleNamespace(decode=lambda *a: {'sub': 'u', 'conversation_id': 'c'})
+    )
+    monkeypatch.setattr(backup, 'enforce_account_deletion_http_access', lambda *a: None)
+    monkeypatch.setattr(backup, 'get_available_app_by_id', lambda *a: True)
+    monkeypatch.setattr(backup, 'is_user_app_enabled', lambda *a: True)
+    monkeypatch.setattr(backup, 'get_audio_signed_urls', playback.get_audio_signed_urls)
+    url = 'https://storage.googleapis.com/synthetic/conversation-exact.mp3?token=short-lived'
+    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', lambda *a, **kw: url)
+    result = backup.backup_audio_manifest('plugin', 'c', 'Bearer synthetic')
+    assert len(result['audio_files']) == 1
+    assert result['audio_files'][0]['signed_url'] == url
+    assert result['audio_files'][0]['content_type'] == 'audio/mpeg'
+    assert result['audio_files'][0]['id'].startswith('conversation-')
+    assert result['audio_files'][0]['id'] != 'alias'
