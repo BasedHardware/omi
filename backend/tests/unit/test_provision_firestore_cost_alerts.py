@@ -4,6 +4,8 @@ import copy
 import importlib.util
 import json
 import sys
+import urllib.response
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -125,6 +127,49 @@ def test_backup_restores_previous_rules_and_removes_only_new_selected_rules(scop
     assert scoped.shared.comparable(api.live[uid]) == scoped.shared.comparable(old)
     assert set(api.live) == set(before)
     assert api.live['unrelated'] == before['unrelated']
+
+
+def test_restore_completes_all_deletes_through_real_empty_204_parser(scoped, tmp_path, monkeypatch):
+    """Use the actual HTTP response parser, not the JSON-returning request fake."""
+    state = Grafana({'unrelated': {'uid': 'unrelated', 'title': 'retain'}})
+    before = copy.deepcopy(state.live)
+
+    class Opener:
+        def open(self, request, timeout):
+            path = request.full_url.removeprefix('https://monitor.omi.me')
+            method = request.get_method()
+            if path == scoped.shared.API and method == 'GET':
+                result = list(state.rules().values())
+            else:
+                body = json.loads(request.data) if request.data else None
+                result = state.request(path, body, method)
+            data = b'' if method == 'DELETE' else json.dumps(result).encode()
+            return urllib.response.addinfourl(
+                BytesIO(data), {}, request.full_url, code=204 if method == 'DELETE' else 200
+            )
+
+    monkeypatch.setattr(scoped.shared.urllib.request, 'build_opener', lambda *_: Opener())
+    api = scoped.shared.Grafana('https://monitor.omi.me', 'fake-test-token')
+    backup = tmp_path / 'apply-backup.json'
+    apply_receipt = scoped.execute(api, desired(scoped), scoped.TARGETS, backup=backup)
+    restore_receipt = scoped.execute(
+        api, desired(scoped), scoped.TARGETS, restore=backup, backup=tmp_path / 'restore-backup.json'
+    )
+    assert restore_receipt['status'] == 'complete'
+    assert restore_receipt['differences'] == []
+    assert [path.rsplit('/', 1)[1] for method, path, _ in state.writes if method == 'DELETE'] == sorted(scoped.TARGETS)
+    assert state.live == before
+    assert apply_receipt['unchanged_before'] == restore_receipt['unchanged_after']
+    (tmp_path / 'offline-204-receipts.json').write_text(
+        json.dumps(
+            {
+                'evidence_kind': 'hermetic HTTP response-parser regression; not production',
+                'apply': apply_receipt,
+                'restore': restore_receipt,
+            },
+            indent=2,
+        )
+    )
 
 
 @pytest.mark.parametrize(
