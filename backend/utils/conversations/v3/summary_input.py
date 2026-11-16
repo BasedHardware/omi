@@ -57,7 +57,7 @@ def fingerprint(row):
     values['photos'] = values['photos'] or []
     values['transcript_segments'] = [
         {
-            'id': policy.field(s, 'id') or legacy_conversation_segment_id(policy.field(row, 'id'), index),
+            'id': policy.field(s, 'id') or legacy_conversation_segment_id(str(policy.field(row, 'id')), index),
             'text': policy.field(s, 'text'),
             'original_text': policy.field(s, 'original_text'),
             'speaker': policy.field(s, 'speaker') or 'SPEAKER_00',
