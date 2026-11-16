@@ -18,6 +18,9 @@ coalesced receipt imports and native recordings keep their existing path.
 An unparseable filename is a reuse-proof miss; the supplied decoder still
 owns ordinary validation and admission. Explicit clock-recovery policies also
 keep that decoder's path, without an exact-source key.
+Source reuse wraps the existing shared clock/coverage decoder at its own intake
+and repair callers. The shared decoder remains byte-pinned; ordinary work from
+pre-reuse producers may omit the optional source fields at admission.
 
 ## Canonical ownership and billing
 

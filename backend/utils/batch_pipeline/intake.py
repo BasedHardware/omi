@@ -50,7 +50,8 @@ from utils.sync.receipt_clock import (
     FutureCaptureRetry,
 )
 from utils.batch_pipeline.repair_lineage import language_proof, lineage_record
-from utils.capture.batch_coverage import decode_for_intake, covered_response
+from utils.capture.batch_coverage import covered_response
+from utils.sync.source_reuse_decode import decode_for_intake
 from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.intake_outcome import IntakeRouteEvidence

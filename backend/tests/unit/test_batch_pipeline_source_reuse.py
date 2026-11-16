@@ -3,9 +3,11 @@
 from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
+from functools import partial
 import hashlib
 import struct
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
@@ -25,7 +27,7 @@ from utils.sync import source_reuse_decode
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
 from utils.batch_pipeline.scheduler import owner_key
-from utils.capture.batch_coverage import decode_for_intake
+from utils.sync.source_reuse_decode import decode_for_intake
 
 UID = 'synthetic-owner'
 NS = 'batch_pipeline_test_sources'
@@ -124,6 +126,24 @@ def test_unproven_filename_keeps_the_normal_decoder(path):
     assert list(decode_for_intake([path], 600, UID, context, decoder=decoder)) == [unit]
     decoder.assert_called_once_with([path], max_seconds=600, received_at=1750000200)
     assert unit.source_reuse_key is None
+
+
+def test_proof_miss_close_reaches_the_normal_decoder():
+    from utils.batch_pipeline.audio import audio_unit
+
+    unit, closed = audio_unit(1750000100, b'\0\0' * 1600), []
+
+    def decoder(*args, **kwargs):
+        try:
+            yield unit
+            raise AssertionError('close must not consume another unit')
+        finally:
+            closed.append(True)
+
+    iterator = decode_for_intake(['a.bin'], 600, UID, {'client_device_id': 'synthetic-device'}, decoder=decoder)
+    assert next(iterator) is unit
+    iterator.close()
+    assert closed == [True]
 
 
 @pytest.mark.parametrize('policy', ['future_device_offset_v1', 'estimated_source_isolated_v1', 'unknown'])
@@ -300,6 +320,52 @@ def test_admission_alias_is_outside_every_paid_queue_and_retains_own_audio(outco
     assert job['state'] == 'result_ready' and job['audio_uri'] == copy.audio_uri
     assert job['attempt'] == 0 and job['protocol_version'] == 2
     assert not any('queues' in path[0] or 'outbox' in path[0] for path in store.client.rows)
+
+
+@pytest.mark.parametrize('provider', [False, True])
+def test_pre_reuse_work_items_keep_normal_admission(provider):
+    from database.batch_pipeline_intake import admit
+    from utils.batch_pipeline.provider_stt_admission import SttRoute, enqueue_in_transaction
+
+    store, original = setup_store()
+    fields = asdict(replace(original, segment_id=COPY))
+    for name in (
+        'source_reuse_key',
+        'source_alias_of',
+        'source_conversation_ids',
+        'capture_time_trust',
+        'capture_source_conversation_id',
+    ):
+        fields.pop(name)
+    serialized = {key: value for key, value in fields.items() if key != 'language_receipt_enabled' or value is not None}
+    # The actual pinned-main WorkItem is exercised by early-clock parity. This
+    # structural fixture also covers the provider boundary without new fields.
+    legacy = cast(WorkItem, SimpleNamespace(**fields, to_dict=lambda: deepcopy(serialized)))
+
+    def run(body):
+        tx = FirestoreTransaction(store.client, NS, store.client.transaction())
+        answer = body(tx)
+        tx.flush()
+        return answer
+
+    binding = ProjectionBinding(UID, 'legacy-job', 'legacy-content', (COPY,), privacy_generation=0)
+    answer = admit(
+        SimpleNamespace(run=run),
+        [legacy],
+        binding,
+        NOW,
+        namespace=NS,
+        policy=replace(BatchUnitPolicy(), batch_enabled=True),
+        enqueue=(
+            partial(enqueue_in_transaction, route=SttRoute('provider', 'unsupported_language', 'modulate', 'vi'))
+            if provider
+            else None
+        ),
+    )
+    assert answer == {'outcome': 'batch', 'job_id': binding.job_id}
+    job = store.ref('jobs', COPY).get().to_dict()
+    assert job['state'] == ('provider_pending' if provider else 'ready')
+    assert not job.get('source_reuse_key') and not job.get('source_alias')
 
 
 @pytest.mark.parametrize(

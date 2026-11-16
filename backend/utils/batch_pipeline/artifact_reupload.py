@@ -13,7 +13,7 @@ from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.future_capture_decode import decode_future_units
-from utils.capture.batch_coverage import decode_for_intake
+from utils.sync.source_reuse_decode import decode_for_intake
 from utils.batch_pipeline.repair_lineage import LANGUAGE_KEYS, LINEAGE_KEYS, recorded_lineage
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor
 

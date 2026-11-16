@@ -16,6 +16,30 @@ from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.files import get_timestamp_from_path
 
 
+def decode_for_intake(
+    paths: Sequence[str],
+    max_seconds: float,
+    uid: str,
+    context: Mapping[str, Any] | None,
+    *,
+    decoder: Callable[..., Iterable[AudioUnit]],
+) -> Generator[AudioUnit, None, None]:
+    """Opt in at the source-reuse caller; leave the shared clock/coverage path intact."""
+    if context and eligible(paths, context):
+        yield from decode_sources(
+            paths,
+            uid=uid,
+            context=context,
+            decoder=decoder,
+            max_seconds=max_seconds,
+            received_at=context.get('capture_received_at'),
+        )
+        return
+    from utils.capture.batch_coverage import decode_for_intake as decode_coverage
+
+    yield from decode_coverage(paths, max_seconds, uid, context, decoder=decoder)
+
+
 def eligible(paths: Sequence[str], context: Mapping[str, Any] | None) -> bool:
     if not source_reuse.enabled() or not context or not context.get('client_device_id') or not 1 <= len(paths) <= 64:
         return False

@@ -68,13 +68,7 @@ def provenance_unit(unit, runs):
 
 
 def decode_for_intake(paths, max_seconds, uid, context, *, decoder):
-    from utils.sync import source_reuse_decode
-
     receipt = (context or {}).get('capture_received_at')
-    if source_reuse_decode.eligible(paths, context):
-        return source_reuse_decode.decode_sources(
-            paths, uid=uid, context=context, decoder=decoder, max_seconds=max_seconds, received_at=receipt
-        )
     clock_kwargs = {'received_at': receipt} if receipt is not None else {}
     if not context or not context.get('capture_evidence_claims') or not refactor_modes.shadow_or_serve(coverage.FLAG):
         return decoder(paths, max_seconds=max_seconds, **clock_kwargs)

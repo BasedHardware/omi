@@ -324,7 +324,7 @@ class Scheduler:
 
     @staticmethod
     def enqueue_in_transaction(tx: Transaction, item: WorkItem, now: float, *, policy=None) -> bool:
-        if item.source_alias_of:
+        if getattr(item, 'source_alias_of', None):
             raise ValueError('source aliases cannot enter paid queues')
         if item.shadow:
             raise ValueError('shadow jobs may only use idle offers')

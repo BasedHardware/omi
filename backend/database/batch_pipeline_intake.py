@@ -190,7 +190,7 @@ def admit(
                 attach_alias_artifacts(tx, item, proposal)
             else:
                 created = enqueue_item(tx, item, now, policy=admission)
-                if item.source_reuse_key:
+                if getattr(item, 'source_reuse_key', None):
                     marked = tx.get('jobs', item.segment_id)
                     marked.update(protocol_version=2, source_reuse_version=1)
                     tx.put('jobs', item.segment_id, marked)
