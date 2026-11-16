@@ -42,7 +42,9 @@ and writes job `state=dead`, `dead_letter_reason=input_expiring`, plus its prior
 leg and transition time. It retains audio, result receipts, intent/attempt
 history, binding and privacy generation. It refuses active tokens/leases,
 open operator/paid intents, privacy refusals and lost content ownership.
-`record_pending` and provider-STT rows do not enter this path.
+`record_pending`, allowance parking and uncommitted provider-STT states do not
+enter this path. A committed provider result can enter the assignment leg if its
+original assignment/result/privacy fences pass.
 
 Before the ordinary held name-cursor page, **every serving maintenance tick** reads
 oldest-first cutoff pages for `enqueued_at` (legacy objects) and `audio_staged_at`
@@ -112,12 +114,20 @@ resets a paid attempt budget or manufactures a restorable target.
 ## Manual redrive (never scheduled)
 
 Run from the repository root with its own `backend/.venv`. This tool never reads
-audio or GCS. Dry-run makes only Firestore reads and prints aggregate counts and
+audio. Dry-run makes only Firestore reads and prints aggregate counts and
 the plan SHA-256, never IDs, URIs, transcripts or exception bodies. It examines
 at most 128 rows per page, ordered by `enqueued_at`, then document name. It selects
 GPU/assignment staging holds (including retained `input_expiring` terminals)
 at age **>=51 days**. Other examined rows are skipped, not authorized for writes.
-The existing `(state, recovery_state, enqueued_at, __name__)` index serves it.
+Apply first checks the exact generation pinned by each reviewed `audio_uri` using
+a metadata-only GCS GET with `if_generation_match`. Missing, mismatched, unpinned,
+permission-denied or otherwise unproven inputs are counted as
+`skipped_input_unproven`; neither requeue nor assignment release runs for them.
+The check is repeated at apply time after digest approval and immediately before
+the existing snapshot-fenced mutation. It is not a lease preventing subsequent
+privacy/lifecycle deletion. No object contents, listing, deletion or new credentials
+are involved. Dry-run selection does not prove object existence.
+The existing `(state, recovery_state, enqueued_at, __name__)` index serves discovery.
 Missing indexes fail closed; no fallback or index deployment occurs here.
 
 Freeze the time for a page and keep the same arguments for dry-run and apply:
@@ -192,3 +202,36 @@ Deploy the shared runtime to the five held-sweep services (`backend`, `backend-s
 `backend-sync-backfill`, `backend-listen`, `backend-integration`) and the batch/provider
 workers that import retention timing, including the GPU batch image, plus the monitoring alert bundle. Confirm
 actual deployment bindings with the release owner. This PR performs no rollout.
+
+
+## Mandatory batch lifecycle-change check (procedural)
+
+There is no scheduled batch-bucket checker or batch lifecycle apply workflow in
+this repository. The private-cloud-sync lifecycle workflow covers different
+buckets. **Drift detection for batch staging is procedural**, not a continuous
+monitor or a guard on arbitrary out-of-band GCS changes.
+
+Before any authorized batch lifecycle change, use the proposed runtime's checked-out
+code and review every proposed live-object Delete that can reach staging inputs:
+its age in seconds must be **strictly greater than `TERMINAL_SECONDS`** (59 days
+for this contract). A day-59 or earlier Delete is forbidden. Preserve the existing
+hold/privacy prerequisites too; an unverified hold control still fails closed.
+Run the existing read-only bucket checker before the change and immediately after
+it, and archive its receipt with the lifecycle change:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py \
+  --bucket gs://based-hardware-batch-pipeline-staging
+```
+
+`check_sync_staging_lifecycle.policy_failure` passes the runtime `TERMINAL_SECONDS`
+to `retention_contract.floor_violations` as an additional strict floor for the
+production staging bucket, independent of the shorter declared hold floors.
+A checker failure, unavailable metadata or missing permission blocks qualification;
+do not waive it or add credentials in this PR. A live day-60 policy can still fail
+an independent unverified hold prerequisite; this new check does not certify that
+control. Extensions reach storage first; shortenings require the earlier runtime
+terminal and proof the affected holds settled before changing storage. The release
+owner must carry these steps into any external apply/drift tooling; this PR does
+not claim such tooling is wired automatically.

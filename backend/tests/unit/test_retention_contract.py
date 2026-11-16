@@ -229,3 +229,24 @@ def test_selective_pusher_images_include_the_runtime_retention_contract():
             'COPY backend/deploy/storage-lifecycle/retention_contract.json ./deploy/storage-lifecycle/retention_contract.json'
             in (BACKEND / path).read_text()
         )
+
+
+@pytest.mark.parametrize('age', [0, 30, 58, 59, 59.0, True, None, float('nan'), float('inf')])
+def test_runtime_input_terminal_floor_is_strict_even_with_short_verified_holds(age):
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
+
+    verified = copy.deepcopy(CONTRACT)
+    verified['holds']['batch_finalization_alarm']['control_verified'] = True
+    assert rc.required_days(verified, BATCH) == 8
+    violations = rc.floor_violations(verified, BATCH, {'rule': [delete(age)]}, input_terminal_seconds=TERMINAL_SECONDS)
+    assert len(violations) == 1 and violations[0]['strict'] is True
+    assert violations[0]['required'] == TERMINAL_SECONDS / 86400
+
+
+def test_runtime_input_floor_allows_day60_and_leaves_other_hold_fences_intact():
+    from utils.batch_pipeline.input_retention import TERMINAL_SECONDS
+
+    verified = copy.deepcopy(CONTRACT)
+    verified['holds']['batch_finalization_alarm']['control_verified'] = True
+    assert rc.floor_violations(verified, BATCH, {'rule': [delete(60)]}, input_terminal_seconds=TERMINAL_SECONDS) == []
+    assert rc.floor_violations(CONTRACT, BATCH, {'rule': [delete(60)]}, input_terminal_seconds=TERMINAL_SECONDS)

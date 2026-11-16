@@ -376,7 +376,7 @@ def test_existing_record_conversation_failure_presentation_at_terminal_day(monke
     ) == ('transcribing' if queue_hold == 'true' and clock is None else 'failed')
 
 
-def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapshot(setup):
+def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapshot(setup, monkeypatch):
     client, store, _ = seed(setup)
     units: list[dict[str, Any]] = [{'id': 'bad', 'leg': 'gpu', 'job': deepcopy(row(client)), 'entry': {}}]
     digest = cli.plan_digest(units, NOW_TERMINAL, 128, None)
@@ -384,6 +384,7 @@ def test_digest_requires_exact_approval_before_any_writer_and_binds_whole_snapsh
     with pytest.raises(cli.Refused, match='approval_digest_changed'):
         cli.apply_plan(untouched, units, digest, 'wrong', NOW_TERMINAL)
     assert not untouched.mock_calls
+    monkeypatch.setattr(cli, 'pinned_audio_exists', lambda *a: True)
     row(client)['attempt'] = 99
     assert cli.apply_plan(store, units, digest, digest, NOW_TERMINAL) == {'refused': 1}
     units[0]['job']['attempt'] = 99
@@ -501,3 +502,60 @@ def test_redrive_selection_uses_current_object_warning_age(age_days, offset, sel
     assert len(units) == int(selected)
     assert examined == 1
     assert ('enqueued_at', '<=', as_of - 51 * 86400) in [c.args for c in query.where.call_args_list]
+
+
+@pytest.mark.parametrize('leg', ['gpu', 'assignment'])
+@pytest.mark.parametrize('evidence', ['deleted', 'wrong_generation', 'existing', 'unavailable', 'unpinned'])
+def test_redrive_requires_exact_generation_metadata_before_either_writer(monkeypatch, leg, evidence):
+    from google.api_core.exceptions import NotFound, Forbidden
+    from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.batch_pipeline_projection_release import ProjectionReleaseStore
+
+    job = {'state': 'dead', 'dead_letter_reason': 'input_expiring', 'audio_uri': URI}
+    if evidence == 'unpinned':
+        job['audio_uri'] = URI.split('#')[0]
+    units = [{'id': 'synthetic', 'leg': leg, 'job': job, 'entry': {'synthetic': True}}]
+    digest = cli.plan_digest(units, NOW_TERMINAL, 128, None)
+    storage = Mock()
+    blob = storage.bucket.return_value.blob.return_value
+    blob.generation = 2 if evidence == 'wrong_generation' else 1
+    if evidence == 'deleted':
+        blob.reload.side_effect = NotFound('private diagnostic')
+    if evidence == 'unavailable':
+        blob.reload.side_effect = Forbidden('private diagnostic')
+    gpu = Mock(return_value=True)
+    assignment = Mock(return_value=True)
+    monkeypatch.setattr(RecoveryStore, 'requeue_quarantined', gpu)
+    monkeypatch.setattr(ProjectionReleaseStore, 'release', assignment)
+    store = Mock()
+    result = cli.apply_plan(store, units, digest, digest, NOW_TERMINAL, storage_client=storage)
+    if evidence == 'existing':
+        assert result == {'requeued': 1}
+        if leg == 'gpu':
+            gpu.assert_called_once_with('synthetic', NOW_TERMINAL, expected_job=job)
+            assignment.assert_not_called()
+        else:
+            assignment.assert_called_once_with(
+                'synthetic', NOW_TERMINAL, operator=True, expected_job=job, expected_entry=units[0]['entry']
+            )
+            gpu.assert_not_called()
+    else:
+        assert result == {'skipped_input_unproven': 1}
+        gpu.assert_not_called()
+        assignment.assert_not_called()
+        assert not store.mock_calls
+    if evidence == 'unpinned':
+        storage.bucket.assert_not_called()
+    else:
+        storage.bucket.assert_called_once_with(STAGING_BUCKET)
+        storage.bucket.return_value.blob.assert_called_once_with('synthetic/audio', generation=1)
+        blob.reload.assert_called_once_with(if_generation_match=1, timeout=10, retry=None)
+    blob.download_as_bytes.assert_not_called()
+    blob.delete.assert_not_called()
+
+
+def test_unapproved_redrive_never_reads_object_metadata():
+    storage = Mock()
+    with pytest.raises(cli.Refused, match='approval_digest_changed'):
+        cli.apply_plan(Mock(), [], 'approved', 'wrong', NOW_TERMINAL, storage_client=storage)
+    assert not storage.mock_calls
