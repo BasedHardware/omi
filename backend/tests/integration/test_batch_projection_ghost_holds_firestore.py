@@ -525,7 +525,7 @@ async def test_settle_wake_tail_uses_real_completion_and_rechecks_privacy(lane, 
         assert batch.ledger.get().to_dict()['status'] == 'processing'
         assert ref.get().to_dict()['projection_state'] != 'completed'
     else:
-        completion.assert_called_once_with(segment, batch.binding)
+        completion.assert_called_once_with(segment, batch.binding, silence=False)
         assert ref.get().to_dict()['projection_state'] == 'completed'
         assert batch.ledger.get().to_dict()['status'] == 'completed'
         assert len(lane.published) == 1
