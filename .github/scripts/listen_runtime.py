@@ -340,8 +340,10 @@ def stage(raw, root, opener=urllib.request.urlopen):
 
 def run(argv, env, *, timeout=20):
     child = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, start_new_session=True)
+    primary = None
+    deadline = time.monotonic() + timeout
     try:
-        out, deadline = bytearray(), time.monotonic() + timeout
+        out = bytearray()
         with selectors.DefaultSelector() as selector:
             selector.register(child.stdout, selectors.EVENT_READ)
             while selector.get_map():
@@ -355,19 +357,48 @@ def run(argv, env, *, timeout=20):
             child.wait(timeout=max(0.01, deadline - time.monotonic()))
         require(child.returncode == 0, 'runtime_process_failed')
         return bytes(out)
+    except BaseException as error:
+        primary = error
+        raise
     finally:
         # Descendants can keep stdout open after the direct child exits. The
         # private process group remains owned by this invocation until collected.
+        cleanup = []
         try:
-            os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except PermissionError:
-            # macOS may refuse an already-terminal child's now-empty group.
-            if child.poll() is None:
-                raise
-        child.wait()
-        child.stdout.close()
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except OSError as error:
+                # Only a terminal direct child makes EPERM ignorable. A live
+                # denial cannot prove descendant cleanup, even if kill works.
+                terminal = False
+                try:
+                    terminal = child.poll() is not None
+                except OSError:
+                    cleanup.append('runtime_process_poll_failed')
+                if not isinstance(error, PermissionError) or not terminal:
+                    cleanup.append('runtime_process_cleanup_denied')
+                    try:
+                        child.kill()
+                    except OSError:
+                        cleanup.append('runtime_process_child_kill_denied')
+            try:
+                child.wait(timeout=max(0.01, deadline - time.monotonic()))
+            except (subprocess.TimeoutExpired, OSError):
+                cleanup.append('runtime_process_reap_failed')
+        finally:
+            try:
+                child.stdout.close()
+            except OSError:
+                cleanup.append('runtime_process_close_failed')
+        if cleanup:
+            if primary is not None:
+                # Fixed codes only: preserve the original refusal without
+                # exposing private command output or OS exception payloads.
+                primary.add_note(','.join(cleanup))
+            else:
+                raise Refused(','.join(cleanup)) from None
 
 
 def environment(root):

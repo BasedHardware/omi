@@ -8,7 +8,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tarfile
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -124,6 +125,83 @@ def test_actual_child_output_bound_and_timeout_reap_children_without_stderr():
             with pytest.raises(runtime.Refused):
                 runtime.run([sys.executable, '-c', code], dict(runtime.os.environ), timeout=timeout)
         assert len(children) == 1 and children[0].returncode is not None
+
+
+@pytest.mark.parametrize('primary', ['bound', 'timeout', 'success'])
+@pytest.mark.parametrize('kill_denied', [False, True])
+def test_live_group_denial_preserves_primary_and_always_waits_and_closes(primary, kill_denied):
+    child, selector = MagicMock(), MagicMock()
+    child.pid, child.returncode = 999999, 0
+    child.poll.return_value = None
+    if kill_denied:
+        child.kill.side_effect = PermissionError('PRIVATE_KILL_PAYLOAD')
+        denied_wait = subprocess.TimeoutExpired('PRIVATE_WAIT_PAYLOAD', 0.01)
+        child.wait.side_effect = [0, denied_wait] if primary == 'success' else denied_wait
+    selector.__enter__.return_value = selector
+    selector.get_map.return_value = {} if primary == 'success' else {1: True}
+    selector.select.return_value = [(SimpleNamespace(fileobj=child.stdout), 1)]
+    # Fixed elapsed clock models the deadline, not a relaxed test/runtime cap.
+    times = iter([0, 2, 2] if primary == 'timeout' else [0, 0, 0, 0])
+    with patch.object(runtime.subprocess, 'Popen', return_value=child), patch.object(
+        runtime.selectors, 'DefaultSelector', return_value=selector
+    ), patch.object(runtime.os, 'read', return_value=b'x' * 16385), patch.object(
+        runtime.os, 'killpg', side_effect=PermissionError('PRIVATE_GROUP_PAYLOAD')
+    ), patch.object(
+        runtime.time, 'monotonic', side_effect=lambda: next(times)
+    ):
+        with pytest.raises(runtime.Refused) as caught:
+            runtime.run(['offline-only'], {}, timeout=1)
+    expected = {
+        'bound': 'runtime_process_bound',
+        'timeout': 'runtime_process_timeout',
+        'success': 'runtime_process_cleanup_denied',
+    }[primary]
+    assert str(caught.value).startswith(expected)
+    diagnostics = str(caught.value) + str(getattr(caught.value, '__notes__', []))
+    assert 'PRIVATE_' not in diagnostics
+    assert 'runtime_process_cleanup_denied' in diagnostics
+    if kill_denied:
+        assert 'runtime_process_child_kill_denied' in diagnostics
+        assert 'runtime_process_reap_failed' in diagnostics
+    child.kill.assert_called_once_with()
+    assert child.wait.called and all(0 < c.kwargs['timeout'] <= 1 for c in child.wait.call_args_list)
+    child.stdout.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize('group_error', [ProcessLookupError(), PermissionError('PRIVATE_GROUP_PAYLOAD')])
+def test_terminal_child_group_cleanup_reaps_and_closes_without_fallback(group_error):
+    child, selector = MagicMock(), MagicMock()
+    child.pid, child.returncode = 999999, 0
+    child.poll.return_value = 0
+    selector.__enter__.return_value = selector
+    selector.get_map.return_value = {}
+    with patch.object(runtime.subprocess, 'Popen', return_value=child), patch.object(
+        runtime.selectors, 'DefaultSelector', return_value=selector
+    ), patch.object(runtime.os, 'killpg', side_effect=group_error):
+        assert runtime.run(['offline-only'], {}, timeout=1) == b''
+    child.kill.assert_not_called()
+    assert child.wait.call_count == 2 and all(0 < c.kwargs['timeout'] <= 1 for c in child.wait.call_args_list)
+    child.stdout.close.assert_called_once_with()
+
+
+def test_actual_descendant_holding_pipe_cannot_extend_deadline_or_emit_private_stderr(capfd):
+    children, real = [], subprocess.Popen
+
+    def start(*args, **kwargs):
+        child = real(*args, **kwargs)
+        children.append(child)
+        return child
+
+    code = (
+        'import subprocess,sys;sys.stderr.write("PRIVATE_RUNTIME_CANARY");'
+        'subprocess.Popen([sys.executable,"-c","import time;time.sleep(20)"])'
+    )
+    with patch.object(runtime.subprocess, 'Popen', side_effect=start):
+        with pytest.raises(runtime.Refused, match='runtime_process_timeout'):
+            runtime.run([sys.executable, '-c', code], dict(runtime.os.environ), timeout=0.1)
+    assert len(children) == 1 and children[0].returncode is not None
+    assert children[0].stdout.closed
+    assert 'PRIVATE_RUNTIME_CANARY' not in str(capfd.readouterr())
 
 
 def test_runtime_manifest_and_bootstrap_failure_output_is_fixed_not_payload(tmp_path):
