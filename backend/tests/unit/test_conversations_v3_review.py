@@ -286,7 +286,7 @@ def test_backlog_over_128_advances_pages_and_extends_prior_window(monkeypatch):
     client = MemoryQuery(rows)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **kw: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     existing_id = None
     processed = set()
@@ -649,7 +649,7 @@ def test_hour_long_continuous_talk_crosses_anchor_and_pending_page(monkeypatch, 
     client = MemoryQuery(rows)
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **kw: {**snap.to_dict(), '_v3_revision': 1} if snap.exists else None
     )
     existing_id = None
     processed = set()
@@ -690,7 +690,7 @@ def test_page_continuation_uses_capture_chronology_not_pending_order(monkeypatch
         )
     monkeypatch.setattr(store, 'account_deletion_blocks_user_work', lambda *a: False)
     monkeypatch.setattr(
-        store, 'decode_row', lambda uid, snap: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
+        store, 'decode_row', lambda uid, snap, **kw: dict(snap.to_dict(), _v3_revision=1) if snap.exists else None
     )
     recordings, _, _ = store.load('u', firestore_client=MemoryQuery(rows))
     assert recordings['0']['_v3_page_continues']

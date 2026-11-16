@@ -89,7 +89,7 @@ from models.client_processing import (
     ProjectedStructure,
     ProjectionProvenance,
 )
-from models.conversation import Conversation
+from models.conversation import Conversation, ProcessConversationRequest
 from models.conversation_enums import CategoryEnum
 from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import load_module_fresh, stub_modules
@@ -778,6 +778,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'recording',
         'recording_pieces',
         'summary_covers_through',
+        # Server-only exact-input freshness stamps, excluded from dumps/schema.
+        # Summary persistence owns them; clearing client display text must retain them.
+        'summary_input_hash',
+        'summary_is_snapshot',
         'tile_state',
         'title_locked',
         'v3_derived',
@@ -2366,7 +2370,10 @@ def test_llm_checkpoints_are_server_only_and_survive_projection_invalidation(ren
         'notes_llm_input_hash': 'ab' * 32,
         'notes_llm_output_hash': 'cd' * 32,
         'l1_llm_input_hash': 'ef' * 32,
+        'summary_input_hash': '12' * 32,
+        'summary_is_snapshot': True,
     }
+    assert checkpoints.keys().isdisjoint(ProcessConversationRequest.model_validate(checkpoints).model_dump())
     # These values come from a server snapshot, not a client display projection.
     conv = Conversation.model_validate({**_make_conversation(is_locked=locked).model_dump(), **checkpoints})
     for field, value in checkpoints.items():

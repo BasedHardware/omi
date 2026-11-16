@@ -131,6 +131,7 @@ async def stream(uid: str, row: dict[str, Any], *, token=None):
             if permit is None:
                 yield done(row)
                 return
+            row = permit['row']
         # run_blocking is awaited by a tracked task and never holds a DB worker
         # while waiting on a model. Request cancellation cannot authorize a write.
         from utils.executors import start_background_task

@@ -7,6 +7,7 @@ from enum import Enum
 
 from utils.conversations.v3 import policy
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
+from models.conversation_photo import ConversationPhoto
 
 
 def _json(value):
@@ -27,11 +28,28 @@ def _voice(segment):
         speaker=policy.field(segment, 'speaker') or 'SPEAKER_00',
         speaker_id=policy.field(segment, 'speaker_id'),
         speaker_id_scope=policy.field(segment, 'speaker_id_scope'),
-        is_user=False,
+        is_user=bool(policy.field(segment, 'is_user')),
+        person_id=policy.field(segment, 'person_id'),
+        speaker_label_source=policy.field(segment, 'speaker_label_source'),
+        speaker_match_source=policy.field(segment, 'speaker_match_source'),
+        **(
+            {'speaker_identity_status': policy.field(segment, 'speaker_identity_status')}
+            if policy.field(segment, 'speaker_identity_status') is not None
+            else {}
+        ),
         start=0,
         end=0,
     )
-    return {'speaker_id': normalized.speaker_id, 'speaker_id_scope': normalized.speaker_id_scope}
+    return {
+        key: getattr(normalized, key)
+        for key in (
+            'speaker_id',
+            'speaker_id_scope',
+            'speaker_label_source',
+            'speaker_identity_status',
+            'speaker_match_source',
+        )
+    }
 
 
 def fingerprint(row):
@@ -54,7 +72,14 @@ def fingerprint(row):
     values['source'] = values['source'] or 'omi'
     values['kind'] = values['kind'] or 'conversation'
     values['manual_end'] = bool(values['manual_end'])
-    values['photos'] = values['photos'] or []
+    if any(policy.field(photo, 'created_at') is None for photo in values['photos'] or []):
+        raise ValueError('photo_capture_time_unavailable')
+    values['photos'] = [
+        (photo if isinstance(photo, ConversationPhoto) else ConversationPhoto.model_validate(photo)).model_dump(
+            mode='json', exclude_none=True
+        )
+        for photo in values['photos'] or []
+    ]
     values['transcript_segments'] = [
         {
             'id': policy.field(s, 'id') or legacy_conversation_segment_id(str(policy.field(row, 'id')), index),

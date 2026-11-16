@@ -326,7 +326,7 @@ async def drain_processing(uid):
 def pending_processing(uid):
     client = store.get_firestore_client()
     return [
-        store.decode_row(uid, doc)
+        store.decode_row(uid, doc, hydrate_photos=True, firestore_client=client)
         for doc in store.user_conversations(client, uid)
         .where(filter=FieldFilter('v3_process_pending', '==', True))
         .limit(store.LIMIT)

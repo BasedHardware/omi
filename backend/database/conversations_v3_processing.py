@@ -51,6 +51,12 @@ def store_summary(
                 != source_revisions
             ):
                 raise Conflict('summary_source_changed')
+        if input_hash:
+            from utils.conversations.v3 import summary_input
+
+            decoded = store.decode_row(uid, snapshot, hydrate_photos=True, transaction=tx, firestore_client=client)
+            if summary_input.fingerprint(decoded) != input_hash:
+                raise Conflict('summary_source_changed')
         if current.get('title_locked'):
             patch['structured']['title'] = (current.get('structured') or {}).get('title', '')
             patch['structured']['emoji'] = (current.get('structured') or {}).get('emoji', '')
@@ -99,7 +105,8 @@ def settle_processing(
         if input_hash and not skipped and not row.get('deleted'):
             from utils.conversations.v3 import summary_input
 
-            if summary_input.fingerprint(store.decode_row(uid, snapshot)) != input_hash:
+            decoded = store.decode_row(uid, snapshot, hydrate_photos=True, transaction=tx, firestore_client=client)
+            if summary_input.fingerprint(decoded) != input_hash:
                 raise Conflict('processing_source_changed')
         tx.update(
             ref,

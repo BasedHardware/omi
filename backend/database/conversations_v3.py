@@ -15,6 +15,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from database._client import get_firestore_client
 from database.transcript_pointer import TranscriptBlobAbsent, TranscriptShredded
 from database import conversations, conversations_v3_leases as leases
+from database import conversations_v3_photos
 from database.account_deletion_marker import account_deletion_blocks_user_work, account_deletion_document
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
@@ -27,7 +28,9 @@ def user_conversations(client, uid):
     return client.collection('users').document(uid).collection('conversations')
 
 
-def decode_row(uid, snapshot) -> dict[str, Any] | None:
+def decode_row(
+    uid, snapshot, *, hydrate_photos=False, transaction=None, firestore_client=None
+) -> dict[str, Any] | None:
     data = snapshot.to_dict() or {}
     if not snapshot.exists:
         return None
@@ -43,16 +46,20 @@ def decode_row(uid, snapshot) -> dict[str, Any] | None:
     if not isinstance(data.get('transcript_segments'), list):
         data['transcript_segments'] = segments
     data['_v3_revision'] = snapshot.update_time
+    if hydrate_photos and not data.get('photos') and data.get('has_photos') is not False:
+        data['photos'] = conversations_v3_photos.read(
+            uid, snapshot.id, transaction=transaction, firestore_client=firestore_client
+        )
     return data
 
 
-def recording_input(uid, snapshot):
+def recording_input(uid, snapshot, *, firestore_client=None):
     if not snapshot.exists:
         return None
     raw = snapshot.to_dict() or {}
     if raw.get('data_protection_level') != 'private' and raw.get('started_at'):
         try:
-            return decode_row(uid, snapshot)
+            return decode_row(uid, snapshot, hydrate_photos=True, firestore_client=firestore_client)
         except (ValueError, TypeError, FileNotFoundError, TranscriptBlobAbsent, TranscriptShredded, Conflict):
             pass
     return {**raw, 'id': snapshot.id, '_v3_revision': snapshot.update_time, '_v3_unreadable': True}
@@ -74,7 +81,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     pending = pending[:32] if not conversation_id else pending
     recordings, unreadable = {}, {}
     for doc in pending:
-        row = recording_input(uid, doc)
+        row = recording_input(uid, doc, firestore_client=client)
         if row and row.get('_v3_unreadable'):
             unreadable[doc.id] = row
         elif row:
@@ -119,7 +126,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
             if p['recording_id'] != row['id']
         )
         for rid in ids - recordings.keys():
-            row = recording_input(uid, coll.document(rid).get())
+            row = recording_input(uid, coll.document(rid).get(), firestore_client=client)
             if row:
                 if row.get('_v3_unreadable'):
                     unreadable[rid] = row

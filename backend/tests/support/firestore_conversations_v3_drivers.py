@@ -26,7 +26,17 @@ def _pending_source(client, combo, trial):
 
 
 def _decode(client):
-    return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot: snapshot.to_dict())
+    return patch('database.conversations_v3.decode_row', side_effect=lambda uid, snapshot, **kw: snapshot.to_dict())
+
+
+def _photo_pages(client, combo, trial):
+    client.queue_results(
+        [
+            client.snapshot(f'users/{SHAPE_UID}/conversations/canonical/photos/frame-{i:03}', {'base64': ''})
+            for i in range(128)
+        ]
+    )
+    client.queue_results([])
 
 
 def entries():
@@ -44,6 +54,12 @@ def entries():
             patchers=(_decode,),
         ),
         DriverEntry('database.conversations_v3.load_derive', base={'uid': SHAPE_UID}),
+        DriverEntry(
+            'database.conversations_v3_photos.read',
+            base={'uid': SHAPE_UID, 'cid': 'canonical'},
+            setup=_photo_pages,
+            neutrals={'transaction': (None, 'Transaction carrier; same owner-scoped bounded photo query')},
+        ),
         DriverEntry('utils.conversations.v3.service.has_pending', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.pending_processing', base={'uid': SHAPE_UID}),
         DriverEntry('utils.conversations.v3.service.sweep'),

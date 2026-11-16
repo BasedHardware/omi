@@ -29,7 +29,7 @@ def source_patch(uid, snapshot, *, now, decoded=None):
         return {'v3_quiet_pending': False}
     if not row.get('transcript_segments'):
         return {}
-    decoded = decoded if decoded is not None else store.decode_row(uid, snapshot)
+    decoded = decoded if decoded is not None else store.decode_row(uid, snapshot, hydrate_photos=True)
     if not decoded or decoded.get('_v3_unreadable') or not decoded.get('transcript_segments'):
         return {}
     generation = summary_input.fingerprint(decoded)
@@ -112,7 +112,7 @@ def sources_current(tx, client, uid, row, *, quiet=False):
             return None
         if quiet and source.get('v3_quiet_due') and datetime.now(timezone.utc) < source['v3_quiet_due']:
             raise NotReady('quiet_not_due')
-        decoded = store.decode_row(uid, snap)
+        decoded = store.decode_row(uid, snap, hydrate_photos=True, transaction=tx, firestore_client=client)
         if not decoded or summary_input.fingerprint(decoded) != expected.get(rid):
             if quiet:
                 raise NotReady('projection_pending')
@@ -129,7 +129,7 @@ def reserve(uid, cid, token, revision, *, quiet=False, firestore_client=None):
     @firestore.transactional
     def begin(tx):
         snapshot = ref.get(transaction=tx)
-        row = store.decode_row(uid, snapshot)
+        row = store.decode_row(uid, snapshot, hydrate_photos=True, transaction=tx, firestore_client=client)
         deletion = account_deletion_document(uid, firestore_client=client).get(transaction=tx)
         lease = held.get(transaction=tx).to_dict() or {}
         now = datetime.now(timezone.utc)

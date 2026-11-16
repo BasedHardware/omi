@@ -9,6 +9,7 @@ import pytest
 
 from database import conversations_v3_quiet as attempts
 from models.conversation import Conversation
+from models.conversation_photo import ConversationPhoto
 from utils.conversations.v3 import quiet, summary_input, summary, triggers, service, renewal
 from utils.conversations import process_conversation as process
 from utils.conversations import transcript_for_llm as transcript
@@ -40,6 +41,46 @@ def test_identity_survives_model_round_trip_and_transport_seal():
     assert summary_input.fingerprint(original) == summary_input.fingerprint(
         {**original, 'status': 'completed', 'audio_files': [{'id': 'seal'}]}
     )
+
+
+def test_photo_identity_normalizes_stored_optional_none_and_model_defaults():
+    photo = ConversationPhoto(id='frame', base64='', description='Planning whiteboard.', created_at=AT)
+    original = row(photos=[photo.model_dump()])
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+
+
+def test_undated_stored_photo_cannot_mint_a_time_dependent_identity():
+    with pytest.raises(ValueError, match='photo_capture_time_unavailable'):
+        summary_input.fingerprint(row(photos=[{'id': 'frame', 'base64': '', 'description': 'Planning.'}]))
+
+
+@pytest.mark.parametrize('authority', ['manual', 'auto'])
+def test_owner_authority_changes_actual_notes_and_freshness(monkeypatch, authority):
+    monkeypatch.setattr(transcript, 'get_user_name', lambda *a, **kw: 'Nik')
+    monkeypatch.setattr(transcript, 'serving_for', lambda *a: False)
+    original = row()
+    segment = original['transcript_segments'][0]
+    segment.update(
+        speaker_id=0,
+        speaker_id_scope='capture:one',
+        speaker_label_source='carried' if authority == 'manual' else None,
+        speaker_identity_status='user' if authority == 'manual' else 'unknown',
+        speaker_match_source=None,
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert 'Nik' not in voices.values() and summary.fresh(original)
+    segment.update(
+        speaker_label_source=authority,
+        speaker_identity_status='user',
+        speaker_match_source=None if authority == 'manual' else 'conversation_voice',
+    )
+    after, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
+    assert 'Nik' in voices.values()
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
 
 
 @pytest.mark.parametrize(
@@ -125,7 +166,7 @@ def test_old_timestamp_only_coverage_does_not_authorize_v3_reuse():
 def test_source_obligation_arms_once_per_content_and_not_per_transport_seal(monkeypatch):
     original = row(recording=True, v3_derived=False)
     snap = SimpleNamespace(to_dict=lambda: original)
-    monkeypatch.setattr(attempts.store, 'decode_row', lambda *a: original)
+    monkeypatch.setattr(attempts.store, 'decode_row', lambda *a, **kw: original)
     patch = attempts.source_patch('u', snap, now=AT)
     assert patch['v3_quiet_due'] == original['finished_at'] + timedelta(seconds=30)
     original.update(patch, status='completed', audio_files=[{'id': 'transport-seal'}])

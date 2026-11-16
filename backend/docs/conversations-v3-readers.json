@@ -107,6 +107,10 @@
     "policy": "conversations",
     "reason": "Owner-scoped bounded title projection excludes recordings, hidden, deleted, locked and absorbed rows before decoding."
   },
+  "backend/database/conversations_v3_photos.py:collection": {
+    "policy": "both",
+    "reason": "Bounded owner-scoped photo evidence for canonical notes and recording generations; summary transactions retain lease, revision and privacy fences."
+  },
   "backend/database/conversations_v3_quiet.py:user_conversations": {
     "policy": "both",
     "reason": "Summary-only quiet permits compare canonical inputs with owner-scoped recording revisions and pending tails; deletion and privacy remain fenced."

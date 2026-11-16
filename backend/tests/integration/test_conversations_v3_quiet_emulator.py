@@ -250,6 +250,107 @@ async def test_foreground_stream_retries_failed_same_input_without_rearming_quie
     assert len(admitted) == 4
 
 
+@pytest.mark.parametrize('authority', ['manual', 'auto'])
+def test_owner_authority_correction_arms_generation_and_new_quiet_permit(seeded, authority):
+    client, uid, cid, rid, coll = seeded
+    source = coll.document(rid).get().to_dict()
+    segments = source['transcript_segments']
+    for segment in segments:
+        segment.update(
+            speaker_id=0,
+            speaker_id_scope='capture:one',
+            is_user=True,
+            speaker_label_source='carried' if authority == 'manual' else None,
+            speaker_identity_status='user' if authority == 'manual' else 'unknown',
+            speaker_match_source=None,
+        )
+    source['transcript_segments'] = segments
+    original = summary_input.fingerprint(source)
+    coll.document(rid).update({'transcript_segments': segments, 'v3_quiet_generation': original})
+    coll.document(cid).update({'transcript_segments': segments, 'v3_source_hashes': {rid: original}})
+    token, permit = claim(seeded)
+    persist(seeded, token, permit)
+    leases.release(uid, 'summary-' + cid, token, firestore_client=client)
+    for segment in segments:
+        segment.update(
+            speaker_label_source=authority,
+            speaker_identity_status='user',
+            speaker_match_source=None if authority == 'manual' else 'conversation_voice',
+        )
+    coll.document(rid).update({'transcript_segments': segments})
+    patch = attempts.source_patch(uid, coll.document(rid).get(), now=datetime.now(timezone.utc) - timedelta(seconds=31))
+    assert patch.get('v3_quiet_pending') and patch['v3_quiet_generation'] != original
+    coll.document(rid).update(patch)
+    coll.document(cid).update(
+        {'transcript_segments': segments, 'v3_source_hashes': {rid: patch['v3_quiet_generation']}}
+    )
+    assert not summary.fresh(store.decode_row(uid, coll.document(cid).get()))
+    token, corrected = claim(seeded)
+    assert corrected and corrected['input_hash'] != permit['input_hash']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('owner', ['quiet', 'foreground'])
+@pytest.mark.parametrize('race', [False, True])
+async def test_snapshot_uses_photo_subcollection_and_rejects_concurrent_photo_change(seeded, monkeypatch, owner, race):
+    from models.conversation_photo import ConversationPhoto
+
+    client, uid, cid, _, coll = seeded
+    assert store.conversations.store_conversation_photos(
+        uid,
+        cid,
+        [
+            ConversationPhoto(
+                id='frame',
+                base64='',
+                description='Original photo evidence.',
+            )
+        ],
+        firestore_client=client,
+    )
+    paid = []
+    monkeypatch.setattr(quiet, 'require_generated_compute', lambda *a, **kw: None)
+
+    def write(owner, row, emit):
+        paid.append(row['id'])
+        assert row['photos'][0]['description'] == 'Original photo evidence.'
+        if race:
+            coll.document(cid).collection('photos').document('frame').update({'description': 'New photo evidence.'})
+        return {'title': 'Plan', 'sections': [{'heading': 'Plan', 'body_markdown': 'Photo-grounded notes.'}]}
+
+    monkeypatch.setattr(summary, 'write', write)
+    row = store.conversations.get_conversation(uid, cid, firestore_client=client)
+    if owner == 'quiet':
+        row = store.decode_row(uid, coll.document(cid).get())
+        assert await quiet.snapshot(uid, row) == ('superseded' if race else 'stored')
+    else:
+        frames = [frame async for frame in summary.stream(uid, row)]
+        assert any(frame.startswith('error: ') for frame in frames) is race
+    current = store.conversations.get_conversation(uid, cid, firestore_client=client)
+    assert summary.fresh(current) is (not race)
+    assert paid == [cid]
+
+
+def test_photo_input_pages_without_losing_evidence_or_freshness(seeded):
+    from models.conversation_photo import ConversationPhoto
+
+    client, uid, cid, _, coll = seeded
+    assert store.conversations.store_conversation_photos(
+        uid,
+        cid,
+        [
+            ConversationPhoto(id=f'frame-{i:03}', base64='', description='Planning evidence.')
+            for i in range(store.LIMIT + 1)
+        ],
+        firestore_client=client,
+    )
+    token, permit = claim(seeded)
+    assert len(permit['row']['photos']) == store.LIMIT + 1
+    assert permit['row']['photos'][-1]['id'] == f'frame-{store.LIMIT:03}'
+    persist(seeded, token, permit)
+    assert summary.fresh(store.conversations.get_conversation(uid, cid, firestore_client=client))
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('new_source', [False, True])
 async def test_foreground_stream_keeps_shared_lease_and_new_recording_commit_fence(seeded, monkeypatch, new_source):
@@ -507,8 +608,9 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
 @pytest.mark.asyncio
 @pytest.mark.parametrize('resolve_speaker', [False, True])
 @pytest.mark.parametrize('owner', ['automatic', 'explicit'])
+@pytest.mark.parametrize('photo_mode', ['none', 'subcollection', 'race'])
 async def test_real_final_processor_persists_new_calendar_context_before_freshness_stamp(
-    seeded, monkeypatch, resolve_speaker, owner
+    seeded, monkeypatch, resolve_speaker, owner, photo_mode
 ):
     import inspect
     from models.calendar_context import CalendarMeetingContext
@@ -517,6 +619,23 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
 
     client, uid, cid, rid, coll = seeded
     row = coll.document(cid).get().to_dict()
+    if photo_mode != 'none':
+        from models.conversation_photo import ConversationPhoto
+
+        assert store.conversations.store_conversation_photos(
+            uid,
+            cid,
+            [
+                ConversationPhoto(
+                    id='frame',
+                    base64='',
+                    description='A planning whiteboard.',
+                    created_at=row['started_at'],
+                )
+            ],
+            firestore_client=client,
+        )
+        assert 'photos' not in coll.document(cid).get().to_dict()
     context = CalendarMeetingContext(
         calendar_event_id='calendar-discovered',
         title='Friday planning',
@@ -559,6 +678,10 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
 
     def notes(owner, language, conversation, **kw):
         assert conversation.external_data['calendar_meeting_context']['calendar_event_id'] == 'calendar-discovered'
+        if photo_mode != 'none':
+            assert len(conversation.photos) == 1 and conversation.photos[0].description == 'A planning whiteboard.'
+            if photo_mode == 'race':
+                coll.document(cid).collection('photos').document('frame').update({'description': 'Corrected evidence.'})
         observed.append(conversation.id)
         return (
             Structured(
@@ -578,9 +701,11 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
         return body(*a, defer_derived_effects=True, **kw)
 
     monkeypatch.setattr(pc, 'process_conversation', process)
-    if owner == 'automatic':
-        await service.drain_processing(uid)
-    else:
+
+    async def run_owner():
+        if owner == 'automatic':
+            await service.drain_processing(uid)
+            return
         from models.conversation import Conversation
         from utils.conversations.processing_trigger import ProcessingTrigger
 
@@ -588,16 +713,24 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
             service.recording_short_path(process),
             uid,
             'en',
-            Conversation(**row),
+            Conversation(**store.conversations.get_conversation(uid, cid, firestore_client=client)),
             trigger=ProcessingTrigger.USER_REPROCESS,
             persistence_observer=lambda success: None,
         )
+
+    if photo_mode == 'race':
+        with pytest.raises(store.Conflict, match='processing_source_changed'):
+            await run_owner()
+        assert not summary.fresh(store.conversations.get_conversation(uid, cid, firestore_client=client))
+        assert observed == [cid]
+        return
+    await run_owner()
     await service.drain_processing(uid)
-    current = store.decode_row(uid, coll.document(cid).get())
+    current = store.conversations.get_conversation(uid, cid, firestore_client=client)
     assert current['external_data']['calendar_meeting_context']['calendar_event_id'] == 'calendar-discovered'
     assert current['transcript_segments'][0]['is_user'] is (not resolve_speaker)
     assert summary.fresh(current) and current['summary_is_snapshot'] is False
-    assert not current['v3_process_pending'] and observed == [cid]
+    assert not current['v3_process_pending'] and current['tile_state'] == 'done' and observed == [cid]
     monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('calendar final notes bought again'))
     assert await summary.prepare(uid, current) is None
 
