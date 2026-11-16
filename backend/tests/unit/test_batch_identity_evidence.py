@@ -206,6 +206,9 @@ def test_word_time_metadata_is_storage_only(original):
     conversation = resolve(lane)
     assert 'speaker_word_seconds' in conversation.model_dump()['transcript_segments'][0]
     assert 'speaker_word_seconds' not in conversation.model_dump(mode='json')['transcript_segments'][0]
+    assert conversation.model_dump()['speaker_resolution']['input_membership_sha256']
+    assert 'input_membership_sha256' not in conversation.model_dump(mode='json')['speaker_resolution']
+    assert 'input_membership_sha256' not in conversation.speaker_resolution.model_json_schema()['properties']
 
 
 def test_mixed_live_and_wal_unit_provenance_uses_each_original_pair(original):
