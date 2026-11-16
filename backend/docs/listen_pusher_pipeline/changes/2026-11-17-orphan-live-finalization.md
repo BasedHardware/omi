@@ -42,7 +42,9 @@ finalization pipeline; rollback does not cancel them.
 ## Local verification
 
 The candidate-query, self-heal sweep/recovery and finalization-job modules passed
-220 tests. Regression coverage drives the real scan and transactional admission
+220 tests; the combined seven-module run including quiet-finalization, operator
+orphan-repair and refactor-mode coverage passed 444 tests at the implementation
+commit. Regression coverage drives the real scan and transactional admission
 with synthetic records, including default/false/malformed flags, closed unleased
 capture enqueue, no-finish/live/unknown leases, non-target lanes, explicit false
 markers, cursor continuation, and the shared per-tick bounds. This proves local

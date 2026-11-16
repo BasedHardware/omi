@@ -234,7 +234,8 @@ BODY_DIGEST = {
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
     # Re-reviewed: quiet admission uses the shared speech clock; query/read shapes are unchanged.
     # Re-reviewed 2026-11-04: atomic blocked_byok_at metadata only; query ownership is unchanged.
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'aa91a14822a421ef8f0e8b11961ae5cda837676259c25665f9d14edcdfe0750a',
+    # Re-reviewed 2026-11-16 UTC: closed unleased batch-live exception is pure; no query/read additions.
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '8e98bd7013aa772a51d4304882296c5d369fa6638005ecb2c878f3260977aa49',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     # Re-reviewed: positional .where converted to filter=FieldFilter — same field/op/value shape.
@@ -1075,7 +1076,9 @@ _add(
         covered_by=('database.conversation_finalization_jobs._conversation_has_finalization_content',),
         reason='orchestrator whose only collection query is the directly driven content probe; '
         'silent-backfill row/session/owner/privacy/job fences add transaction-bound direct document reads only; '
-        'reconnect expiry changes pure deadline arithmetic without adding any query',
+        'reconnect expiry changes pure deadline arithmetic without adding any query; '
+        'closed missing-marker batch-live admission changes only the pure lease refusal predicate, '
+        'with real transaction coverage in test_finjob_candidate_queries',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversation_finalization_jobs._create_or_get_finalization_intent_txn'],
     )
@@ -1207,6 +1210,16 @@ _add(
         neutrals={'limit': _LIMIT, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
     )
 )
+
+
+def _orphaned_live_flag_trials(client):
+    states = cycle((False, False, True, True))
+    return unittest.mock.patch(
+        'database.conversation_finalization_jobs.batch_finalize_orphaned_live_captures_enabled',
+        side_effect=lambda: next(states),
+    )
+
+
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.scan_in_progress_conversations',
@@ -1216,8 +1229,8 @@ _add(
             'finished_before': [None, T0],
         },
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
-        trials=2,
-        patchers=(_finjob_candidate_lever_trials,),
+        trials=4,
+        patchers=(_finjob_candidate_lever_trials, _orphaned_live_flag_trials),
     )
 )
 _add(
