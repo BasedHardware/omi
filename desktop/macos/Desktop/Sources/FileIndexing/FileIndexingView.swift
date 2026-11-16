@@ -553,20 +553,9 @@ struct FileIndexingView: View {
       return
     }
 
-    let service = AIUserProfileService.shared
-    let existingProfile = await service.getLatestProfile()
-
-    if let existing = existingProfile, let profileId = existing.id {
-      // Append to existing profile
-      let updated = existing.profileText + "\n\n--- File Exploration Insights ---\n" + lastAIMessage.text
-      let success = await service.updateProfileText(id: profileId, newText: updated)
-      log("FileIndexingView: Appended exploration to AI profile (success=\(success))")
-    } else {
-      // No profile exists yet — create one via generation, or save directly
-      // For now, trigger a full generation which will pick up the new data
-      log("FileIndexingView: No existing AI profile, triggering generation")
-      _ = try? await service.generateProfile()
-    }
+    // The backend owns the profile: append to it, or start it with this exploration.
+    let success = await AIUserProfileService.shared.appendExploration(lastAIMessage.text)
+    log("FileIndexingView: Saved exploration to AI profile (success=\(success))")
   }
 
   /// Inject a collapsible discovery card into the chat with the full AI exploration text

@@ -498,7 +498,6 @@ struct ChatPrompts {
     "live_notes": "AI-generated notes during recording",
     "memories":
       "user facts, preferences, personal details (age, relationships, habits, interests) — PRIMARY source for personal questions",
-    "ai_user_profiles": "daily AI-generated user profile summaries",
     "indexed_files":
       "file metadata index from ~/Downloads, ~/Documents, ~/Desktop — path, filename, extension, fileType (document/code/image/video/audio/spreadsheet/presentation/archive/data/other), sizeBytes, folder, depth, timestamps",
     "goals": "user goals with progress tracking",
@@ -697,11 +696,6 @@ struct ChatPrompts {
       "relevanceScore": "AI relevance score 0–100",
       "scoredAt": "When relevanceScore was computed",
     ],
-    "ai_user_profiles": [
-      "profileText": "Full AI-generated profile summary text",
-      "dataSourcesUsed": "Bitmask of data sources used to generate the profile",
-      "generatedAt": "When this profile was generated",
-    ],
     "indexed_files": [
       "path": "File path relative to home directory",
       "filename": "File name with extension",
@@ -719,8 +713,11 @@ struct ChatPrompts {
   /// Tables to exclude from the schema prompt (internal/GRDB tables)
   static let excludedTablePrefixes = ["sqlite_", "grdb_"]
   /// Any table whose name contains "_fts" is an FTS virtual or internal table — exclude all.
-  /// Specific infra tables also excluded.
-  static let excludedTables: Set<String> = ["migration_status", "task_dedup_log"]
+  /// Specific infra tables also excluded, plus the retired local profile history, which stays on
+  /// disk only until its newest row is reconciled with the backend-owned profile.
+  static let excludedTables: Set<String> = [
+    "migration_status", "task_dedup_log", LocalProfileHistoryRetirement.table,
+  ]
 
   /// Infrastructure columns to strip from schema — file paths, binary blobs, sync state, internal flags.
   /// New migrations are still picked up automatically; only these specific names are hidden.

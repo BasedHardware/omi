@@ -240,6 +240,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "conversations:topic": (60, 3600),
     # Return-only SSOT AI user profile synthesis (once-daily desktop cadence)
     "users:ai_profile_synthesize": (8, 86400),
+    # Explicit backend-owned AI user profile refresh (Generate Now / Regenerate)
+    "users:ai_profile_refresh": (8, 86400),
     # Canonical graph reads — paginated Firestore + assertion hydration
     "knowledge_graph:canonical": (120, 3600),
     "wrapped:generate": (2, 86400),
