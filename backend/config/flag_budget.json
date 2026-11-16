@@ -463,6 +463,11 @@
       "owner": "pinecone2 / batch rollout lead",
       "review_by": "2026-12-05"
     },
+    "BATCH_SOURCE_REUSE_ENABLED": {
+      "owner": "quality-lead",
+      "review_by": "2026-12-15",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_TIMELINESS_ALL_TIME_COUNTS_ENABLED": {
       "owner": "omi-pipeline",
       "review_by": "2026-12-08",

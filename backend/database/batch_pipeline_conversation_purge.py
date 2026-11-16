@@ -290,7 +290,7 @@ def purge_conversation(
                             data = snapshot.to_dict() or {}
                             if (
                                 _belongs(data, conversation_id)
-                                or (table == 'artifacts' and data.get('segment_id') in segments)
+                                or (table in {'artifacts', 'projections'} and data.get('segment_id') in segments)
                                 or (table == 'intakes' and segments.intersection(data.get('segment_ids') or []))
                             ):
                                 matches.append((snapshot, data))

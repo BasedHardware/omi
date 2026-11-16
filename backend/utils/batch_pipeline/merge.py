@@ -287,6 +287,10 @@ class OrderedMerge:
             candidate = tx.first_pending(key)
             if candidate and candidate.get('shadow'):
                 return None
+            if candidate and candidate.get('source_alias_fallback') and candidate.get('state') == 'result_ready':
+                from database.batch_pipeline_source_fallback import merge_ready
+
+                return merge_ready(tx, candidate, now)
             over_cap = bool(depth and candidate and _awaiting_projection(tx, owner) >= depth)
             if candidate:
                 head['catch_up'] = _catch_up(candidate)
@@ -477,6 +481,9 @@ class OrderedMerge:
                 'projection_state': 'pending',
                 'fresh_capture': job.get('fresh_capture') is True,
             }
+            for field in ('source_reuse_version', 'source_alias_version'):
+                if field in job:
+                    entry[field] = job[field]
             if job.get('recovery_state') == 'recovered' or (job.get('stt_route') or {}).get('stt_route') == 'provider':
                 entry['recovery_version'] = 1
             if bypass:
