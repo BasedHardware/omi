@@ -3225,6 +3225,10 @@ environments:
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
             value: 'false'
             category: ops_kill
+          EPISODES_ENABLED:
+            value: 'off'
+            category: ops_kill
+          OCCASION_CONVERSATIONS_ENABLED: {value: 'off', category: rollout}
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
             category: ops_kill
@@ -3555,6 +3559,9 @@ environments:
             category: ops_kill
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
             value: 'false'
+            category: ops_kill
+          EPISODES_ENABLED:
+            value: 'off'
             category: ops_kill
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
             value: 'true'
@@ -4257,6 +4264,9 @@ environments:
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
               value: 'false'
               category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -4792,6 +4802,9 @@ environments:
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
               value: 'false'
               category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5320,6 +5333,9 @@ environments:
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
               value: 'false'
               category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
+              category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
               category: ops_kill
@@ -5792,6 +5808,9 @@ environments:
               category: ops_kill
             EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED:
               value: 'false'
+              category: ops_kill
+            EPISODES_ENABLED:
+              value: 'off'
               category: ops_kill
             EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED:
               value: 'true'
