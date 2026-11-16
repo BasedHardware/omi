@@ -48,7 +48,10 @@ existing audio-service UUID, which alone does not establish capture availability
 
 ## Device telemetry (`19B10041`)
 
-Exactly 25 bytes, version 1, little endian. Normal offset reads are supported.
+Append-only version 1, little endian: 25-byte base, optional battery tail through
+byte 29, and connection tail through byte 37 (38 bytes total). Readers accept the
+base and ignore trailing fields they do not understand. Normal offset reads use a
+per-connection snapshot, refreshed at offset zero; split reads stay coherent.
 
 | Offset | Size | Meaning |
 | --- | --- | --- |
@@ -61,8 +64,38 @@ Exactly 25 bytes, version 1, little endian. Normal offset reads are supported.
 | 13 | 4 | Microphone overrun count |
 | 17 | 4 | BLE TX drop count |
 | 21 | 4 | Storage error count |
+| 25 | 2 | Optional last-off-charger mV; `0xffff` unavailable |
+| 27 | 2 | Optional charge-pin edges; `0xffff` unavailable |
+| 29 | 1 | Optional frozen SOC boolean; `0xff` unavailable |
+| 30 | 2 | Negotiated connection interval, 1.25 ms units; `0xffff` unavailable |
+| 32 | 2 | Negotiated peripheral latency, connection events; `0xffff` unavailable |
+| 34 | 2 | Negotiated supervision timeout, 10 ms units; `0xffff` unavailable |
+| 36 | 1 | TX PHY: 1 = 1M, 2 = 2M, 4 = Coded; `0xff` unavailable |
+| 37 | 1 | RX PHY, same encoding as TX |
 
 Reset cause defaults to `0xffffffff` if unavailable. Counters start at zero.
+The current firmware leaves bytes 25–29 unavailable, preserving their existing
+app meanings. Connection fields come from `bt_conn_get_info` for the reading
+connection, including its initial PHY before any PHY-update callback. They are
+unavailable if the link cannot be queried or is no longer connected. Apps export
+these raw units as `conn_interval`, `conn_latency`, `conn_timeout`, `tx_phy`, and
+`rx_phy`, omitting unavailable values and incomplete connection tails.
+
+The explicit preferred request remains interval 6–12 (7.5–15 ms), latency 0,
+with timeout 600 (6 s). It satisfies the timeout inequality:
+15 ms × (0 + 1) × 3 = 45 ms < 6000 ms and timeout ≤ 6 s
+([Apple QA1931](https://developer.apple.com/library/archive/qa/qa1931/)).
+This does not claim compliance with Apple's separate interval recommendations;
+the existing interval range is unchanged for audio/backlog throughput. Explicit
+requests are limited to three API calls per connection, counting the initial
+request and failures; good intervals do not replenish the budget. Callbacks never
+sleep while re-requesting. A reconnect starts a fresh budget. Zephyr's automatic
+GAP parameter procedure is separate from this explicit budget.
+
+This change rides the **next firmware release**; it does not change the firmware
+version or release an image. Actual granted parameters and weak-signal outcomes
+still require device verification after that release. A 6 s timeout can delay
+detection of a truly lost link relative to 4 s.
 
 ## Recovery state (`19B10042`)
 

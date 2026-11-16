@@ -78,6 +78,15 @@ enum OmiBleFirmwareDiagnostics {
             }
             if data[29] == 0 || data[29] == 1 { result["soc_frozen"] = NSNumber(value: data[29] == 1) }
         }
+        if data.count >= 38 {
+            for (key, offset) in [("conn_interval", 30), ("conn_latency", 32), ("conn_timeout", 34)] {
+                let value = Int(data[offset]) | (Int(data[offset + 1]) << 8)
+                if value != 0xffff { result[key] = NSNumber(value: value) }
+            }
+            for (key, offset) in [("tx_phy", 36), ("rx_phy", 37)] {
+                if data[offset] != 0xff { result[key] = NSNumber(value: data[offset]) }
+            }
+        }
         return result
     }
 }
