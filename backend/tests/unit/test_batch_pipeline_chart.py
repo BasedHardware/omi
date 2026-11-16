@@ -474,8 +474,8 @@ def test_production_cutover_preserves_live_single_od_hpa_min4_max16():
         container = by_name(docs, 'Deployment')[name]['spec']['template']['spec']['containers'][0]
         env = {v['name']: v.get('value') for v in container['env']}
         assert env['BATCH_PIPELINE_WORKER_PROCESSES'] == processes
-        # Three pump lanes per process on L4; the slower T4 sibling keeps two.
-        assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('3' if processes == '2' else '2')
+        # Four pump lanes per process on L4; the slower T4 sibling keeps two.
+        assert env['BATCH_PIPELINE_WORKER_PIPELINE_DEPTH'] == ('4' if processes == '2' else '2')
 
 
 PROD_BORROWED = ['parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2']
