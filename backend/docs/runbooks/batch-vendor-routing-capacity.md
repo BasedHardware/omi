@@ -307,7 +307,9 @@ Modulate overflow is a supported failover path for GPU stockouts and outages
 (David 065da8, 2026-11-04), not an emergency step.
 
 Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
-`en-overflow-1104b` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow).
+`en-overflow-1116` (lead2 863cd6/fb423f; David 49b7e4: English-only overflow; David 2026-11-16:
+Modulate cap 3,000 -> 5,000 audio-h/day, and prod sets `BATCH_VENDOR_OVERFLOW_PRIORITIES=fresh,recent`
+so RECENT English overflows too while its own backlog is saturated).
 - `selection: ordered`, rows `en: [gpu, modulate, soniox]`, `gpu_supported: [gpu]`,
   `gpu_unsupported: [modulate, soniox]`, `*: [gpu]`. Fresh English overflows to
   Modulate once the ring is saturated. Other GPU-capable languages stay on
@@ -316,10 +318,10 @@ Standing table: `backend/deploy/batch-pipeline/vendor_route_table.prod.json`,
   prod-gpu-first-v1 table: a Modulate outage fails English and unsupported
   languages over to Soniox, else holds them with their audio. Overflow never
   starts on Soniox.
-- Modulate carries a runaway-only `daily_audio_hours_cap` of 3,000 (lead2,
-  Luna P1 on #24637). gpu_unsupported needs about 900 audio-h/day, which
-  leaves about 2,100 audio-h/day of overflow before anything holds (about
-  $180/day worst case). A trip marks Modulate unhealthy for every language
+- Modulate carries a `daily_audio_hours_cap` of 5,000 (3,000 from lead2, Luna
+  P1 on #24637; raised by David 2026-11-16 with RECENT overflow). Non-English
+  traffic used about 1,000 audio-h/day in Nov 2026, which leaves about 4,000
+  audio-h/day of overflow before anything holds (about $300/day worst case). A trip marks Modulate unhealthy for every language
   and holds units with their audio until the window resets; nothing drops.
   `price_usd_per_audio_hour` 0.06 (list) makes $ table-driven.
 - Alert: overflow spend above $50/day (David 49b7e4 episode bound) pages. The
