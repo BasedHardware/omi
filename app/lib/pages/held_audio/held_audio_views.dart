@@ -46,6 +46,7 @@ class HeldRecordingLockedRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           OmiLockedPreview(
+            purchaseSource: 'held_audio',
             key: Key('held_recording_locked_${recording.id}'),
             label: l10n.upgrade,
             onPressed: onPressed ?? () => openHeldAudioPlans(context),

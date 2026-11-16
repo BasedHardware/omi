@@ -180,7 +180,12 @@ export function BarApp(): React.JSX.Element {
     // fail-open, so the press never awaits. On a block we raise the shared popup on
     // the main window (spoken:false — the gesture veto is visual only, matching Mac).
     checkUsageLimit: () => sender.checkSync(),
-    onUsageLimitBlocked: (message) => window.omiBar.notifyUsageLimit({ message, spoken: false }),
+    onUsageLimitBlocked: (message) =>
+      window.omiBar.notifyUsageLimit({
+        message,
+        spoken: false,
+        authoritative: sender.authoritativeLimitReached()
+      }),
     // Barge-in: a new PTT hold cuts off Omi's still-playing spoken reply. The
     // reply plays in the MAIN window (useChat → voiceController), so hop over the
     // bar→main bridge; ChatBridgeHost calls interruptCurrentResponse there.

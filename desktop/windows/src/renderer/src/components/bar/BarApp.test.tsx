@@ -43,6 +43,7 @@ vi.mock('./barSend', () => ({
   createBarSender: () => ({
     send: vi.fn(async () => null),
     sync: vi.fn(async () => {}),
+    authoritativeLimitReached: vi.fn(() => false),
     checkSync: vi.fn(() => null)
   })
 }))

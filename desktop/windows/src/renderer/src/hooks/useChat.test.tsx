@@ -81,7 +81,8 @@ const gateMocks = vi.hoisted(() => ({
   sync: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   checkSync: vi.fn().mockReturnValue({ blocked: false }),
   applyQuota: vi.fn(),
-  isLimitReached: vi.fn().mockReturnValue(false)
+  isLimitReached: vi.fn().mockReturnValue(false),
+  authoritativeLimitReached: vi.fn().mockReturnValue(false)
 }))
 vi.mock('../lib/chatQuotaGate', () => ({ createChatQuotaGate: () => gateMocks }))
 const showUsageLimitSpy = vi.hoisted(() => vi.fn())
@@ -1158,7 +1159,7 @@ describe('useChat — chat quota gate (Mac AgentBridge.quotaExceeded parity)', (
     await act(async () => {
       await result.current.send('hello')
     })
-    expect(showUsageLimitSpy).toHaveBeenCalledWith('chat')
+    expect(showUsageLimitSpy).toHaveBeenCalledWith('chat', false)
     expect(global.fetch).not.toHaveBeenCalled()
     expect(result.current.history).toHaveLength(0)
     expect(result.current.sending).toBe(false)

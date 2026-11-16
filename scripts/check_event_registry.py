@@ -281,6 +281,12 @@ def main():
     for path in set(changed) | set(doc['adopted_files']):
         if (ROOT / path).is_file():
             errors += raw_violations(path, (ROOT / path).read_text(), git(args.base, path), doc['adopted_files'])
+    if not errors:
+        import sys
+        portable = subprocess.run([sys.executable, str(ROOT / 'scripts/generate_purchase_telemetry.py'),
+                                   *(['--write'] if args.write else [])], capture_output=True, text=True)
+        if portable.returncode:
+            errors.append(portable.stdout + portable.stderr)
     for error in errors:
         print(error)
     if not errors:

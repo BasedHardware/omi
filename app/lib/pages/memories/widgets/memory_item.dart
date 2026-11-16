@@ -175,6 +175,7 @@ class MemoryItem extends StatelessWidget {
         ),
         child: memory.isLocked
             ? OmiLockedPreview(
+                purchaseSource: 'locked_memory',
                 label: context.watch<UsageProvider>().showSubscriptionUI ? context.l10n.upgrade : context.l10n.saved,
                 onPressed: openMemory,
                 child: rowContent,

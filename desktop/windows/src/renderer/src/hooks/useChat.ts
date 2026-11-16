@@ -1032,7 +1032,7 @@ export function useChat(): UseChat {
     if (auth.currentUser) {
       const verdict = await mainChatQuotaGate.check()
       if (verdict.blocked) {
-        showUsageLimit('chat')
+        showUsageLimit('chat', mainChatQuotaGate.authoritativeLimitReached())
         return
       }
       mainChatQuotaGate.recordQuery()

@@ -17,6 +17,17 @@ import type {
 vi.mock('../lib/firebase', () => ({
   auth: { currentUser: { getIdToken: async () => 'test-token' } }
 }))
+// Keep the production gate behavior, with a hermetic authoritative quota read.
+vi.mock('../lib/billing', () => ({
+  fetchChatQuota: vi.fn().mockResolvedValue({
+    allowed: true,
+    plan: 'basic',
+    plan_type: 'free',
+    unit: 'questions',
+    used: 0,
+    limit: 1000
+  })
+}))
 vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
 vi.mock('../lib/localAgent', () => ({ gatherLocalContext: async () => '' }))
 // Non-empty screen context so `prompt` (context-prepended) differs from the raw
@@ -53,6 +64,7 @@ vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speak
 // signal fires (recovered/exhausted) without a real PostHog fetch (hermetic).
 const trackEventSpy = vi.fn((_e: string, _p?: Record<string, unknown>) => {})
 vi.mock('../lib/analytics', () => ({
+  trackPurchaseEvent: vi.fn(),
   trackEvent: (e: string, p?: Record<string, unknown>) => trackEventSpy(e, p)
 }))
 // The INV-CHAT-1 shared-thread persistence — spied so we can assert the two turns.

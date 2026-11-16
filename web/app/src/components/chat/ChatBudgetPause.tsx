@@ -1,4 +1,5 @@
 'use client';
+import { useAllowanceObservation } from '@/lib/analytics/usePurchaseExposure';
 import { useEffect, useState } from 'react';
 import type { ChatAtCap } from '@/lib/omiApi.generated';
 import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
@@ -85,6 +86,13 @@ export function ChatBudgetPause({
   budget: ReturnType<typeof useChatBudgetPause>;
 }) {
   const [open, setOpen] = useState(false);
+  useAllowanceObservation(
+    !!budget.state,
+    'usage_budget',
+    'chat',
+    'budget_exhausted',
+    !!budget.state,
+  );
   if (!budget.state) return null;
   return (
     <>

@@ -1,3 +1,5 @@
+import { trackPurchaseEvent } from './analytics'
+import { PurchaseObservation } from './purchaseContract.generated'
 import type { ChatUsageQuota } from './omiApi.generated'
 import { fetchChatQuota } from './billing'
 
@@ -75,6 +77,7 @@ export type ChatQuotaGate = {
   recordQuery: () => void
   /** Test/seam: apply a snapshot directly. */
   applyQuota: (quota: ChatUsageQuota) => void
+  authoritativeLimitReached: () => boolean
   isLimitReached: () => boolean
 }
 
@@ -111,6 +114,7 @@ export function createChatQuotaGate(
   minSyncIntervalMs: number = MIN_SYNC_INTERVAL_MS
 ): ChatQuotaGate {
   let quota: ChatUsageQuota | null = null
+  const telemetry = new PurchaseObservation(trackPurchaseEvent)
   let optimisticDelta = 0
   // Dedupe concurrent syncs (a reveal-refresh racing a cold-start send fetch).
   let inFlight: Promise<void> | null = null
@@ -119,6 +123,16 @@ export function createChatQuotaGate(
   let lastSyncAt = 0
 
   const applyQuota = (next: ChatUsageQuota): void => {
+    telemetry.allowance(next.allowed === false && next.uses_shared_budget !== true, {
+      allowance_kind: 'chat',
+      surface: 'chat',
+      reason: 'chat_quota_exhausted'
+    })
+    telemetry.allowance(next.allowed === false && next.uses_shared_budget === true, {
+      allowance_kind: 'usage_budget',
+      surface: 'chat',
+      reason: 'budget_exhausted'
+    })
     quota = next
     optimisticDelta = 0
     // A snapshot handed in from elsewhere (e.g. a send response) is just as fresh as
@@ -154,6 +168,7 @@ export function createChatQuotaGate(
   return {
     sync,
     applyQuota,
+    authoritativeLimitReached: () => quota?.allowed === false,
     isLimitReached: () => isLimitReached(quota, optimisticDelta),
     recordQuery: () => {
       optimisticDelta += 1

@@ -60,7 +60,8 @@ import type {
   XStatus,
   XSyncResult,
   XRunState,
-  SignInProvider
+  SignInProvider,
+  CheckoutObservationResult
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
@@ -167,7 +168,47 @@ const omi: OmiBridgeApi = {
   getChatScreenshotSharing: () => ipcRenderer.invoke('chat:getScreenshotSharing'),
   setChatScreenshotSharing: (enabled: boolean) =>
     ipcRenderer.invoke('chat:setScreenshotSharing', enabled),
-  openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
+  openCheckout: async (url: string, onOpened?: () => void, onCompleted?: () => void) => {
+    let terminal = false
+    const opened = (): void => {
+      if (terminal) return
+      try {
+        onOpened?.()
+      } catch {
+        /* Optional telemetry must not break checkout. */
+      }
+    }
+    let listening = false
+    try {
+      ipcRenderer.once('billing:checkoutOpened', opened)
+      listening = true
+    } catch {
+      /* Optional visibility transport must not prevent checkout. */
+    }
+    try {
+      const result: CheckoutObservationResult = await ipcRenderer.invoke(
+        'billing:openCheckout',
+        url
+      )
+      if (result.outcome === 'success' && result.observedCompletion === true) {
+        try {
+          onCompleted?.()
+        } catch {
+          /* Optional telemetry must not break checkout. */
+        }
+      }
+      return result.outcome
+    } finally {
+      terminal = true
+      if (listening) {
+        try {
+          ipcRenderer.removeListener('billing:checkoutOpened', opened)
+        } catch {
+          /* Cleanup failure cannot replace the product outcome. */
+        }
+      }
+    }
+  },
   openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
   checkAppSetup: (args: { url: string; uid: string }) =>
     ipcRenderer.invoke('apps:checkSetup', args),

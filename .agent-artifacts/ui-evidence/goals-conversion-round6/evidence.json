@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-legacy-empty-catalog.png",
+      "platform": "mobile-ios",
+      "description": "Empty legacy catalog: existing error state, no Upgrade CTA; synthetic fixture prices, not live offers",
+      "captured_by": "agent",
+      "source": "visual-audit",
+      "sha256": "4b89c0fb335d997bea8908061d0ea4559cfc0a4ebb447c50ae61dc3168803542"
+    },
+    {
+      "file": "002-mobile-ios-legacy-valid-catalog.png",
+      "platform": "mobile-ios",
+      "description": "Valid synthetic catalog control: selectable cards and Upgrade CTA; synthetic fixture prices, not live offers",
+      "captured_by": "agent",
+      "source": "visual-audit",
+      "sha256": "d3907e818cdc4d566fc84f830d3c8b8f421046f84c1785c0d6ccf7acd386fe98"
+    },
+    {
+      "file": "003-mobile-ios-legacy-missing-interval.png",
+      "platform": "mobile-ios",
+      "description": "Single tier missing selected yearly price: existing fallback cards, no invalid Upgrade CTA; synthetic fixture prices, not live offers",
+      "captured_by": "agent",
+      "source": "visual-audit",
+      "sha256": "3f441c3729a5fd57541a2f3655fa415bdc2eba450c14882bd303d19a31f561e3"
+    },
+    {
+      "file": "004-mobile-ios-legacy-multitier-no-price.png",
+      "platform": "mobile-ios",
+      "description": "Multiple tiers missing selected interval: no actual cards and no invalid Upgrade CTA; synthetic fixture prices, not live offers",
+      "captured_by": "agent",
+      "source": "visual-audit",
+      "sha256": "b67e668ac867832b504f0498ac92124418f900fcd0927bb0765f5d4439442979"
+    }
+  ],
+  "source_commit": "71383b552b7b6f1dc9cc65c371b995e41b6f56cb",
+  "capture": "Flutter production-widget raster with fake catalog; not device/runtime acceptance",
+  "logical_viewport": [
+    430,
+    1400
+  ],
+  "png_pixels": [
+    860,
+    2800
+  ],
+  "text_scale": 1,
+  "font_limit": "Production theme and declared assets with existing SF Pro test fixture mappings; no physical-device/system-font/safe-area acceptance",
+  "price_limit": "Synthetic fixture values; not live offers or a pricing measurement",
+  "approval": "David rendered approval required before merge; not yet given"
+}

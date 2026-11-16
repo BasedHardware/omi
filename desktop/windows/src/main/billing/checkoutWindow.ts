@@ -1,5 +1,5 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
-import type { CheckoutOutcome } from '../../shared/types'
+import type { CheckoutOutcome, CheckoutObservationResult } from '../../shared/types'
 import { isAllowedExternalScheme } from '../externalUrl'
 import { installContextMenu } from '../contextMenu'
 
@@ -29,6 +29,29 @@ function outcomeForUrl(rawUrl: string): CheckoutOutcome | null {
   return null
 }
 
+// Same main-owned build configuration as ipc/auth.ts; never accept an origin from IPC.
+function verifiedSuccess(rawUrl: string): boolean {
+  try {
+    const base = import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me'
+    const expected = new URL(`${base.replace(/\/+$/, '')}${SUCCESS_PATH}`)
+    const actual = new URL(rawUrl)
+    // Reject credentials, including an explicitly empty userinfo authority.
+    const authority = rawUrl.trim().match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/i)?.[1]
+    return (
+      ['https:', 'http:'].includes(expected.protocol) &&
+      !authority?.includes('@') &&
+      !actual.username &&
+      !actual.password &&
+      !expected.username &&
+      !expected.password &&
+      actual.origin === expected.origin &&
+      actual.pathname === expected.pathname
+    )
+  } catch {
+    return false
+  }
+}
+
 /**
  * Open a Stripe Checkout URL in a modal in-app window and resolve when the flow
  * completes. Resolves 'success' or 'cancel' when the backend completion route is
@@ -38,7 +61,11 @@ function outcomeForUrl(rawUrl: string): CheckoutOutcome | null {
  * Money safety: this only DISPLAYS Stripe's own hosted checkout page. No payment
  * is completed by this code — the user drives (or abandons) the Stripe form.
  */
-export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
+export function openCheckoutWindow(
+  url: string,
+  onOpened: () => void = () => {},
+  onVerifiedCompletion: () => void = () => {}
+): Promise<CheckoutOutcome> {
   // Only ever load a real https Stripe/backend URL. A prompt-injected or
   // malformed URL must never be handed to a BrowserWindow.
   let parsed: URL
@@ -76,9 +103,17 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
 
   return new Promise<CheckoutOutcome>((resolve) => {
     let settled = false
-    const finish = (outcome: CheckoutOutcome): void => {
+    let failedNavigation = false
+    const finish = (outcome: CheckoutOutcome, observedCompletion = false): void => {
       if (settled) return
       settled = true
+      if (observedCompletion) {
+        try {
+          onVerifiedCompletion()
+        } catch {
+          /* Optional observation never changes checkout. */
+        }
+      }
       if (!win.isDestroyed()) win.destroy()
       resolve(outcome)
     }
@@ -86,25 +121,62 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
     // A navigation to the completion route ends the flow. `will-redirect` and
     // `will-navigate` catch the 30x hop and any in-page link; `did-navigate`
     // is the backstop for a fully-loaded completion page.
-    const onNavigate = (_e: unknown, navUrl: string): void => {
+    const onNavigate = (navUrl: string, isMainFrame: boolean): void => {
       const outcome = outcomeForUrl(navUrl)
-      if (outcome) finish(outcome)
+      if (outcome)
+        finish(
+          outcome,
+          isMainFrame && outcome === 'success' && !failedNavigation && verifiedSuccess(navUrl)
+        )
     }
-    win.webContents.on('will-redirect', onNavigate)
-    win.webContents.on('will-navigate', onNavigate)
-    win.webContents.on('did-navigate', onNavigate)
+    win.webContents.on('will-redirect', (details, navUrl, _isInPlace, isMainFrame) => {
+      // Installed Electron exposes both details and the deprecated fourth argument.
+      // A present details flag takes precedence; absence alone is never main-frame authority.
+      const mainFrame =
+        details.isMainFrame === undefined ? isMainFrame === true : details.isMainFrame === true
+      onNavigate(navUrl, mainFrame)
+    })
+    // Electron guarantees these two event types are main-frame-only.
+    win.webContents.on('will-navigate', (_e, navUrl) => onNavigate(navUrl, true))
+    win.webContents.on('did-navigate', (_e, navUrl) => onNavigate(navUrl, true))
+    win.webContents.on('did-fail-load', (_e, _code, _description, _url, isMainFrame) => {
+      if (isMainFrame !== false) failedNavigation = true
+    })
 
     // User closed the window without completing → treat as cancelled/abandoned.
     win.on('closed', () => finish('closed'))
 
-    win.once('ready-to-show', () => win.show())
+    win.once('ready-to-show', () => {
+      if (settled) return
+      win.show()
+      try {
+        onOpened()
+      } catch {
+        /* Optional observation never changes checkout. */
+      }
+    })
     void win.loadURL(url)
   })
 }
 
 /** Register the billing IPC surface. Call once during main setup. */
 export function registerBillingIpc(): void {
-  ipcMain.handle('billing:openCheckout', (_e, url: string) => openCheckoutWindow(String(url)))
+  ipcMain.handle(
+    'billing:openCheckout',
+    async (event, url: string): Promise<CheckoutObservationResult> => {
+      let observedCompletion = false
+      const outcome = await openCheckoutWindow(
+        String(url),
+        () => {
+          if (!event.sender.isDestroyed()) event.sender.send('billing:checkoutOpened')
+        },
+        () => {
+          observedCompletion = true
+        }
+      )
+      return { outcome, observedCompletion }
+    }
+  )
   // Customer portal opens in the system browser (Mac parity). Guard the scheme
   // the same way the main window's window-open handler does.
   ipcMain.handle('billing:openExternal', (_e, url: string) => {

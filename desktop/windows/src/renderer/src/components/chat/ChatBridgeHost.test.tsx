@@ -28,11 +28,18 @@ vi.mock('../../lib/voice/voiceController', () => ({
 
 import { ChatBridgeHost } from './ChatBridgeHost'
 import { planChatPublish } from './chatPublishSchedule'
-import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../lib/usageLimit'
+import {
+  onUsageLimit,
+  dismissUsageLimit,
+  usageLimitIsAuthoritative,
+  type UsageLimitReason
+} from '../../lib/usageLimit'
 
 let barSendCb: ((p: { text: string; fromVoice: boolean }) => void) | null
 let reqStateCb: (() => void) | null
-let usageLimitCb: ((p: { message: string; spoken: boolean; popup?: boolean }) => void) | null
+let usageLimitCb:
+  | ((p: { message: string; spoken: boolean; popup?: boolean; authoritative?: boolean }) => void)
+  | null
 let published: BarChatState[]
 
 beforeEach(() => {
@@ -59,7 +66,14 @@ beforeEach(() => {
       reqStateCb = cb
       return () => {}
     },
-    onBarUsageLimit: (cb: (p: { message: string; spoken: boolean; popup?: boolean }) => void) => {
+    onBarUsageLimit: (
+      cb: (p: {
+        message: string
+        spoken: boolean
+        popup?: boolean
+        authoritative?: boolean
+      }) => void
+    ) => {
       usageLimitCb = cb
       return () => {}
     },
@@ -190,7 +204,12 @@ describe('ChatBridgeHost', () => {
     const unsub = onUsageLimit((r) => reasons.push(r))
     render(<ChatBridgeHost />)
 
-    usageLimitCb?.({ message: "You've reached 30 Free messages this month.", spoken: false })
+    usageLimitCb?.({
+      message: "You've reached 30 Free messages this month.",
+      spoken: false,
+      authoritative: true
+    })
+    expect(usageLimitIsAuthoritative()).toBe(true)
 
     expect(reasons.at(-1)).toBe('chat')
     // A typed block is shown, not spoken.

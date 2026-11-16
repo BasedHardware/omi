@@ -1,3 +1,4 @@
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -313,7 +314,13 @@ class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
     if (!mounted) return;
     final result = await PlanStorefrontApi()
         .load(source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', locale: context.l10n.localeName);
-    if (mounted && result is ApiSuccess<PlanStorefront>) setState(() => _data = result.data);
+    if (mounted && result is ApiSuccess<PlanStorefront>) {
+      if (result.data.usage?.mcpCapReached == true) {
+        PlatformManager.instance.analytics
+            .allowanceReached(kind: 'mcp_daily_cap', surface: 'settings', reason: 'mcp_cap_reached');
+      }
+      setState(() => _data = result.data);
+    }
   }
 
   @override
@@ -331,6 +338,10 @@ class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
           label: context.l10n.paywallComparePlans,
           onPressed: () =>
               openContextualPlans(context, source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', storefront: data)),
-    ]);
+    ]).withAllowanceBlock(
+      kind: 'mcp_daily_cap',
+      surface: 'settings',
+      reason: 'mcp_cap_reached',
+    );
   }
 }

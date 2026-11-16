@@ -83,7 +83,15 @@ abstract final class PaywallCheckout {
         report(l10n.couldNotProcessSubscription, error: true);
         return PaywallCheckoutOutcome.failed;
       }
-      final completed = await routeToPage(context, PaymentWebViewPage(checkoutUrl: url));
+      final completed = await routeToPage(
+          context,
+          PaymentWebViewPage(
+            checkoutUrl: url,
+            onCheckoutOpened: () => PlatformManager.instance.analytics
+                .checkoutOpened(plan: plan, billingInterval: interval, source: source, inApp: true),
+            onCheckoutCompleted: () => PlatformManager.instance.analytics
+                .checkoutCompleted(plan: plan, billingInterval: interval, source: source, inApp: true),
+          ));
       if (completed != true) {
         PlatformManager.instance.analytics.upgradeCancelled();
         return PaywallCheckoutOutcome.cancelled;

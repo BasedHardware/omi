@@ -1,3 +1,4 @@
+import 'package:omi/utils/analytics/purchase_exposure.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -74,7 +75,11 @@ class ChatPauseCard extends StatelessWidget {
   final ChatAtCap state;
   final VoidCallback onUpgrade;
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => AllowanceBlockShownOnce(
+      kind: 'usage_budget',
+      surface: 'chat',
+      reason: 'budget_exhausted',
+      child: Container(
         key: const Key('chat_budget_pause'),
         padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
@@ -90,5 +95,5 @@ class ChatPauseCard extends StatelessWidget {
             OmiButton.secondary(label: state.upgradeLabel!, onPressed: onUpgrade),
           ],
         ]),
-      );
+      ));
 }

@@ -7,6 +7,8 @@ import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/analytics/purchase_exposure.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Variant `outline`: the soft paywall from PR #21412 (Graphite direction), on the app's real plan
@@ -58,7 +60,7 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
 
   Future<void> _restore() async {
     final usage = context.read<UsageProvider>();
-    await usage.fetchSubscription();
+    await observePurchaseRestore(usage, widget.source);
     if (!mounted) return;
     final l10n = context.l10n;
     if (usage.subscription?.subscription.plan.isPaid == true) {
@@ -307,6 +309,11 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> with TickerProv
           },
         ),
       ),
+    ).withPurchaseExposure(
+      source: widget.source,
+      surface: PaywallViewedSurface.outlinePaywall,
+      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
+      catalogTier: widget.offer?.tierId ?? 'unknown',
     );
   }
 }

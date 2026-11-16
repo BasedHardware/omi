@@ -1,4 +1,5 @@
 'use client';
+import { usePurchaseExposure } from '@/lib/analytics/usePurchaseExposure';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
@@ -81,6 +82,7 @@ import type {
   PricingOption,
 } from '@/types/user';
 import {
+  openPurchaseCheckout,
   trackPaywallOpened,
   trackUpgradePlanSelected,
   trackUpgradeSucceeded,
@@ -938,6 +940,16 @@ export function UsageSectionContent({
   // visible. Basic users reach them through "See plans", paid users see the
   // grid on mount; unknown-plan users never see choices here.
   const plansImpressionRecorded = useRef(false);
+  usePurchaseExposure(
+    !storefrontEnabled &&
+      activeTab === 'plan' &&
+      !!cachedPlans?.length &&
+      !isUnknownPlan &&
+      (isPaid || showUpgradeOptions),
+    'usage_page',
+    subscription?.plan ?? 'unknown',
+    'settings_plans',
+  );
   useEffect(() => {
     if (activeTab !== 'plan' || !cachedPlans?.length) return;
     if (!subscription || plansImpressionRecorded.current) return;
@@ -993,7 +1005,7 @@ export function UsageSectionContent({
         purchaseRoute = 'checkout';
         const result = await createCheckoutSession(selectedPriceId);
         if (result?.url) {
-          window.open(result.url, '_blank');
+          openPurchaseCheckout(result.url, tier, interval, 'usage_page');
           const handleFocus = () => {
             onSubscriptionUpdate();
             window.removeEventListener('focus', handleFocus);

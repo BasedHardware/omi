@@ -1110,7 +1110,10 @@ extension SettingsContentView {
 
   /// `selection` names the plan and interval when the caller already knows them (the
   /// storefront payload); otherwise they are looked up in the local catalog.
-  func startCheckout(for priceId: String, selection known: (plan: String, interval: String)? = nil) {
+  func startCheckout(
+    for priceId: String, selection known: (plan: String, interval: String)? = nil,
+    analyticsSource: String = "macos_settings_view"
+  ) {
     guard activeCheckoutPriceId == nil else { return }
     if let subscription = userSubscription?.subscription,
       SubscriptionPlanPresentation.purchase(
@@ -1129,6 +1132,9 @@ extension SettingsContentView {
     let selection = known ?? checkoutSelection(for: priceId)
     pendingCheckoutPlanId = selection.plan
     pendingCheckoutInterval = selection.interval
+    PurchaseCheckoutObservation.tapped(
+      context: PurchaseCheckoutContext(plan: selection.plan, interval: selection.interval, source: analyticsSource),
+      sink: { event, properties in AnalyticsManager.shared.purchaseEvent(event, properties) })
     AnalyticsManager.shared.upgradePlanSelected(
       plan: selection.plan, billingInterval: selection.interval, source: "macos_settings_view")
 
@@ -1205,7 +1211,11 @@ extension SettingsContentView {
               completionURLs: [
                 normalizedBaseURL + "v1/payments/success",
                 normalizedBaseURL + "v1/payments/cancel",
-              ]
+              ],
+              purchase: PurchaseCheckoutObservation(
+                context: PurchaseCheckoutContext(
+                  plan: selection.plan, interval: selection.interval, source: analyticsSource),
+                sink: { event, properties in AnalyticsManager.shared.purchaseEvent(event, properties) })
             )
           }
         } else {

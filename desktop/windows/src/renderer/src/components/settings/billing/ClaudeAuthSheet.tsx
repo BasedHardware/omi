@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { PurchaseObservation } from '../../../lib/purchaseContract.generated'
+import { trackPurchaseEvent } from '../../../lib/analytics'
+import { useEffect, useRef, useState } from 'react'
 import { Modal } from '../../ui/Modal'
 import { onClaudeSignIn, dismissClaudeSignIn, OMI_PRICING_URL } from '../../../lib/claudeSignIn'
 
@@ -13,10 +15,29 @@ import { onClaudeSignIn, dismissClaudeSignIn, OMI_PRICING_URL } from '../../../l
 // purple (INV-UI-1). Mounted once at the app root.
 export function ClaudeAuthSheet(): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const exposure = useRef(new PurchaseObservation(trackPurchaseEvent))
 
   useEffect(() => onClaudeSignIn((s) => setOpen(s.open)), [])
 
+  useEffect(() => {
+    if (!open) {
+      exposure.current = new PurchaseObservation(trackPurchaseEvent)
+      return
+    }
+    exposure.current.view({
+      source: 'windows_chat',
+      current_plan: 'unknown',
+      catalog_tier: 'unlimited_v2',
+      surface: 'plans_sheet'
+    })
+  }, [open])
+
   const onUpgrade = (): void => {
+    trackPurchaseEvent('upgradeTapped', {
+      source: 'windows_chat',
+      plan: 'unlimited_v2',
+      billing_interval: 'unknown'
+    })
     dismissClaudeSignIn()
     void window.omi.openExternalUrl(OMI_PRICING_URL)
   }
