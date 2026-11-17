@@ -1,8 +1,9 @@
 """Pure helpers shared by the self-heal recovery admission fence and verifier.
 
-Stdlib-only: ``database/conversation_finalization_jobs`` evaluates these
-inside its outbox transaction, so nothing here may touch Firestore, model
-clients, or a clock. Firestore document dicts and ``Structured`` models go
+No Firestore, model clients, or clock: ``database/conversation_finalization_jobs``
+evaluates these inside its outbox transaction, so nothing here may touch those.
+The one project import, ``utils.summary_quality.valid_title``, is pure policy
+with no side effects. Firestore document dicts and ``Structured`` models go
 through the same definitions so admission and verification cannot drift.
 """
 
@@ -13,6 +14,8 @@ import os
 import unicodedata
 from collections.abc import Mapping
 from typing import Any
+
+from utils.summary_quality import valid_title
 
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
@@ -140,7 +143,9 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
     enrichment actually landed), a real ``title`` — set by the user or by an
     earlier successful pass — and the user-authored ``user_title`` field each
     make the row ineligible even with no overview, so recovery never clobbers
-    a useful title for a deterministic-minimum replacement.
+    a useful title for a deterministic-minimum replacement. A placeholder label
+    ("Discussion notes") is not a real title and protects nothing (2026-11-16
+    incident).
     """
     if isinstance(user_title, str):
         if user_title.strip():
@@ -149,7 +154,10 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
         return True
     for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
         value = _field(structured, name)
-        if isinstance(value, str) and value.strip():
+        if not isinstance(value, str):
+            continue
+        # A placeholder label is not a real title; every other text field is content.
+        if valid_title(value) if name == 'title' else value.strip():
             return True
     for name in _PROTECTED_STRUCTURED_LIST_FIELDS:
         if _field(structured, name):

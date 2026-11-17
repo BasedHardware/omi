@@ -26,6 +26,7 @@ from utils.conversations.relevance import content_free_rule, final_relevance
 from utils.conversations.wake_word import find_wake_word_matches
 from utils.llm.notes_short_clip import has_explicit_reminder
 from utils.release_probe import is_release_probe_uid
+from utils.summary_quality import valid_title
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +68,10 @@ def _eligible(
     if conversation.photos or has_explicit_reminder(conversation.transcript_segments):
         return False
     stored = conversation.structured
-    stored_title = (getattr(stored, 'title', '') or '').strip()
+    # A placeholder label ("Discussion notes") is not a title, so a row that only
+    # carries one is still replaceable (2026-11-16 incident).
     return not structured_is_rich(stored) and (
-        not stored_title or getattr(stored, 'title_provenance', None) == 'server_minimum'
+        not valid_title(getattr(stored, 'title', '')) or getattr(stored, 'title_provenance', None) == 'server_minimum'
     )
 
 

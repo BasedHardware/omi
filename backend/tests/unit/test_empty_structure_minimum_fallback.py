@@ -257,6 +257,44 @@ def test_empty_structure_minimum_eligible_for_plain_kept_recovery(monkeypatch):
         assert eligibility.apply_empty_structure_minimum(**other_trigger)[1] is False
 
 
+@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 3', 'Transcribing…'])
+def test_empty_structure_minimum_treats_a_placeholder_title_as_untitled(monkeypatch, title):
+    """A row that only carries the fallback label has no title to protect."""
+    from models.structured import Structured
+
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    conversation = _empty_structure_conversation()
+    _set_stored_structure(conversation, title=title)
+    with patch.object(eligibility, 'is_release_probe_uid', return_value=False), patch.object(
+        eligibility.notification_db, 'get_user_time_zone', MagicMock(return_value='UTC')
+    ):
+        result, applied = eligibility.apply_empty_structure_minimum(
+            **_eligibility_arguments(conversation, Structured())
+        )
+    assert applied is True
+    assert result.title_provenance == 'server_minimum'
+
+
+@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 3'])
+def test_recovery_replaces_a_row_that_only_carries_a_placeholder(pc, monkeypatch, title):
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    captured: dict = {}
+    conversation = _empty_structure_conversation()
+    _set_stored_structure(conversation, title=title)
+    with pytest.raises(_RecoveryProbeReached):
+        _run_empty_structure_recovery(pc, conversation, captured=captured)
+    assert captured['structured'].title_provenance == 'server_minimum'
+
+
+@pytest.mark.parametrize('title', ['Pilot budget', 'Discussion notes Q3'])
+def test_recovery_keeps_a_real_stored_title(pc, monkeypatch, title):
+    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
+    conversation = _empty_structure_conversation()
+    _set_stored_structure(conversation, title=title)
+    with pytest.raises(RecoveryStructureUnavailableError):
+        _run_empty_structure_recovery(pc, conversation)
+
+
 def _eligibility_arguments(conversation, structured, **overrides):
     arguments = dict(
         uid='uid-recovery',

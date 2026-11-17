@@ -269,3 +269,34 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
     wire = transcribing_hold.project(home_step.project(row))
     assert wire['structured'] == notes and wire['status'] == 'completed'
     assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES
+
+
+def test_legacy_completed_row_with_only_a_placeholder_is_transcribing():
+    """An unstamped row has no receipt to gate on; the placeholder must not read as content."""
+    row = capture(
+        structured={'title': FALLBACK, 'overview': ''},
+        home_transcription_pending_at=None,
+        home_transcription_deadline_at=None,
+    )
+    assert not transcribing_hold.applies(row)
+    assert home_step.classify(row) == home_step.TRANSCRIBING
+    assert home_step.classify({**row, 'structured': {'title': 'Pilot budget'}}) == home_step.READY
+
+
+@pytest.mark.parametrize(
+    'structured,protected',
+    [
+        ({'title': FALLBACK}, False),
+        ({'title': 'Discussion 3'}, False),
+        ({'title': 'Transcribing…'}, False),
+        ({'title': ''}, False),
+        ({'title': 'Pilot budget'}, True),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+    ],
+)
+def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
+    """Recovery may replace a row that only carries the fallback label, never a real title."""
+    from utils.conversations.recovery import structured_has_protected_content
+
+    assert structured_has_protected_content(structured) is protected
+    assert structured_has_protected_content(structured, user_title='My chat') is True

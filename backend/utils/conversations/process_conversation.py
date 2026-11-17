@@ -616,8 +616,10 @@ def _get_structured(
             stored_structured = getattr(main_conv, 'structured', None)
             stored_title = getattr(stored_structured, 'title', '') or ''
             stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
+            # A placeholder label ("Discussion notes") is not a title: a row that
+            # only carries one is still replaceable (2026-11-16 incident).
             stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
-                not stored_title.strip() or stored_title_provenance == 'server_minimum'
+                not valid_title(stored_title) or stored_title_provenance == 'server_minimum'
             )
             if (
                 recovery_transcript_decoded

@@ -86,7 +86,6 @@ def classify(row: Mapping[str, Any]) -> str | None:
         return NOISE
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
-    title = str(structured.get('title') or '').strip()
     if status in ('processing', 'merging'):
         seconds = home_processing_max_age_seconds()
         if seconds is None:
@@ -149,9 +148,11 @@ def classify(row: Mapping[str, Any]) -> str | None:
             return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
-    if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
-        # A capture whose speech has not landed. Unstamped legacy rows get the same
-        # bound the stamped ones have, so none can stay Processing forever.
+    if untitled_pending(structured) and not row.get('transcript_segments'):
+        # A capture whose speech has not landed. A placeholder label is not
+        # content, so it cannot make the row look finished (2026-11-16 incident).
+        # Unstamped legacy rows get the same bound the stamped ones have, so none
+        # can stay Processing forever.
         if home_transcription_queue_hold_enabled():
             seconds = home_transcription_max_age_seconds()
             anchor = transcribing_hold.wait_started_at(row)
