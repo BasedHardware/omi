@@ -58,6 +58,14 @@ workers can process normal source-key jobs; an image rollback must retain new
 projection readers and the fallback-aware ordered merger to drain accepted protocol-2 work. Releasing an old image
 is not a safe way to make accepted aliases into ordinary paid work.
 
+The ordered merger also runs in the GPU pump (`batch-pipeline-worker`, its own
+deploy). A pump image older than source reuse copies `protocol_version=2` onto
+the result row without the marker. The projector admits such a row on the
+immutable job's marker (`source_reader_marked`), so the owner's chain is not
+stopped behind it; a row with a present but wrong marker stays refused. Roll
+the worker with intake regardless: 2026-11-16 intake served source keys for
+~16h against a 2026-11-14 pump image.
+
 ## Custody and privacy
 
 Source equivalence is transcription authority only. It produces no covered
@@ -163,3 +171,8 @@ Proposed operator dry run, not an automatically enabled reprocessor:
 No historical reprocessor is run by this change. A packet containing only
 source/time associations and no exact source proofs yields zero proved
 historical exclusions, regardless of its overlap opportunity estimate.
+
+Removal: the job-marker inheritance is a mixed-version bridge. Each admission increments
+`omi_fallback_total{component="sync_dispatch",from_mode="row_source_marker",to_mode="job_source_marker"}`.
+Once the GPU worker runs a merger that copies the markers and that series has stayed at 0 for 7 days with no
+pending unmarked protocol-2 rows, delete the inheritance branch in `source_reader_marked`.
