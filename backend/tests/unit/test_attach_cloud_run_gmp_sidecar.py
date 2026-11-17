@@ -1423,6 +1423,14 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_listen_server_batch_suppression_total',
         'omi_listen_preview_batch_custody_total',
         'omi_batch_pipeline_events_total',
+        # Pre-unit holds and their strict drainer election run on sync/integration.
+        'omi_batch_upload_coalescing_total',
+        'omi_batch_upload_coalescing_scan_total',
+        'omi_batch_upload_coalescing_scan_seconds_bucket',
+        'omi_batch_upload_coalescing_scan_seconds_sum',
+        'omi_batch_upload_coalescing_scan_seconds_count',
+        'omi_batch_upload_coalescing_scan_last_success_seconds',
+        'omi_batch_leader_lease_total',
         'omi_batch_pipeline_oldest_age_seconds',
         'omi_batch_ramp_heavy_owner_excluded_total',
         # Batch ramp gates (batchdesign 2026-11-01 §7.1): the per-upload intake
