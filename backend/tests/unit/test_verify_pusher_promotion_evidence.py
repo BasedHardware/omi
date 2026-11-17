@@ -1185,6 +1185,36 @@ def test_live_receipt_treats_helm_null_secret_ref_and_empty_pod_security_as_abse
     )
 
 
+def test_live_receipt_treats_downward_api_defaults_as_absent(receipt_builder: SimpleNamespace) -> None:
+    def template(field_ref: dict, resource_ref: dict) -> dict:
+        return {
+            "spec": {
+                "containers": [
+                    {
+                        "name": "pusher",
+                        "image": f"repo@{DIGEST}",
+                        "env": [
+                            {"name": "MEMORY_ENABLED", "value": "on"},
+                            {"name": "ROLLOUT_POD_TEMPLATE_HASH", "valueFrom": {"fieldRef": field_ref}},
+                            {"name": "CPU_LIMIT", "valueFrom": {"resourceFieldRef": resource_ref}},
+                        ],
+                    }
+                ]
+            }
+        }
+
+    path = "metadata.labels['pod-template-hash']"
+    rendered = template({"fieldPath": path}, {"resource": "limits.cpu"})
+    live = template({"apiVersion": "v1", "fieldPath": path}, {"resource": "limits.cpu", "divisor": "1"})
+    assert receipt_builder.pod_template_semantic_projection(rendered) == (
+        receipt_builder.pod_template_semantic_projection(live)
+    )
+    moved = template({"apiVersion": "v1", "fieldPath": "metadata.name"}, {"resource": "limits.cpu"})
+    assert receipt_builder.pod_template_semantic_projection(rendered) != (
+        receipt_builder.pod_template_semantic_projection(moved)
+    )
+
+
 def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference(
     receipt_builder: SimpleNamespace,
 ) -> None:
