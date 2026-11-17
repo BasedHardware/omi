@@ -109,24 +109,24 @@ class OverlapObserver:
             self.pages.labels(namespace, mode).inc()
 
 
-_DEFAULT = None
-_DEFAULT_LOCK = threading.Lock()
+_default_observer = None
+_default_lock = threading.Lock()
 
 
 def observe_page(namespace: str, rows: list[str], mode: str) -> None:
     """Telemetry failure cannot change discovery results/cursors or raise into the drain."""
-    global _DEFAULT
+    global _default_observer
     try:
-        if _DEFAULT is None:
-            with _DEFAULT_LOCK:
-                if _DEFAULT is None:
-                    _DEFAULT = OverlapObserver()
-        _DEFAULT.observe(namespace, rows, mode)
+        if _default_observer is None:
+            with _default_lock:
+                if _default_observer is None:
+                    _default_observer = OverlapObserver()
+        _default_observer.observe(namespace, rows, mode)
     except Exception:
         # Do not log row values or an exception payload. Export a bounded gap if possible.
-        if _DEFAULT is not None:
+        if _default_observer is not None:
             try:
-                _DEFAULT.skipped.labels('observer_error').inc()
+                _default_observer.skipped.labels('observer_error').inc()
             except Exception:
                 pass
 

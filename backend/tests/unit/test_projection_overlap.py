@@ -146,7 +146,7 @@ def test_legacy_nonpaginated_observes_without_extra_queries(monkeypatch):
 
 def test_observer_wrapper_never_raises_or_logs_identifiers(monkeypatch):
     broken = SimpleNamespace(observe=Mock(side_effect=RuntimeError('sensitive')), skipped=Mock())
-    monkeypatch.setattr(overlap, '_DEFAULT', broken)
+    monkeypatch.setattr(overlap, '_default_observer', broken)
     overlap.observe_page('batch_pipeline_prod', ['synthetic-id'], 'legacy')
     broken.skipped.labels.assert_called_once_with('observer_error')
 
