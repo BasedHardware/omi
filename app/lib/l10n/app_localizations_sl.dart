@@ -13984,11 +13984,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get summaryBusyBody => 'Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
 
   @override
   String get summaryCheckAgain => 'Preveri znova';

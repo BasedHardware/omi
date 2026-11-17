@@ -14048,11 +14048,11 @@ class AppLocalizationsEl extends AppLocalizations {
       'Το Omi επεξεργάζεται ήδη αυτή τη συνομιλία. Η σύνοψη θα εμφανιστεί εδώ μόλις ολοκληρωθεί.';
 
   @override
-  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
 
   @override
   String get summaryTranscriptionPendingBody =>
-      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
 
   @override
   String get summaryCheckAgain => 'Νέος έλεγχος';

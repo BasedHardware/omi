@@ -4,14 +4,14 @@
     {
       "file": "001-mobile-ios-detail-transcription-pending.png",
       "platform": "mobile-ios",
-      "description": "Conversation detail after Retry is answered 409 transcription_pending: a Waiting for transcription card with OK, no error and no retry",
+      "description": "Conversation detail after Retry is answered 409 transcription_pending: a Not transcribed yet card with OK, no error and no retry",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-activity-transcription-pending.png",
       "platform": "mobile-ios",
-      "description": "Activity Needs Attention row after Retry is answered transcription_pending: Waiting for transcription, no Try Again and no error",
+      "description": "Activity Needs Attention row after Retry is answered transcription_pending: Not transcribed yet, no Try Again and no error",
       "captured_by": "agent",
       "source": "visual-audit"
     }

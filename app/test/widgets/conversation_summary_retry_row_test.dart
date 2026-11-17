@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -59,6 +60,7 @@ Future<ConversationProvider> _pumpRow(
   WidgetTester tester, {
   required ServerConversation conversation,
   Future<ServerConversation?> Function(String conversationId)? reprocess,
+  Future<ReprocessResult> Function(String conversationId)? reprocessResult,
 }) async {
   final provider = ConversationProvider(
     conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
@@ -85,7 +87,8 @@ Future<ConversationProvider> _pumpRow(
                 conversation: conversations.conversations.first,
                 date: DateTime.utc(2020),
                 conversationIdx: 0,
-                reprocess: reprocess,
+                reprocess: reprocessResult ??
+                    (reprocess == null ? null : (id) async => ReprocessResult.fromConversation(await reprocess(id))),
               );
             },
           ),
@@ -189,7 +192,7 @@ void main() {
     });
   }
 
-  testWidgets('a retry the server answers with transcription pending shows waiting, not an error', (tester) async {
+  testWidgets('a retry answered transcription pending shows the not-transcribed status, not an error', (tester) async {
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);
     final calls = <String>[];
@@ -197,11 +200,10 @@ void main() {
       tester,
       conversation: _conversation(title: 'Processing', status: ConversationStatus.completed, summaryRetryable: false)
           .withHomeStep('failed'),
-      reprocess: (id) async {
+      // This attempt's outcome drives the row; nothing else marks the set.
+      reprocessResult: (id) async {
         calls.add(id);
-        // What reProcessConversationServer does on 409 transcription_pending.
-        TranscriptionPendingConversations.mark(id);
-        return null;
+        return const ReprocessTranscriptionPending();
       },
     );
     expect(_retryButton, findsOneWidget);
@@ -216,16 +218,41 @@ void main() {
     expect(find.text("Omi couldn't finish"), findsNothing);
   });
 
-  testWidgets('a known transcription-pending row never offers the summary retry', (tester) async {
+  testWidgets('a failed attempt is an error even after another surface marked a different row', (tester) async {
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);
-    TranscriptionPendingConversations.mark('c1');
+    TranscriptionPendingConversations.mark('other');
     await _pumpRow(
+      tester,
+      conversation: _conversation(summaryRetryable: false).withHomeStep('failed'),
+      reprocessResult: (_) async => const ReprocessFailed(statusCode: 500),
+    );
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n(tester).somethingWentWrong), findsOneWidget);
+    expect(_retryButton, findsOneWidget);
+    expect(TranscriptionPendingConversations.contains('c1'), isFalse);
+  });
+
+  testWidgets('the row follows the not-transcribed set without a tap, and a settled copy clears it', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final provider = await _pumpRow(
       tester,
       conversation: _conversation(title: 'Processing', summaryRetryable: false).withHomeStep('failed'),
     );
+    expect(_retryButton, findsOneWidget);
+
+    TranscriptionPendingConversations.mark('c1');
+    await tester.pump();
     expect(_retryButton, findsNothing);
     expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
+
+    // A newer server copy that is no longer a failed row (transcribed and summarized).
+    provider.updateConversation(_conversation(title: 'Venue planning', summaryRetryable: false));
+    await tester.pump();
+    expect(TranscriptionPendingConversations.contains('c1'), isFalse);
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsNothing);
   });
 
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {

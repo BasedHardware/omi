@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/conversations.dart' show ReprocessResult;
 import 'package:omi/backend/http/api/review.dart' as review_api;
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
@@ -60,7 +61,7 @@ class ActivityPage extends StatefulWidget {
 
   /// Injectable for tests; defaults to [PendingWorkStore.instance].
   final PendingWorkStore? pendingWork;
-  final Future<ServerConversation?> Function(String id)? reprocessConversation;
+  final Future<ReprocessResult> Function(String id)? reprocessConversation;
 
   /// Injectable for tests and visual audits; defaults to [CaptureWedgeMonitor.instance].
   final CaptureWedgeMonitor? captureWedgeMonitor;

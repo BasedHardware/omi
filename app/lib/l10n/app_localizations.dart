@@ -24807,16 +24807,16 @@ abstract class AppLocalizations {
   /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
   String get summaryBusyBody;
 
-  /// Status shown instead of a retry when the server says the recording's audio is still waiting to be transcribed.
+  /// Status shown instead of a summary retry when the server says the recording's audio has not been transcribed.
   ///
   /// In en, this message translates to:
-  /// **'Waiting for transcription'**
+  /// **'Not transcribed yet'**
   String get summaryTranscriptionPendingTitle;
 
-  /// Explains that a summary retry cannot help because the audio is still waiting to be transcribed. Omi is the product name.
+  /// Explains that a summary retry cannot help because the recording's audio has not been transcribed.
   ///
   /// In en, this message translates to:
-  /// **'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.'**
+  /// **'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.'**
   String get summaryTranscriptionPendingBody;
 
   /// Button that re-reads the conversation to see if processing finished.

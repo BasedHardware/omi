@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -618,10 +619,10 @@ void main() {
                   home: ActivityPage(
                       pendingWork: store,
                       captureWedgeMonitor: monitor,
-                      reprocessConversation: (id) {
+                      reprocessConversation: (id) async {
                         expect(id, 'failed');
                         calls++;
-                        return retry.future;
+                        return ReprocessResult.fromConversation(await retry.future);
                       },
                       seen: ActivitySeen(read: () => 0, write: (_) {}),
                       probeDreamReport: () async => false,
@@ -723,9 +724,7 @@ void main() {
                     openConversation: (_, __) async {},
                     reprocess: (id) async {
                       attempts++;
-                      // What reProcessConversationServer does on 409 transcription_pending.
-                      TranscriptionPendingConversations.mark(id);
-                      return null;
+                      return const ReprocessTranscriptionPending();
                     })))));
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
@@ -733,7 +732,8 @@ void main() {
     expect(attempts, 1);
     expect(find.textContaining('Something went wrong'), findsNothing);
     expect(find.text('Try Again'), findsNothing);
-    expect(find.textContaining('Waiting for transcription'), findsOneWidget);
+    expect(find.textContaining('Not transcribed yet'), findsOneWidget);
+    expect(TranscriptionPendingConversations.contains('pending'), isTrue);
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });

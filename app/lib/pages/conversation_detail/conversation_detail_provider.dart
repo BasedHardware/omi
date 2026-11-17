@@ -1138,6 +1138,7 @@ class ConversationDetailProvider extends ChangeNotifier
         return false;
       }
 
+      TranscriptionPendingConversations.unmark(target.id);
       conversationProvider?.updateConversation(updatedConversation, preserveHomeStep: false);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
@@ -1313,6 +1314,7 @@ class ConversationDetailProvider extends ChangeNotifier
                 updatedConversation.status == ConversationStatus.merging)) {
           updatedConversation = updatedConversation.withHomeStep('failed');
         }
+        TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
         resetRecordingTranscript();

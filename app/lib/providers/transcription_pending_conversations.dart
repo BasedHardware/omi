@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
 
-/// Conversations the server said are still awaiting transcription: a reprocess answered 409
+import 'package:omi/backend/schema/conversation.dart';
+
+/// Conversations the server said have audio that is not transcribed: a reprocess answered 409
 /// `transcription_pending`. A summary retry cannot transcribe audio, so surfaces that would offer
-/// "Retry" for these rows show a waiting status instead for the rest of the session.
+/// "Retry" for these rows listen here and show a plain status instead. An id leaves the set when a
+/// reprocess succeeds or a newer copy of the conversation is no longer a failed row.
 class TranscriptionPendingConversations {
   TranscriptionPendingConversations._();
 
@@ -13,6 +16,16 @@ class TranscriptionPendingConversations {
   static void mark(String id) {
     if (contains(id)) return;
     ids.value = {...ids.value, id};
+  }
+
+  static void unmark(String id) {
+    if (!contains(id)) return;
+    ids.value = {...ids.value}..remove(id);
+  }
+
+  /// A newer server copy that is no longer a failed row settles the status.
+  static void observe(ServerConversation conversation) {
+    if (conversation.homeStep != 'failed') unmark(conversation.id);
   }
 
   @visibleForTesting

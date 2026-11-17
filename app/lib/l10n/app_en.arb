@@ -16899,13 +16899,13 @@
     "@summaryBusyBody": {
         "description": "Body when the conversation is already being processed. Omi is the product name."
     },
-    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingTitle": "Not transcribed yet",
     "@summaryTranscriptionPendingTitle": {
-        "description": "Status shown instead of a retry when the server says the recording's audio is still waiting to be transcribed."
+        "description": "Status shown instead of a summary retry when the server says the recording's audio has not been transcribed."
     },
-    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
+    "summaryTranscriptionPendingBody": "This recording's audio hasn't been transcribed, so retrying the summary can't help.",
     "@summaryTranscriptionPendingBody": {
-        "description": "Explains that a summary retry cannot help because the audio is still waiting to be transcribed. Omi is the product name."
+        "description": "Explains that a summary retry cannot help because the recording's audio has not been transcribed."
     },
     "summaryCheckAgain": "Check Again",
     "@summaryCheckAgain": {

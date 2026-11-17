@@ -40,7 +40,7 @@ class NeedsAttentionSection extends StatelessWidget {
 
   final PendingWorkStore store;
   final List<ServerConversation> failedConversations;
-  final Future<ServerConversation?> Function(String id)? reprocess;
+  final Future<ReprocessResult> Function(String id)? reprocess;
 
   /// Injectable for tests; defaults to the app provider when one is in scope.
   final SyncProvider? syncProvider;
@@ -262,7 +262,7 @@ class _FailedConversationRow extends StatefulWidget {
   const _FailedConversationRow({super.key, required this.conversation, required this.openConversation, this.reprocess});
   final ServerConversation conversation;
   final Future<void> Function(BuildContext, String) openConversation;
-  final Future<ServerConversation?> Function(String)? reprocess;
+  final Future<ReprocessResult> Function(String)? reprocess;
 
   @override
   State<_FailedConversationRow> createState() => _FailedConversationRowState();
@@ -275,16 +275,17 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     if (_busy) return;
     setState(() => _busy = true);
     try {
-      final retry = widget.reprocess ?? (String id) async => (await reProcessConversationServer(id)).conversation;
+      final retry = widget.reprocess ?? reProcessConversationServer;
       final result = await retry(widget.conversation.id);
       if (!mounted) return;
-      if (result == null) {
-        // Still awaiting transcription is not a failure: the row shows the waiting status instead.
-        if (!TranscriptionPendingConversations.contains(widget.conversation.id)) {
+      switch (result) {
+        case ReprocessSuccess(:final conversation):
+          context.read<ConversationProvider?>()?.applyConversationReprocessResult(conversation);
+        case ReprocessTranscriptionPending():
+          // Not an error: the row switches to the not-transcribed status.
+          TranscriptionPendingConversations.mark(widget.conversation.id);
+        default:
           OmiFeedback.error(context, context.l10n.somethingWentWrong);
-        }
-      } else {
-        context.read<ConversationProvider?>()?.applyConversationReprocessResult(result);
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -295,6 +296,13 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) => _row(context),
+    );
+  }
+
+  Widget _row(BuildContext context) {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);

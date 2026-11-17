@@ -202,11 +202,25 @@ class ReprocessDiscardedWidget extends StatelessWidget {
 /// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
 /// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
 /// clears the marker and removes this widget.
+/// Whether an empty Summary tab shows the failed-processing slot: Retry, or the not-transcribed
+/// notice once the server said a summary retry cannot help.
+bool summaryRetrySlotApplies(ServerConversation conversation) =>
+    conversation.homeStep == 'failed' ||
+    conversation.showsSummaryRetry ||
+    (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
+
 class SummaryRetryWidget extends StatelessWidget {
   const SummaryRetryWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
@@ -508,11 +522,7 @@ class GetAppsWidgets extends StatelessWidget {
             if (failure != null) return SliverToBoxAdapter(child: SummaryFailureCard(failure: failure));
             final conversation = provider.conversation;
             // A failed processing pass can be retried the same way as a failed summary.
-            if (conversation.homeStep == 'failed' ||
-                conversation.showsSummaryRetry ||
-                (conversation.status == ConversationStatus.failed &&
-                    !conversation.discarded &&
-                    !conversation.isLocked)) {
+            if (summaryRetrySlotApplies(conversation)) {
               return const SliverToBoxAdapter(child: SummaryRetryWidget());
             }
             if (conversation.status == ConversationStatus.processing) {

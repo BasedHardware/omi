@@ -246,8 +246,9 @@ final class ReprocessBusy extends ReprocessResult {
   const ReprocessBusy();
 }
 
-/// The audio has not been transcribed yet (HTTP 409 `transcription_pending`). A summary retry
-/// cannot transcribe it; the pipeline finishes it on its own.
+/// The audio has not been transcribed (HTTP 409 `transcription_pending`): a summary retry cannot
+/// transcribe it. The server also answers this for captures past their transcription deadline,
+/// so it does not promise the audio will still be transcribed.
 final class ReprocessTranscriptionPending extends ReprocessResult {
   const ReprocessTranscriptionPending();
 }
@@ -301,6 +302,7 @@ Future<ReprocessResult> reProcessConversationServer(
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
   final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
   if (result is ReprocessTranscriptionPending) TranscriptionPendingConversations.mark(conversationId);
+  if (result is ReprocessSuccess) TranscriptionPendingConversations.unmark(conversationId);
   return result;
 }
 
