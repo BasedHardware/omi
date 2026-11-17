@@ -4,9 +4,11 @@ Orchestration tests use a bounded metadata query stub and the strict transaction
 fixture; real commit/rollback/retry behavior is covered by the emulator suite.
 """
 
+import ast
 from collections import Counter
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
+from pathlib import Path
 from threading import Barrier, Event, Lock, Thread
 from types import SimpleNamespace
 import time
@@ -286,7 +288,7 @@ def test_each_transaction_retry_takes_a_permit(pool, h, monkeypatch):
 
 
 def test_stop_interrupts_rate_wait():
-    limiter = migration.RowRateLimiter(0.001)
+    limiter = migration.RowRateLimiter(0.1)
     stopped = Event()
     limiter.acquire(stopped)
     stopped.set()
@@ -306,7 +308,7 @@ def test_low_rate_waits_before_begin_on_every_sdk_attempt(h):
             assert transaction._id is None
             clock[0] += delay + 1e-9
 
-    limiter = migration.RowRateLimiter(0.001, clock=lambda: clock[0])
+    limiter = migration.RowRateLimiter(0.1, clock=lambda: clock[0])
 
     def permit():
         assert transaction._id is None
@@ -317,7 +319,7 @@ def test_low_rate_waits_before_begin_on_every_sdk_attempt(h):
     for _attempt in range(3):
         transaction._clean_up()  # The pinned SDK does this before every _begin.
         transaction._begin()
-    assert starts == pytest.approx([0, 1000, 2000])
+    assert starts == pytest.approx([0, 10, 20])
 
 
 def test_cancel_before_begin_is_not_masked_by_sdk_rollback(h):
@@ -353,7 +355,7 @@ def test_concurrent_workers_share_one_bucket():
     assert max(finished) - before >= 7 / 50 - 0.005
 
 
-@pytest.mark.parametrize('rate', [0, -1, float('nan'), float('inf')])
+@pytest.mark.parametrize('rate', [0, -1, float('nan'), float('inf'), 0.099, 0.001, 1e-300, 5e-324])
 def test_invalid_rate(rate):
     with pytest.raises(ValueError):
         migration.RowRateLimiter(rate)
@@ -371,3 +373,13 @@ def test_concurrent_rows_require_caller_executor_before_any_mutation(h):
     with pytest.raises(ValueError, match='requires an executor'):
         migration.apply_page(h.store, 10, concurrency=2)
     assert h.client.rows == before
+
+
+def test_database_migration_imports_nothing_from_utils():
+    # Walk nested imports too, as in the existing import-boundary contracts.
+    tree = ast.parse(Path(migration.__file__).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert (node.module or '').split('.')[0] != 'utils'
+        elif isinstance(node, ast.Import):
+            assert all(alias.name.split('.')[0] != 'utils' for alias in node.names)

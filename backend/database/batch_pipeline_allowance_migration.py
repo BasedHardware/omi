@@ -27,8 +27,8 @@ class RowRateLimiter:
     """
 
     def __init__(self, rate: float | None = None, *, clock=time.monotonic):
-        if rate is not None and (not math.isfinite(rate) or rate <= 0):
-            raise ValueError('max-rows-per-second must be finite and positive')
+        if rate is not None and (not math.isfinite(rate) or rate < 0.1):
+            raise ValueError('max-rows-per-second must be finite and at least 0.1')
         self.rate = rate
         self.clock = clock
         self.lock = threading.Lock()

@@ -25,12 +25,12 @@ def harness(monkeypatch):
         (['--dry-run'], 'prod-operator'),
         (['--concurrency', '33'], 'ro-prod'),
         (['--concurrency', '0'], 'ro-prod'),
-        (['--max-rows-per-second', '0'], 'ro-prod'),
-        (['--max-rows-per-second', 'nan'], 'ro-prod'),
-        (['--max-rows-per-second', 'inf'], 'ro-prod'),
-        (['--max-rows-per-second', '0.099'], 'ro-prod'),
-        (['--max-rows-per-second', '1e-300'], 'ro-prod'),
-        (['--max-rows-per-second', '5e-324'], 'ro-prod'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', '0'], 'prod-operator'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', 'nan'], 'prod-operator'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', 'inf'], 'prod-operator'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', '0.099'], 'prod-operator'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', '1e-300'], 'prod-operator'),
+        (['--apply', '--confirm-reviewed-rollout-go', '--max-rows-per-second', '5e-324'], 'prod-operator'),
     ],
 )
 def test_rejected_before_any_store_access(harness, monkeypatch, arguments, tier):
@@ -112,3 +112,20 @@ def test_minimum_rate_is_accepted(harness, monkeypatch):
     monkeypatch.setattr(cli, 'apply_page', apply)
     cli.main()
     assert apply.call_args.kwargs['rate_limiter'].rate == 0.1
+
+
+@pytest.mark.parametrize('mode', [[], ['--dry-run']])
+@pytest.mark.parametrize('rate', ['0.001', '5e-324'])
+def test_count_only_ignores_unused_rate_and_constructs_no_limiter(harness, monkeypatch, capsys, mode, rate):
+    monkeypatch.setattr(cli.sys, 'argv', ['migration', '--stage', 'dev', *mode, '--max-rows-per-second', rate])
+    limiter = Mock(side_effect=AssertionError('count-only constructed a limiter'))
+    apply = Mock(side_effect=AssertionError('count-only applied a page'))
+    counts = Mock(return_value={'retry': 4, 'allowance_retry': 3, 'policy_held': 2})
+    monkeypatch.setattr(cli, 'RowRateLimiter', limiter)
+    monkeypatch.setattr(cli, 'apply_page', apply)
+    monkeypatch.setattr(cli, 'counts', counts)
+    cli.main()
+    limiter.assert_not_called()
+    apply.assert_not_called()
+    counts.assert_called_once_with(harness.return_value)
+    assert json.loads(capsys.readouterr().out) == counts.return_value

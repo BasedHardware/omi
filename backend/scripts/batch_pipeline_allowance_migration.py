@@ -33,12 +33,12 @@ def main():
         parser.error('max-pages must be 1..10000')
     if not 1 <= args.concurrency <= 32:
         parser.error('concurrency must be 1..32')
-    try:
-        limiter = RowRateLimiter(args.max_rows_per_second)
-    except ValueError as error:
-        parser.error(str(error))
-    if args.max_rows_per_second is not None and args.max_rows_per_second < 0.1:
-        parser.error('max-rows-per-second must be at least 0.1')
+    limiter = None
+    if args.apply:
+        try:
+            limiter = RowRateLimiter(args.max_rows_per_second)
+        except ValueError as error:
+            parser.error(str(error))
     if args.stage == 'prod' and (
         os.getenv('FIRESTORE_EMULATOR_HOST')
         or os.getenv('GCP_AGENT_TIER') != ('prod-operator' if args.apply else 'ro-prod')
