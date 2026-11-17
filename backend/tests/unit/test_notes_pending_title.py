@@ -325,3 +325,14 @@ def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(stru
     from utils.conversations.recovery import stored_structure_is_replaceable
 
     assert stored_structure_is_replaceable(structured) is replaceable
+
+
+def test_stored_structure_is_replaceable_reads_real_section_bodies_on_the_model():
+    """Both call sites pass a Structured model, not a dict; sections must still count."""
+    from models.structured import Structured
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    with_body = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': 'Ship it Friday.'}])
+    assert stored_structure_is_replaceable(with_body) is False
+    empty_body = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': ''}])
+    assert stored_structure_is_replaceable(empty_body) is True

@@ -520,7 +520,11 @@ from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgume
     ],
 )
 def test_recovery_admission_ignores_a_placeholder_title(store, monkeypatch, structured, refusal):
-    """A placeholder-only row is admitted; a real title or a gist still protects it."""
+    """A placeholder-only row is admitted; only a real title or notes refuse it.
+
+    A gist and enrichment-only fields block replacement, not admission: a
+    refusal here retires the quiet obligation without closing the row.
+    """
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     row = store.rows[ROW]
     row['structured'] = structured

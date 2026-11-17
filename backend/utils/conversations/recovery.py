@@ -21,9 +21,9 @@ RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
 _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
-# Content the summary contract respects: a note body or a generated list.
+# Content the summary contract respects: a note body or a generated list. It is
+# counted by its text, with the note policy's narration filter.
 _PROTECTED_STRUCTURED_TEXT_FIELDS = ('overview',)
-_PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 # Content the deterministic minimum would drop. It blocks replacement but not
 # admission: a refusal retires the quiet obligation without closing the row, so
 # only content the summary contract already respects may refuse admission.
@@ -138,7 +138,7 @@ def _has_stored_text_content(structured: Any) -> bool:
             return True
     sections = _field(structured, 'sections')
     if isinstance(sections, (list, tuple)) and any(
-        isinstance(section, Mapping) and safe_body(_field(section, 'body_markdown')).strip() for section in sections
+        safe_body(_field(section, 'body_markdown')).strip() for section in sections
     ):
         return True
     return any(_field(structured, name) for name in ('action_items', 'events'))
