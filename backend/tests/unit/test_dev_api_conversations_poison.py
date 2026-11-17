@@ -373,9 +373,12 @@ def test_developer_api_preserves_joinable_ids_and_real_owner_name(monkeypatch, d
     assert [row['speaker_name'] for row in body['transcript_segments']] == ['David Zhang', 'Phong', 'Speaker A']
 
 
-def _v3_stored_row(cid='v3'):
-    """A v3 row as stored before its summary: no category, participants without source."""
-    return {
+_MISSING = object()
+
+
+def _v3_stored_row(cid='v3', category=_MISSING):
+    """A v3 row as stored before its summary: participants without source, no default category."""
+    row = {
         'id': cid,
         'created_at': _NOW,
         'started_at': _NOW,
@@ -391,16 +394,23 @@ def _v3_stored_row(cid='v3'):
         },
         'transcript_segments': [{'text': 'hello', 'start': 0, 'end': 1, 'is_user': True}],
     }
+    if category is not _MISSING:
+        row['structured']['category'] = category
+    return row
 
 
 @pytest.mark.parametrize('detail', [False, True])
-def test_developer_api_serves_a_v3_row_without_participant_source(monkeypatch, detail):
+@pytest.mark.parametrize(
+    'category', [_MISSING, 'not_a_category', ['not', 'hashable']], ids=['missing', 'bad-enum', 'unhashable']
+)
+def test_developer_api_defaults_a_v3_row_category(monkeypatch, detail, category):
     # #25588 made the app's Conversation model default a participant's missing source, but the
     # developer response model still required structured.category, which a v3 row written before
     # its summary does not carry: the detail route 500'd and the list route silently dropped it.
+    # An out-of-enum or unhashable stored category is folded to 'other' on both routes.
     from dependencies import get_auth_with_conversation_detail_read
 
-    conversation = _v3_stored_row()
+    conversation = _v3_stored_row(category=category)
     monkeypatch.setattr(developer_module, 'populate_folder_names', lambda *a, **k: None)
     monkeypatch.setattr(developer_module, 'populate_speaker_names', lambda *a, **k: None)
     client = _build()
@@ -416,11 +426,44 @@ def test_developer_api_serves_a_v3_row_without_participant_source(monkeypatch, d
     assert body['id'] == 'v3'
     assert body['structured']['title'] == 'A v3 title'
     assert body['structured']['category'] == 'other'
+    # The developer response model has no participants field: the app routes keep a participant
+    # without source under 'transcript', the developer route drops it from the payload.
+    assert 'participants' not in body['structured']
+
+
+def test_developer_api_patch_defaults_a_v3_row_category(monkeypatch):
+    # The title write persists {'structured.title', 'user_title', 'summary_due_at'} and leaves
+    # category absent; the re-read must still serialize, or the client sees a 500 for a write
+    # that already landed.
+    conversation = _v3_stored_row()
+    update_title = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', lambda *a, **k: dict(conversation))
+    monkeypatch.setattr(conversations_db, 'update_conversation_title', update_title)
+    monkeypatch.setattr(developer_module, 'populate_folder_names', lambda *a, **k: None)
+
+    response = _build().patch('/v1/dev/user/conversations/v3', json={'title': 'New Title'})
+
+    assert response.status_code == 200, response.text
+    assert response.json()['structured']['category'] == 'other'
+    update_title.assert_called_once_with('uid1', 'v3', 'New Title')
 
 
 def test_app_conversation_model_keeps_a_participant_without_source():
-    # The app's own list/detail model is the disposition the developer route now matches.
+    # The app's own list/detail model is the disposition the app endpoints use.
     from models.conversation import Conversation as AppConversation
 
     conversation = AppConversation(**_v3_stored_row())
     assert [(p.name, p.source) for p in conversation.structured.participants] == [('Alex', 'transcript')]
+
+
+def test_project_structured_defaults_returns_a_copy():
+    # A 'project' helper must not leak defaults into a shared or cached row.
+    from utils.conversations.structured_defaults import project_structured_defaults
+
+    stored = _v3_stored_row()
+    projected = project_structured_defaults(stored)
+
+    assert projected is not stored
+    assert projected['structured'] is not stored['structured']
+    assert 'category' not in stored['structured']
+    assert projected['structured']['category'].value == 'other'
