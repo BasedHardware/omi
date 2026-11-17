@@ -7,6 +7,7 @@ import time
 from bisect import bisect_right
 from datetime import datetime
 from google.cloud.exceptions import NotFound
+from google.api_core.exceptions import PreconditionFailed
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
@@ -102,28 +103,12 @@ def list_packs(
     timeout=10,
     max_count=10000,
     strict=False,
-    listed_after: float | None = None,
 ):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
     gapped_enabled = raw_live_gapped_packs_enabled()
     with _index_lock:
         cached = _indexes.get(key)
-        if (
-            not fresh
-            and cached
-            and cached[0] > time.monotonic()
-            and (
-                not strict
-                or (
-                    listed_after is not None
-                    and cached[3]
-                    and cached[2] >= listed_after
-                    and cached[4] == gapped_enabled
-                    and cached[5] <= max_count
-                )
-            )
-            and len(cached[1]) <= max_count
-        ):
+        if not fresh and cached and cached[0] > time.monotonic() and not strict and len(cached[1]) <= max_count:
             io_timeout(deadline, timeout)
             return cached[1]
     packs = []
@@ -211,7 +196,7 @@ def list_packs(
                     raise TimeoutError('raw capture index budget exhausted')
             else:
                 packs.append(source)
-        except (KeyError, ValueError, TypeError, NotFound):
+        except (KeyError, ValueError, TypeError, NotFound, PreconditionFailed):
             exclude('invalid')
             if strict:
                 raise

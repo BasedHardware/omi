@@ -118,11 +118,31 @@ def capture(*, gapped=False):
     return bucket, path, manifest_path, pcm
 
 
+def add_peer_pack(bucket, *, gapped=False):
+    peer, old_path, old_manifest, _ = capture(gapped=gapped)
+    path, manifest_path = old_path.replace('/pack/', '/peer/'), old_manifest.replace('/pack/', '/peer/')
+    media = peer.objects[old_path]
+    body = json.loads(peer.objects[old_manifest].data)
+    for frame in body['frames']:
+        frame['start'] += 10
+    for bound in ('capture_start', 'capture_end'):
+        media.metadata[bound] = str(float(media.metadata[bound]) + 10)
+    if not gapped:
+        media.metadata['custody_manifest_path'] = manifest_path
+    body['capture'] = media.metadata
+    body['media']['path'] = path
+    encoded = json.dumps(body).encode()
+    bucket.objects[path] = media
+    bucket.objects[manifest_path] = Object(
+        encoded, {'sha256': hashlib.sha256(encoded).hexdigest(), 'format': 'audio-custody-manifest-v1'}
+    )
+    return path
+
+
 @pytest.fixture(autouse=True)
 def isolate(monkeypatch):
     raw._indexes.clear()
     recovery._proofs.clear()
-    monkeypatch.delenv('SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED', raising=False)
     yield
     raw._indexes.clear()
     recovery._proofs.clear()
@@ -196,12 +216,12 @@ def wire_rebuild(bucket, monkeypatch, *, after_conflict=None):
     monkeypatch.setattr(
         projection.conversations_db,
         'create_audio_files_from_chunks',
-        lambda *a, listed_chunks: [SimpleNamespace(model_dump=lambda: item) for item in listed_chunks],
+        lambda *a, listed_chunks: [SimpleNamespace(model_dump=lambda item=item: item) for item in listed_chunks],
     )
     attempts = []
 
     def apply(*a, **kw):
-        attempts.append(kw)
+        attempts.append({**kw, 'payload': a[2]})
         if len(attempts) == 1:
             if after_conflict is not None:
                 after_conflict()
@@ -212,10 +232,8 @@ def wire_rebuild(bucket, monkeypatch, *, after_conflict=None):
     return attempts
 
 
-@pytest.mark.parametrize('enabled', [True, False])
-def test_rebuild_reuses_strict_listing_and_decode_once_across_cas_retry(monkeypatch, enabled):
+def test_rebuild_relists_and_decodes_once_across_cas_retry(monkeypatch):
     bucket, path, _, _ = capture()
-    monkeypatch.setenv('SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED', 'true' if enabled else 'off')
     # Eviction of the process proof cache must not cause another decode in this rebuild.
     attempts = wire_rebuild(bucket, monkeypatch, after_conflict=recovery._proofs.clear)
     before = {
@@ -225,16 +243,14 @@ def test_rebuild_reuses_strict_listing_and_decode_once_across_cas_retry(monkeypa
     assert projection.rebuild('u', 'c') is True
     assert len(attempts) == 2
     counts = Counter(op for op, _ in bucket.events)
-    assert counts == {'list': 1 if enabled else 2, 'metadata': 3, 'read': 4 if enabled else 5}
+    assert counts == {'list': 2, 'metadata': 3, 'read': 5}
     assert sum(op == 'read' and name == path for op, name in bucket.events) == 1
     assert reads.current() is None
     for op, count in {**counts, 'rebuild': 1}.items():
         assert reads.OPERATIONS.labels(scope='rebuild', operation=op)._value.get() - before[op] == count
 
 
-@pytest.mark.parametrize(
-    'fault', ['generation', 'metageneration', 'missing', 'manifest-generation', 'manifest-missing']
-)
+@pytest.mark.parametrize('fault', ['generation', 'metageneration', 'manifest-generation', 'manifest-missing'])
 def test_cas_retry_does_not_hide_changed_or_missing_objects(monkeypatch, fault):
     bucket, path, manifest, _ = capture()
 
@@ -275,15 +291,6 @@ def test_strict_rebuild_will_not_reuse_unqualified_index(monkeypatch, condition)
     assert sum(op == 'list' and name.startswith('raw-live/') for op, name in bucket.events) == 1
 
 
-@pytest.mark.parametrize(
-    'value,expected', [(None, True), ('false', False), ('off', False), ('0', False), ('true', True), ('garbage', True)]
-)
-def test_listing_reuse_kill_switch_defaults_on(monkeypatch, value, expected):
-    if value is not None:
-        monkeypatch.setenv('SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED', value)
-    assert reads.listing_reuse_enabled() is expected
-
-
 def test_required_archive_read_still_forces_fresh_listing():
     calls = []
     raw.raw_chunks_for_listing(
@@ -318,13 +325,13 @@ def test_cache_does_not_hide_a_changed_gapped_pack_gate(monkeypatch):
     assert sum(op == 'list' and name.startswith('raw-live/') for op, name in bucket.events) == 2
 
 
-def test_reused_listing_keeps_the_original_object_scan_budget():
+def test_fresh_strict_listing_enforces_the_object_scan_budget():
     bucket, _, _, _ = capture()
     bucket.objects['raw-live/u/c/legacy'] = Object(b'x', {'clock_source': 'arrival_estimate'})
     with reads.rebuilding():
         assert len(raw.list_packs(bucket, 'u', 'c', strict=True)) == 1
         with pytest.raises(TimeoutError, match='index budget'):
-            raw.list_packs(bucket, 'u', 'c', strict=True, max_count=1, listed_after=reads.current().started)
+            raw.list_packs(bucket, 'u', 'c', strict=True, max_count=1)
 
 
 def test_metadata_without_metageneration_is_refreshed_before_decode():
@@ -333,3 +340,65 @@ def test_metadata_without_metageneration_is_refreshed_before_decode():
     blob.metageneration = None
     assert raw.read_pack(bucket, path, 'u', blob=blob) == pcm
     assert ('metadata', path) in bucket.events
+
+
+def test_cas_retry_sees_peer_pack_committed_after_first_inventory(monkeypatch):
+    bucket, original, _, _ = capture()
+    owner = {'audio_files': []}
+    peer_projection = [{'path': 'peer-committed-projection'}]
+    peer_paths = []
+
+    def peer_commit():
+        peer_paths.append(add_peer_pack(bucket))
+        owner['audio_files'] = peer_projection
+
+    attempts = wire_rebuild(bucket, monkeypatch, after_conflict=peer_commit)
+    snapshots = []
+
+    def snapshot(*a, **kw):
+        snapshots.append(len([event for event in bucket.events if event == ('list', 'raw-live/u/c/')]))
+        return deepcopy(owner)
+
+    monkeypatch.setattr(projection.conversations_db, 'get_conversation_raw_snapshot', snapshot)
+    assert projection.rebuild('u', 'c') is True
+    assert len(attempts) == 2
+    # Each snapshot precedes its own LIST, including after the peer's successful write.
+    assert snapshots == [0, 1]
+    assert attempts[0]['expected_audio_files'] == []
+    assert attempts[1]['expected_audio_files'] == peer_projection
+    assert {item['path'] for item in attempts[0]['payload']['audio_files']} == {original}
+    assert bucket.events.count(('list', 'raw-live/u/c/')) == 2
+    # Inspect the actual CAS payload, not just the refreshed expected snapshot.
+    assert {item['path'] for item in attempts[1]['payload']['audio_files']} == {original, peer_paths[0]}
+    assert original in bucket.objects and peer_paths[0] in bucket.objects
+
+
+@pytest.mark.parametrize('strict', [False, True])
+@pytest.mark.parametrize('gapped', [False, True])
+def test_manifest_replaced_during_listing_excludes_only_pack_unless_strict(strict, gapped):
+    bucket, path, manifest, _ = capture(gapped=gapped)
+    peer = add_peer_pack(bucket, gapped=gapped)
+
+    def replace(name):
+        if name == manifest:
+            bucket.objects[manifest].generation += 1
+            bucket.before_download = None
+
+    bucket.before_download = replace
+    if strict:
+        with pytest.raises(PreconditionFailed):
+            raw.list_packs(bucket, 'u', 'c', fresh=True, strict=True)
+    else:
+        result = raw.list_packs(bucket, 'u', 'c', fresh=True)
+        assert {item['path'] for item in result} == {peer}
+        assert all(item['path'] != path for item in result)
+    assert bucket.objects[manifest].generation == 2
+
+
+def test_pack_deleted_between_attempts_returns_no_objects_without_committing(monkeypatch):
+    bucket, path, _, _ = capture()
+    attempts = wire_rebuild(bucket, monkeypatch, after_conflict=lambda: bucket.objects.pop(path))
+    assert projection.rebuild('u', 'c') == 'no_objects'
+    assert len(attempts) == 1
+    assert bucket.events.count(('list', 'raw-live/u/c/')) == 2
+    assert reads.current() is None

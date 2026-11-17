@@ -49,16 +49,15 @@ _lock = threading.Lock()
 def validated_uncovered_packs(bucket, uid, cid, chunks):
     deadline = time.monotonic() + 20
     scope = audio_gcs_reads.current()
-    reuse = scope is not None and audio_gcs_reads.listing_reuse_enabled()
     packs = raw_audio_read.list_packs(
         bucket,
         uid,
         cid,
-        fresh=not reuse,
+        # A CAS retry follows a peer write: snapshot-before-LIST requires a new inventory.
+        fresh=True,
         deadline=deadline,
         max_count=4096,
         strict=True,
-        listed_after=scope.started if scope is not None and reuse else None,
     )
     candidates = raw_audio_read.uncovered_raw_packs(packs, chunks)
     decoded_bytes = new_packs = 0

@@ -222,7 +222,12 @@ def test_replay_cannot_shadow_raw_receipt_after_projection_failure(remote, monke
         'owner', replay + tail, 'conversation', 1000, 16000, 'new', 0, frames, framed=True
     )
     # Model another writer's commit while this process still has an empty TTL index.
-    raw_audio_read._indexes[(remote.name, 'owner', 'conversation')] = (time.monotonic() + 120, [])
+    # monkeypatch restores/removes the synthetic entry at teardown.
+    monkeypatch.setitem(
+        raw_audio_read._indexes,
+        (remote.name, 'owner', 'conversation'),
+        (time.monotonic() + 120, [], time.monotonic(), False, True, 0),
+    )
     reload_blob = remote.blob(old.path).reload
 
     def sdk_reload(*, timeout, retry, if_generation_match=None):

@@ -27,15 +27,12 @@ bounds. No PCM is retained by a new cache.
   unchanged packs decode once within the existing proof-count bound. The local
   cache holds only proof keys and expiry times, never frame arrays or PCM. Changes require a new proof or fail closed.
   A backend without metageneration cannot reuse decode proof.
-- Strict raw listings are reusable only if complete, unexpired (120 seconds),
-  started within the current rebuild, within its object-scan/entry limits, and
-  taken with the same gapped-pack setting. Local writes still invalidate them.
-  A retry re-reads encoded inventory and the conversation CAS snapshot.
-
-An older per-instance index cannot prove it is newer than the write that
-triggered repair: current rebuild callers pass no trusted write timestamp.
-Therefore the first raw listing remains fresh. Cross-rebuild strict reuse is
-intentionally excluded. Required-archive replay also retains `fresh=True`.
+Every CAS attempt takes a new strict raw LIST **after that attempt's conversation
+snapshot**, including retries. A peer commit can add original packs before the
+retry's snapshot; reusing an earlier inventory could overwrite their projection
+coverage while passing CAS. Strict listing reuse and its kill switch are removed.
+Ordinary non-strict playback retains its existing 120-second per-instance cache;
+required-archive replay retains `fresh=True`.
 Gapped-manifest uniqueness listings remain: cached evidence cannot hide a new
 ambiguous manifest. Failed reads retain debt and originals.
 
@@ -49,9 +46,9 @@ a cold decode-proof cache, no retries, and one LIST page per prefix. Baseline is
 | Rebuild | LIST before → after | Metadata GET before → after | Body read before → after |
 | --- | --- | --- | --- |
 | Framed, one attempt | 1 → 1 | 4 → 2 | 3 → 3 |
-| Framed, two attempts | 2 → 1 | 7 → 3 | 5 → 4 |
+| Framed, two attempts | 2 → 2 | 7 → 3 | 5 → 5 |
 | Gapped unframed, one attempt | 3 → 3 | 4 → 1 | 3 → 3 |
-| Gapped unframed, two attempts | 6 → 4 | 7 → 2 | 5 → 4 |
+| Gapped unframed, two attempts | 6 → 6 | 7 → 2 | 5 → 5 |
 
 After inventory, **validation itself goes from 3 metadata GETs to 1** per fresh
 pack proof. Its two body reads remain: one manifest and one media object.
@@ -76,7 +73,12 @@ retries are outside this counter. It is not a billing meter. `rebuild` is one
 denominator increment per invocation, including both CAS attempts. Both Cloud
 Run collector profiles retain this metric; tests also check later drop rules.
 
-Operations per rebuild, separated by kind:
+Operations per rebuild, separated by kind, **queried directly against GMP**
+(for example with the read-only `tools/gmpq.sh '<PromQL>'` helper). This family is
+kept by the Cloud Run GMP collectors but is not imported by the in-cluster
+`prometheus-stackdriver-exporter` allowlist. The query therefore works in GMP,
+not against the in-cluster Prometheus datasource. No exporter import is added
+because no in-cluster dashboard depends on this new counter:
 
 ```promql
 sum by (operation) (rate(omi_sync_audio_gcs_operations_total{scope="rebuild",operation=~"list|metadata|read"}[1h]))
@@ -85,12 +87,10 @@ ignoring(operation) group_left
 sum(rate(omi_sync_audio_gcs_operations_total{scope="rebuild",operation="rebuild"}[1h]))
 ```
 
-Listing reuse is on unless `SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED=0`, `false` or
-`off`. One-line rollback of listing reuse: set
-`SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED=off` on the owning repair/read services
-through their normal reviewed release/config path. This forces a fresh raw
-listing on each attempt; version pinning and metadata/decode reuse remain.
-Revert the PR to roll back the complete optimization.
+Rollback: revert this PR and release the revert through the normal reviewed
+release path. There is no listing-reuse switch; every strict attempt always
+re-lists. A manifest generation mismatch excludes only that pack during ordinary
+non-strict playback discovery; strict recovery still raises and retains debt.
 
 No deploy or production config change is performed by this PR. Compare equal
 traffic windows after release, alongside proof failures, repair debt/age and

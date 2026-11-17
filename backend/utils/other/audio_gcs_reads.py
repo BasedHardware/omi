@@ -3,8 +3,6 @@
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-import os
-import time
 
 from google.api_core.exceptions import PreconditionFailed
 from prometheus_client import Counter
@@ -18,16 +16,11 @@ OPERATIONS = Counter(
 
 @dataclass
 class RebuildReads:
-    started: float = field(default_factory=time.monotonic)
     manifests: dict = field(default_factory=dict)
     proofs: dict = field(default_factory=dict)
 
 
 _current: ContextVar[RebuildReads | None] = ContextVar('audio_rebuild_reads', default=None)
-
-
-def listing_reuse_enabled() -> bool:
-    return os.getenv('SYNC_GCS_REBUILD_LISTING_REUSE_ENABLED', '1').strip().lower() not in {'0', 'false', 'off'}
 
 
 def current() -> RebuildReads | None:
