@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from concurrent.futures import FIRST_COMPLETED, wait
+from contextvars import copy_context
 import math
 import threading
 import time
@@ -114,7 +115,7 @@ def _apply_rows(store, rows, now, concurrency, limiter):
         if not isinstance(owner, str) or not owner:
             raise RuntimeError('migration candidate has no owner key')
         groups[owner].append(snapshot)
-    from utils.executors import db_executor, submit_with_context
+    from utils.executors import db_executor
 
     remaining = iter(groups.items())
     pending = set()
@@ -124,7 +125,9 @@ def _apply_rows(store, rows, now, concurrency, limiter):
         entry = next(remaining, None)
         if entry is not None:
             owner, group = entry
-            pending.add(submit_with_context(db_executor, process, group, owner))
+            # These futures are observed synchronously. Keep context propagation
+            # without the fire-and-forget helper's unrelated BYOK error handling.
+            pending.add(db_executor.submit(copy_context().run, process, group, owner))
 
     try:
         for _ in range(min(concurrency, len(groups))):
