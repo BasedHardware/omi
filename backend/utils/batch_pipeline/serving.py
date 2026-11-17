@@ -215,7 +215,12 @@ class Serving:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
-            self._maintain(recover_quarantine=recover_quarantine)
+            from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+
+            self._maintain(
+                recover_quarantine=recover_quarantine,
+                recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
+            )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
             self.metrics.delivered_share.deactivate()
@@ -319,7 +324,7 @@ class Serving:
             self.metrics.fresh_guard.deactivate()
         return leads
 
-    def _maintain(self, *, recover_quarantine: bool):
+    def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):
         """Idempotent, transaction-fenced maintenance: cleanup, sweeps, discovery, recovery, drain."""
         leads = self.refresh_fresh_guard()
         if self.metrics:
@@ -387,7 +392,7 @@ class Serving:
             logging.getLogger(__name__).error(
                 'event=batch_projection action=redrive_expired outcome=retry exception_type=%s', type(error).__name__
             )
-        self.queue().recover(time.time())
+        self.queue().recover(time.time(), caller=recovery_caller)
         if time.monotonic() >= self.allowance_hold_due and self._leads(True):
             self.allowance_hold_due = time.monotonic() + 30
             AllowanceHolds(self.store, entitlement).tick(time.time())

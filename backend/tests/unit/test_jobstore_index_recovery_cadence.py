@@ -12,6 +12,7 @@ import pytest
 from database.jobstore.index_store import IndexStore
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.recovery_discovery import RecoveryCaller
 
 
 class LeasedPrimary(MemoryStore):
@@ -54,9 +55,11 @@ def recovery(monkeypatch, count=0):
     }
     clock = [0.0]
     mirror = SyntheticMirror(primary)
-    store = IndexStore(mirror, enabled_queries={'due_leased'}, clock=lambda: clock[0])
+    store = IndexStore(
+        mirror, enabled_queries={'due_leased'}, clock=lambda: clock[0], recovery_policy=lambda: 'role_minute_v1:10000'
+    )
     store._index.due = Mock(return_value=['deleted-copy-id'])
-    return primary, store, Scheduler(store), clock
+    return primary, store, Scheduler(store, recovery_caller=RecoveryCaller.PUMP), clock
 
 
 @pytest.mark.parametrize('stop', [100, 900])

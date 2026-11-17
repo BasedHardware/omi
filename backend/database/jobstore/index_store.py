@@ -13,8 +13,9 @@ wrapper does not create connections, perform backfills or change erasure.
 Index reads require an already warm connection; no IAM refresh or dial can
 enter the caller. Both the server statement and the synchronous psycopg
 network wait have deadlines. A failed connection is discarded by its pool.
-Production unpartitioned discovery stays on Firestore until complete-query
-coverage can be proven; an owner-sampled copy cannot supply that proof.
+Generic production discovery stays on Firestore. The only exception is the
+qualified leased-recovery gateway, with explicit bounded-hint exposure and
+current-candidate feedback. It makes no complete-copy or backlog claim.
 """
 
 from __future__ import annotations
@@ -37,6 +38,15 @@ from database.jobstore.postgres_store import PostgresStore
 from database.jobstore.connection import sql
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import FallbackReason, ReasonFamily, reason_label
+from utils.batch_pipeline.recovery_discovery import (
+    PRIMARY_SCAN_SUCCESS_TIMESTAMP,
+    RecoveryCaller,
+    RecoveryExposure,
+    RecoveryQuery,
+    metric_namespace,
+    primary_failure_generation,
+)
+from utils.staging_fence import jobstore_production_mirror_configured
 
 INDEX_QUERIES = frozenset({'due_leased', 'due_retry', 'due_result_ready'})
 _DUE_QUERIES = {'leased': 'due_leased', 'retry': 'due_retry', 'result_ready': 'due_result_ready'}
@@ -58,6 +68,8 @@ class IndexReadReason(StrEnum):
     COVERAGE_UNKNOWN = 'coverage_unknown'
     BACKLOG = 'backlog'
     HINT_INELIGIBLE = 'hint_ineligible'
+    POLICY_UNSET = 'policy_unset'
+    POLICY_INVALID = 'policy_invalid'
 
 
 class IndexReadOutcome(StrEnum):
@@ -76,15 +88,11 @@ INDEX_READS_TOTAL = Counter(
     'Discovery answers by source; Postgres returns non-authoritative IDs only.',
     ['query', 'source', 'reason', 'outcome'],
 )
-INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP = Gauge(
-    'omi_jobstore_index_primary_scan_success_timestamp_seconds',
-    'Unix completion time of the last successful bounded primary due query; not backlog coverage.',
-    ['namespace', 'query'],
-)
+INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP: Gauge = PRIMARY_SCAN_SUCCESS_TIMESTAMP
 
 
 def _metric_namespace(namespace: str) -> str:
-    return namespace if namespace in {'batch_pipeline_dev', 'batch_pipeline_prod'} else 'other'
+    return metric_namespace(namespace)
 
 
 def _count(query: str, source: IndexReadSource, reason: IndexReadReason, outcome: IndexReadOutcome) -> None:
@@ -188,6 +196,7 @@ class IndexStore:
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
         observe: Callable[[str, tuple[Any, ...], dict[str, Any]], None] | None = None,
+        recovery_policy: Callable[[], str] = lambda: '',
     ):
         queries = frozenset(enabled_queries)
         if not queries <= INDEX_QUERIES:
@@ -212,7 +221,10 @@ class IndexStore:
         self._clock = clock
         self._wall_clock = wall_clock
         self._observe = observe
+        self._recovery_policy = recovery_policy
         self._last_sweep: dict[str, float] = {}
+        self._primary_attempt: dict[str, int] = {}
+        self._last_failure_generation: dict[str, int] = {}
         # A full primary leased page is evidence of possible backlog, not
         # completion. Continue canonical per-call recovery until a short page.
         self._leased_backlog = False
@@ -234,11 +246,17 @@ class IndexStore:
         fallback_reason: FallbackReason | None = None,
     ) -> list[str]:
         started = self._clock()
+        failure_generation = primary_failure_generation(self.namespace)
+        with self._sweep_lock:
+            attempt = self._primary_attempt.get(query, 0) + 1
+            self._primary_attempt[query] = attempt
+            self._last_sweep.pop(query, None)
         try:
             result = self.primary.due(state, now, limit)
         except Exception:
             with self._sweep_lock:
-                self._last_sweep.pop(query, None)
+                if self._primary_attempt.get(query) == attempt:
+                    self._last_sweep.pop(query, None)
             _count(query, IndexReadSource.FIRESTORE, reason, IndexReadOutcome.ERROR)
             if fallback_reason is not None:
                 self._fallback(fallback_reason, 'exhausted')
@@ -246,9 +264,11 @@ class IndexStore:
         _count(query, IndexReadSource.FIRESTORE, reason, IndexReadOutcome.RETURNED)
         if query in self.enabled_queries:
             with self._sweep_lock:
-                self._last_sweep[query] = started
-                if query == 'due_leased':
-                    self._leased_backlog = len(result) >= max(1, min(limit, 100))
+                if self._primary_attempt.get(query) == attempt:
+                    self._last_sweep[query] = started
+                    self._last_failure_generation[query] = failure_generation
+                    if query == 'due_leased':
+                        self._leased_backlog = len(result) >= max(1, min(limit, 100))
         if query in INDEX_QUERIES:
             INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.labels(namespace=_metric_namespace(self.namespace), query=query).set(
                 self._wall_clock()
@@ -278,57 +298,103 @@ class IndexStore:
         )
 
     def due(self, state: str, now: float, limit: int = 100) -> list[str]:
+        return self._due(state, now, limit)
+
+    def recovery_due(self, recovery: RecoveryQuery) -> list[str]:
+        recovery.fallback = lambda: self._primary_due(
+            'leased',
+            recovery.now,
+            recovery.limit,
+            'due_leased',
+            IndexReadReason.HINT_INELIGIBLE,
+        )
+        if not recovery.active or recovery.store is not self or recovery.caller == RecoveryCaller.UNKNOWN:
+            return recovery.primary('unknown_caller', recovery.fallback)
+        if self.namespace not in {'batch_pipeline_dev', 'batch_pipeline_prod'}:
+            return recovery.primary('excluded', recovery.fallback)
+        return self._due('leased', recovery.now, recovery.limit, recovery=recovery)
+
+    def _due(self, state: str, now: float, limit: int, *, recovery: RecoveryQuery | None = None) -> list[str]:
         query = _DUE_QUERIES.get(state, 'other')
+
+        def primary(reason: IndexReadReason, *, fallback_reason: FallbackReason | None = None) -> list[str]:
+            read = lambda: self._primary_due(state, now, limit, query, reason, fallback_reason=fallback_reason)
+            return recovery.primary(reason.value, read) if recovery is not None else read()
+
         if query not in INDEX_QUERIES:
-            return self._primary_due(state, now, limit, query, IndexReadReason.EXCLUDED)
+            return primary(IndexReadReason.EXCLUDED)
         if query not in self.enabled_queries:
-            return self._primary_due(state, now, limit, query, IndexReadReason.UNSELECTED)
+            return primary(IndexReadReason.UNSELECTED)
         if not self.enabled():
-            return self._primary_due(state, now, limit, query, IndexReadReason.DISABLED)
-        # The production copy is owner-sampled, while due() is unpartitioned.
-        # Neither 10000 owner BPS nor a successful cursor pass certifies all
-        # relevant rows/producers. There is no complete-query coverage proof
-        # in this source yet, so a production PG answer is never eligible.
-        if production_policy_applies(self.namespace):
-            return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
+            return primary(IndexReadReason.DISABLED)
+        # Owner copies never certify a complete global prefix. Only the
+        # audited recovery gateway may accept incomplete bounded hints;
+        # generic discovery and every other production query stay primary.
+        production = production_policy_applies(self.namespace)
+        if production and (recovery is None or not jobstore_production_mirror_configured()):
+            return primary(IndexReadReason.COVERAGE_UNKNOWN)
+        raw_policy = self._recovery_policy() if recovery is not None else ''
+        exposure = RecoveryExposure.parse(raw_policy) if recovery is not None else None
+        selected = True
+        if recovery is not None:
+            if exposure is None or not recovery.policy_current():
+                return primary(IndexReadReason.POLICY_INVALID if raw_policy else IndexReadReason.POLICY_UNSET)
+            selected = exposure.selected(self.namespace, recovery.caller, recovery.entry_wall)
+            if selected:
+                recovery.count('selected', 'index')
         with self._sweep_lock:
             last = self._last_sweep.get(query)
             backlog = query == 'due_leased' and self._leased_backlog
+            if recovery is not None and self._last_failure_generation.get(query) != primary_failure_generation(
+                self.namespace
+            ):
+                last = None
         if backlog:
-            return self._primary_due(state, now, limit, query, IndexReadReason.BACKLOG)
+            return primary(IndexReadReason.BACKLOG)
         if last is None or self._clock() - last >= self.sweep_interval_s:
-            return self._primary_due(state, now, limit, query, IndexReadReason.SAFETY_SWEEP)
+            return primary(IndexReadReason.SAFETY_SWEEP)
+        if recovery is not None:
+            recovery.count('eligible', 'index')
+            if not selected:
+                return primary(IndexReadReason.UNSELECTED)
+            recovery.count('pg_attempt', 'index', source='postgres')
         try:
             # Validate the driver's runtime answer before trusting its shape.
             result: Any = self._index.due(state, now, limit)
         except Exception as exc:
             timeout = isinstance(exc, TimeoutError) or getattr(exc, 'sqlstate', None) == '57014'
-            return self._primary_due(
-                state,
-                now,
-                limit,
-                query,
+            return primary(
                 IndexReadReason.TIMEOUT if timeout else IndexReadReason.ERROR,
                 fallback_reason=FallbackReason.TIMEOUT if timeout else FallbackReason.UNAVAILABLE,
             )
         if not self.enabled():
-            return self._primary_due(state, now, limit, query, IndexReadReason.DISABLED)
-        if production_policy_applies(self.namespace):
-            return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
+            return primary(IndexReadReason.DISABLED)
+        if production_policy_applies(self.namespace) and (
+            recovery is None or not jobstore_production_mirror_configured()
+        ):
+            return primary(IndexReadReason.COVERAGE_UNKNOWN)
+        if recovery is not None and (self._recovery_policy() != raw_policy or not recovery.policy_current()):
+            return primary(IndexReadReason.POLICY_INVALID)
         # SQL may have crossed the safety deadline, or a concurrent primary
         # attempt may have failed. Neither may buy another hint interval.
         with self._sweep_lock:
             last = self._last_sweep.get(query)
             backlog = query == 'due_leased' and self._leased_backlog
+            if recovery is not None and self._last_failure_generation.get(query) != primary_failure_generation(
+                self.namespace
+            ):
+                last = None
         if last is None or self._clock() - last >= self.sweep_interval_s or backlog:
-            return self._primary_due(state, now, limit, query, IndexReadReason.SAFETY_SWEEP)
+            return primary(IndexReadReason.SAFETY_SWEEP)
         if query == 'due_leased' and (
             not isinstance(result, list)
             or not 0 < len(result) < max(1, min(limit, 100))
             or any(not isinstance(key, str) or not key for key in result)
             or len(set(result)) != len(result)
         ):
-            return self._primary_due(state, now, limit, query, IndexReadReason.HINT_INELIGIBLE)
+            return primary(IndexReadReason.HINT_INELIGIBLE)
+        if recovery is not None:
+            recovery.from_pg = True
         _count(query, IndexReadSource.POSTGRES, IndexReadReason.INDEX, IndexReadOutcome.RETURNED)
         self._observe_due(state, now, limit)
         return result

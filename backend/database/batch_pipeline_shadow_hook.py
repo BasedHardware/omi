@@ -52,33 +52,36 @@ def purge_owner(namespace: str, uid: str) -> int:
 
 
 def shadow_parity_collectors() -> tuple:
-    """Parity, convergence and index metrics for a private registry; empty outside shadow/index mode.
+    """Caller metrics in every mode; optional parity/convergence/index metrics in their modes.
 
     ``omi_jobstore_shadow_{parity,convergence}_*`` live in the default registry; a process that serves its own
     ``CollectorRegistry`` (the batch worker) must register them there or the series are never exported.
     Never raises: a failed import keeps the worker serving its other metrics.
     """
+    from utils.batch_pipeline.recovery_discovery import RECOVERY_COLLECTORS
+
     if not _shadow_mode():
-        return ()
+        return RECOVERY_COLLECTORS
     try:
         import database.jobstore.dual_store as dual_store
 
         from database.jobstore.serving_parity import SERVING_PARITY_TOTAL
 
         collectors = (
+            *RECOVERY_COLLECTORS,
             SERVING_PARITY_TOTAL,
             dual_store.SHADOW_PARITY_TOTAL,
             dual_store.SHADOW_CONVERGENCE_TOTAL,
             dual_store.SHADOW_CONVERGENCE_SECONDS,
         )
         if _shadow_mode(index_only=True):
-            from database.jobstore.index_store import INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP, INDEX_READS_TOTAL
+            from database.jobstore.index_store import INDEX_READS_TOTAL
 
-            return (*collectors, INDEX_READS_TOTAL, INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP)
+            return (*collectors, INDEX_READS_TOTAL)
         return collectors
     except Exception:
         logger.warning('event=jobstore_shadow outcome=metrics_unavailable', exc_info=True)
-        return ()
+        return RECOVERY_COLLECTORS
 
 
 def shadow_from_env(primary):

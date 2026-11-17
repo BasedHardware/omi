@@ -294,7 +294,15 @@ class Pump:
             if self.leader is None or await self._run_blocking('maintenance', db_executor, self.leader.acquire):
                 if self.project_pending:
                     await self._run_blocking('projection', sync_executor, self.project_pending)
-                await self._run_blocking('maintenance', db_executor, self.scheduler.recover, time.time())
+                from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+
+                await self._run_blocking(
+                    'maintenance',
+                    db_executor,
+                    self.scheduler.recover,
+                    time.time(),
+                    caller=RecoveryCaller.PUMP,
+                )
                 page = await self._run_blocking('maintenance', db_executor, self.ready_discovery.page)
                 if page is not None:
                     while owner := await self._run_blocking(
