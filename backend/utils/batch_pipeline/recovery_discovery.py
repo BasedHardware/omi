@@ -150,7 +150,7 @@ class RecoveryQuery:
         # IndexStore replaces this callback with its forced-primary seam.
         self.fallback: Callable[[], list[str]] = lambda: store.due('leased', now, limit)
 
-    def count(self, event: str, reason: str, *, source: str = 'none') -> None:
+    def record_event(self, event: str, reason: str, *, source: str = 'none') -> None:
         RECOVERY_DISCOVERY_TOTAL.labels(
             namespace=self.namespace,
             caller=self.caller.value,
@@ -161,7 +161,7 @@ class RecoveryQuery:
 
     def __enter__(self) -> RecoveryQuery:
         self.active = True
-        self.count('entry', 'entry')
+        self.record_event('entry', 'entry')
         self.entry_wall = self.wall_clock()
         sampled = self.clock()
         key = self.namespace, self.caller.value
@@ -175,9 +175,9 @@ class RecoveryQuery:
     def __exit__(self, kind, value, traceback) -> None:
         self.active = False
         if kind is None and self.from_pg and not self.useful:
-            self.count('error', 'hint_ineligible', source='postgres')
+            self.record_event('error', 'hint_ineligible', source='postgres')
             raise RuntimeError('leased hints require current-candidate feedback and primary fallback')
-        self.count(
+        self.record_event(
             'error' if kind else 'completed',
             'error' if kind else 'returned',
             source='postgres' if self.from_pg else ('primary' if self.primary_count else 'none'),
@@ -186,7 +186,7 @@ class RecoveryQuery:
     def primary(self, reason: str, read: Callable[[], list[str]] | None = None) -> list[str]:
         self.from_pg = False
         self.primary_count += 1
-        self.count('primary', reason, source='primary')
+        self.record_event('primary', reason, source='primary')
         started = self.clock()
         try:
             rows = (read or self.fallback)()
@@ -210,10 +210,10 @@ class RecoveryQuery:
 
     def candidate(self, useful: bool) -> None:
         source = 'postgres' if self.from_pg else 'primary'
-        self.count('candidate', 'transition' if useful else 'no_transition', source=source)
+        self.record_event('candidate', 'transition' if useful else 'no_transition', source=source)
         if useful:
             self.useful += 1
-            self.count('useful_candidate', 'transition', source=source)
+            self.record_event('useful_candidate', 'transition', source=source)
 
     def needs_primary(self) -> bool:
         return self.from_pg and self.useful == 0

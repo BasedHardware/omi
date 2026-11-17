@@ -341,7 +341,7 @@ class IndexStore:
                 return primary(IndexReadReason.POLICY_INVALID if raw_policy else IndexReadReason.POLICY_UNSET)
             selected = exposure.selected(self.namespace, recovery.caller, recovery.entry_wall)
             if selected:
-                recovery.count('selected', 'index')
+                recovery.record_event('selected', 'index')
         with self._sweep_lock:
             last = self._last_sweep.get(query)
             backlog = query == 'due_leased' and self._leased_backlog
@@ -354,10 +354,10 @@ class IndexStore:
         if last is None or self._clock() - last >= self.sweep_interval_s:
             return primary(IndexReadReason.SAFETY_SWEEP)
         if recovery is not None:
-            recovery.count('eligible', 'index')
+            recovery.record_event('eligible', 'index')
             if not selected:
                 return primary(IndexReadReason.UNSELECTED)
-            recovery.count('pg_attempt', 'index', source='postgres')
+            recovery.record_event('pg_attempt', 'index', source='postgres')
         try:
             # Validate the driver's runtime answer before trusting its shape.
             result: Any = self._index.due(state, now, limit)
