@@ -30,7 +30,7 @@ from config.stt_cap_dispatch import execution_admission_configured as cap_dispat
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from utils.observability.firestore_probe_export import register_probe_collectors
 from utils.stt.allowance_metrics import COLLECTORS as ALLOWANCE_WATCH_COLLECTORS
-from utils.batch_pipeline.upload_metrics import COLLECTORS as UPLOAD_COLLECTORS
+from database.batch_pipeline_upload_metrics import COLLECTORS as UPLOAD_COLLECTORS
 from config.batch_pipeline import worker_pipeline_depth, worker_processes
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client

@@ -6,7 +6,7 @@ from unittest.mock import Mock
 import pytest
 
 from database import batch_pipeline_coalescing as rows
-from utils.batch_pipeline import upload_metrics
+from database import batch_pipeline_upload_metrics as upload_metrics
 from tests.unit.test_batch_upload_coalescing import group, member, store
 
 

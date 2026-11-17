@@ -1,6 +1,6 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
-from utils.batch_pipeline import upload_metrics
+from database import batch_pipeline_upload_metrics as upload_metrics
 
 from dataclasses import replace
 from functools import partial

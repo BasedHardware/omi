@@ -8,7 +8,7 @@ remains the authority for completion. No poll or surviving hold row is needed.
 from datetime import datetime, timedelta, timezone
 
 from config.batch_pipeline_coalescing_protocol import MAX_COMPLETION_MEMBERS
-from utils.batch_pipeline.upload_metrics import clock_fields
+from database.batch_pipeline_upload_metrics import clock_fields
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result, sync_content_ledger_ref
 
 

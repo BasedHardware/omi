@@ -9,7 +9,8 @@ import pytest
 from prometheus_client import CollectorRegistry, generate_latest
 import yaml
 
-from utils.batch_pipeline import upload_metrics, upload_entitlement
+from database import batch_pipeline_upload_metrics as upload_metrics
+from utils.batch_pipeline import upload_entitlement
 from tests.unit.test_batch_pipeline_intake import proposal, submit, cohort  # noqa: F401
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 

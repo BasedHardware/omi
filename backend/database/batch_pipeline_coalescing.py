@@ -12,7 +12,7 @@ from uuid import uuid4
 
 from config import batch_pipeline_coalescing as config
 from database.batch_coalescing_capabilities import extended_ready
-from utils.batch_pipeline import upload_metrics
+from database import batch_pipeline_upload_metrics as upload_metrics
 
 
 def digest(value):

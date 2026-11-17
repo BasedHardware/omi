@@ -5,7 +5,7 @@ separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
 from database.batch_coalescing_capabilities import advertise
-from utils.batch_pipeline.upload_metrics import observe_completion
+from database.batch_pipeline_upload_metrics import observe_completion
 
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone

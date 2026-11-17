@@ -1,6 +1,6 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
-from utils.batch_pipeline import upload_metrics
+from database import batch_pipeline_upload_metrics as upload_metrics
 
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
