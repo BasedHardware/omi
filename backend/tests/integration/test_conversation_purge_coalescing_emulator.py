@@ -383,3 +383,34 @@ def test_legacy_leader_takeover_cannot_rejoin_its_old_shared_cursor(world):
     row = world.client.collection(jobs.COLLECTION).document(leader).get().to_dict()
     assert row['progress'] == {'ns': 0, 'phase': 'parked'} and not row.get('owner_scan')
     assert not world.client.collection(jobs.COLLECTION).document(follower).get().to_dict().get('scan_epoch')
+
+
+@pytest.mark.parametrize('phase', ['seal', 'resume'])
+def test_ambiguous_claim_commit_recovers_same_members_and_token(monkeypatch, world, phase):
+    from google.api_core.exceptions import ServiceUnavailable
+    from google.cloud.firestore_v1.transaction import Transaction
+
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    if phase == 'resume':
+        _, first = scans._claim(world.client, leader, generation)
+        progress = scans.ScanProgress(world.client, leader, first)
+        progress.checkpoint({'ns': 0, 'phase': 'discover'})
+        progress.finish('checkpointed')
+    commit = Transaction._commit
+    lost = []
+
+    def commit_then_lose_response(transaction):
+        result = commit(transaction)
+        if not lost:
+            lost.append(True)
+            raise ServiceUnavailable('synthetic reply lost after commit')
+        return result
+
+    monkeypatch.setattr(Transaction, '_commit', commit_then_lose_response)
+    status, scan = scans._claim(world.client, leader, generation)
+    assert status == 'run' and set(scan['members']) == {leader, follower}
+    for job, member in scan['members'].items():
+        row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
+        assert row['run_token'] == scan['token'] and row['generation'] == member['generation']
+    scans.ScanProgress(world.client, leader, scan).checkpoint({'ns': 0, 'phase': 'discover'})
