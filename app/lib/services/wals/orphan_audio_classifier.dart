@@ -85,7 +85,12 @@ class OrphanAudioFile {
   /// Independent of the adoption owner class: multiple accounts may reclaim.
   String? reclaimSkipReason(DateTime now) {
     if (classification == 'working') return 'working';
-    if (info == null) return 'unknown_capture_time';
+    // Legacy Limitless wrote random + milliseconds without the later sequence
+    // field. Its capture clock is known even though it is not adoptable by the
+    // strict current producer/framing classifier. Do not loosen adoption.
+    final legacyLimitless =
+        RegExp(r'^audio_limitless_opus_16000_1_fs320_r\d+_\d{13}\.bin$').hasMatch(path.basename(filePath));
+    if (info == null && !legacyLimitless) return 'unknown_capture_time';
     final match = RegExp(r'_(-?\d+(?:\.\d+)?)(?:_u\d{1,9})?\.bin$').firstMatch(path.basename(filePath));
     final raw = double.tryParse(match?.group(1) ?? '');
     if (raw == null || !raw.isFinite) return 'unknown_capture_time';

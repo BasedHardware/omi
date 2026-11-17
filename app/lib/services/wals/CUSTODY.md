@@ -428,8 +428,9 @@ five-file buffer-queue turns with a yield between turns. Each turn checks sessio
 UID/generation, admission, headless/foreground state, raw legacy preferences, every
 source/directory stamp, fresh memory references and file type/size/mtime/ctime. More
 than 512 sources/four directories defers. Sources remain immutable; only the Documents
-directory stamp is advanced synchronously after our own unlinks. No await separates
-the final fence, tombstone, second fence and unlink.
+directory stamp is advanced synchronously after our own unlinks. One batch intent is flushed asynchronously before entering the capture queue;
+a fresh final fence and second revalidation have no await through unlink. Completion
+is flushed asynchronously after leaving the queue.
 
 Device-local `Documents/orphan_audio_reclaim/tombstones.json` is a flushed, atomically
 replaced ring of the latest 200 attempts (hashed local file/stamp key, bytes, mtime,

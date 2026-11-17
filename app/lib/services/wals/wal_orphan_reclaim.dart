@@ -31,8 +31,13 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         return false;
       }
       final off = await (_orphanReclaimOffOverride ?? OrphanAudioReclaimPolicy.isOff)();
-      result = fence() ?? (off ? 'kill_switch' : 'completed');
-      return result == 'completed';
+      final blocked = fence() ?? (off ? 'kill_switch' : null);
+      if (blocked != null) {
+        result = blocked;
+        return false;
+      }
+      // A successful later batch cannot erase an earlier source fence.
+      return true;
     }
 
     try {
@@ -121,23 +126,43 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
       skips['pass_cap'] = max(0, candidates.length - orphanReclaimPassCap);
       final bounded = candidates.take(orphanReclaimPassCap).toList();
 
-      // Atomic flushed replacement; an interrupted temp is never deletion proof.
-      void checkpoint() {
-        // omi-perf-allow: sync-file-io -- At most 200 short local tombstones; synchronous flush+rename keeps the final destructive fence free of await.
+      // Flushed intent is prepared off the capture queue. It grants no authority:
+      // after this I/O each file still needs the complete synchronous commit fence.
+      Future<void> checkpoint() async {
         final temp = File('${journal.path}.tmp');
-        // omi-perf-allow: sync-file-io -- Bounded 200-entry durable intent; no await before the second fence and unlink.
-        temp.writeAsStringSync(jsonEncode({'version': 1, 'entries': entries}), flush: true);
-        // omi-perf-allow: sync-file-io -- Atomic publication of flushed intent precedes unlink; one constant-size rename.
-        temp.renameSync(journal.path);
+        await temp.writeAsString(jsonEncode({'version': 1, 'entries': entries}), flush: true);
+        await temp.rename(journal.path);
       }
 
       for (var start = 0; start < bounded.length; start += orphanReclaimBatchSize) {
         if (!await permitted()) return;
+        final batch = bounded.skip(start).take(orphanReclaimBatchSize).toList();
+        final intents = <OrphanAudioFile, Map<String, dynamic>>{};
+        for (final file in batch) {
+          final key = sha256
+              .convert(
+                  utf8.encode('${path.basename(file.filePath)}:${file.bytes}:${file.modifiedUs}:${file.changedUs}'))
+              .toString();
+          entries.removeWhere((entry) => entry['key'] == key);
+          while (entries.length >= 200) {
+            entries.removeAt(0);
+          }
+          final entry = <String, dynamic>{
+            'key': key,
+            'bytes': file.bytes,
+            'mtime_us': file.modifiedUs,
+            'at_us': _now().microsecondsSinceEpoch,
+            'state': 'pending'
+          };
+          entries.add(entry);
+          intents[file] = entry;
+        }
+        await checkpoint();
         await _enqueueBuffer(() async {
           // A capture operation may have held the queue after the outer read.
-          // Refresh the resolved flag after that wait, before writing intent.
+          // Refresh the resolved flag after that wait and the durable intent I/O.
           if (!await permitted()) return;
-          for (final file in bounded.skip(start).take(orphanReclaimBatchSize)) {
+          for (final file in batch) {
             String? changed() {
               if (fence() case final reason?) return reason;
               if (!preferences.matches(RecordingInventoryPreferences.capture(prefs.getKeys(), prefs.get)) ||
@@ -166,29 +191,13 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               skip('sidecar_type');
               continue;
             }
-            final key = sha256
-                .convert(
-                    utf8.encode('${path.basename(file.filePath)}:${file.bytes}:${file.modifiedUs}:${file.changedUs}'))
-                .toString();
-            entries.removeWhere((entry) => entry['key'] == key);
-            while (entries.length >= 200) {
-              entries.removeAt(0);
-            }
-            final entry = <String, dynamic>{
-              'key': key,
-              'bytes': file.bytes,
-              'mtime_us': file.modifiedUs,
-              'at_us': _now().microsecondsSinceEpoch,
-              'state': 'pending'
-            };
-            entries.add(entry);
-            checkpoint();
             _orphanReclaimAfterTombstone?.call();
             // Revalidate again AFTER the durable write. No await through either
             // unlink, so another queued producer cannot register in this gap.
             reason = changed();
             if (reason != null) {
               skip(reason);
+              if (reason == 'sources_changed') result = reason;
               continue;
             }
             // Sidecar first: a crash after the audio unlink cannot strand it.
@@ -199,10 +208,12 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
             deleted++;
             bytes += file.bytes;
             snapshot.acknowledgeReclaimUnlink();
-            entry['state'] = 'completed';
-            checkpoint();
+            intents[file]!['state'] = 'completed';
           }
         });
+        // Completion is audit state, never replay authority. A crash here leaves
+        // pending intent; fresh census proof makes restart idempotent.
+        await checkpoint();
         if (fence() case final reason?) {
           result = reason;
           return;

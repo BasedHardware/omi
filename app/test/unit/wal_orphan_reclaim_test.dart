@@ -212,6 +212,30 @@ void main() {
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);
   });
+  test('legacy Limitless random-plus-millisecond filename can be reclaimed', () async {
+    final sync = await ledger();
+    // Created after migration: stranded bytes have no indexed custody row.
+    final file = await audio('audio_limitless_opus_16000_1_fs320_r17_${old * 1000}.bin');
+    expect((await census()).orphans.single.classification, 'unparseable');
+    await sync.reclaimOrphanAudio();
+    expect(await file.exists(), isFalse);
+  });
+  for (final guard in ['capture', 'mtime', 'reference', 'working']) {
+    test('legacy Limitless still respects $guard exclusion', () async {
+      final sync = await ledger();
+      final capture = guard == 'capture' ? now - 1 : old;
+      final filename =
+          'audio_limitless_opus_16000_1_fs320_r17_${capture * 1000}.bin${guard == 'working' ? '.part' : ''}';
+      final file = await audio(filename, modified: guard == 'mtime' ? now : old);
+      if (guard == 'reference') {
+        await json('wals_backup.json', {
+          'wals': [row(filename)]
+        });
+      }
+      await sync.reclaimOrphanAudio();
+      expect(await file.exists(), isTrue);
+    });
+  }
   test('mtime exactly 45 days old is retained', () async {
     final file = await audio(name(old), modified: now - 45 * 86400);
     final sync = await ledger();
@@ -297,6 +321,27 @@ void main() {
     final sync = await ledger(off: () async => ++reads >= 4);
     await sync.reclaimOrphanAudio();
     expect((await census()).orphans.length, 3);
+  });
+  test('later successful batch preserves an earlier sources-changed pass result', () async {
+    for (var i = 0; i < 8; i++) {
+      await audio(name(old - i));
+    }
+    var reads = 0;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        event: events.add,
+        off: () async {
+          reads++;
+          final prefs = await SharedPreferences.getInstance();
+          if (reads == 3) {
+            await prefs.setString('localRecordingJobs', jsonEncode({'unrelated.bin': 'job'}));
+          }
+          if (reads == 4) await prefs.remove('localRecordingJobs');
+          return false;
+        });
+    await sync.reclaimOrphanAudio();
+    expect(events.single['deleted_files'], 3);
+    expect(events.single['result'], 'sources_changed');
   });
   test('failure to persist pending intent retains audio and its sidecar', () async {
     final file = await audio(name(old));
