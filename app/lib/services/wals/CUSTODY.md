@@ -324,7 +324,10 @@ create automatic consent. `holdForUser` (rather than
 existing user-controlled path: `LocalRecordingsProvider` lists held rows in
 Home, `RecordingListItem` opens the recording sheet, and its Process now and
 confirmed Delete actions call the provider's `upload`/`delete`. No new UI is
-needed. Recovery publishes `heldRevision` after its batched save so an open
+needed. New recovered rows persist `recovered_orphan=true`; their WAL id is a
+stable hash of the original basename, keeping same-second/fractional/collision
+files separate in playback/share caches and upload attempts. Source filenames,
+device and capture time stay intact. Existing rows retain their legacy ids. Recovery publishes `heldRevision` after its batched save so an open
 recordings view refreshes. Manual upload uses the existing ledger/uploader;
 if the server rejects a later attempt after 30 days, the existing
 `outsideRecoveryWindow` status is persisted, the held row stays visible as
@@ -389,3 +392,9 @@ prunes archives after seven days. While an archive exists, it holds consent or
 invalidates reference completeness. After pruning, the defined current setting
 defaults apply; this pass adds no durable unknown-consent marker. Indexed local-only
 or held rows still preserve phone-wide history regardless of preference pruning.
+
+Unreadable index quarantine is custody evidence, not disposable diagnostics.
+It intentionally prevents adoption until repaired; do not prune it merely to
+make a census complete. More than 512 sources also defers the bounded commit.
+Unknown-owner files are retained, not assigned to the current account or
+surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.

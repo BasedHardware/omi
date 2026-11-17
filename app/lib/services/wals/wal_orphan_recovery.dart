@@ -215,6 +215,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               // Read preferences and memory again after budget I/O, with no
               // await before publication. Held rows keep explicit user actions.
               holdForUser: holdForUser,
+              recoveredOrphan: true,
               filePath: path.basename(candidate.filePath),
               device: info.marker,
               ownerUid: uid,

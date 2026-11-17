@@ -1005,6 +1005,8 @@ void main() {
         ownerUid: 'owner-a',
         device: 'pendant',
         clockRun: run);
+    expect(source.id, 'pendant_${now - 2}');
+    expect(Wal.fromJson(source.toJson()).id, source.id, reason: 'legacy row ids must stay unchanged');
     final clockName = source.getFileName() as String;
     final prefix = clockName.substring(0, clockName.lastIndexOf('_'));
     final names = [
@@ -1027,6 +1029,13 @@ void main() {
     await sync.recoverOrphanAudio();
     final recovered = sync.testWals.where((w) => w.status == WalStatus.miss).toList();
     expect(recovered.map((w) => w.filePath), unorderedEquals(names));
+    expect(recovered.map((w) => w.id).toSet(), hasLength(names.length),
+        reason: 'playback/share caches are keyed by WAL id, not just the source path');
+    final restored = await WalFileManager.loadWals();
+    for (final wal in recovered) {
+      expect(restored.singleWhere((w) => w.filePath == wal.filePath).id, wal.id,
+          reason: 'file-specific recovery identity must survive the durable index');
+    }
     for (final wal in recovered) {
       expect(wal.holdForUser, isTrue);
       expect(wal.totalFrames, 50);
