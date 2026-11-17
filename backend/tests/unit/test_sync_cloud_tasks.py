@@ -1685,10 +1685,6 @@ async def test_over_cap_upload_in_the_final_fresh_lane_is_not_rejected_by_the_ba
         _restore_modules(saved_modules)
 
 
-if __name__ == '__main__':
-    sys.exit(pytest.main([__file__, '-v']))
-
-
 @pytest.mark.asyncio
 async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
     """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""
@@ -1996,3 +1992,7 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+if __name__ == '__main__':
+    sys.exit(pytest.main([__file__, '-v']))

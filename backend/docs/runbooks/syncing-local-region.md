@@ -100,14 +100,10 @@ worker download and delete of a synthetic object before switching traffic.
 2. Before a **no-copy** cutover, pause new sync intake through an operator-owned
    admission/traffic control that preserves client retry behavior; keep old
    workers running. Drain fresh/backfill Cloud Tasks, retries and in-flight
-   jobs. **Firestore pending jobs are part of the drain:** accepted backfill
-   jobs not yet enqueued live as `sync_backfill_pending` documents whose
-   payloads carry `raw_blob_paths` (`database/sync_backfill_sequencer.py`
-   `register_job`; `utils/sync/uid_sequencer.py` `kick` enqueues later).
-   Emptying Cloud Tasks and Redis job keys does not touch them, and after the
-   env flip workers resolve those paths against the new bucket and finalize
-   `sync_staged_audio_expired`. Let the sequencer enqueue and the workers
-   finish every pending document (or operator-verify the queue is empty)
+   jobs. **Firestore pending jobs:** the legacy backfill sequencer that enqueued
+   `sync_backfill_pending` documents was deleted on 2026-11-17 (plan C C9-C11), so
+   any remaining documents are orphaned cleanup items, not work to drain; they are
+   in the legacy-dark cleanup checklist. Drain batch work and Cloud Tasks only
    before declaring the drain complete.
    **Failed/partial backfill jobs keep their staged blobs** (terminal-ack does
    not delete raw paths). The legacy sequencer recovery script was deleted with
