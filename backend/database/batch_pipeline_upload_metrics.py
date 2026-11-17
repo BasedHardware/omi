@@ -1,10 +1,11 @@
-"""Original upload clocks and closed entitlement labels; no customer identifiers."""
+"""Original-upload metrics with closed labels; no customer identifiers or storage calls."""
 
 import math
 
 from prometheus_client import Counter, Histogram
 
-CLASSES = frozenset({'paid', 'trial', 'free', 'unknown'})
+from config.request_clock import CLASSES, bounded_class
+
 CREATED = Counter('omi_batch_pipeline_created_units_total', 'First durable unit admissions', ['entitlement'])
 DELIVERED = Histogram(
     'omi_batch_pipeline_upload_to_transcript_seconds',
@@ -28,26 +29,11 @@ for _class in sorted(CLASSES):
             INTER_UPLOAD_GAP.labels(_class, _freshness, _boundary)
 
 
-def bounded_class(value):
-    return value if isinstance(value, str) and value in CLASSES else 'unknown'
-
-
-def clock_fields(arrived_at, entitlement):
-    if type(arrived_at) not in (int, float) or not math.isfinite(arrived_at) or arrived_at < 0:
-        return {}
-    return {'upload_arrived_at': arrived_at, 'upload_entitlement': bounded_class(entitlement)}
-
-
 def observe_delivery(row, now):
     """Called only after a first authoritative non-deletion completion commits."""
     arrived = row.get('upload_arrived_at')
     if type(arrived) in (int, float) and math.isfinite(arrived) and 0 <= arrived <= now:
         DELIVERED.labels(bounded_class(row.get('upload_entitlement'))).observe(now - arrived)
-
-
-def context_fields(context):
-    context = context or {}
-    return clock_fields(context.get('upload_arrived_at'), context.get('upload_entitlement'))
 
 
 def inter_upload_gap(member, predecessors):

@@ -1,6 +1,6 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
-from database import batch_pipeline_upload_metrics as upload_metrics
+from config.request_clock import context_fields
 
 from dataclasses import replace
 from functools import partial
@@ -1075,7 +1075,7 @@ async def accept_upload(
                 'lane': lane,
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
-                **upload_metrics.context_fields(intake_context),
+                **context_fields(intake_context),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

@@ -23,7 +23,7 @@ from config.policy import BatchUnitPolicy
 from database import batch_pipeline_coalescing as rows
 from database.batch_pipeline_leader import LeaseLost
 from utils.batch_pipeline.contracts import WorkItem
-from database.batch_pipeline_upload_metrics import clock_fields
+from config.request_clock import clock_fields
 from utils.batch_pipeline.capture_decode import decode_units
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import run_blocking, db_executor, storage_executor, sync_executor

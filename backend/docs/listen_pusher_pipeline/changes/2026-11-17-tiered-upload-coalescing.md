@@ -41,8 +41,10 @@ outside coverage. Scrape profiles, real worker/multiprocess and sync exporters
 are tested. The chart-selection contract's cases are isolated individually after
 hosted CI exceeded its unchanged per-test CPU limit; every path assertion stays.
 
-Shared clocks/collectors now live in `database/batch_pipeline_upload_metrics.py`,
-alongside the existing low-level lease telemetry precedent. Persistence and
-business/worker callers import the same module, preserving the documented
-database-to-utils dependency direction and one collector identity. No old-path
-compatibility module remains; metric names, labels and observations are unchanged.
+Pure clock/label validation lives in `config/request_clock.py`; shared collectors
+live in `database/batch_pipeline_upload_metrics.py`, alongside the existing
+low-level lease telemetry precedent. Async request paths use only pure config
+helpers; persistence and worker callers share one collector module. This preserves
+the documented dependency direction without routing pure request metadata through
+a database adapter. No old-path compatibility module remains; metric names,
+labels and observations are unchanged.
