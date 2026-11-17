@@ -50,6 +50,7 @@ model_config_features:
     - persona_clone
     - session_titles
     - smart_glasses
+    - sync_redrive_title
     - episode_composer
     - episode_incremental
     - wrapped_analysis

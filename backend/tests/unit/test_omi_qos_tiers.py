@@ -378,6 +378,7 @@ class TestModelQosProfiles:
             'memory_category',
             'smart_glasses',
             'persona_chat',
+            'sync_redrive_title',
             'episode_incremental',
             'open_loop_card',
         }
