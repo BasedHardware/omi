@@ -1,3 +1,5 @@
+// Ledger-owned, bounded foreground orphan adoption. Census stays off the capture
+// queue; uncertainty retains bytes and no recovery path deletes audio.
 part of 'local_wal_sync.dart';
 
 const orphanRecoveryPassCap = 200;

@@ -1,3 +1,5 @@
+// Read-only orphan identity, framing and age classification for the ledger and
+// diagnostics. Local file identities never enter the aggregate export.
 part of 'recording_inventory.dart';
 
 /// Device-local data only. Export [summary], never this object or its candidates.

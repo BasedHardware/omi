@@ -1,3 +1,5 @@
+// Read-only decoding of recording references and custody owner evidence. Never
+// call repairing loaders or infer server receipt from these local sources.
 part of 'recording_inventory.dart';
 
 _Decoded _decode(Uint8List bytes, String kind) {

@@ -1,3 +1,5 @@
+// Own the non-destructive orphan recovery kill switch. Only true disables
+// recovery; upload and deletion policy remain with the custody ledger.
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 /// Recovery is non-destructive and paced by the ledger and server. Unknown
