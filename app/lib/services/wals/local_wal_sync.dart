@@ -2658,7 +2658,16 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<SyncLocalFilesResponse?> _syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    if (wal.onDeviceOnly || wal.status == WalStatus.uploadRejected) return null;
+    if (wal.onDeviceOnly) return null;
+    // Home's Process now may retry a held refusal after a server fix. It never
+    // releases the hold or the automatic drain's consent fence. Deterministic
+    // byte/part limits keep their existing no-retry guard.
+    if (wal.status == WalStatus.uploadRejected &&
+        (!wal.holdForUser ||
+            wal.uploadRejectionReason == WalUploadRejection.tooLarge ||
+            wal.uploadRejectionReason == WalUploadRejection.tooManyParts)) {
+      return null;
+    }
     final generation = _sessionGeneration;
     await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation)) return null;

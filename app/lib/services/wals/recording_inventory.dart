@@ -447,7 +447,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         for (final row in entry.value)
           if (_reference(row, documents) case final ref?) ref,
   };
-  final ownerBuckets = buckets.entries.where((e) => !e.key.contains('legacy') && e.key != 'boot_journal');
+  // Historical preference/job references have no owner stamp; they must not
+  // disappear from phone-wide ownership proof merely because they are legacy.
+  final ownerBuckets = buckets.entries.where((e) => e.key != 'boot_journal');
   final singleOwner = currentOwner.isNotEmpty &&
       ownerBuckets.expand((e) => e.value).every((r) => r.owner == currentOwner) &&
       buckets.entries

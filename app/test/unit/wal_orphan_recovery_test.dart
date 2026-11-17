@@ -252,6 +252,29 @@ void main() {
     return sync;
   }
 
+  for (final source in ['pending files', 'jobs', 'quarantined jobs']) {
+    test('ownerless legacy $source prevents orphan adoption despite a current-owner row', () async {
+      final orphan = await audio(name(now));
+      await audio(name(now - 1));
+      final snapshot = await captureRecordingCensus(
+          documents: dir.path,
+          memoryBuckets: {'active': []},
+          phoneSeconds: now,
+          currentOwner: 'owner-a',
+          legacyFiles: source == 'pending files' ? ['${dir.path}/${name(now - 1)}'] : [],
+          legacyJobs: source == 'jobs' ? jsonEncode({name(now - 1): 'old-job'}) : '',
+          corruptLegacyJobs: source == 'quarantined jobs' ? jsonEncode({name(now - 1): 'old-job'}) : '');
+      expect(snapshot.complete, isTrue);
+      expect(snapshot.orphans.length, 1);
+      expect(snapshot.orphans.single.classification, 'owner_unknown');
+      final bytes = await orphan.readAsBytes();
+      final sync = await ledger(scan: () async => snapshot);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+      expect(await orphan.readAsBytes(), bytes);
+    });
+  }
+
   test('adoption is batched, oldest first, capped, durable, idempotent and never changes audio', () async {
     for (var i = 0; i < 205; i++) {
       await audio(name(now - i));
@@ -328,6 +351,77 @@ void main() {
     expect(view.getById(name(now - 1)), isNull);
     expect(sync.testWals.any((w) => w.filePath == name(now - 1)), isFalse);
   });
+
+  test('a refused manual upload stays held even when its automatic refusal retry is due', () async {
+    var seconds = now, uploads = 0;
+    final file = await audio(name(now));
+    final bytes = await file.readAsBytes();
+    final sync = await ledger(
+        clock: () => DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+        gate: uploadGate((files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads++;
+          if (uploads == 1) throw const SyncUploadHttpException(400, 'request refused');
+          return UploadFilesResult.queued('explicit-retry');
+        }));
+    await sync.recoverOrphanAudio();
+    final view = LocalRecordingsProvider(ledger: sync, initialize: false);
+    addTearDown(view.dispose);
+    await view.refresh();
+    expect(await view.upload(view.getById(name(now))!), LocalUploadOutcome.failed);
+    final recovered = sync.testWals.singleWhere((w) => w.filePath == name(now));
+    expect(recovered.status, WalStatus.uploadRejected);
+    expect(recovered.holdForUser, isTrue);
+    expect(uploads, 1);
+    seconds += 86400;
+    expect(recovered.refusalRetryDue(seconds), isTrue);
+    expect(isAutoUploadEligible(recovered, nowSeconds: seconds), isFalse);
+    await sync.syncAll();
+    await sync.syncLiveCaptureOnly();
+    expect(uploads, 1, reason: 'a refusal cannot turn a user hold into automatic consent');
+    expect(await view.upload(view.getById(name(now))!), LocalUploadOutcome.started);
+    expect(uploads, 2, reason: 'a later explicit Process now action still reaches the uploader');
+    expect(recovered.status, WalStatus.uploaded);
+    expect(recovered.holdForUser, isTrue);
+    expect(await file.readAsBytes(), bytes);
+  });
+
+  for (final reason in [WalUploadRejection.tooLarge, WalUploadRejection.tooManyParts]) {
+    test('held $reason keeps the existing deterministic refusal guard', () async {
+      await audio(name(now));
+      var uploads = 0;
+      final sync = await ledger(gate: uploadGate((files,
+          {onUploadProgress,
+          conversationId,
+          captureEvidence,
+          recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
+          claimLiveCapture = false,
+          geolocation}) async {
+        uploads++;
+        throw SyncUploadHttpException(413, 'request refused', reasonCode: reason);
+      }));
+      await sync.recoverOrphanAudio();
+      final view = LocalRecordingsProvider(ledger: sync, initialize: false);
+      addTearDown(view.dispose);
+      await view.refresh();
+      expect(await view.upload(view.getById(name(now))!), LocalUploadOutcome.failed);
+      expect(await view.upload(view.getById(name(now))!), LocalUploadOutcome.failed);
+      expect(uploads, 1);
+      final held = sync.testWals.singleWhere((w) => w.filePath == name(now));
+      expect(held.holdForUser, isTrue);
+      expect(held.status, WalStatus.uploadRejected);
+      expect(await File('${dir.path}/${name(now)}').exists(), isTrue);
+    });
+  }
 
   test('manual upload after 30 days marks outsideRecoveryWindow and retains the held file', () async {
     var seconds = now;

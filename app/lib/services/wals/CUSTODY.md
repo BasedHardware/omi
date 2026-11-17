@@ -157,8 +157,11 @@ audio keeps priority, with a separate unknown-clock batch after at most 36 valid
 batch attempts. This shared budget is checkpointed on waiting WALs in the same owner
 index before each valid attempt and resets after an unknown batch enters the
 gate, so restarts cannot erase it and unknown backlog cannot monopolize uploads.
-Local-only custody stays closed; a held recording already submitted explicitly may recover
-automatically. No install migration, clock reset, or receipt is needed: an old
+Local-only and held custody stay closed to automatic uploads, including refusal
+recovery. A held recording may retry a recoverable refusal through Home's
+explicit Process now action; the hold and stored clocks stay intact. Deterministic
+`too_large`/`too_many_parts` refusals retain their existing no-retry guards.
+No install migration, clock reset, or receipt is needed: an unheld old
 invalid-date refusal automatically becomes eligible on its next weekly due date.
 `OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF=true` restores the seven-day expiry for
 this reason without changing any stored state (compile-time, default false).
@@ -290,14 +293,17 @@ The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
 mono filename and strict complete length-prefixed frames establish capture time
 and duration. Automatic recovery requires a plausible capture time within 28
 days, leaving two days inside the server's 30-day admission window. Older audio
-stays on disk. Unknown, missing or foreign owners in any custody source prevent
+stays on disk. Unknown, missing or foreign owners in any custody source, including legacy
+pending-file/job preferences, prevent
 single-owner proof; at least one index/memory row must prove the current owner.
 A capture journal's owner hash must match the current UID. No inference from
 filenames or the currently signed-in account overrides historical ownership.
 
 Lead ruling (2026-11-17): recovered rows enter `miss` with `holdForUser=true`.
 A rowless orphan has no durable original capture-route choice, so recovery
-never authorizes an automatic cloud drain. `holdForUser` (rather than
+never authorizes an automatic cloud drain. The hold also overrides the daily
+`uploadRejected` retry lane after a refused manual request; a refusal cannot
+create automatic consent. `holdForUser` (rather than
 `onDeviceOnly`, which blocks `syncWal` even for an explicit action) is the
 existing user-controlled path: `LocalRecordingsProvider` lists held rows in
 Home, `RecordingListItem` opens the recording sheet, and its Process now and
