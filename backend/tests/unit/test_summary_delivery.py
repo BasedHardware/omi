@@ -152,9 +152,20 @@ def test_actions_events_title_and_empty_sections_do_not_satisfy_summary():
 
 def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     row = debt()
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(row, minimum(), 'u', now=300)
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            delivery.merge_result(row, minimum(), 'u', now=300)
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
     assert row['summary_due_at'] == 220
+    # A request path has no consumer to catch the fence: it records the empty
+    # attempt and commits with the debt still armed instead of raising.
+    request_write = minimum()
+    receipt = delivery.merge_result(row, request_write, 'u', now=300)
+    assert receipt is not None and receipt['reason'] == 'empty_output' and not receipt['present']
+    assert request_write['summary_due_at'] == 220
+    assert not request_write.get('summary_completed_at')
     # A failed model attempt never gets to overwrite a prior usable summary:
     # the enriched row now commits (no lane stranding without an outbox), but
     # the banked content and receipts are re-applied onto the write instead

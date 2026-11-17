@@ -926,6 +926,62 @@ def test_empty_output_owner_race_defers_without_burning_callback_attempts(rows, 
     assert pending['task_token'] != token and pending['lease_until'] == 0
 
 
+def _empty_output(*_):
+    return SimpleNamespace(structured={'title': 'Synthetic'})
+
+
+def _bounded_empty_failure(rows):
+    """The real strike budget, without a Firestore transaction in a unit test."""
+    from database.summary_processing import EmptyFailureOutcome
+
+    def record(_client, _collection, document_id, _owner, _token):
+        row = rows[0][document_id]
+        row['summary_empty_failures'] = min(3, row.get('summary_empty_failures', 0) + 1)
+        if row['summary_empty_failures'] >= 3:
+            row.update(dormant=True, due_at=None, lease_until=0, summary_blocked_reason='empty_output_exhausted')
+            return EmptyFailureOutcome.BLOCKED
+        return EmptyFailureOutcome.RETRY
+
+    return record
+
+
+def test_empty_output_then_success_delivers_the_summary(rows, monkeypatch):
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    first = _deliver(rows, _empty_output)
+    assert (first.outcome, first.reason) == ('retry', 'callback_pending')
+    assert rows[0][KEY]['summary_empty_failures'] == 1
+    # The queue retry reclaims the released lease; a real summary then delivers.
+    second = _deliver(rows, lambda *_: SUMMARY)
+    assert second.outcome == 'done'
+    assert rows[0][KEY]['summary_seen']
+
+
+def test_empty_output_twice_records_a_bounded_retry_then_blocks(rows, monkeypatch):
+    import database._client as firestore_client
+    import database.summary_processing as summary_processing
+
+    monkeypatch.setattr(firestore_client, 'get_firestore_client', Mock())
+    monkeypatch.setattr(summary_processing, 'record_empty_failure', _bounded_empty_failure(rows))
+    for expected in (1, 2):
+        result = _deliver(rows, _empty_output)
+        assert (result.outcome, result.reason) == ('retry', 'callback_pending')
+        assert rows[0][KEY]['summary_empty_failures'] == expected
+    blocked = _deliver(rows, _empty_output)
+    assert (blocked.outcome, blocked.reason) == ('stale', 'empty_output_blocked')
+    assert rows[0][KEY]['dormant'] and rows[0][KEY]['summary_blocked_reason'] == 'empty_output_exhausted'
+
+
+def test_empty_output_on_an_already_enriched_row_acks_instead_of_retrying(rows):
+    """A delivered summary is not a delivery failure: an empty reprocess must not retry forever."""
+    rows[0][KEY]['summary_seen'] = True
+    result = _deliver(rows, _empty_output)
+    assert (result.outcome, result.reason) == ('done', 'processed')
+
+
 def test_transient_fault_on_the_effects_only_path_releases_the_lease(rows, monkeypatch):
     """Luna r1: the effects-only branch runs before the callback block."""
     from utils.conversations import lazy_enrichment

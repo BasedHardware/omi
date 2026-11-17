@@ -104,10 +104,39 @@ def test_record_owner_does_not_bypass_summary_processing_fence(writer):
 def test_empty_model_result_cannot_commit_or_emit(writer, monkeypatch):
     emit = Mock()
     monkeypatch.setattr(delivery, 'emit', emit)
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        db.persist_processing_result_with_lifecycle('u', payload(''))
+    token = delivery.PROCESS_CONTEXT.set({'owner': 'worker', 'claimed': False})
+    try:
+        with pytest.raises(delivery.SummaryOutputUnavailable):
+            db.persist_processing_result_with_lifecycle('u', payload(''))
+    finally:
+        delivery.PROCESS_CONTEXT.reset(token)
     assert not writer.commits
     emit.assert_not_called()
+
+
+def test_empty_model_result_from_a_request_path_commits_with_debt(writer, monkeypatch):
+    """from-segments and finalize have no consumer to catch the fence: commit, keep the debt."""
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert db.persist_processing_result_with_lifecycle('u', payload(''))
+    assert len(writer.commits) == 1
+    written = writer.commits[0]
+    assert written['summary_due_at'] == 220
+    assert not written.get('summary_completed_at')
+    assert not written.get('summary_output_present')
+    emit.assert_called_once()
+    assert emit.call_args[0][0]['reason'] == 'empty_output'
+
+
+def test_from_segments_import_with_an_empty_merge_returns_a_recorded_outcome(writer, monkeypatch):
+    """The import request must not 500 on a merge result that carries no summary."""
+    emit = Mock()
+    monkeypatch.setattr(delivery, 'emit', emit)
+    assert lifecycle.persist_processed_conversation('u', payload(''))
+    assert len(writer.commits) == 1
+    assert writer.commits[0]['summary_due_at'] == 220
+    assert not writer.commits[0].get('summary_completed_at')
+    assert emit.call_args[0][0]['reason'] == 'empty_output'
 
 
 def test_empty_model_result_without_open_obligation_commits(writer, monkeypatch):

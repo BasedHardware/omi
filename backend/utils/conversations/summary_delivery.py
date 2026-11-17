@@ -506,7 +506,18 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         and existing.get('summary_blocked_reason') not in EMPTY_BLOCKED_REASONS
     )
     if not rich and not discarded and obligation_open:
-        raise SummaryOutputUnavailable('kept first-summary output is empty')
+        if PROCESS_CONTEXT.get() is not None:
+            # A consumer owns this write and records the bounded empty-output
+            # strike (``record_empty_failure``) before releasing the lease.
+            raise SummaryOutputUnavailable('kept first-summary output is empty')
+        # No consumer owns this write: a request path (from-segments, finalize)
+        # or a direct sync persist. Raising here aborts the completed write and
+        # surfaces as a 500, so commit the empty attempt with the debt still
+        # armed. The repair pass re-wakes the row and the consumer's empty
+        # budget bounds the retries; an empty structured is never a delivery.
+        if write.get('summary_due_at') is None:
+            write['summary_due_at'] = current + deadline_seconds()
+        return dict(lane=lane(existing), reason='empty_output', present=False, latency=None)
     if existing.get('summary_completed_at') or existing.get('summary_output_present'):
         write['summary_due_at'] = None
         # An enriched row already holds a usable summary. The old fence refused
