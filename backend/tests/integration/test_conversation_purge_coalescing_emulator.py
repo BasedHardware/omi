@@ -388,7 +388,6 @@ def test_legacy_leader_takeover_cannot_rejoin_its_old_shared_cursor(world):
 @pytest.mark.parametrize('phase', ['seal', 'resume'])
 def test_ambiguous_claim_commit_recovers_same_members_and_token(monkeypatch, world, phase):
     from google.api_core.exceptions import ServiceUnavailable
-    from google.cloud.firestore_v1.transaction import Transaction
 
     leader, follower = world.arm('one'), world.arm('two')
     generation = _dispatch(world, leader)
@@ -397,17 +396,20 @@ def test_ambiguous_claim_commit_recovers_same_members_and_token(monkeypatch, wor
         progress = scans.ScanProgress(world.client, leader, first)
         progress.checkpoint({'ns': 0, 'phase': 'discover'})
         progress.finish('checkpointed')
-    commit = Transaction._commit
+    run_transactional = scans.run_transactional
     lost = []
 
-    def commit_then_lose_response(transaction):
-        result = commit(transaction)
-        if not lost:
-            lost.append(True)
-            raise ServiceUnavailable('synthetic reply lost after commit')
-        return result
+    def lose_reply(client, operation, **kwargs):
+        def commit_then_lose_response(transaction):
+            result = operation(transaction)  # Real emulator commit, then lose its reply at the caller boundary.
+            if not lost:
+                lost.append(True)
+                raise ServiceUnavailable('synthetic reply lost after commit')
+            return result
 
-    monkeypatch.setattr(Transaction, '_commit', commit_then_lose_response)
+        return run_transactional(client, commit_then_lose_response, **kwargs)
+
+    monkeypatch.setattr(scans, 'run_transactional', lose_reply)
     status, scan = scans._claim(world.client, leader, generation)
     assert status == 'run' and set(scan['members']) == {leader, follower}
     for job, member in scan['members'].items():
