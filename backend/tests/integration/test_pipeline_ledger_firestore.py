@@ -29,13 +29,14 @@ def _conversation_ref(client, uid, capture_id):
 
 
 def _seed(client, uid, capture_id, **fields):
-    client.collection('users').document(uid).set({'id': uid})
+    client.collection('users').document(uid).set({'id': uid, 'data_protection_level': 'standard'})
     _conversation_ref(client, uid, capture_id).set(
         {
             'id': capture_id,
             'status': 'completed',
             'data_protection_level': 'standard',
             'record_lane_owner': 'batch_live_v1',
+            'private_cloud_sync_enabled': True,
             **fields,
         }
     )
