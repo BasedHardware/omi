@@ -28,6 +28,7 @@ from database.batch_pipeline_projection_protocol import (
     source_reader_marked,
     missing_canonical_source_marker,
     ProjectionSourceMarkerMissing,
+    ProjectionHoldNotApplicable,
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
@@ -342,7 +343,7 @@ class ProjectionSession:
                 or self.entry.get('projection_parts')
                 or self.entry.get('projection_redriven_at')
             ):
-                raise ProjectionBlocked('protocol refusal no longer applies')
+                raise ProjectionHoldNotApplicable('protocol refusal no longer applies')
         elif not protocol_accepted:
             if missing_canonical_source_marker(self.entry, self.job):
                 raise ProjectionSourceMarkerMissing('immutable result binding mismatch')
@@ -514,6 +515,8 @@ class ProjectionSession:
         if quarantined and batch_held_dead_letter_enabled():
             receipt['held_deadline_at'] = self.now + HELD_DEAD_LETTER_SECONDS
         if quarantined:
+            # Reuse the receipt shape required by release/custody consumers;
+            # projection_protocol_hold_reason identifies marker holds separately.
             receipt.update(
                 state='quarantined',
                 disposition='ambiguous_generation',

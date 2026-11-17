@@ -36,6 +36,7 @@ from database.batch_pipeline_projection import ProjectionBlocked, ProjectionRepl
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import ProjectionSourceMarkerMissing
+from database.batch_pipeline_projection_protocol import PROJECTION_HEAD_BLOCKED_SINCE, PROJECTION_HEAD_BLOCK_TYPE
 from database.batch_pipeline_projection_protocol_hold import bound_protocol_head
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
@@ -181,8 +182,6 @@ PROJECTION_HEAD_RETRY_SECONDS = 24 * 3600.0
 
 # Result-row fields stamping a bounded-retry head's first failure. Written
 # once per failure episode; the release redrive clears them with the receipt.
-PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
-PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
 
 def projection_exception_transient(error: BaseException) -> bool:
@@ -255,6 +254,8 @@ def head_holds_without_retry(error: BaseException, job: dict | None, *, now: flo
 
 
 def head_retry_bound_exceeded(entry: dict, now: float) -> bool:
+    if entry.get(PROJECTION_HEAD_BLOCK_TYPE) == ProjectionSourceMarkerMissing.__name__:
+        return False  # A reader refusal cannot spend the next transient failure's retry window.
     since = entry.get(PROJECTION_HEAD_BLOCKED_SINCE)
     return isinstance(since, (int, float)) and now - since > PROJECTION_HEAD_RETRY_SECONDS
 
@@ -948,7 +949,10 @@ class Projector:
 
         def commit(transaction):
             row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
-            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
+            if (
+                row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None
+                and row.get(PROJECTION_HEAD_BLOCK_TYPE) != ProjectionSourceMarkerMissing.__name__
+            ) or row.get('projection_state') not in (
                 'pending',
                 'persisted',
                 'ready',

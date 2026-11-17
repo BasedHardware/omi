@@ -91,3 +91,10 @@ PR #25617 owns blocked-head/outcome alerting. Its projection_drain.py,
 projection_walk_stop.py and metrics.py lines are untouched; this PR adds only the
 disposition metric and retains the existing blocked stop token. No alert is
 added or duplicated.
+
+Reader-refusal and transient-error episodes share field names but not age
+budgets. When a reader fix changes the failure to a transient assignment error,
+the generic retry rule ignores the old protocol stamp and starts its ordinary
+24-hour window at that first transient failure. A stale hint or an already
+redriven row that is ineligible for this hold is a quiet no-op, while actual
+binding/privacy/ledger/source failures still retain their ordinary refusal.

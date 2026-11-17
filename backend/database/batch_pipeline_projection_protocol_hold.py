@@ -7,7 +7,13 @@ from google.cloud import firestore
 from prometheus_client import Counter
 
 from config.policy import ProjectionPolicy, kill_switch
-from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionSourceMarkerMissing
+from database.batch_pipeline_projection_protocol import (
+    ProjectionBlocked,
+    ProjectionSourceMarkerMissing,
+    ProjectionHoldNotApplicable,
+    PROJECTION_HEAD_BLOCKED_SINCE,
+    PROJECTION_HEAD_BLOCK_TYPE,
+)
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -22,9 +28,9 @@ PROTOCOL_HOLDS = Counter(
 
 
 def refusal_age(entry, now):
-    since = entry.get('projection_blocked_since')
+    since = entry.get(PROJECTION_HEAD_BLOCKED_SINCE)
     if (
-        entry.get('projection_block_type') != PROTOCOL_BLOCK_TYPE
+        entry.get(PROJECTION_HEAD_BLOCK_TYPE) != PROTOCOL_BLOCK_TYPE
         or type(since) not in (int, float)
         or not math.isfinite(since)
         or since < 0
@@ -57,7 +63,7 @@ def bound_protocol_head(store, segment_id, job, entry, binding, now) -> bool:
         if age is None:
             transaction.update(
                 session.result_ref,
-                {'projection_blocked_since': now, 'projection_block_type': PROTOCOL_BLOCK_TYPE},
+                {PROJECTION_HEAD_BLOCKED_SINCE: now, PROJECTION_HEAD_BLOCK_TYPE: PROTOCOL_BLOCK_TYPE},
             )
             return False
         if age < PROTOCOL_REFUSAL_SECONDS:
@@ -66,7 +72,10 @@ def bound_protocol_head(store, segment_id, job, entry, binding, now) -> bool:
         transaction.update(session.result_ref, {'projection_protocol_hold_reason': PROTOCOL_HOLD_REASON})
         return age
 
-    committed_age = store.run(commit, policy=policy)
+    try:
+        committed_age = store.run(commit, policy=policy)
+    except ProjectionHoldNotApplicable:
+        return False
     if committed_age is not False:
         try:
             store._mirror(binding)

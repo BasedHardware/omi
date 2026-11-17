@@ -1,6 +1,7 @@
 """11-16 replay: real prepare, quarantine, assignment, owner walk and release fences."""
 
 from dataclasses import asdict
+import logging
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -202,6 +203,29 @@ def test_kill_switch_retains_indefinite_block(incident, monkeypatch):
     assert f.watermark() is None
 
 
+@pytest.mark.parametrize(
+    'field,alias',
+    [
+        ('source_alias', {}),
+        ('source_alias', []),
+        ('source_alias', ''),
+        ('source_alias', False),
+        ('source_alias_of', 'canonical'),
+        ('source_alias_of', ''),
+    ],
+)
+def test_alias_metadata_is_not_a_canonical_source(incident, field, alias):
+    f = incident
+    job = f.client.rows[(f'{NS}_jobs', 'head')]
+    job[field] = alias
+    assert not missing_canonical_source_marker(f.row('head'), job)
+    assert walk(f).advanced == []
+    f.now[0] += PROTOCOL_REFUSAL_SECONDS
+    assert walk(f).advanced == []
+    assert 'projection_blocked_since' not in f.row('head')
+    assert f.watermark() is None
+
+
 def test_unmarked_job_residual_is_bounded_by_current_reader(incident, monkeypatch):
     f = incident
     monkeypatch.setattr(sessions, 'source_reader_marked', f.supported)
@@ -298,9 +322,42 @@ def test_reader_fix_before_bound_prevents_stale_hold(incident, monkeypatch):
     f.now[0] += PROTOCOL_REFUSAL_SECONDS
     job, entry, binding = f.store.read('head')
     monkeypatch.setattr(sessions, 'source_reader_marked', f.supported)
-    with pytest.raises(ProjectionBlocked, match='protocol refusal no longer applies'):
-        bound_protocol_head(f.store, 'head', job, entry, binding, f.now[0])
+    assert not bound_protocol_head(f.store, 'head', job, entry, binding, f.now[0])
     assert f.row('head')['projection_state'] == 'pending'
+
+
+def test_protocol_refusal_age_does_not_spend_a_later_transient_retry_window(incident, monkeypatch):
+    f = incident
+    assert walk(f).advanced == []
+    f.now[0] += 86401
+    monkeypatch.setattr(sessions, 'source_reader_marked', f.supported)
+    persist = f.projector._persist_read
+
+    def timeout(sid, *args, **kwargs):
+        if sid == 'head':
+            raise TimeoutError('synthetic transient after reader upgrade')
+        return persist(sid, *args, **kwargs)
+
+    f.projector._persist_read = timeout
+    assert walk(f).advanced == []
+    assert f.row('head')['projection_state'] == 'pending'
+    assert f.row('head')['projection_blocked_since'] == f.now[0]
+    assert f.row('head')['projection_block_type'] == 'TimeoutError'
+    assert f.watermark() is None
+    f.projector._persist_read = persist
+    assert walk(f).advanced == ['head', 'next', 'tail']
+
+
+def test_redriven_refusal_is_a_quiet_hold_noop(incident, caplog):
+    f = incident
+    f.row('head')['projection_redriven_at'] = 1.0
+    with caplog.at_level(logging.WARNING):
+        assert walk(f).advanced == []
+        f.now[0] += 86401
+        assert walk(f).advanced == []
+    assert not caplog.records
+    assert 'projection_blocked_since' not in f.row('head')
+    assert f.watermark() is None
 
 
 def test_sweep_also_bounds_the_refused_head(incident):
