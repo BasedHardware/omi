@@ -227,7 +227,9 @@ def build(uid, window, recordings, existing=None):
         row['structured']['sections'] = [
             {'heading': str(s.get('title') or '')[:120], 'body_markdown': ''} for s in window.get('sections') or []
         ]
-        row['structured']['participants'] = [{'name': name} for name in window.get('people') or []]
+        row['structured']['participants'] = [
+            {'name': name, 'source': 'transcript'} for name in window.get('people') or []
+        ]
     if existing and segments != existing.get('transcript_segments'):
         row['sync_content_revision'] = int(existing.get('sync_content_revision') or 0) + 1
     elif not existing:
