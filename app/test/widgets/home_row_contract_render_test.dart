@@ -419,121 +419,134 @@ void main() {
     }, skip: _baseline && compact);
   }
 
-  testWidgets('compact cards fold pending only and atomically replace READY members on compose', (tester) async {
-    addTearDown(() => debugDefaultTargetPlatformOverride = null);
-    final fixture = HomeReadyMembersFixture(DateTime.now());
-    var composed = false;
-    var newlyReady = false;
-    final feed = HomeFeedProvider(
-        owner: () => 'fixture',
-        fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
-            items: composed
-                ? [
-                    HomeFeedCard(
-                        id: 'episode:owner',
-                        kind: 'episode',
-                        detailId: 'owner',
-                        startedAt: fixture.waiting.startedAt,
-                        title: 'Combined fixture',
-                        emoji: '',
-                        preview: 'Combined notes',
-                        status: 'completed',
-                        homeStep: 'ready',
-                        starred: false,
-                        isLocked: false,
-                        hasTasks: false,
-                        memberCount: 4,
-                        sources: const [],
-                        summaryAvailable: true,
-                        revision: 'composed')
-                  ]
-                : [
-                    for (final member in fixture.members)
+  for (final age in [const Duration(minutes: 40), const Duration(hours: 2)]) {
+    testWidgets('compact cards fold pending only and atomically replace READY members on compose, age=$age',
+        (tester) async {
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final now = DateTime.now();
+      final fixture = HomeReadyMembersFixture(now, startedAt: now.subtract(age));
+      var composed = false;
+      var newlyReady = false;
+      final feed = HomeFeedProvider(
+          owner: () => 'fixture',
+          fetch: ({cursor}) async => ApiSuccess(HomeFeedPage(
+              items: composed
+                  ? [
                       HomeFeedCard(
-                          id: 'conversation:${member.id}',
-                          kind: 'conversation',
-                          detailId: member.id,
-                          startedAt: member.startedAt,
-                          title: member.structured.title,
+                          id: 'episode:owner',
+                          kind: 'episode',
+                          detailId: 'owner',
+                          startedAt: fixture.waiting.startedAt,
+                          title: 'Combined fixture',
                           emoji: '',
-                          preview: member.structured.overview,
+                          preview: 'Combined notes',
                           status: 'completed',
-                          homeStep: newlyReady && member.id == fixture.members[2].id ? 'ready' : member.homeStep,
+                          homeStep: 'ready',
                           starred: false,
                           isLocked: false,
                           hasTasks: false,
-                          memberCount: 1,
+                          memberCount: 4,
                           sources: const [],
-                          summaryAvailable: member.homeStep == 'ready',
-                          revision: 'waiting')
-                  ],
-            nextCursor: null,
-            hasMore: false,
-            truncated: false,
-            generation: composed ? 'composed' : 'waiting')));
-    addTearDown(feed.dispose);
-    await feed.start();
-    await _pumpHome(tester, [], feed: feed, withNavigation: true, detailItems: fixture.members);
-    expect(find.byType(ProcessingConversationRow), findsOneWidget);
-    expect(tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow)).count, 2);
-    expect(find.text('Ready recording 1'), findsOneWidget);
-    expect(find.text('Ready recording 2'), findsOneWidget);
-    final aggregate = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
-    expect(aggregate.episode!.members.map((m) => m.id).toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
-    expect(aggregate.episode!.conversationIds.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
-    await tester.tap(find.byKey(_processingKey));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    for (final member in fixture.members.take(2)) {
-      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsNothing);
-    }
-    for (final member in fixture.members.skip(2)) {
-      expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
-    }
-    newlyReady = true;
-    await feed.refresh();
-    await tester.pump();
-    expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
-    expect(find.byKey(ValueKey('episode_member_${fixture.members[3].id}')), findsOneWidget);
-    final history =
-        Provider.of<ConversationProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
-    final deleted = <String>[];
-    history.conversationDeleteFetcherOverride = (id) async {
-      deleted.add(id);
-      return true;
-    };
-    await tester.tap(find.byKey(const Key('episode_more')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text('Delete'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.text('Delete 1 Conversation?'), findsOneWidget);
-    await tester.tap(find.text('Delete').last);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(history.memoriesToDelete.keys.toSet(), {fixture.members[3].id});
-    // The typed Home fixture nests Scaffolds; invoke the rendered Undo action
-    // directly. The standalone destructive-scope suite verifies its tap path.
-    tester
-        .widget<TextButton>(find.descendant(of: find.byType(SnackBarAction), matching: find.byType(TextButton)))
-        .onPressed!();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(history.memoriesToDelete, isEmpty);
-    expect(deleted, isEmpty);
-    expect(find.text('Ready recording 1'), findsOneWidget);
-    expect(find.text('Ready recording 2'), findsOneWidget);
-    composed = true;
-    await feed.refresh();
-    await tester.pump();
-    expect(find.text('Combined fixture'), findsOneWidget);
-    expect(find.text('Ready recording 1'), findsNothing);
-    expect(find.text('Ready recording 2'), findsNothing);
-    expect(find.byType(ProcessingConversationRow), findsNothing);
-    await tester.pumpWidget(const SizedBox.shrink());
-    debugDefaultTargetPlatformOverride = null;
-  });
+                          summaryAvailable: true,
+                          revision: 'composed')
+                    ]
+                  : [
+                      for (final member in fixture.members)
+                        HomeFeedCard(
+                            id: 'conversation:${member.id}',
+                            kind: 'conversation',
+                            detailId: member.id,
+                            startedAt: member.startedAt,
+                            title: member.structured.title,
+                            emoji: '',
+                            preview: member.structured.overview,
+                            status: 'completed',
+                            homeStep: newlyReady && member.id == fixture.members[2].id ? 'ready' : member.homeStep,
+                            starred: false,
+                            isLocked: false,
+                            hasTasks: false,
+                            memberCount: 1,
+                            sources: const [],
+                            summaryAvailable: member.homeStep == 'ready',
+                            revision: 'waiting')
+                    ],
+              nextCursor: null,
+              hasMore: false,
+              truncated: false,
+              generation: composed ? 'composed' : 'waiting')));
+      addTearDown(feed.dispose);
+      await feed.start();
+      await _pumpHome(tester, [], feed: feed, withNavigation: true, detailItems: fixture.members);
+      expect(find.byType(ProcessingConversationRow), findsOneWidget);
+      expect(tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow)).count, 2);
+      expect(find.text('Ready recording 1'), findsOneWidget);
+      expect(find.text('Ready recording 2'), findsOneWidget);
+      final aggregate = tester.widget<ProcessingConversationRow>(find.byType(ProcessingConversationRow));
+      expect(aggregate.episode!.members.map((m) => m.id).toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+      expect(aggregate.episode!.conversationIds.toSet(), fixture.members.skip(2).map((m) => m.id).toSet());
+      await tester.tap(find.byKey(_processingKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      // Near the fixture's capture time, the pending page uses Summary/Transcript
+      // tabs. Member assertions belong to Transcript in that layout as well.
+      final transcriptTab = find.byKey(const Key('conversation_tab_transcript'));
+      expect(transcriptTab, age == const Duration(minutes: 40) ? findsOneWidget : findsNothing);
+      if (transcriptTab.evaluate().isNotEmpty) {
+        await tester.tap(transcriptTab);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+      }
+      for (final member in fixture.members.take(2)) {
+        expect(find.byKey(ValueKey('episode_member_${member.id}')), findsNothing);
+      }
+      for (final member in fixture.members.skip(2)) {
+        expect(find.byKey(ValueKey('episode_member_${member.id}')), findsOneWidget);
+      }
+      newlyReady = true;
+      await feed.refresh();
+      await tester.pump();
+      expect(find.byKey(ValueKey('episode_member_${fixture.members[2].id}')), findsNothing);
+      expect(find.byKey(ValueKey('episode_member_${fixture.members[3].id}')), findsOneWidget);
+      final history =
+          Provider.of<ConversationProvider>(tester.element(find.byKey(const Key('episode_page'))), listen: false);
+      final deleted = <String>[];
+      history.conversationDeleteFetcherOverride = (id) async {
+        deleted.add(id);
+        return true;
+      };
+      await tester.tap(find.byKey(const Key('episode_more')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.text('Delete 1 Conversation?'), findsOneWidget);
+      await tester.tap(find.text('Delete').last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(history.memoriesToDelete.keys.toSet(), {fixture.members[3].id});
+      // The typed Home fixture nests Scaffolds; invoke the rendered Undo action
+      // directly. The standalone destructive-scope suite verifies its tap path.
+      tester
+          .widget<TextButton>(find.descendant(of: find.byType(SnackBarAction), matching: find.byType(TextButton)))
+          .onPressed!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(history.memoriesToDelete, isEmpty);
+      expect(deleted, isEmpty);
+      expect(find.text('Ready recording 1'), findsOneWidget);
+      expect(find.text('Ready recording 2'), findsOneWidget);
+      composed = true;
+      await feed.refresh();
+      await tester.pump();
+      expect(find.text('Combined fixture'), findsOneWidget);
+      expect(find.text('Ready recording 1'), findsNothing);
+      expect(find.text('Ready recording 2'), findsNothing);
+      expect(find.byType(ProcessingConversationRow), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
 
   TestWidgetsFlutterBinding.ensureInitialized();
   final previousVisibilityInterval = VisibilityDetectorController.instance.updateInterval;

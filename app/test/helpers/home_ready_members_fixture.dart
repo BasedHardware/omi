@@ -5,8 +5,8 @@ import 'package:omi/backend/schema/structured.dart';
 
 /// Fictional notes/owners only. Exercises the actual member wire adapter too.
 class HomeReadyMembersFixture {
-  HomeReadyMembersFixture(DateTime now) {
-    final at = DateTime(now.year, now.month, now.day, 9);
+  HomeReadyMembersFixture(DateTime now, {DateTime? startedAt}) {
+    final at = startedAt ?? DateTime(now.year, now.month, now.day, 9);
     members = [
       for (var i = 0; i < 4; i++)
         ServerConversation(
