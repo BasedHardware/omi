@@ -522,3 +522,24 @@ def replayed_pair(request):
             source.close()
 
     return invariant, invariants_at(broken), invariants_at(fixed)
+
+
+@pytest.mark.skipif(not HAS_HELM, reason='Helm unavailable; worker chart render runs where helm is installed')
+def test_integration_cadence_exception_preserves_worker_role_boundary(results: Results) -> None:
+    model = results.baseline.models['prod']
+    integration = model.deployments['cloud_run/backend-integration']
+    worker = model.deployments['helm/batch-pipeline-worker']
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': ('200', '100'),
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': ('10', '20'),
+    }
+    cadence_gaps = {f'reader-split|prod|helm/batch-pipeline-worker/{key}' for key in expected}
+    violations = contract.check_reader_split(results.baseline)
+    assert cadence_gaps <= {v.key for v in violations}
+    for key, (admitted, retained_default) in expected.items():
+        assert integration.env[key] == admitted
+        assert key not in worker.env
+        assert contract.effective(worker, key, results.baseline.readers) == retained_default
+    # These remain observable violations, accepted only as two exact role-specific gaps.
+    # The existing head-priority and independent-recovery mutations still reject real drift.
+    assert cadence_gaps <= contract.load_known_gaps().keys()

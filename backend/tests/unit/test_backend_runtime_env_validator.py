@@ -3824,7 +3824,8 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     policy, _, _ = read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
-    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+    # This inspects current source metadata; fixed-date expiry boundary cases are separate below.
+    generated = read_lever_manifest.build_manifest()
     assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
