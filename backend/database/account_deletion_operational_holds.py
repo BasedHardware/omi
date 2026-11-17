@@ -13,6 +13,10 @@ from typing import Any
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.legal_holds import assert_account_deletion_permitted, assert_destructive_gate_still_ours
 
+# October preservation produced 13,464 held generations for one owner; the cap
+# must exceed the largest known per-owner count rather than the former 1,000.
+OPERATIONAL_HOLD_RELEASE_PLAN_MAX_OBJECTS = 20000
+
 # The preservation operator's COMPLETE.json receipt (2026-10-18T13:05:24Z).
 # These are opaque control-artifact integrity bindings, not account identifiers.
 PRESERVATION_LEDGER_SHA256 = {
@@ -89,7 +93,7 @@ def validate_release_plan(uid: str, approval: Any) -> dict[str, Any]:
     ):
         raise OperationalStorageHoldBlocked('operational hold release approval is malformed or changed')
     objects = plan.get('objects')
-    if not isinstance(objects, list) or not objects or len(objects) > 1000:
+    if not isinstance(objects, list) or not objects or len(objects) > OPERATIONAL_HOLD_RELEASE_PLAN_MAX_OBJECTS:
         raise OperationalStorageHoldBlocked('operational hold release plan size is invalid')
     seen = set()
     for item in objects:

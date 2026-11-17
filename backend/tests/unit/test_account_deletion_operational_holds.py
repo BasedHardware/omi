@@ -342,3 +342,40 @@ def test_registration_refuses_legal_hold_and_preserves_marker():
     with pytest.raises(RuntimeError, match='legal hold'):
         operator.register_plan(client.transaction(), client, UID, 'opaque-job', 'token', approval(Blob()))
     assert 'operational_hold_release_approval' not in client.rows[('account_deletions', UID)]
+
+
+def approval_with_object_count(count):
+    approved = approval(Blob())
+    first = approved['plan']['objects'][0]
+    approved['plan']['objects'] = (
+        [first]
+        + [{**first, 'object_sha256': holds.object_digest(f'synthetic-object-{index}')} for index in range(1, count)]
+        if count
+        else []
+    )
+    approved['plan_sha256'] = holds.plan_digest(approved['plan'])
+    return approved
+
+
+def test_release_plan_accepts_largest_known_owner_count():
+    approved = approval_with_object_count(13464)
+    assert holds.validate_release_plan(UID, approved) is approved['plan']
+
+
+@pytest.mark.parametrize('count', [0, holds.OPERATIONAL_HOLD_RELEASE_PLAN_MAX_OBJECTS + 1])
+def test_release_plan_rejects_empty_or_above_cap(count):
+    with pytest.raises(holds.OperationalStorageHoldBlocked, match='plan size is invalid'):
+        holds.validate_release_plan(UID, approval_with_object_count(count))
+
+
+def test_large_plan_does_not_accept_unproven_release_receipt(setup):
+    s = setup
+    s.marker['operational_hold_release_approval'] = approval_with_object_count(13464)
+    # An already-unheld generation cannot reconcile an unrelated release intent.
+    s.blob.temporary_hold = False
+    s.blob.metageneration = 3
+    s.receipt.update({'state': 'release_pending', 'plan_sha256': '0' * 64})
+    with pytest.raises(holds.OperationalStorageHoldBlocked, match='no matching operational release receipt'):
+        release(s)
+    s.blob.patch.assert_not_called()
+    s.receipt_ref.set.assert_not_called()
