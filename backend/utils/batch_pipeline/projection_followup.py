@@ -42,6 +42,7 @@ from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
 from utils.batch_pipeline.projection_followup_clock import FollowupClock
+from utils.batch_pipeline.projection_overlap import observer_for_store
 
 if TYPE_CHECKING:
     from utils.batch_pipeline.projection import Projector
@@ -94,7 +95,10 @@ class ProjectionFollowups:
         self.prioritized: set[str] = set()
         self.owed: dict[str, None] = {}
         self.closed = False
-        self.discovery = ProjectionDiscovery(projector.store.store)
+        store = projector.store.store
+        # Only existing periodic Firestore discovery pages, before local backoff.
+        # Targeted/owed repairs and simulated/Postgres stores are outside this measurement.
+        self.discovery = ProjectionDiscovery(store, on_page=observer_for_store(store))
         self.due_clock = FollowupClock(projector)
         self.due_pass_before: float | None = None
         self.page = 0
