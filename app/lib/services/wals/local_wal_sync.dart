@@ -145,6 +145,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _pendantTimer;
 
   Future<void> _bufferQueue = Future.value();
+  Future<void>? _initializationInFlight;
+  bool _initialIndexAdmissionPending = false;
+  bool _headlessIndexLoad = false;
 
   Future<T> _enqueueBuffer<T>(Future<T> Function() op) {
     final prev = _bufferQueue;
@@ -245,8 +248,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   /// Partitions a freshly-loaded disk index into current-session records and
   /// foreign-owner records. Both buckets remain in the shared durable index.
-  /// Load replaces the published/parked inventories without dropping records.
+  /// Load preserves pending capture rows alongside the published/parked inventories.
   void _admitLoadedWals(List<Wal> loaded) {
+    // Capture can flush audio while startup reads the index. These rows have
+    // bytes on disk but no index commit yet; preserve them without claiming
+    // that the load confirmed their durability.
+    final pending = [..._wals, ..._foreignWals];
+    final loadedKeys = loaded.map(_durableKey).toSet();
     _indexInventory.primeLoaded(loaded);
     final admitted = <Wal>[];
     final foreign = <Wal>[];
@@ -265,6 +273,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _confirmedDurableWalKeys
       ..clear()
       ..addAll(loaded.where((w) => w.storage == WalStorage.disk && !w.recoveredBatchJournal).map(_durableKey));
+    for (final wal in pending) {
+      if (loadedKeys.add(_durableKey(wal))) {
+        (_walAdmittedAtLoad(wal) ? _wals : _foreignWals).add(wal);
+      }
+    }
   }
 
   void _notifyUpdated(int generation) {
@@ -509,6 +522,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void start() {
+    _initialIndexAdmissionPending = true;
+    _headlessIndexLoad = false;
     _initializeWals();
     BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _runNativeIntake();
@@ -606,27 +621,41 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   /// Headless transcription loads custody without starting cloud-audio timers or migrations.
   Future<void> loadForOnDeviceWorker() async {
-    final generation = _sessionGeneration;
-    await WalFileManager.init();
-    final loaded = await WalFileManager.loadWals();
-    if (!_isCurrent(generation)) return;
-    _admitLoadedWals(loaded);
-    if (!_walReady.isCompleted) _walReady.complete();
+    _initialIndexAdmissionPending = true;
+    _headlessIndexLoad = true;
+    await _initializeWals();
+    if (_initialIndexAdmissionPending) throw StateError('WAL index admission unavailable');
   }
 
-  Future<void> _initializeWals() async {
+  Future<void> _initializeWals() => _initializationInFlight ??= _initializeWalsOnce().whenComplete(() {
+        _initializationInFlight = null;
+      });
+
+  Future<void> _initializeWalsOnce() async {
     final generation = _sessionGeneration;
-    await WalFileManager.init();
-    if (!_isCurrent(generation)) {
+    final List<Wal> loaded;
+    try {
+      await WalFileManager.init();
+      loaded = !_headlessIndexLoad && _loadWalsOverride != null
+          ? await _loadWalsOverride!()
+          : await WalFileManager.loadWals();
+      if (!_isCurrent(generation)) {
+        if (!_walReady.isCompleted) _walReady.complete();
+        return;
+      }
+      _admitLoadedWals(loaded);
+      _initialIndexAdmissionPending = false;
+    } catch (e) {
+      // Keep capture timers alive: flush still fsyncs new audio, but no writer
+      // may replace the existing index until a later save retries admission.
+      Logger.debug('LocalWalSync: initial index admission failed; will retry on save: $e');
+      DebugLogManager.logEvent('wal_initial_admission_failed', {'retry': 'next_save'});
+      return;
+    }
+    if (_headlessIndexLoad) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
     }
-    final loaded = _loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals();
-    if (!_isCurrent(generation)) {
-      if (!_walReady.isCompleted) _walReady.complete();
-      return;
-    }
-    _admitLoadedWals(loaded);
     Logger.debug("wal service start: ${_wals.length}");
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
