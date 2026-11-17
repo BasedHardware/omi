@@ -40,7 +40,9 @@ def source_reader_marked(entry: dict[str, Any], job: dict[str, Any]) -> bool:
     reuse (a GPU pump image older than the intake that stamped the job) copies
     only ``protocol_version``: the row is then protocol 2 with no marker, and
     refusing it stops the owner's whole projection chain behind it
-    (2026-11-16 incident). Rules:
+    (2026-11-16 incident). Explicit job requirements are checked against the
+    registry; every non-null copy must match that job. Missing/null copies are
+    recovered and counted once. Older jobs without the map retain these rules:
 
     - no ``source_reuse_key`` on the job: never a source row;
     - any marker field present on the row: at least one non-null marker, and
@@ -56,11 +58,11 @@ def source_reader_marked(entry: dict[str, Any], job: dict[str, Any]) -> bool:
         required = requirements(job)
         # Explicit disagreements are corruption, never a compatibility miss.
         if any(
-            field in entry and (type(entry[field]) is not int or entry[field] != required.get(field))
+            entry.get(field) is not None and (type(entry[field]) is not int or entry[field] != required.get(field))
             for field in SOURCE_MARKERS
         ):
             return False
-        if any(field not in entry for field in required):
+        if any(entry.get(field) is None for field in required):
             _observe_inheritance()
         return bool(required)
     if not job.get('source_reuse_key'):

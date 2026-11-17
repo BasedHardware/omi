@@ -85,7 +85,45 @@ reader uses the immutable job when copies are absent. A present conflicting
 marker remains a corruption refusal. Do not promote compute-dependent fields
 into this registry: it only covers metadata recoverable from the job.
 There is no fleet capability inference or automatic claim that all replicas
-have upgraded.
+have upgraded. A legacy intake retry can add a known marker without changing
+its unknown requirements map; only matching registered requirements are
+accepted, and every known job marker remains authoritative. Unknown requirements
+are retained and refused. With an explicit supported job map, a null result
+copy counts as missing; a non-null conflicting version still refuses.
+
+
+## Refused-merge operator response
+
+A refused job has no automatic expiry or destructive disposition. It retains
+its ready result and audio until a capable merger commits it. Do not accept an
+unattended silent hold: investigate on the first observed refusal, and assign
+an operator to watch this signal during an intake/worker rollout. This change
+does not arm a new pager or assume an existing dwell page is live; recording
+outcome alert ownership remains with #25617.
+
+Diagnostic query (transaction attempts, not unique blocked jobs):
+
+```promql
+sum(increase(omi_batch_result_protocol_refused_total[5m]))
+```
+
+For separately authorized `ro-prod` metadata-only diagnosis, use the existing
+`FirestoreStore.ready_owners(after_owner_key, limit)` and
+`ready_pending(owner_key, limit, after=...)` queries. Use `first_pending` to
+identify the owner's actual ordering head rather than assuming every ready
+row is the head. Set a document budget and retain the pagination cursor; an
+exhausted sample is UNKNOWN, not proof that the remainder is healthy. Aggregate
+`state`, protocol versions, requirement versions and `supported(job)` outcomes;
+do not print owner IDs, transcript content or result objects. These are existing
+query drivers and require no new index or collection.
+
+If intake is introducing an unsupported requirement, stop new source admission
+with its existing kill switch and deploy a capable merger while retaining the
+required projection readers. A corrupt requirement needs a separately reviewed,
+fenced recovery; do not patch its map/protocol, rewrite a result, requeue paid
+work or discard audio to clear the counter. Turning the merge guard off cannot
+make an unknown protocol safe. Verify a fresh refusal-rate sample and that the
+same ready work commits and the owner's log/projection advances after recovery.
 
 ## Custody and privacy
 

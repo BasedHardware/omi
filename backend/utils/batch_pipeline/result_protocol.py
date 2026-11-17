@@ -18,14 +18,26 @@ REFUSED = Counter('omi_batch_result_protocol_refused_total', 'Merge transaction 
 def stamp(job: dict, marker: str) -> None:
     """Attach a registered, job-authoritative requirement; never upgrade a version by accident."""
     version = SOURCE_MARKERS[marker]
+    protocol = job.get('protocol_version', 1)
+    if type(protocol) is not int or protocol not in {1, 2}:
+        raise ValueError('cannot replace an unsupported result protocol')
+    required = job.get(REQUIRED, {})
+    if not isinstance(required, dict) or any(
+        field in SOURCE_MARKERS and (type(value) is not int or value != SOURCE_MARKERS[field])
+        for field, value in required.items()
+    ):
+        raise ValueError('cannot replace an unsupported result requirement')
     if marker in job and (type(job[marker]) is not int or job[marker] != version):
         raise ValueError('cannot change an accepted result marker')
     job.update(protocol_version=2, **{marker: version})
-    job[REQUIRED] = {**job.get(REQUIRED, {}), marker: version}
+    # Legacy jobs can already carry another registered marker without a map.
+    # Retain unknown requirements: rebuilding only known fields would launder
+    # a future requirement into a commit supported by this binary.
+    job[REQUIRED] = {**required, **{field: job[field] for field in SOURCE_MARKERS if field in job}}
 
 
 def requirements(job: dict):
-    """Interpret the one legacy transition that preserves an unknown envelope.
+    """Interpret registered requirements preserved by older job mutators.
 
     Pre-registry projectors convert an accepted alias to own-audio work while
     retaining unknown fields. Its suspended log slot witnesses that transition;
@@ -33,6 +45,17 @@ def requirements(job: dict):
     """
     markers = {field: job[field] for field in SOURCE_MARKERS if field in job}
     required = job.get(REQUIRED, markers)
+    # Older intake can add a registered marker without extending an unknown
+    # envelope. All existing requirements must still match; unknown ones never
+    # disappear. Every recognized job marker remains reader-authoritative.
+    if (
+        isinstance(required, dict)
+        and required
+        and all(
+            field in markers and type(value) is int and value == markers[field] for field, value in required.items()
+        )
+    ):
+        return markers
     fallback = job.get('source_alias_fallback') or {}
     slot = fallback.get('log_slot') if isinstance(fallback, dict) else None
     if (

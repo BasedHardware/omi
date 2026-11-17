@@ -20,7 +20,7 @@ A stale merger that predates the guard can still copy only `protocol_version`
 and the result. Projection recovers each missing supported source marker from
 the immutable job and counts `omi_fallback_total` with
 `from_mode=row_source_marker`, `to_mode=job_source_marker` and
-`reason=capability_mismatch`. Explicitly wrong copies are refused. This recovery
+`reason=capability_mismatch`. Explicitly conflicting versions are refused; null copies are treated as missing for an explicit supported job map. This recovery
 is now a permanent contract: removing it would recreate a dependency on the
 worker deployment clock. Existing legacy jobs without the map still drain.
 An older projector can preserve the unknown requirements map while converting
@@ -48,3 +48,11 @@ projection through a strict Firestore transaction fake, owner watermark advance,
 unsupported-version refusal without a log append, both merge paths, and a
 registry completeness guard over source-job producers. #25617's projection
 alerts and drain implementation are unchanged.
+
+Review follow-up: stamping a legacy job retains all of its registered markers
+and preserves unknown requirements. Matching additive markers from old intake
+are also recognized without rewriting the job. The completeness guard discovers
+job/protocol producers across database and pipeline modules, checks positional
+marker arguments (including aliases) and pins each current producer's intended
+marker. The runbook gives the refusal operator query and recovery steps; this
+change leaves #25617's pager ownership intact.

@@ -71,8 +71,8 @@ def test_guard_kill_switch_restores_copying_without_disabling_reader_recovery(mo
     assert merge_markers(job) is None
     monkeypatch.setenv('BATCH_RESULT_PROTOCOL_GUARD_ENABLED', 'false')
     assert merge_markers(job) == {}
+    job = {'source_reuse_key': 'synthetic'}
     stamp(job, 'source_reuse_version')
-    job['source_reuse_key'] = 'synthetic'
     assert source_reader_marked({'protocol_version': 2}, job)
 
 
@@ -124,23 +124,121 @@ def test_fallback_merger_refuses_unknown_requirements_before_reading_or_writing(
     assert merge_ready(SimpleNamespace(), job, NOW) is None
 
 
+# These versions are owned downstream or by provider routing, never intake
+# requirements. Restrict exclusions to their current owners so a new producer
+# cannot borrow a projector-only name to evade the registry.
+NON_INTAKE_VERSION_FIELDS = {
+    'database/batch_pipeline_projection_session.py': {'lineage_quarantine_version', 'quarantine_version'},
+    'database/batch_pipeline_projection_release.py': {'lineage_quarantine_version', 'projection_release_version'},
+    'database/batch_pipeline_projection_privacy.py': {'privacy_quarantine_version'},
+    'utils/batch_pipeline/merge.py': {'recovery_version'},
+    'utils/batch_pipeline/provider_stt.py': {'recovery_version', 'table_version'},
+}
+
+
+def _stamp_calls(source):
+    if 'result_protocol' not in source:
+        return []
+    tree = ast.parse(source)
+    names = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or '').endswith('result_protocol')
+        for alias in node.names
+        if alias.name == 'stamp'
+    }
+    if not names:
+        return []
+    calls = []
+
+    class Calls(ast.NodeVisitor):
+        def __init__(self):
+            self.functions = []
+
+        def visit_FunctionDef(self, node):
+            self.functions.append(node.name)
+            self.generic_visit(node)
+            self.functions.pop()
+
+        visit_AsyncFunctionDef = visit_FunctionDef
+
+        def visit_Call(self, node):
+            if isinstance(node.func, ast.Name) and node.func.id in names:
+                marker = (
+                    node.args[1]
+                    if len(node.args) > 1
+                    else next((keyword.value for keyword in node.keywords if keyword.arg == 'marker'), None)
+                )
+                value = (
+                    marker.value if isinstance(marker, ast.Constant) and isinstance(marker.value, str) else '<computed>'
+                )
+                calls.append(('.'.join(self.functions), value))
+            self.generic_visit(node)
+
+    Calls().visit(tree)
+    return calls
+
+
+def _version_declarations(source):
+    declarations = set()
+    for node in ast.walk(ast.parse(source)):
+        keys = []
+        if isinstance(node, ast.keyword):
+            if node.arg:
+                declarations.add(node.arg)
+        elif isinstance(node, ast.Dict):
+            keys = node.keys
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
+            keys = [node.slice]
+        for key in keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                declarations.add(key.value)
+            elif isinstance(key, ast.JoinedStr) and any(
+                isinstance(part, ast.Constant) and str(part.value).endswith('_version') for part in key.values
+            ):
+                declarations.add('<computed>_version')
+    return {name for name in declarations if name.endswith('_version')}
+
+
 def test_no_intake_marker_declaration_bypasses_the_registry():
     backend = Path(__file__).resolve().parents[2]
-    # These are the protocol-2 job producers, including the accepted-alias restart.
-    for name in ('batch_pipeline_intake.py', 'batch_pipeline_source_reuse.py', 'batch_pipeline_source_fallback.py'):
-        tree = ast.parse((backend / 'database' / name).read_text())
-        declarations = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.keyword):
-                declarations.add(node.arg)
-            if isinstance(node, ast.Dict):
-                declarations.update(
-                    key.value for key in node.keys if isinstance(key, ast.Constant) and isinstance(key.value, str)
-                )
-        assert {name for name in declarations if name and name.endswith('_version')} <= {
-            'protocol_version',
-            *SOURCE_MARKERS,
-        }
+    expected = {
+        ('database/batch_pipeline_intake.py', 'admit.commit', 'source_reuse_version'),
+        ('database/batch_pipeline_source_reuse.py', 'enqueue_alias', 'source_alias_version'),
+        ('database/batch_pipeline_source_fallback.py', 'enqueue', 'source_reuse_version'),
+    }
+    observed = set()
+    # Discover protocol/job writers across both layers, including future modules.
+    # The cheap text prefilter avoids parsing unrelated account-domain sources.
+    for directory in ('database', 'utils/batch_pipeline'):
+        for path in (backend / directory).rglob('*.py'):
+            source = path.read_text()
+            if not any(
+                token in source
+                for token in ('protocol_version', "'jobs'", '"jobs"', 'required_result_markers', 'result_protocol')
+            ):
+                continue
+            relative = path.relative_to(backend).as_posix()
+            allowed = {'protocol_version', *SOURCE_MARKERS, *NON_INTAKE_VERSION_FIELDS.get(relative, set())}
+            assert _version_declarations(source) <= allowed, relative
+            for function, marker in _stamp_calls(source):
+                assert marker in SOURCE_MARKERS, (relative, function, marker)
+                observed.add((relative, function, marker))
+    assert expected <= observed
+    assert {call for call in observed if call[:2] in {entry[:2] for entry in expected}} == expected
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        "job = {'protocol_version': 2, 'future_version': 1}",
+        "job.update(protocol_version=2, future_version=1)",
+        "job['protocol_version'] = 2; job['future_version'] = 1",
+        "job['protocol_version'] = 2; job[f'{feature}_version'] = 1",
+    ],
+)
+def test_new_or_computed_producer_marker_cannot_escape_completeness_guard(source):
+    assert not _version_declarations(source) <= {'protocol_version', *SOURCE_MARKERS}
 
 
 def test_new_canonical_intake_survives_scheduler_and_copies_registered_requirements():
@@ -161,7 +259,7 @@ def test_new_canonical_intake_survives_scheduler_and_copies_registered_requireme
     assert source_reader_marked(entry, store.rows['jobs', 'canonical'])
 
 
-@pytest.mark.parametrize('bad', [None, True, 2])
+@pytest.mark.parametrize('bad', [True, 2, '1'])
 def test_explicit_copy_conflict_is_not_recovered_from_job(bad):
     job = {'source_reuse_key': 'synthetic'}
     stamp(job, 'source_reuse_version')
@@ -190,3 +288,57 @@ def test_stale_alias_envelope_requires_the_exact_legacy_fallback_witness(defect)
         job[REQUIRED]['source_alias_version'] = 2
     assert merge_markers(job) is None
     assert not source_reader_marked({'source_reuse_version': 1}, job)
+
+
+@pytest.mark.parametrize('marker', ["'wrong_marker'", "'future_version'", 'computed_marker'])
+def test_stamp_positional_marker_arguments_are_checked(marker):
+    source = "from utils.batch_pipeline.result_protocol import stamp as mark\n" + f"mark(job, {marker})"
+    assert any(name not in SOURCE_MARKERS for _, name in _stamp_calls(source))
+
+
+def test_stamping_a_legacy_second_marker_retains_all_known_and_unknown_requirements():
+    job = {'protocol_version': 2, 'source_reuse_key': 'synthetic', 'source_alias_version': 1}
+    stamp(job, 'source_reuse_version')
+    assert merge_markers(job) == {'source_reuse_version': 1, 'source_alias_version': 1}
+    assert source_reader_marked({}, job)
+    job[REQUIRED]['future_version'] = 1
+    stamp(job, 'source_reuse_version')
+    assert job[REQUIRED]['future_version'] == 1
+    assert merge_markers(job) is None
+    assert not source_reader_marked({}, job)
+
+
+@pytest.mark.parametrize('unknown', ['protocol', 'requirement'])
+def test_stamping_cannot_downgrade_an_existing_unsupported_protocol_or_requirement(unknown):
+    job = {'protocol_version': 2, 'source_reuse_key': 'synthetic'}
+    if unknown == 'protocol':
+        job['protocol_version'] = 3
+    else:
+        job[REQUIRED] = {'source_reuse_version': 2}
+    before = deepcopy(job)
+    with pytest.raises(ValueError, match='unsupported result'):
+        stamp(job, 'source_reuse_version')
+    assert job == before
+
+
+def test_null_copies_are_counted_as_missing_only_with_an_explicit_supported_job(monkeypatch):
+    from database import batch_pipeline_projection_protocol as protocol
+
+    observed = []
+    monkeypatch.setattr(protocol, 'record_fallback', lambda **kwargs: observed.append(kwargs))
+    job = {'source_reuse_key': 'synthetic'}
+    stamp(job, 'source_reuse_version')
+    assert source_reader_marked({'source_reuse_version': None, 'source_alias_version': None}, job)
+    assert len(observed) == 1
+    assert source_reader_marked({'source_reuse_version': 1, 'source_alias_version': None}, job)
+    assert len(observed) == 1
+
+
+def test_old_intake_can_add_a_registered_marker_without_rewriting_the_envelope():
+    job = {'source_reuse_key': 'synthetic'}
+    stamp(job, 'source_alias_version')
+    job.update(protocol_version=2, source_reuse_version=1)  # Pre-registry intake retry.
+    before = deepcopy(job)
+    assert merge_markers(job) == {'source_reuse_version': 1, 'source_alias_version': 1}
+    assert source_reader_marked({'source_alias_version': 1}, job)
+    assert job == before
