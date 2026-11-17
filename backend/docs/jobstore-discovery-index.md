@@ -54,6 +54,20 @@ state across repeated store construction. A failed Firestore safety read
 raises; it cannot silently become an index answer.
 
 Each safety read returns the existing bounded due prefix, at most 100 IDs.
+For leased discovery, a full primary page keeps subsequent calls on primary
+until a primary page is shorter than the requested bounded limit. This keeps
+catch-up capacity at the caller's ordinary rate instead of limiting a dropped
+copy backlog to 100 leases per minute. It does not certify complete coverage.
+Empty, malformed, duplicate or full leased hint pages also use primary. At
+limit=1 no leased hint is eligible. These rules currently harden staging only;
+the production refusal above remains unchanged.
+
+The monotonic interval is at most60 seconds and starts at the beginning of a
+successful primary query, not its completion. Any primary failure invalidates
+the previous interval. The interval is checked again after SQL; a query that
+crosses the deadline cannot return a hint. The wall-time freshness gauge still
+records successful primary completion, independently of the cadence clock.
+
 This interval is not a guarantee of complete backlog discovery. A permanent
 prefix blocker can retain the primary's existing starvation behavior; dropped
 copies beyond that prefix need the coverage/retirement work in the production
@@ -67,6 +81,50 @@ refresh, connection establishment or timeout worker runs on the discovery
 path. Postgres failure or timeout discards the connection and uses Firestore.
 Primary fallback can still take its normal bounded RPC path; the index read
 budget is not an end-to-end primary-request latency promise.
+
+### Bounded recovery contract requiring root review
+
+The only leased consumer is `Scheduler.recover`: pump maintenance and serving
+maintenance/manual reconcile call it. Neither tests the leased discovery result
+as a drain/completion/priority guard; recovery proceeds to the independent retry
+query. Each candidate now must still have the state of its discovery query in
+the primary transaction. A leased hint that has become retry cannot bypass
+ordinary/protected retry selection. This also fences primary discovery races.
+
+A production bounded-hint replacement would be a semantic change: an omitted
+expired lease could wait until a successful mandatory primary call, rather than
+being considered at each invocation. For a job inside that call's canonical
+prefix, the conditional delay includes the60-second cadence, measured maximum
+caller invocation gap and primary-query duration. Caller stalls/failed primary
+queries and a permanently blocked prefix have no finite bound. Neither a5s
+pump throttle nor a20s supervisor tick proves a finite caller gap; maintenance
+can run for minutes. Scrape freshness adds no recovery progress.
+
+The source regression uses the actual Scheduler and IndexStore over synthetic
+transactional rows:2000 expired leases,5s invocations and nonempty stale hints.
+Bare60s sweeps leave400 leases after900s; canonical per-call recovery processes
+the2000 by95s. Backlog catch-up above retains that canonical per-call service
+rate after a full primary page, without a global producer generation write.
+This does not strengthen the existing starvation behavior or waive the900s
+obligation/1800s job freeze and other latency trips in the batch contract.
+
+Root must review that added discovery delay against those existing trips,
+the real caller-gap measurement and catch-up capacity before any production
+replacement. Caller-entry eligible/selected/primary/PG counters (including
+factory bypasses) and an invocation-gap measure remain prerequisites. The
+current index-only counters cannot establish that denominator. There is no
+new exposure flag or1% reader cohort in this change.
+
+For a proposed runtime observation window let N be all due_leased invocations,
+P actual primary queries and H actual PG attempts; empty/full/error/deadline
+fallbacks count in both H and P. Nominal removed primary queries are N-P,
+not H or an owner-copy percentage. Document cost must compare canonical
+primary documents/index entries avoided against fallback scans, transaction
+rechecks and parity reads; these counters alone cannot establish billed savings.
+At5s cadence an otherwise eligible nonempty short-hint window could remove
+11 of12 primary queries per60s; an empty/saturated/killed window removes zero,
+and full-primary catch-up deliberately removes zero. These are synthetic
+conditional examples, not production measurements or admission evidence.
 
 ## Evidence and release sequence
 

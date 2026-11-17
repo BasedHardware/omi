@@ -54,12 +54,13 @@ def test_first_read_and_each_safety_interval_expose_dropped_mirror_rows(setup, s
     setup.read.return_value = []
     assert setup.store.due(state, 200) == ['lost-mirror-row']
     setup.read.assert_not_called()
-    assert setup.store.due(state, 201) == []
+    expected = ['lost-mirror-row'] if state == 'leased' else []
+    assert setup.store.due(state, 201) == expected
     setup.clock[0] += 59.99
-    assert setup.store.due(state, 202) == []
+    assert setup.store.due(state, 202) == expected
     setup.clock[0] += 0.01
     assert setup.store.due(state, 203) == ['lost-mirror-row']
-    assert setup.primary.due.call_count == 2
+    assert setup.primary.due.call_count == (4 if state == 'leased' else 2)
 
 
 def test_sweep_cadence_is_per_query_and_uses_monotonic_clock(setup):

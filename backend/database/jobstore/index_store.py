@@ -56,6 +56,8 @@ class IndexReadReason(StrEnum):
     ERROR = 'error'
     TIMEOUT = 'timeout'
     COVERAGE_UNKNOWN = 'coverage_unknown'
+    BACKLOG = 'backlog'
+    HINT_INELIGIBLE = 'hint_ineligible'
 
 
 class IndexReadOutcome(StrEnum):
@@ -192,8 +194,8 @@ class IndexStore:
             raise ValueError('only audited index discovery queries may be enabled')
         if not callable(enabled):
             raise ValueError('index enabled must be a live predicate')
-        if not math.isfinite(sweep_interval_s) or sweep_interval_s <= 0:
-            raise ValueError('positive finite index safety sweep interval required')
+        if not math.isfinite(sweep_interval_s) or not 0 < sweep_interval_s <= 60:
+            raise ValueError('positive finite index safety sweep interval at most 60 seconds required')
         if not math.isfinite(read_budget_s) or not 0 < read_budget_s <= 5:
             raise ValueError('index read budget must be positive and at most five seconds')
         namespace = getattr(mirror.primary, 'namespace', None)
@@ -211,6 +213,9 @@ class IndexStore:
         self._wall_clock = wall_clock
         self._observe = observe
         self._last_sweep: dict[str, float] = {}
+        # A full primary leased page is evidence of possible backlog, not
+        # completion. Continue canonical per-call recovery until a short page.
+        self._leased_backlog = False
         self._sweep_lock = threading.Lock()
         # No connection, credential refresh or other IO during construction.
         self._index = BoundedPostgresReader(mirror.shadow, read_budget_s)
@@ -228,9 +233,12 @@ class IndexStore:
         *,
         fallback_reason: FallbackReason | None = None,
     ) -> list[str]:
+        started = self._clock()
         try:
             result = self.primary.due(state, now, limit)
         except Exception:
+            with self._sweep_lock:
+                self._last_sweep.pop(query, None)
             _count(query, IndexReadSource.FIRESTORE, reason, IndexReadOutcome.ERROR)
             if fallback_reason is not None:
                 self._fallback(fallback_reason, 'exhausted')
@@ -238,7 +246,9 @@ class IndexStore:
         _count(query, IndexReadSource.FIRESTORE, reason, IndexReadOutcome.RETURNED)
         if query in self.enabled_queries:
             with self._sweep_lock:
-                self._last_sweep[query] = self._clock()
+                self._last_sweep[query] = started
+                if query == 'due_leased':
+                    self._leased_backlog = len(result) >= max(1, min(limit, 100))
         if query in INDEX_QUERIES:
             INDEX_PRIMARY_SCAN_SUCCESS_TIMESTAMP.labels(namespace=_metric_namespace(self.namespace), query=query).set(
                 self._wall_clock()
@@ -283,6 +293,9 @@ class IndexStore:
             return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
         with self._sweep_lock:
             last = self._last_sweep.get(query)
+            backlog = query == 'due_leased' and self._leased_backlog
+        if backlog:
+            return self._primary_due(state, now, limit, query, IndexReadReason.BACKLOG)
         if last is None or self._clock() - last >= self.sweep_interval_s:
             return self._primary_due(state, now, limit, query, IndexReadReason.SAFETY_SWEEP)
         try:
@@ -301,6 +314,20 @@ class IndexStore:
             return self._primary_due(state, now, limit, query, IndexReadReason.DISABLED)
         if production_policy_applies(self.namespace):
             return self._primary_due(state, now, limit, query, IndexReadReason.COVERAGE_UNKNOWN)
+        # SQL may have crossed the safety deadline, or a concurrent primary
+        # attempt may have failed. Neither may buy another hint interval.
+        with self._sweep_lock:
+            last = self._last_sweep.get(query)
+            backlog = query == 'due_leased' and self._leased_backlog
+        if last is None or self._clock() - last >= self.sweep_interval_s or backlog:
+            return self._primary_due(state, now, limit, query, IndexReadReason.SAFETY_SWEEP)
+        if query == 'due_leased' and (
+            not isinstance(result, list)
+            or not 0 < len(result) < max(1, min(limit, 100))
+            or any(not isinstance(key, str) or not key for key in result)
+            or len(set(result)) != len(result)
+        ):
+            return self._primary_due(state, now, limit, query, IndexReadReason.HINT_INELIGIBLE)
         _count(query, IndexReadSource.POSTGRES, IndexReadReason.INDEX, IndexReadOutcome.RETURNED)
         self._observe_due(state, now, limit)
         return result

@@ -1149,7 +1149,7 @@ class Scheduler:
                 def commit(tx: Transaction):
                     observations.clear()
                     job = tx.get('jobs', segment_id)
-                    if job.get('state') == 'leased' and job['lease_until'] <= now:
+                    if state == 'leased' and job.get('state') == 'leased' and job['lease_until'] <= now:
                         outcome = expire_lease(
                             tx,
                             job,
@@ -1159,7 +1159,7 @@ class Scheduler:
                             observations=observations,
                             defer=_defer,
                         )
-                    elif job.get('state') == 'retry' and job['available_at'] <= now:
+                    elif state == 'retry' and job.get('state') == 'retry' and job['available_at'] <= now:
                         if segment_id in protected_ids and not protected_share.eligible(job, now):
                             return None
                         if allowance_hold.enabled() and allowance_hold.park(tx, job, now):
