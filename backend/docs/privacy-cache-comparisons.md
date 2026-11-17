@@ -44,10 +44,18 @@ Token/session ages use wall-clock observations for telemetry only; clock skew
 produces `unknown`. TTL enforcement uses the existing monotonic cache clock and
 Redis expiry. Missing legacy age/marker metadata is `unknown`.
 
-A later fresh ALLOW after the first live BLOCK is still a `stale_allow`
-comparison, but `candidate_source=fresh_read` distinguishes that race from cache
-reuse. Shadow always preserves the original live result or exception. No stale
-ALLOW is exempted as `stale_within_ttl`, even at an age below 60 seconds.
+External shadow reads run after live authority using independent snapshots.
+Only actual authority-read call sites explicitly record `fresh_read`; default,
+legacy `cached_age` and unknown evidence do not establish that provenance.
+A live BLOCK followed by an explicitly fresh candidate ALLOW uses
+`reason=fresh_authority_change` in `privacy_decision_mismatch_total`, independent
+of marker changes. This covers both authority writes and gate expiry between
+reads; equal tokens or markers do not prove equal authority at different times.
+The reverse live ALLOW/candidate BLOCK direction retains `stale_block`.
+Both comparison counters still count every mismatch. Cached, synthesized and
+unknown candidates retain conservative reasons, including `stale_allow` within
+TTL, so the fresh classification cannot hide a reused stale ALLOW.
+Shadow always preserves the original live result or exception.
 
 ## Merge gate
 

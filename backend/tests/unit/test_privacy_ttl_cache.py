@@ -498,7 +498,8 @@ def test_fresh_comparison_race_preserves_live_and_labels_marker_transition(world
         else:
             assert external(db)
     assert counter._value.get() == before + 1
-    assert ('reason=stale_allow' if first_block else 'reason=stale_block') in caplog.text
+    expected_reason = 'fresh_authority_change' if first_block else 'stale_block'
+    assert f'reason={expected_reason}' in caplog.text
     for field in (
         'candidate_source=fresh_read',
         'cache_age=unknown',
@@ -509,6 +510,178 @@ def test_fresh_comparison_race_preserves_live_and_labels_marker_transition(world
     ):
         assert field in caplog.text
     assert UID not in caplog.text and 'b' * 32 not in caplog.text
+
+
+@pytest.mark.parametrize('authority', ['gate', 'marker'])
+def test_external_fresh_allow_after_candidate_token_read_is_not_a_cached_stale_allow(
+    world, monkeypatch, caplog, authority
+):
+    db, _, revision, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+    gate = ('legal_hold_deletion_gates', UID)
+    if authority == 'gate':
+        db.rows[gate] = {
+            'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+            'uid': UID,
+            'kind': 'retention_cleanup',
+            'token': 'synthetic',
+            'state': 'running',
+            'started_at': datetime.now(timezone.utc),
+        }
+    else:
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+    token_reads = 0
+
+    def get(ref, **kwargs):
+        nonlocal token_reads
+        snapshot = original(ref, **kwargs)
+        if ref.path == TOKEN:
+            token_reads += 1
+            if token_reads == 2:
+                # Both certification reads see the same revision. The authority
+                # changes only afterward, before the candidate's fresh walk.
+                if authority == 'gate':
+                    db.rows[gate]['state'] = 'completed'
+                else:
+                    db.rows[MARKER]['wipe_status'] = 'cancelled'
+                db.rows[TOKEN]['memo_token'] = 'b' * 32
+                revision[0] += timedelta(seconds=1)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    comparison = metrics.COMPARISONS.labels(
+        'external', 'mismatch', 'fresh_read', 'unknown', 'same', 'same', 'true', 'miss'
+    )
+    shadow = metrics.SHADOW_CHECKS.labels('external', 'mismatch')
+    stale = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels('external', 'fresh_authority_change')
+    before = [counter._value.get() for counter in (comparison, shadow, stale, changed)]
+    metrics._LOG_AT.clear()
+    with caplog.at_level('WARNING'), pytest.raises(legal_holds.DestructiveOperationInProgress):
+        external(db)
+    assert [counter._value.get() for counter in (comparison, shadow, stale, changed)] == [
+        before[0] + 1,
+        before[1] + 1,
+        before[2],
+        before[3] + 1,
+    ]
+    assert 'reason=fresh_authority_change' in caplog.text
+    assert UID not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'family,source,marker',
+    [
+        ('external', 'unknown', 'after'),
+        ('external', 'ttl_hit', 'after'),
+        ('external', 'token_hit', 'after'),
+        ('external', 'session_hit', 'after'),
+        ('batch', 'fresh_read', 'after'),
+        ('batch', 'owner_hit', 'after'),
+    ],
+)
+def test_fresh_authority_change_requires_external_explicit_fresh_source(family, source, marker):
+    live = metrics.DecisionEvidence(markers={'gate': 'before'})
+    candidate = metrics.DecisionEvidence(source=source, markers={} if marker is None else {'gate': marker})
+    stale = metrics.DECISION_MISMATCH.labels(family, 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels(family, 'fresh_authority_change')
+    before_stale, before_changed = stale._value.get(), changed._value.get()
+    metrics.compare(family, 'destructive_operation', 'allow', live_evidence=live, candidate_evidence=candidate)
+    assert stale._value.get() == before_stale + 1
+    assert changed._value.get() == before_changed
+
+
+@pytest.mark.parametrize('provenance', ['legacy_age', 'missing', 'defaulted', 'unknown'])
+def test_unrecorded_candidate_provenance_keeps_stale_allow(provenance):
+    live = metrics.DecisionEvidence(markers={'gate': 'before'})
+    kwargs = {'live_evidence': live}
+    if provenance == 'legacy_age':
+        kwargs['cached_age'] = 2
+    elif provenance in ('defaulted', 'unknown'):
+        candidate = metrics.DecisionEvidence(markers={'gate': 'after'})
+        if provenance == 'unknown':
+            candidate.source = 'unknown'
+        kwargs['candidate_evidence'] = candidate
+    stale = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels('external', 'fresh_authority_change')
+    comparison = metrics.COMPARISONS.labels(
+        'external',
+        'mismatch',
+        'unknown',
+        '1_10s' if provenance == 'legacy_age' else 'unknown',
+        'unknown',
+        'unknown',
+        'true' if provenance in ('defaulted', 'unknown') else 'unknown',
+        'not_used',
+    )
+    before = (stale._value.get(), changed._value.get(), comparison._value.get())
+    metrics.compare('external', 'destructive_operation', 'allow', **kwargs)
+    assert (stale._value.get(), changed._value.get(), comparison._value.get()) == (
+        before[0] + 1,
+        before[1],
+        before[2] + 1,
+    )
+
+
+@pytest.mark.parametrize('marker', [None, 'before', 'after'])
+def test_explicit_fresh_allow_does_not_require_marker_change(marker):
+    live = metrics.DecisionEvidence(markers={'gate': 'before'})
+    candidate = metrics.DecisionEvidence(source='fresh_read', markers={} if marker is None else {'gate': marker})
+    stale = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels('external', 'fresh_authority_change')
+    before = (stale._value.get(), changed._value.get())
+    metrics.compare('external', 'destructive_operation', 'allow', live_evidence=live, candidate_evidence=candidate)
+    assert (stale._value.get(), changed._value.get()) == (before[0], before[1] + 1)
+
+
+def test_fresh_gate_expiry_without_document_change_preserves_live_block(world, monkeypatch):
+    db, _, _, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+
+    class GateClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return current[0]
+
+    started = GateClock(2026, 11, 17, tzinfo=timezone.utc)
+    expiry = started + timedelta(seconds=3)
+    current = [started + timedelta(seconds=2)]
+    monkeypatch.setattr(legal_holds, 'datetime', GateClock)
+    gate = {
+        'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+        'uid': UID,
+        'kind': 'retention_cleanup',
+        'token': 'synthetic',
+        'state': 'running',
+        'started_at': started,
+        'expires_at': expiry,
+    }
+    db.rows[('legal_hold_deletion_gates', UID)] = dict(gate)
+    original_blocks = legal_holds._gate_blocks
+
+    def blocks(value, now, **kwargs):
+        result = original_blocks(value, now, **kwargs)
+        if result:
+            # Advance time after live computes BLOCK, without changing any row.
+            current[0] = expiry + timedelta(seconds=1)
+        return result
+
+    monkeypatch.setattr(legal_holds, '_gate_blocks', blocks)
+    comparison = metrics.COMPARISONS.labels(
+        'external', 'mismatch', 'fresh_read', 'unknown', 'same', 'same', 'false', 'miss'
+    )
+    stale = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels('external', 'fresh_authority_change')
+    before = [counter._value.get() for counter in (comparison, stale, changed)]
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        external(db)
+    assert [counter._value.get() for counter in (comparison, stale, changed)] == [
+        before[0] + 1,
+        before[1],
+        before[2] + 1,
+    ]
+    assert db.rows[('legal_hold_deletion_gates', UID)] == gate
 
 
 @pytest.mark.parametrize('source', ['ttl_hit', 'token_hit', 'session_hit'])
