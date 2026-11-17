@@ -76,10 +76,6 @@ def _manifest(
 ) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
-    scope = audio_gcs_reads.current()
-    key = (bucket.name, path)
-    if blob is None and scope is not None:
-        blob = scope.manifests.get(key)
     if blob is None:
         blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
     if blob.name != path:
@@ -97,8 +93,6 @@ def _manifest(
     )
     audio_gcs_reads.operation('read')
     raw = blob.download_as_bytes(**kwargs)
-    if scope is not None and len(scope.manifests) < MAX_FRAMES:
-        scope.manifests[key] = blob
     if len(raw) > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
     if (blob.metadata or {}).get('encrypted') == 'true':

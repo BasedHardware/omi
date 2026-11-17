@@ -38,7 +38,7 @@ from utils.other.audio_raw_read_metrics import (
 from config.refactor_modes import raw_live_gapped_packs_enabled
 
 _index_lock = threading.Lock()
-_indexes: dict[tuple, tuple[float, list, float, bool, bool, int]] = {}
+_indexes: dict[tuple, tuple[float, list]] = {}
 # Pack writes invalidate their conversation's entry proactively
 # (invalidate_pack_index), so the TTL only bounds cross-instance staleness,
 # and staleness always fails safe: a missing pack keeps the PCM write (proof
@@ -94,27 +94,16 @@ def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
 
 
 def list_packs(
-    bucket,
-    uid: str,
-    conversation_id: str,
-    *,
-    fresh=False,
-    deadline=None,
-    timeout=10,
-    max_count=10000,
-    strict=False,
+    bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000, strict=False
 ):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
-    gapped_enabled = raw_live_gapped_packs_enabled()
     with _index_lock:
         cached = _indexes.get(key)
-        if not fresh and cached and cached[0] > time.monotonic() and not strict and len(cached[1]) <= max_count:
-            io_timeout(deadline, timeout)
+        if not fresh and not strict and cached and cached[0] > time.monotonic():
             return cached[1]
     packs = []
+    gapped_enabled = raw_live_gapped_packs_enabled()
     manifests = None
-    listed_count = 0
-    listed_at = time.monotonic()
     audio_gcs_reads.operation('list')
     for index, blob in enumerate(
         bucket.list_blobs(
@@ -123,7 +112,6 @@ def list_packs(
     ):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture index budget exhausted')
-        listed_count = index + 1
         metadata = blob.metadata or {}
         if metadata.get('clock_source') == 'arrival_estimate':
             # Legacy pusher clocks cannot position independent raw packs on a
@@ -205,7 +193,7 @@ def list_packs(
     with _index_lock:
         if len(_indexes) >= _MAX_INDEXES:
             _indexes.pop(next(iter(_indexes)))
-        _indexes[key] = (time.monotonic() + _INDEX_TTL, result, listed_at, strict, gapped_enabled, listed_count)
+        _indexes[key] = (time.monotonic() + _INDEX_TTL, result)
     return result
 
 

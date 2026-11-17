@@ -1,8 +1,7 @@
-"""Request-scoped metadata reuse; never cache audio, custody or permissions."""
+"""Stateless pinned reads and operation counters; no metadata or proof cache."""
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, field
 
 from google.api_core.exceptions import PreconditionFailed
 from prometheus_client import Counter
@@ -14,31 +13,21 @@ OPERATIONS = Counter(
 )
 
 
-@dataclass
-class RebuildReads:
-    manifests: dict = field(default_factory=dict)
-    proofs: dict = field(default_factory=dict)
-
-
-_current: ContextVar[RebuildReads | None] = ContextVar('audio_rebuild_reads', default=None)
-
-
-def current() -> RebuildReads | None:
-    return _current.get()
+_in_rebuild: ContextVar[bool] = ContextVar('audio_gcs_in_rebuild', default=False)
 
 
 def operation(name: str):
-    OPERATIONS.labels(scope='rebuild' if current() is not None else 'read', operation=name).inc()
+    OPERATIONS.labels(scope='rebuild' if _in_rebuild.get() else 'read', operation=name).inc()
 
 
 @contextmanager
 def rebuilding():
-    token = _current.set(RebuildReads())
+    token = _in_rebuild.set(True)
     operation('rebuild')
     try:
         yield
     finally:
-        _current.reset(token)
+        _in_rebuild.reset(token)
 
 
 def has_metadata(blob) -> bool:

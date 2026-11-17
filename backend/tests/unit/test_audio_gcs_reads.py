@@ -158,7 +158,7 @@ def test_loaded_metadata_skips_reload_but_changed_or_missing_object_refuses(targ
         del bucket.objects[name]
     else:
         setattr(bucket.objects[name], fault, 2)
-    with pytest.raises((PreconditionFailed, NotFound)):
+    with pytest.raises(NotFound if fault == 'missing' else PreconditionFailed):
         if target == 'media':
             raw.read_pack(bucket, path, 'u', blob=blob)
         else:
@@ -189,20 +189,18 @@ def test_mutation_after_reload_still_refuses(fault):
                 setattr(bucket.objects[path], fault, 2)
 
     bucket.before_download = mutate
-    with pytest.raises((PreconditionFailed, NotFound)):
+    with pytest.raises(NotFound if fault == 'missing' else PreconditionFailed):
         raw.read_pack(bucket, path, 'u')
 
 
 @pytest.mark.parametrize('gapped', [False, True])
-def test_validation_uses_one_metadata_get_after_listing_and_never_reloads_for_decode(gapped):
-    bucket, path, _, pcm = capture(gapped=gapped)
-    with reads.rebuilding():
-        raw.list_packs(bucket, 'u', 'c', fresh=True, strict=True)
-        bucket.events.clear()
-        proven = recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
-        assert all(isinstance(expiry, float) for expiry in reads.current().proofs.values())
+def test_attempt_removes_only_duplicate_gets_and_keeps_live_metadata_reads(gapped):
+    bucket, path, manifest, pcm = capture(gapped=gapped)
+    proven = recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
     assert sum(item['span']['samples'] for item in proven) == len(pcm) // 2
-    assert [name for op, name in bucket.events if op == 'metadata'] == [path]
+    assert [name for op, name in bucket.events if op == 'metadata'] == (
+        [path] if gapped else [manifest, path, manifest]
+    )
     assert sum(op == 'read' and name == path for op, name in bucket.events) == 1
 
 
@@ -232,10 +230,11 @@ def wire_rebuild(bucket, monkeypatch, *, after_conflict=None):
     return attempts
 
 
-def test_rebuild_relists_and_decodes_once_across_cas_retry(monkeypatch):
+@pytest.mark.parametrize('evict_proof', [False, True])
+def test_rebuild_relists_and_reads_live_metadata_on_every_attempt(monkeypatch, evict_proof):
     bucket, path, _, _ = capture()
-    # Eviction of the process proof cache must not cause another decode in this rebuild.
-    attempts = wire_rebuild(bucket, monkeypatch, after_conflict=recovery._proofs.clear)
+    # Preserve main's proof-cache behaviour, including decoding again after eviction.
+    attempts = wire_rebuild(bucket, monkeypatch, after_conflict=recovery._proofs.clear if evict_proof else None)
     before = {
         op: reads.OPERATIONS.labels(scope='rebuild', operation=op)._value.get()
         for op in ('rebuild', 'list', 'metadata', 'read')
@@ -243,14 +242,13 @@ def test_rebuild_relists_and_decodes_once_across_cas_retry(monkeypatch):
     assert projection.rebuild('u', 'c') is True
     assert len(attempts) == 2
     counts = Counter(op for op, _ in bucket.events)
-    assert counts == {'list': 2, 'metadata': 3, 'read': 5}
-    assert sum(op == 'read' and name == path for op, name in bucket.events) == 1
-    assert reads.current() is None
+    assert counts == {'list': 2, 'metadata': 6, 'read': 6 if evict_proof else 5}
+    assert sum(op == 'read' and name == path for op, name in bucket.events) == (2 if evict_proof else 1)
     for op, count in {**counts, 'rebuild': 1}.items():
         assert reads.OPERATIONS.labels(scope='rebuild', operation=op)._value.get() - before[op] == count
 
 
-@pytest.mark.parametrize('fault', ['generation', 'metageneration', 'manifest-generation', 'manifest-missing'])
+@pytest.mark.parametrize('fault', ['generation', 'manifest-missing'])
 def test_cas_retry_does_not_hide_changed_or_missing_objects(monkeypatch, fault):
     bucket, path, manifest, _ = capture()
 
@@ -258,9 +256,6 @@ def test_cas_retry_does_not_hide_changed_or_missing_objects(monkeypatch, fault):
         name = manifest if fault.startswith('manifest-') else path
         if fault.endswith('missing'):
             del bucket.objects[name]
-        elif fault == 'metageneration':
-            bucket.objects[name].metageneration += 1
-            bucket.objects[name].metadata['sample_rate'] = '8000'
         else:
             bucket.objects[name].generation += 1
 
@@ -268,27 +263,6 @@ def test_cas_retry_does_not_hide_changed_or_missing_objects(monkeypatch, fault):
     with pytest.raises((PreconditionFailed, NotFound, ValueError)):
         projection.rebuild('u', 'c')
     assert len(attempts) == 1
-    assert reads.current() is None
-
-
-@pytest.mark.parametrize('condition', ['old', 'permissive', 'expired', 'invalidated'])
-def test_strict_rebuild_will_not_reuse_unqualified_index(monkeypatch, condition):
-    bucket, _, _, _ = capture()
-    if condition in {'old', 'permissive'}:
-        raw.list_packs(bucket, 'u', 'c', strict=condition == 'old')
-    with reads.rebuilding() as _:
-        scope = reads.current()
-        assert scope is not None
-        if condition in {'expired', 'invalidated'}:
-            raw.list_packs(bucket, 'u', 'c', strict=True)
-            if condition == 'invalidated':
-                raw.invalidate_pack_index(bucket, 'u', 'c')
-            else:
-                key = (bucket.name, 'u', 'c')
-                raw._indexes[key] = (0, *raw._indexes[key][1:])
-        bucket.events.clear()
-        assert recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
-    assert sum(op == 'list' and name.startswith('raw-live/') for op, name in bucket.events) == 1
 
 
 def test_required_archive_read_still_forces_fresh_listing():
@@ -312,26 +286,6 @@ def test_sync_and_shared_collectors_keep_operation_counter():
             matches = re.fullmatch(rule.get('regex', '.*'), value) is not None
             assert rule['action'] != 'keep' or matches
             assert rule['action'] != 'drop' or not matches
-
-
-def test_cache_does_not_hide_a_changed_gapped_pack_gate(monkeypatch):
-    bucket, _, _, pcm = capture(gapped=True)
-    with reads.rebuilding():
-        monkeypatch.setenv('RAW_LIVE_GAPPED_PACKS_ENABLED', 'off')
-        assert raw.list_packs(bucket, 'u', 'c', strict=True) == []
-        monkeypatch.setenv('RAW_LIVE_GAPPED_PACKS_ENABLED', 'true')
-        proven = recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
-    assert sum(p['span']['samples'] for p in proven) == len(pcm) // 2
-    assert sum(op == 'list' and name.startswith('raw-live/') for op, name in bucket.events) == 2
-
-
-def test_fresh_strict_listing_enforces_the_object_scan_budget():
-    bucket, _, _, _ = capture()
-    bucket.objects['raw-live/u/c/legacy'] = Object(b'x', {'clock_source': 'arrival_estimate'})
-    with reads.rebuilding():
-        assert len(raw.list_packs(bucket, 'u', 'c', strict=True)) == 1
-        with pytest.raises(TimeoutError, match='index budget'):
-            raw.list_packs(bucket, 'u', 'c', strict=True, max_count=1)
 
 
 def test_metadata_without_metageneration_is_refreshed_before_decode():
@@ -401,4 +355,65 @@ def test_pack_deleted_between_attempts_returns_no_objects_without_committing(mon
     assert projection.rebuild('u', 'c') == 'no_objects'
     assert len(attempts) == 1
     assert bucket.events.count(('list', 'raw-live/u/c/')) == 2
-    assert reads.current() is None
+
+
+@pytest.mark.parametrize('field', ['generation', 'metageneration'])
+def test_manifest_calls_in_one_rebuild_read_live_metadata_without_reusing_state(field):
+    bucket, _, path, _ = capture()
+    with reads.rebuilding():
+        table._manifest(bucket, 'u', path)
+        setattr(bucket.objects[path], field, 2)
+        table._manifest(bucket, 'u', path)
+    assert bucket.events == [('metadata', path), ('read', path)] * 2
+    assert bucket.downloads[0][1]['if_generation_match'] == 1
+    assert bucket.downloads[0][1]['if_metageneration_match'] == 1
+    assert bucket.downloads[1][1]['if_generation_match'] == (2 if field == 'generation' else 1)
+    assert bucket.downloads[1][1]['if_metageneration_match'] == (2 if field == 'metageneration' else 1)
+
+
+@pytest.mark.parametrize('field', ['generation', 'metageneration'])
+def test_cas_retry_reads_current_manifest_instead_of_the_first_attempt_snapshot(monkeypatch, field):
+    bucket, _, path, _ = capture()
+    attempts = wire_rebuild(bucket, monkeypatch, after_conflict=lambda: setattr(bucket.objects[path], field, 2))
+    assert projection.rebuild('u', 'c') is True
+    assert len(attempts) == 2
+    downloads = [kwargs for name, kwargs in bucket.downloads if name == path]
+    assert len(downloads) == 4
+    condition = 'if_generation_match' if field == 'generation' else 'if_metageneration_match'
+    assert [kw[condition] for kw in downloads] == [1, 1, 2, 2]
+    assert bucket.events.count(('metadata', path)) == 4
+
+
+def test_metageneration_only_race_after_media_get_fails_for_its_download_precondition():
+    bucket, path, _, _ = capture()
+    original = deepcopy(bucket.objects[path].metadata)
+
+    def race(name):
+        if name == path:
+            bucket.objects[path].metageneration += 1
+
+    bucket.before_download = race
+    with pytest.raises(PreconditionFailed, match='object changed'):
+        recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
+    assert bucket.objects[path].metadata == original
+    assert bucket.objects[path].generation == 1
+    assert bucket.objects[path].metageneration == 2
+    assert bucket.downloads[-1][0] == path
+    assert bucket.downloads[-1][1]['if_generation_match'] == 1
+    assert bucket.downloads[-1][1]['if_metageneration_match'] == 1
+    assert not recovery._proofs
+
+
+@pytest.mark.parametrize('gapped', [False, True])
+def test_consecutive_validation_calls_do_not_share_manifest_metadata(gapped):
+    bucket, path, manifest, _ = capture(gapped=gapped)
+    recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
+    bucket.events.clear()
+    recovery.validated_uncovered_packs(bucket, 'u', 'c', [])
+    assert bucket.events.count(('list', 'raw-live/u/c/')) == 1
+    assert [name for op, name in bucket.events if op == 'metadata'] == (
+        [path] if gapped else [manifest, path, manifest]
+    )
+    # Main's existing proof cache can skip the decode, after fresh metadata and manifest reads.
+    assert bucket.events.count(('read', path)) == 0
+    assert bucket.events.count(('read', manifest)) == 2

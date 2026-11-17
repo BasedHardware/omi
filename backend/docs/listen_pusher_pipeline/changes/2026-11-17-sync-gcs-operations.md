@@ -1,23 +1,23 @@
-# Reduce private-sync recovery metadata operations
+# Remove same-call duplicate sync metadata GETs
 
 The [durable projection recovery contract](../../listen_pusher_pipeline.mdx#durable-playback-projection-rebuild-debt)
-continues to require decoded original frame coverage, privacy preflight and
-commit-time audio_files CAS. Each CAS attempt snapshots the conversation before
-its own fresh strict raw LIST. A retry must see packs committed by the peer that
-caused the conflict; inventories are never shared across attempts.
+retains decoded original coverage, privacy preflight and commit-time audio_files
+CAS. Each attempt snapshots before its own fresh strict LIST, and re-reads live
+media and manifest metadata. No new cache or flag remains; main's existing index
+and process proof-cache behaviour are unchanged.
 
-Already-loaded media and manifest metadata avoid a redundant reload. Downloads
-pin generation and metageneration, retaining hash, decrypt, frame and size checks.
-Fresh validation uses one media metadata GET instead of three. Bounded rebuild
-metadata and decode-proof caches retain no PCM, and current media metadata and
-manifest validation still precede proof reuse. Changed or missing objects fail
-closed in strict recovery. Non-strict discovery excludes an individual pack when
-its manifest changes during download and continues listing other packs.
+The only optimization passes metadata already fetched in this call chain to the
+immediate read: validation supplies its media blob to decoding, and gapped
+manifest listing supplies its manifest blob. Every download pins generation and
+metageneration; hash, decrypt, frame and size checks remain. Strict recovery fails
+closed on an in-flight object change. Non-strict discovery excludes only that
+pack and continues.
 
-The [operations runbook](../../runbooks/sync-gcs-operations.md) records the synthetic
-per-rebuild comparison, GMP-only operations counter query and limitations.
-Regression tests cover a peer pack committed between CAS attempts, generation
-and metadata changes, missing objects and strict/non-strict manifest replacement.
-No flag, wire or payload change remains. Rollback is a normal reviewed revert
-and release. This PR performs no deployment or production config change.
-No saving is claimed.
+The [operations runbook](../../runbooks/sync-gcs-operations.md) gives per-attempt
+counts and a GMP-only query with a guarded denominator. Fresh framed proofs save
+one GET, gapped proofs save three, but framed warm proof hits save zero. Under a
+strict one-GET-per-pack-per-attempt threshold, recommend closing this PR. No
+runtime saving is claimed. Rollback is a normal reviewed revert/release.
+Tests isolate metageneration-only download races, live manifest reads on retry
+and across calls, and peer-committed coverage. No wire/payload change, deploy,
+production config change or merge is performed.

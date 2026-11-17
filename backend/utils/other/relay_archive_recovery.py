@@ -48,17 +48,7 @@ _lock = threading.Lock()
 
 def validated_uncovered_packs(bucket, uid, cid, chunks):
     deadline = time.monotonic() + 20
-    scope = audio_gcs_reads.current()
-    packs = raw_audio_read.list_packs(
-        bucket,
-        uid,
-        cid,
-        # A CAS retry follows a peer write: snapshot-before-LIST requires a new inventory.
-        fresh=True,
-        deadline=deadline,
-        max_count=4096,
-        strict=True,
-    )
+    packs = raw_audio_read.list_packs(bucket, uid, cid, fresh=True, deadline=deadline, max_count=4096, strict=True)
     candidates = raw_audio_read.uncovered_raw_packs(packs, chunks)
     decoded_bytes = new_packs = 0
     validated = []
@@ -93,23 +83,12 @@ def validated_uncovered_packs(bucket, uid, cid, chunks):
             metageneration = getattr(blob, 'metageneration', None)
             frame_digest = hashlib.sha256(json.dumps(frames, sort_keys=True).encode()).hexdigest()
             key = ProofKey(bucket.name, uid, cid, path, generation, metageneration, metadata['sha256'], frame_digest)
-            # Rebuild from the manifest, never the pack's envelope or a sliced
-            # candidate. This preserves gaps and zero-sample diagnostic rows.
-            full_source = {**source, 'timestamp': float(metadata['capture_start'])}
-            for field in tuple(full_source):
-                if field.startswith('raw_') and field not in {'raw_end', 'raw_created_at'}:
-                    full_source.pop(field)
-            proven = entries(frames, rate, full_source, allow_empty=True)
             # A backend without metadata generation cannot lend its old proof
             # to a metadata-only update; validate again instead.
             with _lock:
                 cached = _proofs.get(key) if metageneration is not None else None
-            local_until = scope.proofs.get(key, 0) if scope is not None else 0
-            valid_until = max(local_until, cached[0] if cached else 0)
-            if valid_until > time.monotonic():
-                if scope is not None and len(scope.proofs) < MAX_PROOFS:
-                    scope.proofs[key] = valid_until
-                needed = raw_audio_read.uncovered_raw_packs(proven, chunks)
+            if cached and cached[0] > time.monotonic():
+                needed = raw_audio_read.uncovered_raw_packs(cached[1], chunks)
                 if len(validated) + len(needed) > 4096:
                     raise TimeoutError('recovery frame inventory budget exhausted')
                 validated.extend(needed)
@@ -138,6 +117,13 @@ def validated_uncovered_packs(bucket, uid, cid, chunks):
             del pcm
             decoded_bytes += expected
             new_packs += 1
+            # Rebuild from the manifest, never the pack's envelope or a sliced
+            # candidate. This preserves gaps and zero-sample diagnostic rows.
+            full_source = {**source, 'timestamp': float(metadata['capture_start'])}
+            for field in tuple(full_source):
+                if field.startswith('raw_') and field not in {'raw_end', 'raw_created_at'}:
+                    full_source.pop(field)
+            proven = entries(frames, rate, full_source, allow_empty=True)
             needed = raw_audio_read.uncovered_raw_packs(proven, chunks)
             if len(validated) + len(needed) > 4096:
                 raise TimeoutError('recovery frame inventory budget exhausted')
@@ -145,8 +131,6 @@ def validated_uncovered_packs(bucket, uid, cid, chunks):
             if metageneration is not None:
                 with _lock:
                     _proofs[key] = (time.monotonic() + PROOF_SECONDS, proven)
-                    if scope is not None and len(scope.proofs) < MAX_PROOFS:
-                        scope.proofs[key] = _proofs[key][0]
                     _proofs.move_to_end(key)
                     while (
                         len(_proofs) > MAX_PROOFS or sum(len(value[1]) for value in _proofs.values()) > MAX_PROOF_SPANS

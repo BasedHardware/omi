@@ -226,7 +226,7 @@ def test_replay_cannot_shadow_raw_receipt_after_projection_failure(remote, monke
     monkeypatch.setitem(
         raw_audio_read._indexes,
         (remote.name, 'owner', 'conversation'),
-        (time.monotonic() + 120, [], time.monotonic(), False, True, 0),
+        (time.monotonic() + 120, []),
     )
     reload_blob = remote.blob(old.path).reload
 
