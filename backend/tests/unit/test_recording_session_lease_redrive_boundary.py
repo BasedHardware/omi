@@ -552,7 +552,7 @@ async def test_converged_cycle_redrives_to_a_clean_no_op(blip_store, monkeypatch
     await asyncio.gather(*host.spawned)
 
     assert blip_store.documents[path]['lease_expires_at'] == (first_commit + timedelta(minutes=1))
-        # Merged stack: the budget absorbs retired-id chains inside one tick —
+    # Merged stack: the budget absorbs retired-id chains inside one tick —
     # no boundary-level wait is recorded on this path.
     assert host.waits == []
 
@@ -829,9 +829,7 @@ async def test_wake_between_attempts_resumes_a_fresh_cycle_next_minute(blip_stor
     # Cycle-1's absorbed commit stamped the full duration from 15:30 (=15:35);
     # at 15:31 that is 4 minutes of runway, above the renewal threshold, so the
     # runway skip leaves the healthy fence untouched by design.
-    assert blip_store.documents[path]['lease_expires_at'] == datetime(
-        2026, 10, 22, 15, 35, tzinfo=timezone.utc
-    )
+    assert blip_store.documents[path]['lease_expires_at'] == datetime(2026, 10, 22, 15, 35, tzinfo=timezone.utc)
 
 
 async def test_enforce_mode_availability_blip_writes_nothing_and_crashes_once(blip_store, monkeypatch, caplog):
