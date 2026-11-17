@@ -302,9 +302,9 @@ def test_previously_handed_out_index_falls_back_after_production_config_kill(pro
     monkeypatch.setattr(dual_store, '_configured_copy', lambda actual_primary: mirror)
     store = hook.shadow_from_env(primary)
     assert isinstance(store, IndexStore) and store.enabled()
-    assert store.due('leased', 1) == ['primary']  # initial authoritative sweep
-    monkeypatch.setattr(store._index, 'due', lambda *args: ['pg-hint'])
-    assert store.due('leased', 1) == ['pg-hint']
+    assert store.due('leased', 1) == ['primary']
+    monkeypatch.setattr(store._index, 'due', lambda *args: pytest.fail('unproven production coverage'))
+    assert store.due('leased', 1) == ['primary']  # configuration is not complete-query coverage
     monkeypatch.setenv('JOBSTORE_PRODUCTION_MIRROR', 'off')
     assert not store.enabled()
     assert store.due('leased', 1) == ['primary']
