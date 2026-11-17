@@ -4373,10 +4373,21 @@ for _key, _reason in (
 
 # The bounded source page is now reachable from the supervised serving tick,
 # so exercise every table/cursor shape rather than keeping an operator-only skip.
+class _JobstorePagePrimary:
+    namespace = 'batch_pipeline_prod'
+
+    def __init__(self, client):
+        self.client = client
+
+    def __deepcopy__(self, memo):
+        # Keep the active recorder, following the allowance-hold driver seam.
+        return self
+
+
 def _jobstore_primary_page_setup(client, kwargs, trial):
     from database.jobstore.reconcile import _Budget, PageCounts
 
-    kwargs['primary'] = SimpleNamespace(namespace='batch_pipeline_prod', client=client)
+    kwargs['primary'] = _JobstorePagePrimary(client)
     kwargs['budget'] = _Budget(3, 20, 500, PageCounts())
 
 
