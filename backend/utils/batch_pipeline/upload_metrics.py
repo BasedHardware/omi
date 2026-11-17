@@ -35,6 +35,11 @@ def observe_delivery(row, now):
         DELIVERED.labels(bounded_class(row.get('upload_entitlement'))).observe(now - arrived)
 
 
+def context_fields(context):
+    context = context or {}
+    return clock_fields(context.get('upload_arrived_at'), context.get('upload_entitlement'))
+
+
 def observe_completion(original, members, *, merged, changed, result, now):
     if result is None or result.get('reason_code') == 'source_deleted':
         return

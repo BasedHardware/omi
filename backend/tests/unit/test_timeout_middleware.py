@@ -287,7 +287,7 @@ async def test_dream_v2_outer_timeout_is_dynamic_and_path_scoped(monkeypatch, pa
 
 @pytest.mark.asyncio
 async def test_original_upload_arrival_clock_is_server_owned_and_reset():
-    from utils.other.request_clock import started_at
+    from config.request_clock import started_at
     from starlette.responses import Response
 
     middleware = TimeoutMiddleware(Starlette())
@@ -309,7 +309,7 @@ async def test_original_upload_arrival_clock_is_server_owned_and_reset():
 
 @pytest.mark.asyncio
 async def test_original_upload_arrival_clock_resets_on_timeout():
-    from utils.other.request_clock import started_at
+    from config.request_clock import started_at
 
     middleware = TimeoutMiddleware(Starlette(), methods_timeout={"GET": 0.001})
     response = await middleware.dispatch(_make_request(), _never_returns)

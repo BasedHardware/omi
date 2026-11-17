@@ -4,6 +4,9 @@ This deployment drains already admitted work; it never admits uploads or enables
 a cohort. All storage and model construction happens after the explicit switch.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from utils.executors import db_executor, run_blocking
+
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -240,9 +243,6 @@ async def supervise(pump: Any, state: RuntimeState, stop_event: asyncio.Event, s
 
 
 async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, state: RuntimeState) -> None:
-    from database.batch_coalescing_capabilities import advertise
-    from utils.executors import db_executor, run_blocking
-
     try:
         await run_blocking(db_executor, advertise, store)
     except Exception:

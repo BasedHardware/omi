@@ -1,22 +1,13 @@
 """CPU intake entitlement lookup, separate from worker-safe metric collectors."""
 
+from database import users
+from utils import subscription
+
 import math
 
 
 def subscription_policy():
-    from database import users
-    from utils import subscription
-
     return users, subscription
-
-
-async def prepare_context(uid, context, group):
-    from utils.executors import db_executor, run_blocking
-
-    context = dict(context or {})
-    if group is None:
-        context['upload_entitlement'] = await run_blocking(db_executor, classify, uid)
-    return context
 
 
 def classify(uid):

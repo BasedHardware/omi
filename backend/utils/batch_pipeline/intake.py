@@ -1,5 +1,7 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
+from utils.batch_pipeline import upload_metrics
+
 from dataclasses import replace
 from functools import partial
 import hashlib
@@ -641,9 +643,6 @@ async def accept_upload(
         user = snapshots['user']
         target = snapshots.get('conversations', {}).get(conversation_id) or {}
         user, target = _coalescing_language(user, target, _coalescing_group)
-        from utils.batch_pipeline import upload_metrics, upload_entitlement
-
-        intake_context = await upload_entitlement.prepare_context(uid, intake_context, _coalescing_group)
         # Privacy authorization already loaded this row. Rollback may drain a
         # native owner here without adding an ownership-discovery read to dark
         # uploads, or accidentally admitting a second GPU job.
@@ -1076,11 +1075,7 @@ async def accept_upload(
                 'lane': lane,
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
-                **upload_metrics.clock_fields(
-                    intake_context.get('upload_arrived_at'),
-                    intake_context.get('upload_entitlement'),
-                ),
-                'upload_entitlement': upload_metrics.bounded_class(intake_context.get('upload_entitlement')),
+                **upload_metrics.context_fields(intake_context),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

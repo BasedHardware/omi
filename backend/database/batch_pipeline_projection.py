@@ -4,6 +4,9 @@ No transcript bodies are copied into scheduler metadata. Durable completion is
 separate from the Redis client projection, and can repair a lost Redis reply.
 """
 
+from database.batch_coalescing_capabilities import advertise
+from utils.batch_pipeline.upload_metrics import observe_completion
+
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 import logging
@@ -81,8 +84,6 @@ def usage_stamp(now: datetime, usage_period: Any) -> datetime:
 class ProjectionStore:
     def __init__(self, store: FirestoreStore):
         self.store = store
-        from database.batch_coalescing_capabilities import advertise
-
         try:
             advertise(store)
         except Exception:
@@ -1110,8 +1111,6 @@ class ProjectionStore:
                 SOURCE_DELETED_JOBS.inc()
                 logger.info('event=batch_projection action=completion outcome=source_deleted')
             record_correctness('projection_completed', seconds=seconds)
-        from utils.batch_pipeline.upload_metrics import observe_completion
-
         observe_completion(
             completion_upload,
             delivered_uploads,

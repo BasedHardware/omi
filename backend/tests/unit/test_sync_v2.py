@@ -8,6 +8,13 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from types import SimpleNamespace
+
+from routers import (
+    enrichment as real_enrichment_adapter,
+)  # noqa: F401 - retain the canonical adapter across package stubs
+from utils.batch_pipeline import upload_entitlement as real_upload_entitlement  # noqa: F401 - CPU boundary dependency
+
 from utils.sync import size_telemetry  # noqa: F401 - retain real scoped telemetry across legacy package stubs
 from utils.sync import repeat_work_metrics  # noqa: F401 - retain real telemetry across legacy package stubs
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
@@ -1676,6 +1683,7 @@ class TestAsyncCoordinatorBehavioral:
         module = importlib.util.module_from_spec(spec)
 
         spec.loader.exec_module(module)
+        module.upload_entitlement = SimpleNamespace(classify=lambda _uid: 'unknown')
 
         pipeline_mod = sys.modules['utils.sync.pipeline']
 
@@ -4163,6 +4171,7 @@ class TestV2EndpointExecution:
             )
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
+            module.upload_entitlement = SimpleNamespace(classify=lambda _uid: 'unknown')
             module.retained_source_offsets = MagicMock(return_value={})  # Fake staged paths have no source bytes.
             gc.collect()
             yield saved, jobs, module

@@ -1,5 +1,7 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
+from utils.batch_pipeline import upload_metrics
+
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -264,11 +266,11 @@ def admit(
         }
 
     outcome = store.run(commit)
-    from utils.batch_pipeline.upload_metrics import CREATED, bounded_class
-
     created_units = int(outcome.pop('_created_units', 0) or 0)
     if created_units:
-        CREATED.labels(bounded_class((intake or {}).get('upload_entitlement'))).inc(created_units)
+        upload_metrics.CREATED.labels(upload_metrics.bounded_class((intake or {}).get('upload_entitlement'))).inc(
+            created_units
+        )
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     reused_seconds = outcome.pop('_reused_seconds', 0.0)
     if reused_seconds:
