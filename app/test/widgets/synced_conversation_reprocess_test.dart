@@ -84,6 +84,24 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 5));
   });
 
+  testWidgets('a busy answer explains itself, not "Something went wrong"', (tester) async {
+    final l10n = await _pump(tester, (_) async => const ReprocessBusy());
+    await tester.tap(find.byIcon(Icons.refresh_outlined));
+    await tester.pump();
+    expect(find.text(l10n.summaryBusyBody), findsOneWidget);
+    expect(find.text(l10n.somethingWentWrong), findsNothing);
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+  });
+
+  testWidgets('a rate-limited answer explains itself, not "Something went wrong"', (tester) async {
+    final l10n = await _pump(tester, (_) async => const ReprocessRateLimited(retryAfter: Duration(minutes: 2)));
+    await tester.tap(find.byIcon(Icons.refresh_outlined));
+    await tester.pump();
+    expect(find.text(l10n.summaryLimitBody), findsOneWidget);
+    expect(find.text(l10n.somethingWentWrong), findsNothing);
+    await tester.pumpAndSettle(const Duration(seconds: 5));
+  });
+
   testWidgets('a failed reprocess is an error, no longer silent', (tester) async {
     final l10n = await _pump(tester, (_) async => const ReprocessFailed(statusCode: 500));
     await tester.tap(find.byIcon(Icons.refresh_outlined));

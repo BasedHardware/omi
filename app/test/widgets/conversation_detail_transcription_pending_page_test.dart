@@ -123,6 +123,8 @@ void main() {
     expect(find.text(l10n.summaryTranscriptionPendingBody), findsOneWidget);
     expect(find.text(l10n.errorProcessingConversation), findsNothing);
     await _drain(tester);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('legacy: without the in-place notice it says so once, not as an error', (tester) async {
@@ -134,6 +136,8 @@ void main() {
     expect(find.text(l10n.summaryTranscriptionPendingBody), findsOneWidget);
     expect(find.text(l10n.errorProcessingConversation), findsNothing);
     await _drain(tester);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('legacy: a pending answer for another conversation says nothing here', (tester) async {
@@ -155,5 +159,7 @@ void main() {
     expect(find.text(l10n.summaryTranscriptionPendingBody), findsOneWidget);
     expect(find.text(l10n.errorProcessingConversation), findsNothing);
     await _drain(tester);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 }

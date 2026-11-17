@@ -249,6 +249,8 @@ void main() {
       if (!gate.isCompleted) gate.complete(const ReprocessBusy());
       await tester.pump();
       debugDefaultTargetPlatformOverride = null;
+      // The not-transcribed case arms the marker's expiry timer; it must not outlive the test body.
+      TranscriptionPendingConversations.reset();
     });
   }
 }

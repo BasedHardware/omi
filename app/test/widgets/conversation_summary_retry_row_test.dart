@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:clock/clock.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -219,6 +218,8 @@ void main() {
     expect(find.text('Processing'), findsOneWidget);
     expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
     expect(find.text("Omi couldn't finish"), findsNothing);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('a retry inside the transcription window shows the server waiting state, not an error', (tester) async {
@@ -262,6 +263,8 @@ void main() {
     expect(find.text(_l10n(tester).somethingWentWrong), findsOneWidget);
     expect(_retryButton, findsOneWidget);
     expect(TranscriptionPendingConversations.contains('c1'), isFalse);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('the row follows the not-transcribed set without a tap, and a settled copy clears it', (tester) async {
@@ -315,6 +318,8 @@ void main() {
     expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
     expect(_retryButton, findsNothing);
     expect(find.text(_l10n(tester).conversationSummaryFailed), findsNothing);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('a detail copy with a transcript clears the status and brings Retry back', (tester) async {
@@ -368,17 +373,42 @@ void main() {
     expect(TranscriptionPendingConversations.contains('still-failed'), isTrue);
   });
 
-  test('the not-transcribed status expires, so a stale answer cannot hide Retry for long', () {
+  testWidgets('Retry comes back on its own when the not-transcribed answer expires', (tester) async {
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);
-    final start = DateTime.utc(2026, 11, 17, 8);
-    withClock(Clock.fixed(start), () => TranscriptionPendingConversations.mark('c1'));
-    withClock(Clock.fixed(start.add(const Duration(minutes: 9))), () {
-      expect(TranscriptionPendingConversations.contains('c1'), isTrue);
-    });
-    withClock(Clock.fixed(start.add(TranscriptionPendingConversations.ttl)), () {
-      expect(TranscriptionPendingConversations.contains('c1'), isFalse);
-    });
+    await _pumpRow(
+      tester,
+      conversation:
+          _conversation(title: 'Processing', segments: const [], summaryRetryable: false).withHomeStep('failed'),
+    );
+    TranscriptionPendingConversations.mark('c1');
+    await tester.pump();
+    expect(_retryButton, findsNothing);
+
+    await tester.pump(TranscriptionPendingConversations.ttl - const Duration(seconds: 1));
+    expect(_retryButton, findsNothing);
+    // Nothing else changes: only the expiry rebuilds the row.
+    await tester.pump(const Duration(seconds: 1));
+    expect(TranscriptionPendingConversations.contains('c1'), isFalse);
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsNothing);
+    expect(_retryButton, findsOneWidget);
+  });
+
+  testWidgets("a marked row titled with the server's hold stand-in shows the status once, as its title",
+      (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    await _pumpRow(
+      tester,
+      conversation: _conversation(title: "Couldn't transcribe", segments: const [], summaryRetryable: false)
+          .withHomeStep('failed'),
+    );
+    TranscriptionPendingConversations.mark('c1');
+    await tester.pump();
+    expect(find.text("Couldn't transcribe"), findsNothing);
+    expect(find.text(_l10n(tester).summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(_retryButton, findsNothing);
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {

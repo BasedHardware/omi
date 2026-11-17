@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 
@@ -25,11 +27,32 @@ class TranscriptionPendingConversations {
     return at != null && clock.now().difference(at) < ttl;
   }
 
-  static void mark(String id) => ids.value = {...ids.value, id: clock.now()};
+  /// Whether the status stands in for the title: the row is marked and its title is only the
+  /// English stand-in the server writes on an overdue hold (`transcription_presentation`).
+  static bool replacesTitle(ServerConversation conversation) =>
+      contains(conversation.id) && conversation.structured.title.trim() == "Couldn't transcribe";
+
+  static Timer? _expiry;
+
+  static void mark(String id) => _publish({...ids.value, id: clock.now()});
 
   static void unmark(String id) {
-    if (!ids.value.containsKey(id)) return;
-    ids.value = {...ids.value}..remove(id);
+    if (ids.value.containsKey(id)) _publish({...ids.value}..remove(id));
+  }
+
+  /// Publishes [next] and arms one timer for its earliest expiry, so surfaces rebuild when an
+  /// answer lapses rather than at their next unrelated rebuild.
+  static void _publish(Map<String, DateTime> next) {
+    ids.value = next;
+    _expiry?.cancel();
+    _expiry = null;
+    if (next.isEmpty) return;
+    final earliest = next.values.reduce((a, b) => a.isBefore(b) ? a : b);
+    final wait = earliest.add(ttl).difference(clock.now());
+    _expiry = Timer(wait.isNegative ? Duration.zero : wait, () {
+      final now = clock.now();
+      _publish({...ids.value}..removeWhere((_, at) => now.difference(at) >= ttl));
+    });
   }
 
   /// Clears the status when an applied copy proves transcription is no longer pending. A copy with
@@ -45,5 +68,5 @@ class TranscriptionPendingConversations {
   }
 
   @visibleForTesting
-  static void reset() => ids.value = const {};
+  static void reset() => _publish(const {});
 }

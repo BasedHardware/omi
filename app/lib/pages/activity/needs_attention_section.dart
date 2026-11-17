@@ -308,8 +308,9 @@ class _FailedConversationRowState extends State<_FailedConversationRow> {
     final c = widget.conversation;
     final at = (c.startedAt ?? c.createdAt).toLocal();
     final dates = OmiDateFormat.of(context);
-    final hasTitle = !c.isLocked && c.structured.title.trim().isNotEmpty;
     final pending = TranscriptionPendingConversations.contains(c.id);
+    final hasTitle =
+        !c.isLocked && c.structured.title.trim().isNotEmpty && !TranscriptionPendingConversations.replacesTitle(c);
     final status = pending ? context.l10n.summaryTranscriptionPendingTitle : context.l10n.processingFailed;
     return _AttentionRow(
       title: hasTitle ? c.structured.title : status,

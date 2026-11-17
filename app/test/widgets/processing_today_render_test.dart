@@ -736,6 +736,8 @@ void main() {
     expect(TranscriptionPendingConversations.contains('pending'), isTrue);
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
   evidenceTest('locked failed Activity rows keep the title redacted', (tester) async {
     final failed = ServerConversation(

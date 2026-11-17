@@ -133,6 +133,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conversation_detail_transcription_pending')), findsOneWidget);
     expect(find.text(l10n.retry), findsNothing);
+    // The expiry timer must not outlive the test body.
+    TranscriptionPendingConversations.reset();
   });
 
   testWidgets('failed Home projection survives a legacy detail read and offers retry without a spinner',

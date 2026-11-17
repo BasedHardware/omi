@@ -140,6 +140,10 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
           break;
         case ReprocessTranscriptionPending():
           OmiFeedback.info(context, context.l10n.summaryTranscriptionPendingBody);
+        case ReprocessBusy():
+          OmiFeedback.info(context, context.l10n.summaryBusyBody);
+        case ReprocessRateLimited():
+          OmiFeedback.info(context, context.l10n.summaryLimitBody);
         default:
           OmiFeedback.error(context, context.l10n.somethingWentWrong);
       }

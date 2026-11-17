@@ -48,9 +48,13 @@ import 'package:omi/providers/transcription_pending_conversations.dart';
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
-  // A row the server said is not transcribed keeps its own title; the status slot says why.
-  if (conversation.homeStep == 'failed' && !TranscriptionPendingConversations.contains(conversation.id)) {
-    return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+  // A row the server said is not transcribed keeps its own title and the status slot says why,
+  // unless the title is only the server's stand-in; then the status is the title.
+  if (conversation.homeStep == 'failed') {
+    if (!TranscriptionPendingConversations.contains(conversation.id)) {
+      return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+    }
+    if (TranscriptionPendingConversations.replacesTitle(conversation)) return l10n.summaryTranscriptionPendingTitle;
   }
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
@@ -718,7 +722,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       if (widget.conversation.processingDeferred && widget.conversation.homeStep != 'failed')
                         const ProcessingDeferredMarker(),
                       OnDeviceProvenanceChip(conversationId: widget.conversation.id),
-                      if (widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') ...[
+                      if ((widget.conversation.showsSummaryRetry || widget.conversation.homeStep == 'failed') &&
+                          !TranscriptionPendingConversations.replacesTitle(widget.conversation)) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),
                       ],
