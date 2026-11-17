@@ -75,6 +75,16 @@ def notes_pending(structured: Any) -> bool:
     return not any(structured.get(key) for key in ('action_items', 'events'))
 
 
+def untitled_pending(structured: Any) -> bool:
+    """No title, or only a placeholder on a row with no notes.
+
+    A placeholder beside real note content is generated notes with an unusable
+    headline: that row is finished and must keep its notes visible.
+    """
+    title = structured.get('title') if isinstance(structured, Mapping) else None
+    return not str(title or '').strip() or notes_pending(structured)
+
+
 def display_title(title: Any, preview: Any) -> Any:
     """The Home card title: a bare fallback label with no preview is served as untitled."""
     return '' if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()) else title
