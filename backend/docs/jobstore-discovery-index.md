@@ -29,6 +29,9 @@ No hint result is a drain, completion, backlog, priority or admission guard.
 | `JOBSTORE_INDEX_RECOVERY_POLICY` | Default unset/primary. Exact `role_minute_v1:BPS`, ASCII integer 0..10000. Invalid/unset/stale policy uses primary. |
 
 Existing namespace, deployment and complete target configuration are required.
+The new gateway is default-closed in dev/staging too. Installing this source
+does not preserve an earlier recovery-hint soak without an explicit exposure
+policy; root/Release must bind that policy before accepting new staging evidence.
 The configuration selects a conditional hint policy; it does not prove copy
 coverage, installation, erasure readiness or runtime admission.
 
@@ -76,6 +79,9 @@ authorized current transition, the caller runs full canonical primary discovery
 and processes that page before retry discovery. This is a feedback fallback,
 not a second full primary scan for every useful PG answer. A primary failure
 raises; it cannot authorize a hint or an empty completion.
+The context guard rejects a future caller that consumes PG hints without
+candidate feedback or canonical fallback. It cannot silently complete an
+unhandled all-ineligible answer; the actual Scheduler performs that fallback.
 
 For an omitted candidate inside a successful canonical prefix, discovery delay
 includes the mandatory primary cadence (at most 60s), measured caller gap,
@@ -115,17 +121,24 @@ factory bypasses for leased recovery. PG, failures, parity and scrapes do not
 advance it. Absence/future timestamps/stale scrapes are UNKNOWN. Namespace
 labels are `batch_pipeline_dev`, `batch_pipeline_prod`, `other`; role/event/
 source/reason sets are finite. No IDs, customer content or minutes are labels.
+The legacy `omi_jobstore_index_reads_total` reason `hint_ineligible` also
+includes gateway-refused primary scans; the caller counter distinguishes
+`unknown_caller` and `excluded` from actual candidate-feedback fallback.
 The same collectors export in default and GPU private registries in all modes,
 even if optional shadow/driver imports fail.
 
 Let N be caller entries, P actual leased primary queries, H PG attempts.
-Fallback contributes to both H and P. Nominal removed queries are N-P, not H.
+Fallback contributes to both H and P. N-P is only a nominal upper bound:
+entries that fail before leased discovery also have no primary query and must
+not count as removal. Use successful `completed{source="postgres"}` recovery
+counts over N for completed useful PG-only work; retain error/none entries in
+the invocation denominator. PG attempts alone do not establish read removal.
 Candidate transactions, retries, migration, unchanged retry discovery, mirror
 rereads, parity and index-entry work remain in the cost denominator. Optional
 parity can enqueue after both PG and its feedback primary fallback; a dropped
 comparison is UNKNOWN. These counters do not establish billed savings.
 
-The preserved actual-source 2000/100 burst witness shows bare 60s sweeps leave
+The preserved historical1190 actual-source 2000/100 burst witness shows bare 60s sweeps leave
 400 leases at 900s; canonical per-call and primary-full catch-up clear by 95s
 at 5s invocations. Its 147 nominal removed queries also add 147 missing-ID
 transactions: no net savings claim follows. The fast unit case scales the same

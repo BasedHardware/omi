@@ -105,8 +105,8 @@ def test_idle_to_active_must_sweep_before_nonempty_hint(monkeypatch):
     store._index.due.assert_not_called()
 
 
-@pytest.mark.parametrize('state,deadline', [('leased', 500), ('result_ready', 0), ('retry', 0)])
-def test_actual_scheduler_rechecks_heartbeat_aba_and_deleted_hints(monkeypatch, state, deadline):
+@pytest.mark.parametrize('state', ['leased', 'result_ready', 'retry'])
+def test_actual_scheduler_rechecks_heartbeat_aba_and_deleted_hints(monkeypatch, state):
     primary, store, queue, _clock = recovery(monkeypatch)
     queue.recover(121)  # Mandatory primary first.
     queue.enqueue(item('new-token', owner='synthetic'), 0)

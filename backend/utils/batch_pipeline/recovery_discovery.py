@@ -45,7 +45,7 @@ CALLER_GAP_SECONDS = Histogram(
 )
 CUTOFF_AGE_SECONDS = Histogram(
     'omi_jobstore_recovery_cutoff_age_seconds',
-    'Wall-time age of the recovery cutoff at caller entry.',
+    'Wall-time age of the recovery cutoff at leased discovery after migration.',
     ['namespace', 'caller'],
     buckets=(0.01, 0.2, 1, 5, 15, 60, 120, 300, 900),
 )

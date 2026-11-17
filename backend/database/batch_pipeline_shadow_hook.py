@@ -56,7 +56,8 @@ def shadow_parity_collectors() -> tuple:
 
     ``omi_jobstore_shadow_{parity,convergence}_*`` live in the default registry; a process that serves its own
     ``CollectorRegistry`` (the batch worker) must register them there or the series are never exported.
-    Never raises: a failed import keeps the worker serving its other metrics.
+    Optional jobstore import failures keep the core caller collectors available.
+    recovery_discovery is a required core dependency, already imported by Scheduler.
     """
     from utils.batch_pipeline.recovery_discovery import RECOVERY_COLLECTORS
 

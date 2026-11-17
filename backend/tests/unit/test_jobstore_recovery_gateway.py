@@ -189,6 +189,31 @@ def test_zero_exposure_is_selected_zero_and_keeps_all_work_primary(route):
     route.store._index.due.assert_not_called()
 
 
+def test_dev_gateway_is_default_closed_until_explicit_policy(route):
+    route.primary.namespace = 'batch_pipeline_dev'
+    store = IndexStore(SyntheticMirror(route.primary), enabled_queries={'due_leased'}, clock=lambda: route.clock[0])
+    store._index.due = Mock(return_value=['fresh'])
+    queue = scheduler.Scheduler(store, recovery_caller=RecoveryCaller.PUMP)
+    assert queue.recover(route.wall[0]) == 0
+    add_job(route)
+    assert queue.recover(route.wall[0]) == 1
+    store._index.due.assert_not_called()
+    assert [c.args[0] for c in route.primary.due.call_args_list] == ['leased', 'retry', 'leased', 'retry']
+
+
+def test_context_cannot_silently_complete_hints_without_candidate_feedback(route):
+    with pytest.raises(RuntimeError, match='require current-candidate feedback'):
+        with RecoveryQuery(route.primary, route.wall[0], 100, RecoveryCaller.PUMP) as query:
+            query.from_pg = True
+
+
+def test_context_guard_preserves_an_original_candidate_failure(route):
+    with pytest.raises(ValueError, match='original candidate failure'):
+        with RecoveryQuery(route.primary, route.wall[0], 100, RecoveryCaller.PUMP) as query:
+            query.from_pg = True
+            raise ValueError('original candidate failure')
+
+
 def test_invocation_gap_and_cutoff_age_include_actual_migration_delay(route):
     def histogram_value(metric, suffix):
         return sum(

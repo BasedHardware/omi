@@ -40,6 +40,7 @@ from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage
@@ -215,8 +216,6 @@ class Serving:
                 raise ValueError('owner-only recovery requires an owner and recovered unit')
             return self._reconcile_owner(owner_id, recovered)
         if self._leads(periodic):
-            from utils.batch_pipeline.recovery_discovery import RecoveryCaller
-
             self._maintain(
                 recover_quarantine=recover_quarantine,
                 recovery_caller=RecoveryCaller.SERVING if periodic else RecoveryCaller.RECONCILE,
