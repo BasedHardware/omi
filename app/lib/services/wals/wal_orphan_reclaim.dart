@@ -11,6 +11,7 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
       });
 
   Future<void> _reclaimOrphanAudioOnce() async {
+    final passStopwatch = Stopwatch()..start();
     final generation = _sessionGeneration, uid = SharedPreferencesUtil().uid;
     var result = 'completed', deleted = 0, bytes = 0;
     RecordingOrphanCensus? census;
@@ -244,7 +245,9 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
         'deleted_bytes': bytes,
         'skips': skips,
         'result': result,
-        'census_complete': census?.complete ?? false
+        'census_complete': census?.complete ?? false,
+        // Census plus reclaim wall time: the ramp gate measures this on David's device first.
+        'duration_ms': passStopwatch.elapsedMilliseconds
       };
       try {
         if (_orphanReclaimTelemetry != null) {
@@ -264,7 +267,9 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               referenced: skips['referenced'] ?? 0,
               fileChanged: skips['file_changed'] ?? 0,
               sidecarType: skips['sidecar_type'] ?? 0,
-              result: OrphanAudioReclaimResult.values.firstWhere((v) => v.wireName == result),
+              durationMs: passStopwatch.elapsedMilliseconds,
+              result: OrphanAudioReclaimResult.values
+                  .firstWhere((v) => v.wireName == result, orElse: () => OrphanAudioReclaimResult.failed),
               censusComplete: census?.complete ?? false));
         }
       } catch (_) {/* Aggregate diagnostics never grant or revoke deletion authority. */}

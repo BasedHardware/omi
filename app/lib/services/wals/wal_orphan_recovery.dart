@@ -215,7 +215,9 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           result = 'sources_changed';
           return;
         }
-        final refs = buckets.where((r) => r.filePath != null).map((r) => path.basename(r.filePath!)).toSet();
+        // Case-folded, matching the census reserve and the reclaim unlink fence.
+        final refs =
+            buckets.where((r) => r.filePath != null).map((r) => path.basename(r.filePath!).toLowerCase()).toSet();
         // No await until publication: consent and memory are stable in this
         // isolate. Decode the settings once for the entire bounded admission.
         final holdForUser = snapshot.hasLocalOnlyHistory ||
@@ -232,7 +234,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         var room = min(reserved, max(0, maxRetainedCaptureWalCount - _orphanPendingCount()));
         for (final candidate in candidates.take(reserved)) {
           if (room <= 0) break;
-          if (refs.contains(path.basename(candidate.filePath))) {
+          if (refs.contains(path.basename(candidate.filePath).toLowerCase())) {
             counts['referenced'] = (counts['referenced'] ?? 0) + 1;
             continue;
           }
@@ -270,7 +272,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             ..frameSize = info.frameSize;
           _wals.add(wal);
           admitted.add(wal);
-          refs.add(path.basename(candidate.filePath));
+          refs.add(path.basename(candidate.filePath).toLowerCase());
           counts['adopted'] = (counts['adopted'] ?? 0) + 1;
           room--;
         }
@@ -278,7 +280,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         try {
           if (!await _saveWalsToFile(generation)) {
             rollbackUnpublished();
-            result = fence() ?? 'failed';
+            // A concurrent lifecycle fence must not hide an actual save failure.
+            result = 'failed';
             return;
           }
         } catch (_) {
@@ -299,7 +302,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
       });
       result = published ? 'completed' : fence() ?? result;
     } catch (_) {
-      result = fence() ?? 'failed';
+      result = 'failed';
     } finally {
       if (published) result = 'completed';
       _emitOrphanRecovery(census, counts, result);
@@ -383,7 +386,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         passCap: skips['passCap'] ?? 0,
         dailyCap: skips['dailyCap'] ?? 0,
         pressureCap: skips['pressureCap'] ?? 0,
-        result: OrphanAudioRecoveryResult.values.firstWhere((v) => v.wireName == result),
+        result: OrphanAudioRecoveryResult.values
+            .firstWhere((v) => v.wireName == result, orElse: () => OrphanAudioRecoveryResult.failed),
         censusComplete: census?.complete ?? false,
       ));
     } catch (_) {/* Diagnostics never affect custody. */}

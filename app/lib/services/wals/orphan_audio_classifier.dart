@@ -11,12 +11,19 @@ class OrphanAudioFrameCache {
 }
 
 class _CachedAudioFrames {
-  _CachedAudioFrames(_Metadata file, this.frames)
+  _CachedAudioFrames(_Metadata file, this.frames, this.checkedAt)
       : bytes = file.bytes,
         modifiedUs = file.modifiedUs,
         changedUs = file.changedUs;
-  final int bytes, modifiedUs, changedUs, frames;
-  bool matches(_Metadata file) => bytes == file.bytes && modifiedUs == file.modifiedUs && changedUs == file.changedUs;
+  final int bytes, modifiedUs, changedUs, frames, checkedAt;
+
+  /// Unparseable results are cached too, so unchanged malformed files are not reread on every
+  /// wake, but only for a day: zero can also mean a transient read failure.
+  bool matches(_Metadata file, int nowSeconds) =>
+      bytes == file.bytes &&
+      modifiedUs == file.modifiedUs &&
+      changedUs == file.changedUs &&
+      (frames > 0 || nowSeconds - checkedAt < 86400);
 }
 
 /// Device-local data only. Export [summary], never this object or its candidates.
@@ -166,16 +173,29 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
           info.timerStart >= 1704067200 &&
           info.timerStart <= phoneSeconds &&
           phoneSeconds <= 0x7fffffff) {
-        final previous = frameCache._entries[file.filePath];
-        if (previous != null && previous.matches(file)) {
-          frames = previous.frames;
-          hits++;
+        // Framing matters only for files recovery could adopt. Unowned or out-of-window files are
+        // classified from metadata alone (reclaim needs only age and references), so they cost no
+        // audio reads on any wake.
+        if (!owned) {
+          classification = 'owner_unknown';
+        } else if (phoneSeconds - info.timerStart > orphanRecoveryWindowSeconds) {
+          classification = 'expired';
         } else {
-          frames = _strictFrameCount(file.filePath, file.bytes);
-          reads++;
+          final previous = frameCache._entries[file.filePath];
+          if (previous != null && previous.matches(file, phoneSeconds)) {
+            frames = previous.frames;
+            hits++;
+            entries[file.filePath] = previous;
+          } else {
+            frames = _strictFrameCount(file.filePath, file.bytes);
+            reads++;
+            entries[file.filePath] = _CachedAudioFrames(file, frames, phoneSeconds);
+          }
         }
-        // Zero also represents transient I/O failure; retry it next census.
-        if (frames > 0) entries[file.filePath] = _CachedAudioFrames(file, frames);
+      }
+      if (classification == 'owner_unknown' || classification == 'expired') {
+        return OrphanAudioFile(
+            file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun);
       }
       classification = frames <= 0
           ? 'unparseable'

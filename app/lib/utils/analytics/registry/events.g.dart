@@ -3641,7 +3641,7 @@ enum OrphanAudioReclaimResult {
 }
 
 final class OrphanAudioReclaim extends RegisteredEvent {
-  const OrphanAudioReclaim({required this.deletedFiles, required this.deletedBytes, required this.working, required this.unknownCaptureTime, required this.captureTooYoung, required this.mtimeTooYoung, required this.outsideDocuments, required this.passCap, required this.sourcesChanged, required this.referenced, required this.fileChanged, required this.sidecarType, required this.result, required this.censusComplete});
+  const OrphanAudioReclaim({required this.deletedFiles, required this.deletedBytes, required this.working, required this.unknownCaptureTime, required this.captureTooYoung, required this.mtimeTooYoung, required this.outsideDocuments, required this.passCap, required this.sourcesChanged, required this.referenced, required this.fileChanged, required this.sidecarType, required this.durationMs, required this.result, required this.censusComplete});
   final int deletedFiles;
   final int deletedBytes;
   final int working;
@@ -3654,10 +3654,11 @@ final class OrphanAudioReclaim extends RegisteredEvent {
   final int referenced;
   final int fileChanged;
   final int sidecarType;
+  final int durationMs;
   final OrphanAudioReclaimResult result;
   final bool censusComplete;
   @override
   String get wireName => "Orphan Audio Reclaim";
   @override
-  Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "result": result.wireName, "census_complete": censusComplete};
+  Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
 }

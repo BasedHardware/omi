@@ -309,15 +309,35 @@ void main() {
     expect((rechecked.summary['orphan_classification'] as Map)['frame_files_read'], 1);
     expect((rechecked.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
     expect(rechecked.orphans.singleWhere((f) => f.filePath == changed.path).classification, 'unparseable');
-    // Zero may mean a transient read failure; never persist a negative cache.
+    // An unchanged malformed file is not reread on every wake...
+    final sameDay = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now + 3600,
+        currentOwner: 'owner-a',
+        frameCache: rechecked.frameCache);
+    expect((sameDay.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect((sameDay.summary['orphan_classification'] as Map)['frame_cache_hits'], 3000);
+    expect(sameDay.orphans.singleWhere((f) => f.filePath == changed.path).classification, 'unparseable');
+    // ...but zero may mean a transient read failure, so the negative result expires after a day.
     final retried = await captureRecordingCensus(
         documents: dir.path,
         memoryBuckets: {'active': []},
-        phoneSeconds: now,
+        phoneSeconds: now + 86400,
         currentOwner: 'owner-a',
-        frameCache: rechecked.frameCache);
+        frameCache: sameDay.frameCache);
     expect((retried.summary['orphan_classification'] as Map)['frame_files_read'], 1);
     expect((retried.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
+  });
+  test('unowned and out-of-window orphans are classified without reading audio', () async {
+    await audio(name(now - 40 * 86400));
+    await json('wals_backup.json', {
+      'wals': [row('foreign.bin', 'owner-b')]
+    });
+    await audio(name(now - 60));
+    final result = await census();
+    expect((result.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect(result.orphans.map((f) => f.classification).toSet(), {'owner_unknown'});
   });
   Future<LocalWalSyncImpl> ledger(
       {DateTime Function()? clock,

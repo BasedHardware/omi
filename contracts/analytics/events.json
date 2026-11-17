@@ -5533,6 +5533,10 @@
           "type": "int",
           "wire_name": "sidecar_type"
         },
+        "durationMs": {
+          "type": "int",
+          "wire_name": "duration_ms"
+        },
         "result": {
           "type": "enum",
           "wire_name": "result",
