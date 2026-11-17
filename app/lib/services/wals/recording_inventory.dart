@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
 import 'package:crypto/crypto.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/utils/batch_recording.dart';
 
 import 'package:omi/utils/off_ui_isolate.dart';
@@ -476,8 +477,15 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
           .expand((e) => e.value)
           .any((r) => r.owner == currentOwner);
   final complete = summary['orphan_census_complete'] == true;
-  final candidates =
-      audio.values.where((m) => _audio(path.basename(m.filePath)) && !allReferences.contains(m.filePath)).toList();
+  // A reference that differs only in case (or directory alias) can name the same file on
+  // case-insensitive storage. Reserve by case-folded basename so such a file is never an orphan.
+  final referencedNames = {for (final r in allReferences) path.basename(r).toLowerCase()};
+  final candidates = audio.values
+      .where((m) =>
+          _audio(path.basename(m.filePath)) &&
+          !allReferences.contains(m.filePath) &&
+          !referencedNames.contains(path.basename(m.filePath).toLowerCase()))
+      .toList();
   final classified = await offUiIsolate(
       () => _classifyOrphans(candidates, phoneSeconds, singleOwner && complete, frameCache),
       size: candidates.length,

@@ -50,7 +50,8 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    `fetchSyncJobStatus`, and the custody endpoint path outside the ledger and HTTP-client namespace.
 2. **Delete only on confirmation.** A custody file is deleted only when its upload job completes,
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
-   or when a Watch copy is proven redundant (invariant 5). Undo on Home's recording bar is a user
+   or when a Watch copy is proven redundant (invariant 5), or under the narrowly scoped
+   [stranded-orphan exception](#stranded-orphan-reclaim) to INV-CAP-1. Undo on Home's recording bar is a user
    delete: `LocalWalSyncImpl.discardRecording` (`wal_discard.dart`) drops the live tail and the
    WALs of that one recording session, never another recording's. A WAL of it that is uploading
    is not interrupted; it is never picked for upload again and is deleted once that upload settles.
@@ -274,9 +275,11 @@ with the real compile-time switch off).
 
 ## Orphan audio recovery (stage 1, INV-CAP-1)
 
-Orphans are never deleted without file-bound server proof or an explicit user
-act. Filename age, a local ring receipt, an empty index or a transport label
-never supplies that proof. Stage 1 never deletes or rewrites audio or sidecars.
+Stage 1 never deletes or rewrites audio or sidecars. Its adoption proof does not
+license deletion: a local ring receipt, empty index or transport label cannot
+supply server confirmation. The separate [stranded-orphan reclaim](#stranded-orphan-reclaim)
+exception applies only to complete-census, entirely unreferenced audio with both
+clocks older than 45 days, under David’s explicit ruling.
 
 The ledger's explicit foreground resume/15-minute recovery pass runs only after
 startup admission finishes; headless workers skip it. The shared read-only
@@ -402,3 +405,57 @@ It intentionally prevents adoption until repaired; do not prune it merely to
 make a census complete. More than 512 sources also defers the bounded commit.
 Unknown-owner files are retained, not assigned to the current account or
 surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.
+
+## Stranded orphan reclaim
+
+David's 2026-11-17 ruling item 2 (recorded in chat in
+`omi-workspace/data/run-2026-11-17-pendant-diag/ruling-2026-11-17-orphans.md`)
+is the authority for the [INV-CAP-1 exception](../../../../product/invariants/pendant-audio-retention.md#explicit-exception-stranded-orphan-audio-older-than-45-days).
+Only `LocalWalSyncImpl`'s `wal_orphan_reclaim.dart` may apply it, foreground-only,
+after admission. Existing paced recovery wakes invoke reclaim after recovery settles;
+there is no startup census, separate timer, uploader or UI.
+
+A complete #25573 census reserves every file named by every current/backup/tmp/quarantined
+index generation, live/retired/foreign/held memory row, ring checkpoint/download receipt,
+batch journal, native owner receipt and legacy file/job preference. Working `.part`,
+`.torn`, `omibatch` and `omimobilebatch` files stay intact. The filename capture time
+and mtime must both be strictly older than 45 days; ambiguous clocks and files outside
+Documents stay intact. The deletion predicate is independent of single-owner adoption
+proof: multiple accounts do not prohibit reclaim, but any account's reference does.
+
+The census runs off the capture queue. A pass considers at most 200 candidates, in
+five-file buffer-queue turns with a yield between turns. Each turn checks session
+UID/generation, admission, headless/foreground state, raw legacy preferences, every
+source/directory stamp, fresh memory references and file type/size/mtime/ctime.
+Legacy pending-file basenames remain reserved across directory/container aliases,
+so path-string differences cannot grant deletion. More
+than 512 sources/four directories defers. Sources remain immutable; only the Documents
+directory stamp is advanced synchronously after our own unlinks. One batch intent is flushed asynchronously before entering the capture queue;
+a fresh final revalidation has no await through unlink. Completion
+is flushed asynchronously after leaving the queue.
+
+Device-local `Documents/orphan_audio_reclaim/tombstones.json` is a flushed, atomically
+replaced ring of the latest 200 attempts (hashed local file/stamp key, bytes, mtime,
+attempt time and pending/completed state). It survives account changes and is never
+exported. A non-blocking advisory OS lock serializes cooperating processes; the foreground
+singleton coalesces calls and headless engines skip reclaim. OS locks do not
+serialize isolates in the same process; malformed/oversized
+journals stop the pass. Capture-committed lists use the canonical receipt parser
+and reject malformed rows or unknown fields before the census can be complete. An interrupted temp never grants permission. Intent is
+persisted before either unlink; sidecar is removed before audio, so an interruption
+after audio unlink leaves no geolocation sidecar. A pending entry does not authorize
+replay: a fresh census and unchanged-file fences are always required. Repeating the
+same identity replaces its attempt; absent files do nothing. Completed history ages
+out by the 200-attempt bound; uninstall removes the device-local journal.
+
+`orphan_audio_reclaim_off` follows the destructive Watch kill-switch pattern: only
+resolved false permits deletion; true, unknown and unreadable retain. It initially
+retains until the mobile custody lead enables David's device, then the fleet by
+2026-11-24 (within one week). Expand only if census unreferenced count falls by exactly
+the deleted count and missing-recording reports do not rise. Setting true stops new
+reclaim; deleted bytes cannot be restored. This PR does not create or enable the flag.
+
+`Orphan Audio Reclaim` emits aggregate files/bytes deleted, bounded skip reasons and
+pass result; no filenames, paths, owners or tombstones. Missing events are unknown,
+not zero deletions. Device timing, actual reclaimed space and ramp outcomes require
+physical-device acceptance. Guard: `test/unit/wal_orphan_reclaim_test.dart`.

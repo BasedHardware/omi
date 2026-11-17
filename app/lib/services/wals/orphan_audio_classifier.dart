@@ -11,12 +11,19 @@ class OrphanAudioFrameCache {
 }
 
 class _CachedAudioFrames {
-  _CachedAudioFrames(_Metadata file, this.frames)
+  _CachedAudioFrames(_Metadata file, this.frames, this.checkedAt)
       : bytes = file.bytes,
         modifiedUs = file.modifiedUs,
         changedUs = file.changedUs;
-  final int bytes, modifiedUs, changedUs, frames;
-  bool matches(_Metadata file) => bytes == file.bytes && modifiedUs == file.modifiedUs && changedUs == file.changedUs;
+  final int bytes, modifiedUs, changedUs, frames, checkedAt;
+
+  /// Unparseable results are cached too, so unchanged malformed files are not reread on every
+  /// wake, but only for a day: zero can also mean a transient read failure.
+  bool matches(_Metadata file, int nowSeconds) =>
+      bytes == file.bytes &&
+      modifiedUs == file.modifiedUs &&
+      changedUs == file.changedUs &&
+      (frames > 0 || nowSeconds - checkedAt < 86400);
 }
 
 /// Device-local data only. Export [summary], never this object or its candidates.
@@ -30,6 +37,14 @@ class RecordingOrphanCensus {
   final OrphanAudioFrameCache frameCache;
   bool isDocumentsFile(OrphanAudioFile file) => path.dirname(file.filePath) == _directories.keys.first;
   bool get complete => summary['orphan_census_complete'] == true;
+
+  /// Only call immediately after this queue turn unlinked a Documents orphan,
+  /// with no await since sourcesUnchanged(). Source-file stamps stay immutable.
+  void acknowledgeReclaimUnlink() {
+    // omi-perf-allow: sync-file-io -- One parent-directory stamp after our synchronous unlink; no traversal.
+    _directories[_directories.keys.first] = FileStat.statSync(_directories.keys.first);
+  }
+
   bool get hasLocalOnlyHistory => summary['local_only_history'] != false;
 
   /// Small metadata-only commit fence. No directory walk on the capture queue.
@@ -73,6 +88,31 @@ class OrphanAudioFile {
   final String classification;
   final BatchRecordingInfo? info;
   final String? clockRun;
+
+  /// Independent of the adoption owner class: multiple accounts may reclaim.
+  String? reclaimSkipReason(DateTime now) {
+    if (classification == 'working') return 'working';
+    // Legacy Limitless wrote random + milliseconds without the later sequence
+    // field. Its capture clock is known even though it is not adoptable by the
+    // strict current producer/framing classifier. Do not loosen adoption.
+    final legacyLimitless =
+        RegExp(r'^audio_limitless_opus_16000_1_fs320_r\d+_\d{13}\.bin$').hasMatch(path.basename(filePath));
+    if (info == null && !legacyLimitless) return 'unknown_capture_time';
+    final match = RegExp(r'_(-?\d+(?:\.\d+)?)(?:_u\d{1,9})?\.bin$').firstMatch(path.basename(filePath));
+    final raw = double.tryParse(match?.group(1) ?? '');
+    if (raw == null || !raw.isFinite) return 'unknown_capture_time';
+    final seconds = raw >= 100000000000 ? raw / 1000 : raw;
+    final captureUs = (seconds * 1000000).ceil();
+    final currentUs = now.microsecondsSinceEpoch;
+    if (seconds < 1704067200 || currentUs > 0x7fffffff * 1000000 || seconds > currentUs / 1000000) {
+      return 'unknown_capture_time';
+    }
+    const ageUs = 45 * 86400 * 1000000;
+    if (currentUs - captureUs <= ageUs) return 'capture_too_young';
+    if (currentUs - modifiedUs <= ageUs) return 'mtime_too_young';
+    return null;
+  }
+
   bool unchanged() {
     try {
       if (FileSystemEntity.typeSync(filePath, followLinks: false) != FileSystemEntityType.file) return false;
@@ -133,16 +173,29 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
           info.timerStart >= 1704067200 &&
           info.timerStart <= phoneSeconds &&
           phoneSeconds <= 0x7fffffff) {
-        final previous = frameCache._entries[file.filePath];
-        if (previous != null && previous.matches(file)) {
-          frames = previous.frames;
-          hits++;
+        // Framing matters only for files recovery could adopt. Unowned or out-of-window files are
+        // classified from metadata alone (reclaim needs only age and references), so they cost no
+        // audio reads on any wake.
+        if (!owned) {
+          classification = 'owner_unknown';
+        } else if (phoneSeconds - info.timerStart > orphanRecoveryWindowSeconds) {
+          classification = 'expired';
         } else {
-          frames = _strictFrameCount(file.filePath, file.bytes);
-          reads++;
+          final previous = frameCache._entries[file.filePath];
+          if (previous != null && previous.matches(file, phoneSeconds)) {
+            frames = previous.frames;
+            hits++;
+            entries[file.filePath] = previous;
+          } else {
+            frames = _strictFrameCount(file.filePath, file.bytes);
+            reads++;
+            entries[file.filePath] = _CachedAudioFrames(file, frames, phoneSeconds);
+          }
         }
-        // Zero also represents transient I/O failure; retry it next census.
-        if (frames > 0) entries[file.filePath] = _CachedAudioFrames(file, frames);
+      }
+      if (classification == 'owner_unknown' || classification == 'expired') {
+        return OrphanAudioFile(
+            file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun);
       }
       classification = frames <= 0
           ? 'unparseable'

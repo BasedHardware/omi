@@ -3624,3 +3624,41 @@ final class OrphanAudioRecovery extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"class_working_count": classWorkingCount, "class_working_bytes": classWorkingBytes, "class_unparseable_count": classUnparseableCount, "class_unparseable_bytes": classUnparseableBytes, "class_recoverable_count": classRecoverableCount, "class_recoverable_bytes": classRecoverableBytes, "class_expired_count": classExpiredCount, "class_expired_bytes": classExpiredBytes, "class_owner_unknown_count": classOwnerUnknownCount, "class_owner_unknown_bytes": classOwnerUnknownBytes, "age_0_7_count": age07Count, "age_0_7_bytes": age07Bytes, "age_8_14_count": age814Count, "age_8_14_bytes": age814Bytes, "age_15_28_count": age1528Count, "age_15_28_bytes": age1528Bytes, "age_29_45_count": age2945Count, "age_29_45_bytes": age2945Bytes, "age_over_45_count": ageOver45Count, "age_over_45_bytes": ageOver45Bytes, "age_unknown_count": ageUnknownCount, "age_unknown_bytes": ageUnknownBytes, "adopted": adopted, "changed": changed, "referenced": referenced, "passCap": passCap, "dailyCap": dailyCap, "pressureCap": pressureCap, "result": result.wireName, "census_complete": censusComplete, "expired_since_census": expiredSinceCensus, "outside_documents": outsideDocuments};
 }
+
+enum OrphanAudioReclaimResult {
+  completed("completed"),
+  admissionPending("admission_pending"),
+  headless("headless"),
+  background("background"),
+  killSwitch("kill_switch"),
+  generationChanged("generation_changed"),
+  incompleteCensus("incomplete_census"),
+  sourcesChanged("sources_changed"),
+  journalUnavailable("journal_unavailable"),
+  failed("failed");
+  const OrphanAudioReclaimResult(this.wireName);
+  final String wireName;
+}
+
+final class OrphanAudioReclaim extends RegisteredEvent {
+  const OrphanAudioReclaim({required this.deletedFiles, required this.deletedBytes, required this.working, required this.unknownCaptureTime, required this.captureTooYoung, required this.mtimeTooYoung, required this.outsideDocuments, required this.passCap, required this.sourcesChanged, required this.referenced, required this.fileChanged, required this.sidecarType, required this.durationMs, required this.result, required this.censusComplete});
+  final int deletedFiles;
+  final int deletedBytes;
+  final int working;
+  final int unknownCaptureTime;
+  final int captureTooYoung;
+  final int mtimeTooYoung;
+  final int outsideDocuments;
+  final int passCap;
+  final int sourcesChanged;
+  final int referenced;
+  final int fileChanged;
+  final int sidecarType;
+  final int durationMs;
+  final OrphanAudioReclaimResult result;
+  final bool censusComplete;
+  @override
+  String get wireName => "Orphan Audio Reclaim";
+  @override
+  Map<String, Object> get properties => {"deleted_files": deletedFiles, "deleted_bytes": deletedBytes, "working": working, "unknown_capture_time": unknownCaptureTime, "capture_too_young": captureTooYoung, "mtime_too_young": mtimeTooYoung, "outside_documents": outsideDocuments, "pass_cap": passCap, "sources_changed": sourcesChanged, "referenced": referenced, "file_changed": fileChanged, "sidecar_type": sidecarType, "duration_ms": durationMs, "result": result.wireName, "census_complete": censusComplete};
+}

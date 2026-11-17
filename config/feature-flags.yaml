@@ -810,6 +810,7 @@ flags:
   - {"key": "BATCH_ORIGINAL_IDENTITY_EVIDENCE_ENABLED", "aliases": [], "kind": "env", "lifecycle": "ops_kill", "surfaces": ["backend"], "summary": "Default on; replace sync-on batch sentence embeddings with pinned original-unit label evidence", "fail": "open", "owner": "q12-speaker-evidence", "created": "2026-11-16", "terminal": "keep", "decision": "keep", "notes": "False restores the playback-manifest resolver. No change to final-pass admission, identity thresholds, privacy, retention or compute capacity."}
 
   - {"key":"orphan_audio_recovery_off","aliases":[],"kind":"posthog","lifecycle":"config_switch","surfaces":["mobile"],"summary":"True stops non-destructive foreground orphan audio adoption; unknown or false keeps recovery on","fail":"open","owner":"mobile-custody","created":"2026-11-17","terminal":"keep","decision":"keep","posthog":{"row":"expected","role":"kill"},"notes":"No audio deletion or rewrite. Complete census, single-owner proof, 28-day window, 200/pass, 400/rolling day and pending <=720. David 2026-11-17: plain miss auto-uploads only with no local-only history in any index generation or memory bucket and cloud-permitting upload preference; otherwise holdForUser. Existing held recordings UI permits explicit upload or deletion. Server backfill pacing bounds processing cost. True stops subsequent adoption passes; already-admitted rows retain their policy."}
+  - {"key":"orphan_audio_reclaim_off","aliases":[],"kind":"posthog","lifecycle":"config_switch","surfaces":["mobile"],"summary":"Only resolved false permits foreground aged orphan reclaim; true, unknown or unreadable retains all files","fail":"closed","owner":"mobile-custody","created":"2026-11-17","terminal":"keep","decision":"keep","posthog":{"row":"expected","role":"kill"},"ramp":{"cohorts":["David device","whole fleet within one week"],"clean_metric":"Census unreferenced count falls by exactly deleted count; missing-recording reports do not rise","expander":"mobile custody lead","done_by":"2026-11-24"},"notes":"David ruling item 2, 2026-11-17. Complete census, no reference anywhere, not working, filename and mtime both >45 days. Multiple accounts allowed. Default retains until PostHog row resolves false for David, then fleet by 2026-11-24. No flag creation or enablement in this PR. Durable tombstone before unlink; 200/pass in five-file ledger queue turns. Rollback true; unknown/failed reads retain. See app/lib/services/wals/CUSTODY.md."}
 
 ignore:
   - {"key": "RECORD_TOKEN_LEASE_SECONDS", "kind": "env", "reason": "Lease timing parameter, default 3600 seconds; bounded to 1800-7200; mode owns rollback"}
@@ -861,6 +862,7 @@ ignore:
   - {"key":"forceParakeetFail","reason":"Local QA failure override, not remote rollout authority"}
   - {"key":"OMI_YOLO_MODE","reason":"Local agent override restricted to non-production builds; not remote rollout authority"}
   - {"key":"PROVIDER_MODE","reason":"Local offline provider harness, not a product flag"}
+
 
 
 

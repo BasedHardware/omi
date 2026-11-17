@@ -6,7 +6,23 @@ _Decoded _decode(Uint8List bytes, String kind) {
   try {
     final decoded = jsonDecode(utf8.decode(bytes));
     if (kind == 'capture_committed') {
-      return decoded is List ? _Decoded([], null) : _Decoded([], 'invalid_schema');
+      const fields = {
+        'type',
+        'conversation_id',
+        'capture_root',
+        'source_start',
+        'source_end',
+        'channel',
+        'clock_epoch',
+        'recording_session_id'
+      };
+      bool invalid(Object? row) {
+        if (row is! Map || row.keys.any((key) => !fields.contains(key))) return true;
+        if (row['type'] != null && row['type'] != 'capture_committed') return true;
+        return CaptureCommittedEvent.parse(Map<String, dynamic>.from(row)) is! CaptureCommittedEvent;
+      }
+
+      return decoded is List && !decoded.any(invalid) ? _Decoded([], null) : _Decoded([], 'invalid_schema');
     }
     if (kind == 'ring_custody') return _decodeRingReferences(decoded);
     if (kind == 'boot_journal') {
@@ -122,6 +138,15 @@ class RecordingInventoryPreferences {
   List<String> get files => (_raw['flash_page_pending_uploads'] is List
       ? (_raw['flash_page_pending_uploads'] as List).whereType<String>().toList()
       : <String>[]);
+
+  /// Conservative alias fence. Build once off UI, never scan a pending-file
+  /// archive for each unlink on the capture queue. Names stay device-local.
+  Future<Set<String>> fileReferenceNames() {
+    final names = files;
+    return offUiIsolate(() => names.map((name) => path.basename(name).toLowerCase()).toSet(),
+        size: names.length, threshold: 0, debugName: 'orphan_reference_names');
+  }
+
   String get jobs => _text('localRecordingJobs');
   String get corruptJobs => _text('localRecordingJobsCorrupt');
   bool matches(RecordingInventoryPreferences other) {
