@@ -1327,6 +1327,7 @@ class ConversationDetailProvider extends ChangeNotifier
         TranscriptionPendingConversations.observe(updatedConversation);
         conversationProvider?.updateConversation(updatedConversation);
         _cachedConversation = updatedConversation;
+        clearSettledSummaryFailure(updatedConversation);
         resetRecordingTranscript();
       }
     }

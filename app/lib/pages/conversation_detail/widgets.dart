@@ -199,16 +199,19 @@ class ReprocessDiscardedWidget extends StatelessWidget {
   }
 }
 
-/// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
-/// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
-/// clears the marker and removes this widget.
 /// Whether an empty Summary tab shows the failed-processing slot: Retry, or the not-transcribed
-/// notice once the server said a summary retry cannot help.
+/// notice once the server said a summary retry cannot help. The held detail copy carries no
+/// Home step and is not retryable, so the not-transcribed answer itself must open the slot;
+/// otherwise the tab would offer "Generate Summary", which can only be answered 409 again.
 bool summaryRetrySlotApplies(ServerConversation conversation) =>
+    TranscriptionPendingConversations.contains(conversation.id) ||
     conversation.homeStep == 'failed' ||
     conversation.showsSummaryRetry ||
     (conversation.status == ConversationStatus.failed && !conversation.discarded && !conversation.isLocked);
 
+/// "Summary failed" with Retry, for a row the server marked retryable: its summary pass failed on
+/// a transient error, so a reprocess can still succeed. Success replaces the conversation, which
+/// clears the marker and removes this widget.
 class SummaryRetryWidget extends StatelessWidget {
   const SummaryRetryWidget({super.key});
 
@@ -506,9 +509,10 @@ class GetAppsWidgets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: SummaryGenerationV2Gate.listenable,
-      builder: (context, _, __) => Consumer<ConversationDetailProvider>(
+    return ListenableBuilder(
+      // The not-transcribed answer changes which empty state applies, including when it expires.
+      listenable: Listenable.merge([SummaryGenerationV2Gate.listenable, TranscriptionPendingConversations.ids]),
+      builder: (context, _) => Consumer<ConversationDetailProvider>(
         builder: (context, provider, child) {
           final redesign = SummaryGenerationV2Gate.isEnabled;
           // One progress surface: while a summary is being written, the tab shows that, never the

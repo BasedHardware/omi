@@ -294,16 +294,12 @@ Future<ReprocessResult> reProcessConversationServer(
   String? appId,
   bool requireSpeakerReceipt = false,
   bool forceOmi = false,
+  // Tests replace the transport; production sends through makeApiCall.
+  Future<http.Response?> Function(String url)? send,
 }) async {
   final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
-  final response = await makeApiCall(
-    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
-    headers: {},
-    method: 'POST',
-    body: '',
-    timeout: reprocessRequestTimeout,
-    retries: 0,
-  );
+  final url = '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}';
+  final response = await (send ?? _sendReprocess)(url);
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
   final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
@@ -315,6 +311,15 @@ Future<ReprocessResult> reProcessConversationServer(
   }
   return result;
 }
+
+Future<http.Response?> _sendReprocess(String url) => makeApiCall(
+      url: url,
+      headers: {},
+      method: 'POST',
+      body: '',
+      timeout: reprocessRequestTimeout,
+      retries: 0,
+    );
 
 /// Maps a reprocess response to its [ReprocessResult].
 @visibleForTesting

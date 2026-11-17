@@ -27,10 +27,16 @@ class TranscriptionPendingConversations {
     return at != null && clock.now().difference(at) < ttl;
   }
 
-  /// Whether the status stands in for the title: the row is marked and its title is only the
-  /// English stand-in the server writes on an overdue hold (`transcription_presentation`).
+  /// The English title the server synthesizes on reads for an overdue hold:
+  /// backend/utils/conversations/transcribing_hold.py `transcription_presentation` (~49), pinned by
+  /// backend/tests/unit/test_transcription_pending_retry.py. The hold projection applies only to
+  /// rows with no stored or user title, so on such a row this text is never a title someone gave it.
+  static const serverHoldTitle = "Couldn't transcribe";
+
+  /// Whether the status stands in for the title: the row is marked and its title is only
+  /// [serverHoldTitle].
   static bool replacesTitle(ServerConversation conversation) =>
-      contains(conversation.id) && conversation.structured.title.trim() == "Couldn't transcribe";
+      contains(conversation.id) && conversation.structured.title.trim() == serverHoldTitle;
 
   static Timer? _expiry;
 

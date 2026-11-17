@@ -36,6 +36,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../helpers/home_fixture_env.dart';
 import '../helpers/sfpro_font_fixtures.dart';
+import '../helpers/transcription_hold_wire.dart';
 import '../support/typed_conversation_screen.dart';
 
 const _output = String.fromEnvironment('PROCESSING_TODAY_RENDER_OUTPUT');
@@ -695,8 +696,13 @@ void main() {
     addTearDown(tester.view.reset);
     TranscriptionPendingConversations.reset();
     addTearDown(TranscriptionPendingConversations.reset);
-    final failed = ServerConversation(
-        id: 'pending', createdAt: clock.now(), homeStep: 'failed', structured: Structured('Morning standup', ''));
+    // The real Home/list row for a held recording, (a) in ../helpers/transcription_hold_wire.dart.
+    final failed = ServerConversation.fromJson({
+      ...heldListRowJson(),
+      'id': 'pending',
+      'created_at': clock.now().toUtc().toIso8601String(),
+      'started_at': clock.now().toUtc().toIso8601String(),
+    });
     final store = _store(true, []);
     await store.refresh();
     final monitor = CaptureWedgeMonitor(
@@ -722,9 +728,10 @@ void main() {
                     captureMonitor: monitor,
                     failedConversations: [failed],
                     openConversation: (_, __) async {},
-                    reprocess: (id) async {
+                    reprocess: (id) {
                       attempts++;
-                      return const ReprocessTranscriptionPending();
+                      return reProcessConversationServer(id,
+                          send: (_) async => heldJsonResponse(409, heldReprocess409Body));
                     })))));
     await tester.tap(find.text('Try Again'));
     await tester.pumpAndSettle();
@@ -732,7 +739,9 @@ void main() {
     expect(attempts, 1);
     expect(find.textContaining('Something went wrong'), findsNothing);
     expect(find.text('Try Again'), findsNothing);
+    // The server's stand-in title gives way to the status, said once.
     expect(find.textContaining('Not transcribed yet'), findsOneWidget);
+    expect(find.textContaining("Couldn't transcribe"), findsNothing);
     expect(TranscriptionPendingConversations.contains('pending'), isTrue);
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
