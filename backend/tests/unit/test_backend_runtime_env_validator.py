@@ -3750,12 +3750,22 @@ def test_generated_read_lever_manifest_is_current_and_records_unresolved_sources
         assert lever in notes
     prod_worker = generated['surfaces']['chart/prod/batch-pipeline-worker']
     integration = generated['surfaces']['runtime/prod/cloud_run/services/backend-integration']
-    assert prod_worker['explicit'] == dict(integration['explicit'], usage_month_cache=0, usage_month_total=0)
-    assert prod_worker['effective']['bpp_decision_cache'] == 100
+    assert prod_worker['explicit'] == dict(
+        integration['explicit'],
+        usage_month_cache=0,
+        usage_month_total=0,
+        bpp_decision_cache=0,
+        bpp_owner_memo_enforce=0,
+        privacy_checks_shadow=10,
+    )
+    assert prod_worker['effective']['bpp_decision_cache'] == 0
+    assert prod_worker['effective']['bpp_owner_memo_enforce'] == 0
     assert prod_worker['effective']['batch_timeliness_leader'] == 100
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         surface = generated['surfaces'][f'runtime/prod/cloud_run/services/{service}']
-        assert surface['explicit']['bpp_decision_cache'] == 100
+        assert surface['explicit']['bpp_decision_cache'] == 0
+        assert surface['explicit']['bpp_owner_memo_enforce'] == (0 if service == 'backend-sync-backfill' else 100)
+        assert surface['explicit']['privacy_checks_shadow'] == (10 if service == 'backend-sync-backfill' else 0)
     dev_worker = generated['surfaces']['chart/dev/batch-pipeline-worker']
     assert dev_worker['explicit'] == {}
     assert dev_worker['inheritance']['status'] == 'UNRESOLVED'
@@ -3785,7 +3795,7 @@ def test_read_lever_manifest_rejects_silently_resolved_readme_discrepancy(tmp_pa
     # Real file extraction must detect resolution from either source, including
     # partial resolution of the triple, even though the unchanged note remains.
     with pytest.raises(ValueError, match='README and base now agree.*stale UNRESOLVED'):
-        read_lever_manifest.build_manifest(today=date(2026, 11, 11), **kwargs)
+        read_lever_manifest.build_manifest(today=date(2026, 11, 17), **kwargs)
 
 
 def test_read_lever_manifest_rejects_missing_note_while_readme_disagrees(monkeypatch):
@@ -3796,7 +3806,7 @@ def test_read_lever_manifest_rejects_missing_note_while_readme_disagrees(monkeyp
     ]
     monkeypatch.setattr(read_lever_manifest, 'UNRESOLVED_NOTES', notes)
     with pytest.raises(ValueError, match='source disagreement requires its UNRESOLVED note'):
-        read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+        read_lever_manifest.build_manifest(today=date(2026, 11, 17))
 
 
 @pytest.mark.parametrize('lever', ['memory_list_index_window', 'people_scan_dedupe', 'finjob_candidate_queries'])
@@ -3808,7 +3818,7 @@ def test_read_lever_readme_comparison_rejects_missing_or_ambiguous_claims(tmp_pa
     text = text.replace(claim, lever if mutation == 'missing' else f'{claim} {claim}')
     target.write_text(text)
     with pytest.raises(ValueError, match=f'exactly one historical train claim for {lever}'):
-        read_lever_manifest.build_manifest(today=date(2026, 11, 11), readme_path=target)
+        read_lever_manifest.build_manifest(today=date(2026, 11, 17), readme_path=target)
 
 
 def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources):
@@ -3817,7 +3827,7 @@ def test_read_lever_evidence_metadata_lives_only_in_generator(read_lever_sources
     policy, _, _ = read_lever_sources
     assert policy['reviewed_inheritance'] == read_lever_manifest.REVIEWED_INHERITANCE
     assert policy['unresolved_notes'] == read_lever_manifest.UNRESOLVED_NOTES
-    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 11))
+    generated = read_lever_manifest.build_manifest(today=date(2026, 11, 17))
     assert generated['notes'] == [*read_lever_manifest.RESOLVED_NOTES, *read_lever_manifest.UNRESOLVED_NOTES]
     for surface, annotation in read_lever_manifest.REVIEWED_INHERITANCE.items():
         assert generated['surfaces'][surface]['inheritance'] == annotation
@@ -3923,6 +3933,29 @@ def test_read_lever_parity_rejects_effective_drift(read_lever_sources, surface):
     changed = copy.deepcopy(sources)
     changed[surface]['listen_poll'] = 100
     assert read_lever_manifest.parity_errors(changed, expected, policy)
+
+
+@pytest.mark.parametrize(
+    'lever,value', [('bpp_decision_cache', 100), ('bpp_owner_memo_enforce', 100), ('privacy_checks_shadow', 0)]
+)
+def test_read_lever_parity_rejects_unqualified_worker_privacy_changes(read_lever_sources, lever, value):
+    policy, sources, expected = read_lever_sources
+    changed = copy.deepcopy(sources)
+    changed['chart/prod/batch-pipeline-worker'][lever] = value
+    assert read_lever_manifest.parity_errors(changed, expected, policy) == [
+        'chart/prod/batch-pipeline-worker: effective levers differ from runtime/prod/cloud_run/services/backend-integration'
+    ]
+
+
+def test_backfill_owner_memo_followup_has_dated_surface_approvals(read_lever_sources):
+    policy, _, _ = read_lever_sources
+    for prefix in ('overlay', 'runtime'):
+        surface = f'{prefix}/prod/cloud_run/services/backend-sync-backfill'
+        assert policy['lever_expiry'][surface]['privacy_checks_shadow'] == {
+            'value': 10,
+            'expires': '2026-11-24',
+            'reason': 'owner-memo follow-up window',
+        }
 
 
 @pytest.mark.parametrize(

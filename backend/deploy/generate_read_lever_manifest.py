@@ -238,7 +238,8 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
             ):
                 errors.append(f'{surface}: missing reviewed UNRESOLVED inheritance annotation')
         else:
-            # The prod worker shares integration's map except its monthly readers stay off.
+            # SCA-2283 qualifies owner enforcement on Cloud Run only. The worker
+            # retains shadow 10; decision cache, owner enforcement and monthly readers stay off.
             target = (
                 'runtime/prod/cloud_run/services/backend-integration'
                 if surface == 'chart/prod/batch-pipeline-worker'
@@ -246,7 +247,13 @@ def parity_errors(sources: dict[str, dict[str, int]], expected: dict[str, dict[s
             )
             target_values = dict(expected.get(target, {}))
             if surface == 'chart/prod/batch-pipeline-worker':
-                target_values.update(usage_month_cache=0, usage_month_total=0)
+                target_values.update(
+                    usage_month_cache=0,
+                    usage_month_total=0,
+                    bpp_decision_cache=0,
+                    bpp_owner_memo_enforce=0,
+                    privacy_checks_shadow=10,
+                )
             if target not in expected or effective_levers(explicit) != effective_levers(target_values):
                 errors.append(f'{surface}: effective levers differ from {target}')
     return errors

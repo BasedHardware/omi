@@ -116,9 +116,10 @@ establishes no realized savings.
 Batch worker control-loop settings are declared in the worker chart (including
 explicit prod values): candidate fanout 16, parallel admission true, idle max 10s,
 and `firestoreReadLevers: '{}'` outside prod. Prod uses backend-integration's
-complete lever map except `usage_month_cache:0` and `usage_month_total:0`,
-including `bpp_decision_cache:100` and `batch_timeliness_leader:100`, and enables held-poll
-skip; its kill switch is setting `heldPollSkipEnabled` to false.
+complete lever map except both monthly readers stay 0, owner enforcement stays
+0 and privacy shadow stays 10. `bpp_decision_cache:0` prevents the next worker
+train from enabling the decision cache; `batch_timeliness_leader:100` and held-poll
+skip remain unchanged. The held-poll kill switch is `heldPollSkipEnabled: false`.
 Projection finish backoff remains at its code default, off (SCA-2024).
 The three control knobs
 also have matching base declarations on serving batch hosts; pusher does not run
@@ -158,6 +159,16 @@ pins (`batch_timeliness_leader:0`, `privacy_checks_shadow:100`,
 and backend pin both `usage_month_cache` and `usage_month_total` to 100 (SCA-2222
 Train 1); backfill and the worker keep both at 0. Every other lever and epoch is
 unchanged.
+SCA-2283 (2026-11-17) supersedes the privacy values above: backend, backend-sync
+and backend-integration carry `bpp_owner_memo_enforce:100`, `privacy_checks_shadow:0`
+and `bpp_decision_cache:0`; negative lookup and TTL60 stay 0. Backfill retains
+owner enforcement 0 and shadow 10, with decision cache 0. Its shadow approval
+expires 2026-11-24 (owner-memo follow-up window). The worker keeps enforcement
+0 and shadow 10; only its decision-cache pin changes to 0. Other surfaces and
+levers are unchanged. Kill: `ops_kill_switches/privacy_decision_cache.disabled=true`.
+Inverse: enforcement 0 and shadow 10 in the full service maps, then regenerate.
+No saving is claimed.
+
 These source values ride each surface's next train; no worker roll is requested.
 The generator's `REVIEWED_INHERITANCE` constant preserves `{}` on default/dev
 worker surfaces and enumerates the remaining unresolved inherited differences.

@@ -2848,7 +2848,8 @@ firestore_read_lever_policy:
         expires: '2026-11-17'
       privacy_checks_shadow:
         value: 10
-        expires: '2026-11-17'
+        expires: '2026-11-24'
+        reason: owner-memo follow-up window
     runtime/prod/gke/backend-listen:
       lifecycle_record_pending_head:
         value: 5
@@ -2867,7 +2868,8 @@ firestore_read_lever_policy:
         expires: '2026-11-17'
       privacy_checks_shadow:
         value: 10
-        expires: '2026-11-17'
+        expires: '2026-11-24'
+        reason: owner-memo follow-up window
     runtime/prod/cloud_run/jobs/notifications-job:
       lifecycle_record_pending_head:
         value: 5
@@ -2899,30 +2901,6 @@ firestore_read_lever_policy:
     chart/prod/pusher:
       lifecycle_record_pending_head:
         value: 5
-        expires: '2026-11-17'
-    overlay/prod/cloud_run/services/backend:
-      privacy_checks_shadow:
-        value: 10
-        expires: '2026-11-17'
-    overlay/prod/cloud_run/services/backend-sync:
-      privacy_checks_shadow:
-        value: 10
-        expires: '2026-11-17'
-    overlay/prod/cloud_run/services/backend-integration:
-      privacy_checks_shadow:
-        value: 10
-        expires: '2026-11-17'
-    runtime/prod/cloud_run/services/backend:
-      privacy_checks_shadow:
-        value: 10
-        expires: '2026-11-17'
-    runtime/prod/cloud_run/services/backend-sync:
-      privacy_checks_shadow:
-        value: 10
-        expires: '2026-11-17'
-    runtime/prod/cloud_run/services/backend-integration:
-      privacy_checks_shadow:
-        value: 10
         expires: '2026-11-17'
     chart/prod/batch-pipeline-worker:
       privacy_checks_shadow:
