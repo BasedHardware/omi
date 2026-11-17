@@ -12163,7 +12163,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ตั้งแต่จับคู่: หลุด $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
+    return 'ตั้งแต่จับคู่: เชื่อมต่อใหม่ $drops ครั้ง เชื่อมต่อล้มเหลว $failed ครั้ง';
   }
 
   @override
@@ -13430,7 +13430,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'รอจากโทรศัพท์เครื่องนี้';
 
   @override
-  String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
+  String get syncDetailsTranscribing => 'อัปโหลดแล้ว กำลังรอเซิร์ฟเวอร์';
 
   @override
   String get syncDetailsAudioFiles => 'ไฟล์เสียง';
@@ -15482,4 +15482,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'กำลังเขียนสรุปของคุณ…';
+
+  @override
+  String get onTheWayServerWork => 'งานที่เซิร์ฟเวอร์รายงาน';
 }

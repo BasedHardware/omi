@@ -12322,7 +12322,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Seit der Kopplung: $drops Abbrüche, $failed fehlgeschlagene Verbindungen.';
+    return 'Seit der Kopplung: $drops Wiederverbindungen, $failed fehlgeschlagene Verbindungen.';
   }
 
   @override
@@ -13598,7 +13598,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Wartet auf dieses Handy';
 
   @override
-  String get syncDetailsTranscribing => 'Wird bei Omi transkribiert';
+  String get syncDetailsTranscribing => 'Hochgeladen, wartet auf Server';
 
   @override
   String get syncDetailsAudioFiles => 'Audiodateien';
@@ -15671,4 +15671,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Deine Zusammenfassung wird geschrieben…';
+
+  @override
+  String get onTheWayServerWork => 'Vom Server gemeldete Arbeit';
 }

@@ -2,8 +2,8 @@ import 'dart:math';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
-import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_views.dart';
 import 'package:omi/utils/sync/offline_sync_amounts.dart';
 
 /// One snapshot shared by the device stats and the Catching up tile. Read the WAL inventory once,
@@ -32,8 +32,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
-  final uploaded = wals.where((w) => w.status == WalStatus.uploaded).toList(growable: false);
-  final rows = alreadyCollapsed ? wals : [...uploaded, ...SyncPendingWork.syncingOf(wals)];
+  final rows = pendingWorkRows(wals, nowSeconds: nowSeconds);
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
   var pendingSeconds = 0;
@@ -80,7 +79,7 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
     onPhoneSeconds: onPhoneSeconds,
     pendingSeconds: pendingSeconds,
     hasPending: rows.isNotEmpty,
-    hasUploaded: uploaded.isNotEmpty,
+    hasUploaded: rows.any((w) => w.status == WalStatus.uploaded),
     start: start,
     end: end,
     targetIds: targets.join('\n'),

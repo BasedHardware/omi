@@ -200,6 +200,27 @@ class DeviceDiagnosticsContractTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class FeedbackDiagnosticsServiceParityTest {
+    @Test fun `reconnect history survives restart uses event timestamp and retires with identity`() {
+        val app = RuntimeEnvironment.getApplication()
+        DeviceHealthPersistence.setPolicy(app, true, 7, true)
+        val prefs = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        assertFalse(BleConnectionHistory.connectedBefore(prefs, "device"))
+        BleConnectionHistory.connected(prefs, "device")
+        val restored = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)
+        assertTrue(BleConnectionHistory.connectedBefore(restored, "device"))
+        // An older audio outage is not the timestamp of this disconnect row.
+        prefs.edit().putLong("audio_outage_DEVICE", 1000L).commit()
+        BleConnectionHistory.disconnected(prefs, "device", 15000L)
+        assertEquals(15000L, BleConnectionHistory.eventTimestamp(restored, "device"))
+        val recovery = BleReconnectDiagnostics()
+        recovery.record(BleConnectionHistory.eventTimestamp(restored, "device"), "disconnect", false)
+        assertEquals(2000L, recovery.recovered(17000L, BleConnectionHistory.connectedBefore(restored, "device"))!!.durationMs)
+        BleConnectionHistory.connected(prefs, "device")
+        assertFalse(prefs.contains("reconnect_event_DEVICE"))
+        DeviceHealthPersistence.setPolicy(app, false, 8, true)
+        assertFalse(BleConnectionHistory.connectedBefore(restored, "device"))
+    }
+
     @Test fun `a callback captured before retirement cannot record in the next identity`() {
         val app = RuntimeEnvironment.getApplication()
         OmiBleManager.initialize(app)

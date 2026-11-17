@@ -12232,7 +12232,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sedan kopplingen: $drops avbrott, $failed misslyckade anslutningar.';
+    return 'Sedan parkoppling: $drops återanslutningar, $failed misslyckade anslutningar.';
   }
 
   @override
@@ -13503,7 +13503,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Väntar på den här telefonen';
 
   @override
-  String get syncDetailsTranscribing => 'Transkriberas på Omi';
+  String get syncDetailsTranscribing => 'Uppladdat, väntar på servern';
 
   @override
   String get syncDetailsAudioFiles => 'Ljudfiler';
@@ -15565,4 +15565,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Skriver din sammanfattning…';
+
+  @override
+  String get onTheWayServerWork => 'Arbete rapporterat av servern';
 }

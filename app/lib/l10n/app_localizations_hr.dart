@@ -12263,7 +12263,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od uparivanja: prekida $drops, neuspješnih veza $failed.';
+    return 'Od uparivanja: $drops ponovnih povezivanja, $failed neuspjelih povezivanja.';
   }
 
   @override
@@ -13531,7 +13531,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čeka na ovom telefonu';
 
   @override
-  String get syncDetailsTranscribing => 'Transkripcija na Omi';
+  String get syncDetailsTranscribing => 'Preneseno, čeka poslužitelj';
 
   @override
   String get syncDetailsAudioFiles => 'Audio datoteke';
@@ -15593,4 +15593,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Pišemo vaš sažetak…';
+
+  @override
+  String get onTheWayServerWork => 'Rad koji je prijavio poslužitelj';
 }

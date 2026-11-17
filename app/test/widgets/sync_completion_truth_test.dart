@@ -18,10 +18,11 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/sfpro_font_fixtures.dart';
 
-class _Sync extends ChangeNotifier implements SyncProvider {
+class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals);
   final List<Wal> wals;
   @override
@@ -210,12 +211,13 @@ void main() {
             codec: BleAudioCodec.opus,
             seconds: 10,
             status: WalStatus.uploaded,
+            uploadedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
             storage: WalStorage.disk,
             device: 'pendant')
           ..jobId = 'job-$i',
     ]);
     final l = AppLocalizations.of(tester.element(find.byType(AutoSyncPage)));
-    expect(find.text(l.syncCardTranscribingAmount(OmiDuration.compact(1270, l))), findsOneWidget);
+    expect(find.text('${l.syncDetailsTranscribing} · ${OmiDuration.compact(1270, l)}'), findsOneWidget);
     expect(find.text('All recordings synced'), findsNothing);
     expect(find.text('All caught up'), findsNothing);
     expect(find.text('Conversation created'), findsNothing);

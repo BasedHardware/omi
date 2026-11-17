@@ -12283,7 +12283,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'De la asociere: $drops întreruperi, $failed conexiuni eșuate.';
+    return 'De la asociere: $drops reconectări, $failed conexiuni eșuate.';
   }
 
   @override
@@ -13554,7 +13554,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Așteaptă pe acest telefon';
 
   @override
-  String get syncDetailsTranscribing => 'Se transcrie pe Omi';
+  String get syncDetailsTranscribing => 'Încărcat, în așteptarea serverului';
 
   @override
   String get syncDetailsAudioFiles => 'Fișiere audio';
@@ -15621,4 +15621,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Se scrie rezumatul tău…';
+
+  @override
+  String get onTheWayServerWork => 'Activitate raportată de server';
 }

@@ -12327,7 +12327,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Mula nang ipares: $drops pagputol, $failed bigong koneksyon.';
+    return 'Mula nang ipinares: $drops muling pagkonekta, $failed nabigong koneksyon.';
   }
 
   @override
@@ -13603,7 +13603,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
 
   @override
-  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+  String get syncDetailsTranscribing => 'Na-upload, naghihintay sa server';
 
   @override
   String get syncDetailsAudioFiles => 'Mga audio file';
@@ -15679,4 +15679,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Isinusulat ang iyong buod…';
+
+  @override
+  String get onTheWayServerWork => 'Trabahong iniulat ng server';
 }

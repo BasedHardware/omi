@@ -3800,7 +3800,7 @@
     "diagnosticsDrops": "Pemutusan",
     "diagnosticsDropsPerHour": "sekitar {count} per jam",
     "diagnosticsLongestGap": "Jeda terlama",
-    "diagnosticsSincePairingSummary": "Sejak penyambungan: {drops} pemutusan, {failed} koneksi gagal.",
+    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} penyambungan ulang, {failed} koneksi gagal.",
     "diagnosticsLastDuration": "{duration} terakhir",
     "chatReplyOffline": "Tidak dapat terhubung. Periksa koneksi Anda dan coba lagi.",
     "chatReplyServerError": "Terjadi kesalahan di sisi kami. Silakan coba lagi.",
@@ -4169,7 +4169,7 @@
     "syncDetailsTransferSpeed": "Kecepatan transfer",
     "syncDetailsWaitingOnOmi": "Menunggu Omi Anda",
     "syncDetailsWaitingOnPhone": "Menunggu ponsel ini",
-    "syncDetailsTranscribing": "Mentranskripsi di Omi",
+    "syncDetailsTranscribing": "Diunggah, menunggu server",
     "syncDetailsAudioFiles": "File audio",
     "syncDetailsServerJobs": "Tugas server (selesai / total)",
     "syncDetailsCopy": "Salin detail untuk dukungan",
@@ -4719,5 +4719,6 @@
     "onDeviceModelDownloadSize": "Unduhan {size} MB",
     "downloadNow": "Unduh Sekarang",
     "onWifiLater": "Nanti via Wi-Fi",
-    "conversationWritingSummary": "Menulis ringkasan Anda…"
+    "conversationWritingSummary": "Menulis ringkasan Anda…",
+    "onTheWayServerWork": "Pekerjaan yang dilaporkan server"
 }

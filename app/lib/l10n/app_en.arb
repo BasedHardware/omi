@@ -14589,7 +14589,7 @@
     "@diagnosticsLongestGap": {
         "description": "Device Diagnostics row title: the longest time the device took to reconnect"
     },
-    "diagnosticsSincePairingSummary": "Since pairing: {drops} drops, {failed} failed connections.",
+    "diagnosticsSincePairingSummary": "Since pairing: {drops} reconnections, {failed} failed connections.",
     "@diagnosticsSincePairingSummary": {
         "description": "Device Diagnostics footnote under the 7-day summary with lifetime counts",
         "placeholders": {
@@ -16273,7 +16273,7 @@
     "@syncDetailsWaitingOnPhone": {
         "description": "Sync details row label: audio on the phone that has not been uploaded yet."
     },
-    "syncDetailsTranscribing": "Transcribing on Omi",
+    "syncDetailsTranscribing": "Uploaded, awaiting server",
     "@syncDetailsTranscribing": {
         "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
     },
@@ -19008,5 +19008,6 @@
     "conversationWritingSummary": "Writing your summary…",
     "@conversationWritingSummary": {
         "description": "Shown with a pen over a skeleton while the summary of a conversation in progress is written"
-    }
+    },
+    "onTheWayServerWork": "Server-reported work"
 }

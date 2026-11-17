@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "断开次数",
     "diagnosticsDropsPerHour": "约每小时 {count} 次",
     "diagnosticsLongestGap": "最长中断",
-    "diagnosticsSincePairingSummary": "配对以来：断开 {drops} 次，连接失败 {failed} 次。",
+    "diagnosticsSincePairingSummary": "自配对以来：重连 {drops} 次，连接失败 {failed} 次。",
     "diagnosticsLastDuration": "最近 {duration}",
     "chatReplyOffline": "无法连接。请检查您的连接并重试。",
     "chatReplyServerError": "我们这边出了点问题。请重试。",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "传输速度",
     "syncDetailsWaitingOnOmi": "等待 Omi 传输",
     "syncDetailsWaitingOnPhone": "等待此手机上传",
-    "syncDetailsTranscribing": "Omi 正在转录",
+    "syncDetailsTranscribing": "已上传，等待服务器",
     "syncDetailsAudioFiles": "音频文件",
     "syncDetailsServerJobs": "服务器任务 (已完成 / 总数)",
     "syncDetailsCopy": "复制详情以供支持团队使用",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "下载 {size} MB",
     "downloadNow": "立即下载",
     "onWifiLater": "稍后通过 Wi-Fi",
-    "conversationWritingSummary": "正在撰写你的摘要…"
+    "conversationWritingSummary": "正在撰写你的摘要…",
+    "onTheWayServerWork": "服务器报告的任务"
 }

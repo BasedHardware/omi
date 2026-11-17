@@ -12210,7 +12210,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'पेयरिंग के बाद से: $drops रुकावटें, $failed विफल कनेक्शन।';
+    return 'पेयरिंग के बाद से: $drops पुनः कनेक्शन, $failed असफल कनेक्शन।';
   }
 
   @override
@@ -13479,7 +13479,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'इस फ़ोन पर प्रतीक्षारत';
 
   @override
-  String get syncDetailsTranscribing => 'Omi पर ट्रांसक्राइब हो रहा है';
+  String get syncDetailsTranscribing => 'अपलोड हो गया, सर्वर की प्रतीक्षा में';
 
   @override
   String get syncDetailsAudioFiles => 'ऑडियो फ़ाइलें';
@@ -15539,4 +15539,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'आपका सारांश लिखा जा रहा है…';
+
+  @override
+  String get onTheWayServerWork => 'सर्वर द्वारा बताया गया काम';
 }

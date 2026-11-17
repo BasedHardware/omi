@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:convert';
 import 'dart:io';
 
@@ -168,7 +169,14 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
       'reconnection_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && (e['timeToReconnectMs'] as num? ?? 0) > 0)
+          .where((e) =>
+              (e['timestamp'] as num? ?? 0) >= windowStart &&
+              (e['eventType'] ??
+                      (e['lostAudioResolvedAt'] != null && e['reasonCode'] == null
+                          ? 'audio_recovered'
+                          : 'disconnect')) ==
+                  'disconnect' &&
+              e['isManual'] != true)
           .length,
       'fail_to_connect_count_window': disconnects
           .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
@@ -476,7 +484,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             leading: FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success),
             title: l10n.diagnosticsVerdictReconnects,
             subtitle: median == null
-                ? l10n.diagnosticsVerdictNoDrops
+                ? (summary.drops == 0 ? l10n.diagnosticsVerdictNoDrops : l10n.diagnosticsDrops)
                 : l10n.diagnosticsVerdictReconnectsDetail(_formatDurationMs(median)),
           ),
         OmiSettingsRow(
@@ -1019,9 +1027,11 @@ class DiagnosticsSummary {
 DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {required int nowMs, int? sinceMs}) {
   const hourMs = 3600 * 1000;
   const weekMs = 7 * 24 * hourMs;
-  final window = sinceMs == null ? history : history.where((e) => e.timestamp >= sinceMs).toList();
+  final start = max(sinceMs ?? nowMs - weekMs, nowMs - weekMs);
+  final window = history.where((e) => e.timestamp >= start && e.timestamp <= nowMs).toList();
+  final drops = window.where((e) => e.eventType == 'disconnect' && !e.isManual).toList();
   final gaps = [
-    for (final e in window)
+    for (final e in drops)
       if (e.timeToReconnectMs > 0) e.timeToReconnectMs,
   ]..sort();
   int? median;
@@ -1030,16 +1040,16 @@ DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {requi
     median = gaps.length.isOdd ? gaps[mid] : ((gaps[mid - 1] + gaps[mid]) / 2).round();
   }
   int? perHour;
-  if (sinceMs != null && gaps.isNotEmpty) {
+  if (sinceMs != null && drops.isNotEmpty) {
     final start = sinceMs > nowMs - weekMs ? sinceMs : nowMs - weekMs;
     final hours = (nowMs - start) / hourMs;
     if (hours >= 1) {
-      final rate = (gaps.length / hours).round();
+      final rate = (drops.length / hours).round();
       if (rate >= 1) perHour = rate;
     }
   }
   return DiagnosticsSummary(
-    drops: gaps.length,
+    drops: drops.length,
     failed: window.where((e) => e.eventType == 'fail_to_connect').length,
     failedLast24h: history.where((e) => e.eventType == 'fail_to_connect' && e.timestamp >= nowMs - 24 * hourMs).length,
     medianReconnectMs: median,

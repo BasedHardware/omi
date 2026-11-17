@@ -12278,7 +12278,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'జతచేసినప్పటినుండి: $drops అంతరాయాలు, $failed విఫలమైన కనెక్షన్లు.';
+    return 'జత చేసినప్పటి నుండి: $drops పునఃకనెక్షన్‌లు, $failed విఫలమైన కనెక్షన్‌లు.';
   }
 
   @override
@@ -13550,7 +13550,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ఈ ఫోన్‌లో వేచి ఉంది';
 
   @override
-  String get syncDetailsTranscribing => 'Omi లో ట్రాన్స్క్రైబ్ అవుతోంది';
+  String get syncDetailsTranscribing => 'అప్‌లోడ్ అయింది, సర్వర్ కోసం వేచి ఉంది';
 
   @override
   String get syncDetailsAudioFiles => 'ఆడియో ఫైళ్లు';
@@ -15619,4 +15619,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'మీ సారాంశం రాస్తున్నాం…';
+
+  @override
+  String get onTheWayServerWork => 'సర్వర్ నివేదించిన పని';
 }

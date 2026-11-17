@@ -12265,7 +12265,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od sparowania: zerwania: $drops, nieudane połączenia: $failed.';
+    return 'Od sparowania: $drops ponownych połączeń, $failed nieudanych połączeń.';
   }
 
   @override
@@ -13538,7 +13538,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Czeka na tym telefonie';
 
   @override
-  String get syncDetailsTranscribing => 'Transkrypcja w Omi';
+  String get syncDetailsTranscribing => 'Przesłano, oczekiwanie na serwer';
 
   @override
   String get syncDetailsAudioFiles => 'Pliki audio';
@@ -15601,4 +15601,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Piszemy podsumowanie…';
+
+  @override
+  String get onTheWayServerWork => 'Praca zgłoszona przez serwer';
 }

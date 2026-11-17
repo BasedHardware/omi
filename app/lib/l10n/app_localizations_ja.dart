@@ -12046,7 +12046,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ペアリング以降: 切断 $drops 回、接続の失敗 $failed 回。';
+    return 'ペアリング以降：再接続 $drops 回、接続失敗 $failed 回。';
   }
 
   @override
@@ -13307,7 +13307,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'このスマホで待機中';
 
   @override
-  String get syncDetailsTranscribing => 'Omiで文字起こし中';
+  String get syncDetailsTranscribing => 'アップロード済み、サーバー待ち';
 
   @override
   String get syncDetailsAudioFiles => '音声ファイル';
@@ -15328,4 +15328,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => '要約を作成しています…';
+
+  @override
+  String get onTheWayServerWork => 'サーバーが報告した処理';
 }

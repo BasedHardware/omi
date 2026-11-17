@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Abbrüche",
     "diagnosticsDropsPerHour": "etwa {count} pro Stunde",
     "diagnosticsLongestGap": "Längste Lücke",
-    "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Abbrüche, {failed} fehlgeschlagene Verbindungen.",
+    "diagnosticsSincePairingSummary": "Seit der Kopplung: {drops} Wiederverbindungen, {failed} fehlgeschlagene Verbindungen.",
     "diagnosticsLastDuration": "Letzte {duration}",
     "chatReplyOffline": "Verbindung nicht möglich. Prüfe deine Verbindung und versuche es erneut.",
     "chatReplyServerError": "Auf unserer Seite ist etwas schiefgelaufen. Bitte versuche es erneut.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "Übertragungsgeschwindigkeit",
     "syncDetailsWaitingOnOmi": "Wartet auf dein Omi",
     "syncDetailsWaitingOnPhone": "Wartet auf dieses Handy",
-    "syncDetailsTranscribing": "Wird bei Omi transkribiert",
+    "syncDetailsTranscribing": "Hochgeladen, wartet auf Server",
     "syncDetailsAudioFiles": "Audiodateien",
     "syncDetailsServerJobs": "Serveraufträge (erledigt / gesamt)",
     "syncDetailsCopy": "Details für den Support kopieren",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB Download",
     "downloadNow": "Jetzt laden",
     "onWifiLater": "Später über WLAN",
-    "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…"
+    "conversationWritingSummary": "Deine Zusammenfassung wird geschrieben…",
+    "onTheWayServerWork": "Vom Server gemeldete Arbeit"
 }

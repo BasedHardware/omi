@@ -23,6 +23,7 @@ final class OmiBleManager: NSObject {
             audioExpected.removeAll()
             for uuid in connectionStartTimes.keys { connectionStartTimes[uuid] = CheckedIntegerConversion.epochMs() }
             reconnectDiagnostics.removeAll()
+            everConnected.removeAll()
             chargingState.removeAll()
             // Battery throttling must not reuse the previous account's baseline.
             batteryBaselineRehydrated.removeAll()
@@ -103,6 +104,9 @@ final class OmiBleManager: NSObject {
     private var connectionStartTimes: [String: Int64] = [:]
 
     /// Tracks peripherals that have connected at least once (for reconnection counting).
+    private func hasEverConnected(_ uuid: String) -> Bool {
+        everConnected.contains(uuid) || healthStore.connectedBefore(uuid)
+    }
     private var everConnected: Set<String> = []
     // Authorized by Dart's persisted pairing, never by scan discovery.
     private var reconnectIntent = OmiSavedReconnectIntent()
@@ -728,7 +732,7 @@ final class OmiBleManager: NSObject {
         guard centralManager.state == .poweredOn else { return }
         for (uuid, peripheral) in peripherals {
             guard OmiBleConnectionPolicy.savedRetryAllowed(
-                saved: savedReconnect.contains(uuid), everConnected: everConnected.contains(uuid),
+                saved: savedReconnect.contains(uuid), everConnected: hasEverConnected(uuid),
                 manual: manuallyDisconnected.contains(uuid), pairingLost: pairingLostBlocked.contains(uuid)
             ) else { continue }
             // Only skip if already connected. For peripherals in .connecting state,
@@ -1103,7 +1107,7 @@ final class OmiBleManager: NSObject {
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
-    private static let maxDisconnectHistory = 500
+    private static let maxDisconnectHistory = 4096
     private static let disconnectRetentionMs: Int64 = 7 * 24 * 3600 * 1000
     private static let rssiHistoryLimit = 120
 
@@ -1439,12 +1443,15 @@ final class OmiBleManager: NSObject {
         let ringRead = eventType == "disconnect"
             ? ringReadDiagnostics.disconnected(uuid, now: OmiRingReadDiagnostics.now()) : [:]
         guard healthStore.enabled else { return }
-        if eventType == "disconnect" { healthStore.end(uuid, at: CheckedIntegerConversion.epochMs()) }
+        let now = CheckedIntegerConversion.epochMs()
+        if eventType == "disconnect" {
+            healthStore.end(uuid, at: now)
+            healthStore.recordDisconnect(uuid, at: now)
+        }
         let defaults = UserDefaults.standard
         let key = OmiBleManager.historyKey(uuid)
         var history = defaults.array(forKey: key) as? [[String: Any]] ?? []
 
-        let now = CheckedIntegerConversion.epochMs()
         let startedAt = connectionStartTimes[uuid] ?? 0
         let durationMs: Int64 = (eventType == "disconnect" && startedAt > 0) ? (now - startedAt) : 0
 
@@ -1495,13 +1502,13 @@ final class OmiBleManager: NSObject {
     private func backfillTimeToReconnect(uuid: String) {
         let defaults = UserDefaults.standard
         var pending = reconnectDiagnostics.removeValue(forKey: uuid) ?? OmiBleReconnectDiagnostics()
-        if let start = defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64 {
+        if let start = healthStore.reconnectEvent(uuid) ?? (defaults.object(forKey: "ble_audio_outage_\(uuid)") as? Int64) {
             pending.recordEvent(timestampMs: start, eventType: "disconnect", isManual: false)
         }
         let key = OmiBleManager.historyKey(uuid)
         let history = defaults.array(forKey: key) as? [[String: Any]] ?? []
         if let updated = pending.backfilledHistory(
-            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: everConnected.contains(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
+            history, nowMs: CheckedIntegerConversion.epochMs(), hadConnection: hasEverConnected(uuid) || defaults.object(forKey: "ble_audio_outage_\(uuid)") != nil,
             timestampOf: OmiBleReconnectDiagnostics.eventTimestamp,
             resolvedAtOf: { $0["lostAudioResolvedAt"] as? Int64 },
             onLookupMiss: { start in
@@ -1541,7 +1548,7 @@ final class OmiBleManager: NSObject {
                 reason: obj["reason"] as? String ?? "unknown",
                 reasonCode: Int64(obj["reasonCode"] as? Int ?? -1),
                 isManual: obj["isManual"] as? Bool ?? false,
-                eventType: obj["eventType"] as? String ?? "disconnect",
+                eventType: OmiBleReconnectDiagnostics.eventType(obj),
                 lastRssi: obj["lastRssi"] as? Int64 ?? 0,
                 connectionDurationMs: obj["connectionDurationMs"] as? Int64 ?? 0,
                 appState: obj["appState"] as? String ?? "",
@@ -1810,13 +1817,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] didConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid)")
 
         // Track reconnections (not first connect)
-        if everConnected.contains(uuid) {
+        if hasEverConnected(uuid) {
             incrementReconnectionCount(uuid: uuid)
         }
         // Consume first-time failure markers too, without recording those
         // initial connections as reconnections.
         backfillTimeToReconnect(uuid: uuid)
         everConnected.insert(uuid)
+        healthStore.recordConnected(uuid)
         freshConnections.insert(uuid)
         readyNotified.remove(uuid)
         discoveryStartedAt.removeValue(forKey: uuid)
@@ -1896,7 +1904,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         // Retry previously-connected peripherals — otherwise a failed connect silently
         // drops the user. iOS queues this at the chipset level; it's free while waiting.
-        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), everConnected.contains(uuid) {
+        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), hasEverConnected(uuid) {
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
                 guard let self = self, self.shouldAutoReconnect(uuid: uuid, pairingLost: false),
                       self.centralManager.state == .poweredOn else { return }

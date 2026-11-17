@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Pārrāvumi",
     "diagnosticsDropsPerHour": "aptuveni {count} stundā",
     "diagnosticsLongestGap": "Garākais pārtraukums",
-    "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: pārrāvumi {drops}, neveiksmīgi savienojumi {failed}.",
+    "diagnosticsSincePairingSummary": "Kopš savienošanas pārī: {drops} atkārtoti savienojumi, {failed} neizdevušies savienojumi.",
     "diagnosticsLastDuration": "Pēdējās {duration}",
     "chatReplyOffline": "Nevar izveidot savienojumu. Pārbaudiet savienojumu un mēģiniet vēlreiz.",
     "chatReplyServerError": "Mūsu pusē kaut kas nogāja greizi. Lūdzu, mēģiniet vēlreiz.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "Pārsūtīšanas ātrums",
     "syncDetailsWaitingOnOmi": "Gaida Omi",
     "syncDetailsWaitingOnPhone": "Gaida šajā tālrunī",
-    "syncDetailsTranscribing": "Atšifrē Omi",
+    "syncDetailsTranscribing": "Augšupielādēts, gaida serveri",
     "syncDetailsAudioFiles": "Audio faili",
     "syncDetailsServerJobs": "Servera uzdevumi (pabeigti / kopā)",
     "syncDetailsCopy": "Kopēt informāciju atbalstam",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB lejupielāde",
     "downloadNow": "Lejupielādēt tagad",
     "onWifiLater": "Vēlāk ar Wi-Fi",
-    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…"
+    "conversationWritingSummary": "Rakstām jūsu kopsavilkumu…",
+    "onTheWayServerWork": "Servera ziņotais darbs"
 }

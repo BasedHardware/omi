@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Výpadky",
     "diagnosticsDropsPerHour": "asi {count} za hodinu",
     "diagnosticsLongestGap": "Nejdelší výpadek",
-    "diagnosticsSincePairingSummary": "Od spárování: výpadků {drops}, neúspěšných připojení {failed}.",
+    "diagnosticsSincePairingSummary": "Od spárování: {drops} opětovných připojení, {failed} neúspěšných připojení.",
     "diagnosticsLastDuration": "Posledních {duration}",
     "chatReplyOffline": "Nelze se připojit. Zkontrolujte připojení a zkuste to znovu.",
     "chatReplyServerError": "Něco se pokazilo na naší straně. Zkuste to prosím znovu.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "Rychlost přenosu",
     "syncDetailsWaitingOnOmi": "Čeká na Omi",
     "syncDetailsWaitingOnPhone": "Čeká v tomto telefonu",
-    "syncDetailsTranscribing": "Přepisuje se v Omi",
+    "syncDetailsTranscribing": "Nahráno, čeká na server",
     "syncDetailsAudioFiles": "Zvukové soubory",
     "syncDetailsServerJobs": "Úlohy serveru (hotovo / celkem)",
     "syncDetailsCopy": "Zkopírovat podrobnosti pro podporu",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Stažení {size} MB",
     "downloadNow": "Stáhnout nyní",
     "onWifiLater": "Později přes Wi-Fi",
-    "conversationWritingSummary": "Píšeme vaše shrnutí…"
+    "conversationWritingSummary": "Píšeme vaše shrnutí…",
+    "onTheWayServerWork": "Práce hlášená serverem"
 }

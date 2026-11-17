@@ -21792,7 +21792,7 @@ abstract class AppLocalizations {
   /// Device Diagnostics footnote under the 7-day summary with lifetime counts
   ///
   /// In en, this message translates to:
-  /// **'Since pairing: {drops} drops, {failed} failed connections.'**
+  /// **'Since pairing: {drops} reconnections, {failed} failed connections.'**
   String diagnosticsSincePairingSummary(int drops, int failed);
 
   /// Caption beside the live signal chart title; duration is the chart window, e.g. 60s
@@ -23994,7 +23994,7 @@ abstract class AppLocalizations {
   /// Sync details row label: audio uploaded and still being transcribed by Omi.
   ///
   /// In en, this message translates to:
-  /// **'Transcribing on Omi'**
+  /// **'Uploaded, awaiting server'**
   String get syncDetailsTranscribing;
 
   /// Sync details row label: number of raw audio files the app holds.
@@ -27296,6 +27296,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Writing your summary…'**
   String get conversationWritingSummary;
+
+  /// No description provided for @onTheWayServerWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-reported work'**
+  String get onTheWayServerWork;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

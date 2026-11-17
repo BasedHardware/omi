@@ -12291,7 +12291,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Dall\'associazione: $drops interruzioni, $failed connessioni non riuscite.';
+    return 'Dall\'abbinamento: $drops riconnessioni, $failed connessioni non riuscite.';
   }
 
   @override
@@ -13568,7 +13568,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'In attesa di questo telefono';
 
   @override
-  String get syncDetailsTranscribing => 'Trascrizione su Omi';
+  String get syncDetailsTranscribing => 'Caricato, in attesa del server';
 
   @override
   String get syncDetailsAudioFiles => 'File audio';
@@ -15634,4 +15634,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Sto scrivendo il tuo riepilogo…';
+
+  @override
+  String get onTheWayServerWork => 'Lavoro segnalato dal server';
 }

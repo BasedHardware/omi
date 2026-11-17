@@ -140,7 +140,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                     _buildStorageSettings(userProvider, syncProvider),
                     if (hasAnyRecording) ...[
                       const SizedBox(height: 32),
-                      _buildFilterChips(walSeconds(toSync.where(walIsSyncable))),
+                      _buildFilterChips(walSeconds(syncProvider.derivedWals.pendingWork)),
                       const SizedBox(height: 4),
                     ],
                   ]),
@@ -164,11 +164,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   Widget _buildOverallStatusCard(SyncProvider p, SyncState s) {
     final l = context.l10n;
     String dur(int seconds) => OmiDuration.compact(seconds, l);
-    final step = _runTracker.update(s, p.allWals);
-    final uploaded = p.uploadedWals.length;
+    final step = _runTracker.update(s, p.allWals, pendingWork: p.derivedWals.pendingWork);
+    final uploaded = p.derivedWals.pendingWork.where((w) => w.status == WalStatus.uploaded).length;
     final sorted = p.displaySortedWals;
     final attentionWals = sorted.where((w) => _needsAttention(w.syncDisplayState)).toList();
-    final readyWals = sorted
+    final readyWals = p.derivedWals.pendingWork
         .where(
           (w) =>
               w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
@@ -217,13 +217,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (isActive || uploaded > 0) {
       // Uploads finished; the server is turning them into conversations.
       final job = p.offlineServerProcessingSeconds;
-      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
-      subtitle = job.tracked && job.totalSeconds > 0
-          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
-          : l.syncProcessingBackgroundHint;
+      final amounts = SyncPipelineAmounts.fromPending(p.derivedWals.pendingWork);
+      title = amounts.processingSeconds > 0
+          ? '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}'
+          : l.syncCardProcessing;
+      subtitle = l.syncProcessingBackgroundHint;
       barStep = SyncStep.transcribe;
       barFraction = job.tracked && job.doneSeconds > 0 ? job.doneSeconds / job.totalSeconds : null;
       if (isActive) action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
+    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.transcriptionUnavailable;
+      titleColor = Colors.orangeAccent;
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
@@ -826,6 +830,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   (Color, String) _rowLabel(Wal wal) {
+    if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
+      return (OmiColors.textSecondary, context.l10n.transcriptionUnavailable);
+    }
     final state = wal.syncDisplayState;
     var (color, _, label) = _rowVisual(state, rejectionReason: wal.uploadRejectionReason);
     // On-device WALs surface their transfer state instead of "Waiting to sync".
@@ -954,7 +961,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncStatusUploaded);
+        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncDetailsTranscribing);
       case WalSyncDisplayState.waiting:
         return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusWaiting);
       case WalSyncDisplayState.retrying:

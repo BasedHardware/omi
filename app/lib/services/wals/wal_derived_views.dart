@@ -23,6 +23,20 @@ List<Wal> pendingSyncRows(Iterable<Wal> wals) {
   return _visibleSyncRows(pending, hidden.contains);
 }
 
+/// One display inventory for every pending-work amount. A completed phone
+/// twin suppresses its device row even when its server handle has expired.
+List<Wal> pendingWorkRows(Iterable<Wal> wals, {int? nowSeconds}) {
+  final rows = wals.toList(growable: false);
+  final hidden = {
+    for (final w in rows)
+      if (!_onDevice(w) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced)) w.id,
+  };
+  return _pendingWorkRows(rows, hidden.contains, nowSeconds);
+}
+
+List<Wal> _pendingWorkRows(Iterable<Wal> rows, bool Function(String) hidden, int? nowSeconds) =>
+    _visibleSyncRows(rows.where((w) => w.countsAsPendingWork(nowSeconds: nowSeconds)).toList(), hidden);
+
 List<Wal> _visibleSyncRows(List<Wal> pending, bool Function(String) hidden) {
   final visible = pending.where((w) => !(_onDevice(w) && hidden(w.id))).toList();
   final sources = visible.where(_onDevice).toList();
@@ -144,7 +158,27 @@ class WalDerivedViews {
       _syncing ??= List.unmodifiable(_visibleSyncRows(_buckets[9].members.toList(), _hidden.containsKey)
         ..sort((a, b) => b.timerStart.compareTo(a.timerStart)));
   List<Wal>? _pendingWork;
-  List<Wal> get pendingWork => _pendingWork ??= List.unmodifiable([...uploaded, ...syncing]);
+  List<Wal> get pendingWork => pendingWorkAt();
+  int? _pendingWorkComputedAt;
+  int? _pendingWorkDeadline;
+  List<Wal> pendingWorkAt({int? nowSeconds}) {
+    final now = nowSeconds ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (_pendingWork == null ||
+        (_pendingWorkDeadline != null && now >= _pendingWorkDeadline!) ||
+        (_pendingWorkComputedAt != null && now < _pendingWorkComputedAt!)) {
+      _pendingWorkComputedAt = now;
+      final candidates = [...uploaded, ...syncing];
+      _pendingWork = List.unmodifiable(_pendingWorkRows(candidates, _hidden.containsKey, now));
+      final deadlines = candidates.map((w) => w.pendingWorkExpiresAt).whereType<int>().where((t) => t > now);
+      _pendingWorkDeadline = deadlines.isEmpty ? null : deadlines.reduce(min);
+    }
+    return _pendingWork!;
+  }
+
+  /// Retained uploads with no recent server confirmation. Display only: these
+  /// rows never enter deletion/retry eligibility or mutate the custody ledger.
+  List<Wal> stalledUploadsAt({int? nowSeconds}) => _visibleSyncRows(
+      uploaded.where((w) => !w.countsAsPendingWork(nowSeconds: nowSeconds)).toList(), _hidden.containsKey);
   Map<DateTime, int>? _pendingSecondsByDay;
   int? _pendingSecondsComputedAt;
   int? _pendingSecondsDeadline;
@@ -163,7 +197,7 @@ class WalDerivedViews {
   Map<DateTime, int> _dayTotals(int nowSeconds) {
     final totals = <DateTime, int>{};
     _pendingSecondsDeadline = null;
-    for (final w in pendingWork) {
+    for (final w in pendingWorkAt(nowSeconds: nowSeconds)) {
       if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
       final expires = w.pendingWorkExpiresAt;
       if (expires != null) {

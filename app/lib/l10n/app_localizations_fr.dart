@@ -12327,7 +12327,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Depuis l\'appairage : $drops coupures, $failed échecs de connexion.';
+    return 'Depuis l\'appairage : $drops reconnexions, $failed connexions échouées.';
   }
 
   @override
@@ -13604,7 +13604,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'En attente de ce téléphone';
 
   @override
-  String get syncDetailsTranscribing => 'Transcription sur Omi';
+  String get syncDetailsTranscribing => 'Envoyé, en attente du serveur';
 
   @override
   String get syncDetailsAudioFiles => 'Fichiers audio';
@@ -15684,4 +15684,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Rédaction de votre résumé…';
+
+  @override
+  String get onTheWayServerWork => 'Traitement signalé par le serveur';
 }

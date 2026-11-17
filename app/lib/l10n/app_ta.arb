@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "துண்டிப்புகள்",
     "diagnosticsDropsPerHour": "மணிக்கு சுமார் {count}",
     "diagnosticsLongestGap": "நீண்ட இடைவெளி",
-    "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} துண்டிப்புகள், {failed} தோல்வியுற்ற இணைப்புகள்.",
+    "diagnosticsSincePairingSummary": "இணைத்ததிலிருந்து: {drops} மறு இணைப்புகள், {failed} தோல்வியடைந்த இணைப்புகள்.",
     "diagnosticsLastDuration": "கடந்த {duration}",
     "chatReplyOffline": "இணைக்க முடியவில்லை. உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
     "chatReplyServerError": "எங்கள் பக்கத்தில் ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.",
@@ -11554,7 +11554,7 @@
     "syncDetailsTransferSpeed": "பரிமாற்ற வேகம்",
     "syncDetailsWaitingOnOmi": "Omi இல் காத்திருக்கிறது",
     "syncDetailsWaitingOnPhone": "இந்த ஃபோனில் காத்திருக்கிறது",
-    "syncDetailsTranscribing": "Omi இல் எழுத்தாக்கம் நடக்கிறது",
+    "syncDetailsTranscribing": "பதிவேற்றப்பட்டது, சேவையகத்திற்குக் காத்திருக்கிறது",
     "syncDetailsAudioFiles": "ஆடியோ கோப்புகள்",
     "syncDetailsServerJobs": "சர்வர் பணிகள் (முடிந்தவை / மொத்தம்)",
     "syncDetailsCopy": "ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "{size} MB பதிவிறக்கம்",
     "downloadNow": "இப்போது பதிவிறக்கு",
     "onWifiLater": "பின்னர் Wi-Fi இல்",
-    "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…"
+    "conversationWritingSummary": "உங்கள் சுருக்கம் எழுதப்படுகிறது…",
+    "onTheWayServerWork": "சேவையகம் தெரிவித்த பணி"
 }

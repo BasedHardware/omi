@@ -12261,7 +12261,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sinds koppeling: $drops onderbrekingen, $failed mislukte verbindingen.';
+    return 'Sinds koppelen: $drops herverbindingen, $failed mislukte verbindingen.';
   }
 
   @override
@@ -13533,7 +13533,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Wacht op deze telefoon';
 
   @override
-  String get syncDetailsTranscribing => 'Transcriberen op Omi';
+  String get syncDetailsTranscribing => 'Geüpload, wacht op server';
 
   @override
   String get syncDetailsAudioFiles => 'Audiobestanden';
@@ -15596,4 +15596,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Je samenvatting wordt geschreven…';
+
+  @override
+  String get onTheWayServerWork => 'Door de server gemeld werk';
 }

@@ -12256,7 +12256,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Kopš savienošanas pārī: pārrāvumi $drops, neveiksmīgi savienojumi $failed.';
+    return 'Kopš savienošanas pārī: $drops atkārtoti savienojumi, $failed neizdevušies savienojumi.';
   }
 
   @override
@@ -13529,7 +13529,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Gaida šajā tālrunī';
 
   @override
-  String get syncDetailsTranscribing => 'Atšifrē Omi';
+  String get syncDetailsTranscribing => 'Augšupielādēts, gaida serveri';
 
   @override
   String get syncDetailsAudioFiles => 'Audio faili';
@@ -15591,4 +15591,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
+
+  @override
+  String get onTheWayServerWork => 'Servera ziņotais darbs';
 }

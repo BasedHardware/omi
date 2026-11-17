@@ -12265,7 +12265,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'ಜೋಡಿಯಾದಾಗಿನಿಂದ: $drops ಕಡಿತಗಳು, $failed ವಿಫಲ ಸಂಪರ್ಕಗಳು.';
+    return 'ಜೋಡಿಸಿದಾಗಿನಿಂದ: $drops ಮರುಸಂಪರ್ಕಗಳು, $failed ವಿಫಲ ಸಂಪರ್ಕಗಳು.';
   }
 
   @override
@@ -13537,7 +13537,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ';
 
   @override
-  String get syncDetailsTranscribing => 'Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ';
+  String get syncDetailsTranscribing => 'ಅಪ್‌ಲೋಡ್ ಆಗಿದೆ, ಸರ್ವರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
 
   @override
   String get syncDetailsAudioFiles => 'ಆಡಿಯೊ ಫೈಲ್‌ಗಳು';
@@ -15607,4 +15607,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'ನಿಮ್ಮ ಸಾರಾಂಶವನ್ನು ಬರೆಯಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get onTheWayServerWork => 'ಸರ್ವರ್ ವರದಿ ಮಾಡಿದ ಕೆಲಸ';
 }

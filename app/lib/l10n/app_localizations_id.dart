@@ -12232,7 +12232,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sejak penyambungan: $drops pemutusan, $failed koneksi gagal.';
+    return 'Sejak pemasangan: $drops penyambungan ulang, $failed koneksi gagal.';
   }
 
   @override
@@ -13507,7 +13507,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Menunggu ponsel ini';
 
   @override
-  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+  String get syncDetailsTranscribing => 'Diunggah, menunggu server';
 
   @override
   String get syncDetailsAudioFiles => 'File audio';
@@ -15571,4 +15571,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Menulis ringkasan Anda…';
+
+  @override
+  String get onTheWayServerWork => 'Pekerjaan yang dilaporkan server';
 }

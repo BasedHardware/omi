@@ -56,7 +56,7 @@ class OmiBleForegroundService : Service() {
         private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
         private const val KEY_RECONNECT_COUNT = "reconnect_count"
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
-        private const val MAX_DISCONNECT_HISTORY = 500
+        private const val MAX_DISCONNECT_HISTORY = 4096
         private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
         // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
         // maybeEmit can roll up yesterday - 6, whose start is nearly eight days
@@ -185,7 +185,10 @@ class OmiBleForegroundService : Service() {
         pendingAudioRecovery.clear()
         packetDays.clear()
         for (addr in audioCounters.keys) audioCounters[addr] = BleAudioPacketCounter()
-        for (managed in managedDevices.values) managed.connectionStartTime = System.currentTimeMillis()
+        for (managed in managedDevices.values) {
+            managed.connectionStartTime = System.currentTimeMillis()
+            managed.hasEverConnected = false
+        }
         healthSessions.retire()
     }
 
@@ -214,12 +217,18 @@ class OmiBleForegroundService : Service() {
             val managed = managedDevices[addr] ?: return
 
             Log.i(TAG, "onGattConnected: $addr")
+            val diagnosticsPrefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+            managed.hasEverConnected = managed.hasEverConnected ||
+                BleConnectionHistory.connectedBefore(diagnosticsPrefs, addr)
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
             }
             backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
             managed.hasEverConnected = true
+            if (DeviceHealthPersistence.enabled(this@OmiBleForegroundService)) {
+                BleConnectionHistory.connected(diagnosticsPrefs, addr)
+            }
             managed.currentAttemptEstablished = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.pendingReconnect = null
@@ -1134,6 +1143,7 @@ class OmiBleForegroundService : Service() {
                 null
             }
             val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
+            if (eventType == "disconnect") BleConnectionHistory.disconnected(prefs, address, now)
             val key = historyKey(address)
             val historyJson = prefs.getString(key, "[]") ?: "[]"
             val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
@@ -1243,7 +1253,7 @@ class OmiBleForegroundService : Service() {
         val key = historyKey(address)
         val historyJson = prefs.getString(key, "[]") ?: "[]"
         val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }
-        val outage = prefs.getLong("audio_outage_${address.uppercase()}", 0L)
+        val outage = BleConnectionHistory.eventTimestamp(prefs, address)
         if (outage > 0L) managed.reconnectDiagnostics.record(outage, "disconnect", false)
         val updated = managed.reconnectDiagnostics.backfilledHistory(
             (0 until history.length()).mapNotNull { history.optJSONObject(it) },

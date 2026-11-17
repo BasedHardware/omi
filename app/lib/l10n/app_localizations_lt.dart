@@ -12247,7 +12247,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Nuo susiejimo: nutrūkimų $drops, nepavykusių ryšių $failed.';
+    return 'Nuo susiejimo: $drops pakartotinių prisijungimų, $failed nepavykusių prisijungimų.';
   }
 
   @override
@@ -13520,7 +13520,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Laukia šiame telefone';
 
   @override
-  String get syncDetailsTranscribing => 'Transkribuojama Omi';
+  String get syncDetailsTranscribing => 'Įkelta, laukiama serverio';
 
   @override
   String get syncDetailsAudioFiles => 'Garso failai';
@@ -15580,4 +15580,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Rašoma jūsų santrauka…';
+
+  @override
+  String get onTheWayServerWork => 'Serverio praneštas darbas';
 }

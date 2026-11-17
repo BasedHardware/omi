@@ -12220,7 +12220,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Pärast sidumist: katkestusi $drops, ebaõnnestunud ühendusi $failed.';
+    return 'Sidumisest alates: $drops taasühendust, $failed ebaõnnestunud ühendust.';
   }
 
   @override
@@ -13491,7 +13491,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ootab selles telefonis';
 
   @override
-  String get syncDetailsTranscribing => 'Omi transkribeerib';
+  String get syncDetailsTranscribing => 'Üles laaditud, ootab serverit';
 
   @override
   String get syncDetailsAudioFiles => 'Helifailid';
@@ -15549,4 +15549,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Kirjutame sinu kokkuvõtet…';
+
+  @override
+  String get onTheWayServerWork => 'Serveri teatatud töö';
 }

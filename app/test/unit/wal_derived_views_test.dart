@@ -2,11 +2,43 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
+import 'package:omi/utils/sync/offline_sync_amounts.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 
 Wal _row(int start, WalStatus status, {WalStorage storage = WalStorage.disk}) =>
     Wal(timerStart: start, codec: BleAudioCodec.opus, seconds: 30, status: status, storage: storage);
 
 void main() {
+  test('all pending surfaces expire uploaded handles and fold device twins', () {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final stale = _row(now - 40 * 86400, WalStatus.uploaded)..uploadedAt = now - 90000;
+    final phone = _row(now - 60, WalStatus.uploaded)..uploadedAt = now;
+    final twin = _row(now - 60, WalStatus.miss, storage: WalStorage.sdcard);
+    final rows = [stale, phone, twin];
+    final views = WalDerivedViews(rows);
+    addTearDown(views.dispose);
+    expect(views.pendingWork, catchUpStaleHandleOff ? [phone, stale] : [phone]);
+    final amounts = SyncPipelineAmounts.of(rows);
+    expect(amounts.processingSeconds, catchUpStaleHandleOff ? 60 : 30);
+    expect(amounts.onDeviceSeconds, 0);
+    expect(views.pendingSeconds, deviceCatchUpLocal(rows).pendingSeconds);
+    expect(stale.status, WalStatus.uploaded);
+    expect(walDeletionAllowed(stale), isFalse);
+  });
+
+  test('pending inventory expires at its exact deadline and recovers on confirmation', () {
+    final wal = _row(1700000000, WalStatus.uploaded)..uploadedAt = 2000000000;
+    final views = WalDerivedViews([wal]);
+    addTearDown(views.dispose);
+    final expiry = wal.pendingWorkExpiresAt ?? 2000086401;
+    expect(views.pendingWorkAt(nowSeconds: expiry - 1), [wal]);
+    expect(views.pendingWorkAt(nowSeconds: expiry), catchUpStaleHandleOff ? [wal] : isEmpty);
+    wal.jobPendingConfirmedAt = expiry;
+    views.refresh();
+    expect(views.pendingWorkAt(nowSeconds: expiry), [wal]);
+    expect(wal.status, WalStatus.uploaded);
+  });
+
   test('derived partitions/counts match full scans over mixed states and hide device twins', () {
     final rows = [
       for (final status in WalStatus.values) _row(1700000000 + status.index, status),

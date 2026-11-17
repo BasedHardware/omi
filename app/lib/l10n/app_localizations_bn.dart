@@ -12225,7 +12225,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'জোড়া হওয়ার পর থেকে: $dropsটি বিচ্ছিন্নতা, $failedটি ব্যর্থ সংযোগ।';
+    return 'পেয়ার করার পর থেকে: $drops বার পুনঃসংযোগ, $failed বার সংযোগ ব্যর্থ।';
   }
 
   @override
@@ -13495,7 +13495,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'এই ফোনে অপেক্ষমাণ';
 
   @override
-  String get syncDetailsTranscribing => 'Omi-তে ট্রান্সক্রাইব হচ্ছে';
+  String get syncDetailsTranscribing => 'আপলোড হয়েছে, সার্ভারের অপেক্ষায়';
 
   @override
   String get syncDetailsAudioFiles => 'অডিও ফাইল';
@@ -15551,4 +15551,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
+
+  @override
+  String get onTheWayServerWork => 'সার্ভারের জানানো কাজ';
 }

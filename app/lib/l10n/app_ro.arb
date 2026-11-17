@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Întreruperi",
     "diagnosticsDropsPerHour": "aproximativ {count} pe oră",
     "diagnosticsLongestGap": "Cea mai lungă întrerupere",
-    "diagnosticsSincePairingSummary": "De la asociere: {drops} întreruperi, {failed} conexiuni eșuate.",
+    "diagnosticsSincePairingSummary": "De la asociere: {drops} reconectări, {failed} conexiuni eșuate.",
     "diagnosticsLastDuration": "Ultimele {duration}",
     "chatReplyOffline": "Nu se poate conecta. Verifică-ți conexiunea și încearcă din nou.",
     "chatReplyServerError": "Ceva a mers prost de partea noastră. Încearcă din nou.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "Viteză de transfer",
     "syncDetailsWaitingOnOmi": "Așteaptă Omi-ul",
     "syncDetailsWaitingOnPhone": "Așteaptă pe acest telefon",
-    "syncDetailsTranscribing": "Se transcrie pe Omi",
+    "syncDetailsTranscribing": "Încărcat, în așteptarea serverului",
     "syncDetailsAudioFiles": "Fișiere audio",
     "syncDetailsServerJobs": "Joburi pe server (finalizate / total)",
     "syncDetailsCopy": "Copiază detaliile pentru asistență",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Descărcare de {size} MB",
     "downloadNow": "Descarcă acum",
     "onWifiLater": "Mai târziu pe Wi-Fi",
-    "conversationWritingSummary": "Se scrie rezumatul tău…"
+    "conversationWritingSummary": "Se scrie rezumatul tău…",
+    "onTheWayServerWork": "Activitate raportată de server"
 }

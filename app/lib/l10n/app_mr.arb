@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "खंड",
     "diagnosticsDropsPerHour": "तासाला सुमारे {count}",
     "diagnosticsLongestGap": "सर्वात मोठा खंड",
-    "diagnosticsSincePairingSummary": "जोडणीनंतर: {drops} खंड, {failed} अयशस्वी कनेक्शन.",
+    "diagnosticsSincePairingSummary": "पेअरिंगपासून: {drops} पुनर्जोडण्या, {failed} अयशस्वी जोडण्या.",
     "diagnosticsLastDuration": "गेले {duration}",
     "chatReplyOffline": "कनेक्ट करता आले नाही. तुमचे कनेक्शन तपासा आणि पुन्हा प्रयत्न करा.",
     "chatReplyServerError": "आमच्या बाजूने काहीतरी चूक झाली. कृपया पुन्हा प्रयत्न करा.",
@@ -11554,7 +11554,7 @@
     "syncDetailsTransferSpeed": "ट्रान्सफर गती",
     "syncDetailsWaitingOnOmi": "Omi वर प्रतीक्षेत",
     "syncDetailsWaitingOnPhone": "या फोनवर प्रतीक्षेत",
-    "syncDetailsTranscribing": "Omi वर ट्रान्सक्राइब होत आहे",
+    "syncDetailsTranscribing": "अपलोड झाले, सर्व्हरची प्रतीक्षा",
     "syncDetailsAudioFiles": "ऑडिओ फाइल्स",
     "syncDetailsServerJobs": "सर्व्हर जॉब्स (पूर्ण / एकूण)",
     "syncDetailsCopy": "सपोर्टसाठी तपशील कॉपी करा",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "{size} MB डाउनलोड",
     "downloadNow": "आता डाउनलोड करा",
     "onWifiLater": "नंतर Wi-Fi वर",
-    "conversationWritingSummary": "तुमचा सारांश लिहित आहे…"
+    "conversationWritingSummary": "तुमचा सारांश लिहित आहे…",
+    "onTheWayServerWork": "सर्व्हरने नोंदवलेले काम"
 }

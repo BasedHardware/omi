@@ -12213,7 +12213,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Since pairing: $drops drops, $failed failed connections.';
+    return 'Since pairing: $drops reconnections, $failed failed connections.';
   }
 
   @override
@@ -13481,7 +13481,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Waiting on this phone';
 
   @override
-  String get syncDetailsTranscribing => 'Transcribing on Omi';
+  String get syncDetailsTranscribing => 'Uploaded, awaiting server';
 
   @override
   String get syncDetailsAudioFiles => 'Audio files';
@@ -15540,4 +15540,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Writing your summary…';
+
+  @override
+  String get onTheWayServerWork => 'Server-reported work';
 }

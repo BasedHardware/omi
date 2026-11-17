@@ -12029,7 +12029,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return '配对以来：断开 $drops 次，连接失败 $failed 次。';
+    return '自配对以来：重连 $drops 次，连接失败 $failed 次。';
   }
 
   @override
@@ -13289,7 +13289,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => '等待此手机上传';
 
   @override
-  String get syncDetailsTranscribing => 'Omi 正在转录';
+  String get syncDetailsTranscribing => '已上传，等待服务器';
 
   @override
   String get syncDetailsAudioFiles => '音频文件';
@@ -15305,4 +15305,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => '正在撰写你的摘要…';
+
+  @override
+  String get onTheWayServerWork => '服务器报告的任务';
 }

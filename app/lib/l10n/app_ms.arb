@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "Pemutusan",
     "diagnosticsDropsPerHour": "kira-kira {count} sejam",
     "diagnosticsLongestGap": "Jurang terpanjang",
-    "diagnosticsSincePairingSummary": "Sejak pemasangan: {drops} pemutusan, {failed} sambungan gagal.",
+    "diagnosticsSincePairingSummary": "Sejak dipasangkan: {drops} sambungan semula, {failed} sambungan gagal.",
     "diagnosticsLastDuration": "{duration} lepas",
     "chatReplyOffline": "Tidak dapat menyambung. Semak sambungan anda dan cuba lagi.",
     "chatReplyServerError": "Sesuatu telah berlaku di pihak kami. Sila cuba lagi.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "Kelajuan pemindahan",
     "syncDetailsWaitingOnOmi": "Menunggu Omi anda",
     "syncDetailsWaitingOnPhone": "Menunggu telefon ini",
-    "syncDetailsTranscribing": "Mentranskripsi di Omi",
+    "syncDetailsTranscribing": "Dimuat naik, menunggu pelayan",
     "syncDetailsAudioFiles": "Fail audio",
     "syncDetailsServerJobs": "Tugas pelayan (selesai / jumlah)",
     "syncDetailsCopy": "Salin butiran untuk sokongan",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "Muat turun {size} MB",
     "downloadNow": "Muat Turun Sekarang",
     "onWifiLater": "Kemudian melalui Wi-Fi",
-    "conversationWritingSummary": "Menulis ringkasan anda…"
+    "conversationWritingSummary": "Menulis ringkasan anda…",
+    "onTheWayServerWork": "Kerja yang dilaporkan pelayan"
 }

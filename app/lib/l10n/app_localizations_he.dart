@@ -12134,7 +12134,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'מאז ההתאמה: $drops ניתוקים, $failed חיבורים שנכשלו.';
+    return 'מאז ההתאמה: $drops חיבורים מחדש, $failed חיבורים שנכשלו.';
   }
 
   @override
@@ -13399,7 +13399,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'ממתין בטלפון זה';
 
   @override
-  String get syncDetailsTranscribing => 'מתמלל ב-Omi';
+  String get syncDetailsTranscribing => 'הועלה, בהמתנה לשרת';
 
   @override
   String get syncDetailsAudioFiles => 'קובצי אודיו';
@@ -15444,4 +15444,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'כותבים את הסיכום שלך…';
+
+  @override
+  String get onTheWayServerWork => 'עבודה שדווחה מהשרת';
 }

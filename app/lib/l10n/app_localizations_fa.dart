@@ -12222,7 +12222,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'از زمان جفت‌سازی: $drops قطعی، $failed اتصال ناموفق.';
+    return 'از زمان جفت‌سازی: $drops اتصال مجدد، $failed اتصال ناموفق.';
   }
 
   @override
@@ -13492,7 +13492,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'در انتظار این گوشی';
 
   @override
-  String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
+  String get syncDetailsTranscribing => 'بارگذاری شد، در انتظار سرور';
 
   @override
   String get syncDetailsAudioFiles => 'فایل‌های صوتی';
@@ -15549,4 +15549,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'در حال نوشتن خلاصه شما…';
+
+  @override
+  String get onTheWayServerWork => 'کار گزارش‌شده توسط سرور';
 }

@@ -60,6 +60,9 @@ class WalListItem extends StatelessWidget {
 
   (Color, String) _rowStatus(BuildContext context, bool hasError) {
     final l = context.l10n;
+    if (wal.status == WalStatus.uploaded && !wal.countsAsPendingWork()) {
+      return (Colors.grey.shade400, l.transcriptionUnavailable);
+    }
     final state = wal.syncDisplayState;
     if (state == WalSyncDisplayState.syncing) {
       return (Colors.grey.shade300, l.syncStatusBackingUp);
@@ -71,7 +74,7 @@ class WalListItem extends StatelessWidget {
       case WalSyncDisplayState.synced:
         return (Colors.grey.shade500, l.statusProcessed);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, l.syncStatusUploaded);
+        return (Colors.grey.shade400, l.syncDetailsTranscribing);
       case WalSyncDisplayState.retrying:
         return (Colors.orangeAccent, l.syncStatusRetrying);
       case WalSyncDisplayState.failed:

@@ -12230,7 +12230,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Parituksen jälkeen: katkoksia $drops, epäonnistuneita yhteyksiä $failed.';
+    return 'Pariliitoksen jälkeen: $drops uudelleenyhdistämistä, $failed epäonnistunutta yhteyttä.';
   }
 
   @override
@@ -13501,7 +13501,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Odottaa tässä puhelimessa';
 
   @override
-  String get syncDetailsTranscribing => 'Litteroidaan Omissa';
+  String get syncDetailsTranscribing => 'Lähetetty, odottaa palvelinta';
 
   @override
   String get syncDetailsAudioFiles => 'Äänitiedostot';
@@ -15561,4 +15561,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Kirjoitetaan yhteenvetoasi…';
+
+  @override
+  String get onTheWayServerWork => 'Palvelimen ilmoittama työ';
 }

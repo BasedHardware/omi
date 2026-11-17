@@ -12291,7 +12291,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Des de l\'aparellament: $drops talls, $failed connexions fallides.';
+    return 'Des de l\'aparellament: $drops reconnexions, $failed connexions fallides.';
   }
 
   @override
@@ -13566,7 +13566,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Esperant aquest mòbil';
 
   @override
-  String get syncDetailsTranscribing => 'Transcrivint a Omi';
+  String get syncDetailsTranscribing => 'Pujat, esperant el servidor';
 
   @override
   String get syncDetailsAudioFiles => 'Fitxers d\'àudio';
@@ -15633,4 +15633,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Escrivint el teu resum…';
+
+  @override
+  String get onTheWayServerWork => 'Feina indicada pel servidor';
 }

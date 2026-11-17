@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Izpadi",
     "diagnosticsDropsPerHour": "približno {count} na uro",
     "diagnosticsLongestGap": "Najdaljši premor",
-    "diagnosticsSincePairingSummary": "Od seznanitve: izpadov {drops}, neuspešnih povezav {failed}.",
+    "diagnosticsSincePairingSummary": "Od seznanitve: {drops} ponovnih povezav, {failed} neuspelih povezav.",
     "diagnosticsLastDuration": "Zadnjih {duration}",
     "chatReplyOffline": "Povezava ni uspela. Preverite povezavo in poskusite znova.",
     "chatReplyServerError": "Na naši strani je šlo nekaj narobe. Poskusite znova.",
@@ -11554,7 +11554,7 @@
     "syncDetailsTransferSpeed": "Hitrost prenosa",
     "syncDetailsWaitingOnOmi": "Čaka na Omi",
     "syncDetailsWaitingOnPhone": "Čaka na tem telefonu",
-    "syncDetailsTranscribing": "Prepisovanje v Omi",
+    "syncDetailsTranscribing": "Naloženo, čaka na strežnik",
     "syncDetailsAudioFiles": "Zvočne datoteke",
     "syncDetailsServerJobs": "Opravila strežnika (končana / skupaj)",
     "syncDetailsCopy": "Kopiraj podrobnosti za podporo",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "Prenos {size} MB",
     "downloadNow": "Prenesi zdaj",
     "onWifiLater": "Pozneje prek Wi-Fi",
-    "conversationWritingSummary": "Pišemo vaš povzetek…"
+    "conversationWritingSummary": "Pišemo vaš povzetek…",
+    "onTheWayServerWork": "Delo, ki ga poroča strežnik"
 }

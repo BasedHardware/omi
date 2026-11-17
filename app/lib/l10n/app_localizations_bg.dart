@@ -12270,7 +12270,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'От сдвояването: $drops прекъсвания, $failed неуспешни връзки.';
+    return 'От сдвояването: $drops повторни свързвания, $failed неуспешни връзки.';
   }
 
   @override
@@ -13544,7 +13544,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чака на този телефон';
 
   @override
-  String get syncDetailsTranscribing => 'Транскрибира се в Omi';
+  String get syncDetailsTranscribing => 'Качено, изчаква сървъра';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлове';
@@ -15607,4 +15607,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишем вашето резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа, отчетена от сървъра';
 }

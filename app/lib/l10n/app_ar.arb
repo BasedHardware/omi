@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "الانقطاعات",
     "diagnosticsDropsPerHour": "حوالي {count} في الساعة",
     "diagnosticsLongestGap": "أطول انقطاع",
-    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} انقطاع، {failed} اتصال فاشل.",
+    "diagnosticsSincePairingSummary": "منذ الاقتران: {drops} إعادة اتصال، {failed} اتصال فاشل.",
     "diagnosticsLastDuration": "آخر {duration}",
     "chatReplyOffline": "تعذر الاتصال. تحقق من اتصالك وحاول مرة أخرى.",
     "chatReplyServerError": "حدث خطأ ما من جانبنا. يُرجى المحاولة مرة أخرى.",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "سرعة النقل",
     "syncDetailsWaitingOnOmi": "في انتظار Omi",
     "syncDetailsWaitingOnPhone": "في انتظار هذا الهاتف",
-    "syncDetailsTranscribing": "جارٍ النسخ في Omi",
+    "syncDetailsTranscribing": "تم الرفع، بانتظار الخادم",
     "syncDetailsAudioFiles": "ملفات صوتية",
     "syncDetailsServerJobs": "مهام الخادم (المكتملة / الإجمالي)",
     "syncDetailsCopy": "نسخ التفاصيل للدعم",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "تنزيل {size} ميغابايت",
     "downloadNow": "التنزيل الآن",
     "onWifiLater": "لاحقًا عبر Wi-Fi",
-    "conversationWritingSummary": "جارٍ كتابة ملخصك…"
+    "conversationWritingSummary": "جارٍ كتابة ملخصك…",
+    "onTheWayServerWork": "عمل أبلغ عنه الخادم"
 }

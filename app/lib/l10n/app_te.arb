@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "అంతరాయాలు",
     "diagnosticsDropsPerHour": "గంటకు సుమారు {count}",
     "diagnosticsLongestGap": "అతి పొడవైన విరామం",
-    "diagnosticsSincePairingSummary": "జతచేసినప్పటినుండి: {drops} అంతరాయాలు, {failed} విఫలమైన కనెక్షన్లు.",
+    "diagnosticsSincePairingSummary": "జత చేసినప్పటి నుండి: {drops} పునఃకనెక్షన్‌లు, {failed} విఫలమైన కనెక్షన్‌లు.",
     "diagnosticsLastDuration": "గత {duration}",
     "chatReplyOffline": "కనెక్ట్ చేయలేకపోయింది. మీ కనెక్షన్‌ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
     "chatReplyServerError": "మా వైపు ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
@@ -11554,7 +11554,7 @@
     "syncDetailsTransferSpeed": "బదిలీ వేగం",
     "syncDetailsWaitingOnOmi": "Omi లో వేచి ఉంది",
     "syncDetailsWaitingOnPhone": "ఈ ఫోన్‌లో వేచి ఉంది",
-    "syncDetailsTranscribing": "Omi లో ట్రాన్స్క్రైబ్ అవుతోంది",
+    "syncDetailsTranscribing": "అప్‌లోడ్ అయింది, సర్వర్ కోసం వేచి ఉంది",
     "syncDetailsAudioFiles": "ఆడియో ఫైళ్లు",
     "syncDetailsServerJobs": "సర్వర్ జాబ్‌లు (పూర్తైనవి / మొత్తం)",
     "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి",
@@ -12241,5 +12241,6 @@
     "onDeviceModelDownloadSize": "{size} MB డౌన్‌లోడ్",
     "downloadNow": "ఇప్పుడే డౌన్‌లోడ్ చేయండి",
     "onWifiLater": "తర్వాత Wi-Fiలో",
-    "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…"
+    "conversationWritingSummary": "మీ సారాంశం రాస్తున్నాం…",
+    "onTheWayServerWork": "సర్వర్ నివేదించిన పని"
 }

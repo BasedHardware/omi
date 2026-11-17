@@ -3765,7 +3765,7 @@
     "diagnosticsDrops": "切断",
     "diagnosticsDropsPerHour": "1時間に約{count}回",
     "diagnosticsLongestGap": "最長の途切れ",
-    "diagnosticsSincePairingSummary": "ペアリング以降: 切断 {drops} 回、接続の失敗 {failed} 回。",
+    "diagnosticsSincePairingSummary": "ペアリング以降：再接続 {drops} 回、接続失敗 {failed} 回。",
     "diagnosticsLastDuration": "直近{duration}",
     "chatReplyOffline": "接続できません。接続を確認してもう一度お試しください。",
     "chatReplyServerError": "こちら側で問題が発生しました。もう一度お試しください。",
@@ -4134,7 +4134,7 @@
     "syncDetailsTransferSpeed": "転送速度",
     "syncDetailsWaitingOnOmi": "Omi側で待機中",
     "syncDetailsWaitingOnPhone": "このスマホで待機中",
-    "syncDetailsTranscribing": "Omiで文字起こし中",
+    "syncDetailsTranscribing": "アップロード済み、サーバー待ち",
     "syncDetailsAudioFiles": "音声ファイル",
     "syncDetailsServerJobs": "サーバージョブ (完了 / 合計)",
     "syncDetailsCopy": "サポート用に詳細をコピー",
@@ -4684,5 +4684,6 @@
     "onDeviceModelDownloadSize": "{size} MB のダウンロード",
     "downloadNow": "今すぐダウンロード",
     "onWifiLater": "後で Wi-Fi で",
-    "conversationWritingSummary": "要約を作成しています…"
+    "conversationWritingSummary": "要約を作成しています…",
+    "onTheWayServerWork": "サーバーが報告した処理"
 }

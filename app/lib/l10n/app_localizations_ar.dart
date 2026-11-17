@@ -12154,7 +12154,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'منذ الاقتران: $drops انقطاع، $failed اتصال فاشل.';
+    return 'منذ الاقتران: $drops إعادة اتصال، $failed اتصال فاشل.';
   }
 
   @override
@@ -13421,7 +13421,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'في انتظار هذا الهاتف';
 
   @override
-  String get syncDetailsTranscribing => 'جارٍ النسخ في Omi';
+  String get syncDetailsTranscribing => 'تم الرفع، بانتظار الخادم';
 
   @override
   String get syncDetailsAudioFiles => 'ملفات صوتية';
@@ -15468,4 +15468,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'جارٍ كتابة ملخصك…';
+
+  @override
+  String get onTheWayServerWork => 'عمل أبلغ عنه الخادم';
 }

@@ -12275,7 +12275,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Párosítás óta: $drops kiesés, $failed sikertelen kapcsolat.';
+    return 'Párosítás óta: $drops újracsatlakozás, $failed sikertelen csatlakozás.';
   }
 
   @override
@@ -13549,7 +13549,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ezen a telefonon vár';
 
   @override
-  String get syncDetailsTranscribing => 'Átírás az Omin';
+  String get syncDetailsTranscribing => 'Feltöltve, várakozás a szerverre';
 
   @override
   String get syncDetailsAudioFiles => 'Hangfájlok';
@@ -15615,4 +15615,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Összefoglaló írása…';
+
+  @override
+  String get onTheWayServerWork => 'A szerver által jelzett munka';
 }
