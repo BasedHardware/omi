@@ -1121,6 +1121,9 @@ class OmiBleForegroundService : Service() {
         eventType: String
     ) {
         synchronized(DeviceHealthPersistence) {
+            val ringRead = if (eventType == "disconnect") {
+                bleManager.ringReadDiagnostics.disconnected(address.uppercase(), android.os.SystemClock.elapsedRealtime())
+            } else emptyMap()
             if (!DeviceHealthPersistence.enabled(this)) return
             val now = System.currentTimeMillis()
             // Judge the marker before the new row exists. A later commit of that
@@ -1171,6 +1174,7 @@ class OmiBleForegroundService : Service() {
                 put("appState", currentAppState())
                 put("timeToReconnectMs", 0L)
                 put("rssiTrend", trend)
+                for ((field, value) in ringRead) put(field, value)
             }
             history.put(event)
             val recovery = managed?.reconnectDiagnostics ?: BleReconnectDiagnostics()

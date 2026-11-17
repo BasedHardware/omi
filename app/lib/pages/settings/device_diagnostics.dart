@@ -1073,6 +1073,8 @@ Map<String, dynamic> feedbackDiagnosticsExportFields(
             'event_type': e['eventType'],
             'last_rssi': e['lastRssi'],
             'last_rssi_age_ms': e['lastRssiAgeMs'],
+            'ring_read_active': e['ring_read_active'],
+            'ring_read_age_ms': e['ring_read_age_ms'],
             'last_audio_notification_age_ms': e['lastAudioNotificationAgeMs'],
             'connection_duration_ms': e['connectionDurationMs'],
             'app_state': e['appState'],
