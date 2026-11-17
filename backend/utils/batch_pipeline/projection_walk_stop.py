@@ -29,6 +29,21 @@ WALK_STOPS = frozenset(
     }
 )
 _BLOCK_MESSAGE = re.compile(r'[a-z][a-z -]{0,63}')
+# Closed metric classes for a stop token. ``blocked_<token>`` is an open family
+# (a slug of a constant message), so a metric folds it to ``blocked_privacy`` or
+# ``blocked`` and the log line keeps the full token.
+STOP_CLASSES = tuple(sorted(WALK_STOPS | {'yield', 'blocked', 'blocked_privacy', 'other'}))
+
+
+def walk_stop_class(stop: str | None) -> str:
+    """The closed metric class of a walk/turn stop token."""
+    if stop in WALK_STOPS or stop == 'yield':
+        return stop
+    if isinstance(stop, str) and stop.startswith('blocked_privacy_'):
+        return 'blocked_privacy'
+    if isinstance(stop, str) and stop.startswith('blocked_'):
+        return 'blocked'
+    return 'other'
 
 
 def walk_head_stop(error: BaseException) -> str:

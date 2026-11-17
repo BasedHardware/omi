@@ -121,7 +121,8 @@ def test_log_metric_source_scopes_and_real_turn_extraction():
         for m in metrics.values()
         for suffix in (['_sum', '_count'] if m['metricDescriptor']['valueType'] == 'DISTRIBUTION' else [''])
     }
-    assert set(declared) == expected
+    # Log-based metrics are declared from their source file; other gmp-cloud-run declarations are app families.
+    assert {name for name in declared if name.startswith('logging_googleapis_com:')} == expected
     upload = metrics['omi_pipeline_upload_admission_503']['filter']
     for token in (
         'resource.type="cloud_run_revision"',

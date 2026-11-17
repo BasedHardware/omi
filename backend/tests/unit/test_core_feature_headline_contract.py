@@ -150,7 +150,8 @@ def test_capture_failures_can_be_read_by_reason():
 
 def test_first_screen_is_exactly_the_agreed_panels():
     panels = _top_level_outcome_tiles()
-    assert {p['id'] for p in panels} == {63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88)}
+    # 99-102: the recording-outcome tiles (transcript and summary within 15 min) and their trends.
+    assert {p['id'] for p in panels} == {63, 3, 2, 73, 4, 20, 36, 70, *range(80, 88), *range(99, 103)}
 
 
 def test_home_rows_tile_is_an_average_not_a_success_rate():

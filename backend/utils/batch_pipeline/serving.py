@@ -222,6 +222,7 @@ class Serving:
             )
         elif self.metrics:
             self.metrics.fresh_guard.deactivate()
+            self.metrics.recording_outcome.deactivate()
             self.metrics.delivered_share.deactivate()
         priority = []
         if owner_id is not None and self.projector and owner_chain_projection_enabled():
@@ -312,15 +313,21 @@ class Serving:
             self.held_pass_started = None
 
     def refresh_fresh_guard(self) -> bool:
-        """Use the maintenance lease, including outside the potentially slow pass."""
+        """Use the maintenance lease, including outside the potentially slow pass.
+
+        The recording-outcome counts ride the same lease and cadence: both are
+        measurement-only count aggregations that must not wait on maintenance.
+        """
         if not self.metrics:
             return False
         # Explicit reconcile bypasses the periodic lease; the guard never does.
         leads = self._leads(True)
         if leads:
             self.metrics.fresh_guard.refresh(self.store)
+            self.metrics.recording_outcome.refresh(self.store)
         else:
             self.metrics.fresh_guard.deactivate()
+            self.metrics.recording_outcome.deactivate()
         return leads
 
     def _maintain(self, *, recover_quarantine: bool, recovery_caller=None):

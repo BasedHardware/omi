@@ -170,6 +170,33 @@ BATCH_PIPELINE_INDEX_REQUIREMENTS = (
         'COLLECTION_GROUP',
         (_asc('record_lane_owner'), _asc('status'), _asc('finished_at'), _asc('__name__')),
     ),
+    # Recording-outcome SLI numerators. The finished-recordings denominator is
+    # served by record_seal_repair_oldest_completed above.
+    FirestoreIndexRequirement(
+        'recording_outcome_summarized',
+        'conversations',
+        'COLLECTION_GROUP',
+        (
+            _asc('record_lane_owner'),
+            _asc('status'),
+            _asc('summary_output_present'),
+            _asc('finished_at'),
+            _asc('__name__'),
+        ),
+    ),
+    # Two range fields: Firestore orders the inequality fields lexicographically.
+    FirestoreIndexRequirement(
+        'recording_outcome_transcribed',
+        'conversations',
+        'COLLECTION_GROUP',
+        (
+            _asc('record_lane_owner'),
+            _asc('status'),
+            _asc('finished_at'),
+            _asc('record_projection_revision'),
+            _asc('__name__'),
+        ),
+    ),
     # Newest-first operator discovery for the reversible no-speech terminal.
     # Equality on owner/status, then the capture clock descending.
     FirestoreIndexRequirement(

@@ -1306,6 +1306,34 @@ async def test_productive_continuation_never_peeks_or_backs_off(monkeypatch, dra
     assert not drain_timers and not drains.continuations
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'stop,stop_class',
+    [
+        # 2026-11-16: an unmarked GPU-worker result refused as a head held every later row for its owner.
+        ('blocked_immutable_result_binding_mismatch', 'blocked'),
+        ('blocked_privacy_disposition_requires_a_source_deletion_tombstone', 'blocked_privacy'),
+        ('privacy_blocked', 'privacy_blocked'),
+    ],
+)
+async def test_zero_progress_turn_is_counted_by_closed_stop_class(drain_timers, stop, stop_class):
+    from utils.batch_pipeline.metrics import PROJECTION_DRAIN_WALK_STOPS
+
+    log = ResultLog()
+    chain(log, BURST, 'a', 3)
+    projector = projector_for(log)
+    drains = projector.drains = projection_drain.OwnerDrains(projector)
+    projector.drain_step = lambda *a, **kw: projection.Walk([], [], False, stop)
+    child = PROJECTION_DRAIN_WALK_STOPS.labels(stop=stop_class, progress='none')
+    before = child._value.get()
+    drains.request([BURST])
+    await settle(projector)
+    assert child._value.get() == before + 1
+    # The open blocked_<slug> family never becomes a label value.
+    labels = {sample.labels['stop'] for metric in PROJECTION_DRAIN_WALK_STOPS.collect() for sample in metric.samples}
+    assert stop not in labels or stop == stop_class
+
+
 PRIVACY_STOPS = [
     ('blocked_privacy_disposition_requires_a_source_deletion_tombstone', 'tombstone'),
     ('blocked_privacy_refusal_no_longer_applies', 'refusal_no_longer_applies'),

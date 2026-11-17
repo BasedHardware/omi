@@ -692,6 +692,21 @@ exports the query window anchor only with valid counts; compare that exact
 inclusive window using `scripts/fresh_guard_cohort.py` (stored `fresh_capture`,
 never `fresh_first` or capture age). Scrapes still perform no IO.
 
+The same lease and timer also sample the recording-outcome SLI
+(`utils/batch_pipeline/recording_outcome.py`): three count aggregations over
+completed `batch_live_v1` conversations finished 45 to 15 minutes ago (all,
+`record_projection_revision > 0`, `summary_output_present == true`), published as
+`omi_batch_pipeline_recording_outcome_{finished,transcribed,summarized}_window_total`
+with `_sample_age_seconds` and `_sample_timestamp_seconds`. The denominator is
+every finished recording, so a stall lowers the shares. A failed triple withdraws
+the counts; counts expire at 180 s. `BATCH_PIPELINE_RECORDING_OUTCOME_ENABLED`
+(default on) suppresses queries and gauges. Pages and activation order:
+`docs/runbooks/recording-outcome.md`.
+
+Owner-drain turns count `omi_batch_projection_walk_stops_total{stop,progress}` with
+the closed `projection_walk_stop.STOP_CLASSES`; the open `blocked_<token>` family
+folds to `blocked` or `blocked_privacy` (the turn log keeps the token).
+
 The projection acknowledge also stamps `jobs.delivered_at` and
 `jobs.delivered_in_target` in the transaction that sets
 `projection_state=completed`. The only semantic reader is the delivered-share

@@ -168,7 +168,7 @@ def test_only_maintenance_leader_samples_even_for_explicit_reconcile(guard, peri
     memory.client, memory.namespace = client, 'batch_pipeline_dev'
     leader = Mock()
     leader.acquire.return_value = False
-    metrics = SimpleNamespace(fresh_guard=sampler, delivered_share=Mock(), refresh=Mock())
+    metrics = SimpleNamespace(fresh_guard=sampler, recording_outcome=Mock(), delivered_share=Mock(), refresh=Mock())
     service = Serving(memory, leader=leader, metrics=metrics)
     service.reconcile(periodic=periodic)
     assert client.calls == [] and samples(registry) == {}
@@ -262,7 +262,7 @@ async def test_guard_ticks_while_maintenance_is_stalled(guard, monkeypatch):
     service = Serving(
         memory,
         cleanup=stalled_cleanup,
-        metrics=SimpleNamespace(fresh_guard=sampler, delivered_share=Mock(), refresh=Mock()),
+        metrics=SimpleNamespace(fresh_guard=sampler, recording_outcome=Mock(), delivered_share=Mock(), refresh=Mock()),
         leader=SimpleNamespace(acquire=lambda: True),
     )
     stop = asyncio.Event()
