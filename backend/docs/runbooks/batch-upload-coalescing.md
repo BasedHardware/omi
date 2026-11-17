@@ -146,12 +146,11 @@ before removing compatible readers. Never roll back to an incompatible binary
 with nonterminal member receipts. Book $0 until the release-owner live readback
 proves reads per unchanged admitted audio-hour down with quality/custody PASS.
 
-
 ## Counts-only production diagnosis
 
 Sync and integration use `deploy/cloud_run_gmp_sync.yaml`, not the shared
-`omi_.*` sidecar profile. Retain `omi_batch_upload_coalescing_*` and
-`omi_batch_leader_lease_total` there. The retention test in
+`omi_.*` sidecar profile. Retain the explicitly listed coalescing hold/scan
+metrics and `omi_batch_leader_lease_total` there. The retention test in
 `tests/unit/test_attach_cloud_run_gmp_sidecar.py` covers both the hold outcomes
 and the strict scan's counter, histogram and last-success gauge. A registered
 zero gauge on a non-draining backend instance does not establish scan health.
@@ -167,9 +166,10 @@ sum by (outcome) (increase(omi_batch_leader_lease_total{role="upload_coalescing_
 
 An absent outcome counter is unknown until ingestion is qualified. Even after
 that, `accepted` is an observation count, not a unique-source denominator.
-The producer declines when its shared quota heartbeat is absent or older than
-five seconds; the GMP scrape interval is sixty seconds, so the last-success
-gauge alone cannot certify that five-second admission condition. Positive
+The producer declines when its shared quota heartbeat is absent, older than
+five seconds, or more than five seconds in the future. The GMP scrape interval
+is sixty seconds, so the last-success gauge alone cannot certify that
+five-second admission condition. Positive
 `accepted` and `drained_merged` observations establish execution separately.
 
 There is no coalescing-specific percentage or allowlist. Batch admission's
