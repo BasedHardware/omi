@@ -1,25 +1,32 @@
 # The drop hold is part of the reconnect protocol again
 
-`9791f032ef5` dropped `listen_reconnect.enabled()` from the teardown branch that
-holds a legacy (producer-less) mobile batch capture open after a socket drop.
-The hold only has an exit when the reconnect protocol runs: a drained producer
-lets the quiet check publish the close barrier. With `LISTEN_BATCH_RECONNECT_ENABLED`
-unset, every mobile batch drop held its row open with no barrier.
+#25460 made a mobile batch socket drop hold a legacy (producer-less) capture
+open when it has committed audio and a quiet check owns it. `72a09f9db9b`
+gated that hold on `LISTEN_BATCH_RECONNECT_ENABLED`, and `9791f032ef5` removed
+the gate again. Both changes reached prod together in the 2026-11-16 22:06Z
+backend-listen rollout (235baea), with the switch unset.
 
-This has been serving since the 2026-11-16 22:06Z backend-listen rollout (235baea).
-The stranded row stays the canonical recording-session binding, and every
-reconnect rolled into a new, empty `in_progress` generation about every 2 minutes.
-Owner rows: 47/47 closed before the rollout, 0/153 after. Fleet: the
-`batch_live_v1` `in_progress` share went from about 10% to 83-90% of finished
-captures per hour.
+The quiet check can only finalize a held capture once its recording-session
+lease expires. A reconnecting phone keeps renewing that lease, so the held row
+was never sealed. It stayed the canonical recording-session binding, and every
+reconnect conflicted with it and rolled into a new empty `in_progress`
+generation (no committed window) about every 2 minutes.
 
-The branch is gated on the switch again. With the protocol off, a drop
-finalizes exactly as it did before the protocol shipped. The hold remains
-available behind the switch.
+- Owner rows: 47/47 closed before the rollout, 0/153 after.
+- Fleet: the `batch_live_v1` `in_progress` share went from about 10% of
+  finished captures per hour to 83-90%.
+- Stock, finished 22:00Z-11:00Z: 43,989 rows, of which 610 have committed
+  audio (the held rows) and the rest are rollover stubs.
 
-Not in this change: closing the rows the storm already left (empty stubs and
-stranded captures). That needs a recording-session-lease and storage-proof
-fence, and is tracked separately.
+The hold is gated on the switch again. With the switch off, a drop finalizes
+the capture as it did before #25460. The tradeoff returns too: a long
+recording whose phone socket drops is split into several conversations. The
+hold remains available behind the switch, together with the reconnect
+protocol that gives it an exit.
 
-Tests: `backend/tests/unit/test_mobile_batch_disconnect.py`.
-Rollback: revert.
+This change stops new held rows, and with them new rollover stubs. It does not
+close rows the storm already left: the held captures with committed audio and
+the empty stubs. Their exit needs a durable writer-drain proof and a policy
+decision, and is tracked separately.
+
+Tests: `backend/tests/unit/test_mobile_batch_disconnect.py`. Rollback: revert.

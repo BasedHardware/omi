@@ -1,4 +1,4 @@
-"""A phone socket drop keeps its batch capture open; only desktop treats close as stop."""
+"""With LISTEN_BATCH_RECONNECT_ENABLED on, a phone socket drop keeps its batch capture open; off, it finalizes."""
 
 import asyncio
 from copy import deepcopy
@@ -156,6 +156,7 @@ async def test_phone_socket_drop_finalizes_when_the_reconnect_switch_is_off(monk
     teardown = Teardown(monkeypatch, row, tail={'server_batch_audio_end': NOW.timestamp() + 2})
     process = await teardown.run()
     process.assert_awaited_once_with('capture')
+    assert 'archive_close' not in teardown.calls  # no hold: process_conversation owns the close barrier
 
 
 @pytest.mark.asyncio
@@ -182,6 +183,8 @@ async def test_desktop_batch_socket_close_still_finalizes_immediately(monkeypatc
     ],
 )
 async def test_phone_drop_without_a_quiet_owner_or_audio_keeps_immediate_finalization(monkeypatch, case):
+    # With the switch on, these guards are what keep the drop hold from engaging.
+    monkeypatch.setenv('LISTEN_BATCH_RECONNECT_ENABLED', 'true')
     row = capture()
     options = {}
     if case == 'quiet_check_refused':

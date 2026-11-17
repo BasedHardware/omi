@@ -11,8 +11,9 @@ producer owns the row; tokens fence stale disconnects and audio metadata writes.
 `LISTEN_BATCH_RECONNECT_ENABLED` defaults **false** and enables only for trimmed,
 case-insensitive `true`. This is a temporary default-off rollout flag, reviewed by
 2026-11-20, per the Q12-R31 lead decision: old listeners can bypass the producer
-fence. An unconfigured deployment preserves origin/main's legacy behavior,
-including #25460's full-quiet-timeout mobile recovery for unmarked sessions.
+fence. An unconfigured deployment finalizes unmarked mobile sessions on drop;
+#25460's drop hold now also requires the switch (superseded by
+2026-11-17-drop-hold-regate.md).
 Switch-off refuses all marked-row claims. A reconnect to a drained hold durably
 ends it and rearms the existing quiet check due now, without acquiring its token.
 Workers with the switch off also treat a drained hold as due immediately and
