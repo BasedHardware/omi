@@ -7,6 +7,7 @@ from database import conversations_v3_processing as writers
 from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
+import importlib
 
 import pytest
 
@@ -17,6 +18,13 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 AT = datetime.now(timezone.utc)
 R = ('users', 'synthetic', 'conversations', 'r')
 L = ('users', 'synthetic', 'conversation_v3_leases', 'builder')
+
+
+@pytest.fixture(scope='module', autouse=True)
+def lifecycle_owner_import():
+    # Exercise real lifecycle transactions below, but load their owner during
+    # file setup, as the call-phase CPU guard requires for shared imports.
+    return importlib.import_module('utils.conversations.lifecycle')
 
 
 @pytest.fixture

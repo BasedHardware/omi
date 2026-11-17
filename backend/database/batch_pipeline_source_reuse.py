@@ -13,6 +13,7 @@ from config.batch_pipeline import FRESH_CAPTURE_LAG_SECONDS
 from database.batch_pipeline_staging import artifact_id
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from utils.batch_pipeline.retention import RECEIPT_RETENTION
+from utils.batch_pipeline.result_protocol import stamp
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
 from utils.batch_pipeline.scheduler import owner_key
 from utils.batch_pipeline import source_reuse
@@ -134,8 +135,6 @@ def enqueue_alias(tx, item, now, *, policy, proposal):
         'owner_key': key,
         'policy': policy.to_dict(),
         'policy_source': 'admission',
-        'protocol_version': 2,
-        'source_alias_version': 1,
         'source_alias': {'segment_id': canonical['segment_id']},
         'source_conversation_ids': canonical['dependencies'],
         'state': 'result_ready',
@@ -149,6 +148,7 @@ def enqueue_alias(tx, item, now, *, policy, proposal):
         'fresh_capture': now - item.capture_at - item.duration_seconds <= FRESH_CAPTURE_LAG_SECONDS,
         'result': WorkResult(item.segment_id, proposal['result_uri']).to_dict(),
     }
+    stamp(job, 'source_alias_version')
     tx.put('jobs', item.segment_id, job)
     owner['revision'] = owner.get('revision', 0) + 1
     tx.put('owners', key, owner)
