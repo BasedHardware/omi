@@ -177,7 +177,9 @@ def test_huh_completed_dead_letter_empty_decision_snapshot(monkeypatch, text, ve
         ({'title': 'Discussion notes'}, True),
         ({'title': 'Discussion 3'}, True),
         ({'title': 'Pilot budget'}, False),
-        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, False),
+        # A gist is not a delivered summary, so a retry is still offered.
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, True),
+        ({'title': 'Discussion notes', 'overview': 'Pilot budget approved'}, False),
     ],
 )
 def test_dead_letter_retryability_ignores_a_placeholder_title(monkeypatch, structured, retryable):

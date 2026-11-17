@@ -511,9 +511,9 @@ from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgume
         ({'title': 'Discussion notes'}, None),
         ({'title': 'Discussion 3'}, None),
         ({'title': 'Pilot budget'}, 'protected_content'),
-        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, 'protected_content'),
-        # Enrichment-only rows must still be admitted: a refusal retires the quiet
-        # obligation without closing the row.
+        # A refusal retires the quiet obligation without closing the row, so only
+        # content the summary contract respects may refuse admission.
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, None),
         ({'title': 'Discussion notes', 'participants': [{'name': 'Alex'}]}, None),
         ({'title': 'Discussion notes', 'insights': [{'text': 'Budget is tight.'}]}, None),
         ({'title': 'Discussion notes', 'salience': 'highlight'}, None),

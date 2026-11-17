@@ -19,13 +19,14 @@ Changed, all on by default with no new flag and no provider call of their own:
   deterministic minimum would drop them. `structured_is_rich` is unchanged: it verifies a fresh
   enrichment landed and must stay aligned with `summary_delivery.present`.
 - `recovery.structured_has_protected_content` no longer counts a placeholder as a real title. It
-  shares `_has_stored_text_content` (overview, gist, sections, tasks, events), which uses the note
-  policy's narration filter, so a row whose only text is "the transcript is unavailable" has no
-  content and is still replaceable. **New protection**: a gist now blocks recovery admission, the
-  recovery discard fence and `summary_retryable=True` at dead letter. That is intended: the Home
-  card preview reads the gist, so a retry chip beside it would misdescribe the row. Enrichment-only
-  fields (participants, insights, note claims, `meeting_type`, `salience`) deliberately do not block
-  admission: the quiet check retires an obligation on a refusal without closing the row.
+  shares `_has_stored_text_content` (overview, section bodies, tasks, events) with the note policy's
+  narration filter, so a row whose only text is "the transcript is unavailable" has no content and
+  is still replaceable. A section now counts by its body, matching the Home reader.
+- Admission deliberately does not refuse on a gist or on enrichment-only fields. The quiet check
+  retires an obligation on a refusal without closing the row, so those would strand it. A gist-only
+  row is admitted instead: it either regenerates its notes or dead-letters with the gist intact. A
+  discarded row keeps its stored structure too; only the minimum replacement would drop it, and
+  that is blocked.
 - `conversation_terminal_title._title_update` keeps its promise that a kept visible terminal row
   leaves titled: a blank title is always replaced, and a placeholder label is replaced unless real
   notes sit beside it (that row keeps its notes and its headline).
@@ -34,14 +35,6 @@ Not changed: the Home step. `home_step.classify`'s legacy branch still reads a n
 an unstamped placeholder-only row still reads `ready` rather than the bounded wait. That rule
 belongs with the `transcribing_hold` receipt gate; widening it here would hide transcript-bearing
 rows on list reads that omit `transcript_segments`.
-
-Residual, documented rather than repaired: an `in_progress` row whose only stored content is a
-gist is refused recovery admission, and the quiet check retires its obligation, so no path closes
-it. The same row with a placeholder title was already refused before this change, so the new
-exposure is a gist-bearing row with an empty title. Such a row is rare, it is not hidden by the
-Home processing-age bound (that bound applies to `processing`/`merging`, not `in_progress`), and it
-stays presented as an in-progress capture. Closing it needs a repair pass that keeps the gist, a
-later and separately approved write.
 
 Relaxing `structured_has_protected_content` admits placeholder-only rows that were previously
 refused to normal processing, which may summarize them. The change adds no provider call of its
@@ -52,4 +45,5 @@ own.
 Evidence: `tests/unit/test_notes_pending_title.py`,
 `tests/unit/test_empty_structure_minimum_fallback.py`,
 `tests/unit/test_conversation_quiet_finalization.py`,
-`tests/unit/test_terminal_relevance.py`, `tests/unit/test_dead_letter_visible_row_title.py`.
+`tests/unit/test_terminal_relevance.py`, `tests/unit/test_dead_letter_visible_row_title.py`,
+`tests/unit/test_selfheal_recovery.py`.

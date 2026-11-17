@@ -280,10 +280,11 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
         ({'title': ''}, False),
         ({'title': 'Pilot budget'}, True),
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
-        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
         ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, False),
-        # These block replacement, not admission: refusing admission would retire
-        # the quiet obligation without closing the row.
+        # A gist and enrichment-only fields block replacement, not admission:
+        # refusing admission would retire the quiet obligation without closing
+        # the row.
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
         ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
         ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
         ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),

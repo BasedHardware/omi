@@ -2,7 +2,7 @@
 
 Narrower than the typed refusal it replaces: only a kept, decoded, non-empty plain
 conversation whose stored structure is replaceable. Every other case keeps the
-refusal, so rich or titled stored content is never overwritten.
+refusal, so contentful or titled stored content is never overwritten.
 """
 
 from __future__ import annotations

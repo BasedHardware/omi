@@ -21,14 +21,12 @@ RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
 _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
-# Content that makes a stored row worth keeping but that
-# ``summary_delivery.present`` does not count as a summary. ``gist`` and
-# ``overview`` are judged with the note policy's narration filter.
-_PROTECTED_STRUCTURED_NOTE_FIELDS = ('overview', 'gist')
+# Content the summary contract respects: a note body or a generated list.
+_PROTECTED_STRUCTURED_TEXT_FIELDS = ('overview',)
 _PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
-# Enrichment the deterministic minimum would drop. It blocks replacement but not
-# admission: refusing admission retires the quiet obligation without closing the
-# row, so only content the summary contract already respects may do that.
+# Content the deterministic minimum would drop. It blocks replacement but not
+# admission: a refusal retires the quiet obligation without closing the row, so
+# only content the summary contract already respects may refuse admission.
 _REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims', 'meeting_type', 'salience')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
@@ -131,21 +129,35 @@ def structured_is_rich(structured: Any) -> bool:
 def _has_stored_text_content(structured: Any) -> bool:
     """Content the summary contract respects: a note body or a generated list.
 
-    Overview and gist use the note policy's narration filter, so a row whose only
-    text is "the transcript is unavailable" has no content here either.
+    Overview and section bodies use the note policy's narration filter, so a row
+    whose only text is "the transcript is unavailable" has no content here.
     """
-    for name in _PROTECTED_STRUCTURED_NOTE_FIELDS:
+    for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
         value = _field(structured, name)
         if isinstance(value, str) and safe_body(value).strip():
             return True
-    return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_LIST_FIELDS)
+    sections = _field(structured, 'sections')
+    if isinstance(sections, (list, tuple)) and any(
+        isinstance(section, Mapping) and safe_body(_field(section, 'body_markdown')).strip() for section in sections
+    ):
+        return True
+    return any(_field(structured, name) for name in ('action_items', 'events'))
 
 
 def _has_replace_blocking_content(structured: Any) -> bool:
-    """Everything the deterministic minimum would drop if it replaced this structure."""
-    return _has_stored_text_content(structured) or any(
-        _field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS
-    )
+    """Everything the deterministic minimum would drop if it replaced this structure.
+
+    A gist counts here but not for admission: a gist-only row that is refused
+    admission would retire its quiet obligation without any path closing it,
+    while a gist-only row that reaches enrichment either regenerates the gist or
+    dead-letters with it intact.
+    """
+    if _has_stored_text_content(structured):
+        return True
+    gist = _field(structured, 'gist')
+    if isinstance(gist, str) and safe_body(gist).strip():
+        return True
+    return any(_field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS)
 
 
 def stored_structure_is_replaceable(structured: Any) -> bool:
