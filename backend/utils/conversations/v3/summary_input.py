@@ -72,6 +72,25 @@ def fingerprint(row):
     values['source'] = values['source'] or 'omi'
     values['kind'] = values['kind'] or 'conversation'
     values['manual_end'] = bool(values['manual_end'])
+    corrections = policy.field(row, 'user_corrections') or []
+    values['correction_context_text'] = [str(note.get('note', ''))[:2000] for note in corrections[-100:]]
+    values['correction_identity_text'] = [str(note.get('note') or '') for note in corrections]
+    values['capture_group_members'] = [
+        {
+            'id': policy.field(member, 'id'),
+            'source': getattr(policy.field(member, 'source'), 'value', policy.field(member, 'source')),
+        }
+        for member in policy.field(policy.field(row, 'capture_group'), 'members') or []
+        if isinstance(policy.field(member, 'id'), str) and policy.field(member, 'id')
+    ]
+    values['reminder_clock'] = (
+        {
+            'started_at': policy.field(row, 'recorded_start') or values['started_at'],
+            'capture_timezone': policy.field(row, 'capture_timezone') or None,
+        }
+        if values['source'] == 'desktop'
+        else None
+    )
     values['speaker_resolution_available'] = (
         policy.field(policy.field(row, 'speaker_resolution'), 'status') != 'unavailable'
     )

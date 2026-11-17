@@ -638,10 +638,17 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('resolve_speaker', [False, True])
-@pytest.mark.parametrize('owner', ['automatic', 'explicit'])
-@pytest.mark.parametrize('photo_mode', ['none', 'subcollection', 'race'])
+@pytest.mark.parametrize(
+    'owner,photo_mode,correction_mode',
+    [(owner, photo, 'none') for owner in ['automatic', 'explicit'] for photo in ['none', 'subcollection', 'race']]
+    + [
+        (owner, 'none', correction)
+        for owner in ['automatic', 'explicit']
+        for correction in ['confirmed_correction', 'correction_race']
+    ],
+)
 async def test_real_final_processor_persists_new_calendar_context_before_freshness_stamp(
-    seeded, monkeypatch, resolve_speaker, owner, photo_mode
+    seeded, monkeypatch, resolve_speaker, owner, photo_mode, correction_mode
 ):
     import inspect
     from models.calendar_context import CalendarMeetingContext
@@ -650,6 +657,10 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
 
     client, uid, cid, rid, coll = seeded
     row = coll.document(cid).get().to_dict()
+    correction = [{'note': 'It was Phong, not Michael Liebmann.', 'at': 'diagnostic'}]
+    if correction_mode == 'confirmed_correction':
+        coll.document(cid).update({'user_corrections': correction})
+    source_generation = coll.document(rid).get().to_dict()['v3_quiet_generation']
     if photo_mode != 'none':
         from models.conversation_photo import ConversationPhoto
 
@@ -714,6 +725,11 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
             if photo_mode == 'race':
                 coll.document(cid).collection('photos').document('frame').update({'description': 'Corrected evidence.'})
         observed.append(conversation.id)
+        if correction_mode == 'confirmed_correction':
+            assert conversation.user_corrections == correction
+        if correction_mode == 'correction_race':
+            assert not conversation.user_corrections
+            coll.document(cid).update({'user_corrections': correction})
         return (
             Structured(
                 title='Plan',
@@ -749,11 +765,17 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
             persistence_observer=lambda success: None,
         )
 
-    if photo_mode == 'race':
+    if photo_mode == 'race' or correction_mode == 'correction_race':
         with pytest.raises(store.Conflict, match='processing_source_changed'):
             await run_owner()
         assert not summary.fresh(store.conversations.get_conversation(uid, cid, firestore_client=client))
         assert observed == [cid]
+        if correction_mode == 'correction_race':
+            assert (
+                store.conversations.get_conversation(uid, cid, firestore_client=client)['user_corrections']
+                == correction
+            )
+        assert coll.document(rid).get().to_dict()['v3_quiet_generation'] == source_generation
         return
     await run_owner()
     await service.drain_processing(uid)
@@ -762,6 +784,7 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
     assert current['transcript_segments'][0]['is_user'] is (not resolve_speaker)
     assert summary.fresh(current) and current['summary_is_snapshot'] is False
     assert not current['v3_process_pending'] and current['tile_state'] == 'done' and observed == [cid]
+    assert coll.document(rid).get().to_dict()['v3_quiet_generation'] == source_generation
     monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('calendar final notes bought again'))
     assert await summary.prepare(uid, current) is None
 

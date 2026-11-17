@@ -13,6 +13,14 @@ from models.conversation_photo import ConversationPhoto
 from models.other import Person
 from utils.llm import notes_packet
 from utils.conversations import transcript_repeats
+from utils.conversations import meeting_notes_wiring as notes_wiring
+from utils.llm.notes_identity import notes_identity
+from utils.llm.notes_output_contract import _finish_identity
+from utils.llm.conversation_prompt_context import ConversationPromptPrefix
+from models.structured import Structured
+from utils.conversations import screen_frame_evidence
+from utils.conversations import llm_input_dedupe
+from utils.task_intelligence import reminder_policy
 from utils.conversations.v3 import quiet, summary_input, summary, triggers, service, renewal
 from utils.conversations import process_conversation as process
 from utils.conversations import transcript_for_llm as transcript
@@ -82,6 +90,169 @@ def test_owner_authority_changes_actual_notes_and_freshness(monkeypatch, authori
     )
     after, voices = transcript.conversation_transcript_and_speaker_map('u', Conversation(**original))
     assert 'Nik' in voices.values()
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+
+
+def test_confirmed_correction_changes_context_identity_output_and_final_reuse(real_notes_seam, monkeypatch):
+    monkeypatch.setattr(process, 'content_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(process, 'quiet_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(notes_wiring, '_rich_meeting_roster', lambda *a: (None, [], False, ()))
+    original = row(
+        status='completed',
+        summary_is_snapshot=False,
+        structured={'title': 'Old notes', 'sections': [{'heading': 'Plan', 'body_markdown': 'Prior identity.'}]},
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    old = Conversation(**original)
+    assert (
+        notes_wiring.rich_notes_inputs('u', old, None, 'UTC', include_background=False, include_screen_text=True)[1]
+        is None
+    )
+    prefix = ConversationPromptPrefix(conversation_id='c', context='Planning', transcript_body='[s1 c0] Plan Friday.')
+    assert not notes_identity(prefix, notes_wiring.notes_agent_inputs(old, False)).supported('Phong')
+    original['user_corrections'] = [{'note': 'It was Phong, not Michael Liebmann.', 'at': 'diagnostic'}]
+    corrected = Conversation(**original)
+    context = notes_wiring.rich_notes_inputs(
+        'u', corrected, None, 'UTC', include_background=False, include_screen_text=True
+    )[1]
+    assert 'It was Phong, not Michael Liebmann.' in context
+    inputs = notes_wiring.notes_agent_inputs(corrected, False)
+    identity = notes_identity(prefix, inputs)
+    assert identity.supported('Phong') and not identity.supported('Michael Liebmann')
+    output = _finish_identity(
+        Structured(
+            title='Planning',
+            participants=[
+                {'name': 'Phong', 'source': 'transcript'},
+                {'name': 'Michael Liebmann', 'source': 'transcript'},
+            ],
+        ),
+        prefix,
+        inputs,
+    )
+    assert [p.name for p in output.participants] == ['Phong']
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(corrected)
+    with summary.models.notes_mode('u'):
+        process._get_structured('u', 'en', corrected)
+    assert len(real_notes_seam) == 1
+
+
+def test_correction_identity_keeps_order_and_consumer_empty_semantics():
+    original = row()
+    assert summary_input.fingerprint(original) == summary_input.fingerprint({**original, 'user_corrections': []})
+    assert summary_input.fingerprint(original) == summary_input.fingerprint({**original, 'user_corrections': None})
+    one = {**original, 'user_corrections': [{'note': 'It was Phong.', 'at': 1}, {'note': 'Not Michael.', 'at': 2}]}
+    assert summary_input.fingerprint(one) == summary_input.fingerprint(Conversation(**one))
+    assert summary_input.fingerprint(one) == summary_input.fingerprint(
+        {
+            **one,
+            'user_corrections': [
+                {'note': 'It was Phong.', 'at': 99},
+                {'note': 'Not Michael.', 'diagnostic': 'changed'},
+            ],
+        }
+    )
+    assert summary_input.fingerprint(one) != summary_input.fingerprint(
+        {**one, 'user_corrections': list(reversed(one['user_corrections']))}
+    )
+    assert summary_input.fingerprint(original) != summary_input.fingerprint({**original, 'user_corrections': [{}]})
+    assert summary_input.fingerprint({**original, 'user_corrections': [{'note': None}]}) != summary_input.fingerprint(
+        {**original, 'user_corrections': [{}]}
+    )
+
+
+def test_capture_group_member_selector_changes_actual_v3_rich_roster(monkeypatch):
+    original = row(
+        source='desktop',
+        external_data={'conversation_role': 'meeting'},
+        capture_group={
+            'id': 'group',
+            'primary_id': 'c',
+            'members': [{'id': 'c', 'source': 'omi'}, {'id': 'desktop-member', 'source': 'omi'}],
+        },
+    )
+    monkeypatch.setattr(screen_frame_evidence, 'capture_group_primary_notes_enabled', lambda: True)
+    monkeypatch.setattr(
+        screen_frame_evidence, 'shared_speech_group_record', lambda uid, c: c.capture_group.model_dump()
+    )
+    monkeypatch.setattr(
+        screen_frame_evidence,
+        'load_screen_frame_evidence',
+        lambda uid, cid: (
+            ()
+            if cid == 'c'
+            else (
+                screen_frame_evidence.ScreenFrameEvidence(
+                    'frame', AT, 'strip', 1, ('Phong',), 'Planning with Phong.', cid
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        screen_frame_evidence.conversations_db,
+        'get_conversation_raw_snapshot',
+        lambda *a, **kw: {
+            'visibility': 'public',
+            'external_data': {'conversation_role': 'meeting'},
+            'screenshot_sharing_enabled': True,
+        },
+    )
+    monkeypatch.setattr(
+        notes_wiring,
+        'meeting_context_sources',
+        lambda: SimpleNamespace(
+            load_people_documents=lambda *a: [],
+            resolve_owner_identity=lambda *a: ('Nik', []),
+        ),
+    )
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before = notes_wiring.rich_notes_inputs(
+        'u', Conversation(**original), None, 'UTC', include_background=False, include_screen_text=True
+    )
+    assert before[4] == 0
+    original['capture_group']['members'][1]['source'] = 'desktop'
+    after = notes_wiring.rich_notes_inputs(
+        'u', Conversation(**original), None, 'UTC', include_background=False, include_screen_text=True
+    )
+    assert after[4] == 1 and any(e.display_name == 'Phong' for e in after[0].entries)
+    assert not summary.fresh(original)
+    assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
+
+
+@pytest.mark.parametrize('field', ['recorded_start', 'capture_timezone'])
+def test_desktop_reminder_clock_reaches_notes_and_changes_due_output(monkeypatch, field):
+    original = row(source='desktop', recorded_start=AT.replace(hour=1), capture_timezone='UTC')
+    monkeypatch.setattr(reminder_policy, 'enabled', lambda: True)
+    monkeypatch.setattr(llm_input_dedupe, 'dedupe_enabled', lambda: False)
+
+    def due(data):
+        seen = []
+        c = Conversation(**data)
+        llm_input_dedupe.notes(
+            'u',
+            c,
+            'prefix',
+            lambda *a, **kw: seen.append(kw['reminder_source']),
+            None,
+            task_intelligence_capture=process._proposes_task_candidates(c),
+        )
+        clock = seen[0]
+        return reminder_policy.resolve_due(
+            'tomorrow', source_at=clock['started_at'], capture_timezone=clock['capture_timezone']
+        )
+
+    original.update(
+        summary_covers_through=original['finished_at'], summary_input_hash=summary_input.fingerprint(original)
+    )
+    before = due(original)
+    original[field] = original[field] + timedelta(days=1) if field == 'recorded_start' else 'America/Los_Angeles'
+    assert due(original) != before
     assert not summary.fresh(original)
     assert summary_input.fingerprint(original) == summary_input.fingerprint(Conversation(**original))
 
