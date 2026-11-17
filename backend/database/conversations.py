@@ -1721,6 +1721,12 @@ def persist_processing_result_with_lifecycle(
         summary_changed = processing_backlog.stage_transition(
             transaction, uid, conversation_data['id'], existing, write_data, firestore_client=db
         )
+        # A replacement output cannot inherit a checkpoint for an older result,
+        # even if a concurrent undo returns its inputs to that old checkpoint.
+        if 'structured' in write_data:
+            for field in ('summary_covers_through', 'summary_input_hash', 'summary_is_snapshot'):
+                if field in existing or field in write_data:
+                    write_data[field] = None
         if family_enabled:
             transaction.update(conversation_ref, _processing_result_update_fields(write_data))
         else:

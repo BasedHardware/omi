@@ -73,6 +73,20 @@ def test_summary_commit_preserves_record_lane_owner(writer, record_owner):
     assert writer.commits[0]['summary_completed_at']
 
 
+@pytest.mark.parametrize('family_mode', ['on', 'off'])
+def test_replacement_output_clears_previous_exact_stamp_in_its_commit(writer, monkeypatch, family_mode):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', family_mode)
+    writer.document.update(
+        summary_input_hash='previous-input',
+        summary_covers_through=datetime.now(timezone.utc),
+        summary_is_snapshot=False,
+    )
+    assert db.persist_processing_result_with_lifecycle('u', payload('Replacement output'))
+    written = writer.commits[0]
+    assert written['structured']['overview'] == 'Replacement output'
+    assert all(written[key] is None for key in ('summary_input_hash', 'summary_covers_through', 'summary_is_snapshot'))
+
+
 @pytest.mark.parametrize('sections_only', [False, True])
 def test_long_notes_use_the_lifecycle_summary_ledger_writer(writer, sections_only):
     notes = payload()

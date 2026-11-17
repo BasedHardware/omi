@@ -20,6 +20,7 @@ from google.cloud import firestore
 from database import _client, conversations_v3 as store, conversations_v3_leases as leases
 from database import conversations_v3_quiet as attempts, conversations_v3_processing as writers
 from utils.conversations.v3 import quiet, summary, summary_input, service
+from tests.unit.test_conversations_v3_stream import real_notes_seam
 
 pytestmark = pytest.mark.integration
 
@@ -650,6 +651,20 @@ async def test_normal_final_persistence_is_fresh_on_open_without_a_speculative_p
 async def test_real_final_processor_persists_new_calendar_context_before_freshness_stamp(
     seeded, monkeypatch, resolve_speaker, owner, photo_mode, correction_mode
 ):
+    await _real_final_processor_case(seeded, monkeypatch, resolve_speaker, owner, photo_mode, correction_mode)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('family_mode', ['on', 'off'])
+async def test_real_edit_undo_replacement_cannot_inherit_old_final_stamp(
+    seeded, monkeypatch, real_notes_seam, family_mode
+):
+    monkeypatch.setenv('CONVERSATION_TERMINAL_FAMILY_MODE', family_mode)
+    await _real_final_processor_case(seeded, monkeypatch, False, 'explicit', 'none', 'undo')
+    assert len(real_notes_seam) == 1, 'automatic recovery reused rejected replacement instead of generating A'
+
+
+async def _real_final_processor_case(seeded, monkeypatch, resolve_speaker, owner, photo_mode, correction_mode):
     import inspect
     from models.calendar_context import CalendarMeetingContext
     from models.structured import Structured
@@ -684,6 +699,21 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
         start_time=row['started_at'],
         duration_minutes=120,
     )
+    if correction_mode == 'undo':
+        from database import chat_edits
+
+        coll.document(cid).update(
+            {
+                'status': 'completed',
+                'user_title': 'My title',
+                'user_corrections': [],
+                'external_data': {'calendar_meeting_context': context.model_dump(mode='json')},
+                'structured': {
+                    'title': 'My title',
+                    'sections': [{'heading': 'Plan', 'body_markdown': 'Original A notes.'}],
+                },
+            }
+        )
     coll.document(cid).update({'status': 'processing', 'v3_process_pending': True})
     monkeypatch.setattr(pc.member_notes, 'before_notes', lambda *a, **kw: None)
     monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *a: False)
@@ -717,6 +747,17 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
     monkeypatch.setattr(pc, 'emit_finalized_owner_recognition', lambda *a, **kw: None)
     monkeypatch.setattr(store.conversations, '_sync_conversation_search_index', lambda *a, **kw: None)
     observed = []
+    warming_original = correction_mode == 'undo'
+    original_get_structured = pc._get_structured
+    before_settlement = []
+    if correction_mode == 'undo':
+        settle = writers.settle_processing
+
+        def observed_settle(*a, **kw):
+            before_settlement.append(store.conversations.get_conversation(uid, cid, firestore_client=client))
+            return settle(*a, **kw)
+
+        monkeypatch.setattr(writers, 'settle_processing', observed_settle)
 
     def notes(owner, language, conversation, **kw):
         assert conversation.external_data['calendar_meeting_context']['calendar_event_id'] == 'calendar-discovered'
@@ -730,11 +771,21 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
         if correction_mode == 'correction_race':
             assert not conversation.user_corrections
             coll.document(cid).update({'user_corrections': correction})
+        if correction_mode == 'undo' and not warming_original:
+            assert conversation.user_corrections == correction
+            chat_edits.restore(uid, 'conversation', cid, expected, previous, firestore_client=client)
+            restored = store.conversations.get_conversation(uid, cid, firestore_client=client)
+            assert not restored['user_corrections'] and summary_input.fingerprint(restored) == old_hash
         return (
             Structured(
                 title='Plan',
                 overview='Calendar-grounded final notes.',
-                sections=[{'heading': 'Plan', 'body_markdown': 'Ship on Friday with the calendar team.'}],
+                sections=[
+                    {
+                        'heading': 'Plan',
+                        'body_markdown': 'Original A notes.' if warming_original else 'Replacement B notes.',
+                    }
+                ],
             ),
             False,
         )
@@ -765,10 +816,31 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
             persistence_observer=lambda success: None,
         )
 
-    if photo_mode == 'race' or correction_mode == 'correction_race':
+    if correction_mode == 'undo':
+        # Start from an actual successful, already-enriched final A, so no
+        # incidental enrichment can make the round-trip input differ from A.
+        await run_owner()
+        warming_original = False
+        original = store.conversations.get_conversation(uid, cid, firestore_client=client)
+        assert summary.fresh(original) and original['summary_is_snapshot'] is False
+        old_hash = original['summary_input_hash']
+        previous = chat_edits.snapshot(uid, 'conversation', cid, firestore_client=client)
+        expected = store.conversations.update_conversation_chat(
+            uid,
+            cid,
+            previous,
+            {'structured': original['structured'], 'user_title': 'My title', 'user_corrections': correction},
+        )
+        assert not summary.fresh(store.conversations.get_conversation(uid, cid, firestore_client=client))
+        coll.document(cid).update({'v3_process_pending': True})
+        observed.clear()
+        before_settlement.clear()
+
+    if photo_mode == 'race' or correction_mode in {'correction_race', 'undo'}:
         with pytest.raises(store.Conflict, match='processing_source_changed'):
             await run_owner()
-        assert not summary.fresh(store.conversations.get_conversation(uid, cid, firestore_client=client))
+        rejected = store.conversations.get_conversation(uid, cid, firestore_client=client)
+        assert not summary.fresh(rejected)
         assert observed == [cid]
         if correction_mode == 'correction_race':
             assert (
@@ -776,6 +848,32 @@ async def test_real_final_processor_persists_new_calendar_context_before_freshne
                 == correction
             )
         assert coll.document(rid).get().to_dict()['v3_quiet_generation'] == source_generation
+        if correction_mode == 'undo':
+            assert rejected['structured']['sections'][0]['body_markdown'] == 'Replacement B notes.'
+            assert rejected['v3_process_pending'] and not rejected['user_corrections']
+            assert before_settlement[0]['structured'] == rejected['structured']
+            assert not summary.fresh(before_settlement[0]), 'replacement was already fresh before settlement ran'
+            assert all(
+                rejected.get(key) is None
+                for key in ('summary_input_hash', 'summary_covers_through', 'summary_is_snapshot')
+            )
+            reopen_token = await summary.prepare(uid, rejected)
+            assert reopen_token is not None, 'reopen trusted B under the previous A stamp'
+            leases.release(uid, 'summary-' + cid, reopen_token, firestore_client=client)
+            monkeypatch.setattr(pc, '_get_structured', original_get_structured)
+            monkeypatch.setattr(pc, 'content_minimum', lambda *a, **kw: None)
+            monkeypatch.setattr(pc, 'quiet_minimum', lambda *a, **kw: None)
+            await service.drain_processing(uid)
+            recovered = store.conversations.get_conversation(uid, cid, firestore_client=client)
+            assert recovered['structured']['sections'][0]['body_markdown'] == 'Meet tomorrow.'
+            assert summary.fresh(recovered) and recovered['summary_is_snapshot'] is False
+            assert not recovered['v3_process_pending'] and recovered['tile_state'] == 'done'
+            assert not recovered['user_corrections'] and recovered['user_title'] == 'My title'
+            assert coll.document(rid).get().to_dict()['v3_quiet_generation'] == source_generation
+            await service.drain_processing(uid)
+            monkeypatch.setattr(summary, 'write', lambda *a: pytest.fail('recovered final notes bought again'))
+            assert await summary.prepare(uid, recovered) is None
+            assert [frame async for frame in summary.stream(uid, recovered)][0].startswith('done: ')
         return
     await run_owner()
     await service.drain_processing(uid)
