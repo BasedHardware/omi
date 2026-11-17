@@ -60,7 +60,7 @@ def _prefetch_row(tx, segment_id, owner):
     """
     references = {}
     for address in [('jobs', segment_id), (OWNERS, owner)]:
-        reference = tx.client.collection(f'{tx.namespace}_{address[0]}').document(address[1])
+        reference = tx._ref(*address)
         references[reference.path] = (reference, address)
     seen = set()
     for snapshot in tx.client.get_all([reference for reference, _ in references.values()], transaction=tx.transaction):
