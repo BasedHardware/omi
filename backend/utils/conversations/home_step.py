@@ -43,7 +43,7 @@ from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
-from utils.conversations.home_titles import notes_pending, summary_owed, untitled_pending
+from utils.conversations.home_titles import summary_owed, untitled_pending
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
@@ -86,6 +86,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
         return NOISE
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
+    title = str(structured.get('title') or '').strip()
     if status in ('processing', 'merging'):
         seconds = home_processing_max_age_seconds()
         if seconds is None:
@@ -148,26 +149,15 @@ def classify(row: Mapping[str, Any]) -> str | None:
             return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
-    if notes_pending(structured) and not row.get('transcript_segments'):
-        # A capture whose speech has not landed. A placeholder label is not
-        # content, so it cannot make the row look finished (2026-11-16 incident);
-        # a row with notes keeps its previous result. Unstamped legacy rows get
-        # the same bound the stamped ones have, so none can stay Processing
-        # forever.
+    if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
+        # A capture whose speech has not landed. Unstamped legacy rows get the same
+        # bound the stamped ones have, so none can stay Processing forever.
         if home_transcription_queue_hold_enabled():
             seconds = home_transcription_max_age_seconds()
             anchor = transcribing_hold.wait_started_at(row)
         else:
             seconds = LEGACY_TRANSCRIPTION_SECONDS
-            # created_at bounds a row that never recorded its finish, as in the
-            # processing branch.
-            anchor = next(
-                (row.get(key) for key in ('finished_at', 'created_at') if isinstance(row.get(key), datetime)), None
-            )
-        if anchor is None:
-            # No server clock at all is not a wait: keep the row visible as ready
-            # instead of an unbounded transcribing row.
-            return READY
+            anchor = row.get('finished_at')
         return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 

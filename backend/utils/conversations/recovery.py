@@ -21,8 +21,19 @@ RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
 _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
-_PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview', 'gist')
-_PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
+# Content that makes a stored row worth keeping but that
+# ``summary_delivery.present`` does not count as a summary. ``gist`` and
+# ``overview`` are judged with the note policy's narration filter.
+_PROTECTED_STRUCTURED_NOTE_FIELDS = ('overview', 'gist')
+_PROTECTED_STRUCTURED_LIST_FIELDS = (
+    'sections',
+    'action_items',
+    'events',
+    'participants',
+    'insights',
+    'note_claims',
+)
+_PROTECTED_STRUCTURED_OPTIONAL_FIELDS = ('meeting_type', 'salience')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
@@ -121,26 +132,38 @@ def structured_is_rich(structured: Any) -> bool:
     return False
 
 
+def _has_note_content(structured: Any) -> bool:
+    """Whether stored structure holds notes worth keeping.
+
+    Broader than ``structured_is_rich``: that predicate verifies a fresh
+    enrichment landed and must stay aligned with ``summary_delivery.present``.
+    This one answers the admission question, so it also counts a gist, people,
+    insights, claim provenance, a meeting kind and a salience verdict, none of
+    which ``present`` treats as a summary. Overview and gist use the note
+    policy's narration filter, so a row whose only text is "the transcript is
+    unavailable" has no notes here either.
+    """
+    for name in _PROTECTED_STRUCTURED_NOTE_FIELDS:
+        value = _field(structured, name)
+        if isinstance(value, str) and safe_body(value).strip():
+            return True
+    for name in _PROTECTED_STRUCTURED_LIST_FIELDS:
+        if _field(structured, name):
+            return True
+    return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_OPTIONAL_FIELDS)
+
+
 def stored_structure_is_replaceable(structured: Any) -> bool:
     """Whether recovery may replace this stored structure with the deterministic minimum.
 
-    Not rich, and no real title. A placeholder label ("Discussion notes") is not
+    No notes and no real title. A placeholder label ("Discussion notes") is not
     a title, so a row that only carries one is still replaceable; a
     ``server_minimum`` stand-in is provisional by definition (2026-11-16
     incident). One owner for the rule: the recovery guard and the
     post-enrichment eligibility both call this.
-
-    A gist counts as content here even though ``structured_is_rich`` leaves it
-    out: that predicate also gates the typed recovery refusal, and
-    ``summary_delivery.present`` does not treat a gist as a summary, so widening
-    it would turn a refusal into a persist-time ``SummaryOutputUnavailable``.
     """
-    gist = _field(structured, 'gist')
-    has_gist = isinstance(gist, str) and bool(gist.strip())
-    return (
-        not structured_is_rich(structured)
-        and not has_gist
-        and (not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum')
+    return not _has_note_content(structured) and (
+        not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum'
     )
 
 
@@ -165,8 +188,8 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
     Admission and discard-commit predicate: unlike ``structured_is_rich`` (which verifies new
     enrichment actually landed), a real ``title`` — set by the user or by an
     earlier successful pass — and the user-authored ``user_title`` field each
-    make the row ineligible even with no overview, so recovery never clobbers
-    a useful title for a deterministic-minimum replacement. A placeholder label
+    make the row ineligible even with no notes, so recovery never clobbers a
+    useful title for a deterministic-minimum replacement. A placeholder label
     ("Discussion notes") is not a real title and protects nothing (2026-11-16
     incident).
     """
@@ -175,19 +198,7 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
             return True
     elif user_title:
         return True
-    for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
-        value = _field(structured, name)
-        if not isinstance(value, str):
-            continue
-        # A placeholder label is not a real title; every other text field is
-        # content, minus the availability narration the note policy drops, so
-        # this reader and ``home_titles.notes_pending`` agree on the same row.
-        if valid_title(value) if name == 'title' else safe_body(value).strip():
-            return True
-    for name in _PROTECTED_STRUCTURED_LIST_FIELDS:
-        if _field(structured, name):
-            return True
-    return False
+    return bool(valid_title(_field(structured, 'title'))) or _has_note_content(structured)
 
 
 def raw_transcript_bytes(conversation: Mapping[str, Any]) -> int:

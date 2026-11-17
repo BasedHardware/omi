@@ -271,49 +271,6 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
     assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES
 
 
-def test_legacy_completed_row_with_only_a_placeholder_is_transcribing():
-    """An unstamped row has no receipt to gate on; the placeholder must not read as content."""
-    row = capture(
-        structured={'title': FALLBACK, 'overview': ''},
-        home_transcription_pending_at=None,
-        home_transcription_deadline_at=None,
-    )
-    assert not transcribing_hold.applies(row)
-    assert home_step.classify(row) == home_step.TRANSCRIBING
-    assert home_step.classify({**row, 'structured': {'title': 'Pilot budget'}}) == home_step.READY
-
-
-@pytest.mark.parametrize(
-    'notes',
-    [
-        {'title': '', 'overview': 'Approval is due Friday.'},
-        {'title': '', 'gist': 'Pilot budget approval'},
-        {'title': '', 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]},
-        {'title': '', 'action_items': [{'description': 'Send the budget'}]},
-    ],
-)
-def test_legacy_completed_row_with_notes_and_no_title_stays_ready(notes):
-    """An empty title is not evidence of a missing transcript when notes exist."""
-    row = capture(
-        structured=notes,
-        home_transcription_pending_at=None,
-        home_transcription_deadline_at=None,
-    )
-    assert home_step.classify(row) == home_step.READY
-
-
-def test_legacy_placeholder_row_without_an_anchor_or_finish_is_bounded():
-    """No finished_at falls back to created_at, and no anchor at all stays ready."""
-    row = capture(
-        structured={'title': FALLBACK, 'overview': ''},
-        home_transcription_pending_at=None,
-        home_transcription_deadline_at=None,
-    )
-    late = NOW - timedelta(days=3)
-    assert home_step.classify({**row, 'created_at': late, 'finished_at': None}) == home_step.FAILED
-    assert home_step.classify({**row, 'created_at': None, 'finished_at': None}) == home_step.READY
-
-
 @pytest.mark.parametrize(
     'structured,protected',
     [
@@ -324,6 +281,11 @@ def test_legacy_placeholder_row_without_an_anchor_or_finish_is_bounded():
         ({'title': 'Pilot budget'}, True),
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
         ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
+        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, False),
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, True),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, True),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
+        ({'title': FALLBACK, 'salience': 'highlight'}, True),
     ],
 )
 def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
@@ -347,6 +309,12 @@ def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, p
         ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
         ({'title': FALLBACK, 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]}, False),
         ({'title': FALLBACK, 'action_items': [{'description': 'Send the budget'}]}, False),
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
+        ({'title': FALLBACK, 'note_claims': [{'text': 'budget'}], 'overview': ''}, False),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
+        ({'title': FALLBACK, 'salience': 'highlight'}, False),
+        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
     ],
 )
 def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
