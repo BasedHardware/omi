@@ -29,6 +29,10 @@ _PROTECTED_STRUCTURED_TEXT_FIELDS = ('overview',)
 # admission: a refusal retires the quiet obligation without closing the row, so
 # only content the summary contract already respects may refuse admission.
 _REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims')
+# The minimum pins category ``other`` and its neutral emoji. A row that already
+# chose a different one keeps it by refusing replacement.
+_MINIMUM_CATEGORY = 'other'
+_NEUTRAL_EMOJIS = frozenset({'💬', '🧠'})
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
@@ -164,7 +168,13 @@ def _has_replace_blocking_content(structured: Any) -> bool:
     gist = _field(structured, 'gist')
     if isinstance(gist, str) and safe_body(gist).strip():
         return True
-    return any(_field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS)
+    if any(_field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS):
+        return True
+    category = _field(structured, 'category')
+    if category and str(getattr(category, 'value', category)) != _MINIMUM_CATEGORY:
+        return True
+    emoji = _field(structured, 'emoji')
+    return isinstance(emoji, str) and bool(emoji.strip()) and emoji not in _NEUTRAL_EMOJIS
 
 
 def stored_structure_is_replaceable(structured: Any) -> bool:
@@ -213,6 +223,18 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
     elif user_title:
         return True
     return bool(valid_title(_field(structured, 'title'))) or _has_stored_text_content(structured)
+
+
+def recovery_discard_would_lose_content(structured: Any, user_title: Any = None) -> bool:
+    """Whether a recovery discard would erase content this row keeps.
+
+    A discard writes the empty discard structure, so it is refused whenever the
+    row carries a real title, user title or note body, and whenever the
+    deterministic minimum would refuse to replace it. Refusing here preserves a
+    visible row for the typed-minimum terminal path instead of a contradictory
+    completed discard.
+    """
+    return structured_has_protected_content(structured, user_title) or not stored_structure_is_replaceable(structured)
 
 
 def raw_transcript_bytes(conversation: Mapping[str, Any]) -> int:

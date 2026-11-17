@@ -319,6 +319,11 @@ def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, p
         ({'title': FALLBACK, 'salience': 'highlight'}, True),
         ({'title': FALLBACK, 'sections': 'not-a-list'}, False),
         ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
+        # The minimum pins category other and a neutral emoji, so a row that
+        # already chose a different one keeps it by refusing replacement.
+        ({'title': FALLBACK, 'category': 'business'}, False),
+        ({'title': FALLBACK, 'emoji': '🚀'}, False),
+        ({'title': FALLBACK, 'category': 'other', 'emoji': '💬'}, True),
     ],
 )
 def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
@@ -337,3 +342,21 @@ def test_stored_structure_is_replaceable_reads_real_section_bodies_on_the_model(
     assert stored_structure_is_replaceable(with_body) is False
     empty_body = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': ''}])
     assert stored_structure_is_replaceable(empty_body) is True
+
+
+@pytest.mark.parametrize(
+    'structured,would_lose',
+    [
+        ({'title': FALLBACK}, False),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, True),
+        ({'title': 'Discussion notes', 'participants': [{'name': 'Alex'}]}, True),
+        ({'title': 'Pilot budget'}, True),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+    ],
+)
+def test_recovery_discard_refuses_anything_the_minimum_would_keep(structured, would_lose):
+    """The discard commit writes the empty discard structure, so it must not erase notes."""
+    from utils.conversations.recovery import recovery_discard_would_lose_content
+
+    assert recovery_discard_would_lose_content(structured) is would_lose
+    assert recovery_discard_would_lose_content(structured, user_title='My chat') is True

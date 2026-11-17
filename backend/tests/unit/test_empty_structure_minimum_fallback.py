@@ -337,7 +337,12 @@ def test_recovery_guard_replaces_only_a_placeholder_title(pc, monkeypatch, title
     monkeypatch.setattr(pc, 'get_conversation_notes', lambda *a, **kw: Structured())
 
     structured, _ = pc._get_structured('uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SERVER_RECOVERY)
-    assert (structured.title_provenance == 'server_minimum') is replaced
+    if replaced:
+        assert structured.title_provenance == 'server_minimum'
+    else:
+        # The guard did not take the minimum branch: the stored title is untouched.
+        assert structured.title_provenance != 'server_minimum'
+        assert conversation.structured.title == title
 
 
 def _eligibility_arguments(conversation, structured, **overrides):

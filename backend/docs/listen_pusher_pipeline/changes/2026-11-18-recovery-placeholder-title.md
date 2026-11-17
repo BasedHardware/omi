@@ -14,22 +14,23 @@ Changed, all on by default with no new flag and no provider call of their own:
   `server_minimum` stand-in keep their previous meaning. `process_conversation` recovery's
   `stored_content_is_replaceable` and `empty_structure_minimum._eligible` both call it, so the
   predicate has one owner.
-- Replacement is blocked by more fields than admission is. `_has_replace_blocking_content` also
-  counts a gist, participants, insights, note claims, `meeting_type` and `salience`, because the
-  deterministic minimum would drop them. `structured_is_rich` is unchanged: it verifies a fresh
-  enrichment landed and must stay aligned with `summary_delivery.present`.
+- The replacement check counts content the deterministic minimum would drop: a gist, participants,
+  insights and note claims, plus a non-default category or a non-neutral emoji. `meeting_type` and
+  `salience` do not block it: they are metadata whose minimum value the presentation already
+  handles, and blocking them would send a metadata-only row to a paid notes call. `structured_is_rich`
+  is unchanged: it verifies a fresh enrichment landed and must stay aligned with
+  `summary_delivery.present`.
 - `recovery.structured_has_protected_content` no longer counts a placeholder as a real title. It
   shares `_has_stored_text_content` (overview, section bodies, tasks, events) with the note policy's
   narration filter, so a row whose only text is "the transcript is unavailable" has no content and
-  is still replaceable. A section now counts by its body, matching the Home reader.
+  is still replaceable. A section counts by its body, matching the Home reader, on the `Structured`
+  model as well as a dict.
 - Admission deliberately does not refuse on a gist or on enrichment-only fields. The quiet check
   retires an obligation on a refusal without closing the row, so those would strand it. A gist-only
-  row is admitted instead: it either regenerates its notes or dead-letters with the gist intact. A
-  discarded row keeps its stored structure too; only the minimum replacement would drop it, and
-  that is blocked.
-- `meeting_type` and `salience` do not block the free minimum: they are metadata whose
-  minimum value the presentation already handles, and blocking them would send a metadata-only row
-  to a paid notes call.
+  row is admitted instead: it either regenerates its notes or dead-letters with the gist intact.
+- `recovery.recovery_discard_would_lose_content` is the discard-commit guard. A discard writes the
+  empty discard structure, so it is refused whenever the row keeps a title, a user title, a note
+  body, or anything the deterministic minimum would refuse to replace.
 - `conversation_terminal_title._title_update` keeps its promise that a kept visible terminal row
   leaves titled: a blank title is always replaced, and a placeholder label is replaced unless real
   notes sit beside it (that row keeps its notes and its headline).
