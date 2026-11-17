@@ -6,8 +6,8 @@ Two batch-projection fixes. Neither changes a flag or a default.
 `PROJECTION_HEAD_RETRY_SECONDS` (24 h). After that it takes the held disposition, and its owner's chain advances.
 The bound runs from `projection_blocked_since`. That stamp was written in a transaction that never began, so it never landed,
 and those heads froze their chains indefinitely. The stamp now goes through `ProjectionStore.note_head_blocked`
-(`@firestore.transactional`). Every path that puts a row back to pending clears it, now including the source-fallback
-`merge_ready`. After deploy, heads that have waited for days are stamped on their next visit and hold about 24 h later.
+(`@firestore.transactional`). The release reset clears it, and now the source-fallback `merge_ready` does too. A privacy replay keeps it,
+because it continues the same head-wait episode. After deploy, heads that have waited for days are stamped on their next visit and hold about 24 h later.
 Their successors then project, so expect a one-time rise in held units and in follow-up drain work in that window.
 Held units keep their audio and use the existing hold-recovery path.
 

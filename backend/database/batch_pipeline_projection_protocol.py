@@ -30,7 +30,8 @@ def normalized_binding(raw: dict[str, Any]) -> ProjectionBinding:
 _SOURCE_MARKERS = ('source_reuse_version', 'source_alias_version')
 
 # Result-row fields stamping a bounded-retry head's first failure. Written
-# once per failure episode; every re-pending path clears them.
+# once per failure episode; the release reset and source-fallback redrive
+# clear them. A privacy replay continues the same head-wait episode.
 PROJECTION_HEAD_BLOCKED_SINCE = 'projection_blocked_since'
 PROJECTION_HEAD_BLOCK_TYPE = 'projection_block_type'
 
