@@ -46,7 +46,7 @@ from tests.support.firestore_review_query_drivers import registry_extension as o
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
-from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries
+from tests.support.firestore_allowance_hold_drivers import entries as allowance_hold_entries, StoreArgument
 from tests.support.firestore_batch_privacy_drivers import entries as batch_privacy_entries
 from tests.support.firestore_home_feed_drivers import entries as home_feed_entries
 from tests.support.firestore_composer_default_context_drivers import entries as composer_default_context_entries
@@ -4373,28 +4373,17 @@ for _key, _reason in (
 
 # The bounded source page is now reachable from the supervised serving tick,
 # so exercise every table/cursor shape rather than keeping an operator-only skip.
-class _JobstorePagePrimary:
-    namespace = 'batch_pipeline_prod'
-
-    def __init__(self, client):
-        self.client = client
-
+class _JobstorePageBudget:
     def __deepcopy__(self, memo):
-        # Keep the active recorder, following the allowance-hold driver seam.
-        return self
+        from database.jobstore.reconcile import _Budget, PageCounts
 
-
-def _jobstore_primary_page_setup(client, kwargs, trial):
-    from database.jobstore.reconcile import _Budget, PageCounts
-
-    kwargs['primary'] = _JobstorePagePrimary(client)
-    kwargs['budget'] = _Budget(3, 20, 500, PageCounts())
+        return _Budget(3, 20, 500, PageCounts())
 
 
 _add(
     DriverEntry(
         'database.jobstore.reconcile._primary_keys',
-        base={'primary': None},
+        base={'primary': StoreArgument('batch_pipeline_prod')},
         domains={
             'table': [
                 'jobs',
@@ -4413,9 +4402,8 @@ _add(
         },
         neutrals={
             'limit': (10, 'bounded page size; no filter/index effect'),
-            'budget': (None, 'RPC timeout/read cap only; fresh budget supplied per trial'),
+            'budget': (_JobstorePageBudget(), 'RPC timeout/read cap only; fresh budget supplied per trial'),
         },
-        setup=_jobstore_primary_page_setup,
     )
 )
 _add(
