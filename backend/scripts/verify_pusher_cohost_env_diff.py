@@ -274,6 +274,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Prod holds CPU projection off; pusher never constructs Projector.
+            "BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED",
             # Occasion stitching runs only in the /v4/listen session (routers/listen/runtime.py);
             # pusher opens no client listen socket.
             "OCCASION_CONVERSATIONS_ENABLED",

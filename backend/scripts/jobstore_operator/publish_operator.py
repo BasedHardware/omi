@@ -1,6 +1,7 @@
 """Proposed exact-digest publication; invoked only by the protected CI job."""
 
 import argparse
+import image_smoke
 import base64
 import json
 import os
@@ -16,6 +17,7 @@ DESTINATION = 'gcr.io/based-hardware/jobstore-reconcile-operator'
 
 
 def validate_qualification(contract, receipt):
+    image_smoke.source_refusal_program(contract.get('readiness_sha256'))
     expected = {
         'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
         'source_sha': contract['source_sha'],
@@ -24,7 +26,7 @@ def validate_qualification(contract, receipt):
         'oci_manifest_digest': contract['oci_manifest_digest'],
         'build_inputs_sha256': contract['build_inputs_sha256'],
         'supervisor_sha256': contract['supervisor_sha256'],
-        'tests_run': 49,
+        'tests_run': 58,
         'tests_skipped': 0,
         'uid': 1000,
         'container_network': 'none',
@@ -35,6 +37,7 @@ def validate_qualification(contract, receipt):
     }
     if any(receipt.get(k) != v for k, v in expected.items()):
         raise ValueError('CURRENT_RUN_EXACT_NATIVE_QUALIFICATION_REQUIRED')
+    image_smoke.validate_source_refusal(receipt.get('resource_bound_source_refusal', {}), contract['readiness_sha256'])
     host = receipt.get('native_host', {})
     if (
         host.get('system') != 'Linux'

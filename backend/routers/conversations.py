@@ -540,7 +540,47 @@ class ConversationTestPromptResponse(BaseModel):
     summary: str
 
 
-@router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
+@router.post(
+    "/v1/conversations",
+    response_model=CreateConversationResponse,
+    responses={
+        404: {'description': 'No in-progress conversation was found'},
+        500: {
+            'description': 'Conversation processing failed',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {'detail': {'type': 'string'}},
+                    }
+                }
+            },
+        },
+        503: {
+            'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {
+                            'detail': {
+                                'type': 'object',
+                                'required': ['code', 'message'],
+                                'properties': {
+                                    'code': {'type': 'string', 'enum': ['conversation_processing_retryable']},
+                                    'message': {'type': 'string'},
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+        },
+    },
+    tags=['conversations'],
+)
 def process_in_progress_conversation(
     request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
@@ -806,7 +846,40 @@ def get_conversation_finalization_status(
             'description': 'The selected app is disabled or not enabled by this user, or the conversation '
             'is already being processed (detail code conversation_processing_in_progress)'
         },
+        500: {
+            'description': 'Conversation processing failed',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {'detail': {'type': 'string'}},
+                    }
+                }
+            },
+        },
         502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
+        503: {
+            'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {
+                            'detail': {
+                                'type': 'object',
+                                'required': ['code', 'message'],
+                                'properties': {
+                                    'code': {'type': 'string', 'enum': ['conversation_processing_retryable']},
+                                    'message': {'type': 'string'},
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+        },
     },
     tags=['conversations'],
 )

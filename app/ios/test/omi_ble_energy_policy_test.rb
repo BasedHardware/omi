@@ -385,6 +385,32 @@ class OmiBleEnergyPolicyTest < Minitest::Test
                     precondition(partial["last_off_charger_mv"] == nil)
                 }
                 precondition((try? PropertyListSerialization.data(fromPropertyList: [parsed], format: .binary, options: 0)) != nil)
+                let connectionKeys = ["conn_interval", "conn_latency", "conn_timeout", "tx_phy", "rx_phy"]
+                for length in [25, 30, 31, 32, 33, 34, 35, 36, 37] {
+                    var incomplete = diagnostic
+                    incomplete.append(Data(repeating: 0xff, count: length - 25))
+                    let p = OmiBleFirmwareDiagnostics.parse(incomplete, timestampMs: 1)!
+                    for key in connectionKeys { precondition(p[key] == nil) }
+                }
+                var connection = diagnostic
+                connection.append(contentsOf: [255, 255, 255, 255, 255, 0x34, 0x12, 0x78, 0x56, 0x58, 2, 2, 4])
+                let conn = OmiBleFirmwareDiagnostics.parse(connection, timestampMs: 123)!
+                for (key, value) in zip(connectionKeys, [0x1234, 0x5678, 600, 2, 4]) {
+                    precondition(conn[key] as? NSNumber == NSNumber(value: value))
+                }
+                for (key, value) in parsed { precondition((value as AnyObject).isEqual(conn[key])) }
+                for key in ["last_off_charger_mv", "charge_pin_edges", "soc_frozen"] { precondition(conn[key] == nil) }
+                precondition((try? PropertyListSerialization.data(fromPropertyList: [conn], format: .binary, options: 0)) != nil)
+                connection.append(contentsOf: [99, 98])
+                precondition(NSDictionary(dictionary: conn).isEqual(to: OmiBleFirmwareDiagnostics.parse(connection, timestampMs: 123)!))
+                for offset in 30...37 { connection[offset] = 0xff }
+                let noConnection = OmiBleFirmwareDiagnostics.parse(connection, timestampMs: 123)!
+                for key in connectionKeys { precondition(noConnection[key] == nil) }
+                // Zero latency and 1M PHY are real values, not unavailable.
+                for offset in 30...37 { connection[offset] = 0 }
+                connection[36] = 1; connection[37] = 1
+                let zero = OmiBleFirmwareDiagnostics.parse(connection, timestampMs: 123)!
+                precondition(zero["conn_latency"] as? NSNumber == 0 && zero["tx_phy"] as? NSNumber == 1)
                 var unknown = Data(repeating: 0xff, count: 25)
                 unknown[0] = 1
                 let unknownParsed = OmiBleFirmwareDiagnostics.parse(unknown, timestampMs: 456)!

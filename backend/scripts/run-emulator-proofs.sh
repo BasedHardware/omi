@@ -87,6 +87,13 @@ run_proof "summary task recovery, concurrency and expiry" \
   tests/integration/test_summary_task_promotion_emulator.py \
   tests/integration/test_candidate_accept_expiry_emulator.py -q
 
+# Silent receipts can become ready at assignment; keep the paginated follow-up
+# and mixed-completion read guards in the hosted emulator acceptance suite.
+run_proof "batch projection follow-up (silent ready, rollback and mixed completion)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider \
+  tests/integration/test_batch_pipeline_projection_followup_firestore.py \
+  tests/integration/test_batch_pipeline_silence_sizing_firestore.py
+
 run_proof "projection ghost-hold release gaps and ready-hint repair follow-up" \
   "$PYTHON" -m pytest -q -rxX -p no:cacheprovider \
   tests/integration/test_batch_projection_ghost_holds_firestore.py

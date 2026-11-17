@@ -237,9 +237,12 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
   bool _stoppedIntentionally = false;
   bool get stoppedIntentionally => _stoppedIntentionally;
 
-  Future stop({String? reason}) async {
+  /// [userStop]: the user tapped Stop. The server then finalizes the conversation
+  /// on close instead of holding it open for a reconnect. Drops must not set it.
+  Future stop({String? reason, bool userStop = false}) async {
     _stoppedIntentionally = true;
     _detachClientState();
+    if (userStop) _sendUserStopReason();
     await _socket.stop();
     _listeners.clear();
 
@@ -281,6 +284,16 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     _socket.send(frame.payload);
     if (_socket.status == PureSocketStatus.connected) {
       _binaryAudioBytesSent += frame.payload.length;
+    }
+  }
+
+  /// Best-effort: a failed send never blocks the close.
+  void _sendUserStopReason() {
+    if (_socket.status != PureSocketStatus.connected) return;
+    try {
+      _socket.send(jsonEncode(const {'type': 'finalization_reason', 'reason': 'user_stop'}));
+    } catch (e) {
+      Logger.debug('finalization_reason send failed: $e');
     }
   }
 

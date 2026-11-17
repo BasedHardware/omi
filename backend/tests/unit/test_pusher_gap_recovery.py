@@ -241,7 +241,12 @@ def app_socket(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_optional_queue_full_waits_instead_of_closing(app_socket, monkeypatch):
+async def test_optional_queue_full_drops_oldest_without_stalling_capture(app_socket, monkeypatch):
+    """A stalled app/webhook consumer must neither stall the receive loop nor close the socket.
+
+    Prod 2026-11-16: a full optional audio_bytes queue raised AudioBackpressure and closed
+    live capture sockets with 1011. Optional audio is best-effort: drop the oldest item.
+    """
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: True)
     monkeypatch.setattr(pusher, 'AUDIO_BYTES_QUEUE_WARN_SIZE', 2)
     entered, release = asyncio.Event(), asyncio.Event()
@@ -258,12 +263,21 @@ async def test_optional_queue_full_waits_instead_of_closing(app_socket, monkeypa
     task = asyncio.create_task(pusher._websocket_util_trigger(socket, UID, 8000))
     try:
         await asyncio.wait_for(entered.wait(), 3)
-        await asyncio.sleep(0.05)
-        assert not task.done() and socket.close_code is None
+        # The receive loop keeps consuming frames while the consumer is blocked.
+        for _ in range(200):
+            if not socket.frames:
+                break
+            await asyncio.sleep(0.01)
+        assert not socket.frames
+        assert socket.close_code in (None, 1000)
         release.set()
         await asyncio.wait_for(task, 5)
         assert socket.close_code == 1000
-        assert processed == [frame[12:] for frame in frames]
+        payloads = [frame[12:] for frame in frames]
+        # First item went straight to the consumer; later ones were best-effort.
+        assert processed[0] == payloads[0]
+        assert len(processed) < len(payloads)
+        assert all(item in payloads for item in processed)
     finally:
         release.set()
         if not task.done():

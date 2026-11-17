@@ -98,6 +98,9 @@ class ScriptedPureSocket implements IPureSocket {
   final List<List<int>> sentBinary = <List<int>>[];
   final List<String> sentText = <String>[];
 
+  /// Every send and local close in order: the text itself, `<binary>` or `<close>`.
+  final List<String> wire = <String>[];
+
   @override
   PureSocketStatus get status => _status;
 
@@ -128,6 +131,7 @@ class ScriptedPureSocket implements IPureSocket {
   @override
   Future stop() async {
     closeCalls++;
+    wire.add('<close>');
     _status = PureSocketStatus.notConnected;
     return;
   }
@@ -136,8 +140,10 @@ class ScriptedPureSocket implements IPureSocket {
   void send(dynamic message) {
     if (message is List<int>) {
       sentBinary.add(message);
+      wire.add('<binary>');
     } else {
       sentText.add(message.toString());
+      wire.add(message.toString());
     }
   }
 
@@ -286,6 +292,7 @@ class CaptureReplayWorld {
 
   /// The local_preview declaration of each socket the controller opened.
   final List<bool> localPreviewRequests = [];
+  final List<String?> socketRecordingIds = [];
 
   /// Every transcription socket the controller opened, in order, with the source it declared.
   final List<({String? source, ScriptedPureSocket transport})> sockets = [];
@@ -327,6 +334,7 @@ class CaptureReplayWorld {
 
   CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
+  Future<BleAudioCodec> Function(String)? audioCodecLoader;
   CalendarCaptureGapMonitor? calendarGapMonitor;
   Future<void> Function(String, bool)? deviceMuteWriter;
   Future<bool?> Function(String)? deviceMuteReader;
@@ -460,7 +468,7 @@ class CaptureReplayWorld {
         if (custom != null) return custom();
         return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
-      audioCodecLoader: (deviceId) async => pendantCodec,
+      audioCodecLoader: (deviceId) => audioCodecLoader?.call(deviceId) ?? Future.value(pendantCodec),
       microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
@@ -683,6 +691,7 @@ class _ReplayCaptureController extends CaptureController {
   }) async {
     final transport = ScriptedPureSocket();
     world.localPreviewRequests.add(localPreview);
+    world.socketRecordingIds.add(clientConversationId);
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {
       transport.nextConnectFails = true;
