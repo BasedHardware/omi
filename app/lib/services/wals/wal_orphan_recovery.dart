@@ -184,6 +184,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               totalFrames: candidate.frames,
               storage: WalStorage.disk,
               status: WalStatus.miss,
+              // Original per-file capture policy is lost. The existing held
+              // recordings UI permits explicit upload/delete; onDeviceOnly
+              // would also reject that deliberate manual upload in syncWal.
+              holdForUser: true,
               filePath: path.basename(candidate.filePath),
               device: info.marker,
               ownerUid: uid,
@@ -204,6 +208,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         await _saveWalsToFile(generation);
         result = fence() ?? 'completed';
         if (result != 'completed') return;
+        heldRevision.value++;
         _notifyUpdated(generation);
       });
       result = fence() ?? result;

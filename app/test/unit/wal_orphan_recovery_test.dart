@@ -9,6 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/models/local_recording.dart';
+import 'package:omi/services/wals/sync_upload_gate.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -65,6 +69,7 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({'uid': 'owner-a'});
     await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
     dir = await Directory.systemTemp.createTemp('orphan-recovery-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => dir.path);
@@ -215,6 +220,7 @@ void main() {
   });
   Future<LocalWalSyncImpl> ledger(
       {DateTime Function()? clock,
+      SyncUploadGate? gate,
       Timer Function(Duration, void Function(Timer))? periodic,
       void Function(Map<String, Object?>)? onEvent,
       Future<RecordingOrphanCensus> Function()? scan,
@@ -224,6 +230,7 @@ void main() {
       List<Map<String, Object?>>? events}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
+        uploadGate: gate,
         periodic: periodic,
         orphanCensus: scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
@@ -260,6 +267,8 @@ void main() {
     expect(saves, 1);
     final adopted = sync.testWals.where((w) => w.status == WalStatus.miss).toList();
     expect(adopted.length, 200);
+    expect(adopted.every((w) => w.holdForUser && !w.onDeviceOnly && !isAutoUploadEligible(w)), isTrue);
+    expect(Wal.fromJson(adopted.first.toJson()).holdForUser, isTrue);
     expect(adopted.first.timerStart, now - 204);
     expect(adopted.last.timerStart, now - 5);
     expect(adopted.every((w) => w.ownerUid == 'owner-a' && w.totalFrames == 50 && w.seconds == 1), isTrue);
@@ -270,6 +279,96 @@ void main() {
     await sync.recoverOrphanAudio();
     expect(saves, before);
     expect((await WalFileManager.loadIndexedWals()).length, 206);
+  });
+
+  SyncUploadGate uploadGate(SyncFilesUploader uploader) => SyncUploadGate(
+      limiter: SyncRateLimiter.instance, fairUseStatusLoader: () async => {'stage': 'none'}, uploader: uploader);
+
+  test('recovered rows appear in the existing view, never auto-drain, and allow explicit upload or delete', () async {
+    final uploadFile = await audio(name(now));
+    final deleteFile = await audio(name(now - 1));
+    final bytes = await uploadFile.readAsBytes();
+    var uploads = 0;
+    final sync = await ledger(gate: uploadGate((files,
+        {onUploadProgress,
+        conversationId,
+        captureEvidence,
+        recordingSessionId,
+        audioStartSeconds,
+        audioEndSeconds,
+        claimLiveCapture = false,
+        geolocation}) async {
+      uploads++;
+      return UploadFilesResult.queued('manual-job');
+    }));
+    final view = LocalRecordingsProvider(ledger: sync);
+    addTearDown(view.dispose);
+    await view.refresh();
+    expect(view.recordings, isEmpty);
+    await sync.recoverOrphanAudio();
+    await pumpEventQueue(times: 100);
+    expect(view.recordings.length, 2, reason: 'heldRevision publishes to an already-open recordings view');
+    expect(view.recordings.every((r) => r.state == LocalRecordingState.pending), isTrue);
+    final held = sync.testWals.where((w) => w.holdForUser).toList();
+    expect(held.length, 2);
+    expect(held.every((w) => !isAutoUploadEligible(w)), isTrue);
+    expect((await WalFileManager.loadIndexedWals()).where((w) => w.holdForUser).length, 2);
+    await sync.syncAll();
+    await sync.syncLiveCaptureOnly();
+    expect(sync.getOrphanedWals(), isEmpty);
+    expect(uploads, 0);
+    expect(await view.upload(view.getById(name(now))!), LocalUploadOutcome.started);
+    expect(uploads, 1);
+    final uploaded = sync.testWals.singleWhere((w) => w.filePath == name(now));
+    expect(uploaded.status, WalStatus.uploaded);
+    expect(uploaded.holdForUser, isTrue);
+    expect(await uploadFile.readAsBytes(), bytes);
+    await view.delete(view.getById(name(now - 1))!);
+    expect(await deleteFile.exists(), isFalse, reason: 'only the explicit user delete removes audio');
+    expect(view.getById(name(now - 1)), isNull);
+    expect(sync.testWals.any((w) => w.filePath == name(now - 1)), isFalse);
+  });
+
+  test('manual upload after 30 days marks outsideRecoveryWindow and retains the held file', () async {
+    var seconds = now;
+    const capture = now - 28 * 86400;
+    final file = await audio(name(capture));
+    final bytes = await file.readAsBytes();
+    var uploads = 0;
+    final sync = await ledger(
+        clock: () => DateTime.fromMillisecondsSinceEpoch(seconds * 1000),
+        gate: uploadGate((files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          uploads++;
+          expect(audioStartSeconds, capture.toDouble());
+          expect(seconds - capture, greaterThan(30 * 86400));
+          throw const SyncRecoveryWindowExceededException();
+        }));
+    await sync.recoverOrphanAudio();
+    final recovered = sync.testWals.singleWhere((w) => w.status == WalStatus.miss);
+    final view = LocalRecordingsProvider(ledger: sync, initialize: false);
+    addTearDown(view.dispose);
+    await view.refresh();
+    expect(view.getById(name(capture)), isNotNull);
+    seconds += 3 * 86400;
+    expect(await view.upload(view.getById(name(capture))!), LocalUploadOutcome.failed);
+    expect(uploads, 1);
+    expect(recovered.status, WalStatus.outsideRecoveryWindow);
+    expect(recovered.holdForUser, isTrue);
+    expect(isAutoUploadEligible(recovered), isFalse);
+    expect(view.getById(name(capture))!.state, LocalRecordingState.failed);
+    expect(sync.testWals.contains(recovered), isTrue);
+    expect(await file.readAsBytes(), bytes);
+    final durable = (await WalFileManager.loadIndexedWals()).singleWhere((w) => w.filePath == name(capture));
+    expect(durable.status, WalStatus.outsideRecoveryWindow);
+    expect(durable.holdForUser, isTrue);
   });
 
   test('pressure threshold never grows beyond 720', () async {

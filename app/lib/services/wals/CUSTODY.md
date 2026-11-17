@@ -295,7 +295,20 @@ single-owner proof; at least one index/memory row must prove the current owner.
 A capture journal's owner hash must match the current UID. No inference from
 filenames or the currently signed-in account overrides historical ownership.
 
-At most 200 oldest eligible files enter `miss` custody per pass, at most 400 per
+Lead ruling (2026-11-17): recovered rows enter `miss` with `holdForUser=true`.
+A rowless orphan has no durable original capture-route choice, so recovery
+never authorizes an automatic cloud drain. `holdForUser` (rather than
+`onDeviceOnly`, which blocks `syncWal` even for an explicit action) is the
+existing user-controlled path: `LocalRecordingsProvider` lists held rows in
+Home, `RecordingListItem` opens the recording sheet, and its Process now and
+confirmed Delete actions call the provider's `upload`/`delete`. No new UI is
+needed. Recovery publishes `heldRevision` after its batched save so an open
+recordings view refreshes. Manual upload uses the existing ledger/uploader;
+if the server rejects a later attempt after 30 days, the existing
+`outsideRecoveryWindow` status is persisted, the held row stays visible as
+failed, and every audio byte remains retained until explicit user deletion.
+
+At most 200 oldest eligible files enter held `miss` custody per pass, at most 400 per
 rolling 24 hours, and pending rows across all buckets never rise above 720.
 Timestamped reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget
 without adoption, conservatively delaying the next pass. A torn budget blocks
@@ -305,14 +318,15 @@ source metadata, file size and mtime/ctime are rechecked before committing rows.
 Configured directories outside Documents are classified but retained in place.
 No census or audio decoding runs inside the capture queue. Commit metadata
 checks are bounded to 512 sources and four directories; larger source sets
-retain everything for a later supported pass. The existing drain
-honors upload/local-only preferences; normal server confirmation and retention
-remain responsible for later retirement.
+retain everything for a later supported pass. The automatic drain excludes
+these held pending rows; only a deliberate user upload can start transfer.
+Normal server confirmation and retention govern an explicitly uploaded copy.
 
 PostHog `orphan_audio_recovery_off` is a kill switch: only true stops recovery;
 unknown/false keeps it on. This is safe to default on because adoption preserves
-all bytes, owner uncertainty retains, local caps bound the backlog and existing
-server backfill pacing bounds processed-speech cost. This stage makes no storage
+all bytes, owner uncertainty retains, and held rows cannot automatically upload.
+Local caps bound the backlog; existing server backfill pacing also bounds
+processed-speech cost after an explicit user upload. This stage makes no storage
 reclamation or duplicate-processing outcome claim. `Orphan Audio Recovery` is
 one typed aggregate event per pass: class/age counts and bytes, adopted count,
 cap/change/reference, commit-time expiry and outside-Documents skips, and a bounded fence result. The diagnostics export's
