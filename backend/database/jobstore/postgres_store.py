@@ -60,7 +60,6 @@ from database.batch_pipeline_store import (
 )
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 
-import database.jobstore.codec as codec
 from database.jobstore.connection import Pool, sql, jsonb
 
 # Mirrors the recovery protocol's state names without binding to its enum.

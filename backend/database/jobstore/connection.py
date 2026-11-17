@@ -18,7 +18,7 @@ import database.jobstore.codec as codec
 MAX_POOL_SIZE = 4
 
 
-def _psycopg():
+def _psycopg() -> Any:
     try:
         # psycopg joins the lockfile separately; until then pyright cannot resolve it.
         import psycopg  # pyright: ignore[reportMissingImports]

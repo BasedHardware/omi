@@ -16,6 +16,7 @@ from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_session import ProjectionSession
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_store import FirestoreStore, FirestoreTransaction
+from database.batch_pipeline_transaction_attempt import prepare_transaction
 from database.batch_privacy_attempt import TOKEN_FIELD, token_version
 from database.jobstore import codec
 from database.jobstore.authority import AuthorityRefused, fingerprint
@@ -443,7 +444,7 @@ class _ViewStore(FirestoreStore):
         self.projection = projection
         super().__init__(projection.handoff.ticket.namespace, firestore_client=projection.handoff.client)
 
-    def run(self, body):
+    def run(self, body, *, before_attempt=None):
         @firestore.transactional
         def commit(transaction):
             self.projection.guard(transaction)
@@ -453,4 +454,4 @@ class _ViewStore(FirestoreStore):
             return result
 
         with self.projection.writer_scope():
-            return commit(self.client.transaction())
+            return commit(prepare_transaction(self.client, before_attempt))
