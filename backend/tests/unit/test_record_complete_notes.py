@@ -167,9 +167,35 @@ def test_large_output_set_checkpoints_without_repeating_notes_after_restart(reco
     outputs = ['capture', *(f'split-{i}' for i in range(128))]
     for cid in outputs[1:]:
         f.user.collection('conversations').document(cid).create({'status': 'completed'})
+    # Arrange ready fallback obligations in linear time. mark_enrichment's
+    # per-output producer walk is covered above; repeating that whole walk here
+    # rechecks all 129 privacy targets for each fallback (quadratic setup).
+    # This test keeps the real 128/129 completion boundary and strict guards.
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    collection = f.client.collection(reprocess.COLLECTION)
+    fallback_due = collection.document(reprocess.key(f.binding.owner_id, 'capture')).get().to_dict()['due_at']
+    outbox = FirestoreEnrichmentOutbox(f.client)
+    for cid in outputs[1:]:
+        outbox.enqueue(
+            reprocess.key(f.binding.owner_id, cid),
+            f.binding.owner_id,
+            {
+                'conversation_id': cid,
+                'language': 'en',
+                'record_notes_producer': {'conversation_id': 'capture', 'revision': 1},
+            },
+            fallback_due,
+            tx=f.client.transaction(),
+            now=NOW,
+            coalesce='min',
+            snapshot_summary=True,
+            eager_if_unheld=True,
+        )
+    f.client.rows[f.ledger.path]['record_notes_fallback_outputs'] = sorted(outputs)
     entry = f.client.rows[f.store.ref('results', 'first').path]
     entry['projection']['size_rollover_outputs'] = [{'conversation_id': cid, 'created': False} for cid in outputs]
-    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    initial_rows = [data for path, data in f.client.rows.items() if path[0] == reprocess.COLLECTION]
+    assert len(initial_rows) == 129 and all(row['version'] == 1 for row in initial_rows)
     assert f.store.complete('first', f.binding, NOW, f.accounting, policy=POLICY) is None
     assert len(f.ledger.get().to_dict()['record_notes_prepared_outputs']) == 128
     assert len([path for path in f.client.rows if path[0] == reprocess.COLLECTION]) == 129
