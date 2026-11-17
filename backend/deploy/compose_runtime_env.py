@@ -222,8 +222,9 @@ def _apply_conversations_v3_stage(env_config: ConfigDict) -> None:
             # Declared so the staging compose maps it to staging-conversations-v3 like every other queue.
             service['env']['CONVERSATIONS_V3_TASKS_QUEUE'] = {'value': 'conversations-v3', 'category': 'reliability'}
         # desktop-backend sets its env inline in its deploy workflow and reads the code defaults
-        # (stage beta, no first build), which equal these values. Moving the stage past beta needs
-        # that workflow to carry CONVERSATIONS_V3_STAGE too.
+        # (stage beta, no first build). While this source is not beta (cohort hold since 2026-11-17)
+        # desktop capability/episode responses diverge from it; desktop creates stay one-to-one.
+        # Moving to all needs that workflow to carry CONVERSATIONS_V3_STAGE too.
         gke = env_config.get('gke', {})
         config_map = gke.get('config_map')
         if isinstance(config_map, dict):
