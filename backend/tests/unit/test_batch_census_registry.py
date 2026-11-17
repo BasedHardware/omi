@@ -366,6 +366,7 @@ def test_census_guard_runs_for_writer_and_vocabulary_changes(path):
 
 
 def test_unmapped_census_registry_selects_the_guard_and_its_importers(monkeypatch):
+    monkeypatch.setenv('BACKEND_UNIT_GRAPH_SELECTION', '1')
     selector = runpy.run_path(str(BACKEND / 'scripts/select_backend_unit_tests.py'))
     all_tests = selector['discover_all_tests']()
     # The registry is not mapped to a narrow area. Its edit selects the tests

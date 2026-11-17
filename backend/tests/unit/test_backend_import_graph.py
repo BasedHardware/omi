@@ -28,6 +28,11 @@ def _tree(root: Path, files: dict) -> Path:
     return root
 
 
+@pytest.fixture(autouse=True)
+def graph_selection_on(monkeypatch):
+    monkeypatch.setenv("BACKEND_UNIT_GRAPH_SELECTION", "1")
+
+
 @pytest.fixture
 def graph(tmp_path):
     root = _tree(
@@ -119,7 +124,8 @@ def test_unparseable_modules_are_recorded(graph):
 
 
 def test_parallel_and_serial_builds_agree(tmp_path, graph):
-    parallel = graph_module.build_import_graph(graph.backend_dir, workers=2)
+    # min_parallel_files=0 forces the process-pool branch on the small fixture.
+    parallel = graph_module.build_import_graph(graph.backend_dir, workers=2, min_parallel_files=0)
     assert parallel.importers == graph.importers
     assert parallel.lazy_importers == graph.lazy_importers
 
@@ -157,7 +163,8 @@ def test_rotation_slices_partition_the_full_suite(selector_and_all_tests):
     slices = [[test for test in tests if selector.rotation_slice(test, 8) == index] for index in range(8)]
     assert sorted(test for chunk in slices for test in chunk) == sorted(tests)
     assert all(len(chunk) > len(tests) / 16 for chunk in slices)
-    assert selector.rotation_slice("tests/unit/test_x.py", 8) == selector.rotation_slice("tests/unit/test_x.py", 8)
+    # Pinned: crc32 is stable across processes and Python versions, unlike hash().
+    assert selector.rotation_slice("tests/unit/test_x.py", 8) == 0x4248F0ED % 8
 
 
 def test_workflow_passes_both_kill_switches_and_keeps_the_full_suite_paths():
@@ -167,3 +174,78 @@ def test_workflow_passes_both_kill_switches_and_keeps_the_full_suite_paths():
     assert "bash scripts/run-unit-ci.sh --all --shard 8/${{ matrix.shard }}" in workflow
     assert 'git merge-base --is-ancestor "$UNIT_MAIN_BASE" HEAD' in workflow
     assert "BACKEND_UNIT_FORCE_TYPECHECK=1" in workflow
+
+
+def test_test_code_naming_a_module_selects_it_even_when_the_module_has_importers(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "db/__init__.py": "",
+            "db/rows.py": "X = 1\n",
+            "svc.py": "import db.rows\n",
+            "tests/unit/test_svc.py": "import svc\n",
+            # Loads the file directly (spec_from_file_location / runpy style).
+            "tests/unit/test_rows_fresh.py": "PATH = 'db/rows.py'\n",
+            # Production code naming the file is a path table, not a loader.
+            "tables.py": "PATHS = ['db/rows.py']\n",
+            "tests/unit/test_tables.py": "import tables\n",
+        },
+    )
+    graph = graph_module.build_import_graph(root, workers=1)
+    tests = ["tests/unit/test_svc.py", "tests/unit/test_rows_fresh.py", "tests/unit/test_tables.py"]
+    assert graph.dependent_tests("db/rows.py", tests) == {"tests/unit/test_svc.py", "tests/unit/test_rows_fresh.py"}
+
+
+def test_python_source_scanners_are_found_directly_and_through_helpers(tmp_path):
+    root = _tree(
+        tmp_path,
+        {
+            "tests/support/inventory.py": "def modules(root):\n    return sorted(root.rglob('*.py'))\n",
+            "tests/unit/test_boundary.py": "from tests.support import inventory\n",
+            "tests/unit/test_walk.py": "import os\nfor r, _, fs in os.walk('utils'):\n    names = [f for f in fs if f.endswith('.py')]\n",
+            "tests/unit/test_fixture_listing.py": "FILES = sorted(DIR.glob('*.json'))\n",
+            "tests/unit/test_plain.py": "X = 1\n",
+        },
+    )
+    graph = graph_module.build_import_graph(root, workers=1)
+    tests = [
+        "tests/unit/test_boundary.py",
+        "tests/unit/test_walk.py",
+        "tests/unit/test_fixture_listing.py",
+        "tests/unit/test_plain.py",
+    ]
+    assert graph.tree_scan_tests(tests) == {"tests/unit/test_boundary.py", "tests/unit/test_walk.py"}
+
+
+def test_unmapped_utils_change_still_runs_whole_tree_ratchets(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    selected, reason = selector.tests_for_changed_paths(["backend/utils/metrics.py"], all_tests)
+    assert "import graph" in reason
+    assert {"tests/unit/test_utils_import_boundary.py", "tests/unit/test_http_timeout_defaults.py"} <= set(selected)
+
+
+def test_integration_only_change_does_not_run_the_unit_suite(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    path = "backend/tests/integration/test_home_feed_emulator.py"
+    assert (BACKEND_DIR.parent / path).is_file()
+    selected, _ = selector.tests_for_changed_paths([path], all_tests)
+    # Only unit tests that name or import it (contract inventories) plus the
+    # source-scan ratchets; never the 2,900-file suite.
+    assert 0 < len(selected) < 100
+
+
+def test_unreferenced_integration_test_selects_nothing_by_itself(tmp_path, monkeypatch, selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    graph = selector.import_graph()
+    monkeypatch.setattr(graph, "dependent_tests", lambda path, tests: set())
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/tests/integration/test_home_feed_emulator.py"], all_tests
+    )
+    assert selected != all_tests
+    assert reason.startswith("only integration/e2e test files outside unit discovery changed")
+
+
+def test_module_loaded_by_file_in_a_test_is_selected(selector_and_all_tests):
+    selector, all_tests = selector_and_all_tests
+    selected, _ = selector.tests_for_changed_paths(["backend/database/conversations.py"], all_tests)
+    assert "tests/unit/test_conversation_archive_filter_contract.py" in selected

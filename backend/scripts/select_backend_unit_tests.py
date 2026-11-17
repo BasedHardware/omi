@@ -23,13 +23,12 @@ if str(BACKEND_DIR) not in sys.path:
 from tests.support.firestore_serving_query_inventory import is_serving_query_inventory_path  # noqa: E402
 from tests.support.background_task_ratchet_scope import is_background_task_ratchet_path  # noqa: E402
 from tests.support.sync_legacy_ratchet_scope import is_sync_legacy_ratchet_path  # noqa: E402
-from scripts.backend_import_graph import ImportGraph, build_import_graph  # noqa: E402
+from scripts.backend_import_graph import ImportGraph, cached_import_graph  # noqa: E402
 
 # Kill switch for import-graph selection: on unless set to 0/false/off. Off
 # restores the pre-graph behaviour exactly (every graph-eligible path forces
 # the full suite again). CI passes the repository variable of the same name.
 GRAPH_SELECTION_ENV = 'BACKEND_UNIT_GRAPH_SELECTION'
-_import_graph_cache: ImportGraph | None = None
 
 
 def graph_selection_enabled() -> bool:
@@ -37,10 +36,7 @@ def graph_selection_enabled() -> bool:
 
 
 def import_graph() -> ImportGraph:
-    global _import_graph_cache
-    if _import_graph_cache is None:
-        _import_graph_cache = build_import_graph(BACKEND_DIR)
-    return _import_graph_cache
+    return cached_import_graph(BACKEND_DIR)
 
 
 FULL_TEST_ROOTS = (
@@ -921,8 +917,10 @@ def tests_for_changed_paths(
             return all_tests, f'{unresolved[0]} did not match a backend test-selection contract'
         graph_paths.extend(unmapped_backend_sources)
 
+    graph_skipped_only = False
     if graph_paths:
         graph = import_graph()
+        resolved: list[str] = []
         for path in graph_paths:
             dependents = graph.dependent_tests(path.removeprefix('backend/'), all_tests)
             if not dependents and is_undiscovered_test_file(path):
@@ -934,11 +932,22 @@ def tests_for_changed_paths(
                 # be a silent gap, so this path still runs everything.
                 return all_tests, f'{path} has no import-graph dependents'
             selected.update(dependents)
+            resolved.append(path)
+        if any(path.endswith('.py') for path in resolved):
+            # Ratchets that scan source trees see every module without importing it.
+            selected.update(graph.tree_scan_tests(all_tests))
+        graph_skipped_only = not resolved
 
     if not backend_paths:
         if selected:
             return sorted(selected), 'selected backend unit tests from changed paths and workflow contracts'
         return [], 'no backend files changed'
+    if graph_skipped_only and not unmapped_backend_sources:
+        # Any guard tests already selected (lifecycle writers, contracts) still run.
+        return (
+            sorted(selected),
+            'only integration/e2e test files outside unit discovery changed; their own workflows run them',
+        )
     if selected:
         if graph_paths:
             return sorted(selected), (
@@ -998,7 +1007,9 @@ def main() -> None:
         '--rotation',
         help=(
             'K/N: also select every full-suite test in rotating slice K of N (stable crc32 of the path). '
-            'Main pushes use this so the whole suite is covered across N runs, not on every run.'
+            'Main pushes use this so the whole suite is covered across N runs, not on every run. The slices '
+            'partition exactly what --all runs; contract-only extras such as the canonical-memory e2e are '
+            'outside --all and are selected by their contracts instead.'
         ),
     )
     args = parser.parse_args()

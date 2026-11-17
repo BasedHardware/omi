@@ -39,6 +39,13 @@ def _load_repo_script(name: str):
     return module
 
 
+@pytest.fixture(autouse=True)
+def graph_selection_on(monkeypatch):
+    # Graph assertions must not depend on the ambient kill switch; tests that
+    # exercise the switch set it off explicitly.
+    monkeypatch.setenv("BACKEND_UNIT_GRAPH_SELECTION", "1")
+
+
 @pytest.fixture(scope="module")
 def selector_and_all_tests():
     selector = _load_script("select_backend_unit_tests")
@@ -76,8 +83,8 @@ def test_background_task_ratchet_change_selects_the_ratchet(selector_and_all_tes
         assert reason == "selected backend unit tests from changed paths and workflow contracts"
 
     # Negatives: narrow-area paths outside the ratchet's scanned directories.
-    # (backend/database/_client.py is not a valid negative: database/ changes
-    # fall back to the full suite, which includes the ratchet.)
+    # (backend/database/_client.py is not a valid negative: almost every test
+    # reaches it through the import graph, including the ratchet.)
     for path in ("backend/models/users.py", "backend/database/csat.py"):
         selected, reason = selector.tests_for_changed_paths([path], all_tests)
         assert ratchet not in selected, path
@@ -224,7 +231,10 @@ def test_selector_docs_and_flat_utils_do_not_force_full_suite_via_globs(selector
         assert reason == f"{path} requires the full backend unit suite"
 
 
-def test_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+def test_absent_unmapped_source_forces_full_suite_even_when_direct_test_changed(selector_and_all_tests):
+    """A deleted or not-yet-existing unmapped source cannot be resolved by the
+    import graph, so one direct test must not narrow it. (A present unmapped
+    module selects its importers; see the utils/metrics.py case above.)"""
     selector, all_tests = selector_and_all_tests
 
     selected, reason = selector.tests_for_changed_paths(

@@ -161,7 +161,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           MAIN_SELECTION: ${{ vars.BACKEND_UNIT_MAIN_SELECTION }}
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/plan_backend_unit_selection.sh
+        run: bash .github/actions/ci-tier/plan_backend_unit_selection.sh
 
   # The suite's measured cost is per-file pytest process startup (2026-09-10,
   # run 34430370667: 1126 files each in its own session, 19m18s of a 21m53s

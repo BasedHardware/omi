@@ -34,10 +34,24 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set
+
+TEST_TREE_PREFIXES = ('tests/', 'testing/', 'scripts/jobstore_operator/tests/')
+# Python source scans: ratchets and inventories that read whole source trees
+# instead of importing what they check (``UTILS_DIR.rglob('*.py')``, an
+# ``os.walk`` filtered to ``.py``). Directory listings of fixtures do not count.
+TREE_SCAN_PATTERN = re.compile(
+    rb"""\.r?glob\(\s*['"][^'"]*\.py['"]"""  # Path.glob/rglob('*.py' | '**/*.py')
+    rb"""|glob\.glob\([^)]*\.py"""
+    rb"""|['"]--glob['"]\s*,\s*['"][^'"]*\.py['"]"""  # rg --glob '*.py' subprocess scans
+    rb"""|\.rglob\(\s*['"]\*['"]\s*\)[\s\S]{0,300}?\.py['"]"""  # rglob('*') filtered to .py
+    rb"""|os\.walk\([^)]*\)[\s\S]{0,400}?\.py['"]"""
+    rb"""|iterdir\(\)[\s\S]{0,200}?(?:\.suffix\s*==\s*['"]\.py|endswith\(\s*['"]\.py)"""
+)
 
 SKIP_DIR_NAMES = frozenset({'.venv', 'venv', 'node_modules', '__pycache__', '.git', '.mypy_cache', '.pytest_cache'})
 
@@ -132,6 +146,7 @@ class ImportGraph:
     lazy_importers: Dict[str, Set[str]] = field(default_factory=dict)  # module -> function-level importers
     unparseable: Set[str] = field(default_factory=set)  # backend-relative paths
     _sources: Optional[Dict[str, bytes]] = field(default=None, repr=False)
+    _tree_scan_tests: Optional[Set[str]] = field(default=None, repr=False)
 
     def module_for_path(self, relative_path: str) -> Optional[str]:
         return self.path_modules.get(relative_path)
@@ -161,6 +176,9 @@ class ImportGraph:
         name = relative_path.rsplit('/', 1)[-1].encode('utf-8')
         if not name:
             return set()
+        return {module for module, text in self._module_sources().items() if name in text}
+
+    def _module_sources(self) -> Dict[str, bytes]:
         if self._sources is None:
             self._sources = {}
             for module, path in self.modules.items():
@@ -168,7 +186,25 @@ class ImportGraph:
                     self._sources[module] = (self.backend_dir / path).read_bytes()
                 except OSError:
                     continue
-        return {module for module, text in self._sources.items() if name in text}
+        return self._sources
+
+    def is_test_tree_module(self, module: str) -> bool:
+        return self.modules.get(module, '').startswith(TEST_TREE_PREFIXES)
+
+    def tree_scan_tests(self, tests: Iterable[str]) -> Set[str]:
+        """Tests that scan source directories, directly or through a test-tree helper.
+
+        A changed module can break such a test without either importing the
+        other, so callers add these for every Python change the graph resolves.
+        """
+        tests = list(tests)
+        if self._tree_scan_tests is None:
+            selected: Set[str] = set()
+            for module, text in self._module_sources().items():
+                if self.is_test_tree_module(module) and TREE_SCAN_PATTERN.search(text):
+                    selected |= self._tests_reaching(self.dependent_modules(module), tests)
+            self._tree_scan_tests = selected
+        return set(self._tree_scan_tests)
 
     def dependent_tests(self, relative_path: str, tests: Iterable[str]) -> Set[str]:
         """Backend-relative test files that can load ``relative_path``.
@@ -180,16 +216,20 @@ class ImportGraph:
         """
         module = self.module_for_path(relative_path)
         dependents = self.dependent_modules(module) if module is not None else set()
-        # Name references matter for data files and for modules nothing
-        # imports (scripts, jobs, entry points run via runpy or subprocess).
-        # A library module's file name also appears in path tables, so
-        # matching it would only add noise.
-        if module is None or not (self.importers.get(module) or self.lazy_importers.get(module)):
-            for referencing in self.referencing_modules(relative_path):
-                if referencing != module:
-                    dependents |= self.dependent_modules(referencing)
+        # Name references: test code that names the file (load_module_fresh,
+        # spec_from_file_location, runpy, subprocess, fixtures) always counts.
+        # Production code that names it counts only for data files and for
+        # modules nothing imports (scripts, jobs, entry points); a library
+        # module's file name also appears in path tables, which is noise.
+        unimported = module is None or not (self.importers.get(module) or self.lazy_importers.get(module))
+        for referencing in self.referencing_modules(relative_path):
+            if referencing != module and (unimported or self.is_test_tree_module(referencing)):
+                dependents |= self.dependent_modules(referencing)
         if not dependents:
             return set()
+        return self._tests_reaching(dependents, tests)
+
+    def _tests_reaching(self, dependents: Set[str], tests: Iterable[str]) -> Set[str]:
         conftest_dirs = []
         for dependent in dependents:
             path = self.modules.get(dependent, '')
@@ -217,7 +257,9 @@ def _scan_file(item: tuple[str, str, str, bool]) -> tuple[str, str, Optional[Set
     return relative, module, collector.module_level, collector.lazy - collector.module_level
 
 
-def build_import_graph(backend_dir: Path, *, workers: Optional[int] = None) -> ImportGraph:
+def build_import_graph(
+    backend_dir: Path, *, workers: Optional[int] = None, min_parallel_files: int = 200
+) -> ImportGraph:
     """Parse every backend module once. Parsing ~6,200 files is CPU-bound, so
     it fans out across processes (BACKEND_IMPORT_GRAPH_WORKERS overrides)."""
     graph = ImportGraph(backend_dir=backend_dir)
@@ -237,10 +279,14 @@ def build_import_graph(backend_dir: Path, *, workers: Optional[int] = None) -> I
             items.append((full_path, relative, module, filename == '__init__.py'))
     if workers is None:
         workers = int(os.environ.get('BACKEND_IMPORT_GRAPH_WORKERS', '0') or 0) or min(8, os.cpu_count() or 1)
-    if workers > 1 and len(items) > 200:
-        with ProcessPoolExecutor(max_workers=workers) as pool:
-            results = list(pool.map(_scan_file, items, chunksize=64))
-    else:
+    results = None
+    if workers > 1 and len(items) > min_parallel_files:
+        try:
+            with ProcessPoolExecutor(max_workers=workers) as pool:
+                results = list(pool.map(_scan_file, items, chunksize=64))
+        except Exception:  # noqa: BLE001 - a broken pool (spawn without an importable __main__) must not fail selection
+            results = None
+    if results is None:
         results = [_scan_file(item) for item in items]
     for relative, module, module_level, lazy in results:
         if module_level is None or lazy is None:
@@ -253,3 +299,19 @@ def build_import_graph(backend_dir: Path, *, workers: Optional[int] = None) -> I
             if target in graph.modules and target != module:
                 graph.lazy_importers.setdefault(target, set()).add(module)
     return graph
+
+
+_GRAPH_CACHE: Dict[str, ImportGraph] = {}
+
+
+def cached_import_graph(backend_dir: Path) -> ImportGraph:
+    """One graph per backend directory per process.
+
+    The cache lives here, not in the selector, because tests and tools load the
+    selector afresh (runpy, spec_from_file_location) while this module stays
+    imported once, so each fresh selector reuses the same parse.
+    """
+    key = str(Path(backend_dir).resolve())
+    if key not in _GRAPH_CACHE:
+        _GRAPH_CACHE[key] = build_import_graph(Path(backend_dir))
+    return _GRAPH_CACHE[key]

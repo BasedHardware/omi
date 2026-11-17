@@ -135,10 +135,14 @@ def markdown(report: dict) -> str:
     lines += ["", f"Projected PR minutes/day: Linux {report['projected_pr_minutes_per_day']['linux']:.1f}, macOS {report['projected_pr_minutes_per_day']['macos']:.1f}.", f"Internal time-to-signal p50: {report['internal_time_to_signal_p50_minutes']} minutes."]
     main = report.get("main_push") or {}
     if main:
-        total = sum(row["projected_minutes_per_day"] for row in main.values())
+        sampled = {name: row for name, row in main.items() if not name.startswith("_")}
+        total = sum(row["projected_minutes_per_day"] for row in sampled.values())
         lines += ["", "## Push to main (reported, not gated)", "", f"Projected main-push job minutes/day: {total:.1f} (runs in the last {DAYS} days x one sampled run's job minutes).", "", "| Workflow | Runs/week | Sampled run job-min | Projected min/day |", "| --- | ---: | ---: | ---: |"]
-        for workflow, row in sorted(main.items(), key=lambda item: -item[1]["projected_minutes_per_day"]):
-            lines.append(f"| {workflow} | {row['runs_per_week']} | {row['sampled_run_job_minutes']} | {row['projected_minutes_per_day']} |")
+        for workflow, row in sorted(sampled.items(), key=lambda item: -item[1]["projected_minutes_per_day"]):
+            note = " (first 100 jobs only)" if row.get("truncated_jobs") else ""
+            lines.append(f"| {workflow} | {row['runs_per_week']} | {row['sampled_run_job_minutes']}{note} | {row['projected_minutes_per_day']} |")
+        if "_not_sampled" in main:
+            lines.append(f"\nNot sampled (over the {MAX_MAIN_WORKFLOWS}-workflow bound): {', '.join(main['_not_sampled']['workflows'])}.")
     lines += ["", "## Problems", ""] + ([f"- {problem}" for problem in report["problems"]] or ["None."])
     return "\n".join(lines) + "\n"
 
@@ -175,8 +179,10 @@ def job_minutes(jobs: list[dict]) -> float:
 def collect_main_pushes(api: Github, budget: dict, now: datetime) -> dict:
     """Runs per week and one sampled run's job minutes for each push-to-main workflow."""
     eligible = sorted(name for name, wf in budget["workflows"].items() if "push" in wf["triggers"])
-    if len(eligible) > MAX_MAIN_WORKFLOWS:
-        raise RuntimeError(f"{len(eligible)} push workflows exceeds bounded sample capacity {MAX_MAIN_WORKFLOWS}")
+    # Reported, not gated: past the bound, sample the first workflows and say
+    # so rather than failing the whole audit.
+    skipped = eligible[MAX_MAIN_WORKFLOWS:]
+    eligible = eligible[:MAX_MAIN_WORKFLOWS]
     since = (now - timedelta(days=DAYS)).strftime("%Y-%m-%d")
     rows = {}
     for workflow in eligible:
@@ -193,6 +199,10 @@ def collect_main_pushes(api: Github, budget: dict, now: datetime) -> dict:
             "sampled_run_job_minutes": round(minutes, 1),
             "projected_minutes_per_day": round(count / DAYS * minutes, 1),
         }
+        if jobs.get("total_count", 0) > 100:
+            rows[workflow]["truncated_jobs"] = True  # only the first 100 jobs were priced
+    if skipped:
+        rows["_not_sampled"] = {"workflows": skipped}
     return rows
 
 
