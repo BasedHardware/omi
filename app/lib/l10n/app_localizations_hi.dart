@@ -13928,6 +13928,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summaryBusyBody => 'Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'अभी तक ट्रांसक्राइब नहीं हुआ';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ट्रांसक्रिप्ट तैयार होने पर सारांश दिखाई देगा।';
+
+  @override
   String get summaryCheckAgain => 'फिर से जांचें';
 
   @override

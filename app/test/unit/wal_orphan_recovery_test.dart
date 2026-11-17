@@ -309,15 +309,35 @@ void main() {
     expect((rechecked.summary['orphan_classification'] as Map)['frame_files_read'], 1);
     expect((rechecked.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
     expect(rechecked.orphans.singleWhere((f) => f.filePath == changed.path).classification, 'unparseable');
-    // Zero may mean a transient read failure; never persist a negative cache.
+    // An unchanged malformed file is not reread on every wake...
+    final sameDay = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now + 3600,
+        currentOwner: 'owner-a',
+        frameCache: rechecked.frameCache);
+    expect((sameDay.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect((sameDay.summary['orphan_classification'] as Map)['frame_cache_hits'], 3000);
+    expect(sameDay.orphans.singleWhere((f) => f.filePath == changed.path).classification, 'unparseable');
+    // ...but zero may mean a transient read failure, so the negative result expires after a day.
     final retried = await captureRecordingCensus(
         documents: dir.path,
         memoryBuckets: {'active': []},
-        phoneSeconds: now,
+        phoneSeconds: now + 86400,
         currentOwner: 'owner-a',
-        frameCache: rechecked.frameCache);
+        frameCache: sameDay.frameCache);
     expect((retried.summary['orphan_classification'] as Map)['frame_files_read'], 1);
     expect((retried.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
+  });
+  test('unowned and out-of-window orphans are classified without reading audio', () async {
+    await audio(name(now - 40 * 86400));
+    await json('wals_backup.json', {
+      'wals': [row('foreign.bin', 'owner-b')]
+    });
+    await audio(name(now - 60));
+    final result = await census();
+    expect((result.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect(result.orphans.map((f) => f.classification).toSet(), {'owner_unknown'});
   });
   Future<LocalWalSyncImpl> ledger(
       {DateTime Function()? clock,
@@ -331,13 +351,17 @@ void main() {
       bool realCensus = false,
       bool realPersistence = false,
       Future<void> Function(List<Wal>)? persist,
-      List<Map<String, Object?>>? events}) async {
+      List<Map<String, Object?>>? events,
+      Future<bool> Function()? reclaimOff,
+      void Function(Map<String, Object?>)? onReclaim}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
         uploadGate: gate,
         periodic: periodic,
         orphanCensus: realCensus ? null : scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
+        orphanReclaimOff: reclaimOff,
+        orphanReclaimTelemetry: onReclaim,
         orphanForeground: foregroundProbe ?? () => foreground, orphanTelemetry: (v) {
       events?.add(v);
       onEvent?.call(v);
@@ -1327,6 +1351,21 @@ void main() {
     timers[2].fire();
     await done.future;
     expect(scans, 2);
+  });
+
+  test('one foreground wake runs recovery, then reclaim after recovery settles', () async {
+    final order = <String>[];
+    final reclaimed = Completer<void>();
+    final sync = await ledger(
+        onEvent: (_) => order.add('recovery'),
+        reclaimOff: () async => false,
+        onReclaim: (_) {
+          order.add('reclaim');
+          if (!reclaimed.isCompleted) reclaimed.complete();
+        });
+    sync.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await reclaimed.future.timeout(const Duration(seconds: 10));
+    expect(order, ['recovery', 'reclaim']);
   });
 
   test('incomplete census and kill switch adopt nothing', () async {

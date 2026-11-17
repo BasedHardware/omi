@@ -4303,6 +4303,8 @@
     "summaryWithOmiInstead": "Résumer plutôt avec Omi",
     "summaryBusyTitle": "Traitement en cours",
     "summaryBusyBody": "Omi travaille déjà sur cette conversation. Le résumé apparaîtra ici une fois terminé.",
+    "summaryTranscriptionPendingTitle": "Pas encore transcrit",
+    "summaryTranscriptionPendingBody": "Le résumé apparaîtra dès que la transcription sera prête.",
     "summaryCheckAgain": "Vérifier à nouveau",
     "summaryLimitTitle": "Limite de résumés atteinte",
     "summaryLimitBody": "Vous avez régénéré plusieurs résumés au cours de la dernière heure. Réessayez plus tard.",

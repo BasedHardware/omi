@@ -43,7 +43,7 @@ from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
-from utils.conversations.home_titles import summary_owed
+from utils.conversations.home_titles import summary_owed, untitled_pending
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
@@ -102,7 +102,8 @@ def classify(row: Mapping[str, Any]) -> str | None:
         elif _older_than(anchor, seconds):
             PROCESSING_AGE_TOTAL.labels(reason=HomeProcessingAgeReason.EXPIRED).inc()
             return FAILED
-        return TRANSCRIBING if not title else WRITING_NOTES
+        # A placeholder stamped on a capture stub is not evidence of a transcript.
+        return TRANSCRIBING if untitled_pending(structured) else WRITING_NOTES
     if status == 'failed':
         return FAILED
     if status != 'completed':

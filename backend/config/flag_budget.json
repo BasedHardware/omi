@@ -1240,6 +1240,11 @@
       "owner": "quality-lead",
       "review_by": "2026-12-15",
       "registry": "config/feature-flags.yaml"
+    },
+    "BATCH_RESULT_PROTOCOL_GUARD_ENABLED": {
+      "owner": "pipeline-driver",
+      "review_by": "2026-12-17",
+      "registry": "config/feature-flags.yaml"
     }
   },
   "retired_history": "docs/history/retired-pipeline-flags.json",

@@ -13947,6 +13947,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get summaryBusyBody => 'Omi đang xử lý cuộc trò chuyện này. Bản tóm tắt sẽ xuất hiện ở đây khi hoàn tất.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Chưa được chép lời';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Bản tóm tắt sẽ xuất hiện khi bản chép lời sẵn sàng.';
+
+  @override
   String get summaryCheckAgain => 'Kiểm tra lại';
 
   @override

@@ -18,6 +18,7 @@ import 'package:omi/pages/conversation_detail/widgets/conversation_entity_chips.
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
@@ -107,13 +108,23 @@ class ConversationDetailHeader extends StatelessWidget {
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
     final titleStyle = OmiType.title1.copyWith(height: 1.15, letterSpacing: -0.4);
     if (conversation.discarded) return Text(context.l10n.discardedConversation, style: titleStyle);
-    return ConversationTitleField(
-      focusNode: provider.titleFocusNode,
-      controller: provider.titleController,
-      style: titleStyle,
-      displayText: (stored) => presentableConversationTitle(conversation, title: stored),
-      hintText: transcriptFallbackTitle(conversation) ??
-          recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+    // Once the server says the audio is still waiting for a transcript, its "Couldn't transcribe"
+    // stand-in title would contradict the Summary tab, so the page shows the untitled fallback.
+    return ValueListenableBuilder<Map<String, DateTime>>(
+      valueListenable: TranscriptionPendingConversations.ids,
+      builder: (context, _, __) {
+        final waiting = TranscriptionPendingConversations.replacesTitle(conversation);
+        return ConversationTitleField(
+          focusNode: provider.titleFocusNode,
+          controller: provider.titleController,
+          style: titleStyle,
+          displayText: (stored) => waiting && stored.trim() == TranscriptionPendingConversations.serverHoldTitle
+              ? ''
+              : presentableConversationTitle(conversation, title: stored),
+          hintText: transcriptFallbackTitle(conversation) ??
+              recordingFallbackTitle(conversation, context.l10n, dates: OmiDateFormat.of(context)),
+        );
+      },
     );
   }
 

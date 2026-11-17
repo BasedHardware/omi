@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "Наместо тоа, сумирај со Omi",
     "summaryBusyTitle": "Сè уште се обработува",
     "summaryBusyBody": "Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.",
+    "summaryTranscriptionPendingTitle": "Сè уште не е транскрибирано",
+    "summaryTranscriptionPendingBody": "Резимето ќе се појави кога транскриптот ќе биде подготвен.",
     "summaryCheckAgain": "Провери повторно",
     "summaryLimitTitle": "Достигнато е ограничувањето за резимеа",
     "summaryLimitBody": "Во последниот час повеќе пати повторно генериравте резимеа. Обидете се повторно подоцна.",

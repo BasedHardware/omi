@@ -562,7 +562,7 @@ async def test_only_the_lease_holder_runs_recovery_and_global_drain():
     assert pumps[0].leader.acquire()  # Replica 0 already leads this tick.
     recovered = []
     original = queue.recover
-    queue.recover = lambda now: recovered.append(now) or original(now)
+    queue.recover = lambda now, **kwargs: recovered.append(now) or original(now, **kwargs)
     assert await pumps[1].run_once() == 0
     assert not recovered and store.rows['jobs', 'first']['state'] == 'result_ready'
     assert await pumps[0].run_once() == 0

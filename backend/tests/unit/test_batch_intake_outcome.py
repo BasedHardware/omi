@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from functools import partial
 
 import pytest
+import anthropic  # noqa: F401 - unrelated SDK cold import belongs to harness setup, not routing CPU
 from starlette.datastructures import UploadFile
 
 from config.policy import BatchUnitPolicy, ramp

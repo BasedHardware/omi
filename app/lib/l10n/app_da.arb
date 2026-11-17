@@ -4310,6 +4310,8 @@
     "summaryWithOmiInstead": "Opsummer med Omi i stedet",
     "summaryBusyTitle": "Behandles stadig",
     "summaryBusyBody": "Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.",
+    "summaryTranscriptionPendingTitle": "Ikke transskriberet endnu",
+    "summaryTranscriptionPendingBody": "Opsummeringen vises, når transskriptionen er klar.",
     "summaryCheckAgain": "Tjek igen",
     "summaryLimitTitle": "Grænsen for opsummeringer er nået",
     "summaryLimitBody": "Du har genereret flere opsummeringer igen inden for den seneste time. Prøv igen senere.",

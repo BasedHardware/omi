@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "Ипак сажми помоћу Omi",
     "summaryBusyTitle": "Обрада је још у току",
     "summaryBusyBody": "Omi већ ради на овом разговору. Сажетак ће се појавити овде када буде готов.",
+    "summaryTranscriptionPendingTitle": "Још није транскрибовано",
+    "summaryTranscriptionPendingBody": "Сажетак ће се појавити када транскрипт буде спреман.",
     "summaryCheckAgain": "Провери поново",
     "summaryLimitTitle": "Достигнуто је ограничење сажетака",
     "summaryLimitBody": "У последњих сат времена сте више пута поново генерисали сажетке. Покушајте поново касније.",

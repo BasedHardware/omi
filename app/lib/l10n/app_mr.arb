@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "त्याऐवजी Omi ने सारांश करा",
     "summaryBusyTitle": "अजूनही प्रक्रिया सुरू आहे",
     "summaryBusyBody": "Omi आधीच या संभाषणावर काम करत आहे. पूर्ण झाल्यावर सारांश येथे दिसेल.",
+    "summaryTranscriptionPendingTitle": "अद्याप ट्रान्सक्राइब केलेले नाही",
+    "summaryTranscriptionPendingBody": "ट्रान्सक्रिप्ट तयार झाल्यावर सारांश दिसेल.",
     "summaryCheckAgain": "पुन्हा तपासा",
     "summaryLimitTitle": "सारांश मर्यादा गाठली",
     "summaryLimitBody": "तुम्ही गेल्या तासात अनेक सारांश पुन्हा तयार केले आहेत. नंतर पुन्हा प्रयत्न करा.",

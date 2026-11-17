@@ -13974,6 +13974,12 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryBusyBody => 'Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kada bude gotov.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Još nije transkribovano';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Sažetak će se pojaviti kada transkript bude spreman.';
+
+  @override
   String get summaryCheckAgain => 'Provjeri ponovo';
 
   @override

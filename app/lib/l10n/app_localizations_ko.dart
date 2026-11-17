@@ -13756,6 +13756,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get summaryBusyBody => 'Omi가 이미 이 대화를 처리하고 있습니다. 완료되면 여기에 요약이 표시됩니다.';
 
   @override
+  String get summaryTranscriptionPendingTitle => '아직 전사되지 않음';
+
+  @override
+  String get summaryTranscriptionPendingBody => '전사가 완료되면 요약이 표시됩니다.';
+
+  @override
   String get summaryCheckAgain => '다시 확인';
 
   @override

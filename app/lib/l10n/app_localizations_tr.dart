@@ -13958,6 +13958,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryBusyBody => 'Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
+
+  @override
   String get summaryCheckAgain => 'Tekrar kontrol et';
 
   @override

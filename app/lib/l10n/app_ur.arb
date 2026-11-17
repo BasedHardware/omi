@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "اس کے بجائے Omi سے خلاصہ کریں",
     "summaryBusyTitle": "ابھی کارروائی جاری ہے",
     "summaryBusyBody": "Omi پہلے ہی اس گفتگو پر کام کر رہا ہے۔ مکمل ہونے پر خلاصہ یہاں ظاہر ہوگا۔",
+    "summaryTranscriptionPendingTitle": "ابھی تک ٹرانسکرائب نہیں ہوا",
+    "summaryTranscriptionPendingBody": "ٹرانسکرپٹ تیار ہونے پر خلاصہ ظاہر ہوگا۔",
     "summaryCheckAgain": "دوبارہ چیک کریں",
     "summaryLimitTitle": "خلاصے کی حد پوری ہو گئی",
     "summaryLimitBody": "آپ نے پچھلے ایک گھنٹے میں کئی خلاصے دوبارہ بنائے ہیں۔ بعد میں دوبارہ کوشش کریں۔",

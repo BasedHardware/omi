@@ -13943,6 +13943,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get summaryBusyBody => 'Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'هنوز رونویسی نشده';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.';
+
+  @override
   String get summaryCheckAgain => 'بررسی دوباره';
 
   @override

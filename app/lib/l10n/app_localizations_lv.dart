@@ -13979,6 +13979,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get summaryBusyBody => 'Omi jau apstrādā šo sarunu. Kopsavilkums parādīsies šeit, kad tas būs gatavs.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Vēl nav transkribēts';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kopsavilkums parādīsies, kad transkripcija būs gatava.';
+
+  @override
   String get summaryCheckAgain => 'Pārbaudīt vēlreiz';
 
   @override

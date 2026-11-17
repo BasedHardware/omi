@@ -13970,6 +13970,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get summaryBusyBody => 'Omi jau apdoroja šį pokalbį. Santrauka bus parodyta čia, kai bus baigta.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Dar netranskribuota';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Santrauka bus parodyta, kai bus paruošta transkripcija.';
+
+  @override
   String get summaryCheckAgain => 'Tikrinti dar kartą';
 
   @override

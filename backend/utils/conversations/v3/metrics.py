@@ -3,6 +3,10 @@
 from prometheus_client import Counter, Histogram, Gauge
 
 RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder outcomes', ['outcome'])
+BLOCKED = Counter(
+    'omi_conversations_v3_blocked_total', 'Deterministic reconcile conflicts parked behind owner backoff', ['reason']
+)
+ADOPTED = Counter('omi_conversations_v3_adopted_total', 'Existing derived rows adopted as a replanned prior')
 PENDING_AGE = Histogram(
     'omi_conversations_v3_pending_age_seconds', 'Pending recording age', buckets=(60, 300, 600, 1800, 3600, 86400)
 )

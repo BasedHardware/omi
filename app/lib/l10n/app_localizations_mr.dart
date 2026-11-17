@@ -13954,6 +13954,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get summaryBusyBody => 'Omi आधीच या संभाषणावर काम करत आहे. पूर्ण झाल्यावर सारांश येथे दिसेल.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'अद्याप ट्रान्सक्राइब केलेले नाही';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ट्रान्सक्रिप्ट तयार झाल्यावर सारांश दिसेल.';
+
+  @override
   String get summaryCheckAgain => 'पुन्हा तपासा';
 
   @override

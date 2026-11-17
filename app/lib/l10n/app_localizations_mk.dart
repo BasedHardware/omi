@@ -14008,6 +14008,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get summaryBusyBody => 'Omi веќе работи на овој разговор. Резимето ќе се појави тука кога ќе заврши.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Сè уште не е транскрибирано';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Резимето ќе се појави кога транскриптот ќе биде подготвен.';
+
+  @override
   String get summaryCheckAgain => 'Провери повторно';
 
   @override

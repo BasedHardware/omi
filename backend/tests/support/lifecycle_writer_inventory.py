@@ -13,11 +13,9 @@ FIELD_SITES = {
                 'lease_until',
                 'merge_pending',
                 'policy',
-                'protocol_version',
                 'requires_compute_admission',
                 'source_alias_fallback',
                 'source_conversation_ids',
-                'source_reuse_version',
                 'state',
                 'stt_route',
                 'token',
@@ -27,7 +25,7 @@ FIELD_SITES = {
             'merge_ready',
             'projection_state',
             "'pending'",
-            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result', 'source_reuse_version'),
+            ('projection_redriven_at', 'projection_state', 'protocol_version', 'result'),
         ),
         ('merge_ready', 'state', "'committed'", ('merge_pending', 'state')),
     ],
@@ -48,11 +46,9 @@ FIELD_SITES = {
                 'policy',
                 'policy_source',
                 'priority',
-                'protocol_version',
                 'ready_at',
                 'result',
                 'source_alias',
-                'source_alias_version',
                 'source_conversation_ids',
                 'state',
                 'token',
@@ -166,7 +162,7 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
-        ('reconcile', 'status', "prior['status']", ('status',)),
+        ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
@@ -3112,6 +3108,7 @@ FIELD_SITES = {
             "'leased'",
             ('attempt', 'lease_until', 'shared_gpu_key', 'state', 'token'),
         ),
+        ('Scheduler._recover.recover_page.commit', 'state', "'ready'", ('state',)),
         ('Scheduler.complete.commit', 'state', "'result_ready'", ('ready_at', 'result', 'state')),
         ('Scheduler.defer.commit', 'state', "'retry'", ('attempt', 'available_at', 'lease_until', 'state', 'token')),
         (
@@ -3135,7 +3132,6 @@ FIELD_SITES = {
                 'token',
             ),
         ),
-        ('Scheduler.recover.commit', 'state', "'ready'", ('state',)),
         (
             'Scheduler.redrive_in_transaction',
             'state',

@@ -13989,6 +13989,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get summaryBusyBody => 'Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗಿಲ್ಲ';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'ಲಿಪ್ಯಂತರ ಸಿದ್ಧವಾದಾಗ ಸಾರಾಂಶ ಕಾಣಿಸುತ್ತದೆ.';
+
+  @override
   String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
 
   @override

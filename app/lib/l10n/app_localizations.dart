@@ -24795,6 +24795,18 @@ abstract class AppLocalizations {
   /// **'Omi is already working on this conversation. The summary will appear here when it finishes.'**
   String get summaryBusyBody;
 
+  /// Status shown in place of a summary when the recording has no transcript yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribed yet'**
+  String get summaryTranscriptionPendingTitle;
+
+  /// Shown when a recording has no transcript yet, so its summary cannot be made. Tells the user the summary will come after the transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'The summary will appear once the transcript is ready.'**
+  String get summaryTranscriptionPendingBody;
+
   /// Button that re-reads the conversation to see if processing finished.
   ///
   /// In en, this message translates to:

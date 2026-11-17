@@ -1,5 +1,6 @@
 """Presentation-only replacement of transcript-echo minimum titles."""
 
+import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Any, Callable, Optional
@@ -8,6 +9,7 @@ from config.episodes import home_neutral_minimum_titles_enabled
 
 from utils.conversations.deterministic_minimum import fallback_title, first_sentence, truncate_on_word_boundary
 from utils.conversations.summary_delivery import field, present
+from utils.summary_quality import safe_body, valid_title
 
 
 def apply_user_title(row: dict[str, Any], user_title: str | None) -> None:
@@ -31,6 +33,80 @@ def summary_owed(row: Mapping[str, Any]) -> bool:
         and not row.get('summary_completed_at')
         and not row.get('summary_output_present')
     )
+
+
+# The two labels ``summary_quality.title_or_fallback`` produces. Kept here, not in
+# the note policy module, because that file's source is part of the notes prompt
+# fingerprint and these readers are not prompt policy.
+_FALLBACK_TITLE = re.compile(r'^discussion (?:notes|\d+)$', re.I)
+
+
+# Passed through the note policy in place of a missing title so sanitizing a row
+# with no notes does not count as a generated-title fallback. Never stored.
+PENDING_TITLE_STAND_IN = 'Pending capture'
+
+
+def is_fallback_title(value: Any) -> bool:
+    """Exactly the deterministic fallback labels, never another placeholder."""
+    return isinstance(value, str) and bool(_FALLBACK_TITLE.fullmatch(re.sub(r'\s+', ' ', value).strip()))
+
+
+def notes_pending(structured: Any) -> bool:
+    """True when no notes exist yet: no usable title, note body, task or event.
+
+    A capture stub and a raw-capture completion carry an empty structure. The
+    deterministic fallback title belongs to generated notes whose headline is
+    unusable; on a row with no notes it reads as a finished conversation, so
+    Home stops presenting the wait and the batch projection stops registering
+    the first-summary obligation (2026-11-16 incident).
+    """
+    if not isinstance(structured, Mapping):
+        return True
+    if valid_title(structured.get('title')):
+        return False
+    if any(safe_body(structured.get(key)).strip() for key in ('overview', 'gist')):
+        return False
+    sections = structured.get('sections')
+    if any(
+        isinstance(section, Mapping) and safe_body(section.get('body_markdown')).strip()
+        for section in (sections if isinstance(sections, list) else [])
+    ):
+        return False
+    return not any(structured.get(key) for key in ('action_items', 'events'))
+
+
+def untitled_pending(structured: Any) -> bool:
+    """No title, or only a placeholder on a row with no notes.
+
+    A placeholder beside real note content is generated notes with an unusable
+    headline: that row is finished and must keep its notes visible.
+    """
+    title = structured.get('title') if isinstance(structured, Mapping) else None
+    return not str(title or '').strip() or notes_pending(structured)
+
+
+def display_title(title: Any, preview: Any) -> Any:
+    """The Home card title: a bare fallback label with no preview is served as untitled."""
+    return '' if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()) else title
+
+
+def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:
+    """Serve a row that carries only a deterministic placeholder as untitled.
+
+    Capture stubs written 2026-11-16..17 were stamped "Discussion notes" before
+    any notes existed. Read-only: clients keep their own untitled presentation,
+    a user title or any summary keeps the stored title, and nothing is rewritten.
+    """
+    structured = row.get('structured')
+    if not isinstance(structured, Mapping):
+        return row
+    if (
+        not is_fallback_title(structured.get('title'))
+        or str(row.get('user_title') or '').strip()
+        or not notes_pending(structured)
+    ):
+        return row
+    return {**row, 'structured': {**structured, 'title': ''}}
 
 
 def is_deferred_preview_title(row: Any) -> bool:

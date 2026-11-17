@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "สรุปด้วย Omi แทน",
     "summaryBusyTitle": "ยังคงประมวลผลอยู่",
     "summaryBusyBody": "Omi กำลังประมวลผลบทสนทนานี้อยู่แล้ว สรุปจะปรากฏที่นี่เมื่อเสร็จสิ้น",
+    "summaryTranscriptionPendingTitle": "ยังไม่ได้ถอดเสียง",
+    "summaryTranscriptionPendingBody": "สรุปจะปรากฏเมื่อการถอดเสียงพร้อม",
     "summaryCheckAgain": "ตรวจสอบอีกครั้ง",
     "summaryLimitTitle": "ถึงขีดจำกัดการสรุปแล้ว",
     "summaryLimitBody": "คุณสร้างสรุปใหม่หลายครั้งในชั่วโมงที่ผ่านมา โปรดลองอีกครั้งในภายหลัง",

@@ -13952,6 +13952,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get summaryBusyBody => 'Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Inte transkriberad än';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Sammanfattningen visas när transkriptionen är klar.';
+
+  @override
   String get summaryCheckAgain => 'Kontrollera igen';
 
   @override

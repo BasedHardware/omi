@@ -7889,6 +7889,16 @@ retries. Current debt counts only jobs still in `state=quarantined`; historical
 quarantine timestamps and counters include subsequently recovered results.
 Details: [worker runtime](../diarizer/batch_pipeline_runtime.md).
 
+### Batch result metadata across deploy units
+
+New source jobs carry `required_result_markers`, a map declared by
+`utils/batch_pipeline/result_protocol.py`. Both ordered merge paths validate and
+copy that map's registered job fields. `BATCH_RESULT_PROTOCOL_GUARD_ENABLED`
+defaults on; false restores legacy copying. Unsupported requirements leave work
+ready without appending an ordered result. Missing supported result copies are
+recovered from the immutable job and counted; conflicting copies are refused.
+See [source reuse rollout and compatibility](runbooks/sync-source-reuse.md).
+
 ### Batch worker artifact IO and fenced publication
 
 The dedicated worker prepares a lane's first fetch/decode before acquiring the
