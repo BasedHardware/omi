@@ -21,7 +21,7 @@ from google.cloud import firestore
 from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
 from database import legal_holds, rpc_deadline
-from database._client import get_firestore_client
+from database._client import get_firestore_client, run_transactional
 from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversations
 from database.batch_pipeline_purge import NAMESPACES
 
@@ -40,7 +40,7 @@ def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:
     def run(transaction):
         return body(transaction)
 
-    return run(client.transaction())
+    return run_transactional(client, run, transient=True)
 
 
 def enabled() -> bool:
@@ -155,6 +155,9 @@ def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] 
     def body(transaction):
         snapshots = {key: ref.get(transaction=transaction) for key, ref in refs.items()}
         current = snapshots[job].to_dict() or {}
+        committed = current.get('owner_scan') or {}
+        if committed.get('epoch') == epoch and committed.get('token') == token:
+            return 'run', committed  # A retried, ambiguous seal commit already succeeded.
         if int(current.get('generation') or 0) != generation or jobs.lease_held(current, now=now):
             return 'legacy', None
         eligible = {}
@@ -219,6 +222,8 @@ def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any])
         scan: dict[str, Any] = row.get('owner_scan') or {}
         if scan.get('epoch') != observed['epoch'] or int(row.get('generation') or 0) != generation:
             return 'superseded', None
+        if scan.get('token') == token and row.get('run_token') == token:
+            return 'run', scan  # Same resume, retried after an ambiguous commit.
         if jobs.lease_held(row, now=now):
             return 'in_progress', None
         rows = _read_members(client, transaction, scan)
