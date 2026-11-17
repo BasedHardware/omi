@@ -237,6 +237,18 @@ void main() {
     });
   }
 
+  // A non-empty but unparsable revision (e.g. the 'Unknown' sentinel after a failed BLE read) is a
+  // device-side failure, so the page must say the version is unknown, not blame connectivity.
+  for (final revision in ['Unknown', 'not-a-version']) {
+    testWidgets('unparsable firmware revision "$revision" is reported as unknown version', (tester) async {
+      await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: revision, expectOffer: false);
+      expect(find.text(en.yourDeviceIsUpToDate), findsNothing);
+      expect(find.text(en.firmwareUpdateCheckUnavailable), findsNothing);
+      expect(find.text(en.unableToDetermineFirmwareVersion), findsOneWidget);
+      debugDefaultTargetPlatformOverride = null;
+    });
+  }
+
   testWidgets('firmware at the latest version is still reported as up to date', (tester) async {
     await pumpPage(tester, _DeviceProvider(batteryLevel: 80), firmwareVersion: '3.0.1', expectOffer: false);
     expect(find.text(en.yourDeviceIsUpToDate), findsOneWidget);

@@ -34,6 +34,10 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   /// A failed or inconclusive lookup leaves this false so the page never reports it as success.
   bool isConfirmedCurrent = false;
 
+  /// Whether the device's own firmware revision is empty or unparsable, so the inconclusive check is a
+  /// device-side failure rather than a lookup/connectivity one.
+  bool isCurrentVersionUnknown = false;
+
   // Store reference to provider for safe disposal
   DeviceProvider? _deviceProvider;
 
@@ -77,9 +81,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           setState(() {
             shouldUpdate = result.status == FirmwareUpdateCheck.updateAvailable;
             isConfirmedCurrent = result.status == FirmwareUpdateCheck.upToDate;
-            updateMessage = widget.device!.firmwareRevision.isEmpty
-                ? context.l10n.unableToDetermineFirmwareVersion
-                : result.message;
+            isCurrentVersionUnknown = result.status == FirmwareUpdateCheck.currentVersionUnknown;
+            updateMessage = isCurrentVersionUnknown ? context.l10n.unableToDetermineFirmwareVersion : result.message;
             isLoading = false;
           });
         }
@@ -419,7 +422,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   child: Text(
                     widget.isRollback
                         ? context.l10n.noStableFirmwareFound
-                        : widget.device!.firmwareRevision.isEmpty
+                        : isCurrentVersionUnknown
                             ? context.l10n.unableToDetermineFirmwareVersion
                             : context.l10n.firmwareUpdateCheckUnavailable,
                     style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),

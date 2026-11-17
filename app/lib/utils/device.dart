@@ -7,7 +7,10 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 
 /// Outcome of a firmware lookup, as far as the firmware update page may claim it.
-enum FirmwareUpdateCheck { updateAvailable, upToDate, notConfirmed }
+///
+/// [currentVersionUnknown] is a device-side failure: the paired device reported no revision or one that
+/// does not parse (e.g. the `Unknown` sentinel after a failed BLE read), so no lookup can be conclusive.
+enum FirmwareUpdateCheck { updateAvailable, upToDate, notConfirmed, currentVersionUnknown }
 
 class DeviceUtils {
   /// Closed, analysis-safe hardware family used by product telemetry.
@@ -63,14 +66,20 @@ class DeviceUtils {
   /// Classifies a firmware lookup. Only [FirmwareUpdateCheck.upToDate] means the lookup confirmed the
   /// device already runs the latest release; every other outcome without an offer is
   /// [FirmwareUpdateCheck.notConfirmed] (failed or empty lookup, draft or unparsable release metadata,
-  /// a device below the release's minimum version, or a release that needs a newer app).
+  /// a device below the release's minimum version, or a release that needs a newer app), except an empty or
+  /// unparsable device revision, which is [FirmwareUpdateCheck.currentVersionUnknown] whatever the lookup says.
   static Future<({FirmwareUpdateCheck status, String message, String version})> checkFirmwareUpdate({
     required String currentFirmware,
     required Map latestFirmwareDetails,
   }) async {
     const notConfirmed = FirmwareUpdateCheck.notConfirmed;
-    if (currentFirmware.isEmpty) {
-      return (status: notConfirmed, message: 'Unable to determine current firmware version', version: '');
+    Version? currentVersion = _tryParseVersion(currentFirmware);
+    if (currentVersion == null) {
+      return (
+        status: FirmwareUpdateCheck.currentVersionUnknown,
+        message: 'Unable to determine current firmware version',
+        version: '',
+      );
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
       return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
@@ -79,10 +88,6 @@ class DeviceUtils {
       return (status: notConfirmed, message: 'Latest Version Not Available', version: '');
     }
 
-    Version? currentVersion = _tryParseVersion(currentFirmware);
-    if (currentVersion == null) {
-      return (status: notConfirmed, message: 'Unable to determine current firmware version', version: '');
-    }
     String latestVersionStr = latestFirmwareDetails['version'];
     Version? latestVersion = _tryParseVersion(latestVersionStr);
     Version? minVersion = _tryParseVersion(latestFirmwareDetails['min_version']);
