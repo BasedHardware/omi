@@ -146,7 +146,8 @@ class ImportGraph:
     lazy_importers: Dict[str, Set[str]] = field(default_factory=dict)  # module -> function-level importers
     unparseable: Set[str] = field(default_factory=set)  # backend-relative paths
     _sources: Optional[Dict[str, bytes]] = field(default=None, repr=False)
-    _tree_scan_tests: Optional[Set[str]] = field(default=None, repr=False)
+    _tree_scan_modules: Optional[Set[str]] = field(default=None, repr=False)
+    _tree_scan_tests: Dict[tuple, Set[str]] = field(default_factory=dict, repr=False)
 
     def module_for_path(self, relative_path: str) -> Optional[str]:
         return self.path_modules.get(relative_path)
@@ -197,14 +198,27 @@ class ImportGraph:
         A changed module can break such a test without either importing the
         other, so callers add these for every Python change the graph resolves.
         """
-        tests = list(tests)
-        if self._tree_scan_tests is None:
+        key = tuple(sorted(tests))
+        if key not in self._tree_scan_tests:
             selected: Set[str] = set()
-            for module, text in self._module_sources().items():
-                if self.is_test_tree_module(module) and TREE_SCAN_PATTERN.search(text):
-                    selected |= self._tests_reaching(self.dependent_modules(module), tests)
-            self._tree_scan_tests = selected
-        return set(self._tree_scan_tests)
+            for module in self.tree_scan_modules():
+                selected |= self._tests_reaching(self.dependent_modules(module), key)
+            self._tree_scan_tests[key] = selected
+        return set(self._tree_scan_tests[key])
+
+    def tree_scan_modules(self) -> Set[str]:
+        if self._tree_scan_modules is None:
+            self._tree_scan_modules = {
+                module
+                for module, text in self._module_sources().items()
+                if self.is_test_tree_module(module) and TREE_SCAN_PATTERN.search(text)
+            }
+        return self._tree_scan_modules
+
+    def warm(self) -> 'ImportGraph':
+        """Do the one-time work (source read, scanner detection) up front."""
+        self.tree_scan_modules()
+        return self
 
     def dependent_tests(self, relative_path: str, tests: Iterable[str]) -> Set[str]:
         """Backend-relative test files that can load ``relative_path``.
