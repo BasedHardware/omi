@@ -137,7 +137,7 @@ async def pull(body: PullRequest):
         leases = await run_blocking(db_executor, body.service().pull, body.limit, body.capacity, pool=body.pool)
     except BatchPrivacyBlocked:
         return {'leases': []}
-    return {'leases': [asdict(lease) for lease in leases]}
+    return {'leases': [{**asdict(lease), 'item': lease.item.to_dict(include_nulls=True)} for lease in leases]}
 
 
 @router.post('/heartbeat', include_in_schema=False)

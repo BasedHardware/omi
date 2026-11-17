@@ -1999,6 +1999,15 @@ class AppLocalizationsTe extends AppLocalizations {
   String get memoryHistory => 'చరిత్ర';
 
   @override
+  String get recordingWithYourPhone => 'మీ ఫోన్‌తో రికార్డ్ అవుతోంది';
+
+  @override
+  String get wrapUp => 'ముగించు';
+
+  @override
+  String get recordingDiscarded => 'రికార్డింగ్ తీసివేయబడింది';
+
+  @override
   String get undo => 'మరలుచేయండి';
 
   @override
@@ -7071,6 +7080,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Apple సాથে సైన్ ఇన్ చేయడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple తో సైన్ ఇన్ కాలేదు. మళ్లీ ప్రయత్నించండి లేదా Google తో కొనసాగండి.';
 
   @override
   String get authFailedToRetrieveToken => 'firebase టోకెన్‌ను పొందడానికి విఫలమైంది, దయచేసి ప్రయత్నించండి.';
@@ -13455,6 +13468,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro కోడ్ ఉందా? తదుపరి స్క్రీన్‌లో దాన్ని నమోదు చేయండి.';
+
+  @override
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
@@ -15460,6 +15476,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paymentDeclinedTitle => 'మీ కార్డ్ తిరస్కరించబడింది';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'కార్డును అప్‌డేట్ చేయండి, లేదా $planను నెలకు $priceతో తిరిగి పొందండి';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '$plan తిరిగి పొందడానికి కార్డును అప్‌డేట్ చేయండి';
   }
@@ -15484,4 +15505,118 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'నెలవారీకి మారండి';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, నెలకు $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'చెల్లించని $yearly వార్షిక ఛార్జీకి బదులుగా. ప్రతి నెలా పునరుద్ధరించబడుతుంది. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'చెల్లింపు తిరస్కరించబడింది. మీ ప్లాన్ మారలేదు.';
+
+  @override
+  String get monthlySwitchUnavailable => 'ప్రస్తుతం మార్చడం అందుబాటులో లేదు. బదులుగా కార్డును అప్‌డేట్ చేయండి.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'మీరు ఇప్పుడు నెలవారీ ప్లాన్‌లో ఉన్నారు';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'ఈరోజు $price చెల్లించబడింది. ప్రతి నెలా పునరుద్ధరించబడుతుంది.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'ప్రాసెసింగ్ జాబితా మారింది. జాబితాను పరిశీలించి మళ్లీ ప్రయత్నించండి.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'ఈ నెల $minutes నిమిషాలు వాడేశారు';
+  }
+
+  @override
+  String get freeCapBody => 'Omi ఇంకా రికార్డ్ చేస్తోంది. ట్రాన్స్‌క్రిప్షన్ ఎలా కొనసాగించాలో ఎంచుకోండి.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'అపరిమిత క్లౌడ్ ట్రాన్స్‌క్రిప్షన్';
+
+  @override
+  String get freeCapProAccuracy => 'ఉత్తమ ఖచ్చితత్వం';
+
+  @override
+  String get freeCapProWaiting => 'వేచి ఉన్న మీ రికార్డింగ్‌లను ట్రాన్స్‌క్రైబ్ చేస్తుంది';
+
+  @override
+  String get freeCapPhoneSubtitle => 'ఉచితం. మీరు తిరిగి మార్చే వరకు ఆన్‌లో ఉంటుంది.';
+
+  @override
+  String get transcribingOnThisPhone => 'ఈ ఫోన్‌లో ట్రాన్స్‌క్రైబ్ అవుతోంది';
+
+  @override
+  String get getPro => 'Pro పొందండి';
+
+  @override
+  String get unlock => 'అన్‌లాక్';
+
+  @override
+  String get transcribeWith => 'దీనితో ట్రాన్స్‌క్రైబ్ చేయండి';
+
+  @override
+  String get omiCloud => 'Omi క్లౌడ్';
+
+  @override
+  String get thisPhone => 'ఈ ఫోన్';
+
+  @override
+  String get onDeviceReady => 'సిద్ధం';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit నిమిషాలు మిగిలాయి · $dateన రీసెట్';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes క్లౌడ్ నిమిషాలు అందుబాటులో ఉన్నాయి';
+  }
+
+  @override
+  String get switchBack => 'తిరిగి మార్చండి';
+
+  @override
+  String get setUpThisPhone => 'ఈ ఫోన్‌ను సెటప్ చేయండి';
+
+  @override
+  String get speechRecognition => 'స్పీచ్ రికగ్నిషన్';
+
+  @override
+  String get audioStaysOnPhone => 'ఆడియో మీ ఫోన్‌లోనే ఉంటుంది';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB డౌన్‌లోడ్';
+  }
+
+  @override
+  String get downloadNow => 'ఇప్పుడే డౌన్‌లోడ్ చేయండి';
+
+  @override
+  String get onWifiLater => 'తర్వాత Wi-Fiలో';
+
+  @override
+  String get conversationWritingSummary => 'మీ సారాంశం రాస్తున్నాం…';
 }

@@ -25,6 +25,7 @@ from database.batch_pipeline_projection_finish import projection_finish_state_fi
 from database.batch_pipeline_projection import assignment_held_without_recovery, OPERATOR_INTENTS
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.scheduler import owner_key
+from config.policy import ProjectionPolicy
 from config.batch_pipeline import (
     projection_hold_recovery_enabled,
     batch_held_dead_letter_enabled,
@@ -292,7 +293,13 @@ class ProjectionReleaseStore:
                             {
                                 'projection_state': 'ready',
                                 'ghost_settled_cohort': cohort,
-                                **projection_finish_state_fields('ready', now),
+                                **projection_finish_state_fields(
+                                    'ready',
+                                    now,
+                                    async_projection=ProjectionPolicy.from_dict(
+                                        (job.get('policy_parts') or {}).get('projection') or {}
+                                    ).async_projection,
+                                ),
                             },
                         )
                         return ('ghost_settled', bucket, invalid_cohort)

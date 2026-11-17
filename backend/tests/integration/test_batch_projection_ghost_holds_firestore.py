@@ -202,6 +202,7 @@ def test_completed_assignment_receipt_cannot_expire(holds, monkeypatch, enabled,
                 'projection_state': 'ready',
                 'ghost_settled_cohort': 'g1',
                 'projection_finish_due_at': NOW,
+                'projection_followup_due_at': NOW,
                 'projection_finish_backoff_step': 0,
             }
             if settled
@@ -237,7 +238,12 @@ def test_reconcile_only_repairs_ghost_hints_and_is_idempotent(holds, monkeypatch
         segment: {
             **row,
             **(
-                {'projection_state': 'ready', 'projection_finish_due_at': NOW, 'projection_finish_backoff_step': 0}
+                {
+                    'projection_state': 'ready',
+                    'projection_finish_due_at': NOW,
+                    'projection_followup_due_at': NOW,
+                    'projection_finish_backoff_step': 0,
+                }
                 if segment in GHOSTS
                 else {}
             ),
@@ -308,6 +314,7 @@ def test_repaired_ready_hint_completes_ledger_and_publishes_without_reassignment
         **ready,
         'ghost_settled_cohort': 'g1',
         'projection_finish_due_at': committed_at + 86400,
+        'projection_followup_due_at': committed_at + 86400,
         'projection_finish_backoff_step': 0,
     }
     assert projection_page(lane.client, lane.store.namespace, states=('ready',))[0] == [segment]
@@ -518,7 +525,7 @@ async def test_settle_wake_tail_uses_real_completion_and_rechecks_privacy(lane, 
         assert batch.ledger.get().to_dict()['status'] == 'processing'
         assert ref.get().to_dict()['projection_state'] != 'completed'
     else:
-        completion.assert_called_once_with(segment, batch.binding)
+        completion.assert_called_once_with(segment, batch.binding, silence=False)
         assert ref.get().to_dict()['projection_state'] == 'completed'
         assert batch.ledger.get().to_dict()['status'] == 'completed'
         assert len(lane.published) == 1

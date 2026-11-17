@@ -1952,6 +1952,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memoryHistory => '历史';
 
   @override
+  String get recordingWithYourPhone => '正在用手机录音';
+
+  @override
+  String get wrapUp => '结束';
+
+  @override
+  String get recordingDiscarded => '已舍弃录音';
+
+  @override
   String get undo => '撤销';
 
   @override
@@ -6919,6 +6928,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => '使用Apple登录失败，请重试。';
+
+  @override
+  String get authAppleSignInFailedUseGoogle => '无法通过 Apple 登录。请重试，或使用 Google 继续。';
 
   @override
   String get authFailedToRetrieveToken => '获取Firebase令牌失败，请重试。';
@@ -13195,6 +13207,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => '有 Omi Pro 兑换码？请在下一个页面输入。';
+
+  @override
   String get paywallTrialCancelNote => '随时取消。无费用，无罚款。';
 
   @override
@@ -15147,6 +15162,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paymentDeclinedTitle => '您的银行卡被拒绝';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return '更新银行卡，或恢复使用 $plan，每月 $price';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return '更新银行卡以恢复使用 $plan';
   }
@@ -15171,4 +15191,118 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => '改为按月付费';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan，每月 $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '替代未支付的年费 $yearly。按月续订。可随时取消。';
+  }
+
+  @override
+  String get monthlySwitchDeclined => '付款被拒。你的计划没有变化。';
+
+  @override
+  String get monthlySwitchUnavailable => '目前无法切换。请改为更新银行卡。';
+
+  @override
+  String get monthlySwitchDoneTitle => '已改为按月付费';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return '今日已支付 $price。按月续订。';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => '处理列表已更改。请检查列表后重试。';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return '本月的 $minutes 分钟已用完';
+  }
+
+  @override
+  String get freeCapBody => 'Omi 仍在录音。选择继续转录的方式。';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => '无限云端转录';
+
+  @override
+  String get freeCapProAccuracy => '最佳准确度';
+
+  @override
+  String get freeCapProWaiting => '转录你等待中的录音';
+
+  @override
+  String get freeCapPhoneSubtitle => '免费。在你切换回来之前保持开启。';
+
+  @override
+  String get transcribingOnThisPhone => '正在此手机上转录';
+
+  @override
+  String get getPro => '获取 Pro';
+
+  @override
+  String get unlock => '解锁';
+
+  @override
+  String get transcribeWith => '转录方式';
+
+  @override
+  String get omiCloud => 'Omi 云端';
+
+  @override
+  String get thisPhone => '此手机';
+
+  @override
+  String get onDeviceReady => '已就绪';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '剩余 $left/$limit 分钟 · $date 重置';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '可用 $minutes 分钟云端转录';
+  }
+
+  @override
+  String get switchBack => '切换回来';
+
+  @override
+  String get setUpThisPhone => '设置此手机';
+
+  @override
+  String get speechRecognition => '语音识别';
+
+  @override
+  String get audioStaysOnPhone => '音频保留在你的手机上';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '下载 $size MB';
+  }
+
+  @override
+  String get downloadNow => '立即下载';
+
+  @override
+  String get onWifiLater => '稍后通过 Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => '正在撰写你的摘要…';
 }

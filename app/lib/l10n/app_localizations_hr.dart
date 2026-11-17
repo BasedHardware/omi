@@ -1991,6 +1991,15 @@ class AppLocalizationsHr extends AppLocalizations {
   String get memoryHistory => 'Povijest';
 
   @override
+  String get recordingWithYourPhone => 'Snima se telefonom';
+
+  @override
+  String get wrapUp => 'Završi';
+
+  @override
+  String get recordingDiscarded => 'Snimka odbačena';
+
+  @override
   String get undo => 'Vrati Unazad';
 
   @override
@@ -7052,6 +7061,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Prijava s Apple-om nije uspjela, molim vas pokušajte ponovno.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Prijava putem Applea nije uspjela. Pokušajte ponovno ili nastavite s Googleom.';
 
   @override
   String get authFailedToRetrieveToken => 'Dohvaćanje firebase tokena nije uspjelo, molim vas pokušajte ponovno.';
@@ -13436,6 +13449,9 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Imate Omi Pro kod? Unesite ga na sljedećem zaslonu.';
+
+  @override
   String get paywallTrialCancelNote => 'Otkažite bilo kada. Bez naknada, bez kazni.';
 
   @override
@@ -15434,6 +15450,11 @@ class AppLocalizationsHr extends AppLocalizations {
   String get paymentDeclinedTitle => 'Vaša kartica je odbijena';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Ažurirajte karticu ili vratite $plan za $price mjesečno';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Ažurirajte karticu kako biste vratili $plan';
   }
@@ -15458,4 +15479,118 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Prijeđi na mjesečno';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mjesečno';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Zamjenjuje neplaćenu godišnju naplatu od $yearly. Obnavlja se mjesečno. Otkažite bilo kada.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Plaćanje je odbijeno. Vaš plan nije promijenjen.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Prelazak trenutačno nije dostupan. Umjesto toga ažurirajte karticu.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Sada plaćate mjesečno';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Danas plaćeno $price. Obnavlja se mjesečno.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Popis obrade se promijenio. Pregledajte ga i pokušajte ponovno.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Iskoristili ste $minutes minuta za ovaj mjesec';
+  }
+
+  @override
+  String get freeCapBody => 'Omi i dalje snima. Odaberite kako nastaviti s transkripcijom.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neograničena transkripcija u oblaku';
+
+  @override
+  String get freeCapProAccuracy => 'Najbolja točnost';
+
+  @override
+  String get freeCapProWaiting => 'Transkribira vaše snimke na čekanju';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Besplatno. Ostaje uključeno dok se ne vratite.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkripcija na ovom telefonu';
+
+  @override
+  String get getPro => 'Nabavite Pro';
+
+  @override
+  String get unlock => 'Otključaj';
+
+  @override
+  String get transcribeWith => 'Transkribiraj pomoću';
+
+  @override
+  String get omiCloud => 'Omi oblak';
+
+  @override
+  String get thisPhone => 'Ovaj telefon';
+
+  @override
+  String get onDeviceReady => 'Spremno';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Preostalo $left od $limit min · obnavlja se $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Dostupno $minutes minuta u oblaku';
+  }
+
+  @override
+  String get switchBack => 'Vrati se';
+
+  @override
+  String get setUpThisPhone => 'Postavite ovaj telefon';
+
+  @override
+  String get speechRecognition => 'Prepoznavanje govora';
+
+  @override
+  String get audioStaysOnPhone => 'Zvuk ostaje na vašem telefonu';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return 'Preuzimanje $size MB';
+  }
+
+  @override
+  String get downloadNow => 'Preuzmi sada';
+
+  @override
+  String get onWifiLater => 'Kasnije na Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Pišemo vaš sažetak…';
 }

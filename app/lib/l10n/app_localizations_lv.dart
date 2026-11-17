@@ -1996,6 +1996,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get memoryHistory => 'Vēsture';
 
   @override
+  String get recordingWithYourPhone => 'Ieraksta ar tālruni';
+
+  @override
+  String get wrapUp => 'Pabeigt';
+
+  @override
+  String get recordingDiscarded => 'Ieraksts atmests';
+
+  @override
   String get undo => 'Atsaukt';
 
   @override
@@ -7045,6 +7054,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Neizdevās pierakstīties ar Apple, lūdzu, mēģiniet vēlreiz.';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Pierakstīšanās ar Apple neizdevās. Mēģiniet vēlreiz vai turpiniet ar Google.';
 
   @override
   String get authFailedToRetrieveToken => 'Neizdevās iegūt Firebase marķieri, lūdzu, mēģiniet vēlreiz.';
@@ -13434,6 +13447,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Vai jums ir Omi Pro kods? Ievadiet to nākamajā ekrānā.';
+
+  @override
   String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
 
   @override
@@ -15432,6 +15448,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paymentDeclinedTitle => 'Jūsu karte tika noraidīta';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'Atjauniniet karti vai atgūstiet $plan par $price mēnesī';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'Atjauniniet karti, lai atgūtu $plan';
   }
@@ -15456,4 +15477,118 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'Pāriet uz mēneša maksu';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, $price mēnesī';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return 'Aizstāj neapmaksāto gada maksu $yearly. Atjaunojas katru mēnesi. Atceliet jebkurā laikā.';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'Maksājums noraidīts. Jūsu plāns nav mainīts.';
+
+  @override
+  String get monthlySwitchUnavailable => 'Pāreja pašlaik nav pieejama. Tā vietā atjauniniet karti.';
+
+  @override
+  String get monthlySwitchDoneTitle => 'Tagad jūs maksājat katru mēnesi';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'Šodien samaksāts $price. Atjaunojas katru mēnesi.';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'Apstrādes saraksts ir mainījies. Pārskatiet to un mēģiniet vēlreiz.';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'Esat izmantojis šī mēneša $minutes minūtes';
+  }
+
+  @override
+  String get freeCapBody => 'Omi joprojām ieraksta. Izvēlieties, kā turpināt transkribēšanu.';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'Neierobežota mākoņa transkripcija';
+
+  @override
+  String get freeCapProAccuracy => 'Vislabākā precizitāte';
+
+  @override
+  String get freeCapProWaiting => 'Transkribē jūsu gaidošos ierakstus';
+
+  @override
+  String get freeCapPhoneSubtitle => 'Bez maksas. Paliek ieslēgts, līdz pārslēdzat atpakaļ.';
+
+  @override
+  String get transcribingOnThisPhone => 'Transkribē šajā tālrunī';
+
+  @override
+  String get getPro => 'Iegūt Pro';
+
+  @override
+  String get unlock => 'Atbloķēt';
+
+  @override
+  String get transcribeWith => 'Transkribēt ar';
+
+  @override
+  String get omiCloud => 'Omi mākonis';
+
+  @override
+  String get thisPhone => 'Šis tālrunis';
+
+  @override
+  String get onDeviceReady => 'Gatavs';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return 'Atlikušas $left no $limit min · atjaunojas $date';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return 'Pieejamas $minutes mākoņa minūtes';
+  }
+
+  @override
+  String get switchBack => 'Pārslēgt atpakaļ';
+
+  @override
+  String get setUpThisPhone => 'Iestatīt šo tālruni';
+
+  @override
+  String get speechRecognition => 'Runas atpazīšana';
+
+  @override
+  String get audioStaysOnPhone => 'Audio paliek jūsu tālrunī';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB lejupielāde';
+  }
+
+  @override
+  String get downloadNow => 'Lejupielādēt tagad';
+
+  @override
+  String get onWifiLater => 'Vēlāk ar Wi-Fi';
+
+  @override
+  String get conversationWritingSummary => 'Rakstām jūsu kopsavilkumu…';
 }

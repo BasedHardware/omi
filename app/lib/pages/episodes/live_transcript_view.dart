@@ -17,6 +17,7 @@ import 'package:omi/pages/conversation_capturing/capture_recovery_status.dart';
 import 'package:omi/pages/conversation_capturing/widgets/speaker_suggestion_chip.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/pages/episodes/live_preview_transcript.dart';
+import 'package:omi/pages/on_device/on_phone_banner.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -122,6 +123,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
         return Column(
           children: [
             const CaptureRecoveryStatus(),
+            if (showOnPhoneBanner(transcribingOnPhone: provider.transcribingOnPhone, usage: usage))
+              const OnPhoneTranscriptionBanner(),
             if (provider.localSttFailure case final failure?)
               LocalSttRecoveryNotice(
                 failure: failure,
@@ -707,7 +710,9 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
   }) {
     if (!provider.pendantCaptureVerified) return '';
     if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
-    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (usage.isOutOfCredits && !provider.transcribingOnPhoneAtCap && !provider.transcribingOnPhone) {
+      return context.l10n.transcriptionUnavailableRecordingSaved;
+    }
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;
     }

@@ -146,6 +146,7 @@ _WRITE_PLUMBING_MODULES = frozenset(
         'database.memory_change_head',
         'database.action_item_write_fence',
         'database.batch_privacy_write_fence',
+        'database.home_feed_writer',
         # The transactional callback has returned before the SDK commits, so the
         # retry helper would otherwise be the first frame for every caller of it
         # (~50% of Cloud Run writes on 2026-11-01).

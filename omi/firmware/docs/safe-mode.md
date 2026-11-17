@@ -408,7 +408,7 @@ procedure. Never substitute release HEX into the archived two-core flasher.
 
 ## Differences from the scoping snapshot
 
-The backlog already owns a 25-byte telemetry packet at `19B10041`. The combined
+The backlog already owns an append-only (25-byte base) telemetry packet at `19B10041`. The combined
 candidate keeps that UUID/layout and exposes main's 16-byte recovery
 prefix plus the 80-byte boot record at `19B10042`, in the same service. Normal diagnostics follows storage;
 SAFE registers the extended recovery state, including boot/storage telemetry. See [gatt-map.md](gatt-map.md)

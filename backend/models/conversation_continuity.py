@@ -4,7 +4,8 @@ from datetime import datetime, timedelta, timezone
 from math import isfinite
 from typing import Any, Mapping
 
-from config.server_batch import language_compatible, owned
+from config.server_batch import language_compatible, owned, has_audio
+from config import listen_reconnect
 
 from config.recorded_time_tolerances import (
     CONTINUE_GAP_SECONDS as DEFAULT_GAP_SECONDS,
@@ -117,6 +118,11 @@ def resumable_continuation(
     from utils.conversations.recorded_time import recorded_end
 
     finish = recorded_end(row)
+    if owned(row) and has_audio(row):
+        # A committed original-audio bound proves activity even before batch STT
+        # has produced any placed segments. Arrival alone never grants continuity.
+        audio_end = datetime.fromtimestamp(row['server_batch_audio_end'], timezone.utc)
+        finish = max(finish, audio_end) if finish is not None else audio_end
     if not allow_server_batch:
         if owned(row):
             return False
@@ -125,6 +131,9 @@ def resumable_continuation(
             return False
     return (
         row.get('status') == 'in_progress'
+        and not (owned(row) and row.get('server_batch_audio_closed'))
+        and not listen_reconnect.grace_expired(row, arrival_at)
+        and listen_reconnect.producer(row).get('phase') != 'ended'
         and not any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         and row.get('source') == source
         and row.get('client_device_id') == device_id

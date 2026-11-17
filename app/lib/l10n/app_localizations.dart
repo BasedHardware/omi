@@ -3867,6 +3867,24 @@ abstract class AppLocalizations {
   /// **'History'**
   String get memoryHistory;
 
+  /// Home's recording bar, line 1: this phone is recording a live conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recording with your phone'**
+  String get recordingWithYourPhone;
+
+  /// Button on Home's recording bar: end the phone recording and process it
+  ///
+  /// In en, this message translates to:
+  /// **'Wrap Up'**
+  String get wrapUp;
+
+  /// Confirmation after Undo on Home's recording bar: the accidental recording was thrown away
+  ///
+  /// In en, this message translates to:
+  /// **'Recording discarded'**
+  String get recordingDiscarded;
+
   /// Undo button text
   ///
   /// In en, this message translates to:
@@ -13250,6 +13268,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to sign in with Apple, please try again.'**
   String get authFailedToSignInWithApple;
+
+  /// Shown after Sign in with Apple fails for a reason other than the user cancelling; points to the Google button on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Apple didn\'t work. Try again or continue with Google.'**
+  String get authAppleSignInFailedUseGoogle;
 
   /// Error message when retrieving Firebase token fails
   ///
@@ -23835,6 +23859,12 @@ abstract class AppLocalizations {
   /// **'Try for {price}'**
   String paywallTrialCta(String price);
 
+  /// Trial paywall line under the Try button: a prepaid or promo code is entered on the Stripe checkout screen that opens next
+  ///
+  /// In en, this message translates to:
+  /// **'Have an Omi Pro code? Add it on the next screen.'**
+  String get paywallTrialCodeHint;
+
   /// Paywall footnote
   ///
   /// In en, this message translates to:
@@ -27021,6 +27051,12 @@ abstract class AppLocalizations {
   /// **'Your card was declined'**
   String get paymentDeclinedTitle;
 
+  /// Home row line under 'Your card was declined' when a declined yearly renewal can switch to monthly. it = the card; plan = a product name such as Omi Pro; price = the monthly price, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'Update it, or get {plan} back for {price} a month'**
+  String paymentDeclinedMonthlyMessage(String plan, String price);
+
   /// Home row line under 'Your card was declined'. it = the card; plan = a product name such as Omi Pro
   ///
   /// In en, this message translates to:
@@ -27062,6 +27098,204 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirming installation… This may take up to 3 minutes.'**
   String get firmwareVerifyingInstallation;
+
+  /// Title of the sheet and the button that move a declined yearly renewal to the same plan billed monthly
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Monthly'**
+  String get monthlySwitchTitle;
+
+  /// Value of the Plan row in the switch-to-monthly sheet, e.g. "Omi Pro, US$29.99 a month"
+  ///
+  /// In en, this message translates to:
+  /// **'{plan}, {price} a month'**
+  String monthlySwitchPlanValue(String plan, String price);
+
+  /// Line under the switch-to-monthly preview. yearly = the declined yearly amount, e.g. US$269.91
+  ///
+  /// In en, this message translates to:
+  /// **'Replaces the unpaid {yearly} yearly charge. Renews monthly. Cancel anytime.'**
+  String monthlySwitchNote(String yearly);
+
+  /// Switch-to-monthly sheet: the monthly charge was declined; nothing changed
+  ///
+  /// In en, this message translates to:
+  /// **'Payment declined. Your plan didn\'t change.'**
+  String get monthlySwitchDeclined;
+
+  /// Switch-to-monthly sheet: the server refused the switch for this subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Switching isn\'t available right now. Update your card instead.'**
+  String get monthlySwitchUnavailable;
+
+  /// Switch-to-monthly sheet title after a successful switch
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on monthly'**
+  String get monthlySwitchDoneTitle;
+
+  /// Switch-to-monthly sheet body after a successful switch. price = the amount charged, e.g. US$29.99
+  ///
+  /// In en, this message translates to:
+  /// **'{price} paid today. Renews monthly.'**
+  String monthlySwitchDoneBody(String price);
+
+  /// Deletion was cancelled because recordings left the visible processing scope during confirmation. Review the current list before deleting again.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing changed. Review the list and try again.'**
+  String get processingDeleteScopeChanged;
+
+  /// No description provided for @syncTooOldExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.'**
+  String get syncTooOldExplanation;
+
+  /// Title of the sheet shown when a free plan has used all of its monthly cloud transcription minutes
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s {minutes} minutes'**
+  String freeCapTitle(int minutes);
+
+  /// Body of the free-plan cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is still recording. Choose how to keep transcribing.'**
+  String get freeCapBody;
+
+  /// Product name of the paid plan; keep the brand name
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Pro'**
+  String get omiProPlanName;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited cloud transcription'**
+  String get freeCapProUnlimited;
+
+  /// Omi Pro benefit on the cap sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Best accuracy'**
+  String get freeCapProAccuracy;
+
+  /// Omi Pro benefit: recordings held at the cap get transcribed
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribes your waiting recordings'**
+  String get freeCapProWaiting;
+
+  /// Subtitle of the 'Transcribe on this phone' option at the cap; the choice is permanent until switched back
+  ///
+  /// In en, this message translates to:
+  /// **'Free. Stays on until you switch back.'**
+  String get freeCapPhoneSubtitle;
+
+  /// Banner during recording when transcription runs on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing on this phone'**
+  String get transcribingOnThisPhone;
+
+  /// Short button label to open the Omi Pro plans; keep 'Pro'
+  ///
+  /// In en, this message translates to:
+  /// **'Get Pro'**
+  String get getPro;
+
+  /// Button on a recording held at the cap; opens the plans
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get unlock;
+
+  /// Settings section header above the transcription source choices
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe with'**
+  String get transcribeWith;
+
+  /// Transcription source: Omi's cloud service; keep 'Omi'
+  ///
+  /// In en, this message translates to:
+  /// **'Omi cloud'**
+  String get omiCloud;
+
+  /// Transcription source: on this phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone'**
+  String get thisPhone;
+
+  /// Status: this phone can transcribe now
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get onDeviceReady;
+
+  /// Cloud transcription minutes left this month and the reset date, e.g. '258 of 300 min left · resets Dec 1'
+  ///
+  /// In en, this message translates to:
+  /// **'{left} of {limit} min left · resets {date}'**
+  String cloudMinutesLeft(int left, int limit, String date);
+
+  /// Shown to a free plan on the phone after the monthly reset: cloud minutes available again
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} cloud minutes available'**
+  String cloudMinutesAvailable(int minutes);
+
+  /// Button: switch transcription back to Omi's cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Back'**
+  String get switchBack;
+
+  /// Settings section header: steps before the phone can transcribe
+  ///
+  /// In en, this message translates to:
+  /// **'Set up this phone'**
+  String get setUpThisPhone;
+
+  /// Row title: the iOS speech recognition permission
+  ///
+  /// In en, this message translates to:
+  /// **'Speech recognition'**
+  String get speechRecognition;
+
+  /// Subtitle: on-device transcription keeps audio on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Audio stays on your phone'**
+  String get audioStaysOnPhone;
+
+  /// Download size of the on-device speech model in megabytes
+  ///
+  /// In en, this message translates to:
+  /// **'{size} MB download'**
+  String onDeviceModelDownloadSize(int size);
+
+  /// Button: download the speech model now on any network
+  ///
+  /// In en, this message translates to:
+  /// **'Download Now'**
+  String get downloadNow;
+
+  /// Button: download the speech model later, when on Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'On Wi-Fi Later'**
+  String get onWifiLater;
+
+  /// Shown with a pen over a skeleton while the summary of a conversation in progress is written
+  ///
+  /// In en, this message translates to:
+  /// **'Writing your summary…'**
+  String get conversationWritingSummary;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -334,6 +334,10 @@ def test_gke_podmonitoring_scrapes_consumer_port_and_revision(chart, suffix):
             env['ROLLOUT_POD_TEMPLATE_HASH']['valueFrom']['fieldRef']['fieldPath']
             == "metadata.labels['pod-template-hash']"
         )
+        if chart == 'pusher':
+            # The API server stores fieldRef.apiVersion=v1; the Pusher release receipt compares
+            # the rendered PodTemplate with the live one, so the chart must render the default.
+            assert env['ROLLOUT_POD_TEMPLATE_HASH']['valueFrom']['fieldRef']['apiVersion'] == 'v1'
         monitoring = next(
             d
             for d in docs

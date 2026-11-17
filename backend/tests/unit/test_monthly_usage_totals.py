@@ -204,3 +204,21 @@ def test_record_usage_does_not_swallow_unrelated_write_errors(monkeypatch, once)
     monkeypatch.setattr(user_usage, writer, Mock(side_effect=RuntimeError('synthetic write failure')))
     with pytest.raises(RuntimeError, match='synthetic write failure'):
         analytics.record_usage('u', speech_seconds=5, idempotency_key='capture' if once else None)
+
+
+def test_ready_doc_under_another_epoch_is_a_missing_baseline_not_corruption(monkeypatch):
+    """SCA-1750: a v1-ready doc read by a c2fs host must re-prove, not report unavailable."""
+    doc = seeded_month().docs['users/u/monthly_usage_totals/2026-10']
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', 'v1')
+    assert totals.verified_transcription_seconds(doc, NOW) == doc['totals']['transcription_seconds']
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', 'c2fs_20261026_r1')
+    with pytest.raises(totals.UsageBaselineNotReady):
+        totals.verified_transcription_seconds(doc, NOW)
+    corrupt = {**doc, 'totals': {**doc['totals'], 'transcription_seconds': float('nan')}}
+    with pytest.raises(ValueError) as raised:
+        totals.verified_transcription_seconds(corrupt, NOW)
+    assert not isinstance(raised.value, totals.UsageBaselineNotReady)
+    monkeypatch.setenv('FSR_USAGE_MONTH_TOTAL_EPOCH', '')
+    with pytest.raises(ValueError) as raised:
+        totals.verified_transcription_seconds(doc, NOW)
+    assert not isinstance(raised.value, totals.UsageBaselineNotReady)

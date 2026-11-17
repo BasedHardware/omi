@@ -1,6 +1,6 @@
 """Client-visible sync job response shapes shared by both dispatch protocols."""
 
-from typing import List
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 from utils.sync.lanes import SyncLane
@@ -53,6 +53,23 @@ class SyncCaptureManifestRequest(BaseModel):
 
 class SyncCaptureManifestResponse(BaseModel):
     manifest: str
+
+
+class SyncCaptureEndRequest(BaseModel):
+    """The phone's statement that a recording ended. Times are device-clock epoch seconds."""
+
+    recording_session_id: str = Field(min_length=1, max_length=128)
+    end_type: Literal['user_initiated', 'silence_backstop', 'disconnect']
+    # None when the phone's VAD never scored speech in this recording.
+    last_speech_at: Optional[float] = Field(default=None, gt=0)
+    end_decided_at: float = Field(gt=0)
+    sent_at: float = Field(gt=0)
+    pending_wals: int = Field(ge=0, le=100000)
+
+
+class SyncCaptureEndResponse(BaseModel):
+    accepted: bool
+    retry: bool = False
 
 
 class SyncUploadHoldReleaseResponse(BaseModel):

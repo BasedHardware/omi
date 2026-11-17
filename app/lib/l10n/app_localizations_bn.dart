@@ -1987,6 +1987,15 @@ class AppLocalizationsBn extends AppLocalizations {
   String get memoryHistory => 'ইতিহাস';
 
   @override
+  String get recordingWithYourPhone => 'আপনার ফোনে রেকর্ড হচ্ছে';
+
+  @override
+  String get wrapUp => 'শেষ করুন';
+
+  @override
+  String get recordingDiscarded => 'রেকর্ডিং বাতিল হয়েছে';
+
+  @override
   String get undo => 'পূর্বাবস্থা';
 
   @override
@@ -7037,6 +7046,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get authFailedToSignInWithApple => 'Apple দিয়ে সাইন ইন করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
+
+  @override
+  String get authAppleSignInFailedUseGoogle =>
+      'Apple দিয়ে সাইন ইন হয়নি। আবার চেষ্টা করুন অথবা Google দিয়ে চালিয়ে যান।';
 
   @override
   String get authFailedToRetrieveToken => 'Firebase টোকেন পুনরুদ্ধার করতে ব্যর্থ, দয়া করে আবার চেষ্টা করুন।';
@@ -13400,6 +13413,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get paywallTrialCodeHint => 'Omi Pro কোড আছে? পরের স্ক্রিনে সেটি দিন।';
+
+  @override
   String get paywallTrialCancelNote => 'যেকোনো সময় বাতিল করুন। কোনো ফি নেই, কোনো জরিমানা নেই।';
 
   @override
@@ -15392,6 +15408,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paymentDeclinedTitle => 'আপনার কার্ড প্রত্যাখ্যাত হয়েছে';
 
   @override
+  String paymentDeclinedMonthlyMessage(String plan, String price) {
+    return 'কার্ডটি আপডেট করুন, অথবা $plan আবার পান মাসে $price-এ';
+  }
+
+  @override
   String paymentDeclinedMessage(Object plan) {
     return 'আবার $plan পেতে কার্ডটি আপডেট করুন';
   }
@@ -15416,4 +15437,118 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get firmwareVerifyingInstallation => 'Confirming installation… This may take up to 3 minutes.';
+
+  @override
+  String get monthlySwitchTitle => 'মাসিকে যান';
+
+  @override
+  String monthlySwitchPlanValue(String plan, String price) {
+    return '$plan, মাসে $price';
+  }
+
+  @override
+  String monthlySwitchNote(String yearly) {
+    return '$yearly-এর অপরিশোধিত বার্ষিক চার্জের বদলে। প্রতি মাসে নবায়ন হয়। যেকোনো সময় বাতিল করুন।';
+  }
+
+  @override
+  String get monthlySwitchDeclined => 'পেমেন্ট প্রত্যাখ্যাত হয়েছে। আপনার প্ল্যান বদলায়নি।';
+
+  @override
+  String get monthlySwitchUnavailable => 'এই মুহূর্তে পরিবর্তন করা যাচ্ছে না। এর বদলে কার্ডটি আপডেট করুন।';
+
+  @override
+  String get monthlySwitchDoneTitle => 'আপনি এখন মাসিক প্ল্যানে';
+
+  @override
+  String monthlySwitchDoneBody(String price) {
+    return 'আজ $price পরিশোধ হয়েছে। প্রতি মাসে নবায়ন হয়।';
+  }
+
+  @override
+  String get processingDeleteScopeChanged => 'প্রক্রিয়াধীন তালিকা বদলেছে। তালিকাটি দেখে আবার চেষ্টা করুন।';
+
+  @override
+  String get syncTooOldExplanation =>
+      'This recording is over 30 days old, so Omi can\'t transcribe it. Download the audio to keep it, then delete it here.';
+
+  @override
+  String freeCapTitle(int minutes) {
+    return 'এই মাসের $minutes মিনিট ব্যবহার হয়ে গেছে';
+  }
+
+  @override
+  String get freeCapBody => 'Omi এখনও রেকর্ড করছে। কীভাবে ট্রান্সক্রিপশন চালিয়ে যাবেন বেছে নিন।';
+
+  @override
+  String get omiProPlanName => 'Omi Pro';
+
+  @override
+  String get freeCapProUnlimited => 'সীমাহীন ক্লাউড ট্রান্সক্রিপশন';
+
+  @override
+  String get freeCapProAccuracy => 'সেরা নির্ভুলতা';
+
+  @override
+  String get freeCapProWaiting => 'আপনার অপেক্ষমাণ রেকর্ডিং ট্রান্সক্রাইব করে';
+
+  @override
+  String get freeCapPhoneSubtitle => 'বিনামূল্যে। ফিরে না যাওয়া পর্যন্ত চালু থাকবে।';
+
+  @override
+  String get transcribingOnThisPhone => 'এই ফোনে ট্রান্সক্রাইব হচ্ছে';
+
+  @override
+  String get getPro => 'Pro নিন';
+
+  @override
+  String get unlock => 'আনলক';
+
+  @override
+  String get transcribeWith => 'যেটি দিয়ে ট্রান্সক্রাইব হবে';
+
+  @override
+  String get omiCloud => 'Omi ক্লাউড';
+
+  @override
+  String get thisPhone => 'এই ফোন';
+
+  @override
+  String get onDeviceReady => 'প্রস্তুত';
+
+  @override
+  String cloudMinutesLeft(int left, int limit, String date) {
+    return '$left/$limit মিনিট বাকি · $date রিসেট হবে';
+  }
+
+  @override
+  String cloudMinutesAvailable(int minutes) {
+    return '$minutes ক্লাউড মিনিট উপলব্ধ';
+  }
+
+  @override
+  String get switchBack => 'ফিরে যান';
+
+  @override
+  String get setUpThisPhone => 'এই ফোন সেট আপ করুন';
+
+  @override
+  String get speechRecognition => 'স্পিচ রিকগনিশন';
+
+  @override
+  String get audioStaysOnPhone => 'অডিও আপনার ফোনেই থাকে';
+
+  @override
+  String onDeviceModelDownloadSize(int size) {
+    return '$size MB ডাউনলোড';
+  }
+
+  @override
+  String get downloadNow => 'এখনই ডাউনলোড করুন';
+
+  @override
+  String get onWifiLater => 'পরে Wi-Fi-তে';
+
+  @override
+  String get conversationWritingSummary => 'আপনার সারাংশ লেখা হচ্ছে…';
 }

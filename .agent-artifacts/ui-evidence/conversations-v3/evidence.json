@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-v3-home-and-summary.png",
+      "platform": "mobile-ios",
+      "description": "Left to right, from the home_v3_test render frames: (1) v3 Home: one flat list under day labels. The conversation in progress leads Today (even above a call that started after it) with the breathing dot and its running length; the tiles show transcribing (spinner), writing (pen), done (emoji; the test engine has no emoji font, so emoji draw as boxes) and failed (warning mark, never the emoji). Yesterday carries a chevron that opens the day summary; Today has none. (2) Opening the conversation in progress: the pen and 'Writing your summary…' over a skeleton. (3) The summary streaming in section by section; the pen stays until it is stored. (4) The same Home in the light theme, including the failed tile.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 from __future__ import annotations
 
 from config.refactor_modes import serving_for
-from config.llm_input_versions import prompt_version
+from config.llm_input_versions import NOTES_UNSCALED_PREVIOUS_VERSION, NOTES_REUSABLE_PREVIOUS_VERSIONS, prompt_version
 from config.memory_l1_admission import noise_skip_enabled
 from config.llm_input_legacy import (
     LEGACY_DEPENDENCY_VERSIONS,
@@ -17,6 +17,7 @@ from config.llm_input_legacy import (
 )
 
 import dataclasses
+from copy import deepcopy
 import hashlib
 import json
 import os
@@ -28,14 +29,18 @@ from enum import Enum
 from typing import Any
 
 from prometheus_client import Counter
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from models.structured import Structured
+from utils.summary_quality import clean_structured, capture_availability
 
 from utils.conversations.summary_delivery import present as summary_present
 from config.sync_reprocess import dedupe_enabled
 
 from utils.sync.repeat_work_metrics import record_feature
 from utils.task_intelligence import reminder_policy
+from database import notes_quality_repair
+from utils.observability.fallback import record_fallback
+from utils.observability.reasons import NotesQualityRepairReason, ReasonFamily, reason_label
 
 SKIPPED = Counter(
     'conversation_llm_input_dedupe_skipped_total', 'Successful conversation feature input reused', ['feature']
@@ -50,6 +55,12 @@ CHECKPOINT_ERRORS = Counter(
     'Input hash matched but the stored output checkpoint was unusable',
     ['feature'],
 )
+QUALITY_REGENERATIONS = Counter(
+    'conversation_notes_quality_regenerations_total',
+    'Admitted single quality-regeneration attempts for visible unchanged notes',
+    ['reason'],
+)
+QUALITY_FILTER_HASH = 'notes_quality_filter_input_hash'
 NOTES_HASH = 'notes_llm_input_hash'
 NOTES_OUTPUT_HASH = 'notes_llm_output_hash'
 L1_HASH = 'l1_llm_input_hash'
@@ -171,10 +182,17 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
     # and compatible prompt sources/dependencies; exact inputs + output validation
     # still apply. A dependency bump deliberately recomputes once per input.
     implementations = {stable_implementation(feature), _legacy_implementation_digest(feature)}
+    unscaled_notes = feature == 'notes' and isinstance(inputs, dict) and 'scaled_detail' not in inputs
+    compatibility_version = NOTES_UNSCALED_PREVIOUS_VERSION if unscaled_notes else prompt_version(feature)
+    if unscaled_notes:
+        # Exact unchanged short/flag-off packets reuse notes-3 output, then are
+        # restamped with the current digest. This never schedules any work.
+        suffix = stable_implementation(feature).split(':', 1)[1]
+        implementations.add(f'{NOTES_UNSCALED_PREVIOUS_VERSION}:{suffix}')
     if (
         INSTALLED_DEPENDENCY_VERSIONS == LEGACY_DEPENDENCY_VERSIONS
         and routing_digest() == LEGACY_ROUTING
-        and prompt_version(feature) in LEGACY_PROMPT_VERSIONS[feature]
+        and compatibility_version in LEGACY_PROMPT_VERSIONS[feature]
     ):
         implementations.update(LEGACY_IMPLEMENTATIONS[feature])
         implementations.update(f'{version}:{routing_digest()}' for version in LEGACY_PROMPT_VERSIONS[feature])
@@ -182,6 +200,14 @@ def _matches(saved: str | None, feature: str, inputs: Any, digest: str) -> bool:
         implementations.update(
             f'{version}:{routing_digest()}:{dependencies}' for version in LEGACY_PROMPT_VERSIONS[feature]
         )
+    if saved and feature == 'notes':
+        for version in NOTES_REUSABLE_PREVIOUS_VERSIONS:
+            old_inputs = deepcopy(inputs)
+            if isinstance(old_inputs, dict) and 'scaled_detail' in old_inputs:
+                old_inputs['scaled_detail']['version'] = version
+            old_implementation = version + ':' + stable_implementation(feature).split(':', 1)[1]
+            if saved == _fingerprint(feature, old_inputs, old_implementation):
+                return True
     return bool(saved) and any(saved == _fingerprint(feature, inputs, item) for item in implementations)
 
 
@@ -210,6 +236,19 @@ def _notes_packet_identity(uid: str) -> dict[str, Any]:
     return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
 
 
+def _scaled_notes_identity(prefix: Any) -> dict[str, Any] | None:
+    from utils.conversations.relevance_rules import transcript_word_count
+    from utils.llm.notes_lengths import length_guide, scaled_length_range
+
+    data = prefix if isinstance(prefix, dict) else vars(prefix) if hasattr(prefix, '__dict__') else {}
+    context = data.get('shaped_context') or (
+        'FULL TRANSCRIPT\n' + data.get('context', '').split('FULL TRANSCRIPT\n', 1)[-1]
+    )
+    words = transcript_word_count(context)
+    bounds = scaled_length_range(words)
+    return {'version': prompt_version('notes'), 'range': bounds, 'guidance': length_guide(words)} if bounds else None
+
+
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
     open_loop_out = kwargs.pop('open_loop_out', None)
     if kwargs.get('task_intelligence_capture') and reminder_policy.enabled():
@@ -226,32 +265,88 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
         'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
         'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
     }
+    scaled_detail = _scaled_notes_identity(prefix)
+    if scaled_detail is not None:
+        inputs['scaled_detail'] = scaled_detail
     digest = fingerprint('notes', inputs)
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}
     saved = None
+    repair_inputs = deepcopy(inputs)
+    scaled_repair = repair_inputs.get('scaled_detail')
+    if isinstance(scaled_repair, dict):
+        scaled_repair.pop('version', None)
+    repair_key = _fingerprint('notes', repair_inputs, 'quality-repair-v1')
     matched_input = _matches(row.get(NOTES_HASH), 'notes', inputs, digest) and not row.get('discarded')
     if matched_input and row.get(NOTES_OUTPUT_HASH):
-        from pydantic import ValidationError
-
         try:
             candidate = Structured.model_validate(row.get('structured'))
-            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and summary_present(candidate):
+            if row[NOTES_OUTPUT_HASH] == output_fingerprint(candidate) and (
+                summary_present(candidate) or row.get(QUALITY_FILTER_HASH) == repair_key
+            ):
                 saved = candidate
         except ValidationError:
             pass  # An unusable optional checkpoint is an ordinary cache miss.
+    regenerate = False
     if saved is not None:
+        violation = _quality_violation(row.get('structured') or {})
+        if violation and summary_present(saved) and notes_quality_repair.visible(row):
+            regenerate = _claim_quality_repair(uid, conversation, row, repair_key)
+            if regenerate:
+                QUALITY_REGENERATIONS.labels(
+                    reason=reason_label(ReasonFamily.NOTES_QUALITY_REPAIR, violation, NotesQualityRepairReason)
+                ).inc()
+        # Deterministic cleanup always runs, including after a failed/exhausted repair.
+        saved = Structured.model_validate(clean_structured(saved.model_dump()))
+    if saved is not None and not regenerate:
         output = saved
         SKIPPED.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'reused')
     else:
-        if matched_input:
+        if matched_input and saved is None:
             CHECKPOINT_ERRORS.labels(feature='notes').inc()
         MISSES.labels(feature='notes').inc()
         record_feature(uid, conversation, 'notes', 'invoked')
         output = generate(prefix, uid=uid, open_loop_out=open_loop_out, **kwargs)
+    if saved is not None and not summary_present(output):
+        hashes[QUALITY_FILTER_HASH] = repair_key
     hashes[NOTES_HASH] = digest
     hashes[NOTES_OUTPUT_HASH] = output_fingerprint(output)
     return output
+
+
+def _quality_violation(structured: dict[str, Any]) -> NotesQualityRepairReason | None:
+    texts = [structured.get(key) for key in ('title', 'overview', 'gist')]
+    sections = [section for section in structured.get('sections') or [] if isinstance(section, dict)]
+    texts.extend(text for section in sections for text in (section.get('heading'), section.get('body_markdown')))
+    if any(capture_availability(text) for text in texts):
+        return NotesQualityRepairReason.CAPTURE_AVAILABILITY
+    if not str(structured.get('title') or '').strip() or any(
+        not str(section.get('heading') or '').strip() for section in sections
+    ):
+        return NotesQualityRepairReason.EMPTY_HEADING
+    return None
+
+
+def _claim_quality_repair(uid: str, conversation: Any, row: dict[str, Any], key: str) -> bool:
+    try:
+        return notes_quality_repair.claim(
+            uid,
+            conversation.id,
+            key,
+            expected_revision=row.get('sync_content_revision'),
+            expected_input=row.get(NOTES_HASH),
+            expected_output=row.get(NOTES_OUTPUT_HASH),
+        )
+    except Exception:
+        # No admission proof: reuse filtered output; never spend on uncertainty.
+        record_fallback(
+            component='conversation_notes',
+            from_mode='quality_repair',
+            to_mode='saved_output',
+            reason='other',
+            outcome='degraded',
+        )
+        return False
 
 
 def output_fingerprint(output: Any) -> str:

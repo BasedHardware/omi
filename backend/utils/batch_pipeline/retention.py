@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import logging
 import os
+import time
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -19,6 +20,7 @@ from google.cloud import firestore
 from config.batch_language_recovery import language_guarded, words_repair_eligible, REPAIR_EPOCH, REPAIR_PROVIDER
 from config.firestore_read_levers import lever_enabled
 from config.policy import RecoveryPolicy
+from config.record_wal_storage import private_archive_bucket
 from database import rpc_deadline
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
@@ -29,6 +31,7 @@ from database.batch_pipeline_shadow_hook import mirror_refresh
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 from utils.batch_pipeline.voice_centroids import deadline as voice_deadline, FINALIZED_TTL
 from utils.audio_cleanup_custody import cleanup_hold_reason
+from utils.batch_pipeline.record_wal_erasure import purge_record_wal_owner
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
@@ -50,15 +53,19 @@ def delete_batch_object(uid: str, uri: str, *, timeout: float | None = None, sto
         for name in ('BUCKET_BATCH_PIPELINE', 'BUCKET_TEMPORAL_SYNC_LOCAL')
         if (value := os.getenv(name, '').strip())
     }
+    wal_original = bucket_name == private_archive_bucket() and path.startswith(f'record-wal/{uid}/')
     if (
         parsed.scheme != 'gs'
-        or bucket_name not in allowed_buckets
+        or (bucket_name not in allowed_buckets and not wal_original)
         or parsed.query
-        or not path.startswith(
-            (
-                f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
-                f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
-                f'syncing/{uid}/',
+        or not (
+            wal_original
+            or path.startswith(
+                (
+                    f'batch-pipeline/batch_pipeline_prod/owners/{privacy_owner_key(uid)}/',
+                    f'batch-pipeline/batch_pipeline_dev/owners/{privacy_owner_key(uid)}/',
+                    f'syncing/{uid}/',
+                )
             )
         )
         or any(part in {'.', '..'} for part in path.split('/'))
@@ -146,15 +153,21 @@ def _register_batch_artifact(
                 voice_due = min(voice_due, result['expires_at'] - RECEIPT_RETENTION + timedelta(seconds=FINALIZED_TTL))
             if datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS) >= voice_due:
                 raise PermissionError('voice evidence upload cannot finish within retention window')
-        conversation_ids = [
-            value
-            for value in (
-                job.get('conversation_id'),
-                binding.get('target_conversation_id'),
-                getattr(item, 'conversation_id', None),
-            )
-            if value
-        ] + projected_ids
+        conversation_ids = (
+            [
+                value
+                for value in (
+                    job.get('conversation_id'),
+                    job.get('capture_source_conversation_id'),
+                    getattr(item, 'capture_source_conversation_id', None),
+                    binding.get('target_conversation_id'),
+                    getattr(item, 'conversation_id', None),
+                )
+                if value
+            ]
+            + projected_ids
+            + list(getattr(item, 'source_conversation_ids', ()) or job.get('source_conversation_ids') or [])
+        )
         assert_batch_write_allowed(
             client, transaction, uid, conversation_ids=conversation_ids, expected_generation=expected_generation
         )
@@ -223,6 +236,15 @@ def _register_batch_artifact(
             and bool(redrive.get('token'))
             and uri.endswith(f"/{redrive['token']}.enc")
         )
+        source_alias_write = False
+        if not job and getattr(item, 'source_alias_of', None):
+            from database.batch_pipeline_source_reuse import current
+            from database.batch_pipeline_store import FirestoreTransaction
+
+            candidate = current(
+                FirestoreTransaction(client, namespace, transaction), item, time.time(), expected=item.source_alias_of
+            )
+            source_alias_write = candidate is not None
         if (
             kind != 'audio'
             and job.get('state') != 'leased'
@@ -232,11 +254,12 @@ def _register_batch_artifact(
             and not redrive_write
             and not terminal_write
             and not voice_write
+            and not source_alias_write
         ):
             raise BatchPrivacyBlocked('result_lease_lost')
         if job and not shadow and job.get('owner_id') != uid:
             raise ValueError('artifact owner mismatch')
-        if not job and (item is None or item.owner_id != uid or kind != 'audio'):
+        if not job and (item is None or item.owner_id != uid or kind != 'audio' and not source_alias_write):
             raise ValueError('result requires an existing owner job')
         existing = reference.get(transaction=transaction)
         if not existing.exists:
@@ -465,14 +488,24 @@ def cleanup_completed_artifacts(
 
 
 def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = None, read_budget=None):
-    """Authorize artifact IO; full-row exports always use live transactional reads."""
+    """Authorize artifact IO with partial exports on owner-memo hits.
+
+    The walk fills ``loaded`` whenever it walks live (identical reads and order
+    to the lever-off path). When the owner memo (bpp_owner_memo) serves the
+    check, already-certified IDs are not exported; unseen IDs are still checked
+    live and their conversation rows may be exported. The protection rows this
+    callback needs — the user row and, for ``snapshots`` callers, the target
+    conversation row — are read explicitly below when the decision did not
+    export them.
+    """
     from utils.batch_pipeline.artifacts import ProtectionContext
 
     def authorize(transaction):
-        loaded = {}
+        loaded: dict[str, Any] = {}
         # The ordinary artifact callback returns only ProtectionContext, whose
-        # protection level is read live below. It does not export full rows.
-        # Staging/enrichment callers requesting snapshots retain the exact walk.
+        # protection level is read live below. Every other caller passes
+        # ``loaded``: a live walk fills it, and an owner hit may leave it empty
+        # for certified IDs or partially fill it for unseen IDs.
         decision_only = (
             snapshots is None
             and current_attempt() is not None
@@ -485,27 +518,51 @@ def batch_artifact_authorize(store: Any, item: Any, *, snapshots: dict | None = 
             store.client,
             transaction,
             item.owner_id,
-            conversation_ids=(item.conversation_id,) if item.conversation_id else (),
+            conversation_ids=tuple(
+                value
+                for value in (
+                    item.conversation_id,
+                    getattr(item, 'capture_source_conversation_id', None),
+                    *(getattr(item, 'source_conversation_ids', ()) or ()),
+                )
+                if value
+            ),
             expected_generation=item.privacy_generation,
             snapshots=None if decision_only else loaded,
             read_budget=read_budget,
         )
+        if 'user' not in loaded:
+            # A certified memo decision served the walk: read the protection
+            # rows this callback needs. A live walk already loaded them.
+            loaded['user'] = (
+                privacy_check_metrics.read_snapshot(
+                    'batch',
+                    store.client.collection('users').document(item.owner_id),
+                    uid=item.owner_id,
+                    transaction=transaction,
+                    read_budget=read_budget,
+                ).to_dict()
+                or {}
+            )
+            target = item.conversation_id
+            if snapshots is not None and target and target not in loaded.get('conversations', {}):
+                loaded.setdefault('conversations', {})[target] = (
+                    privacy_check_metrics.read_snapshot(
+                        'batch',
+                        store.client.collection('users')
+                        .document(item.owner_id)
+                        .collection('conversations')
+                        .document(target),
+                        uid=item.owner_id,
+                        transaction=transaction,
+                        read_budget=read_budget,
+                    ).to_dict()
+                    or {}
+                )
         if snapshots is not None:
             snapshots.clear()
             snapshots.update(loaded)
-        user = (
-            privacy_check_metrics.read_snapshot(
-                'batch',
-                store.client.collection('users').document(item.owner_id),
-                uid=item.owner_id,
-                transaction=transaction,
-                read_budget=read_budget,
-            ).to_dict()
-            or {}
-            if decision_only
-            else loaded['user']
-        )
-        return ProtectionContext(user.get('data_protection_level', 'enhanced'), generation)
+        return ProtectionContext(loaded['user'].get('data_protection_level', 'enhanced'), generation)
 
     if read_budget is not None:
         from database.batch_pipeline_reads import read_snapshot
@@ -519,8 +576,10 @@ def batch_artifact_register(store: Any, item: Any, uri: str, kind: str, context:
     register_batch_artifact(store, item.owner_id, item.segment_id, uri, kind, context.generation, item=item)
 
 
-def purge_batch_storage_owner(uid: str, namespace: str) -> None:
-    """Sweep all versions of the deterministic owner prefix, including orphans."""
+def purge_batch_storage_owner(uid: str, namespace: str, *, wal_originals: bool = False) -> None:
+    """Sweep deterministic owner prefixes; privacy callers include WAL orphans."""
+    if wal_originals:
+        purge_record_wal_owner(uid)
     bucket_name = os.getenv('BUCKET_BATCH_PIPELINE', '').strip()
     if not bucket_name:
         return  # No artifact store can be constructed without an explicit bucket.

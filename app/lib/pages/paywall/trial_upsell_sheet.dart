@@ -79,7 +79,8 @@ class TrialUpsellContentState extends State<TrialUpsellContent> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Padding(
+    // Scrolls so Claim and No Thanks stay reachable at the largest text sizes.
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,

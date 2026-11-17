@@ -13,6 +13,7 @@ from database.batch_pipeline_projection_finish import (
     PROJECTION_FINISH_STATES,
     projection_finish_state_fields,
 )
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 BACKFILL_VERSION = 1
 BACKFILL_KEY = f'projection_finish_clock_v{BACKFILL_VERSION}'
@@ -59,7 +60,12 @@ def stamp_page(store, now: float, *, size: int = 200, apply: bool = False) -> di
         current = marker_ref.get(transaction=transaction).to_dict() or {}
         if current != before:
             raise RuntimeError('backfill checkpoint changed; retry from durable progress')
-        rows = [ref.get(transaction=transaction).to_dict() or {} for ref in refs]
+        # One BatchGet per page, not one RPC per row: 200 serial transactional reads from an
+        # operator host cost about 17 s a page, which made the pass a 12-hour job. The read set
+        # and the transaction's conflict fence are the same documents either way.
+        fetched = store.client.get_all(refs, transaction=transaction) if refs else ()
+        snapshots = {snapshot.reference.path: snapshot for snapshot in fetched}
+        rows = [snapshots[ref.path].to_dict() or {} for ref in refs]
         count = 0
         for ref, row in zip(refs, rows):
             if missing(row):
@@ -76,4 +82,7 @@ def stamp_page(store, now: float, *, size: int = 200, apply: bool = False) -> di
         )
         return {'complete': cursor is None, 'scanned': len(ids), 'missing': count, 'stamped': count}
 
-    return commit(store.client.transaction())
+    report = commit(store.client.transaction())
+    # This commit is outside Store.run: re-copy the stamped rows and the marker (no-op unless shadow mode).
+    mirror_refresh(store.namespace, [('control', BACKFILL_KEY), *(('results', sid) for sid in ids)])
+    return report

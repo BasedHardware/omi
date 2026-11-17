@@ -36,8 +36,12 @@ from config.episodes import (
     home_empty_output_noise_enabled,
     home_processing_max_age_seconds,
     home_step_projection_enabled,
+    home_transcription_max_age_seconds,
+    home_transcription_queue_hold_enabled,
 )
 from utils.conversations import transcribing_hold
+from utils.conversations import home_latency, legacy_empty_wire
+from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
 from utils.conversations.home_titles import summary_owed
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
@@ -78,6 +82,8 @@ def classify(row: Mapping[str, Any]) -> str | None:
     """
     if not home_step_projection_enabled():
         return None
+    if empty_capture.applies(row):
+        return NOISE
     status = _value(row.get('status'))
     structured = row.get('structured') or {}
     title = str(structured.get('title') or '').strip()
@@ -106,7 +112,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if transcribing_hold.applies(row):
         _, presented = transcribing_hold.transcription_presentation(
             transcribing_hold.deadline(row),
-            failed=bool(row.get('record_upload_failed') or row.get('finalization_status') == 'dead_letter'),
+            failed=transcribing_hold.failed(row),
         )
         return FAILED if presented == 'failed' else TRANSCRIBING
     if (
@@ -132,7 +138,7 @@ def classify(row: Mapping[str, Any]) -> str | None:
         and not row.get('summary_completed_at')
         and not summary_owed(row)
     )
-    if is_completed_below_floor(row) or empty_output:
+    if is_completed_below_floor(row) or empty_output or legacy_empty_wire.terminal_noise(row):
         return NOISE
     if provisional:
         if summary_owed(row):
@@ -145,7 +151,13 @@ def classify(row: Mapping[str, Any]) -> str | None:
     if not title and not str(structured.get('overview') or '').strip() and not row.get('transcript_segments'):
         # A capture whose speech has not landed. Unstamped legacy rows get the same
         # bound the stamped ones have, so none can stay Processing forever.
-        return FAILED if _older_than(row.get('finished_at'), LEGACY_TRANSCRIPTION_SECONDS) else TRANSCRIBING
+        if home_transcription_queue_hold_enabled():
+            seconds = home_transcription_max_age_seconds()
+            anchor = transcribing_hold.wait_started_at(row)
+        else:
+            seconds = LEGACY_TRANSCRIPTION_SECONDS
+            anchor = row.get('finished_at')
+        return FAILED if _older_than(anchor, seconds) else TRANSCRIBING
     return READY
 
 
@@ -160,4 +172,7 @@ def _older_than(moment: Any, seconds: float) -> bool:
 def project(row: dict[str, Any]) -> dict[str, Any]:
     """Return a wire copy carrying ``home_step`` (unchanged when there is none)."""
     step = classify(row)
-    return row if step is None else {**row, 'home_step': step}
+    if step == READY:
+        home_latency.observe(row)
+    wire = row if step is None else {**row, 'home_step': step}
+    return legacy_empty_wire.project(empty_capture.project(wire), noise=step == NOISE)

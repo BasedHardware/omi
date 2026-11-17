@@ -16,17 +16,23 @@ def listing(monkeypatch):
     monkeypatch.setattr(storage.audio_archive, 'admitted', lambda uid, mode: True)
     monkeypatch.setattr(storage, 'playback_on_demand', lambda: False)
 
-    def slow(*args):
+    calls = []
+
+    def slow(*args, **kwargs):
+        calls.append(kwargs)
         raise TimeoutError('synthetic slow archive listing')
 
     monkeypatch.setattr(storage, 'list_packs', slow)
+    return calls
 
 
 def test_default_listing_keeps_legacy_chunks_when_archive_listing_fails(listing):
     chunks = storage.list_audio_chunks('owner', 'conv')
     assert [chunk['path'] for chunk in chunks] == ['chunks/owner/conv/100.000.batch.bin']
+    assert listing == [{}]
 
 
 def test_required_archive_listing_raises_instead_of_returning_a_short_capture(listing):
     with pytest.raises(TimeoutError):
         storage.list_audio_chunks('owner', 'conv', require_archive=True)
+    assert listing[0]['fresh'] is True

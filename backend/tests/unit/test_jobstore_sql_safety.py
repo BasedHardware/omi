@@ -88,6 +88,27 @@ def test_due_rejects_an_unknown_state_before_any_sql():
     assert conn.statements == []
 
 
+def test_ready_pending_binds_the_tuple_cursor_without_interpolation():
+    conn = Conn([])
+    assert store(conn).ready_pending(HOSTILE, 500, after=(3.0, HOSTILE)) == []
+    statement, params = conn.statements[0]
+    assert '(capture_at, key COLLATE "C") > (%s, %s)' in statement
+    assert HOSTILE not in statement
+    assert params == ('batch_pipeline_test_sql', HOSTILE, 3.0, HOSTILE, 160)
+
+
+@pytest.mark.parametrize('descending,direction', [(False, 'ASC'), (True, 'DESC')])
+def test_ready_owners_preserves_ceiling_direction_and_bound_values(descending, direction):
+    conn = Conn([])
+    assert store(conn).ready_owners(HOSTILE, 1, ceiling_owner_key=HOSTILE, descending=descending) == []
+    statement, params = conn.statements[0]
+    assert 'owner_key COLLATE "C" > %s' in statement
+    assert 'owner_key COLLATE "C" <= %s' in statement
+    assert f'ORDER BY owner_key COLLATE "C" {direction} LIMIT 1' in statement
+    assert HOSTILE not in statement
+    assert params == ('batch_pipeline_test_sql', HOSTILE, HOSTILE)
+
+
 def test_control_candidates_quotes_priority_columns_and_binds_values():
     conn = Conn([('c1', 1.0)])
     assert store(conn).control_candidates(2, 'live', 5.0) == ['c1']

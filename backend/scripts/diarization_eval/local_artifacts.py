@@ -139,7 +139,7 @@ def project_external(python, artifacts, item, binding, uri):
     """Keep the model runtime separate from the pinned backend projection env."""
     request = artifacts.root / 'projection-request.json'
     response = artifacts.root / 'projection-response.json'
-    encoded = asdict(item)
+    encoded = item.to_dict(include_nulls=True)
     encoded['priority'] = item.priority.value
     private_json(request, {'root': str(artifacts.root), 'item': encoded, 'binding': asdict(binding), 'uri': uri})
     completed = subprocess.run(

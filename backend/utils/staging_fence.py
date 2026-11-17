@@ -130,21 +130,96 @@ def is_staging(env: Mapping[str, str] | None = None) -> bool:
 
 
 PROD_JOBSTORE_NAMESPACE = 'batch_pipeline_prod'
+_PRODUCTION_MIRROR_CONTEXT = {
+    'OMI_DEPLOYMENT': 'prod',
+    'OMI_ENV_STAGE': 'prod',
+    'GOOGLE_CLOUD_PROJECT': 'based-hardware',
+    'OMI_CUSTOMER_DATA_PROJECT': 'based-hardware',
+    'OMI_FIRESTORE_DATA_PLANE_PROJECT': 'based-hardware',
+    'FIRESTORE_DATABASE_ID': '(default)',
+}
+_OWNER_KEY = re.compile(r'[0-9a-f]{64}')
+_MIRROR_SAMPLE_BPS = re.compile(r'(?:[1-9][0-9]{0,3}|10000)')
+_MIRROR_SAMPLE_DOMAIN = 'omi:jobstore-production-mirror:v1:'
 
 
-def jobstore_shadow_admits(namespace: str, env: Mapping[str, str] | None = None) -> bool:
-    """Whether the A2 Postgres job-store shadow and mirror may run on ``namespace`` (ruling L02-2).
+def _production_mirror_sample_bps(env: Mapping[str, str]) -> int:
+    value = env.get('JOBSTORE_PRODUCTION_MIRROR_SAMPLE_BPS', '')
+    return int(value) if _MIRROR_SAMPLE_BPS.fullmatch(value) else 0
+
+
+def jobstore_production_mirror_configured(env: Mapping[str, str] | None = None) -> bool:
+    """Validate explicit production-mirror configuration; this does not admit any owner's rows.
+
+    A production factory may use this to build a lazy copy handle only after its copy, parity and erasure
+    paths enforce the owner cohort. Existing namespace-only callers remain production-refused. No default
+    database, project, deployment, cohort or Postgres target is inferred. This is a configuration check,
+    not proof of the live client's identity, database reachability, erasure readiness or release approval.
+    """
+    env = os.environ if env is None else env
+    if env.get('JOBSTORE_PRODUCTION_MIRROR') != 'on' or not _production_mirror_sample_bps(env):
+        return False
+    if not jobstore_production_context_matches(env):
+        return False
+    if not all(
+        (env.get(name) or '').strip() for name in ('JOBSTORE_PG_HOST', 'JOBSTORE_PG_DATABASE', 'JOBSTORE_PG_USER')
+    ):
+        return False
+    return PROD_JOBSTORE_NAMESPACE in {
+        name.strip() for name in env.get('JOBSTORE_SHADOW_NAMESPACES', '').split(',') if name.strip()
+    }
+
+
+def jobstore_production_context_matches(env: Mapping[str, str] | None = None) -> bool:
+    """Exact production data-plane binding, independently of copying/owner admission."""
+    env = os.environ if env is None else env
+    return (
+        all(env.get(name) == expected for name, expected in _PRODUCTION_MIRROR_CONTEXT.items())
+        and not any(env.get(name) and env[name] != 'based-hardware' for name in _OPTIONAL_PROJECT_ENV)
+        and not env.get('FIRESTORE_EMULATOR_HOST')
+    )
+
+
+def jobstore_shadow_admits(
+    namespace: str, env: Mapping[str, str] | None = None, *, owner_key: str | None = None
+) -> bool:
+    """Admit staging/test shadow work, or one explicitly selected production owner.
 
     Staging keeps the worker namespace ``batch_pipeline_prod``, so the namespace alone cannot tell staging
     from prod. That namespace is admitted only in a staging deployment on the staging Firestore database;
-    production (and the staging flag on any other database) stays refused until account deletion purges
-    the Postgres copy too. Every other namespace is admitted. The one gate for ``shadow_from_env`` and
-    ``mirror_refresh``.
+    the staging flag on any other database stays refused (L02-2).
+    Every namespace must also be explicitly named in JOBSTORE_SHADOW_NAMESPACES
+    (comma separated exact names; default empty, no wildcards).
+
+    Production additionally requires ``jobstore_production_mirror_configured`` and a canonical
+    ``privacy_owner_key`` (64 lowercase hex characters). A versioned SHA256 bucket selects the owner's
+    entire cohort deterministically. Namespace-only callers, unknown owners and malformed configuration
+    remain refused, including a configured 10000-bps full cohort. Resolving row ownership, filtering shared
+    rows and erasing retained copies belong to the copy/erasure path; this helper does none of those.
     """
+    env = os.environ if env is None else env
+    admitted = {name.strip() for name in env.get('JOBSTORE_SHADOW_NAMESPACES', '').split(',') if name.strip()}
+    if namespace not in admitted:
+        return False
     if namespace != PROD_JOBSTORE_NAMESPACE:
         return True
-    env = os.environ if env is None else env
-    return is_staging(env) and (env.get('FIRESTORE_DATABASE_ID') or '').strip() == STAGING_DATABASE
+    if is_staging(env):
+        return (env.get('FIRESTORE_DATABASE_ID') or '').strip() == STAGING_DATABASE
+    if (
+        not jobstore_production_mirror_configured(env)
+        or not isinstance(owner_key, str)
+        or not _OWNER_KEY.fullmatch(owner_key)
+    ):
+        return False
+    bucket = int(hashlib.sha256(f'{_MIRROR_SAMPLE_DOMAIN}{owner_key}'.encode()).hexdigest(), 16) % 10000
+    return bucket < _production_mirror_sample_bps(env)
+
+
+def jobstore_mirror_factory_admits(namespace: str) -> bool:
+    """Allow a lazy production handle; individual upserts still require resolved-owner admission."""
+    return jobstore_shadow_admits(namespace) or (
+        namespace == PROD_JOBSTORE_NAMESPACE and jobstore_production_mirror_configured()
+    )
 
 
 def _sha(value: str) -> str:

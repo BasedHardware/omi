@@ -1999,6 +1999,9 @@
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
+    "recordingWithYourPhone": "Snemanje s telefonom",
+    "wrapUp": "Zaključi",
+    "recordingDiscarded": "Posnetek zavržen",
     "undo": "Razveljavi",
     "@undo": {
         "description": "Undo button text"
@@ -8695,6 +8698,7 @@
     "@authFailedToSignInWithApple": {
         "description": "Error message when Apple sign-in fails"
     },
+    "authAppleSignInFailedUseGoogle": "Prijava z Applom ni uspela. Poskusite znova ali nadaljujte z Googlom.",
     "authFailedToRetrieveToken": "Pridobivanje Firebase žetona ni uspelo, prosimo, poskusite ponovno.",
     "@authFailedToRetrieveToken": {
         "description": "Error message when retrieving Firebase token fails"
@@ -11528,6 +11532,7 @@
     "paywallTrialBilledYearly": "Letno zaračunavanje",
     "paywallTrialSaveAmount": "Prihranite {amount}",
     "paywallTrialCta": "Začnite za {price}",
+    "paywallTrialCodeHint": "Imate kodo Omi Pro? Vnesite jo na naslednjem zaslonu.",
     "paywallTrialCancelNote": "Prekličite kadar koli. Brez stroškov, brez kazni.",
     "paywallMonthlyFallbackTitle": "Celo leto je za zdaj preveč?",
     "paywallMonthlyFallbackTrialBody": "Začnite z mesečnim paketom. Enakih {days} dni brezplačno, nato {price} na mesec. Prekličite kadar koli.",
@@ -12196,11 +12201,45 @@
     "referralRewardSecondDetail": "Ko kupijo še 3 prijatelji",
     "referralClaimShort": "Prevzemi",
     "paymentDeclinedTitle": "Vaša kartica je bila zavrnjena",
+    "paymentDeclinedMonthlyMessage": "Posodobite kartico ali znova dobite {plan} za {price} na mesec",
     "paymentDeclinedMessage": "Posodobite kartico, da znova dobite {plan}",
     "hasLinkedTasksLabel": "Ima povezane naloge",
     "hasTasksFilter": "Z nalogami",
     "firmwareUpdateNotInstalledMessage": "The update didn't install. Your pendant is still on {version}. Please try again.",
     "firmwareUpdateUnconfirmedMessage": "Couldn't confirm the update. Your pendant hasn't reconnected yet. Keep it nearby and check its firmware version before trying again.",
     "firmwareUpdateUnconfirmedTitle": "Update Not Confirmed",
-    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes."
+    "firmwareVerifyingInstallation": "Confirming installation… This may take up to 3 minutes.",
+    "monthlySwitchTitle": "Preklopi na mesečno",
+    "monthlySwitchPlanValue": "{plan}, {price} na mesec",
+    "monthlySwitchNote": "Nadomesti neplačano letno bremenitev {yearly}. Obnavlja se mesečno. Prekličite kadar koli.",
+    "monthlySwitchDeclined": "Plačilo je bilo zavrnjeno. Vaš paket se ni spremenil.",
+    "monthlySwitchUnavailable": "Preklop trenutno ni na voljo. Namesto tega posodobite kartico.",
+    "monthlySwitchDoneTitle": "Zdaj plačujete mesečno",
+    "monthlySwitchDoneBody": "Danes plačano {price}. Obnavlja se mesečno.",
+    "processingDeleteScopeChanged": "Seznam obdelave se je spremenil. Preglejte ga in poskusite znova.",
+    "syncTooOldExplanation": "This recording is over 30 days old, so Omi can't transcribe it. Download the audio to keep it, then delete it here.",
+    "freeCapTitle": "Porabili ste {minutes} minut tega meseca",
+    "freeCapBody": "Omi še vedno snema. Izberite, kako nadaljevati s prepisovanjem.",
+    "omiProPlanName": "Omi Pro",
+    "freeCapProUnlimited": "Neomejeno prepisovanje v oblaku",
+    "freeCapProAccuracy": "Najboljša natančnost",
+    "freeCapProWaiting": "Prepiše vaše čakajoče posnetke",
+    "freeCapPhoneSubtitle": "Brezplačno. Ostane vklopljeno, dokler ne preklopite nazaj.",
+    "transcribingOnThisPhone": "Prepisovanje na tem telefonu",
+    "getPro": "Pridobite Pro",
+    "unlock": "Odkleni",
+    "transcribeWith": "Prepisuj z",
+    "omiCloud": "Oblak Omi",
+    "thisPhone": "Ta telefon",
+    "onDeviceReady": "Pripravljeno",
+    "cloudMinutesLeft": "Preostalo {left} od {limit} min · ponastavitev {date}",
+    "cloudMinutesAvailable": "Na voljo {minutes} minut v oblaku",
+    "switchBack": "Preklopi nazaj",
+    "setUpThisPhone": "Nastavite ta telefon",
+    "speechRecognition": "Prepoznavanje govora",
+    "audioStaysOnPhone": "Zvok ostane na telefonu",
+    "onDeviceModelDownloadSize": "Prenos {size} MB",
+    "downloadNow": "Prenesi zdaj",
+    "onWifiLater": "Pozneje prek Wi-Fi",
+    "conversationWritingSummary": "Pišemo vaš povzetek…"
 }

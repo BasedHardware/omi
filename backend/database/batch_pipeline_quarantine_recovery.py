@@ -358,10 +358,18 @@ class RecoveryStore(RecoveryFence):
         return self.store.run(commit)
 
     def hold_invalid_manifest(self, segment_id, token, now, *, audio_uri):
-        """Retain a unit whose stored manifest can never materialize, without a paid intent.
+        return self._hold_unrecoverable_input(
+            segment_id, token, now, audio_uri=audio_uri, reason='invalid_retained_manifest'
+        )
+
+    def hold_input_missing(self, segment_id, token, now, *, audio_uri):
+        return self._hold_unrecoverable_input(segment_id, token, now, audio_uri=audio_uri, reason='input_missing')
+
+    def _hold_unrecoverable_input(self, segment_id, token, now, *, audio_uri, reason):
+        """Retain an unrecoverable input without starting a paid intent.
 
         failed_held leaves the recovery candidate set, so neither a task retry nor
-        the sweep re-reads it. The manifest and its sources stay in place."""
+        the sweep re-reads it. No input or unit data is deleted."""
 
         def commit(tx):
             job, _ = self.checked(tx, segment_id)
@@ -383,7 +391,7 @@ class RecoveryStore(RecoveryFence):
             job['recovery_state'] = 'failed_held'
             if batch_held_dead_letter_enabled():
                 job['held_deadline_at'] = now + HELD_DEAD_LETTER_SECONDS
-            job['recovery'].update(settled_at=now, refusal={'reason': 'invalid_retained_manifest'})
+            job['recovery'].update(settled_at=now, refusal={'reason': reason})
             tx.put('jobs', segment_id, job)
             return True
 
