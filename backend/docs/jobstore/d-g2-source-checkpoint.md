@@ -5,7 +5,8 @@ reverse certificate, staging-sizing receipt, serving acceptance or savings claim
 Source delivery books $0. Continue all fixes on `sca-1697-d-g2-dark`; no second D writer.
 
 Original base: `f3902ec5435809d95ac7c15f6be7e9f056564d3d` (origin/main at checkout).
-Current main `f317e02d0f32fab9ab85bd2f5efa73929d8f5bb3` is integrated by a normal merge.
+Main snapshots `f317e02d0f32fab9ab85bd2f5efa73929d8f5bb3` and then
+`0ce396503a5595975055c44994005db986294060` are integrated by normal merges.
 Published b9f707b and recovered local 01348656 ancestry are both preserved.
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
@@ -24,6 +25,18 @@ Existing synthetic databases with the old dark checksums cannot be relabeled.
 No remote migration/database change was executed. The preserved local provider
 budget patch is reconciled with the published branch before this main merge.
 Original pre-loss dirty/untracked state remains UNKNOWN.
+
+The 2026-11-17 bounded repair addresses the retained R2 seams: top-level
+imports with a lazy JSON adapter boundary; managed DB executor interception;
+C1 observer/purge ordering note; live FS privacy/token validation inside
+completion publication; atomic unsealed recording-wide admission replacement;
+drain rotation independent of owner backoff; matching provider START/COMPLETE
+lock order; benign token rotation at external START; and isolation of failed
+already-committed claims without another paid send. Source patches do not
+discharge the full integration finding. Real PG/FS readmission, provider and
+drain races still require execution; root owns SQL PG qualification separately.
+The C1 pure Firestore emulator suite passes20 after the allowing fixtures were
+made explicit about cloud-sync permission. No privacy rejection was relaxed.
 
 G2 Rev 3 retention (§3.5.5, §8 A4): effect registry rows exist only while the
 effect is unresolved. Every terminal path deletes the row and sink capability;
