@@ -38,6 +38,8 @@ TOLERANCE_SECONDS = 5.0
 HOLD_FIELD = 'sync_processing_hold'
 # ``database.pipeline_ledger.TRANSCRIBED``; pinned by a test for the same reason.
 LEDGER_TRANSCRIBED = 'transcribed'
+# Key in the hold state: the ``record_sealed_at`` whose units all landed or are held for recovery.
+UNITS_SETTLED_FIELD = 'units_settled_seal_at'
 CLOCK_END_MATCH_SECONDS = 1.0
 MAX_CLOCK_SPAN_SECONDS = 7 * 86400
 CLIENT_END_TYPES = {'user_initiated': 'user_initiated', 'silence_backstop': 'silence_backstop', 'disconnect': 'unknown'}
@@ -225,6 +227,19 @@ def seal_barrier(row: Mapping[str, Any]) -> str | None:
     return None
 
 
+def units_settled(row: Mapping[str, Any]) -> bool:
+    """Whether projection marked every unit of the row's latest seal landed or held for recovery.
+
+    ``ProjectionStore.hold_for_quarantine`` stamps the seal it saw
+    (``record_sealed_at``) under ``UNITS_SETTLED_FIELD`` in the hold state when
+    each unit is either projected or quarantined. A reseal moves
+    ``record_sealed_at``, so an older stamp proves nothing.
+    """
+    state = row.get(HOLD_FIELD)
+    sealed_at = _seconds(row.get('record_sealed_at'))
+    return isinstance(state, Mapping) and sealed_at > 0 and _seconds(state.get(UNITS_SETTLED_FIELD)) == sealed_at
+
+
 def seal_proof(row: Mapping[str, Any], ledger: Mapping[str, Any] | None) -> str:
     """Whether the server's own seal proves this row's first notes need not wait.
 
@@ -238,10 +253,18 @@ def seal_proof(row: Mapping[str, Any], ledger: Mapping[str, Any] | None) -> str:
     moves back). The seal says nothing about a pendant or phone copy that is
     still uploading, so it proves the first notes only: content that lands
     after them keeps the quiet wait and the one late run.
+
+    A unit whose transcription failed waits in quarantine for recovery (about
+    an hour in production) and keeps the whole projection open. Once every
+    other unit landed (``units_settled``) the result is ``units_held``: the
+    first notes use the landed units, and the recovered unit later counts as
+    late content.
     """
     reason = seal_barrier(row)
     if reason is not None:
         return reason
+    if units_settled(row):
+        return 'units_held'
     sealed_at = _seconds(row.get('record_sealed_at'))
     transitions = ledger.get('transitions') if isinstance(ledger, Mapping) else None
     if sealed_at <= 0 or not isinstance(transitions, list):
