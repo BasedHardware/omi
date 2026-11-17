@@ -151,6 +151,7 @@ Wal _wal(DateTime start, int minutes, WalStatus status,
     codec: BleAudioCodec.opus,
     seconds: minutes * 60,
     status: status,
+    uploadedAt: status == WalStatus.uploaded ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : 0,
     storage: storage,
     device: 'pendant',
     uploadRejectionReason: rejectionReason,
@@ -336,7 +337,7 @@ void main() {
 
   testWidgets('On the Way with mixed days', (tester) async {
     await pumpOnTheWay(tester);
-    for (final status in ['Uploading', 'Transcribing…', 'Next', 'Queued']) {
+    for (final status in ['Uploading', 'Uploaded, awaiting server', 'Next', 'Queued']) {
       expect(find.text(status), findsOneWidget, reason: status);
     }
     expect(find.text('Try Again'), findsNothing);
