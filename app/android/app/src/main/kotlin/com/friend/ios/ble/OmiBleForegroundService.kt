@@ -56,7 +56,8 @@ class OmiBleForegroundService : Service() {
         private const val KEY_DISCONNECT_HISTORY = "disconnect_history"
         private const val KEY_RECONNECT_COUNT = "reconnect_count"
         private const val KEY_FAIL_TO_CONNECT_COUNT = "fail_to_connect_count"
-        private const val MAX_DISCONNECT_HISTORY = 4096
+        // Matches iOS: about one week at p90 fleet drop rates, bounding the synchronous rewrite.
+        private const val MAX_DISCONNECT_HISTORY = 1024
         private const val DISCONNECT_RETENTION_MS = 7L * 24 * 3600 * 1000
         // 15-minute reads over the worst-case catch-up window: 4/hour * 24 * 8.
         // maybeEmit can roll up yesterday - 6, whose start is nearly eight days
@@ -1143,7 +1144,8 @@ class OmiBleForegroundService : Service() {
                 null
             }
             val prefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
-            if (eventType == "disconnect") BleConnectionHistory.disconnected(prefs, address, now)
+            // A manual disconnect never seeds a reconnect-latency marker.
+            if (eventType == "disconnect" && !isManual) BleConnectionHistory.disconnected(prefs, address, now)
             val key = historyKey(address)
             val historyJson = prefs.getString(key, "[]") ?: "[]"
             val history = try { JSONArray(historyJson) } catch (_: Exception) { JSONArray() }

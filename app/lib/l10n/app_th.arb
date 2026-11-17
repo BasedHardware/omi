@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "กำลังซิงค์การบันทึกของคุณ",
     "syncStepDownloadingAmount": "กำลังดาวน์โหลดจาก Omi · {done} จาก {total}",
     "syncStepUploadingAmount": "กำลังอัปโหลด · {done} จาก {total}",
-    "syncCardTranscribingAmount": "กำลังแปลง {amount} เป็นบทสนทนา",
-    "syncCardTranscribedOf": "เสร็จแล้ว {done} จาก {total} · ออกจากหน้าจอนี้ได้เลย",
     "syncCardReadyAmount": "{amount} พร้อมซิงค์",
     "syncDetailsTitle": "รายละเอียดการซิงค์",
     "syncDetailsRightNow": "ตอนนี้",

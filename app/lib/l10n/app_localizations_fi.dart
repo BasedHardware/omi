@@ -13468,16 +13468,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muutetaan $amount keskusteluiksi';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · voit poistua tästä näkymästä';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount valmiina synkronoitavaksi';
   }

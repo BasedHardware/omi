@@ -13495,16 +13495,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Перетворення $amount на розмови';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done із $total · можна залишити цей екран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готово до синхронізації';
   }

@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "همگام‌سازی ضبط‌های شما",
     "syncStepDownloadingAmount": "دریافت از Omi · {done} / {total}",
     "syncStepUploadingAmount": "آپلود · {done} / {total}",
-    "syncCardTranscribingAmount": "تبدیل {amount} به گفتگو",
-    "syncCardTranscribedOf": "{done} / {total} انجام شد · می‌توانید از این صفحه خارج شوید",
     "syncCardReadyAmount": "{amount} آماده همگام‌سازی",
     "syncDetailsTitle": "جزئیات همگام‌سازی",
     "syncDetailsRightNow": "همین حالا",

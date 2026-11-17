@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "உங்கள் பதிவுகள் ஒத்திசைக்கப்படுகின்றன",
     "syncStepDownloadingAmount": "உங்கள் Omi இலிருந்து பதிவிறக்கம் · {done} / {total}",
     "syncStepUploadingAmount": "பதிவேற்றம் · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} உரையாடல்களாக மாற்றப்படுகிறது",
-    "syncCardTranscribedOf": "{done} / {total} முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்",
     "syncCardReadyAmount": "{amount} ஒத்திசைக்கத் தயார்",
     "syncDetailsTitle": "ஒத்திசைவு விவரங்கள்",
     "syncDetailsRightNow": "இப்போது",

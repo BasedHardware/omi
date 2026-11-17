@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "録音を同期中",
     "syncStepDownloadingAmount": "Omiからダウンロード中 · {done} / {total}",
     "syncStepUploadingAmount": "アップロード中 · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount}を会話に変換中",
-    "syncCardTranscribedOf": "{done} / {total} 完了 · この画面を閉じても大丈夫です",
     "syncCardReadyAmount": "{amount}を同期できます",
     "syncDetailsTitle": "同期の詳細",
     "syncDetailsRightNow": "現在",

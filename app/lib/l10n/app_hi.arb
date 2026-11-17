@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "आपकी रिकॉर्डिंग सिंक हो रही हैं",
     "syncStepDownloadingAmount": "आपके Omi से डाउनलोड · {done} / {total}",
     "syncStepUploadingAmount": "अपलोड · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} को बातचीत में बदला जा रहा है",
-    "syncCardTranscribedOf": "{done} / {total} पूरा · आप इस स्क्रीन से बाहर जा सकते हैं",
     "syncCardReadyAmount": "{amount} सिंक के लिए तैयार",
     "syncDetailsTitle": "सिंक विवरण",
     "syncDetailsRightNow": "अभी",

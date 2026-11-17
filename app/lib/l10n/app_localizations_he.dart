@@ -13366,16 +13366,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'הופך $amount לשיחות';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done מתוך $total הושלמו · אפשר לצאת ממסך זה';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount מוכנים לסנכרון';
   }

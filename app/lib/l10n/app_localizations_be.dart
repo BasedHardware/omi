@@ -13498,16 +13498,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ператварэнне $amount у размовы';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Гатова $done з $total · можна пакінуць гэты экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount гатова да сінхранізацыі';
   }

@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Kayıtlarınız senkronize ediliyor",
     "syncStepDownloadingAmount": "Omi'den indiriliyor · {done} / {total}",
     "syncStepUploadingAmount": "Yükleniyor · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} konuşmalara dönüştürülüyor",
-    "syncCardTranscribedOf": "{done} / {total} tamamlandı · bu ekrandan çıkabilirsiniz",
     "syncCardReadyAmount": "{amount} senkronize edilmeye hazır",
     "syncDetailsTitle": "Senkronizasyon ayrıntıları",
     "syncDetailsRightNow": "Şu anda",

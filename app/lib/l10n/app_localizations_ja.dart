@@ -13274,16 +13274,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amountを会話に変換中';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 完了 · この画面を閉じても大丈夫です';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amountを同期できます';
   }

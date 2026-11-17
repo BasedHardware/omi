@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "আপনার রেকর্ডিং সিঙ্ক হচ্ছে",
     "syncStepDownloadingAmount": "Omi থেকে ডাউনলোড · {done} / {total}",
     "syncStepUploadingAmount": "আপলোড · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} কথোপকথনে রূপান্তর হচ্ছে",
-    "syncCardTranscribedOf": "{done} / {total} সম্পন্ন · আপনি এই স্ক্রিন ছেড়ে যেতে পারেন",
     "syncCardReadyAmount": "{amount} সিঙ্কের জন্য প্রস্তুত",
     "syncDetailsTitle": "সিঙ্কের বিবরণ",
     "syncDetailsRightNow": "এই মুহূর্তে",

@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Συγχρονισμός των ηχογραφήσεών σας",
     "syncStepDownloadingAmount": "Λήψη από το Omi σας · {done} από {total}",
     "syncStepUploadingAmount": "Μεταφόρτωση · {done} από {total}",
-    "syncCardTranscribingAmount": "Μετατροπή {amount} σε συζητήσεις",
-    "syncCardTranscribedOf": "Ολοκληρώθηκαν {done} από {total} · μπορείτε να φύγετε από αυτήν την οθόνη",
     "syncCardReadyAmount": "{amount} έτοιμα για συγχρονισμό",
     "syncDetailsTitle": "Λεπτομέρειες συγχρονισμού",
     "syncDetailsRightNow": "Αυτή τη στιγμή",

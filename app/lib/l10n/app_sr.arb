@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Синхронизација снимака",
     "syncStepDownloadingAmount": "Преузимање са уређаја Omi · {done} од {total}",
     "syncStepUploadingAmount": "Слање · {done} од {total}",
-    "syncCardTranscribingAmount": "Претварање {amount} у разговоре",
-    "syncCardTranscribedOf": "Готово {done} од {total} · можете напустити овај екран",
     "syncCardReadyAmount": "{amount} спремно за синхронизацију",
     "syncDetailsTitle": "Детаљи синхронизације",
     "syncDetailsRightNow": "Тренутно",

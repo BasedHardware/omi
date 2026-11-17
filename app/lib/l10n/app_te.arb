@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "మీ రికార్డింగ్‌లు సింక్ అవుతున్నాయి",
     "syncStepDownloadingAmount": "మీ Omi నుండి డౌన్‌లోడ్ · {done} / {total}",
     "syncStepUploadingAmount": "అప్‌లోడ్ · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} సంభాషణలుగా మార్చబడుతోంది",
-    "syncCardTranscribedOf": "{done} / {total} పూర్తయింది · మీరు ఈ స్క్రీన్ నుండి వెళ్లవచ్చు",
     "syncCardReadyAmount": "{amount} సింక్ కోసం సిద్ధంగా ఉంది",
     "syncDetailsTitle": "సింక్ వివరాలు",
     "syncDetailsRightNow": "ప్రస్తుతం",

@@ -13500,16 +13500,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount omzetten in gesprekken';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done van $total klaar · je kunt dit scherm verlaten';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount klaar om te synchroniseren';
   }

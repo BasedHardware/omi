@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "正在同步你的录音",
     "syncStepDownloadingAmount": "正在从 Omi 下载 · {done} / {total}",
     "syncStepUploadingAmount": "正在上传 · {done} / {total}",
-    "syncCardTranscribingAmount": "正在将 {amount} 转为对话",
-    "syncCardTranscribedOf": "已完成 {done} / {total} · 你可以离开此屏幕",
     "syncCardReadyAmount": "{amount} 可同步",
     "syncDetailsTitle": "同步详情",
     "syncDetailsRightNow": "当前状态",

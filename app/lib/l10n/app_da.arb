@@ -4167,8 +4167,6 @@
     "syncCardSyncingTitle": "Synkroniserer dine optagelser",
     "syncStepDownloadingAmount": "Henter fra din Omi · {done} af {total}",
     "syncStepUploadingAmount": "Uploader · {done} af {total}",
-    "syncCardTranscribingAmount": "Omdanner {amount} til samtaler",
-    "syncCardTranscribedOf": "{done} af {total} færdig · du kan forlade denne skærm",
     "syncCardReadyAmount": "{amount} klar til synkronisering",
     "syncDetailsTitle": "Synkroniseringsdetaljer",
     "syncDetailsRightNow": "Lige nu",

@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "آپ کی ریکارڈنگز سنک ہو رہی ہیں",
     "syncStepDownloadingAmount": "آپ کے Omi سے ڈاؤن لوڈ · {done} / {total}",
     "syncStepUploadingAmount": "اپ لوڈ · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} کو گفتگو میں تبدیل کیا جا رہا ہے",
-    "syncCardTranscribedOf": "{done} / {total} مکمل · آپ اس اسکرین سے باہر جا سکتے ہیں",
     "syncCardReadyAmount": "{amount} سنک کے لیے تیار",
     "syncDetailsTitle": "سنک کی تفصیلات",
     "syncDetailsRightNow": "ابھی",

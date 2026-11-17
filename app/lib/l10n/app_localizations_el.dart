@@ -13549,16 +13549,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Μετατροπή $amount σε συζητήσεις';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Ολοκληρώθηκαν $done από $total · μπορείτε να φύγετε από αυτήν την οθόνη';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount έτοιμα για συγχρονισμό';
   }

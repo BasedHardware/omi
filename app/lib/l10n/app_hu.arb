@@ -4221,8 +4221,6 @@
     "syncCardSyncingTitle": "Felvételek szinkronizálása",
     "syncStepDownloadingAmount": "Letöltés az Omiról · {done} / {total}",
     "syncStepUploadingAmount": "Feltöltés · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} átalakítása beszélgetésekké",
-    "syncCardTranscribedOf": "{done} / {total} kész · elhagyhatod ezt a képernyőt",
     "syncCardReadyAmount": "{amount} készen áll a szinkronizálásra",
     "syncDetailsTitle": "Szinkronizálás részletei",
     "syncDetailsRightNow": "Jelenleg",

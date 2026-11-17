@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "מסנכרן את ההקלטות שלך",
     "syncStepDownloadingAmount": "מוריד מה-Omi שלך · {done} מתוך {total}",
     "syncStepUploadingAmount": "מעלה · {done} מתוך {total}",
-    "syncCardTranscribingAmount": "הופך {amount} לשיחות",
-    "syncCardTranscribedOf": "{done} מתוך {total} הושלמו · אפשר לצאת ממסך זה",
     "syncCardReadyAmount": "{amount} מוכנים לסנכרון",
     "syncDetailsTitle": "פרטי הסנכרון",
     "syncDetailsRightNow": "כרגע",

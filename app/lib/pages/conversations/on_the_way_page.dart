@@ -243,8 +243,10 @@ class _PendingWork {
       {required int nowSeconds}) {
     final processingIds = {for (final c in processing) c.id};
     final walRows = p.derivedWals.pendingWorkAt(nowSeconds: nowSeconds);
+    // Stalled uploads are listed under Needs attention; their still-processing server
+    // conversation must not be listed again as server work.
     final walConversationIds = {
-      for (final w in walRows)
+      for (final w in [...walRows, ...p.derivedWals.stalledUploadsAt(nowSeconds: nowSeconds)])
         if (w.conversationId != null) w.conversationId
     };
     final dated = <_PendingItem>[

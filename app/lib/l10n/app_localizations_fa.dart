@@ -13459,16 +13459,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'تبدیل $amount به گفتگو';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total انجام شد · می‌توانید از این صفحه خارج شوید';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount آماده همگام‌سازی';
   }

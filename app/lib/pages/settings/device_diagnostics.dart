@@ -1041,8 +1041,8 @@ int diagnosticsWindowDropCount(Iterable<Map> rows, {required int nowMs, int? sin
         sinceMs: sinceMs))
     .length;
 
-/// Summarises [history] since [sinceMs] (the whole history, which native keeps for 7 days, when
-/// null).
+/// Summarises [history] since [sinceMs], never earlier than the retained seven-day window; a null
+/// anchor uses that window. Rows timestamped after [nowMs] are excluded.
 @visibleForTesting
 DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {required int nowMs, int? sinceMs}) {
   const hourMs = 3600 * 1000;

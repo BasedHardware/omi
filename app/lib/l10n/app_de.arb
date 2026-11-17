@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Aufnahmen werden synchronisiert",
     "syncStepDownloadingAmount": "Herunterladen von deinem Omi · {done} von {total}",
     "syncStepUploadingAmount": "Hochladen · {done} von {total}",
-    "syncCardTranscribingAmount": "{amount} werden in Unterhaltungen umgewandelt",
-    "syncCardTranscribedOf": "{done} von {total} fertig · du kannst diesen Bildschirm verlassen",
     "syncCardReadyAmount": "{amount} bereit zur Synchronisierung",
     "syncDetailsTitle": "Sync-Details",
     "syncDetailsRightNow": "Gerade jetzt",

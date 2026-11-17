@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sincronitzant les teves gravacions",
     "syncStepDownloadingAmount": "Baixant des de l'Omi · {done} de {total}",
     "syncStepUploadingAmount": "Pujant · {done} de {total}",
-    "syncCardTranscribingAmount": "Convertint {amount} en converses",
-    "syncCardTranscribedOf": "{done} de {total} fet · pots sortir d'aquesta pantalla",
     "syncCardReadyAmount": "{amount} a punt per sincronitzar",
     "syncDetailsTitle": "Detalls de la sincronització",
     "syncDetailsRightNow": "Ara mateix",

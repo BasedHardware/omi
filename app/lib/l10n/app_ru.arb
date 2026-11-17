@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Синхронизация записей",
     "syncStepDownloadingAmount": "Загрузка с Omi · {done} из {total}",
     "syncStepUploadingAmount": "Загрузка на сервер · {done} из {total}",
-    "syncCardTranscribingAmount": "Преобразование {amount} в разговоры",
-    "syncCardTranscribedOf": "Готово {done} из {total} · можно покинуть этот экран",
     "syncCardReadyAmount": "{amount} готово к синхронизации",
     "syncDetailsTitle": "Сведения о синхронизации",
     "syncDetailsRightNow": "Сейчас",

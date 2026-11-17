@@ -13516,16 +13516,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount átalakítása beszélgetésekké';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total kész · elhagyhatod ezt a képernyőt';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount készen áll a szinkronizálásra';
   }

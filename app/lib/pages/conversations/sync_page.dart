@@ -561,7 +561,9 @@ class _SyncPageState extends State<SyncPage> {
     } else if (uploaded > 0) {
       // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
       final amounts = SyncPipelineAmounts.fromPending(pending);
-      title = '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}';
+      title = amounts.processingSeconds > 0
+          ? '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}'
+          : l.syncCardProcessing;
       subtitle = l.syncProcessingBackgroundHint;
     } else if (syncProvider.needsAttentionWalsCount > 0) {
       title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);

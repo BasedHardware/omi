@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Synchronizácia nahrávok",
     "syncStepDownloadingAmount": "Sťahovanie z Omi · {done} z {total}",
     "syncStepUploadingAmount": "Nahrávanie · {done} z {total}",
-    "syncCardTranscribingAmount": "Premena {amount} na konverzácie",
-    "syncCardTranscribedOf": "Hotovo {done} z {total} · túto obrazovku môžete opustiť",
     "syncCardReadyAmount": "{amount} pripravené na synchronizáciu",
     "syncDetailsTitle": "Podrobnosti synchronizácie",
     "syncDetailsRightNow": "Práve teraz",

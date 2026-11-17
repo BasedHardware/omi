@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತಿವೆ",
     "syncStepDownloadingAmount": "ನಿಮ್ಮ Omi ನಿಂದ ಡೌನ್‌ಲೋಡ್ · {done} / {total}",
     "syncStepUploadingAmount": "ಅಪ್‌ಲೋಡ್ · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} ಅನ್ನು ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ",
-    "syncCardTranscribedOf": "{done} / {total} ಪೂರ್ಣ · ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಡಬಹುದು",
     "syncCardReadyAmount": "{amount} ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧ",
     "syncDetailsTitle": "ಸಿಂಕ್ ವಿವರಗಳು",
     "syncDetailsRightNow": "ಈಗ",

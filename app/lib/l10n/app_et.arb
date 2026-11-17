@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sünkroonin sinu salvestusi",
     "syncStepDownloadingAmount": "Laadin alla sinu Omist · {done} / {total}",
     "syncStepUploadingAmount": "Üleslaadimine · {done} / {total}",
-    "syncCardTranscribingAmount": "Muudan {amount} vestlusteks",
-    "syncCardTranscribedOf": "{done} / {total} valmis · võid selle ekraani sulgeda",
     "syncCardReadyAmount": "{amount} on sünkroonimiseks valmis",
     "syncDetailsTitle": "Sünkroonimise üksikasjad",
     "syncDetailsRightNow": "Praegu",

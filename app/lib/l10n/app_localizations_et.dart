@@ -13458,16 +13458,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Muudan $amount vestlusteks';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total valmis · võid selle ekraani sulgeda';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount on sünkroonimiseks valmis';
   }

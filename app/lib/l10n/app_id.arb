@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Menyinkronkan rekaman Anda",
     "syncStepDownloadingAmount": "Mengunduh dari Omi Anda · {done} dari {total}",
     "syncStepUploadingAmount": "Mengunggah · {done} dari {total}",
-    "syncCardTranscribingAmount": "Mengubah {amount} menjadi percakapan",
-    "syncCardTranscribedOf": "{done} dari {total} selesai · Anda boleh meninggalkan layar ini",
     "syncCardReadyAmount": "{amount} siap disinkronkan",
     "syncDetailsTitle": "Detail sinkronisasi",
     "syncDetailsRightNow": "Saat ini",

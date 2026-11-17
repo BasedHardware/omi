@@ -13388,16 +13388,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'تحويل $amount إلى محادثات';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'اكتمل $done من $total · يمكنك مغادرة هذه الشاشة';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount جاهزة للمزامنة';
   }

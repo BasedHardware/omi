@@ -13504,16 +13504,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount ಅನ್ನು ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total ಪೂರ್ಣ · ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಡಬಹುದು';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧ';
   }

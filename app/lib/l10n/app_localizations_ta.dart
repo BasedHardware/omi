@@ -13556,16 +13556,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount உரையாடல்களாக மாற்றப்படுகிறது';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount ஒத்திசைக்கத் தயார்';
   }

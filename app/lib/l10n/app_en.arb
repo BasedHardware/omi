@@ -16219,27 +16219,6 @@
             }
         }
     },
-    "syncCardTranscribingAmount": "Turning {amount} into conversations",
-    "@syncCardTranscribingAmount": {
-        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
-        "placeholders": {
-            "amount": {
-                "type": "String"
-            }
-        }
-    },
-    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
-    "@syncCardTranscribedOf": {
-        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
-        "placeholders": {
-            "done": {
-                "type": "String"
-            },
-            "total": {
-                "type": "String"
-            }
-        }
-    },
     "syncCardReadyAmount": "{amount} ready to sync",
     "@syncCardReadyAmount": {
         "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",

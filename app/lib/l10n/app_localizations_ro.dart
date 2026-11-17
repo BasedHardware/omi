@@ -13521,16 +13521,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Se transformă $amount în conversații';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done din $total gata · poți părăsi acest ecran';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount gata de sincronizare';
   }

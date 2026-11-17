@@ -13570,16 +13570,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ginagawang mga usapan ang $amount';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount handa nang i-sync';
   }

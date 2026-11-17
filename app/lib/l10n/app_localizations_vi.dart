@@ -13462,16 +13462,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Đang biến $amount thành cuộc trò chuyện';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Xong $done / $total · bạn có thể rời màn hình này';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sẵn sàng đồng bộ';
   }

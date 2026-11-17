@@ -13493,16 +13493,6 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Pretvaranje $amount u razgovore';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Završeno $done od $total · možete napustiti ovaj ekran';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount spremno za sinhronizaciju';
   }

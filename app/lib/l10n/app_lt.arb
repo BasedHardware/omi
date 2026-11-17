@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sinchronizuojami jūsų įrašai",
     "syncStepDownloadingAmount": "Atsisiunčiama iš Omi · {done} iš {total}",
     "syncStepUploadingAmount": "Įkeliama · {done} iš {total}",
-    "syncCardTranscribingAmount": "{amount} paverčiama pokalbiais",
-    "syncCardTranscribedOf": "Atlikta {done} iš {total} · galite palikti šį ekraną",
     "syncCardReadyAmount": "{amount} paruošta sinchronizuoti",
     "syncDetailsTitle": "Sinchronizavimo informacija",
     "syncDetailsRightNow": "Šiuo metu",

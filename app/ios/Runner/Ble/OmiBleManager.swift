@@ -1107,7 +1107,9 @@ final class OmiBleManager: NSObject {
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
     private static let failToConnectCountKeyPrefix = "ble_diagnostics_fail_to_connect_count_"
-    private static let maxDisconnectHistory = 4096
+    // One week at about p90 fleet drop rates (~140/day) while keeping each synchronous
+    // per-disconnect rewrite well under the 4096-row cost measured in the PR evidence.
+    private static let maxDisconnectHistory = 1024
     private static let disconnectRetentionMs: Int64 = 7 * 24 * 3600 * 1000
     private static let rssiHistoryLimit = 120
 
@@ -1446,7 +1448,8 @@ final class OmiBleManager: NSObject {
         let now = CheckedIntegerConversion.epochMs()
         if eventType == "disconnect" {
             healthStore.end(uuid, at: now)
-            healthStore.recordDisconnect(uuid, at: now)
+            // A manual disconnect never seeds a reconnect-latency marker.
+            if !isManual { healthStore.recordDisconnect(uuid, at: now) }
         }
         let defaults = UserDefaults.standard
         let key = OmiBleManager.historyKey(uuid)

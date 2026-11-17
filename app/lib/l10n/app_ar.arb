@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "مزامنة تسجيلاتك",
     "syncStepDownloadingAmount": "التنزيل من Omi · {done} من {total}",
     "syncStepUploadingAmount": "الرفع · {done} من {total}",
-    "syncCardTranscribingAmount": "تحويل {amount} إلى محادثات",
-    "syncCardTranscribedOf": "اكتمل {done} من {total} · يمكنك مغادرة هذه الشاشة",
     "syncCardReadyAmount": "{amount} جاهزة للمزامنة",
     "syncDetailsTitle": "تفاصيل المزامنة",
     "syncDetailsRightNow": "الآن",

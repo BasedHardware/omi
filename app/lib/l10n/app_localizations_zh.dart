@@ -13256,16 +13256,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '正在将 $amount 转为对话';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '已完成 $done / $total · 你可以离开此屏幕';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 可同步';
   }

@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Синхронизиране на записите",
     "syncStepDownloadingAmount": "Изтегляне от Omi · {done} от {total}",
     "syncStepUploadingAmount": "Качване · {done} от {total}",
-    "syncCardTranscribingAmount": "Превръщане на {amount} в разговори",
-    "syncCardTranscribedOf": "Готово {done} от {total} · можете да напуснете екрана",
     "syncCardReadyAmount": "{amount} готови за синхронизиране",
     "syncDetailsTitle": "Подробности за синхронизацията",
     "syncDetailsRightNow": "В момента",

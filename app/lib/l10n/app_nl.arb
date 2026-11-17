@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Opnamen synchroniseren",
     "syncStepDownloadingAmount": "Downloaden van je Omi · {done} van {total}",
     "syncStepUploadingAmount": "Uploaden · {done} van {total}",
-    "syncCardTranscribingAmount": "{amount} omzetten in gesprekken",
-    "syncCardTranscribedOf": "{done} van {total} klaar · je kunt dit scherm verlaten",
     "syncCardReadyAmount": "{amount} klaar om te synchroniseren",
     "syncDetailsTitle": "Synchronisatiedetails",
     "syncDetailsRightNow": "Op dit moment",

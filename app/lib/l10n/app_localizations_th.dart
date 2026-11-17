@@ -13397,16 +13397,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'กำลังแปลง $amount เป็นบทสนทนา';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'เสร็จแล้ว $done จาก $total · ออกจากหน้าจอนี้ได้เลย';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount พร้อมซิงค์';
   }

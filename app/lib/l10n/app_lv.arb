@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sinhronizē jūsu ierakstus",
     "syncStepDownloadingAmount": "Lejupielāde no Omi · {done} no {total}",
     "syncStepUploadingAmount": "Augšupielāde · {done} no {total}",
-    "syncCardTranscribingAmount": "{amount} pārvēršana sarunās",
-    "syncCardTranscribedOf": "Gatavs {done} no {total} · varat atstāt šo ekrānu",
     "syncCardReadyAmount": "{amount} gatavs sinhronizācijai",
     "syncDetailsTitle": "Sinhronizācijas informācija",
     "syncDetailsRightNow": "Pašlaik",

@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Đang đồng bộ bản ghi của bạn",
     "syncStepDownloadingAmount": "Đang tải từ Omi của bạn · {done} / {total}",
     "syncStepUploadingAmount": "Đang tải lên · {done} / {total}",
-    "syncCardTranscribingAmount": "Đang biến {amount} thành cuộc trò chuyện",
-    "syncCardTranscribedOf": "Xong {done} / {total} · bạn có thể rời màn hình này",
     "syncCardReadyAmount": "{amount} sẵn sàng đồng bộ",
     "syncDetailsTitle": "Chi tiết đồng bộ",
     "syncDetailsRightNow": "Ngay lúc này",

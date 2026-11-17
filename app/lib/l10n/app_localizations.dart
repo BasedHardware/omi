@@ -23937,18 +23937,6 @@ abstract class AppLocalizations {
   /// **'Uploading · {done} of {total}'**
   String syncStepUploadingAmount(String done, String total);
 
-  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
-  ///
-  /// In en, this message translates to:
-  /// **'Turning {amount} into conversations'**
-  String syncCardTranscribingAmount(String amount);
-
-  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
-  ///
-  /// In en, this message translates to:
-  /// **'{done} of {total} done · you can leave this screen'**
-  String syncCardTranscribedOf(String done, String total);
-
   /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
   ///
   /// In en, this message translates to:

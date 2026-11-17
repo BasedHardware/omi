@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Menyegerakkan rakaman anda",
     "syncStepDownloadingAmount": "Memuat turun daripada Omi anda · {done} daripada {total}",
     "syncStepUploadingAmount": "Memuat naik · {done} daripada {total}",
-    "syncCardTranscribingAmount": "Menukar {amount} kepada perbualan",
-    "syncCardTranscribedOf": "{done} daripada {total} selesai · anda boleh tinggalkan skrin ini",
     "syncCardReadyAmount": "{amount} sedia untuk disegerakkan",
     "syncDetailsTitle": "Butiran penyegerakan",
     "syncDetailsRightNow": "Sekarang",

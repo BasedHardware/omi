@@ -184,7 +184,9 @@ class WalDerivedViews {
       _pendingWorkDeadline = deadlines.isEmpty ? null : deadlines.reduce(min);
       _pendingWorkTimer?.cancel();
       if (onPendingWorkExpired != null && _pendingWorkDeadline != null) {
-        final delay = max(0, _pendingWorkDeadline! * 1000 - _clock().millisecondsSinceEpoch);
+        // Same timebase as the deadline (the caller's `now`), so an injected clock can never
+        // produce a past deadline and a zero-delay re-arm loop; at least 1 s between expiries.
+        final delay = max(1000, (_pendingWorkDeadline! - now) * 1000);
         _pendingWorkTimer = Timer(Duration(milliseconds: delay), () {
           _pendingWorkTimer = null;
           _pendingWork = null;

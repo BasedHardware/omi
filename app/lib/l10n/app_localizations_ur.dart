@@ -13478,16 +13478,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount کو گفتگو میں تبدیل کیا جا رہا ہے';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total مکمل · آپ اس اسکرین سے باہر جا سکتے ہیں';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount سنک کے لیے تیار';
   }

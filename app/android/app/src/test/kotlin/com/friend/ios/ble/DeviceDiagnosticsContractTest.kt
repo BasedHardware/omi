@@ -200,7 +200,7 @@ class DeviceDiagnosticsContractTest {
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [35])
 class FeedbackDiagnosticsServiceParityTest {
-    @Test fun `reconnect history survives restart uses event timestamp and retires with identity`() {
+    @Test fun `reconnect history keys use event timestamp, respect the enabled guard and retire with identity`() {
         val app = RuntimeEnvironment.getApplication()
         DeviceHealthPersistence.setPolicy(app, true, 7, true)
         val prefs = app.getSharedPreferences("ble_diagnostics", Context.MODE_PRIVATE)

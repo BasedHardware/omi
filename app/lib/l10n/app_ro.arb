@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Se sincronizează înregistrările",
     "syncStepDownloadingAmount": "Se descarcă de pe Omi · {done} din {total}",
     "syncStepUploadingAmount": "Se încarcă · {done} din {total}",
-    "syncCardTranscribingAmount": "Se transformă {amount} în conversații",
-    "syncCardTranscribedOf": "{done} din {total} gata · poți părăsi acest ecran",
     "syncCardReadyAmount": "{amount} gata de sincronizare",
     "syncDetailsTitle": "Detalii sincronizare",
     "syncDetailsRightNow": "Chiar acum",

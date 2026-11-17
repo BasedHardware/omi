@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Синхронізація записів",
     "syncStepDownloadingAmount": "Завантаження з Omi · {done} із {total}",
     "syncStepUploadingAmount": "Завантаження на сервер · {done} із {total}",
-    "syncCardTranscribingAmount": "Перетворення {amount} на розмови",
-    "syncCardTranscribedOf": "Готово {done} із {total} · можна залишити цей екран",
     "syncCardReadyAmount": "{amount} готово до синхронізації",
     "syncDetailsTitle": "Відомості про синхронізацію",
     "syncDetailsRightNow": "Зараз",

@@ -13535,16 +13535,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Trasformazione di $amount in conversazioni';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done di $total completati · puoi lasciare questa schermata';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount pronti da sincronizzare';
   }

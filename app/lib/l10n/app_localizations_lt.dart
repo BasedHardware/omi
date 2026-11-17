@@ -13487,16 +13487,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount paverčiama pokalbiais';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Atlikta $done iš $total · galite palikti šį ekraną';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount paruošta sinchronizuoti';
   }

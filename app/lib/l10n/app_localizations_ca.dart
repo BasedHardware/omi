@@ -13533,16 +13533,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Convertint $amount en converses';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done de $total fet · pots sortir d\'aquesta pantalla';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount a punt per sincronitzar';
   }

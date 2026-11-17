@@ -4160,8 +4160,6 @@
     "syncCardSyncingTitle": "Synchronizacja nagrań",
     "syncStepDownloadingAmount": "Pobieranie z Omi · {done} z {total}",
     "syncStepUploadingAmount": "Przesyłanie · {done} z {total}",
-    "syncCardTranscribingAmount": "Zamiana {amount} na rozmowy",
-    "syncCardTranscribedOf": "Gotowe: {done} z {total} · możesz opuścić ten ekran",
     "syncCardReadyAmount": "{amount} gotowe do synchronizacji",
     "syncDetailsTitle": "Szczegóły synchronizacji",
     "syncDetailsRightNow": "Teraz",

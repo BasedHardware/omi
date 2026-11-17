@@ -13279,16 +13279,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount을(를) 대화로 변환 중';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total 완료 · 이 화면을 나가도 됩니다';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount 동기화 준비됨';
   }

@@ -11,8 +11,9 @@ The sheet, banner, On the Way WAL rows and Catching up WAL contribution read thi
 inventory. The owning SyncProvider notifies mounted consumers at the earliest
 expiry deadline and cancels that timer on disposal. On the Way lists server-reported work separately because a server row
 can describe the same audio without a WAL identity. Its duration is not added to
-WAL day totals. The device tile prefers the WAL amount while local work exists;
-server-only work retains its own tile and details section. The active banner remembers the audio its run set out to move;
+WAL day totals. The device tile shows the WAL amount while local work exists and
+falls back to server-only work only when there is none; server-only work always
+keeps its own On the Way section. The active banner remembers the audio its run set out to move;
 its progress snapshot intentionally holds steady as uploads finish.
 
 Expired handles remain uploaded in the custody ledger. On the Way offers Offline
@@ -34,7 +35,7 @@ When the native anchor is absent, support exports preserve `counters_since` as
 null for both counters and count retained rows in the rolling seven-day window.
 The historical native lifetime counter counts reconnections; the footer now says
 reconnections explicitly. Previously missed lifetime reconnects and evicted
-history cannot be reconstructed. Both native histories now retain up to 4096 rows
+history cannot be reconstructed. Both native histories now retain up to 1024 rows
 within seven days; extreme event storms can still reach this bounded cap.
 
 Native reconnect history persists the event's timestamp separately from the audio
@@ -65,8 +66,8 @@ helper, binary-plist serialization and isolated UserDefaults writes. Reproduce:
 
 ```sh
 swiftc -parse-as-library app/ios/Runner/Ble/OmiBleEnergyPolicy.swift \
-  app/ios/test/ble_history_ring_benchmark.swift -o /Volumes/Ephemeral/scratch/ble-ring-benchmark
-/Volumes/Ephemeral/scratch/ble-ring-benchmark m5-mbp
+  app/ios/test/ble_history_ring_benchmark.swift -o ./ble-ring-benchmark
+./ble-ring-benchmark "$(hostname -s)"
 ```
 
 This is macOS host evidence; iPhone and Android event-loop latency under a full

@@ -13477,16 +13477,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount konuşmalara dönüştürülüyor';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total tamamlandı · bu ekrandan çıkabilirsiniz';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount senkronize edilmeye hazır';
   }

@@ -13469,16 +13469,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount चे संभाषणांमध्ये रूपांतर होत आहे';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total पूर्ण · तुम्ही ही स्क्रीन सोडू शकता';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount सिंकसाठी तयार';
   }

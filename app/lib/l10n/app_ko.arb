@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "녹음 동기화 중",
     "syncStepDownloadingAmount": "Omi에서 다운로드 중 · {done} / {total}",
     "syncStepUploadingAmount": "업로드 중 · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount}을(를) 대화로 변환 중",
-    "syncCardTranscribedOf": "{done} / {total} 완료 · 이 화면을 나가도 됩니다",
     "syncCardReadyAmount": "{amount} 동기화 준비됨",
     "syncDetailsTitle": "동기화 상세 정보",
     "syncDetailsRightNow": "현재",

@@ -13495,16 +13495,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Menukar $amount kepada perbualan';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done daripada $total selesai · anda boleh tinggalkan skrin ini';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sedia untuk disegerakkan';
   }

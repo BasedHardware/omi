@@ -4125,8 +4125,6 @@
     "syncCardSyncingTitle": "Sincronizzazione delle registrazioni",
     "syncStepDownloadingAmount": "Download dal tuo Omi · {done} di {total}",
     "syncStepUploadingAmount": "Caricamento · {done} di {total}",
-    "syncCardTranscribingAmount": "Trasformazione di {amount} in conversazioni",
-    "syncCardTranscribedOf": "{done} di {total} completati · puoi lasciare questa schermata",
     "syncCardReadyAmount": "{amount} pronti da sincronizzare",
     "syncDetailsTitle": "Dettagli sincronizzazione",
     "syncDetailsRightNow": "Adesso",

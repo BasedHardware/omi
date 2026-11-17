@@ -60,6 +60,28 @@ void main() {
     });
   });
 
+  test('an injected past clock never re-arms a zero-delay expiry loop', () {
+    fakeAsync((time) {
+      final clock = time.getClock(DateTime(2026, 11, 17, 12));
+      final deviceNow = clock.now().millisecondsSinceEpoch ~/ 1000;
+      // The caller's clock is a day behind the device clock, so the deadline it computes
+      // is already in the device's past.
+      final callerNow = deviceNow - 86400;
+      var notifications = 0;
+      final wal = _row(callerNow - 60, WalStatus.uploaded)..uploadedAt = callerNow - 60;
+      late WalDerivedViews views;
+      views = WalDerivedViews([wal], clock: clock.now, onPendingWorkExpired: () {
+        notifications++;
+        // A consumer recomputes on notification; cap it so a regression fails instead of hanging.
+        if (notifications < 3) views.pendingWorkAt(nowSeconds: callerNow);
+      });
+      addTearDown(views.dispose);
+      views.pendingWorkAt(nowSeconds: callerNow);
+      time.elapse(const Duration(seconds: 10));
+      expect(notifications, 0);
+    });
+  });
+
   test('pending inventory expires at its exact deadline and recovers on confirmation', () {
     final wal = _row(1700000000, WalStatus.uploaded)..uploadedAt = 2000000000;
     final views = WalDerivedViews([wal]);

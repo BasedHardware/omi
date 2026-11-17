@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Сінхранізацыя запісаў",
     "syncStepDownloadingAmount": "Спампоўка з Omi · {done} з {total}",
     "syncStepUploadingAmount": "Загрузка на сервер · {done} з {total}",
-    "syncCardTranscribingAmount": "Ператварэнне {amount} у размовы",
-    "syncCardTranscribedOf": "Гатова {done} з {total} · можна пакінуць гэты экран",
     "syncCardReadyAmount": "{amount} гатова да сінхранізацыі",
     "syncDetailsTitle": "Дэталі сінхранізацыі",
     "syncDetailsRightNow": "Цяпер",
