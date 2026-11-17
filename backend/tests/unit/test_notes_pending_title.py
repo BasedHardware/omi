@@ -196,6 +196,7 @@ def test_wire_serves_a_bare_placeholder_as_untitled_on_live_rows():
     'changes',
     [
         {'user_title': FALLBACK},
+        {'user_title': 'My chat', 'structured': {'title': FALLBACK, 'overview': ''}},
         {'structured': {'title': FALLBACK, 'overview': 'Approval is due Friday.'}},
         {'structured': {'title': 'Pilot budget'}},
         {'structured': {'title': ''}},
@@ -250,3 +251,21 @@ def test_expired_empty_capture_with_any_placeholder_is_noise(title):
     assert empty_capture.applies(row, now=NOW)
     assert home_step.classify(row) == home_step.NOISE
     assert transcribing_hold.project(row)['structured']['title'] == 'No summary'
+
+
+@pytest.mark.parametrize(
+    'notes',
+    [
+        {'title': FALLBACK, 'overview': 'Approval is due Friday.'},
+        {'title': FALLBACK, 'sections': [{'heading': 'Discussion 1', 'body_markdown': 'Budget is $8,000.'}]},
+        {'title': 'Transcribing…', 'gist': 'Pilot budget approval'},
+    ],
+)
+def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcription_wait(notes):
+    """Generated notes with an unusable headline, on a batch capture whose transcript receipt has not landed."""
+    row = capture(structured=notes)
+    assert not transcribing_hold.applies(row)
+    assert home_step.classify(row) == home_step.READY
+    wire = transcribing_hold.project(home_step.project(row))
+    assert wire['structured'] == notes and wire['status'] == 'completed'
+    assert home_step.classify(capture(status='processing', structured=notes)) == home_step.WRITING_NOTES

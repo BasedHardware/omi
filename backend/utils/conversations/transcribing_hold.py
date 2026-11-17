@@ -20,8 +20,7 @@ from config.episodes import (
 from utils.conversations.fragment_visibility import BATCH_RECORD_OWNERS
 from config.transcription_pending import pending_retry_enabled, seal_wait_enabled
 from utils.conversations import empty_capture
-from utils.conversations.home_titles import placeholder_title_wire
-from utils.summary_quality import valid_title
+from utils.conversations.home_titles import placeholder_title_wire, untitled_pending
 
 READ_FIELDS = (
     'created_at',
@@ -76,8 +75,9 @@ def applies(row: Mapping[str, Any], *, stored: bool = False) -> bool:
         and not row.get('record_projection_revision')
         and not has_transcript
         and not str(row.get('user_title') or '').strip()
-        # A deterministic placeholder stamped on a capture stub is not a title.
-        and not valid_title((row.get('structured') or {}).get('title'))
+        # A placeholder stamped on a capture stub is not a title; a placeholder
+        # beside real notes is a finished row and keeps them visible.
+        and untitled_pending(row.get('structured') or {})
     )
 
 
