@@ -11,6 +11,7 @@ from google.cloud import firestore
 
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_allowance_hold import OWNERS, STATE, enabled, park
+from utils.executors import db_executor
 
 KEY = 'allowance_parking_v1'
 
@@ -83,7 +84,6 @@ def _apply_rows(store, rows, now, concurrency, limiter):
                 break
 
             def migrate(tx):
-                limiter.acquire(stopped)
                 if owner is not None:
                     # Discovery is only a scheduling hint. Both documents must
                     # be read again in this transaction, including every retry.
@@ -94,7 +94,7 @@ def _apply_rows(store, rows, now, concurrency, limiter):
                 return park(tx, job, now)
 
             try:
-                parked += store.run(migrate)
+                parked += store.run(migrate, before_attempt=lambda: limiter.acquire(stopped))
             except BatchPrivacyBlocked:
                 fenced += 1  # Erasure owns the row; never bypass its authority.
             except _Stopped:
@@ -115,8 +115,6 @@ def _apply_rows(store, rows, now, concurrency, limiter):
         if not isinstance(owner, str) or not owner:
             raise RuntimeError('migration candidate has no owner key')
         groups[owner].append(snapshot)
-    from utils.executors import db_executor
-
     remaining = iter(groups.items())
     pending = set()
     parked, fenced = 0, 0

@@ -50,8 +50,6 @@ def test_prod_apply_refuses_emulator_even_with_operator_identity(harness, monkey
 
 
 def test_apply_shares_limiter_across_pages_and_drains_executor(harness, monkeypatch, capsys):
-    from utils import executors
-
     monkeypatch.setenv('GCP_AGENT_TIER', 'prod-operator')
     monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
     monkeypatch.setattr(
@@ -74,7 +72,7 @@ def test_apply_shares_limiter_across_pages_and_drains_executor(harness, monkeypa
     apply = Mock(side_effect=[{'complete': False}, {'complete': True}])
     shutdown = Mock()
     monkeypatch.setattr(cli, 'apply_page', apply)
-    monkeypatch.setattr(executors, 'shutdown_executors', shutdown)
+    monkeypatch.setattr(cli, 'shutdown_executors', shutdown)
     cli.main()
     assert apply.call_count == 2
     first, second = (call.kwargs for call in apply.call_args_list)

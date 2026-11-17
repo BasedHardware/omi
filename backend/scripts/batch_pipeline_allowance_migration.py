@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from database.batch_pipeline_allowance_migration import RowRateLimiter, apply_page, counts
 from database.batch_pipeline_store import FirestoreStore
+from utils.executors import shutdown_executors
 
 
 def main():
@@ -55,8 +56,6 @@ def main():
                 break
     finally:
         if args.concurrency > 1:
-            from utils.executors import shutdown_executors
-
             shutdown_executors()
 
 

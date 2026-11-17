@@ -109,7 +109,8 @@ The shared DB executor can impose a lower worker ceiling if configured below 32.
 `--max-rows-per-second` defaults to unlimited; a positive finite value sets a
 single process-wide token bucket shared across pages and workers. Every row
 transaction **attempt**, including SDK/contention retries and fenced/no-op rows,
-takes a token before reading. Capacity is one token: at 50/s it spaces permits
+takes a token before BeginTransaction, so low rates never wait with a transaction
+open. Capacity is one token: at 50/s it spaces permits
 by at least 20 ms and does not accumulate an idle/page burst. Already permitted
 in-flight attempts can finish together; checkpoint transactions and individual
 document reads are not row attempts and are outside this rate. Never multiply

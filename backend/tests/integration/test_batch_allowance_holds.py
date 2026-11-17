@@ -1,10 +1,15 @@
 """Allowance parking/release on the shared sim, Firestore and Postgres matrix."""
 
 from unittest.mock import Mock
+from threading import Barrier, Lock
 
 import pytest
+from google.api_core.exceptions import Aborted
 
 from testing.store_fixtures import store_backend  # noqa: F401
+from database import batch_pipeline_allowance_migration as migration
+from database import batch_pipeline_store as store_module
+from database.batch_pipeline_allowance_migration import KEY, apply_page, counts
 from utils.batch_pipeline.allowance_hold import AllowanceHolds
 from database.batch_pipeline_allowance_hold import OWNERS, STATE, park
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, Priority
@@ -265,8 +270,6 @@ def test_privacy_fence_prevents_release_without_resurrecting_work(h):
 def test_migration_count_only_resume_and_cas(h, monkeypatch, concurrency):
     if h.name != 'emulator':
         pytest.skip('Firestore migration queries require the actual emulator')
-    from database.batch_pipeline_allowance_migration import apply_page, counts
-
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     hold(h, 'a')
     hold(h, 'b', capture=2, now=4)
@@ -287,8 +290,6 @@ def test_migration_count_only_resume_and_cas(h, monkeypatch, concurrency):
 def test_migration_failure_preserves_checkpoint(h, monkeypatch, concurrency):
     if h.name != 'emulator':
         pytest.skip('Firestore migration queries require the actual emulator')
-    from database.batch_pipeline_allowance_migration import KEY, apply_page
-
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     hold(h, 'a')
     hold(h, 'b', capture=2, now=4)
@@ -308,10 +309,6 @@ def test_migration_failure_preserves_checkpoint(h, monkeypatch, concurrency):
 def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
     if h.name != 'emulator':
         pytest.skip('Firestore migration requires actual transaction commits')
-    from threading import Barrier, Lock
-
-    from database import batch_pipeline_allowance_migration as migration
-
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     h.seed_user('other')
     h.seed_user('blocked')
@@ -327,7 +324,7 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
     original = h.store.run
     marker = h.store.client.collection(f'{h.namespace}_migrations').document(migration.KEY)
 
-    def run(body):
+    def run(body, **options):
         identity = []
 
         def wrapped(tx):
@@ -346,7 +343,7 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
             return result
 
         try:
-            return original(wrapped)
+            return original(wrapped, **options)
         finally:
             if identity:
                 with lock:
@@ -368,31 +365,58 @@ def test_migration_parallel_commit_fences_and_stale_page_replay(h, monkeypatch):
     assert get(h, 'd')['state'] == 'retry'
 
 
-def test_migration_sdk_retry_is_rate_limited(h, monkeypatch):
+@pytest.mark.parametrize('retry_kind', ['outer_read', 'sdk_commit'])
+def test_migration_sdk_retry_is_rate_limited(h, monkeypatch, retry_kind):
     if h.name != 'emulator':
         pytest.skip('Actual Firestore SDK transaction retry required')
-    from google.api_core.exceptions import Aborted
-
-    from database import batch_pipeline_allowance_migration as migration
-
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     hold(h)
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED')
     limiter = migration.RowRateLimiter(50)
-    acquire = Mock(wraps=limiter.acquire)
+    api = h.store.client._firestore_api
+    begin = Mock(wraps=api.begin_transaction)
+    monkeypatch.setattr(api, 'begin_transaction', begin)
+    original_acquire = limiter.acquire
+    permits = []
+
+    def permit(stopped):
+        assert begin.call_count == len(permits)  # Permit must precede BeginTransaction.
+        permits.append(True)
+        original_acquire(stopped)
+
+    acquire = Mock(side_effect=permit)
     monkeypatch.setattr(limiter, 'acquire', acquire)
     attempts = []
     original = h.store.run
+    monkeypatch.setattr(store_module, 'contention_retry_enabled', lambda: retry_kind == 'outer_read')
+    if retry_kind == 'sdk_commit':
+        commit = api.commit
+        aborted = []
 
-    def run(body):
+        def commit_after_abort(*args, **kwargs):
+            if not aborted:
+                aborted.append(True)
+                # A real Aborted response releases the attempt's locks. Model
+                # that server-side effect before injecting the SDK response.
+                request = kwargs['request']
+                api.rollback(
+                    request={'database': request['database'], 'transaction': request['transaction']},
+                    metadata=kwargs.get('metadata', ()),
+                )
+                raise Aborted('synthetic commit abort')
+            return commit(*args, **kwargs)
+
+        monkeypatch.setattr(api, 'commit', commit_after_abort)
+
+    def run(body, **options):
         def retry_once(tx):
             result = body(tx)
             attempts.append(True)
-            if len(attempts) == 1:
+            if len(attempts) == 1 and retry_kind == 'outer_read':
                 raise Aborted('synthetic abort before flush')
             return result
 
-        return original(retry_once)
+        return original(retry_once, **options)
 
     monkeypatch.setattr(h.store, 'run', run)
     assert migration.apply_page(h.store, 10, concurrency=2, rate_limiter=limiter)['parked'] == 1
@@ -406,8 +430,6 @@ def test_migration_sdk_retry_is_rate_limited(h, monkeypatch):
 def test_migration_rpc_envelope_keeps_fences_and_batches_only_job_owner(h, monkeypatch, concurrency, row_reads):
     if h.name != 'emulator':
         pytest.skip('Measure actual SDK RPCs against loopback Firestore')
-    from database.batch_pipeline_allowance_migration import apply_page
-
     monkeypatch.setenv('BATCH_ALLOWANCE_PARK_ENABLED', 'off')
     hold(h)
     monkeypatch.delenv('BATCH_ALLOWANCE_PARK_ENABLED')

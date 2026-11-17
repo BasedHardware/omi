@@ -16,6 +16,7 @@ import pytest
 from database import batch_pipeline_allowance_migration as migration
 from database.batch_pipeline_allowance_hold import OWNERS, STATE
 from database.batch_pipeline_store import FirestoreStore, FirestoreTransaction
+from database.batch_pipeline_transaction_attempt import prepare_transaction
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 
@@ -108,7 +109,7 @@ def test_concurrent_owners_serialize_through_commit_and_checkpoint_waits(h, monk
     seen = []
     original = h.store.run
 
-    def run(body):
+    def run(body, **options):
         owner = []
 
         def wrapped(tx):
@@ -126,7 +127,7 @@ def test_concurrent_owners_serialize_through_commit_and_checkpoint_waits(h, monk
             return result
 
         try:
-            return original(wrapped)  # Includes flush and commit, not just park().
+            return original(wrapped, **options)  # Includes flush and commit, not just park().
         finally:
             if owner:
                 with lock:
@@ -266,10 +267,11 @@ def test_each_transaction_retry_takes_a_permit(h, monkeypatch):
     monkeypatch.setattr(limiter, 'acquire', lambda stopped: starts.append(True))
     original = h.store.run
 
-    def retry(body):
+    def retry(body, **options):
         # Discard the first attempt before flush; the emulator test proves real retries.
+        options['before_attempt']()
         body(FirestoreTransaction(h.client, h.store.namespace, h.client.transaction()))
-        return original(body)
+        return original(body, **options)
 
     monkeypatch.setattr(h.store, 'run', retry)
     assert migration.apply_page(h.store, 10, concurrency=2, rate_limiter=limiter)['parked'] == 1
@@ -283,6 +285,42 @@ def test_stop_interrupts_rate_wait():
     stopped.set()
     with pytest.raises(migration._Stopped):
         limiter.acquire(stopped)
+
+
+def test_low_rate_waits_before_begin_on_every_sdk_attempt(h):
+    clock = [0.0]
+    starts = []
+
+    class Stop:
+        def is_set(self):
+            return False
+
+        def wait(self, delay):
+            assert transaction._id is None
+            clock[0] += delay + 1e-9
+
+    limiter = migration.RowRateLimiter(0.001, clock=lambda: clock[0])
+
+    def permit():
+        assert transaction._id is None
+        limiter.acquire(Stop())
+        starts.append(clock[0])
+
+    transaction = prepare_transaction(h.client, permit)
+    for _attempt in range(3):
+        transaction._clean_up()  # The pinned SDK does this before every _begin.
+        transaction._begin()
+    assert starts == pytest.approx([0, 1000, 2000])
+
+
+def test_cancel_before_begin_is_not_masked_by_sdk_rollback(h):
+    stopped = Event()
+    stopped.set()
+    limiter = migration.RowRateLimiter(50)
+    transaction = prepare_transaction(h.client, lambda: limiter.acquire(stopped))
+    with pytest.raises(migration._Stopped):
+        migration.firestore.transactional(lambda tx: pytest.fail('cancelled body ran'))(transaction)
+    assert transaction._id is None
 
 
 def test_concurrent_workers_share_one_bucket():
