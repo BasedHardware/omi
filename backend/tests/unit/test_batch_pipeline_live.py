@@ -21,7 +21,7 @@ from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.live import record_identity, register_recording
 from utils.batch_pipeline.live_projection import replace_record
 from utils.batch_pipeline.source_audio import MAGIC, materialize, validate_reference
-from utils.conversations import summary_delivery
+from utils.conversations import lifecycle, summary_delivery
 from utils.enrichment.age_gate import expired
 from utils.sync.assignment_errors import SyncAssignmentConflict
 from tests.unit.test_batch_provider_stt import Outbox, Artifacts, Vendor, stage as provider_stage
@@ -1205,8 +1205,6 @@ async def test_protocol_cutover_defers_without_reading_archive_or_expiring_oblig
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])
 def test_capture_reservation_preserves_supported_language_route(monkeypatch, language, admitted):
-    from utils.conversations import lifecycle
-
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'true')
