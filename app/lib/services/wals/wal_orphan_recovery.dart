@@ -259,7 +259,9 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         final config = jsonDecode(raw);
         if (config is! Map ||
             config['provider'] != 'omi' ||
-            (config['send_raw_audio_to_omi'] != null && config['send_raw_audio_to_omi'] != true)) return true;
+            (config['send_raw_audio_to_omi'] != null && config['send_raw_audio_to_omi'] != true)) {
+          return true;
+        }
       } catch (_) {
         return true;
       }
