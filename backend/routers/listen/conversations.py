@@ -1241,14 +1241,16 @@ class LiveConversationController:
                 if quiet_from is None:
                     quiet_from = self.host.state.last_audio_received_time
                 finished_at = max(finished_at, datetime.fromtimestamp(quiet_from, timezone.utc))
+            # A live batch row's stored recorded_end is its creation; a calendar window counts from speech.
+            timed_row = (
+                dict(conversation, recorded_end=finished_at) if server_batch_owned(conversation) else conversation
+            )
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),
                 in_progress_status=ConversationStatus.in_progress,
                 seconds_since_last_update=(self.clock() - finished_at).total_seconds(),
-                conversation_creation_timeout=continuation_timeout(
-                    conversation, self.host.conversation_creation_timeout
-                ),
+                conversation_creation_timeout=continuation_timeout(timed_row, self.host.conversation_creation_timeout),
             )
             boundary_action = await conversation_action(self, conversation)
             if boundary_action == 'hold':

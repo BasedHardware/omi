@@ -92,7 +92,8 @@ def quiet_since(clock: Optional[SpeechClock], row_created_at: Optional[datetime]
     by this socket that has heard no speech returns `now`: an
     all-silent row stays open rather than closing into an empty recording every
     timeout. A row resumed from an earlier socket may hold speech this clock
-    never heard, so its resume counts as speech.
+    never heard, so its resume counts as speech: the row stays open for one
+    full timeout after each reconnect.
     """
     if clock is None or clock.failed:
         return None

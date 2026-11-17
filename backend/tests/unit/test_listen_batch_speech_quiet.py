@@ -175,3 +175,18 @@ async def test_a_calendar_meeting_keeps_a_silent_batch_row_open_until_its_window
         'end_time': (NOW + timedelta(minutes=30)).isoformat(),
     }
     assert await _one_pass(monkeypatch, row, clock) == 0
+
+
+@pytest.mark.asyncio
+async def test_a_row_created_before_the_meeting_still_gets_its_window(monkeypatch):
+    opened = NOW - timedelta(minutes=40)
+    clock = _clock(opened=opened, started=opened, speech=NOW - timedelta(seconds=150))
+    row = _batch_row(NOW - timedelta(minutes=35))
+    row['has_content'] = True
+    row['external_data']['calendar_meeting_context'] = {
+        'calendar_event_id': 'evt-2',
+        'calendar_source': 'google',
+        'start_time': (NOW - timedelta(minutes=10)).isoformat(),
+        'end_time': (NOW + timedelta(minutes=30)).isoformat(),
+    }
+    assert await _one_pass(monkeypatch, row, clock) == 0
