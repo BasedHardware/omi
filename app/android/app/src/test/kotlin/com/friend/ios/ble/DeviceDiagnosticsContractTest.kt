@@ -218,7 +218,12 @@ class FeedbackDiagnosticsServiceParityTest {
         assertEquals(2000L, recovery.recovered(17000L, BleConnectionHistory.connectedBefore(restored, "device", DeviceHealthPersistence.enabled(app)))!!.durationMs)
         BleConnectionHistory.connected(prefs, "device")
         assertFalse(prefs.contains("reconnect_event_DEVICE"))
+        BleConnectionHistory.disconnected(prefs, "device", 18000L)
+        assertTrue(restored.contains("ever_connected_DEVICE"))
+        assertTrue(restored.contains("reconnect_event_DEVICE"))
         DeviceHealthPersistence.setPolicy(app, false, 8, true)
+        assertFalse(restored.contains("ever_connected_DEVICE"))
+        assertFalse(restored.contains("reconnect_event_DEVICE"))
         assertFalse(BleConnectionHistory.connectedBefore(restored, "device", DeviceHealthPersistence.enabled(app)))
     }
 

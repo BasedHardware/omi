@@ -21,12 +21,17 @@ Transcription unavailable. This also covers captures older than the server's
 configurable backfill window without guessing that a job was rejected. Display
 expiry never changes status, retries, file paths, retention, or deletion rights.
 A recent pending response can restore the active display inventory.
+When ready recordings coexist with expired uploads, both Offline Sync banners
+keep the ready amount and Sync action; the expired recording retains its
+unavailable row and details route.
 
 Drops are non-manual disconnect rows in the observed seven-day window, including
 rows whose reconnect time is still unknown. Only completed non-manual disconnects
 contribute reconnect latency. Audio-recovery stamps and failed connect attempts
 are different events. UI and diagnostics export use the same drop predicate, including when no native
 window anchor is available. Lifetime reconnections stay in the separate footer.
+When the native anchor is absent, support exports preserve `counters_since` as
+null for both counters and count retained rows in the rolling seven-day window.
 The historical native lifetime counter counts reconnections; the footer now says
 reconnections explicitly. Previously missed lifetime reconnects and evicted
 history cannot be reconstructed. Both native histories now retain up to 4096 rows

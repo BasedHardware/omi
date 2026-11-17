@@ -238,17 +238,17 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           }),
         );
       }
-    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
-      action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
-          () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else if (readyWals.isNotEmpty) {
       final seconds = walSeconds(readyWals);
       title = seconds > 0
           ? l.syncCardReadyAmount(dur(seconds))
           : l.syncCardReadyCount(groupRecordingBlocks(readyWals).length);
       action = statusActionPill(l.sync, OmiColors.accent, startSync);
+    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.transcriptionUnavailable;
+      titleColor = Colors.orangeAccent;
+      action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
+          () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else {
       // All synced, or nothing recorded yet: the same calm baseline, so the card never pops in/out.
       title = l.syncCardAllBackedUp;

@@ -566,9 +566,6 @@ class _SyncPageState extends State<SyncPage> {
     } else if (syncProvider.needsAttentionWalsCount > 0) {
       title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
       titleColor = Colors.orangeAccent;
-    } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
       final seconds = walSeconds(pending.where((w) => w.status == WalStatus.miss));
       title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
@@ -579,6 +576,9 @@ class _SyncPageState extends State<SyncPage> {
           OmiFeedback.error(context, l.internetRequired);
         }
       });
+    } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.transcriptionUnavailable;
+      titleColor = Colors.orangeAccent;
     } else {
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;

@@ -194,6 +194,33 @@ void main() {
   });
 
   for (final legacy in [false, true]) {
+    testWidgets('expired upload cannot hide ready Sync action (legacy=$legacy)', (tester) async {
+      final stale = Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.opus,
+          seconds: 120,
+          status: WalStatus.uploaded,
+          storage: WalStorage.disk);
+      final ready = Wal(
+          timerStart: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk);
+      await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.miss, recordings: [stale, ready]);
+      final l = AppLocalizations.of(tester.element(find.byType(legacy ? SyncPage : AutoSyncPage)));
+      expect(find.text(l.syncCardReadyAmount(OmiDuration.compact(60, l))), findsOneWidget);
+      expect(find.text(l.sync), findsOneWidget);
+      expect(stale.status, WalStatus.uploaded);
+      expect(ready.status, WalStatus.miss);
+      expect(tester.takeException(), isNull);
+      await _capture(
+          tester,
+          legacy
+              ? '006-mobile-ios-legacy-ready-with-stalled-upload.png'
+              : '005-mobile-ios-sync-ready-with-stalled-upload.png');
+    });
+
     testWidgets('expired uploads are unavailable without a processing spinner (legacy=$legacy)', (tester) async {
       final wal = Wal(
           timerStart: DateTime.now().subtract(const Duration(days: 40)).millisecondsSinceEpoch ~/ 1000,
