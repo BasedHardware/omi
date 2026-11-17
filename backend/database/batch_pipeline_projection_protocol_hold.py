@@ -72,7 +72,7 @@ def bound_protocol_head(store, segment_id, job, entry, binding, now) -> bool:
             store._mirror(binding)
         except Exception:
             logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=protocol_head_bound')
-        PROTOCOL_HOLDS.labels(reason=PROTOCOL_HOLD_REASON).inc()
+        PROTOCOL_HOLDS.labels(reason='missing_source_marker').inc()
         logger.warning(
             'event=batch_projection action=protocol_head_bound outcome=quarantine_held reason=%s age_seconds=%.0f',
             PROTOCOL_HOLD_REASON,
