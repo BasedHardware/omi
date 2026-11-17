@@ -223,7 +223,7 @@ npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention 
 
 **Runtime image contracts.** `runtime_images.json` owns image, Dockerfile, context, entrypoint and deploy-workflow registration. `make runtime-image-source-closure` gates source closure and workflow Dockerfile smoke coverage locally and in CI. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU builds use the same dependency probe but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
 
-Selector/preflight `--check-deployment-contracts` requires exact `testing/workflow_contracts.json` mappings to discovered tests; wildcards do not count.
+All selector modes require exact `testing/workflow_contracts.json` mappings to discovered tests; wildcards do not count. Use `--check-deployment-contracts`.
 
 **OpenAPI contract runner** — OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 
