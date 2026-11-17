@@ -163,6 +163,12 @@ they do not inflate the live baseline. Qualification needs actual eligible memo
 hits on each candidate family/plane and a match-plus-mismatch denominator;
 ineligible live fallbacks or shadow errors do not prove cache correctness.
 Unresolved shadow errors or missing candidate coverage block qualification.
+External comparisons use independent, sequential authority snapshots. A fresh
+candidate plus an observed marker transition is reported as
+`reason=fresh_authority_change`, while remaining a mismatch in both comparison
+counters. It is not evidence of a cached ALLOW. Cached disagreements and
+transitions without that evidence keep their conservative reasons; see
+[`privacy-cache-comparisons.md`](../privacy-cache-comparisons.md).
 Compare each plane against its own lifecycle baseline; pusher's first complete
 interval includes setup checks, while listen resets its census after bootstrap.
 

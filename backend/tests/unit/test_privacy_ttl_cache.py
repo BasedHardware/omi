@@ -498,7 +498,7 @@ def test_fresh_comparison_race_preserves_live_and_labels_marker_transition(world
         else:
             assert external(db)
     assert counter._value.get() == before + 1
-    assert ('reason=stale_allow' if first_block else 'reason=stale_block') in caplog.text
+    assert 'reason=fresh_authority_change' in caplog.text
     for field in (
         'candidate_source=fresh_read',
         'cache_age=unknown',
@@ -509,6 +509,88 @@ def test_fresh_comparison_race_preserves_live_and_labels_marker_transition(world
     ):
         assert field in caplog.text
     assert UID not in caplog.text and 'b' * 32 not in caplog.text
+
+
+@pytest.mark.parametrize('authority', ['gate', 'marker'])
+def test_external_fresh_allow_after_candidate_token_read_is_not_a_cached_stale_allow(
+    world, monkeypatch, caplog, authority
+):
+    db, _, revision, _ = world
+    enable(monkeypatch, 'privacy_checks_shadow')
+    gate = ('legal_hold_deletion_gates', UID)
+    if authority == 'gate':
+        db.rows[gate] = {
+            'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+            'uid': UID,
+            'kind': 'retention_cleanup',
+            'token': 'synthetic',
+            'state': 'running',
+            'started_at': datetime.now(timezone.utc),
+        }
+    else:
+        db.rows[MARKER] = {'wipe_status': 'pending'}
+    original = StrictFirestoreDocument.get
+    token_reads = 0
+
+    def get(ref, **kwargs):
+        nonlocal token_reads
+        snapshot = original(ref, **kwargs)
+        if ref.path == TOKEN:
+            token_reads += 1
+            if token_reads == 2:
+                # Both certification reads see the same revision. The authority
+                # changes only afterward, before the candidate's fresh walk.
+                if authority == 'gate':
+                    db.rows[gate]['state'] = 'completed'
+                else:
+                    db.rows[MARKER]['wipe_status'] = 'cancelled'
+                db.rows[TOKEN]['memo_token'] = 'b' * 32
+                revision[0] += timedelta(seconds=1)
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    comparison = metrics.COMPARISONS.labels(
+        'external', 'mismatch', 'fresh_read', 'unknown', 'same', 'same', 'true', 'miss'
+    )
+    shadow = metrics.SHADOW_CHECKS.labels('external', 'mismatch')
+    stale = metrics.DECISION_MISMATCH.labels('external', 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels('external', 'fresh_authority_change')
+    before = [counter._value.get() for counter in (comparison, shadow, stale, changed)]
+    metrics._LOG_AT.clear()
+    with caplog.at_level('WARNING'), pytest.raises(legal_holds.DestructiveOperationInProgress):
+        external(db)
+    assert [counter._value.get() for counter in (comparison, shadow, stale, changed)] == [
+        before[0] + 1,
+        before[1] + 1,
+        before[2],
+        before[3] + 1,
+    ]
+    assert 'reason=fresh_authority_change' in caplog.text
+    assert UID not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'family,source,marker',
+    [
+        ('external', 'fresh_read', None),
+        ('external', 'fresh_read', 'before'),
+        ('external', 'unknown', 'after'),
+        ('external', 'ttl_hit', 'after'),
+        ('external', 'token_hit', 'after'),
+        ('external', 'session_hit', 'after'),
+        ('batch', 'fresh_read', 'after'),
+        ('batch', 'owner_hit', 'after'),
+    ],
+)
+def test_fresh_authority_change_requires_external_fresh_marker_evidence(family, source, marker):
+    live = metrics.DecisionEvidence(markers={'gate': 'before'})
+    candidate = metrics.DecisionEvidence(source=source, markers={} if marker is None else {'gate': marker})
+    stale = metrics.DECISION_MISMATCH.labels(family, 'stale_allow')
+    changed = metrics.DECISION_MISMATCH.labels(family, 'fresh_authority_change')
+    before_stale, before_changed = stale._value.get(), changed._value.get()
+    metrics.compare(family, 'destructive_operation', 'allow', live_evidence=live, candidate_evidence=candidate)
+    assert stale._value.get() == before_stale + 1
+    assert changed._value.get() == before_changed
 
 
 @pytest.mark.parametrize('source', ['ttl_hit', 'token_hit', 'session_hit'])

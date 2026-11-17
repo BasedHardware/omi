@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-sequential-authority-compared-as-stale-cache",
+  "family": "observability-gap",
+  "violated_contract": "A cache-staleness reason must distinguish a reused decision from independent fresh authority observations that changed between a live check and its later shadow check. Labelling an external fresh ALLOW after a live BLOCK as stale_allow can trip a cache kill guard even when no cached ALLOW was served.",
+  "canonical_prevention": "Classify an external fresh candidate with a changed common marker as fresh_authority_change while retaining every mismatch counter and the original live decision. Preserve conservative stale reasons for reused candidates, other families and missing transition evidence. Reproduce changes both before and after the candidate token read, since equal token observations do not prove equal later authority snapshots.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_privacy_ttl_cache.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/privacy_check_metrics.py",
+    "backend/tests/unit/test_privacy_ttl_cache.py"
+  ],
+  "status": "open"
+}

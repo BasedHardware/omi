@@ -477,6 +477,13 @@ def compare(family, live, candidate, *, cached_age=None, live_evidence=None, can
         SHADOW_CHECKS.labels(family, 'mismatch' if mismatch else 'match').inc()
         if mismatch:
             reason = 'stale_allow' if candidate == 'allow' else 'stale_block' if live == 'allow' else 'block_reason'
+            if family == 'external' and labels[0] == 'fresh_read' and labels[4] == 'true':
+                # External shadow runs after live with independent snapshots.
+                # A gate finishing (or a marker restoring access) between reads
+                # changes fresh authority, not a cached decision. Keep the
+                # disagreement visible without calling that ALLOW stale. Token
+                # observations can still match if the writer commits after both.
+                reason = 'fresh_authority_change'
             DECISION_MISMATCH.labels(family, reason).inc()
             # Preserve at most one fixed-size line per family per minute.
             with _LOG_LOCK:
