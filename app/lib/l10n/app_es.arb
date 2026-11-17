@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "Resumir con Omi en su lugar",
     "summaryBusyTitle": "Aún en proceso",
     "summaryBusyBody": "Omi ya está trabajando en esta conversación. El resumen aparecerá aquí cuando termine.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Volver a comprobar",
     "summaryLimitTitle": "Límite de resúmenes alcanzado",
     "summaryLimitBody": "Has regenerado varios resúmenes en la última hora. Inténtalo de nuevo más tarde.",

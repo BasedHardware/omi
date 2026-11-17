@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "Sammanfatta med Omi i stället",
     "summaryBusyTitle": "Bearbetas fortfarande",
     "summaryBusyBody": "Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Kontrollera igen",
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",

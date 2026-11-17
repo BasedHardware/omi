@@ -41,13 +41,17 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// The row title for a conversation (hub audit #21): its title, else its transcript text (legacy
 /// rows the server left untitled), a recording date/time when neither exists, and
 /// "Discarded · 12s" for a discarded one (its words go in [conversationSnippet]).
 String conversationRowTitle(BuildContext context, ServerConversation conversation) {
   final l10n = context.l10n;
-  if (conversation.homeStep == 'failed') return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+  if (conversation.homeStep == 'failed') {
+    if (TranscriptionPendingConversations.contains(conversation.id)) return l10n.summaryTranscriptionPendingTitle;
+    return l10n.summaryTemplateFailedTitle(l10n.omiAppName);
+  }
   // A noise clip revealed from Home's fold reads like any row, not as "Discarded".
   if (conversation.discarded && !conversation.isFoldedNoise) {
     final seconds = conversation.getDurationInSeconds();
@@ -209,6 +213,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
       if (!mounted) return;
       final provider = context.read<ConversationProvider>();
       if (updated == null) {
+        // Still awaiting transcription is not a failure: the row shows the waiting status instead.
+        if (TranscriptionPendingConversations.contains(widget.conversation.id)) return;
         AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
         return;
       }
@@ -221,8 +227,18 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
   }
 
-  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed.
+  /// "Summary failed · Retry": shown only when the server says a reprocess can succeed. A row the
+  /// server said is still awaiting transcription gets a plain waiting status and no retry.
   Widget _buildSummaryRetry(BuildContext context) {
+    if (TranscriptionPendingConversations.contains(widget.conversation.id)) {
+      return Text(
+        context.l10n.summaryTranscriptionPendingTitle,
+        key: const Key('conversation_transcription_pending_indicator'),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     return Row(
       children: [
         Flexible(

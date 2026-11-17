@@ -22,6 +22,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 import 'maps_util.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 
 /// The detail page's length label: the same rule and format as the conversation list row
 /// ([ServerConversation.getDurationInSeconds], [OmiDuration.compact]), so both always agree.
@@ -214,6 +215,13 @@ class SummaryRetryWidget extends StatelessWidget {
             child: OmiLoadingState(label: context.l10n.summarizingConversation),
           );
         }
+        if (TranscriptionPendingConversations.contains(provider.conversation.id)) {
+          return _SummaryWaitingNotice(
+            key: const Key('conversation_detail_transcription_pending'),
+            title: context.l10n.summaryTranscriptionPendingTitle,
+            body: context.l10n.summaryTranscriptionPendingBody,
+          );
+        }
         return _SummaryCallToAction(
           key: const Key('conversation_detail_summary_retry'),
           message: context.l10n.conversationSummaryFailed,
@@ -221,6 +229,32 @@ class SummaryRetryWidget extends StatelessWidget {
           onPressed: () => provider.reprocessConversation(),
         );
       },
+    );
+  }
+}
+
+/// A centred status with no action: the server is still transcribing, so there is nothing to retry.
+class _SummaryWaitingNotice extends StatelessWidget {
+  const _SummaryWaitingNotice({super.key, required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxl),
+      child: Column(
+        children: [
+          Text(title, style: OmiType.title3, textAlign: TextAlign.center),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(
+            body,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }

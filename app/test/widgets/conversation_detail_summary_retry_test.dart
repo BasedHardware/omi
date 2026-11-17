@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
@@ -15,6 +16,7 @@ import 'package:omi/pages/conversation_detail/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_detail_header.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/ui/ui.dart';
 import '../helpers/reprocess_fakes.dart';
 
@@ -101,6 +103,36 @@ void main() {
     await tester.pump();
     expect(detail.conversation.summaryRetryable, isFalse);
     expect(find.byKey(const Key('conversation_detail_summary_retry')), findsNothing);
+  });
+
+  testWidgets('a retry answered transcription pending explains the wait and stops offering retry', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final calls = <String>[];
+    final detail = _detail(
+      _conversation(),
+      reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) async {
+        calls.add(id);
+        return const ReprocessTranscriptionPending();
+      },
+    );
+    addTearDown(detail.dispose);
+
+    await tester.pumpWidget(_app(detail, _summary));
+    final l10n = AppLocalizations.of(tester.element(find.byType(Scaffold)));
+    await tester.tap(find.text(l10n.retry));
+    await tester.pumpAndSettle();
+
+    expect(calls, ['detail-retry']);
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsOneWidget);
+    expect(find.text(l10n.summaryTranscriptionPendingBody), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
+    expect(find.text(l10n.errorProcessingConversation), findsNothing);
+
+    detail.dismissSummaryFailure();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('conversation_detail_transcription_pending')), findsOneWidget);
+    expect(find.text(l10n.retry), findsNothing);
   });
 
   testWidgets('failed Home projection survives a legacy detail read and offers retry without a spinner',

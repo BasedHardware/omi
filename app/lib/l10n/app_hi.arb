@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "इसके बजाय Omi से सारांश बनाएं",
     "summaryBusyTitle": "अभी भी प्रोसेस हो रहा है",
     "summaryBusyBody": "Omi पहले से ही इस बातचीत पर काम कर रहा है। पूरा होने पर सारांश यहां दिखाई देगा।",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "फिर से जांचें",
     "summaryLimitTitle": "सारांश की सीमा पूरी हो गई",
     "summaryLimitBody": "आपने पिछले एक घंटे में कई सारांश दोबारा बनाए हैं। बाद में फिर से कोशिश करें।",

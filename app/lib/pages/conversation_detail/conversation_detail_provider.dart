@@ -28,6 +28,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -1129,6 +1130,7 @@ class ConversationDetailProvider extends ChangeNotifier
           switch (result) {
             ReprocessBusy() => SummaryFailureKind.busy,
             ReprocessRateLimited() => SummaryFailureKind.rateLimited,
+            ReprocessTranscriptionPending() => SummaryFailureKind.transcriptionPending,
             _ when appId != null => SummaryFailureKind.template,
             _ => SummaryFailureKind.generic,
           },
@@ -1214,7 +1216,13 @@ class ConversationDetailProvider extends ChangeNotifier
     lastFailedReprocessConversationId = target.id;
     lastFailedReprocessAppId = appId;
     recordSummaryFailure(SummaryFailure(conversationId: target.id, kind: kind, appId: appId));
-    notifyError('REPROCESS_FAILED');
+    if (kind == SummaryFailureKind.transcriptionPending) {
+      // Not an error: the audio is still in the transcription queue and a retry cannot speed it up.
+      TranscriptionPendingConversations.mark(target.id);
+      notifyInfo('REPROCESS_TRANSCRIPTION_PENDING');
+    } else {
+      notifyError('REPROCESS_FAILED');
+    }
     notifyListeners();
   }
 

@@ -11690,6 +11690,8 @@
     "summaryWithOmiInstead": "బదులుగా Omi తో సారాంశం చేయండి",
     "summaryBusyTitle": "ఇంకా ప్రాసెస్ అవుతోంది",
     "summaryBusyBody": "Omi ఇప్పటికే ఈ సంభాషణపై పని చేస్తోంది. పూర్తయినప్పుడు సారాంశం ఇక్కడ కనిపిస్తుంది.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "మళ్లీ తనిఖీ చేయండి",
     "summaryLimitTitle": "సారాంశ పరిమితిని చేరుకున్నారు",
     "summaryLimitBody": "గత గంటలో మీరు అనేక సారాంశాలను మళ్లీ రూపొందించారు. తర్వాత మళ్లీ ప్రయత్నించండి.",

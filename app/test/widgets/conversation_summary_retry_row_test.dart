@@ -14,6 +14,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/conversations/conversation_title.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
@@ -187,6 +188,45 @@ void main() {
       expectPresentation();
     });
   }
+
+  testWidgets('a retry the server answers with transcription pending shows waiting, not an error', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final calls = <String>[];
+    await _pumpRow(
+      tester,
+      conversation: _conversation(title: 'Processing', status: ConversationStatus.completed, summaryRetryable: false)
+          .withHomeStep('failed'),
+      reprocess: (id) async {
+        calls.add(id);
+        // What reProcessConversationServer does on 409 transcription_pending.
+        TranscriptionPendingConversations.mark(id);
+        return null;
+      },
+    );
+    expect(_retryButton, findsOneWidget);
+    await tester.tap(_retryButton);
+    await tester.pumpAndSettle();
+    expect(calls, ['c1']);
+    final l10n = _l10n(tester);
+    expect(find.text(l10n.somethingWentWrong), findsNothing);
+    expect(_retryButton, findsNothing);
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
+    expect(find.text(l10n.summaryTranscriptionPendingTitle), findsNWidgets(2));
+    expect(find.text("Omi couldn't finish"), findsNothing);
+  });
+
+  testWidgets('a known transcription-pending row never offers the summary retry', (tester) async {
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    TranscriptionPendingConversations.mark('c1');
+    await _pumpRow(
+      tester,
+      conversation: _conversation(title: 'Processing', summaryRetryable: false).withHomeStep('failed'),
+    );
+    expect(_retryButton, findsNothing);
+    expect(find.byKey(const Key('conversation_transcription_pending_indicator')), findsOneWidget);
+  });
 
   testWidgets('a row the model found nothing in keeps its title and offers no retry', (tester) async {
     await _pumpRow(tester, conversation: _conversation(summaryRetryable: false));

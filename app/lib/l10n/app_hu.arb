@@ -4366,6 +4366,8 @@
     "summaryWithOmiInstead": "Összefoglalás inkább az Omival",
     "summaryBusyTitle": "Feldolgozás folyamatban",
     "summaryBusyBody": "Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Újbóli ellenőrzés",
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",

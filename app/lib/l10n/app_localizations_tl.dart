@@ -14065,6 +14065,13 @@ class AppLocalizationsTl extends AppLocalizations {
   String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+
+  @override
+  String get summaryTranscriptionPendingBody =>
+      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+
+  @override
   String get summaryCheckAgain => 'Suriin muli';
 
   @override

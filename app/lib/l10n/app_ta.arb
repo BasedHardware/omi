@@ -11690,6 +11690,8 @@
     "summaryWithOmiInstead": "பதிலாக Omi மூலம் சுருக்கு",
     "summaryBusyTitle": "இன்னும் செயலாக்கப்படுகிறது",
     "summaryBusyBody": "Omi ஏற்கனவே இந்த உரையாடலில் வேலை செய்கிறது. முடிந்ததும் சுருக்கம் இங்கே தோன்றும்.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "மீண்டும் சரிபார்",
     "summaryLimitTitle": "சுருக்க வரம்பை அடைந்துவிட்டீர்கள்",
     "summaryLimitBody": "கடந்த ஒரு மணிநேரத்தில் பல சுருக்கங்களை மீண்டும் உருவாக்கியுள்ளீர்கள். பிறகு மீண்டும் முயலவும்.",

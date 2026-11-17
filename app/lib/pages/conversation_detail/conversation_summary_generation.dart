@@ -39,6 +39,9 @@ enum SummaryFailureKind {
   /// The hourly regenerate limit (HTTP 429).
   rateLimited,
 
+  /// The audio is still awaiting transcription (HTTP 409 `transcription_pending`): nothing to retry.
+  transcriptionPending,
+
   /// Anything else.
   generic,
 }

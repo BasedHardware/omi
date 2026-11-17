@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "لخّص باستخدام Omi بدلًا من ذلك",
     "summaryBusyTitle": "لا تزال المعالجة جارية",
     "summaryBusyBody": "يعمل Omi بالفعل على هذه المحادثة. سيظهر الملخص هنا عند الانتهاء.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "تحقق مرة أخرى",
     "summaryLimitTitle": "تم بلوغ حد الملخصات",
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",

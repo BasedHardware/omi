@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "Radšej zhrnúť pomocou Omi",
     "summaryBusyTitle": "Stále sa spracúva",
     "summaryBusyBody": "Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Skontrolovať znova",
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",

@@ -4270,6 +4270,8 @@
     "summaryWithOmiInstead": "Võta hoopis Omiga kokku",
     "summaryBusyTitle": "Töötlemine käib veel",
     "summaryBusyBody": "Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Kontrolli uuesti",
     "summaryLimitTitle": "Kokkuvõtete limiit on täis",
     "summaryLimitBody": "Oled viimase tunni jooksul mitu kokkuvõtet uuesti loonud. Proovi hiljem uuesti.",

@@ -13998,6 +13998,13 @@ class AppLocalizationsPl extends AppLocalizations {
   String get summaryBusyBody => 'Omi już pracuje nad tą rozmową. Podsumowanie pojawi się tutaj po zakończeniu.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+
+  @override
+  String get summaryTranscriptionPendingBody =>
+      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+
+  @override
   String get summaryCheckAgain => 'Sprawdź ponownie';
 
   @override

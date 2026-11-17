@@ -1234,6 +1234,11 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
             if (detailProvider.reprocessedConversationId == detailProvider.conversationOrNull?.id) {
               OmiFeedback.confirm(context, context.l10n.conversationReprocessed);
             }
+          case 'REPROCESS_TRANSCRIPTION_PENDING':
+            // The redesigned Summary tab explains this in place.
+            if (SummaryGenerationV2Gate.isEnabled) break;
+            if (detailProvider.lastFailedReprocessConversationId != detailProvider.conversationOrNull?.id) break;
+            OmiFeedback.info(context, context.l10n.summaryTranscriptionPendingBody);
         }
       },
       child: Scaffold(

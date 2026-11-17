@@ -27,6 +27,7 @@ import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/activity/past_processing_section.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/ui/ui.dart';
@@ -684,6 +685,55 @@ void main() {
     expect(opened, isNull);
     await tester.tap(find.text('Unfinished notes'));
     expect(opened, 'retry-error');
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
+  evidenceTest('a failed Activity row waiting for transcription shows waiting with no retry', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = _phone;
+    addTearDown(tester.view.reset);
+    TranscriptionPendingConversations.reset();
+    addTearDown(TranscriptionPendingConversations.reset);
+    final failed = ServerConversation(
+        id: 'pending', createdAt: clock.now(), homeStep: 'failed', structured: Structured('Morning standup', ''));
+    final store = _store(true, []);
+    await store.refresh();
+    final monitor = CaptureWedgeMonitor(
+        featureGate: () async => false,
+        track: (_, __) {},
+        bleRetry: (_) async {},
+        appBuild: () => 'fixture',
+        platform: () => 'ios');
+    addTearDown(store.dispose);
+    addTearDown(monitor.dispose);
+    var attempts = 0;
+    final boundary = GlobalKey();
+    await tester.pumpWidget(RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: _theme(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(
+                body: NeedsAttentionSection(
+                    store: store,
+                    captureMonitor: monitor,
+                    failedConversations: [failed],
+                    openConversation: (_, __) async {},
+                    reprocess: (id) async {
+                      attempts++;
+                      // What reProcessConversationServer does on 409 transcription_pending.
+                      TranscriptionPendingConversations.mark(id);
+                      return null;
+                    })))));
+    await tester.tap(find.text('Try Again'));
+    await tester.pumpAndSettle();
+    await _capture(tester, boundary, '031-mobile-ios-activity-transcription-pending');
+    expect(attempts, 1);
+    expect(find.textContaining('Something went wrong'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.textContaining('Waiting for transcription'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
     debugDefaultTargetPlatformOverride = null;
   });

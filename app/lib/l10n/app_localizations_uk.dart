@@ -13987,6 +13987,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get summaryBusyBody => 'Omi вже працює над цією розмовою. Підсумок з\'явиться тут, щойно буде готовий.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+
+  @override
+  String get summaryTranscriptionPendingBody =>
+      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+
+  @override
   String get summaryCheckAgain => 'Перевірити знову';
 
   @override

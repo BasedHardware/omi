@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/providers/transcription_pending_conversations.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
@@ -245,6 +246,12 @@ final class ReprocessBusy extends ReprocessResult {
   const ReprocessBusy();
 }
 
+/// The audio has not been transcribed yet (HTTP 409 `transcription_pending`). A summary retry
+/// cannot transcribe it; the pipeline finishes it on its own.
+final class ReprocessTranscriptionPending extends ReprocessResult {
+  const ReprocessTranscriptionPending();
+}
+
 /// The hourly reprocess limit (HTTP 429). [retryAfter] when the server said how long.
 final class ReprocessRateLimited extends ReprocessResult {
   const ReprocessRateLimited({this.retryAfter});
@@ -292,7 +299,9 @@ Future<ReprocessResult> reProcessConversationServer(
   );
   if (response == null) return const ReprocessFailed();
   Logger.debug('reProcessConversationServer: ${response.statusCode}');
-  return reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  final result = reprocessResultFromResponse(response, requireSpeakerReceipt: requireSpeakerReceipt);
+  if (result is ReprocessTranscriptionPending) TranscriptionPendingConversations.mark(conversationId);
+  return result;
 }
 
 /// Maps a reprocess response to its [ReprocessResult].
@@ -320,9 +329,11 @@ ReprocessResult reprocessResultFromResponse(
       // 409 is busy only with the structured `conversation_processing_in_progress` detail. The same
       // route answers 409 with a string detail when the selected app is disabled or not enabled:
       // that is the template failing, not the conversation being busy.
-      return _detailCode(response.body) == 'conversation_processing_in_progress'
-          ? const ReprocessBusy()
-          : const ReprocessFailed(statusCode: 409);
+      return switch (_detailCode(response.body)) {
+        'conversation_processing_in_progress' => const ReprocessBusy(),
+        'transcription_pending' => const ReprocessTranscriptionPending(),
+        _ => const ReprocessFailed(statusCode: 409),
+      };
     case 429:
       return ReprocessRateLimited(retryAfter: parseApiRetryAfter(response, now));
     default:

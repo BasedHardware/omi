@@ -13999,6 +13999,13 @@ class AppLocalizationsKn extends AppLocalizations {
   String get summaryBusyBody => 'Omi ಈಗಾಗಲೇ ಈ ಸಂಭಾಷಣೆಯ ಮೇಲೆ ಕೆಲಸ ಮಾಡುತ್ತಿದೆ. ಮುಗಿದಾಗ ಸಾರಾಂಶ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Waiting for transcription';
+
+  @override
+  String get summaryTranscriptionPendingBody =>
+      'This recording hasn\'t been transcribed yet. Omi will finish it automatically, so there\'s nothing to retry.';
+
+  @override
   String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';
 
   @override

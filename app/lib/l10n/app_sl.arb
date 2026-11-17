@@ -11690,6 +11690,8 @@
     "summaryWithOmiInstead": "Raje povzemi z Omi",
     "summaryBusyTitle": "Obdelava še poteka",
     "summaryBusyBody": "Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.",
+    "summaryTranscriptionPendingTitle": "Waiting for transcription",
+    "summaryTranscriptionPendingBody": "This recording hasn't been transcribed yet. Omi will finish it automatically, so there's nothing to retry.",
     "summaryCheckAgain": "Preveri znova",
     "summaryLimitTitle": "Dosežena omejitev povzetkov",
     "summaryLimitBody": "V zadnji uri ste večkrat znova ustvarili povzetke. Poskusite znova pozneje.",
