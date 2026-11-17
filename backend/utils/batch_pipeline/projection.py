@@ -943,23 +943,8 @@ class Projector:
 
     def _note_head_blocked(self, segment_id: str, error: BaseException) -> None:
         """Stamp a bounded-retry head's first failure time; one write per episode."""
-
-        def commit(transaction):
-            row = self.store.ref('results', segment_id).get(transaction=transaction).to_dict() or {}
-            if row.get(PROJECTION_HEAD_BLOCKED_SINCE) is not None or row.get('projection_state') not in (
-                'pending',
-                'persisted',
-                'ready',
-            ):
-                return False
-            transaction.update(
-                self.store.ref('results', segment_id),
-                {PROJECTION_HEAD_BLOCKED_SINCE: self.clock(), PROJECTION_HEAD_BLOCK_TYPE: error_type(error)},
-            )
-            return True
-
         try:
-            self.store.run(commit)
+            self.store.note_head_blocked(segment_id, self.clock(), error_type(error))
         except Exception as note_error:
             logger.warning(
                 'event=batch_projection action=head_block_note outcome=retry exception_type=%s',
