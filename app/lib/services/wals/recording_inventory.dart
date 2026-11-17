@@ -492,6 +492,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
         List<String> legacyFiles = const [],
         String legacyJobs = '',
         String corruptLegacyJobs = '',
+        OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
         int? freeBytes}) async =>
     (await captureRecordingCensus(
             documents: documents,
@@ -502,5 +503,6 @@ Future<Map<String, Object?>> captureRecordingInventory(
             legacyFiles: legacyFiles,
             legacyJobs: legacyJobs,
             corruptLegacyJobs: corruptLegacyJobs,
+            frameCache: frameCache,
             freeBytes: freeBytes))
         .summary;

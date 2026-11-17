@@ -342,8 +342,11 @@ Age is read again immediately before each admission,
 after budget I/O, and a capture outside the current 28-day window is retained.
 This cache is derived data, never custody/deletion proof; only
 entries in the latest orphan corpus survive, and stop/account reset clears it.
-Diagnostics count actual frame-reader calls and cache hits. Cold scans after a
-restart still read the corpus; no device-scale timing or memory claim is made. Commit metadata
+Diagnostics count actual frame-reader calls and cache hits.
+Support exports reuse the opaque ledger framing snapshot when available, while
+still refreshing reference, owner, stat and age evidence. Only aggregate results
+are serialized; the cache never enters diagnostics or telemetry.
+Cold scans after a restart still read the corpus; no device-scale timing or memory claim is made. Commit metadata
 checks are bounded to 512 sources and four directories; larger source sets
 retain everything for a later supported pass. The automatic drain excludes
 these held pending rows; only a deliberate user upload can start transfer.

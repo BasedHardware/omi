@@ -6,6 +6,9 @@ const orphanRecoveryPassCap = 200;
 const orphanRecoveryDailyCap = 400;
 
 extension LocalOrphanRecovery on LocalWalSyncImpl {
+  /// Opaque, read-only derived framing for diagnostics; never export the cache.
+  OrphanAudioFrameCache get orphanFrameCache => _orphanFrameCache;
+
   bool get _orphanForeground =>
       (_flushingTimer?.isActive ?? false) &&
       (_orphanForegroundOverride?.call() ?? WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);

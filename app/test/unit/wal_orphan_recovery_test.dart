@@ -227,6 +227,14 @@ void main() {
         frameCache: result.frameCache);
     expect((cached.summary['orphan_classification'] as Map)['frame_files_read'], 0);
     expect((cached.summary['orphan_classification'] as Map)['frame_cache_hits'], 3000);
+    final exported = await captureRecordingInventory(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: cached.frameCache);
+    expect((exported['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect((exported['orphan_classification'] as Map)['frame_cache_hits'], 3000);
     final changed = File('${dir.path}/${name(now)}');
     final stamp = (await changed.stat()).modified;
     await changed.writeAsBytes(List.filled(250, 0)); // same size, invalid framing
@@ -333,6 +341,15 @@ void main() {
     expect(adopted.last.timerStart, now - 5);
     expect(adopted.every((w) => w.ownerUid == 'owner-a' && w.totalFrames == 50 && w.seconds == 1), isTrue);
     expect(await File('${dir.path}/${name(now - 204)}').readAsBytes(), bytes);
+    final exported = await captureRecordingInventory(
+        documents: dir.path,
+        memoryBuckets: sync.recordingInventorySnapshot,
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: sync.orphanFrameCache);
+    expect((exported['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect((exported['orphan_classification'] as Map)['frame_cache_hits'], 5);
+    expect(jsonEncode(exported), isNot(contains(dir.path)));
     await sync.recoverOrphanAudio();
     expect(sync.testWals.where((w) => w.status == WalStatus.miss).length, 205);
     expect((events.first['classification'] as Map)['frame_files_read'], 205);
