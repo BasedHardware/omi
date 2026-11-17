@@ -10,6 +10,7 @@ from google.cloud.exceptions import NotFound
 from database.audio_timeline import chunk_span, span_valid
 
 from utils import encryption
+from utils.other import audio_gcs_reads
 from utils.other.raw_audio import WAL_FORMAT, decode_capture, decode_capture_frames
 from utils.other.audio_frame_table import (
     FRAME_SCHEMA,
@@ -36,7 +37,7 @@ from utils.other.audio_raw_read_metrics import (
 from config.refactor_modes import raw_live_gapped_packs_enabled
 
 _index_lock = threading.Lock()
-_indexes: dict[tuple, tuple[float, list]] = {}
+_indexes: dict[tuple, tuple[float, list, float, bool, bool, int]] = {}
 # Pack writes invalidate their conversation's entry proactively
 # (invalidate_pack_index), so the TTL only bounds cross-instance staleness,
 # and staleness always fails safe: a missing pack keeps the PCM write (proof
@@ -71,6 +72,7 @@ def _custody_manifests(bucket, uid: str, conversation_id: str, *, deadline=None,
     prefix = f'audio-outbox/{uid}/{conversation_id}/'
     owner_prefix = f'audio-outbox/{uid}/'
     manifests = {}
+    audio_gcs_reads.operation('list')
     for index, blob in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline, timeout), retry=None)):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture manifest index budget exhausted')
@@ -91,16 +93,44 @@ def _gap_count_matches(frames: list[dict], gap_count: int) -> bool:
 
 
 def list_packs(
-    bucket, uid: str, conversation_id: str, *, fresh=False, deadline=None, timeout=10, max_count=10000, strict=False
+    bucket,
+    uid: str,
+    conversation_id: str,
+    *,
+    fresh=False,
+    deadline=None,
+    timeout=10,
+    max_count=10000,
+    strict=False,
+    listed_after=None,
 ):
     key = (getattr(bucket, 'name', ''), uid, conversation_id)
+    gapped_enabled = raw_live_gapped_packs_enabled()
     with _index_lock:
         cached = _indexes.get(key)
-        if not fresh and not strict and cached and cached[0] > time.monotonic():
+        if (
+            not fresh
+            and cached
+            and cached[0] > time.monotonic()
+            and (
+                not strict
+                or (
+                    listed_after is not None
+                    and cached[3]
+                    and cached[2] >= listed_after
+                    and cached[4] == gapped_enabled
+                    and cached[5] <= max_count
+                )
+            )
+            and len(cached[1]) <= max_count
+        ):
+            io_timeout(deadline, timeout)
             return cached[1]
     packs = []
-    gapped_enabled = raw_live_gapped_packs_enabled()
     manifests = None
+    listed_count = 0
+    listed_at = time.monotonic()
+    audio_gcs_reads.operation('list')
     for index, blob in enumerate(
         bucket.list_blobs(
             prefix=f'raw-live/{uid}/{conversation_id}/', timeout=io_timeout(deadline, timeout), retry=None
@@ -108,6 +138,7 @@ def list_packs(
     ):
         if index >= max_count or (deadline is not None and time.monotonic() >= deadline):
             raise TimeoutError('raw capture index budget exhausted')
+        listed_count = index + 1
         metadata = blob.metadata or {}
         if metadata.get('clock_source') == 'arrival_estimate':
             # Legacy pusher clocks cannot position independent raw packs on a
@@ -170,7 +201,9 @@ def list_packs(
                     if strict:
                         raise ValueError('raw capture has no unique custody manifest')
                     continue
-                frames, rate = unframed_frames(bucket, blob, uid, manifest.name, deadline=deadline)
+                frames, rate = unframed_frames(
+                    bucket, blob, uid, manifest.name, deadline=deadline, manifest_blob=manifest
+                )
                 if not _gap_count_matches(frames, int(metadata['gap_count'])):
                     raise CoverageMismatch('capture gap count differs from frame table')
                 packs.extend(entries(frames, rate, source, allow_empty=True))
@@ -187,7 +220,7 @@ def list_packs(
     with _index_lock:
         if len(_indexes) >= _MAX_INDEXES:
             _indexes.pop(next(iter(_indexes)))
-        _indexes[key] = (time.monotonic() + _INDEX_TTL, result)
+        _indexes[key] = (time.monotonic() + _INDEX_TTL, result, listed_at, strict, gapped_enabled, listed_count)
     return result
 
 
@@ -246,10 +279,15 @@ def finish_audio_listing(chunks, raw_chunks, source_identity):
     return sorted(chunks, key=lambda item: item['timestamp'])
 
 
-def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None) -> bytes:
+def _read_pack(
+    bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None, blob=None
+) -> bytes:
     download_kwargs = {'timeout': 10, 'retry': None, **(download_kwargs or {})}
     generation = download_kwargs.get('if_generation_match')
-    blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
+    if blob is None:
+        blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
+    elif blob.name != path:
+        raise ValueError('capture object path mismatch')
     try:
         return _decode_pack(bucket, blob, uid, download_kwargs, sample_rate, frames=frames)
     except Exception as error:
@@ -259,7 +297,10 @@ def _read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: i
 
 def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, frames=None) -> bytes:
     deadline = time.monotonic() + download_kwargs.get('timeout', 10)
-    blob.reload(**(download_kwargs or {}))
+    if not audio_gcs_reads.has_metadata(blob):
+        audio_gcs_reads.operation('metadata')
+        blob.reload(**(download_kwargs or {}))
+    download_kwargs = audio_gcs_reads.pinned_download(blob, download_kwargs)
     metadata = blob.metadata or {}
     if frames is not None:
         rate = int(metadata['sample_rate'])
@@ -274,6 +315,7 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, f
         expected = resampled_samples(sum(int(frame['samples']) for frame in frames), rate, sample_rate) * 2
     else:
         expected = round((float(metadata['capture_end']) - float(metadata['capture_start'])) * sample_rate) * 2
+    audio_gcs_reads.operation('read')
     raw = blob.download_as_bytes(**{**download_kwargs, 'timeout': io_timeout(deadline)})
     if metadata.get('encrypted') == 'true':
         try:
@@ -297,8 +339,10 @@ def _decode_pack(bucket, blob, uid: str, download_kwargs, sample_rate: int, *, f
     return pcm
 
 
-def read_pack(bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None) -> bytes:
-    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate, frames=frames)
+def read_pack(
+    bucket, path: str, uid: str, download_kwargs=None, sample_rate: int = 16000, *, frames=None, blob=None
+) -> bytes:
+    pcm = _read_pack(bucket, path, uid, download_kwargs, sample_rate, frames=frames, blob=blob)
     record('ok')
     return pcm
 

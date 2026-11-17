@@ -11,6 +11,7 @@ import time
 from typing import Any
 
 from utils import encryption
+from utils.other import audio_gcs_reads
 from utils.pusher_audio_window import AUDIO_TIMELINE_CONTINUITY_TOLERANCE
 
 FRAME_SCHEMA = 'audio_frames_v1'
@@ -71,18 +72,33 @@ def resampled_samples(samples: int, rate: int, output_rate: int = 16000) -> int:
 
 
 def _manifest(
-    bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None, require_frame_schema=True
+    bucket, uid: str, path: str, generation=None, digest=None, *, deadline=None, require_frame_schema=True, blob=None
 ) -> dict:
     if not path.startswith(f'audio-outbox/{uid}/'):
         raise ValueError('frame manifest owner mismatch')
-    blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
-    blob.reload(timeout=io_timeout(deadline), retry=None)
+    scope = audio_gcs_reads.current()
+    key = (bucket.name, path)
+    if blob is None and scope is not None:
+        blob = scope.manifests.get(key)
+    if blob is None:
+        blob = bucket.blob(path, generation=int(generation)) if generation else bucket.blob(path)
+    if blob.name != path:
+        raise ValueError('frame manifest path mismatch')
+    if not audio_gcs_reads.has_metadata(blob):
+        audio_gcs_reads.operation('metadata')
+        blob.reload(timeout=io_timeout(deadline), retry=None)
     pinned = int(generation or blob.generation)
     if pinned <= 0:
         raise ValueError('frame manifest requires generation')
     if blob.size is None or blob.size > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
-    raw = blob.download_as_bytes(if_generation_match=pinned, timeout=io_timeout(deadline), retry=None)
+    kwargs = audio_gcs_reads.pinned_download(
+        blob, {'if_generation_match': pinned, 'timeout': io_timeout(deadline), 'retry': None}
+    )
+    audio_gcs_reads.operation('read')
+    raw = blob.download_as_bytes(**kwargs)
+    if scope is not None and len(scope.manifests) < MAX_FRAMES:
+        scope.manifests[key] = blob
     if len(raw) > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
     if (blob.metadata or {}).get('encrypted') == 'true':
@@ -116,7 +132,7 @@ def committed_frames(bucket, blob, uid: str, *, deadline=None) -> tuple[list[dic
 
 
 def unframed_frames(
-    bucket, blob, uid: str, manifest_path: str, *, deadline=None, metadata=None
+    bucket, blob, uid: str, manifest_path: str, *, deadline=None, metadata=None, manifest_blob=None
 ) -> tuple[list[dict], int]:
     """Frame positions for a pack whose writer did not declare a frame schema.
 
@@ -127,7 +143,7 @@ def unframed_frames(
     pack's internal gap positions.
     """
     metadata = metadata if metadata is not None else (blob.metadata or {})
-    manifest = _manifest(bucket, uid, manifest_path, deadline=deadline, require_frame_schema=False)
+    manifest = _manifest(bucket, uid, manifest_path, deadline=deadline, require_frame_schema=False, blob=manifest_blob)
     if manifest['media'] != {
         'bucket': bucket.name,
         'path': blob.name,
@@ -157,6 +173,7 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tu
     """
     prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
     candidates = []
+    audio_gcs_reads.operation('list')
     for index, candidate in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)):
         io_timeout(deadline)
         if index >= MAX_FRAMES:
@@ -167,7 +184,9 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tu
                 break
     if len(candidates) != 1:
         raise ValueError('gapped capture has no unique custody manifest')
-    return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline, metadata=metadata)
+    return unframed_frames(
+        bucket, blob, uid, candidates[0].name, deadline=deadline, metadata=metadata, manifest_blob=candidates[0]
+    )
 
 
 def receipt_frames(bucket, uid: str, receipt: dict, *, deadline=None) -> tuple[list[dict], int]:

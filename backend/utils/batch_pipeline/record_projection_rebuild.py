@@ -5,7 +5,7 @@ from typing import Literal
 from config import audio_archive
 from database import conversations as conversations_db, conversation_tombstones, record_projection_rebuild as jobs
 from database._client import get_firestore_client
-from utils.other import storage, raw_audio_read
+from utils.other import storage, raw_audio_read, audio_gcs_reads
 from utils.other.relay_archive_recovery import validated_uncovered_packs
 from utils.other.relay_recovery_metrics import SAMPLES
 
@@ -77,6 +77,11 @@ def rebuild(uid: str, cid: str) -> bool | Literal['no_objects'] | None:
         return False
     if not jobs.preflight_projection(uid, cid):
         return None  # Privacy/consent holds forbid original reads and retain debt.
+    with audio_gcs_reads.rebuilding():
+        return _rebuild(uid, cid)
+
+
+def _rebuild(uid, cid):
     for _ in range(2):
         diagnostics = {}
         discovery = discover(uid, cid, strict_raw=True, validate_raw=True, diagnostics=diagnostics)
