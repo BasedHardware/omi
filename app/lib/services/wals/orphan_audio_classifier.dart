@@ -65,12 +65,13 @@ class RecordingOrphanCensus {
 }
 
 class OrphanAudioFile {
-  OrphanAudioFile(
-      this.filePath, this.bytes, this.modifiedUs, this.changedUs, this.classification, this.info, this.frames);
+  OrphanAudioFile(this.filePath, this.bytes, this.modifiedUs, this.changedUs, this.classification, this.info,
+      this.frames, this.clockRun);
   final String filePath;
   final int bytes, modifiedUs, changedUs, frames;
   final String classification;
   final BatchRecordingInfo? info;
+  final String? clockRun;
   bool unchanged() {
     try {
       if (FileSystemEntity.typeSync(filePath, followLinks: false) != FileSystemEntityType.file) return false;
@@ -99,24 +100,30 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
         name.startsWith('audio_omibatch') ||
         name.startsWith('audio_omimobilebatch');
     BatchRecordingInfo? info;
+    String? clockRun;
     var frames = 0;
     var classification = 'working';
     if (!working) {
       // BatchRecordingInfo is intentionally forgiving for legacy native intake;
       // unattended orphan adoption additionally requires the complete mono shape.
-      if (RegExp(r'^audio_.+_(opus(?:_fs(?:160|320))?|pcm16|pcm8)_\d+_1_fs\d+(?:_u\d+)?_\d+(?:\.\d{1,6})?\.bin$')
-          .hasMatch(name)) {
+      // Strip only known producer suffixes for the legacy parser. Preserve the
+      // original path and estimated-clock provenance on the recovered row.
+      final shape = RegExp(
+              r'^(audio_.+_(?:opus(?:_fs(?:160|320))?|pcm16|pcm8)_\d+_1_fs(\d+))(?:_r\d+_\d+)?(?:_u\d+)?(?:_clke([0-9a-z]{1,32}))?_\d+(?:\.\d{1,6})?(?:_u\d{1,9})?\.bin$')
+          .firstMatch(name);
+      if (shape != null) {
         final time = _filenameTime(name);
         if (time != null) {
           // Preserve the exact original filename for the uploader. The ledger's
           // integer timer uses the same conservative floor as inventory clocks.
-          final normalized = name.replaceFirst(RegExp(r'_(?:u\d+_)?\d+(?:\.\d+)?\.bin$'), '_$time.bin');
+          final normalized = '${shape.group(1)}_$time.bin';
           try {
             info = BatchRecordingInfo.fromFileName(normalized);
+            clockRun = shape.group(3);
           } catch (_) {/* Unparseable metadata retains the original bytes. */}
         }
       }
-      final suffixFrame = RegExp(r'_fs(\d+)(?:_u\d+)?_\d+(?:\.\d+)?\.bin$').firstMatch(name)?.group(1);
+      final suffixFrame = shape?.group(2);
       if (info != null &&
           int.tryParse(suffixFrame ?? '') == info.frameSize &&
           info.sampleRate == info.frameSize * info.codec.getFramesPerSecond() &&
@@ -144,7 +151,8 @@ const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 
                   ? 'expired'
                   : 'recoverable';
     }
-    return OrphanAudioFile(file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames);
+    return OrphanAudioFile(
+        file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames, clockRun);
   }).toList();
   return (files: files, cache: OrphanAudioFrameCache._(entries), reads: reads, hits: hits);
 }

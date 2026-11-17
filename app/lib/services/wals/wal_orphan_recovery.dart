@@ -174,7 +174,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             continue;
           }
           final info = candidate.info!;
-          if (now - info.timerStart > orphanRecoveryWindowSeconds) {
+          final age = _now().millisecondsSinceEpoch ~/ 1000 - info.timerStart;
+          if (age < 0 || age > orphanRecoveryWindowSeconds) {
             counts['expiredSinceCensus'] = (counts['expiredSinceCensus'] ?? 0) + 1;
             continue;
           }
@@ -182,6 +183,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           // ledger queue so one durable index transaction covers the pass.
           final wal = Wal(
               timerStart: info.timerStart,
+              clockRun: candidate.clockRun,
               codec: info.codec,
               sampleRate: info.sampleRate,
               seconds: info.secondsFromFrameCount(candidate.frames),

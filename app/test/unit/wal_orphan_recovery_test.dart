@@ -14,6 +14,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/device_capture_clock.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
@@ -566,6 +567,54 @@ void main() {
     expect(recovered.totalFrames, 50);
   });
 
+  test('Limitless collision and clock-run producer filenames retain timing and clock provenance', () async {
+    const run = 'a1b2c3d4e5f6';
+    final source = Wal(
+        timerStart: now - 2,
+        codec: BleAudioCodec.opusFS320,
+        seconds: 1,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        device: 'pendant',
+        clockRun: run);
+    final clockName = source.getFileName() as String;
+    final prefix = clockName.substring(0, clockName.lastIndexOf('_'));
+    final names = [
+      'audio_limitless_opus_16000_1_fs320_r1234_0_${(now - 1) * 1000}.bin',
+      'audio_limitless_opus_16000_1_fs320_r1234_1_clke${run}_${now * 1000}.bin',
+      clockName,
+      '${deviceClockCollisionPrefix(prefix, 1)}_${now - 2}.bin',
+      walCollisionName(clockName, 2, false),
+    ];
+    for (final file in names) {
+      await audio(file);
+    }
+    // The server cannot preserve a run separated from time by a nonce. Keep
+    // that unsupported historical shape unparseable rather than lose lineage.
+    final unsupported = await audio(walCollisionName(clockName, 3, true));
+    final classified = await census();
+    expect(classified.orphans.where((f) => f.classification == 'recoverable').length, names.length);
+    expect(classified.orphans.singleWhere((f) => f.filePath == unsupported.path).classification, 'unparseable');
+    final sync = await ledger();
+    await sync.recoverOrphanAudio();
+    final recovered = sync.testWals.where((w) => w.status == WalStatus.miss).toList();
+    expect(recovered.map((w) => w.filePath), unorderedEquals(names));
+    for (final wal in recovered) {
+      expect(wal.holdForUser, isTrue);
+      expect(wal.totalFrames, 50);
+      expect(wal.seconds, 1);
+      expect(wal.clockRun, wal.filePath!.contains('_clke') ? run : null);
+      expect(
+          wal.timerStart,
+          wal.filePath == names[0]
+              ? now - 1
+              : wal.filePath == names[1]
+                  ? now
+                  : now - 2);
+    }
+    expect(await unsupported.exists(), isTrue);
+  });
+
   test('400 reservations is a true rolling 24-hour cap across a window boundary', () async {
     for (var i = 0; i < 850; i++) {
       await audio(name(now - i));
@@ -710,6 +759,26 @@ void main() {
     await sync.recoverOrphanAudio();
     expect((events.single['counts'] as Map)['expiredSinceCensus'], 1);
     expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
+  test('expiry after the budget timestamp is rechecked immediately before admission', () async {
+    final file = await audio(name(now - 28 * 86400));
+    final bytes = await file.readAsBytes();
+    var censusComplete = false, postCensusClockReads = 0;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        events: events,
+        clock: () =>
+            DateTime.fromMillisecondsSinceEpoch((now + (censusComplete && postCensusClockReads++ > 0 ? 1 : 0)) * 1000),
+        scan: () async {
+          final snapshot = await census();
+          censusComplete = true;
+          return snapshot;
+        });
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    expect((events.single['counts'] as Map)['expiredSinceCensus'], 1);
+    expect(await file.readAsBytes(), bytes);
   });
 
   test('resume and timer wakes share one 15-minute pacing gate', () async {

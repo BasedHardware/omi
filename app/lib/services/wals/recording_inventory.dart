@@ -68,7 +68,8 @@ int? _integer(Object? value) => value is int ? value : null;
 String? _string(Object? value) => value is String ? value : null;
 
 int? _filenameTime(String name) {
-  final token = RegExp(r'_(-?\d+(?:\.\d+)?)\.bin(?:\.part|\.torn)?$').firstMatch(path.basename(name))?.group(1);
+  final token =
+      RegExp(r'_(-?\d+(?:\.\d+)?)(?:_u\d{1,9})?\.bin(?:\.part|\.torn)?$').firstMatch(path.basename(name))?.group(1);
   final value = token == null ? null : double.tryParse(token);
   if (value == null || !value.isFinite) return null;
   return (value >= 100000000000 ? value / 1000 : value).floor();
