@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Bounded weekly GitHub Actions PR-job sample and budget alert.
 
-At most 24 workflow-list calls, 144 job-list calls, and two issue calls.
+PR jobs: at most 20 workflows x 7 days of one workflow-list call and one
+job-list call each, plus two issue calls. Main pushes (reported, not gated
+yet): at most 40 workflows x one run-count call and one job-list call, so
+push-to-main cost is visible next to the PR budget instead of absent.
 Only GITHUB_TOKEN is read; no personal token or historical backfill is used.
 """
 
@@ -21,8 +24,9 @@ from pathlib import Path
 
 TITLE = "Weekly CI budget audit"
 MAX_WORKFLOWS = 20
+MAX_MAIN_WORKFLOWS = 40
 DAYS = 7
-MAX_CALLS = 282
+MAX_CALLS = 282 + 2 * MAX_MAIN_WORKFLOWS
 
 
 def timestamp(value: str) -> datetime:
@@ -129,6 +133,12 @@ def markdown(report: dict) -> str:
     for key, row in sorted(report["jobs"].items()):
         lines.append(f"| {key} | {row['owner']} | {row['count']} | {row['p50_minutes']} | {row['mean_minutes']} | {row['budget_p50_minutes']} |")
     lines += ["", f"Projected PR minutes/day: Linux {report['projected_pr_minutes_per_day']['linux']:.1f}, macOS {report['projected_pr_minutes_per_day']['macos']:.1f}.", f"Internal time-to-signal p50: {report['internal_time_to_signal_p50_minutes']} minutes."]
+    main = report.get("main_push") or {}
+    if main:
+        total = sum(row["projected_minutes_per_day"] for row in main.values())
+        lines += ["", "## Push to main (reported, not gated)", "", f"Projected main-push job minutes/day: {total:.1f} (runs in the last {DAYS} days x one sampled run's job minutes).", "", "| Workflow | Runs/week | Sampled run job-min | Projected min/day |", "| --- | ---: | ---: | ---: |"]
+        for workflow, row in sorted(main.items(), key=lambda item: -item[1]["projected_minutes_per_day"]):
+            lines.append(f"| {workflow} | {row['runs_per_week']} | {row['sampled_run_job_minutes']} | {row['projected_minutes_per_day']} |")
     lines += ["", "## Problems", ""] + ([f"- {problem}" for problem in report["problems"]] or ["None."])
     return "\n".join(lines) + "\n"
 
@@ -153,6 +163,39 @@ def collect(api: Github, budget: dict, now: datetime) -> list[dict]:
     return result
 
 
+def job_minutes(jobs: list[dict]) -> float:
+    total = 0.0
+    for job in jobs:
+        if job.get("conclusion") in (None, "skipped") or not job.get("started_at") or not job.get("completed_at"):
+            continue
+        total += max(0.0, (timestamp(job["completed_at"]) - timestamp(job["started_at"])).total_seconds() / 60)
+    return total
+
+
+def collect_main_pushes(api: Github, budget: dict, now: datetime) -> dict:
+    """Runs per week and one sampled run's job minutes for each push-to-main workflow."""
+    eligible = sorted(name for name, wf in budget["workflows"].items() if "push" in wf["triggers"])
+    if len(eligible) > MAX_MAIN_WORKFLOWS:
+        raise RuntimeError(f"{len(eligible)} push workflows exceeds bounded sample capacity {MAX_MAIN_WORKFLOWS}")
+    since = (now - timedelta(days=DAYS)).strftime("%Y-%m-%d")
+    rows = {}
+    for workflow in eligible:
+        query = urllib.parse.urlencode({"event": "push", "branch": "main", "status": "completed", "created": f">={since}", "per_page": 1})
+        page = api.request("GET", f"/repos/{api.repo}/actions/workflows/{workflow}/runs?{query}")
+        runs = page.get("workflow_runs", [])
+        count = int(page.get("total_count", 0))
+        if not count or not runs:
+            continue
+        jobs = api.request("GET", f"/repos/{api.repo}/actions/runs/{runs[0]['id']}/jobs?per_page=100")
+        minutes = job_minutes(jobs.get("jobs", []))
+        rows[workflow] = {
+            "runs_per_week": count,
+            "sampled_run_job_minutes": round(minutes, 1),
+            "projected_minutes_per_day": round(count / DAYS * minutes, 1),
+        }
+    return rows
+
+
 def upsert_issue(api: Github, report: dict, body: str) -> None:
     if not report["problems"]:
         return
@@ -169,6 +212,7 @@ def main() -> int:
     budget = json.loads(Path(".github/ci-budget.yaml").read_text())
     now = datetime.now(timezone.utc)
     report = summarize(budget, collect(api, budget, now), now)
+    report["main_push"] = collect_main_pushes(api, budget, now)
     out = Path(os.environ.get("CI_BUDGET_REPORT_DIR", "ci-budget-report"))
     out.mkdir(parents=True, exist_ok=True)
     body = markdown(report)
