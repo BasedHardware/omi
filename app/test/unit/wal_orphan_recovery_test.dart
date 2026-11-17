@@ -351,13 +351,17 @@ void main() {
       bool realCensus = false,
       bool realPersistence = false,
       Future<void> Function(List<Wal>)? persist,
-      List<Map<String, Object?>>? events}) async {
+      List<Map<String, Object?>>? events,
+      Future<bool> Function()? reclaimOff,
+      void Function(Map<String, Object?>)? onReclaim}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
         uploadGate: gate,
         periodic: periodic,
         orphanCensus: realCensus ? null : scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
+        orphanReclaimOff: reclaimOff,
+        orphanReclaimTelemetry: onReclaim,
         orphanForeground: foregroundProbe ?? () => foreground, orphanTelemetry: (v) {
       events?.add(v);
       onEvent?.call(v);
@@ -1347,6 +1351,21 @@ void main() {
     timers[2].fire();
     await done.future;
     expect(scans, 2);
+  });
+
+  test('one foreground wake runs recovery, then reclaim after recovery settles', () async {
+    final order = <String>[];
+    final reclaimed = Completer<void>();
+    final sync = await ledger(
+        onEvent: (_) => order.add('recovery'),
+        reclaimOff: () async => false,
+        onReclaim: (_) {
+          order.add('reclaim');
+          if (!reclaimed.isCompleted) reclaimed.complete();
+        });
+    sync.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await reclaimed.future.timeout(const Duration(seconds: 10));
+    expect(order, ['recovery', 'reclaim']);
   });
 
   test('incomplete census and kill switch adopt nothing', () async {
