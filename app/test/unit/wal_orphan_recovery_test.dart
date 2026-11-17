@@ -7,9 +7,11 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/recording_inventory.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -172,13 +174,14 @@ void main() {
     expect(result.orphans.every((f) => f.classification == 'recoverable'), isTrue);
   });
   Future<LocalWalSyncImpl> ledger(
-      {Future<RecordingOrphanCensus> Function()? scan,
+      {DateTime Function()? clock,
+      Future<RecordingOrphanCensus> Function()? scan,
       Future<bool> Function()? off,
       bool foreground = true,
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events}) async {
     final sync = LocalWalSyncImpl(_Listener(),
-        now: () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
+        now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
         orphanCensus: scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
         orphanForeground: () => foreground,
@@ -262,6 +265,42 @@ void main() {
     await sync.recoverOrphanAudio();
     expect(events.single['result'], 'budget_unavailable');
     expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
+  test('fractional capture filenames from the real producer classify and adopt', () async {
+    final base = Wal(
+        timerStart: now - 1,
+        codec: BleAudioCodec.opusFS320,
+        seconds: 1,
+        storage: WalStorage.disk,
+        ownerUid: 'owner-a',
+        device: 'pendant');
+    final fractional = walEvidenceRunFileName(base, now - 0.5, 0, 50);
+    expect(fractional, contains('.5.bin'));
+    await audio(fractional);
+    final classified = await census();
+    expect(classified.orphans.single.classification, 'recoverable');
+    final sync = await ledger();
+    await sync.recoverOrphanAudio();
+    final recovered = sync.testWals.singleWhere((w) => w.status == WalStatus.miss);
+    expect(recovered.filePath, fractional);
+    expect(recovered.timerStart, now - 1);
+    expect(recovered.totalFrames, 50);
+  });
+
+  test('400 reservations is a true rolling 24-hour cap across a window boundary', () async {
+    for (var i = 0; i < 850; i++) {
+      await audio(name(now - i));
+    }
+    var seconds = now;
+    final sync = await ledger(clock: () => DateTime.fromMillisecondsSinceEpoch(seconds * 1000));
+    await sync.recoverOrphanAudio(); // 200 at t0
+    seconds += 23 * 3600;
+    await sync.recoverOrphanAudio(); // 200 at t0+23h
+    seconds = now + 86401;
+    await sync.recoverOrphanAudio(); // t0 expired, so another 200 fits
+    await sync.recoverOrphanAudio(); // t0+23h and t0+24h still spend all 400
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss).length, 600);
   });
 
   test('changed audio and newly referenced files are skipped', () async {

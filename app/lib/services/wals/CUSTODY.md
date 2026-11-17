@@ -297,7 +297,7 @@ filenames or the currently signed-in account overrides historical ownership.
 
 At most 200 oldest eligible files enter `miss` custody per pass, at most 400 per
 rolling 24 hours, and pending rows across all buckets never rise above 720.
-Reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget
+Timestamped reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget
 without adoption, conservatively delaying the next pass. A torn budget blocks
 adoption; logout cannot clear this budget with account preferences. Each nonempty pass
 makes one index save. Generation, foreground, admission, kill switch, references,

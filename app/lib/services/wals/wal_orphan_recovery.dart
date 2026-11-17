@@ -98,7 +98,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         // reservation conservatively, so restart cannot reset the daily cap.
         final budgetKey = sha256.convert(utf8.encode(uid)).toString();
         final now = _now().millisecondsSinceEpoch ~/ 1000;
-        var start = now, spent = 0;
+        var spent = 0;
+        final reservations = <Map<String, int>>[];
         final budgetRaw = await budgetFile.readAsString();
         result = fence() ?? 'completed';
         if (result != 'completed') return;
@@ -112,18 +113,20 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         final raw = budget[budgetKey];
         if (raw != null) {
           try {
-            final state = raw as Map;
-            start = state['start'] as int;
-            spent = state['spent'] as int;
-            if (spent < 0 || start > now) {
-              result = 'budget_unavailable';
-              return;
-            }
-            if (now - start >= 86400) {
-              start = now;
-              spent = 0;
+            for (final entry in raw as List) {
+              final at = entry['at'] as int, count = entry['count'] as int;
+              if (at > now || at < 0 || count <= 0 || count > orphanRecoveryDailyCap) {
+                result = 'budget_unavailable';
+                return;
+              }
+              if (now - at < 86400) {
+                reservations.add({'at': at, 'count': count});
+                spent += count;
+              }
             }
           } catch (_) {
+            // No released client has the pre-review fixed-window shape.
+            // Unknown/torn formats retain audio rather than resetting capacity.
             result = 'budget_unavailable';
             return;
           }
@@ -136,7 +139,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         counts['passCap'] = max(0, min(candidates.length, min(dailyRoom, pressureRoom)) - orphanRecoveryPassCap);
         if (limit <= 0 || candidates.isEmpty) return;
         final reserved = min(limit, candidates.length);
-        budget[budgetKey] = {'start': start, 'spent': spent + reserved};
+        budget[budgetKey] = [
+          ...reservations,
+          {'at': now, 'count': reserved}
+        ];
         await budgetFile.writeAsString(jsonEncode(budget), flush: true);
         result = fence() ?? 'completed';
         if (result != 'completed') return;
@@ -144,7 +150,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           result = 'sources_changed';
           return;
         }
-        // Native intake can register while prefs awaits; recheck all in-memory
+        // Native intake can register while the budget write awaits; recheck all in-memory
         // buckets, ownership and pressure at commit. No await from stat to add.
         final buckets = recordingInventorySnapshot.values.expand((r) => r).toList();
         if (buckets.any((r) => r.owner != uid)) {

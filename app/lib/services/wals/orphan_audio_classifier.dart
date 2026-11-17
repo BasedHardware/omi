@@ -83,10 +83,19 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
     if (!working) {
       // BatchRecordingInfo is intentionally forgiving for legacy native intake;
       // unattended orphan adoption additionally requires the complete mono shape.
-      if (RegExp(r'^audio_.+_(opus(?:_fs(?:160|320))?|pcm16|pcm8)_\d+_1_fs\d+_\d+\.bin$').hasMatch(name)) {
-        info = BatchRecordingInfo.fromFileName(name);
+      if (RegExp(r'^audio_.+_(opus(?:_fs(?:160|320))?|pcm16|pcm8)_\d+_1_fs\d+(?:_u\d+)?_\d+(?:\.\d{1,6})?\.bin$')
+          .hasMatch(name)) {
+        final time = _filenameTime(name);
+        if (time != null) {
+          // Preserve the exact original filename for the uploader. The ledger's
+          // integer timer uses the same conservative floor as inventory clocks.
+          final normalized = name.replaceFirst(RegExp(r'_(?:u\d+_)?\d+(?:\.\d+)?\.bin$'), '_$time.bin');
+          try {
+            info = BatchRecordingInfo.fromFileName(normalized);
+          } catch (_) {/* Unparseable metadata retains the original bytes. */}
+        }
       }
-      final suffixFrame = RegExp(r'_fs(\d+)_\d+\.bin$').firstMatch(name)?.group(1);
+      final suffixFrame = RegExp(r'_fs(\d+)(?:_u\d+)?_\d+(?:\.\d+)?\.bin$').firstMatch(name)?.group(1);
       if (info != null &&
           int.tryParse(suffixFrame ?? '') == info.frameSize &&
           info.sampleRate == info.frameSize * info.codec.getFramesPerSecond() &&
