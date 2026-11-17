@@ -1,6 +1,15 @@
 """Reviewed payload sites, including values/keys and duplicate sites. Never refresh in a test."""
 
 FIELD_SITES = {
+    'database/batch_summary_debt.py': [
+        ('arm_projection_summary', 'summary_due_at', "candidate['summary_due_at']", ('summary_due_at',)),
+        (
+            'arm_projection_summary',
+            'summary_first_pending_at',
+            "candidate['summary_first_pending_at']",
+            ('summary_first_pending_at',),
+        ),
+    ],
     # R40: own retained-audio fallback preserves its committed owner-log slot.
     'database/batch_pipeline_source_fallback.py': [
         (

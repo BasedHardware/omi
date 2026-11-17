@@ -2,6 +2,7 @@
 
 from dataclasses import asdict, replace
 from datetime import datetime, timezone
+import logging
 
 import pytest
 from google.cloud import firestore
@@ -100,6 +101,19 @@ def test_projection_does_not_take_an_active_or_unrelated_generation(batch_projec
     stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
     assert stored.get('summary_due_at') is None
     assert 'summary_projection_finalization' not in stored
+
+
+def test_successful_byok_finalizer_keeps_credential_custody_with_account_byok_off(batch_projection, caplog):
+    lane = batch_projection
+    setup_record(lane)
+    lane.client.rows[('conversation_finalization_jobs', 'finalizer')]['requires_byok'] = True
+    lane.client.rows[('users', 'u')]['byok'] = {'active': False}
+    with caplog.at_level(logging.INFO, logger='database.batch_summary_debt'):
+        lane.projector.project('segment')
+    stored = lane.client.rows[('users', 'u', 'conversations', 'live')]
+    assert stored.get('summary_due_at') is None
+    assert 'summary_projection_finalization' not in stored
+    assert 'phase=precommit outcome=refused reason=byok_required' in caplog.text
 
 
 def test_projection_kill_switch_preserves_the_generation_fence(batch_projection, monkeypatch):

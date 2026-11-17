@@ -1,8 +1,12 @@
 """Transfer summary custody only after the batch capture's finalizer has finished."""
 
+import logging
+
 from google.cloud import firestore
 from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
 from utils.conversations import summary_delivery as delivery
+
+logger = logging.getLogger(__name__)
 
 
 def arm_projection_summary(uid, client, transaction, payload, current):
@@ -40,7 +44,16 @@ def arm_projection_summary(uid, client, transaction, payload, current):
             and job.get('status') == 'completed'
             and job.get('terminal_outcome') == 'success'
             and job.get('fanout_status') == 'completed'
+            and not job.get('requires_byok')
         ):
+            reason = (
+                'byok_required'
+                if job.get('requires_byok')
+                else 'missing_finalizer' if not job else 'finalizer_not_eligible'
+            )
+            # This is an eligibility observation, not a durable outcome: a
+            # transaction retry can observe the same refusal more than once.
+            logger.info('event=batch_summary_debt phase=precommit outcome=refused reason=%s', reason)
             return
         payload['summary_projection_finalization'] = {'job_id': job_id, 'revision': revision}
     # Assignment has already staged this invalidation. DELETE_FIELD is truthy;
@@ -50,6 +63,12 @@ def arm_projection_summary(uid, client, transaction, payload, current):
     if candidate.get('client_processing') is firestore.DELETE_FIELD:
         candidate.pop('client_processing')
     delivery.stamp_projection_debt(candidate)
-    for name in ('summary_title_provenance', 'summary_first_pending_at', 'summary_due_at', 'summary_lane'):
-        if name in candidate:
-            payload[name] = candidate[name]
+    # Literal sites keep these writes in the reviewed lifecycle inventory.
+    if 'summary_title_provenance' in candidate:
+        payload['summary_title_provenance'] = candidate['summary_title_provenance']
+    if 'summary_first_pending_at' in candidate:
+        payload['summary_first_pending_at'] = candidate['summary_first_pending_at']
+    if 'summary_due_at' in candidate:
+        payload['summary_due_at'] = candidate['summary_due_at']
+    if 'summary_lane' in candidate:
+        payload['summary_lane'] = candidate['summary_lane']
