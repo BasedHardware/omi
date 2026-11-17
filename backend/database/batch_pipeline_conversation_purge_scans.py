@@ -22,7 +22,7 @@ from config.policy.kill_switches import kill_switch
 from database import conversation_batch_purge_jobs as jobs
 from database import legal_holds, rpc_deadline
 from database._client import get_firestore_client, run_transactional
-from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversations
+from database.batch_pipeline_conversation_purge import PurgeCheckpointed, PurgeIntentMissing, purge_conversations
 from database.batch_pipeline_purge import NAMESPACES
 from utils.observability.fallback import record_fallback
 
@@ -469,6 +469,15 @@ def run_job(
         progress = ScanProgress(
             client, job, scan, clock=clock, sleep=sleep, budget_seconds=budget_seconds, started=started
         )
+
+        def hand_off(outcome: str) -> str:
+            try:
+                progress.finish(outcome)
+            except jobs.RunSuperseded:
+                handback(client, job, scan['epoch'], scan['token'])
+                return 'superseded'
+            return outcome
+
         logger.info('event=conversation_batch_purge_owner_scan_started members=%d count=1', len(scan['members']))
         try:
             progress.check_authority()
@@ -481,15 +490,13 @@ def run_job(
                 raise RuntimeError('owner scan finished with segment erasure still recorded')
             if not progress.finish('completed'):
                 raise jobs.RunSuperseded()
-        except jobs.RunSuperseded:
+        except (jobs.RunSuperseded, PurgeIntentMissing):
             handback(client, job, scan['epoch'], scan['token'])
             return 'superseded'
         except legal_holds.LegalHoldActive:
-            progress.finish('held')
-            return 'held'
+            return hand_off('held')
         except PurgeCheckpointed:
-            progress.finish('checkpointed')
-            return 'checkpointed'
+            return hand_off('checkpointed')
         except BaseException as error:
             outcome = (
                 'busy' if isinstance(error, Exception) and jobs.lost_gate_to_peer(error, scan['uid']) else 'failed'

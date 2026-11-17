@@ -63,6 +63,10 @@ SEGMENT_PAGE = 20
 OBJECT_DELETE_TIMEOUT_SECONDS = 5.0
 
 
+class PurgeIntentMissing(RuntimeError):
+    """Deletion intent vanished before traversal; no destructive work is authorized."""
+
+
 class PurgeCheckpointed(Exception):
     """The run budget ran out at a checkpoint; the next run resumes from it."""
 
@@ -201,7 +205,7 @@ def purge_conversations(
             client.collection('users').document(uid).collection('deleted_conversations').document(conversation_id)
         )
         if not tombstone.get().exists:
-            raise RuntimeError('conversation deletion intent required before batch purge')
+            raise PurgeIntentMissing('conversation deletion intent required before batch purge')
     default_storage_cleanup = delete_uri is None
     if delete_uri is None:
         from utils.batch_pipeline.retention import delete_batch_object
@@ -429,4 +433,4 @@ def purge_conversations(
     return erased
 
 
-__all__ = ['PHASES', 'PurgeCheckpointed', 'purge_conversation', 'purge_conversations']
+__all__ = ['PHASES', 'PurgeCheckpointed', 'PurgeIntentMissing', 'purge_conversation', 'purge_conversations']

@@ -484,3 +484,40 @@ def test_tombstone_loss_after_seal_hands_back_without_a_failed_task(monkeypatch,
         row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
         assert not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
         assert jobs.run_job(job, row['generation'], firestore_client=world.client) == 'no_tombstone'
+
+
+def test_tombstone_loss_between_authority_and_data_plane_preflight_is_not_failure(monkeypatch, world):
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    check = scans.ScanProgress.check_authority
+
+    def wipe_after_check(progress):
+        check(progress)
+        for member in progress.scan['members'].values():
+            world.client.document(f"users/{world.uid}/deleted_conversations/{member['conversation_id']}").delete()
+
+    monkeypatch.setattr(scans.ScanProgress, 'check_authority', wipe_after_check)
+    assert _run(world, leader, generation) == 'superseded'
+    for job in (leader, follower):
+        row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
+        assert not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
+        assert jobs.run_job(job, row['generation'], firestore_client=world.client) == 'no_tombstone'
+
+
+@pytest.mark.parametrize('outcome', ['held', 'checkpointed'])
+def test_rearm_at_retry_handoff_is_supersession_not_a_failed_task(monkeypatch, world, outcome):
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+
+    def interrupt(uid, members, progress, **kwargs):
+        progress.checkpoint({'ns': 0, 'phase': 'discover'})
+        world.arm('two')
+        if outcome == 'held':
+            raise legal_holds.LegalHoldActive(world.uid)
+        raise purge.PurgeCheckpointed()
+
+    monkeypatch.setattr(scans, 'purge_conversations', interrupt)
+    assert _run(world, leader, generation) == 'superseded'
+    for job in (leader, follower):
+        row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
+        assert row and not row.get('scan_epoch') and row.get('last_outcome') != 'failed'
