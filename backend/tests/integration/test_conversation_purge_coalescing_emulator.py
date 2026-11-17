@@ -362,3 +362,24 @@ def test_shared_wal_reservations_release_once_after_unknown_delete(monkeypatch, 
     assert capacity.sample(world.client) == {'bytes': 0, 'files': 0}
     assert not ref.get().exists
     assert _run(world, follower, 1) == 'missing'
+
+
+def test_legacy_leader_takeover_cannot_rejoin_its_old_shared_cursor(world):
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    _, scan = scans._claim(world.client, leader, generation)
+    progress = scans.ScanProgress(world.client, leader, scan)
+    progress.checkpoint({'ns': 1, 'phase': 'dependents', 'table': 3})
+    progress.finish('checkpointed')
+    # A pre-coalescing binary can claim the leader after its handoff/expiry.
+    claim, row, token = jobs.begin_run(leader, generation, firestore_client=world.client)
+    assert claim == 'run'
+    legacy = jobs.RunProgress(world.client, leader, generation, token, world.uid, row.get('progress'))
+    legacy.checkpoint({'ns': 0, 'phase': 'parked'})
+    jobs.finish_run(leader, generation, token, 'checkpointed', firestore_client=world.client)
+    # Even if that binary has now released its lease, the shared cursor must
+    # never be resurrected over the independent worker's changed ownership.
+    assert scans._claim(world.client, leader, generation) == ('legacy', None)
+    row = world.client.collection(jobs.COLLECTION).document(leader).get().to_dict()
+    assert row['progress'] == {'ns': 0, 'phase': 'parked'} and not row.get('owner_scan')
+    assert not world.client.collection(jobs.COLLECTION).document(follower).get().to_dict().get('scan_epoch')

@@ -227,7 +227,11 @@ def _resume(client: Any, leader: str, generation: int, observed: dict[str, Any])
             # Only the leader's dispatch generation may advance. Followers
             # retain the shared delegation until takeover/handback.
             if key == leader:
-                valid = value.get('scan_epoch') == scan['epoch']
+                valid = (
+                    value.get('scan_epoch') == scan['epoch']
+                    and value.get('run_token') == scan['token']
+                    and not value.get('progress')
+                )
             else:
                 valid = _delegated(value, scan, member)
             if not valid or not _same_arm(value, member):
