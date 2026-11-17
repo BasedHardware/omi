@@ -404,6 +404,10 @@ def test_deadline_discards_connection_and_releases_pool_slot():
 
 
 def test_read_only_statement_timeout_and_outer_deadline():
+    # A real existing pooled connection already loaded the driver. The fake
+    # connection must model that warm-only prerequisite before starting the
+    # 100ms transport budget, rather than timing the first module import.
+    index_store.sql()
     pool = Pool('', size=1, connect=Mock(side_effect=AssertionError('dial')))
     conn = PollingConnection()
     pool._idle.put(conn)

@@ -61,7 +61,7 @@ def recovery(monkeypatch, count=0):
 
 @pytest.mark.parametrize('stop', [100, 900])
 def test_full_primary_prefix_keeps_recovery_on_primary_until_caught_up(monkeypatch, stop):
-    primary, store, queue, clock = recovery(monkeypatch, count=2000)
+    primary, store, queue, clock = recovery(monkeypatch, count=40)
     hint_times = []
 
     def hint(*args):
@@ -70,11 +70,11 @@ def test_full_primary_prefix_keeps_recovery_on_primary_until_caught_up(monkeypat
         return ['deleted-copy-id']
 
     store._index.due.side_effect = hint
-    # Bare 60s cadence recovers only1600 by900s and leaves400 stranded.
-    # Canonical per-call recovery drains the same2000 in20 five-second calls.
+    # Scale the executable2000/100 witness to40/2 for the fast CPU lane.
+    # Bare60s cadence leaves8 by900s; per-call recovery clears40 by95s.
     for elapsed in range(0, stop + 1, 5):
         clock[0] = elapsed
-        queue.recover(121 + elapsed)
+        queue.recover(121 + elapsed, limit=2)
     assert not any(job['state'] == 'leased' for job in primary.rows.values())
     assert not hint_times or min(hint_times) >= 105
 
