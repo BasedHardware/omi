@@ -511,20 +511,15 @@ from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgume
         ({'title': 'Discussion notes'}, None),
         ({'title': 'Discussion 3'}, None),
         ({'title': 'Pilot budget'}, 'protected_content'),
-        # A refusal retires the quiet obligation without closing the row, so only
-        # content the summary contract respects may refuse admission.
-        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, None),
+        # A gist is content the minimum would drop, so it refuses admission.
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, 'protected_content'),
         ({'title': 'Discussion notes', 'participants': [{'name': 'Alex'}]}, None),
         ({'title': 'Discussion notes', 'insights': [{'text': 'Budget is tight.'}]}, None),
         ({'title': 'Discussion notes', 'salience': 'highlight'}, None),
     ],
 )
 def test_recovery_admission_ignores_a_placeholder_title(store, monkeypatch, structured, refusal):
-    """A placeholder-only row is admitted; only a real title or notes refuse it.
-
-    A gist and enrichment-only fields block replacement, not admission: a
-    refusal here retires the quiet obligation without closing the row.
-    """
+    """A placeholder-only row is admitted; a real title, a note body or a gist refuses it."""
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     row = store.rows[ROW]
     row['structured'] = structured

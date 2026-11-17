@@ -177,8 +177,7 @@ def test_huh_completed_dead_letter_empty_decision_snapshot(monkeypatch, text, ve
         ({'title': 'Discussion notes'}, True),
         ({'title': 'Discussion 3'}, True),
         ({'title': 'Pilot budget'}, False),
-        # A gist is not a delivered summary, so a retry is still offered.
-        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, True),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, False),
         ({'title': 'Discussion notes', 'overview': 'Pilot budget approved'}, False),
     ],
 )

@@ -16,23 +16,18 @@ import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
-from utils.summary_quality import safe_body, valid_title
+from utils.summary_quality import valid_title
 
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
 _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
-# Content the summary contract respects: a note body or a generated list. It is
-# counted by its text, with the note policy's narration filter.
-_PROTECTED_STRUCTURED_TEXT_FIELDS = ('overview',)
-# Content the deterministic minimum would drop. It blocks replacement but not
-# admission: a refusal retires the quiet obligation without closing the row, so
-# only content the summary contract already respects may refuse admission.
-_REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims')
-# The minimum pins category ``other`` and its neutral emoji. A row that already
-# chose a different one keeps it by refusing replacement.
-_MINIMUM_CATEGORY = 'other'
-_NEUTRAL_EMOJIS = frozenset({'💬', '🧠'})
+# A gist is content the deterministic minimum would drop, so it protects a row
+# from replacement and from a discard. It is not part of ``structured_is_rich``:
+# that predicate also gates the typed recovery refusal and must stay aligned with
+# ``summary_delivery.present``, which does not treat a gist as a summary.
+_PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview', 'gist')
+_PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
@@ -131,52 +126,6 @@ def structured_is_rich(structured: Any) -> bool:
     return False
 
 
-def _has_stored_text_content(structured: Any) -> bool:
-    """Content the summary contract respects: a note body, a task or an event.
-
-    Overview and section bodies use the note policy's narration filter, so a row
-    whose only text is "the transcript is unavailable" has no content here.
-    Tasks and events count by presence, as the Home reader counts them.
-    """
-    for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
-        value = _field(structured, name)
-        if isinstance(value, str) and safe_body(value).strip():
-            return True
-    sections = _field(structured, 'sections')
-    if sections and not isinstance(sections, (list, tuple)):
-        # A malformed stored shape is still content: never replace over it.
-        return True
-    if isinstance(sections, (list, tuple)) and any(
-        safe_body(_field(section, 'body_markdown')).strip() for section in sections
-    ):
-        return True
-    return any(_field(structured, name) for name in ('action_items', 'events'))
-
-
-def _has_replace_blocking_content(structured: Any) -> bool:
-    """Everything the deterministic minimum would drop if it replaced this structure.
-
-    A gist counts here but not for admission: a gist-only row that is refused
-    admission would retire its quiet obligation without any path closing it,
-    while a gist-only row that reaches enrichment either regenerates the gist or
-    dead-letters with it intact. ``meeting_type`` and ``salience`` are metadata
-    whose minimum value the presentation already handles, so they do not block
-    the free minimum.
-    """
-    if _has_stored_text_content(structured):
-        return True
-    gist = _field(structured, 'gist')
-    if isinstance(gist, str) and safe_body(gist).strip():
-        return True
-    if any(_field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS):
-        return True
-    category = _field(structured, 'category')
-    if category and str(getattr(category, 'value', category)) != _MINIMUM_CATEGORY:
-        return True
-    emoji = _field(structured, 'emoji')
-    return isinstance(emoji, str) and bool(emoji.strip()) and emoji not in _NEUTRAL_EMOJIS
-
-
 def stored_structure_is_replaceable(structured: Any) -> bool:
     """Whether recovery may replace this stored structure with the deterministic minimum.
 
@@ -186,9 +135,10 @@ def stored_structure_is_replaceable(structured: Any) -> bool:
     incident). One owner for the rule: the recovery guard and the
     post-enrichment eligibility both call this.
     """
-    return not _has_replace_blocking_content(structured) and (
-        not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum'
-    )
+    if _field(structured, 'title_provenance') == 'server_minimum':
+        # A stand-in title is provisional; only real content blocks replacement.
+        return not structured_is_rich(structured)
+    return not structured_has_protected_content(structured)
 
 
 def verified_recovery_discard(discarded: Any, decision: Any) -> bool:
@@ -222,7 +172,14 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
             return True
     elif user_title:
         return True
-    return bool(valid_title(_field(structured, 'title'))) or _has_stored_text_content(structured)
+    for name in _PROTECTED_STRUCTURED_TEXT_FIELDS:
+        value = _field(structured, name)
+        if not isinstance(value, str):
+            continue
+        # A placeholder label is not a real title; every other text field is content.
+        if valid_title(value) if name == 'title' else value.strip():
+            return True
+    return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_LIST_FIELDS)
 
 
 def recovery_discard_would_lose_content(structured: Any, user_title: Any = None) -> bool:

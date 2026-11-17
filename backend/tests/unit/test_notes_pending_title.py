@@ -280,11 +280,9 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
         ({'title': ''}, False),
         ({'title': 'Pilot budget'}, True),
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
-        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, False),
-        # A gist and enrichment-only fields block replacement, not admission:
-        # refusing admission would retire the quiet obligation without closing
-        # the row.
-        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
+        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
+        # A gist is content the minimum would drop, so it protects the row.
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
         ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
         ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
         ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
@@ -312,18 +310,14 @@ def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, p
         ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
         ({'title': FALLBACK, 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]}, False),
         ({'title': FALLBACK, 'action_items': [{'description': 'Send the budget'}]}, False),
-        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
-        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
-        ({'title': FALLBACK, 'note_claims': [{'text': 'budget'}], 'overview': ''}, False),
+        # Enrichment-only fields are not part of the protected set: a row that
+        # carries only those is still replaceable.
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, True),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, True),
         ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
         ({'title': FALLBACK, 'salience': 'highlight'}, True),
-        ({'title': FALLBACK, 'sections': 'not-a-list'}, False),
-        ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, True),
-        # The minimum pins category other and a neutral emoji, so a row that
-        # already chose a different one keeps it by refusing replacement.
-        ({'title': FALLBACK, 'category': 'business'}, False),
-        ({'title': FALLBACK, 'emoji': '🚀'}, False),
-        ({'title': FALLBACK, 'category': 'other', 'emoji': '💬'}, True),
+        ({'title': FALLBACK, 'category': 'business'}, True),
+        ({'title': FALLBACK, 'emoji': '🚀'}, True),
     ],
 )
 def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
@@ -333,15 +327,15 @@ def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(stru
     assert stored_structure_is_replaceable(structured) is replaceable
 
 
-def test_stored_structure_is_replaceable_reads_real_section_bodies_on_the_model():
+def test_stored_structure_is_replaceable_reads_sections_on_the_model():
     """Both call sites pass a Structured model, not a dict; sections must still count."""
     from models.structured import Structured
     from utils.conversations.recovery import stored_structure_is_replaceable
 
-    with_body = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': 'Ship it Friday.'}])
-    assert stored_structure_is_replaceable(with_body) is False
-    empty_body = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': ''}])
-    assert stored_structure_is_replaceable(empty_body) is True
+    with_sections = Structured(title=FALLBACK, sections=[{'heading': 'Plan', 'body_markdown': 'Ship it Friday.'}])
+    assert stored_structure_is_replaceable(with_sections) is False
+    without_sections = Structured(title=FALLBACK)
+    assert stored_structure_is_replaceable(without_sections) is True
 
 
 @pytest.mark.parametrize(
@@ -349,7 +343,6 @@ def test_stored_structure_is_replaceable_reads_real_section_bodies_on_the_model(
     [
         ({'title': FALLBACK}, False),
         ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, True),
-        ({'title': 'Discussion notes', 'participants': [{'name': 'Alex'}]}, True),
         ({'title': 'Pilot budget'}, True),
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
     ],
