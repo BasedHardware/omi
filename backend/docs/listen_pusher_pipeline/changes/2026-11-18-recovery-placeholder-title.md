@@ -45,7 +45,11 @@ Known limits, documented rather than repaired:
 
 Relaxing `structured_has_protected_content` admits placeholder-only rows that were previously
 refused to normal processing, which may summarize them. The change adds no provider call of its
-own.
+own. It also widens the manual repair script
+`backend/scripts/repair_recovery_dead_letter_untitled.py`: a blank-title dead-letter row whose only
+content is a placeholder title now passes its protected-structure fence and can be retitled. That
+script writes only `structured.title` (plus the discard/decision fields it already owned), so the
+widening is policy-consistent.
 
 `utils/summary_quality.py` is unchanged: its source is part of the notes prompt fingerprint.
 

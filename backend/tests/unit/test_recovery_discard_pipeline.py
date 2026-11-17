@@ -389,6 +389,31 @@ async def test_post_read_protection_refuses_discard_transactionally(pipeline, mo
 
 
 @pytest.mark.asyncio
+async def test_placeholder_title_does_not_block_a_rule_discard(pipeline, monkeypatch):
+    """A placeholder label is not content, so the discard commits."""
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(pipeline, transcript=[], structured={'title': 'Discussion notes', 'overview': ''})
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'done'}
+    assert row['discarded'] is True
+    assert counters['refused'] == 0
+
+
+@pytest.mark.asyncio
+async def test_gist_blocks_a_rule_discard(pipeline, monkeypatch):
+    """A discard writes the empty discard structure, so a gist must refuse it."""
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'off')
+    _seed(pipeline, transcript=[], structured={'title': 'Discussion notes', 'gist': 'Pilot budget approval'})
+    response, counters = await _run_and_verify(pipeline)
+    row = pipeline.store.rows[CONVERSATION_PATH]
+    assert response == {'status': 'dead_letter'}
+    assert row['discarded'] is False
+    assert row['structured']['gist'] == 'Pilot budget approval'
+    assert counters['refused'] == 1
+
+
+@pytest.mark.asyncio
 async def test_restore_before_finalizer_read_never_decides_discard(pipeline, capsys):
     blob = _seed(pipeline, sync_relevance_user_kept=True)
     response, counters = await _run_and_verify(pipeline)

@@ -334,15 +334,15 @@ def test_recovery_guard_replaces_only_a_placeholder_title(pc, monkeypatch, title
     monkeypatch.setattr(pc, 'before_notes', lambda *a, **kw: None)
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a: [])
     monkeypatch.setattr(pc, 'notes_agent_inputs', lambda *a: {})
-    monkeypatch.setattr(pc, 'get_conversation_notes', lambda *a, **kw: Structured())
+    from_notes = Structured(title='from notes')
+    monkeypatch.setattr(pc, 'get_conversation_notes', lambda *a, **kw: from_notes)
 
     structured, _ = pc._get_structured('uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SERVER_RECOVERY)
     if replaced:
         assert structured.title_provenance == 'server_minimum'
     else:
-        # The guard did not take the minimum branch: the stored title is untouched.
-        assert structured.title_provenance != 'server_minimum'
-        assert conversation.structured.title == title
+        # The guard did not short-circuit: the notes result is what came back.
+        assert structured is from_notes
 
 
 def _eligibility_arguments(conversation, structured, **overrides):
