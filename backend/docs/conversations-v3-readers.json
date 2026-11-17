@@ -1,4 +1,8 @@
 {
+  "backend/utils/batch_pipeline/projection_writers.py:collection": {
+    "policy": "both",
+    "reason": "Owner-scoped private playback persistence reconstructs only the original capture's retained transcript ranges at its canonical recording/conversation target after the customer projection receipt. It is a capture/custody writer input, not a product list/by-id response; existing deletion/privacy and audio publication gates remain required. No discovery, cross-owner read or new visibility grant."
+  },
   "backend/database/action_item_refresh.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
