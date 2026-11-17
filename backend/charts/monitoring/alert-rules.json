@@ -38796,5 +38796,305 @@
       "repeat_interval": "4h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-conversation-stale-content",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Conversation status - stale content backlog",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(omi_conversation_stale_content_holding)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  200
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Alerting",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "A selfheal window has over 200 stale content-bearing conversations for 30 minutes.",
+      "threshold": "max(omi_conversation_stale_content_holding) > 200 for 30m",
+      "user_impact": "Content-bearing conversations can remain unfinished without a terminal conversation status, even when finalization jobs report success.",
+      "scope": "Latest bounded selfheal scan window per process; max avoids adding overlapping scans. Not a fleet census. The fast reconciler uses a 5-minute cutoff; the optional job uses 2 hours.",
+      "verification": "Inspect omi_conversation_stale_content_oldest_age_seconds, omi_conversation_stale_content_over_12h and selfheal tick outcomes; confirm the bounded scan is current before intervention.",
+      "safe_next_action": "Have the conversation lifecycle owner inspect aggregate status and scan health using the capture reliability runbook before any repair.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-conversation-stale-content",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-conversation-selfheal-deadman",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Resilience",
+    "title": "Conversation selfheal - tick missing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(time() - max(omi_conversation_selfheal_tick_timestamp_seconds)) or vector(1e9)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  3600
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-11-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Alerting",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "No conversation selfheal tick has been observed in over an hour for 10 minutes.",
+      "threshold": "(time() - max(omi_conversation_selfheal_tick_timestamp_seconds)) or vector(1e9) > 3600 for 10m",
+      "user_impact": "Content-bearing conversations can remain unfinished without a terminal conversation status, even when finalization jobs report success.",
+      "scope": "Newest selfheal tick across processes, including disabled/off ticks. Missing series also pages. This is tick liveness, not successful scanning.",
+      "verification": "Inspect selfheal tick outcome rates and the selfheal reconciler scheduler; verify metrics ingestion before attributing the gap to the worker.",
+      "safe_next_action": "Have the conversation lifecycle owner inspect aggregate status and scan health using the capture reliability runbook before any repair.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-conversation-selfheal-deadman",
+      "component": "speech-processing",
+      "impact": "user-experience",
+      "tier": "page",
+      "audience": "human",
+      "owner": "two-lane-lead"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
   }
 ]

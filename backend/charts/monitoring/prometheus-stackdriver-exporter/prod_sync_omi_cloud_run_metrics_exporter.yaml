@@ -75,6 +75,11 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_journey_'
       - 'prometheus.googleapis.com/omi_client_journey_'
       - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
+      # Conversation status windows, tick liveness, and terminal CAS outcomes.
+      - 'prometheus.googleapis.com/omi_conversation_stale_content_'
+      - 'prometheus.googleapis.com/omi_conversation_selfheal_tick_'
+      - 'prometheus.googleapis.com/omi_conversation_terminal_transition_total/'
+      - 'prometheus.googleapis.com/omi_conversations_v3_reconciles_total/'
       - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
       - 'prometheus.googleapis.com/omi_conversation_relevance_decision_total/'
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'

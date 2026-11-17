@@ -29,6 +29,7 @@ import database.conversations as conversations_db
 from database.account_deletion_marker import account_deletion_blocks_user_work
 from services.capture_wedge import run_capture_wedge_check
 from utils.conversations import lifecycle
+from utils.metrics import observe_conversation_selfheal_tick
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.recovery import (
     raw_transcript_bytes,
@@ -377,6 +378,7 @@ def run_selfheal_tick(
         'verification_timeouts': 0,
     }
     exhausted = False
+    scan_returned = False
 
     if mode != 'off':
         stale_cutoff = now - stale_after
@@ -401,6 +403,7 @@ def run_selfheal_tick(
                 firestore_client=firestore_client,
                 **({'content_due_before': stale_cutoff} if content_due_scan else {}),
             )
+            scan_returned = True
             counters['scanned'] = int(scan.get('scanned') or 0)
             exhausted = bool(scan.get('exhausted'))
             resume_after_path = scan.get('resume_after_path')
@@ -500,6 +503,7 @@ def run_selfheal_tick(
             counters['errors'] += 1
             logger.exception('selfheal wedge check failed type=%s', type(error).__name__)
 
+    observe_conversation_selfheal_tick(counters, now, scan_returned=scan_returned)
     _emit(
         'selfheal_tick',
         scanned=counters['scanned'],

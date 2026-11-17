@@ -1,6 +1,8 @@
+import logging
 import os
 import re
 import threading
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from database.fsr_cache_telemetry import OMI_FALLBACK_TOTAL as OMI_FALLBACK_TOTAL
@@ -927,6 +929,76 @@ CONVERSATION_ORPHANED_UNFINALIZED = Counter(
     'omi_conversation_orphaned_unfinalized',
     'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
 )
+
+CONVERSATION_STALE_CONTENT_HOLDING = Gauge(
+    'omi_conversation_stale_content_holding',
+    'Stale content-bearing conversations in the latest bounded selfheal window',
+)
+CONVERSATION_STALE_CONTENT_OLDEST_AGE_SECONDS = Gauge(
+    'omi_conversation_stale_content_oldest_age_seconds',
+    'Oldest stale content age in the latest bounded selfheal window',
+)
+CONVERSATION_STALE_CONTENT_OVER_12H = Gauge(
+    'omi_conversation_stale_content_over_12h',
+    'Content-bearing conversations at least 12h old in the latest selfheal window',
+)
+CONVERSATION_SELFHEAL_TICK_TIMESTAMP_SECONDS = Gauge(
+    'omi_conversation_selfheal_tick_timestamp_seconds',
+    'Start timestamp of the latest selfheal tick, including off ticks',
+)
+CONVERSATION_SELFHEAL_TICK_OUTCOME_TOTAL = Counter(
+    'omi_conversation_selfheal_tick_outcome_total',
+    'Selfheal ticks: ok without errors, partial with a returned scan and errors, error without a returned scan',
+    ['outcome'],
+)
+for _outcome in ('ok', 'error', 'partial'):
+    CONVERSATION_SELFHEAL_TICK_OUTCOME_TOTAL.labels(outcome=_outcome)
+
+CONVERSATION_TERMINAL_TRANSITION_TOTAL = Counter(
+    'omi_conversation_terminal_transition_total',
+    'Successful lifecycle transition CAS to a terminal status, by inclusive finish-age upper bound; missing clocks omitted',
+    ['to_status', 'age_bucket'],
+)
+for _status in ('completed', 'failed'):
+    for _age_bucket in ('1h', '6h', '24h', '7d', 'older'):
+        CONVERSATION_TERMINAL_TRANSITION_TOTAL.labels(to_status=_status, age_bucket=_age_bucket)
+
+
+def conversation_terminal_age_bucket(finished_at: Any, now: datetime) -> str | None:
+    if not isinstance(finished_at, datetime):
+        return None
+    finished_at = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+    age = (now - finished_at).total_seconds()
+    for limit, bucket in ((3600, '1h'), (21600, '6h'), (86400, '24h'), (604800, '7d')):
+        if age <= limit:
+            return bucket
+    return 'older'
+
+
+def observe_conversation_terminal_transition(to_status: str, finished_at: Any) -> None:
+    try:
+        if to_status not in {'completed', 'failed'}:
+            return
+        bucket = conversation_terminal_age_bucket(finished_at, datetime.now(timezone.utc))
+        if bucket is not None:
+            CONVERSATION_TERMINAL_TRANSITION_TOTAL.labels(to_status=to_status, age_bucket=bucket).inc()
+    except Exception:
+        logging.getLogger(__name__).warning('Conversation terminal transition metric failed')
+
+
+def observe_conversation_selfheal_tick(counters: dict[str, Any], now: datetime, *, scan_returned: bool) -> None:
+    try:
+        CONVERSATION_SELFHEAL_TICK_TIMESTAMP_SECONDS.set(now.timestamp())
+        # A failed scan must not replace the previous observed backlog with a healthy zero.
+        if scan_returned:
+            CONVERSATION_STALE_CONTENT_HOLDING.set(counters['content_holding'])
+            CONVERSATION_STALE_CONTENT_OLDEST_AGE_SECONDS.set(counters['oldest_age_seconds'])
+            CONVERSATION_STALE_CONTENT_OVER_12H.set(counters['content_holding_over_12h'])
+        outcome = ('partial' if scan_returned else 'error') if counters['errors'] else 'ok'
+        CONVERSATION_SELFHEAL_TICK_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    except Exception:
+        logging.getLogger(__name__).warning('Conversation selfheal tick metric failed')
+
 
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',

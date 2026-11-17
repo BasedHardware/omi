@@ -3,6 +3,9 @@
 from prometheus_client import Counter, Histogram, Gauge
 
 RECONCILES = Counter('omi_conversations_v3_reconciles_total', 'Builder outcomes', ['outcome'])
+# Export idle outcomes so no events and a missing scrape remain distinguishable.
+for _outcome in ('busy', 'committed', 'error', 'outline_fallback', 'dispatch_error'):
+    RECONCILES.labels(outcome=_outcome)
 PENDING_AGE = Histogram(
     'omi_conversations_v3_pending_age_seconds', 'Pending recording age', buckets=(60, 300, 600, 1800, 3600, 86400)
 )
