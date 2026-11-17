@@ -77,6 +77,7 @@ from utils.manual_speaker_assignments import (
 from utils.conversations.home_titles import (
     SUMMARY_DEBT_FIELDS,
     apply_user_title,
+    PENDING_TITLE_STAND_IN,
     notes_pending,
     project_home,
     title_for_stability,
@@ -1422,7 +1423,11 @@ def _quality_processing_notes(uid: str, data: dict, existing: Mapping[str, Any])
         # stand-in (server minimum) stays; a stored placeholder is cleared.
         stored = existing.get('structured')
         stored_title = stored.get('title') if isinstance(stored, Mapping) else None
-        cleaned = {**generated, 'title': stored_title if valid_title(stored_title) else ''}
+        # Same sanitization as generated notes (unsafe narration, quality flags). A
+        # usable stand-in title keeps the policy from recording a title fallback
+        # for a row that never had notes; the real title is set just below.
+        cleaned = clean_structured({**generated, 'title': PENDING_TITLE_STAND_IN})
+        cleaned['title'] = stored_title if valid_title(stored_title) else ''
     elif user_title is not None:
         cleaned = clean_structured(generated)
         cleaned['title'] = user_title

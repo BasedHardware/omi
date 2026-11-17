@@ -41,6 +41,11 @@ def summary_owed(row: Mapping[str, Any]) -> bool:
 _FALLBACK_TITLE = re.compile(r'^discussion (?:notes|\d+)$', re.I)
 
 
+# Passed through the note policy in place of a missing title so sanitizing a row
+# with no notes does not count as a generated-title fallback. Never stored.
+PENDING_TITLE_STAND_IN = 'Pending capture'
+
+
 def is_fallback_title(value: Any) -> bool:
     """Exactly the deterministic fallback labels, never another placeholder."""
     return isinstance(value, str) and bool(_FALLBACK_TITLE.fullmatch(re.sub(r'\s+', ' ', value).strip()))
@@ -68,6 +73,11 @@ def notes_pending(structured: Any) -> bool:
     ):
         return False
     return not any(structured.get(key) for key in ('action_items', 'events'))
+
+
+def display_title(title: Any, preview: Any) -> Any:
+    """The Home card title: a bare fallback label with no preview is served as untitled."""
+    return '' if is_fallback_title(title) and not (isinstance(preview, str) and preview.strip()) else title
 
 
 def placeholder_title_wire(row: dict[str, Any]) -> dict[str, Any]:

@@ -18,7 +18,7 @@ from tests.unit.test_home_transcribing_hold import capture
 from tests.unit.test_stale_empty_capture import placeholder
 from utils.batch_pipeline.live_projection import replace_record
 from utils.conversations import empty_capture, home_step, home_titles, summary_delivery, transcribing_hold
-from utils.conversations.home_titles import is_fallback_title, notes_pending
+from utils.conversations.home_titles import display_title, is_fallback_title, notes_pending
 from utils.summary_quality import title_or_fallback
 
 NOW = datetime.now(timezone.utc)
@@ -210,6 +210,43 @@ def test_wire_rule_touches_nothing_else(changes):
 
 def test_expired_empty_capture_is_noise_even_when_stamped():
     row = placeholder(structured={'title': FALLBACK, 'overview': ''})
+    assert empty_capture.applies(row, now=NOW)
+    assert home_step.classify(row) == home_step.NOISE
+    assert transcribing_hold.project(row)['structured']['title'] == 'No summary'
+
+
+def test_pending_write_is_sanitized_like_generated_notes_and_records_no_title_fallback(store, monkeypatch):
+    from utils.observability import fallback
+
+    recorded = []
+    monkeypatch.setattr(fallback, 'record_fallback', lambda **labels: recorded.append(labels))
+    client = store(stub(structured={'title': ''}))
+    narrated = stub(structured={**EMPTY_NOTES, 'overview': 'The transcript is unavailable.', 'quality_flags': []})
+    db.upsert_conversation_with_lifecycle('u', narrated)
+    written = client.commits[0]['structured']
+    assert written['title'] == '' and written['overview'] == ''
+    assert 'quality_flags' not in written
+    assert not [labels for labels in recorded if labels.get('to_mode') == 'deterministic_title']
+
+
+@pytest.mark.parametrize(
+    'title,preview,served',
+    [
+        (FALLBACK, '', ''),
+        (FALLBACK, '   ', ''),
+        ('Discussion 2', None, ''),
+        (FALLBACK, 'Approval is due Friday.', FALLBACK),
+        ('Pilot budget', '', 'Pilot budget'),
+        ('', '', ''),
+    ],
+)
+def test_home_card_title_rule(title, preview, served):
+    assert display_title(title, preview) == served
+
+
+@pytest.mark.parametrize('title', ['Transcribing…', 'Untitled'])
+def test_expired_empty_capture_with_any_placeholder_is_noise(title):
+    row = placeholder(structured={'title': title, 'overview': ''})
     assert empty_capture.applies(row, now=NOW)
     assert home_step.classify(row) == home_step.NOISE
     assert transcribing_hold.project(row)['structured']['title'] == 'No summary'
