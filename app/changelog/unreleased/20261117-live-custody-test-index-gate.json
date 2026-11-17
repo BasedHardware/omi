@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test-only determinism fix for the live-custody WAL index-save test; no production code or user-facing behavior change."
+}

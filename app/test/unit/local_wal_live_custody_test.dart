@@ -189,14 +189,21 @@ void main() {
     final custody = manager();
     final conn = _FakeCustodyConn()..info = info(42);
     final barrier = Completer<void>();
+    final indexEntered = Completer<void>();
     var saves = 0;
+    var slowDisk = false;
     final sync = LocalWalSyncImpl(
       _MockListener(),
       custody: custody,
       connectionResolver: (_) async => conn,
-      freeDiskBytes: () async => 1 << 40,
+      freeDiskBytes: () async {
+        // Stands in for full-suite contention: the stop chain reaches the index save late.
+        if (slowDisk) await Future<void>.delayed(const Duration(milliseconds: 150));
+        return 1 << 40;
+      },
       persistWals: (wals) async {
         saves++;
+        if (!indexEntered.isCompleted) indexEntered.complete();
         await barrier.future;
         await WalFileManager.saveWals(wals);
       },
@@ -222,15 +229,22 @@ void main() {
     await pump();
     expect(conn.advances, isEmpty, reason: 'marks alone cannot advance — nothing durable yet');
 
+    slowDisk = true;
     final stopping = sync.stop();
-    await pump();
-    expect(conn.advances, isEmpty, reason: 'index save still gated — no ADVANCE may leak ahead of it');
-    expect(saves, 1);
-    expect(await WalFileManager.loadWals(), isEmpty);
-    expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
-    expect(custody.advanceTarget('dev', 1), isNull);
-    barrier.complete();
-    await stopping;
+    try {
+      // Observe the index-save boundary rather than elapsed time: under full-suite contention the
+      // stop chain can take longer than one 60 ms pump to reach the gated save (#25557).
+      await indexEntered.future.timeout(const Duration(seconds: 5));
+      await pump();
+      expect(conn.advances, isEmpty, reason: 'index save still gated — no ADVANCE may leak ahead of it');
+      expect(saves, 1);
+      expect(await WalFileManager.loadWals(), isEmpty);
+      expect(await custody.isDurableLiveRecord('dev', 42, 3), isFalse);
+      expect(custody.advanceTarget('dev', 1), isNull);
+    } finally {
+      if (!barrier.isCompleted) barrier.complete();
+      await stopping;
+    }
     await pump();
 
     expect(conn.advances, hasLength(1));
