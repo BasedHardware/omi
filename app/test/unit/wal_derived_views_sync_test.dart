@@ -52,11 +52,14 @@ Object _snapshot(WalDerivedViews v, int now) => {
 
 void _expectSame(WalDerivedViews incremental, List<Wal> rows, String step) {
   final fresh = WalDerivedViews(rows);
-  addTearDown(fresh.dispose);
-  const now = 1800000000;
-  expect(_snapshot(incremental, now), _snapshot(fresh, now), reason: step);
-  final ids = {for (final w in rows.take(5)) w.id};
-  expect(incremental.rowsForIds(ids).toList(), fresh.rowsForIds(ids).toList(), reason: '$step rowsForIds');
+  try {
+    const now = 1800000000;
+    expect(_snapshot(incremental, now), _snapshot(fresh, now), reason: step);
+    final ids = {for (final w in rows.take(5)) w.id};
+    expect(incremental.rowsForIds(ids).toList(), fresh.rowsForIds(ids).toList(), reason: '$step rowsForIds');
+  } finally {
+    fresh.dispose();
+  }
 }
 
 void _randomWalk(Random r) {
@@ -143,11 +146,44 @@ void main() {
     }
     final added = _CountedWal(1700000000, WalStatus.miss);
     final next = List<Wal>.unmodifiable([...history, added]);
+    final reconciles = views.fullReconciles;
     views.sync(next);
+    expect(views.fullReconciles, reconciles, reason: 'an append takes the pointer-comparison fast path');
     expect(history.fold<int>(0, (sum, w) => sum + w.reads), 0,
         reason: 'a capture flush must not re-derive the retained history');
     expect(views.missing, [added]);
     expect(identical(views.synced, synced), isTrue, reason: 'unchanged buckets keep their sorted lists');
     _expectSame(views, next, 'append');
+  });
+
+  test('a previously passed list edited in place cannot fake an unchanged prefix', () {
+    final a = _CountedWal(1700000000, WalStatus.miss);
+    final b = _CountedWal(1700000010, WalStatus.miss);
+    final c = _CountedWal(1700000020, WalStatus.synced);
+    final first = <Wal>[a, b];
+    final views = WalDerivedViews(first);
+    addTearDown(views.dispose);
+    // The caller reuses its list; the next snapshot is a new object whose
+    // prefix matches the edited list but not what the views adopted.
+    first[1] = c;
+    final next = <Wal>[a, c, _CountedWal(1700000030, WalStatus.miss)];
+    views.sync(next);
+    _expectSame(views, next, 'edited previous list');
+    expect(views.missing, isNot(contains(b)));
+  });
+
+  test('Wal.id follows device and timerStart changes after it was cached', () {
+    final w = _CountedWal(1700000000, WalStatus.miss);
+    expect(w.id, 'phone_1700000000');
+    w.timerStart = 1700000100;
+    expect(w.id, 'phone_1700000100');
+    w.device = 'pendant';
+    expect(w.id, 'pendant_1700000100');
+    final views = WalDerivedViews([w]);
+    addTearDown(views.dispose);
+    w.device = 'moved';
+    views.refresh();
+    expect(views.rowsForIds({'moved_1700000100'}).toList(), [w]);
+    expect(views.rowsForIds({'pendant_1700000100'}).toList(), isEmpty);
   });
 }

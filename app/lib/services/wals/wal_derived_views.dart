@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'dart:collection';
 
+import 'package:flutter/foundation.dart';
+
 import 'wal.dart';
 
 bool _onDevice(Wal w) => w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage;
@@ -47,12 +49,17 @@ class WalDerivedViews {
       w.addViewChangeListener(_changed);
       _apply(w);
     }
-    _source = wals is List<Wal> ? wals : null;
+    _source = List<Wal>.of(wals);
   }
 
-  /// The last adopted snapshot, when it was a list: lets [sync] recognise the
-  /// common append-only change with pointer comparisons alone.
+  /// A private copy of the last adopted snapshot (pointers only): lets [sync]
+  /// recognise the common append-only change by comparison, even if the
+  /// caller later edits the list it passed.
   List<Wal>? _source;
+
+  /// Full identity reconciles run by [sync]; the append fast path skips them.
+  @visibleForTesting
+  int fullReconciles = 0;
 
   /// Adopts a new inventory snapshot without rebuilding unchanged rows.
   ///
@@ -63,23 +70,22 @@ class WalDerivedViews {
   /// afterwards equals a fresh `WalDerivedViews(wals)` over the same list.
   void sync(Iterable<Wal> wals) {
     final previous = _source;
-    _source = wals is List<Wal> ? wals : null;
-    // The same list object may have been edited in place; only a distinct
-    // snapshot proves its prefix still holds the rows adopted last time.
-    if (previous != null && !identical(previous, wals) && wals is List<Wal> && wals.length >= previous.length) {
+    final rows = List<Wal>.of(wals);
+    _source = rows;
+    if (previous != null && rows.length >= previous.length) {
       var same = true;
       for (var i = 0; i < previous.length; i++) {
-        if (!identical(previous[i], wals[i])) {
+        if (!identical(previous[i], rows[i])) {
           same = false;
           break;
         }
       }
       if (same) {
         // Append-only: retained rows keep their positions and order.
-        for (var i = previous.length; i < wals.length; i++) {
-          final w = wals[i];
+        for (var i = previous.length; i < rows.length; i++) {
+          final w = rows[i];
           if (_entries.containsKey(w)) {
-            _syncAll(wals);
+            _syncAll(rows);
             return;
           }
           _order[w] = i;
@@ -90,10 +96,11 @@ class WalDerivedViews {
         return;
       }
     }
-    _syncAll(wals);
+    _syncAll(rows);
   }
 
-  void _syncAll(Iterable<Wal> wals) {
+  void _syncAll(List<Wal> wals) {
+    fullReconciles++;
     final epoch = ++_syncEpoch;
     var position = 0;
     var lastRetained = -1;
