@@ -18,6 +18,7 @@ from database.account_deletion_marker import account_deletion_blocks_user_work, 
 from database.account_deletion_policy import account_deletion_marker_blocks_access
 from utils.encryption import encrypt, decrypt
 from utils.conversations.v3 import Conflict
+from utils.open_loops.extraction import OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, OPEN_LOOP_EXTRACTIONS_FIELD
 
 LIMIT = 128
 
@@ -274,11 +275,27 @@ def commit_projection(uid, token, recordings, existing, rows, cache, *, clear_pe
     prepared = []
     for row in rows:
         clean = {k: v for k, v in row.items() if not k.startswith('_v3_') and k != 'updated_at'}
-        prepared.append(
-            conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
-                clean, uid, clean.get('data_protection_level') or 'standard', allow_offload=True
-            )
+        # A prior row carries its stored open-loop extractions as the protected blob (the read
+        # path never decodes them); the codec accepts only the decoded object.
+        blob = clean.pop(OPEN_LOOP_EXTRACTIONS_FIELD, None)
+        marker = clean.pop(OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD, None)
+        level = clean.get('data_protection_level') or 'standard'
+        encoded = conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage] -- reuse the authoritative encryption codec
+            clean, uid, level, allow_offload=True
         )
+        if blob:
+            prior_level = (existing.get(row['id']) or {}).get('data_protection_level') or 'standard'
+            if marker and prior_level == level:
+                encoded[OPEN_LOOP_EXTRACTIONS_FIELD] = blob
+                encoded[OPEN_LOOP_EXTRACTIONS_COMPRESSED_FIELD] = marker
+            else:
+                retained = conversations.decode_open_loop_extractions(uid, blob, bool(marker))
+                encoded.update(
+                    conversations._prepare_conversation_for_write(  # pyright: ignore[reportPrivateUsage]
+                        {OPEN_LOOP_EXTRACTIONS_FIELD: retained}, uid, level
+                    )
+                )
+        prepared.append(encoded)
     encrypted_cache = encrypt(json.dumps(cache, default=str), uid)
 
     @firestore.transactional

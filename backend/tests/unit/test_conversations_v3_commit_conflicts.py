@@ -230,3 +230,71 @@ def test_adoptable_skips_deleted_tombstoned_and_recording_rows(monkeypatch):
         'u', ['live', 'deleted', 'tomb', 'rec', 'legacy', 'missing'], firestore_client=MemoryQuery(rows)
     )
     assert list(found) == ['live']
+
+
+def _open_loop_row(level):
+    return {
+        'id': 'c',
+        'status': 'processing',
+        'started_at': AT,
+        'finished_at': AT,
+        'v3_recording_ids': ['r'],
+        'transcript_segments': [],
+        'structured': {},
+        'data_protection_level': level,
+        'open_loop_extractions': 'stored-protected-blob',
+        'open_loop_extractions_compressed': True,
+    }
+
+
+def test_prior_open_loop_blob_is_carried_verbatim(strict, monkeypatch):
+    seen = []
+    real = store.conversations._prepare_conversation_for_write
+
+    def prepare(row, *a, **kw):
+        seen.append(dict(row))
+        return real(row, *a, **kw)
+
+    monkeypatch.setattr(store.conversations, '_prepare_conversation_for_write', prepare)
+    strict.rows[R] = {'recording': True, 'v3_pending': True}
+    strict.rows[('users', 'synthetic', 'conversations', 'c')] = {'id': 'c'}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    prior = {**_open_loop_row('standard'), '_v3_revision': 1}
+    store.commit_projection(
+        'synthetic',
+        token,
+        {'r': {'id': 'r', 'recording': True, '_v3_revision': 1}},
+        {'c': prior},
+        [_open_loop_row('standard')],
+        [],
+        firestore_client=strict,
+    )
+    # The protected blob never reaches the codec, which accepts only the decoded object.
+    assert all('open_loop_extractions' not in row for row in seen)
+    stored = strict.rows[('users', 'synthetic', 'conversations', 'c')]
+    assert stored['open_loop_extractions'] == 'stored-protected-blob'
+    assert stored['open_loop_extractions_compressed'] is True
+
+
+def test_open_loop_blob_is_reprotected_on_a_level_change(strict, monkeypatch):
+    decoded = []
+    monkeypatch.setattr(
+        store.conversations,
+        'decode_open_loop_extractions',
+        lambda uid, raw, compressed: decoded.append((raw, compressed)) or {'loops': []},
+    )
+    strict.rows[R] = {'recording': True, 'v3_pending': True}
+    strict.rows[('users', 'synthetic', 'conversations', 'c')] = {'id': 'c'}
+    token = leases.acquire('synthetic', 'builder', firestore_client=strict)
+    prior = {**_open_loop_row('standard'), '_v3_revision': 1}
+    store.commit_projection(
+        'synthetic',
+        token,
+        {'r': {'id': 'r', 'recording': True, '_v3_revision': 1}},
+        {'c': prior},
+        [_open_loop_row('enhanced')],
+        [],
+        firestore_client=strict,
+    )
+    assert decoded == [('stored-protected-blob', True)]
+    assert strict.rows[('users', 'synthetic', 'conversations', 'c')]['open_loop_extractions'] == {'loops': []}
