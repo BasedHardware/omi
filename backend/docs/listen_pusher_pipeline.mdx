@@ -10227,6 +10227,8 @@ See the [capacity runbook](./runbooks/batch-vendor-routing-capacity.md#overflow-
 conversation deletion batch-purge consumer shares one resumable owner scan for a
 sealed group of fresh obligations. `false`, `off`, `0` or `no` returns members to
 legacy execution, preserving their per-conversation journals and legacy progress.
-Task payloads and the reconciler protocol are unchanged. Existing finite leases
-also allow older consumers to recover after expiry. See the
+Task payloads and the reconciler protocol are unchanged. Coalescing also requires
+Release's expiring all-consumers-new marker; missing/stale readiness stays legacy.
+Revoke readiness, switch off and drain groups before routing an old binary, whose
+completion cannot fence a re-arm. See the
 [rollback and canary contract](runbooks/conversation-purge-coalescing.md).

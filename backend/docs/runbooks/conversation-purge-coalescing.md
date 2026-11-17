@@ -12,7 +12,20 @@ The backend-sync task consumer at
 reads `conversation_batch_purge_jobs` using `due_at` and dispatches ordinary
 `batch_purge` payloads. Tombstone producers still arm that collection atomically
 with deletion intent. Accepted-delete cascade jobs are unchanged. There is **no
-new collection, task kind, route, index, backfill, TTL or independent dispatcher**.
+new task kind, route, index, backfill, TTL or independent dispatcher**.
+
+The existing collection also holds one Release-owned readiness metadata
+document, `conversation_batch_purge_jobs/_owner_scan_v1_readiness`. There is
+**no new collection**. This reserved ID cannot collide with SHA-256 job IDs; the
+marker has no `uid` or `due_at`, so old/new owner and due queries exclude it.
+Only the backend-sync scan consumer reads it; Release writes/revokes it. Neither the reconciler nor old
+consumers read it. It is separate from member obligations and has no due work.
+`all_consumers_new` must be the boolean `true`, with a timezone-aware
+`valid_until` timestamp in the next 24 hours. Absent, false, malformed or expired
+markers refuse coalescing and execute legacy purges. Read errors retry the task.
+The marker is re-read transactionally at seal, resume, every unit/checkpoint and
+completion. Revocation or expiry hands an active group back with its journals.
+This readiness requirement applies even while the default-on kill switch is on.
 
 A worker seals at most 16 fresh obligations belonging to one UID in a transaction.
 Only the leader has `owner_scan` (epoch, token, immutable member identities,
@@ -66,40 +79,61 @@ and makes it due. The existing reconciler redrives ordinary per-conversation
 execution. A delivery observing an off-state group can perform this handback too.
 No member completes merely because handback or an HTTP acknowledgement happened.
 
-An older binary understands every task and obligation. While leased it returns
-`in_progress` or `superseded`; after the ordinary 300-second lease expires it
-executes a full legacy scan from the untouched member cursor and journal. Its
-new token/generation invalidates the group. A surviving new worker releases only
-still-delegated members; it never revokes that old worker's lease. If an old leader
-finishes and removes the inline group state, followers recover independently
-through their finite leases. Thus binary rollback needs no protocol-aware probe
-or journal transfer. Prefer switch-off and drain before reverting for efficiency;
-an immediate binary rollback also retains erasure reachability. Rollback may
-repeat owner scans, which is the intended cost tradeoff.
+The pre-PR binary understands the task and ordinary obligation fields. Live
+leases and superseded generations prevent entry; after expiry it ignores the
+shared cursor and starts from the original legacy progress and member journal.
+A takeover changes its token and invalidates the shared run. This preserves
+rollback reachability, but **does not prove the new re-arm guarantee during a
+mixed roll**: old completion compares only generation/token, never the arming
+revision. An old worker that takes over, checkpoints and then observes a re-arm
+cannot fence that arm. Coalescing is therefore refused during mixed-version
+serving until Release explicitly attests all consumers are new.
 
-## Canary (release owner, separate train)
+Before enabling the marker, Release verifies the reviewed image on **every**
+backend-sync revision/consumer that can receive purge tasks, including queued
+revision-specific task targets. Drain or retarget old consumers first; a route
+presence probe is insufficient. Keep the switch off until that is established,
+then write the marker with a short expiry (at most 24 hours), record deployment
+evidence, and enable the canary. Refresh only after re-verifying the same claim.
+This PR does not create or assert a production readiness marker.
 
-This PR does not deploy. Release/lead2 first deploy the reviewed image with the
-switch off, then enable on one backend-sync canary revision for one full deletion
-lookback window. Expand to all task-consumer revisions only after audits pass.
-Existing older revisions can serve tasks safely, but reduce sharing while present.
+For rollback, revoke the marker and switch off **before** restoring old traffic.
+Drain active groups through handback (or wait for their finite leases and redrive)
+before sending tasks to an old revision. Verify no active delegated groups remain.
+Do not leave an all-new attestation valid while routing old workers. Handback
+preserves an old takeover's nonempty legacy cursor as well as each member journal;
+it never revokes a replacement worker's lease. If a leader is already gone,
+followers still recover through finite leases. Legacy rollback may repeat owner
+scans. No member completes from handback or HTTP acknowledgement alone.
 
-Compare timestamped, aggregate deletion purge reads **per armed conversation**
-for the same route, including owner pages, job-result gets, owner-ID fallback,
-member-journal and coordination reads. Track actual group sizes using
-`event=conversation_batch_purge_owner_scan_completed members=...`, completion age,
-purge failures/retries, held outcomes and foreground account-gate latency. Do not
-book unit-test page reductions as billed-read savings. Fresh-only eligibility,
-singletons, separate waves, lease-expiry fallback and coordination overhead can
-reduce the benefit. The supplied baseline is a planning input, not a new measure.
+## Canary and owner
 
-Stop and set the switch off if **any completed member has authorized rows/objects
-remaining in an audit**, purge failures rise, unrelated erasures appear, or
-completion age/gate latency regress. Audit both namespaces, nested/alias and
-segment-only identities, corrupt-owner artifacts and exact WAL prefixes (all
-object generations). Unknown storage answers remain failures, never audit proof.
-Release/lead2 owns expansion or rollback on that train; margin-40 has no dependency
-on this PR. No production reads or writes were needed to implement/test it.
+**Release is the canary executor and owns expansion or rollback.** Lead2 owns the
+batch-custody contract and pre-merge review; margin-40 has no dependency on this
+train. This PR does not deploy or inspect production.
+
+After establishing all-consumer readiness above, enable one backend-sync canary
+revision for a full deletion lookback window. Measure **deletion purge reads per
+armed conversation**, origin
+`http:/v1/conversations/deletion-batch-purges/run`, including coordination,
+member-journal, owner-page, job-result and owner-ID fallback reads. Use timestamped
+aggregate evidence and the 24 hours before canary as the comparison baseline.
+Track group sizes, completion age and gate latency; local page-count reductions
+are not billed-read savings.
+
+Stop, revoke readiness and switch off if **any** of these occurs:
+
+- An audit finds any completed member with rows remaining (also audit artifacts,
+  exact WAL prefixes/all generations and both namespaces).
+- Purge failure rate **or dead-letter rate rises 20% or more** versus the 24 hours
+  before canary. A zero baseline with any new failure/dead letter also stops.
+- Reads per armed conversation are not falling versus that baseline after the
+  full lookback window.
+
+Expand only after a clean full window and completed-member audits. Fresh-only
+eligibility, singletons, separate waves, rollback scans and coordination overhead
+can reduce the gain. Unknown storage outcomes remain failures, never audit proof.
+No production savings are claimed by this implementation.
 
 ## Scope-panel disposition
 
@@ -107,8 +141,10 @@ The initial scope panel's erasure, races, leases, holds, quota, shadow, mirror,
 read-growth, bounds and rollback concerns are covered by the shared traversal,
 existing erasure helpers and synthetic unit/emulator tests. Replacement-boundary
 approval is supplied by David's explicit task approval; this adds no batch writer
-schema or replacement coordination service. New collection/read-budget, TTL,
-new task protocol/readiness and historical backfill proposals are unnecessary
-because all state stays on existing obligations/journals. Live sharing factor,
-read attribution, revision mix and savings remain canary questions; production
+schema or replacement coordination service. Paged scan collections, TTL, new task
+protocols and historical backfills remain unnecessary: work stays on existing
+obligations/journals. The new bounded
+readiness control document is necessary because the actual pre-PR binary cannot
+fence re-arms after takeover; missing readiness retains legacy execution. Live
+sharing factor, read attribution, revision mix and savings remain canary questions; production
 inspection is outside this task's authorized scope.
