@@ -330,7 +330,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         return true;
       }
     }
-    return LocalSttCustody.keepsPhoneAudio;
+    // The live controller can keep audio local before its preference write lands.
+    return LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
   }
 
   int _orphanPendingCount() =>
