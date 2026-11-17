@@ -12,6 +12,9 @@ import pytest
 
 from database import conversations_v3 as store
 from utils.conversations.v3 import service, summary
+from utils.conversations import (
+    lifecycle,
+)  # noqa: F401 -- the commit path's import graph is paid at collection, not in a test's CPU budget
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreSnapshot
 
 AT = datetime.now(timezone.utc)
