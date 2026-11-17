@@ -364,6 +364,24 @@ def creation_result(write: Row, uid: str) -> Row | None:
     return merge_result({}, write, uid)
 
 
+def retires_title_marker(existing: Row, write: Row) -> bool:
+    """Whether this processing write's notes must delete the stored stand-in's title marker.
+
+    ``merge_result`` deletes it on such a write: the processing write merges
+    maps and keeps every leaf it omits, so the stand-in's
+    ``structured.title_provenance`` would outlive the real notes, and Home and
+    the settling-fragment filter would keep treating the summarized row as a
+    provisional minimum. A write that states its own marker keeps it.
+    """
+    structured = write.get('structured')
+    return bool(
+        write.get('summary_output_present')
+        and isinstance(structured, dict)
+        and 'title_provenance' not in structured
+        and field(existing.get('structured'), 'title_provenance') is not None
+    )
+
+
 def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = None) -> Row | None:
     """Inside the existing revision-fenced transaction, before its write."""
     if 'summary_output_present' not in write:
@@ -403,6 +421,11 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
+    if retires_title_marker(existing, write):
+        # Imported here like effective_user_title below: sync tests load this module with google.cloud stubbed.
+        from google.cloud.firestore import DELETE_FIELD
+
+        write['structured']['title_provenance'] = DELETE_FIELD
     # The fence guards an open first-summary obligation only. Rows outside the
     # server-minimum protocol, already-enriched rows, and rows whose empty
     # budget is exhausted have no caller that catches this exception — the

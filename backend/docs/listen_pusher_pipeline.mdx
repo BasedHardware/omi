@@ -9411,7 +9411,7 @@ has since moved for another reason the result is `clock_unknown` and the quiet r
 and late-cap rules still apply. Any other result, a read failure included, leaves the quiet rule as it is.
 `omi_sync_capture_end_total{end_type,outcome}` counts markers and
 `omi_sync_capture_end_proof_total{result}` counts evaluations (`proven`, `absent`, `pending`,
-`no_speech_clock`, `content_behind`, `resumed`, `sealed`).
+`no_speech_clock`, `content_behind`, `resumed`, `sealed`, `sealed_held`).
 
 **Server seal proof (2026-11-16).** A batch-owned live record (`record_lane_owner == 'batch_live_v1'`) needs no
 phone marker: the server captured it, so its seal is the proof. Admission skips the wait (outcome `end_proof`, proof
@@ -9428,6 +9428,16 @@ Complete-record notes scheduling in projection runs only after every unit is rea
 job carrying the row's current upload revision, counting `sealed` after commit. It shares the
 `SYNC_UPLOAD_WATERMARK_ENABLED` kill switch and adds no write.
 [Change note](listen_pusher_pipeline/changes/2026-11-16-sealed-live-record-end-proof.md).
+
+**Sealed record first notes without deadline or held units (2026-11-17).** With eager record notes off, the
+record's whole completion writes the ledger's `transcribed` first, then moves the row's existing open notes
+obligation to due now and wakes it, instead of leaving it at the 120 s first-summary deadline. When a unit is held for
+recovery (quarantined) and every other unit is projected, `hold_for_quarantine` stamps the seal it saw as
+`sync_processing_hold.units_settled_seal_at` (only on a row that already has a hold state) and wakes the obligation
+the same way; `seal_proof` returns `units_held` (proof result `sealed_held`) while that stamp equals
+`record_sealed_at`, with no ledger read. Both require the row barrier (sealed, projected, no notes yet). The move
+never creates, reopens or re-leases an obligation. The recovered unit later counts as late content. Same kill switch.
+[Change note](listen_pusher_pipeline/changes/2026-11-17-sealed-record-first-notes-latency.md).
 
 `SYNC_UPLOAD_WATERMARK_ENABLED` is the default-on kill switch: off, the route stores nothing, admission
 reads nothing, and phones are told no silence timer. `SYNC_CAPTURE_END_SILENCE_SECONDS` (default 120,

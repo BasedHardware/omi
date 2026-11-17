@@ -391,3 +391,21 @@ def test_unstamped_wait_uses_server_clock_not_offline_capture_age(age, expected,
     empty = row(structured={'title': '', 'overview': ''}, finished_at=NOW - timedelta(days=16), created_at=None)
     empty[clock] = (NOW - timedelta(hours=age)).isoformat()
     assert home_step.classify(empty) == expected
+
+
+@pytest.mark.parametrize('title', ['', 'Discussion notes'])
+def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
+    """The feed classifies the field-masked read, so the row-level stand-in marker must be loaded."""
+    from database.home_feed import CONVERSATION_FIELDS
+
+    projected = row(
+        structured={'title': title, 'overview': ''},
+        record_lane_owner='batch_live_v1',
+        record_projection_revision=1,
+        record_audio_closed=True,
+        summary_title_provenance='server_minimum',
+        summary_due_at=NOW.timestamp(),
+        transcript_segments=[{'text': 'we closed the round', 'start': 0, 'end': 3}],
+    )
+    read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
+    assert home_step.classify(read) == 'writing_notes'
