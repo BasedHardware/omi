@@ -11,6 +11,10 @@
         {
           "fieldPath": "started_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -24,6 +28,10 @@
         },
         {
           "fieldPath": "v3_pending_since",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -57,6 +65,10 @@
         {
           "fieldPath": "created_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -75,6 +87,10 @@
         {
           "fieldPath": "started_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     },
@@ -88,6 +104,10 @@
         },
         {
           "fieldPath": "geolocation.latitude",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
@@ -106,6 +126,10 @@
         },
         {
           "fieldPath": "started_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
         }
       ]
