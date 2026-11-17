@@ -37,6 +37,7 @@ BLOCKED = frozenset(
         'v3_derived_budget',
         'recording_decode_unavailable',
         'account_deletion',
+        'document_too_large',
     }
 )
 
@@ -337,9 +338,18 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
 
 
 def _commit(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
+    from google.api_core.exceptions import InvalidArgument
+
     from utils.conversations import lifecycle
 
-    lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache, clear_pending=clear_pending)
+    try:
+        lifecycle.commit_v3_projection(uid, token, recordings, existing, rows, cache, clear_pending=clear_pending)
+    except InvalidArgument as error:
+        # A copied window whose inline transcript exceeds Firestore's 1 MiB document limit fails the same
+        # way on every retry; park the owner instead of cycling the shared queue.
+        if 'exceeds the maximum allowed size' in str(error):
+            raise Conflict('document_too_large') from error
+        raise
 
 
 async def drain_processing(uid):
