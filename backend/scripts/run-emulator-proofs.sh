@@ -115,6 +115,10 @@ run_proof "job-store conformance (sim + emulator, including fenced scheduler pul
   "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py \
   tests/integration/test_recovery_custody_conformance.py
 
+run_proof "allowance parking migration (owner concurrency, retry pacing, privacy and replay)" \
+  env "OMI_REQUIRE_STORE_BACKENDS=${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_batch_allowance_holds.py -k migration
+
 # Daily parity: real claims/settlement on old Firestore and new Postgres.
 # CI requires sim + emulator; local/staging qualification must require all.
 run_proof "enrichment recovery conformance (PL-342/397/398)" \
