@@ -24,13 +24,19 @@ def capture(monkeypatch):
     }
     handles = []
 
-    def fresh_blob(path):
-        blob = SimpleNamespace(metadata=None, download_as_bytes=lambda **kw: raw)
+    def fresh_blob(path, generation=None):
+        blob = SimpleNamespace(name=path, metadata=None, generation=generation, metageneration=None, size=None)
 
         def reload(**kwargs):
             blob.metadata = dict(metadata)
+            blob.generation, blob.metageneration, blob.size = 1, 1, len(raw)
 
-        blob.reload = reload
+        def download(**kwargs):
+            assert kwargs['if_generation_match'] == blob.generation
+            assert kwargs['if_metageneration_match'] == blob.metageneration
+            return raw
+
+        blob.reload, blob.download_as_bytes = reload, download
         handles.append(blob)
         return blob
 
