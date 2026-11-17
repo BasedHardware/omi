@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-gateway-vertex-drops-function-calls",
+  "family": "cross-boundary-contract",
   "violated_contract": "An OpenAI-compatible adapter that forwards function tools to a native Gemini/Vertex generateContent upstream must return those tool calls on the caller wire. A 200 with billed output tokens is not success if functionCall parts were translated into empty or text-only assistant content, because desktop Insight/Task assistants only act on functionCall and will emit no Advice Generated or Task Extracted.",
   "canonical_prevention": "Vertex response and SSE normalizers must emit OpenAI tool_calls (and finish_reason tool_calls) from Gemini functionCall parts, including functionCall-only candidates with no text. Prove it with a hermetic generateContent and SSE fixture that would have stayed red when the adapter copied text only.",
   "canonical_prevention_artifact": [
