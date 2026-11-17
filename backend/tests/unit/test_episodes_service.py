@@ -522,7 +522,21 @@ def test_first_moment_opens_an_episode_with_sealed_content():
         }
     )
     c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
-    assert service.record_moment(UID, _moment(person='p1'), c) == 'applied'
+    named = _moment(person='p1')
+    named = replace(
+        named,
+        segments=[
+            {
+                **segment,
+                'id': str(index),
+                'speaker_id': index % 2,
+                'speaker_id_scope': 'synthetic',
+                **({'speaker_label_source': 'manual'} if not segment['is_user'] else {}),
+            }
+            for index, segment in enumerate(named.segments)
+        ],
+    )
+    assert service.record_moment(UID, named, c) == 'applied'
 
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     assert episode['title'] == 'Coding at the café'
@@ -562,7 +576,7 @@ def test_next_moment_sends_only_state_plus_new_text_and_dedupes_applied_segments
     user_message = model.calls[1][1][1]
     assert '"Lunch at 12:30"' in user_message and 'git thing' not in user_message and 'pricing' in user_message
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert [m['heading'] for m in episode['moments']] == ['Lunch', '']
+    assert [m['heading'] for m in episode['moments']] == ['Lunch', 'Discussion 2']
     assert episode['bullets'] == ['B2'] and episode['applied']['c1'] == 50.0
 
 
@@ -2143,7 +2157,7 @@ def test_output_language_firestore_and_preference_reads_are_cached_per_session(m
         conversations_db,
         'get_conversation_raw_snapshot',
         lambda *args, **kwargs: (
-            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language'] else None,
+            language_reads.append(args[1]) if kwargs.get('field_paths') == ['language', 'recording'] else None,
             raw_snapshot(*args, **kwargs),
         )[1],
     )

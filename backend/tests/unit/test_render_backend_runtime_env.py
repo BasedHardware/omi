@@ -1406,19 +1406,26 @@ def test_firestore_train_preserves_monthly_reader_scope_and_cloud_run_overrides(
         # SCA-2173 / SCA-2222 Train 1: the prod read train carries the same five lever values
         # on backend-integration, backend-sync and backend — monthly readers on
         # (usage_month_cache/total=100), pending head 100, timeliness leader 100 (fleet
-        # sampler election and capped backlog counts on), privacy shadow 0.
-        # backend-sync-backfill keeps its ec191a row 3 pins.
+        # sampler election and capped backlog counts on).
+        # SCA-2190 comparison preparation pins all four callers to shadow=10,
+        # negative-cache=0, TTL60=0 and explicit owner enforcement=0.
+        # backend-sync-backfill keeps its other ec191a row 3 pins.
         if enabled:
-            wanted.update(bpp_decision_cache=100, privacy_negative_lookup_cache=100)
+            wanted.update(
+                bpp_decision_cache=100,
+                privacy_checks_shadow=10,
+                privacy_negative_lookup_cache=0,
+                privacy_ttl60=0,
+                bpp_owner_memo_enforce=0,
+            )
             if name == 'cloud_run/backend-sync-backfill':
-                wanted.update(privacy_checks_shadow=100, batch_timeliness_leader=0)
+                wanted.update(batch_timeliness_leader=0)
             else:
                 wanted.update(
                     usage_month_cache=100,
                     usage_month_total=100,
                     lifecycle_record_pending_head=100,
                     batch_timeliness_leader=100,
-                    privacy_checks_shadow=0,
                 )
         assert json.loads(literal['value']) == wanted, name
         monkeypatch.setenv('FIRESTORE_READ_LEVERS', literal['value'])
@@ -1642,3 +1649,14 @@ def test_record_close_notify_renders_on_every_cloud_run_listener(environment, se
         'PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S': '',
     }.items():
         assert [(name, value) for name, value in rendered if name == key] == [(key, expected)]
+
+
+def test_prod_silence_read_skip_is_held_off_on_projection_hosts():
+    key = 'BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED'
+    prod = _MANIFEST['environments']['prod']
+    for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert prod['cloud_run']['services'][name]['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    assert prod['gke']['backend-listen']['env'][key] == {'value': 'false', 'category': 'ops_kill'}
+    chart = Path(__file__).resolve().parents[2] / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    values = yaml.safe_load(chart.read_text())
+    assert [entry['value'] for entry in values['env'] if entry['name'] == key] == ['false']

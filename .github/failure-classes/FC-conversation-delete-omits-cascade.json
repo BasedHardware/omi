@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-conversation-delete-omits-cascade",
+  "family": "duplicated-implementation",
   "violated_contract": "Deleting a conversation from any client must also remove the memories extracted from that recording. The server still defaults cascade to false, so each client has to send cascade=true.",
   "canonical_prevention": "Windows cloud deletes share cloudConversationDeletePath, which sets cascade=true. Web deleteConversation sets the same flag. Both are covered by a regression test.",
   "evidence_prs": [],

@@ -45,6 +45,8 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        # Shared backend routes: keep the silence kill switch off on listen too.
+        BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -65,6 +67,9 @@ overlay:
         EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
         HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
+        OCCASION_CONVERSATIONS_ENABLED: {value: 'off', category: rollout}
         EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -314,6 +319,8 @@ overlay:
         EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
         HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+        # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+        EPISODES_ENABLED: {value: 'off', category: ops_kill}
         EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
         EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
         CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -591,6 +598,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Hold silent read skipping until the release-owner canary (review F1).
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -606,6 +615,8 @@ overlay:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
           HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -655,7 +666,7 @@ overlay:
           # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
           # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
           # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -983,6 +994,8 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          # Hold silent read skipping until the release-owner canary (review F1).
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -995,6 +1008,8 @@ overlay:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
           HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1022,11 +1037,15 @@ overlay:
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
           # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
           # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
@@ -1061,7 +1080,7 @@ overlay:
           # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
           # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
           # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1167,9 +1186,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -1409,6 +1425,8 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          # Hold silent read skipping until the release-owner canary (review F1).
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1421,6 +1439,8 @@ overlay:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
           HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1445,11 +1465,15 @@ overlay:
           HOME_PROCESSING_MAX_AGE_SECONDS: {value: '21600', category: config}
           BATCH_FINAL_PASS_ENABLED: {value: 'true', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted batch units park 2 h between admission re-checks instead of 30 min
           # (David 065da8, 2026-11-04; interim pending the upgrade-latency ruling). Authorize-compute
           # reads it per decision. Kill switch: '60' restores the short cycle; removing the line
@@ -1476,7 +1500,7 @@ overlay:
           # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
           # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
           # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":100,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":0}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":5,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":0,"usage_month_total":0,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":0,"bpp_owner_memo_enforce":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);
@@ -1571,9 +1595,6 @@ overlay:
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
             value: '48'
-            category: rollout
-          DREAM_STATE_PASS_MODE:
-            value: shadow
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1784,6 +1805,8 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          # Hold silent read skipping until the release-owner canary (review F1).
+          BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_PERCENT: {value: '100', category: rollout}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED_SERVE_UID_SHA256S: {value: '', category: rollout}
@@ -1796,6 +1819,8 @@ overlay:
           EPISODE_COMPOSE_TRANSCRIPT_READY_ENABLED: {value: 'true', category: ops_kill}
           HOME_SETTLED_EMPTY_WIRE_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED: {value: 'false', category: ops_kill}
+          # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set on.
+          EPISODES_ENABLED: {value: 'off', category: ops_kill}
           EPISODE_COMPOSE_ANCHORED_WAIT_ENABLED: {value: 'true', category: ops_kill}
           EPISODE_COMPOSE_SETTLED_TERMINAL_ENABLED: {value: 'true', category: ops_kill}
           CONVERSATION_NOTES_SCALED_DETAIL_ENABLED: {value: 'true', category: ops_kill}
@@ -1828,11 +1853,15 @@ overlay:
           # so its batch final pass can only fall back. Keep the URL absent here or re-enable the pass.
           BATCH_FINAL_PASS_ENABLED: {value: 'false', category: ops_kill}
           # Standing batch vendor route table (lead2 863cd6, David 49b7e4/065da8): compact JSON of
-          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1104b), pinned by
+          # backend/deploy/batch-pipeline/vendor_route_table.prod.json (en-overflow-1116), pinned by
           # tests/unit/test_batch_vendor_route_table_prod.py. Fresh English overflows to Modulate past
           # the GPU SLO; percent is the runtime ramp. Kill switches: BATCH_VENDOR_OVERFLOW_ENABLED /
           # BATCH_VENDOR_ROUTING_ENABLED = false. Removing the line serves the builtin table.
-          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1104b","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":3000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          BATCH_VENDOR_ROUTE_TABLE: {value: '{"schema_version":1,"table_version":"en-overflow-1116","selection":"ordered","gpu_floor_percent":0.0,"routes":{"gpu":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":null,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"modulate":{"price_usd_per_audio_hour":0.06,"daily_audio_hours_cap":5000.0,"monthly_budget_usd":null,"failover_only":false,"speaker_turns":"discard"},"soniox":{"price_usd_per_audio_hour":null,"daily_audio_hours_cap":1000.0,"monthly_budget_usd":null,"failover_only":true,"speaker_turns":"discard"}},"rows":[{"language_class":"en","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"gpu_supported","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]},{"language_class":"gpu_unsupported","options":[{"route":"modulate","quality_tier":"accepted","quality_source":"legacy_parity"},{"route":"soniox","quality_tier":"accepted","quality_source":"staging_drill"}]},{"language_class":"*","options":[{"route":"gpu","quality_tier":"accepted","quality_source":"legacy_parity"}]}]}', category: rollout}
+          # RECENT English also overflows while its own GPU backlog is past the SLO (David 2026-11-16,
+          # L4 stockout: ~35k RECENT ready, FRESH ~4). Modulate cap 3000 -> 5000 audio-h/day in the same
+          # ruling. Rollback: 'fresh' (today's FRESH-only overflow).
+          BATCH_VENDOR_OVERFLOW_PRIORITIES: {value: 'fresh,recent', category: config}
           # Allowance-exhausted provider-STT units park 24 h between admission re-checks on this service
           # (David 2026-11-13; interim until a plan change or renewal wakes held units). At 2 h, 83% of
           # provider-stt queue wakes were re-checks of units still refused. 86400 is the code's maximum;
@@ -1844,7 +1873,6 @@ overlay:
           # the staging bucket's lifecycle: repair stays available for as long as the audio can still be
           # fetched (a renewal on day 29 is still served), and an older row is never re-woken to fetch audio
           # that is gone (David 2026-11-13, D5). Removing the line restores 14.
-          BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS: {value: '30', category: reliability}
           # Plan C3 prod activation: new sr- obligations bind to /v2/enrichment/run on the enrichment queue,
           # served by backend-integration. Rows keep the binding they were created with, so the kill switch
           # ENRICHMENT_ROUTE=sync_handler never strands work (the old /v2/sync-jobs/run binding stays accepted).
@@ -1871,7 +1899,7 @@ overlay:
           # Monthly epoch stays c2fs_20261026_r1; base/GKE/jobs/desktop/dev stay 0/v1 (#24194 guard).
           # Privacy cache kill switch: set only privacy_negative_lookup_cache=0 in this full JSON literal.
           # Source-pin rollback: revert the pin change and regenerate runtime_env.yaml.
-          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":0,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":100,"batch_timeliness_leader":100}', category: rollout}
+          FIRESTORE_READ_LEVERS: {value: '{"action_items_page":100,"action_items_ttl120":100,"backfill_task_reads":100,"bpp_decision_cache":100,"bpp_generation_memo":100,"candidates_page":100,"canonical_statuses_dedupe":100,"conversation_list_cursor":100,"deletion_marker_cache":100,"finjob_candidate_queries":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"lifecycle_record_pending_head":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":100,"people_scan_dedupe":100,"privacy_checks_shadow":10,"privacy_ttl60":0,"queue_age_sample_budget":100,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"sync_snapshot_resolve_cache":100,"usage_month_cache":100,"usage_month_total":100,"privacy_negative_lookup_cache":0,"batch_timeliness_leader":100,"bpp_owner_memo_enforce":0}', category: rollout}
           FSR_USAGE_MONTH_TOTAL_EPOCH: {value: c2fs_20261026_r1, category: rollout}
           # Batch ladder 2026-10-29 (lead ruling 12:15Z): pin shadow 25 so a Cloud Run deploy
           # cannot reset the hand-applied ladder state again (11:13Z deploy reset incident);

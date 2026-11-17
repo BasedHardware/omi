@@ -5,6 +5,7 @@ Transcript grant checks still precede cache reads. Source behavior and audit
 outcomes stay shared by origin and cache paths.
 """
 
+from utils.conversations.layer import read_product as read_product_conversation
 from fastapi import HTTPException
 from typing import Any, Callable
 from utils import external_polling_cache as polling_cache
@@ -38,7 +39,7 @@ def read_conversation_item(
                 detail='Conversation ID not found or unknown conversation sub-route',
                 headers={'X-Omi-List-Cache': 'negative; max-age=10'},
             )
-        conversation = conversations_db.get_conversation(uid, conversation_id)
+        conversation = read_product_conversation(conversations_db.get_conversation, uid, conversation_id)
         if conversation is None and negative_key:
             polling_cache.remember_missing(cache_client(), negative_key)
         if not conversation or conversation.get('deleted', False):

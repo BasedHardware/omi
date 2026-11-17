@@ -445,7 +445,13 @@ class ProjectionFollowups:
                     return 'coalesced'
                 self.completion_attempts.add(key)
             try:
-                result = await run_blocking(postprocess_executor, self.projector.complete_content, segment, binding)
+                result = await run_blocking(
+                    postprocess_executor,
+                    self.projector.complete_content,
+                    segment,
+                    binding,
+                    silence=entry.get('result', {}).get('outcome') == 'silence',
+                )
             except BaseException:
                 # Failure/cancellation is not a readiness result. Another
                 # sibling in this page may immediately retry the probe.

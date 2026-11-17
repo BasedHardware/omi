@@ -297,6 +297,31 @@ final class DeviceConnectFailureShown extends RegisteredEvent {
   Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
 }
 
+enum DevicePairingSettingsOpenedFailureReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied");
+  const DevicePairingSettingsOpenedFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DevicePairingSettingsOpenedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DevicePairingSettingsOpenedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingSettingsOpened extends RegisteredEvent {
+  const DevicePairingSettingsOpened({required this.failureReason, required this.platform});
+  final DevicePairingSettingsOpenedFailureReason failureReason;
+  final DevicePairingSettingsOpenedPlatform platform;
+  @override
+  String get wireName => "Device Pairing Settings Opened";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
 enum DeviceConnectFailedErrorClass {
   timeout("timeout"),
   bluetoothOff("bluetooth_off"),
@@ -2510,7 +2535,8 @@ enum PaywallOpenedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2535,6 +2561,23 @@ final class PaywallOpened extends RegisteredEvent {
   String get wireName => "Paywall Opened";
   @override
   Map<String, Object> get properties => {"source": source.wireName, "current_plan": currentPlan.wireName};
+}
+
+enum FreeCapSheetChoiceChoice {
+  upgrade("upgrade"),
+  transcribeOnPhone("transcribe_on_phone"),
+  dismissed("dismissed");
+  const FreeCapSheetChoiceChoice(this.wireName);
+  final String wireName;
+}
+
+final class FreeCapSheetChoice extends RegisteredEvent {
+  const FreeCapSheetChoice({required this.choice});
+  final FreeCapSheetChoiceChoice choice;
+  @override
+  String get wireName => "Free Cap Sheet Choice";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
 }
 
 enum UpgradePlanSelectedPlan {
@@ -2582,7 +2625,8 @@ enum UpgradePlanSelectedSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -3056,7 +3100,8 @@ enum PaywallVariantShownSource {
   budget80("budget_80"),
   onboarding("onboarding"),
   ahaFirstSummary("aha_first_summary"),
-  freeCap("free_cap");
+  freeCap("free_cap"),
+  onPhoneBanner("on_phone_banner");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }

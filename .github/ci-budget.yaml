@@ -1066,7 +1066,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/build-image": {
-      "budget_p50_minutes": 8,
+      "budget_p50_minutes": 10,
       "display_name": "build-image",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1079,7 +1079,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Builds and pushes backend:<sha7> without deploying so listen-only fixes skip the backend train; estimate one per day, 5-minute placeholder p50.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1088,7 +1088,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/build-role-images": {
-      "budget_p50_minutes": 42,
+      "budget_p50_minutes": 44,
       "display_name": "build-role-images",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 1,
@@ -1101,7 +1101,7 @@
         "record_break_glass"
       ],
       "owner": "Backend platform (plan B role images)",
-      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-21 plan B B2 release train: runs only on a manual gcp_backend.yml mode=build-only dispatch from main (no PR runs); builds, probes and publishes the role images plus listen-edge and a fat-image baseline on the private base; 40-minute p50 budget; forecast at build-image's manual rate because every build-only dispatch runs both jobs B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1110,7 +1110,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/deploy": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 9,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1123,7 +1123,7 @@
         "record_break_glass"
       ],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Deploy job itself is unchanged; estimate one manual backend train per day.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1132,7 +1132,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/firestore_readiness": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 9,
       "display_name": "firestore_readiness",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1141,7 +1141,7 @@
       "matrix_size": 1,
       "needs": "validate-production-boundary",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Shared Release Eligibility admission for deploy and build-only; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-11-01 keyless index check: the gate now mints an OIDC token through the deploy pool as omi-ci-index-check@ instead of reading GCP_FIRESTORE_READONLY_CREDENTIALS; the job gains id-token: write and drops its empty-credential pre-check. No trigger, matrix, or runner change; auth cost is one STS exchange, so the budget is unchanged. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1149,8 +1149,26 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_backend.yml/operator-qualify-publish": {
+      "budget_p50_minutes": 16,
+      "display_name": "operator-qualify-publish",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 1,
+      "if": "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.inputs.environment == 'prod' && github.event.inputs.mode == 'operator-qualify-publish'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend platform / existing Omi Control Release",
+      "rationale": "David-approved 2026-11-16 source preparation only: one manual prod-gated native AMD64 exact-image qualification/publication mode on a standard ubuntu-24.04 runner. No PR/automatic runs, image rebuild, new capacity or dispatch authorized by this source change. Fifteen-minute initial planning budget and one potential operator run/day are unmeasured guard allowances; replace with real execution evidence after separately approved dispatch. Contract remains closed while registry authorization is unverified. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-24.04"
+    },
     "gcp_backend.yml/record_break_glass": {
-      "budget_p50_minutes": 8,
+      "budget_p50_minutes": 10,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1159,7 +1177,7 @@
       "matrix_size": 1,
       "needs": "firestore_readiness",
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Audit job runs only on a break-glass dispatch of either mode; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1168,7 +1186,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/repair-traffic": {
-      "budget_p50_minutes": 8,
+      "budget_p50_minutes": 10,
       "display_name": "repair-traffic",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0.1,
@@ -1177,7 +1195,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Traffic repair is unchanged and rare; estimate one per ten days.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. B5 (legacy-sync retirement M3) widens the trigger with the break_glass_lock input and prod-train concurrency; manual-only, no PR runs; the one-minute bump records the trigger change. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1186,7 +1204,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend.yml/validate-production-boundary": {
-      "budget_p50_minutes": 7,
+      "budget_p50_minutes": 9,
       "display_name": "validate-production-boundary",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1.1,
@@ -1195,7 +1213,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change.",
+      "rationale": "2026-10-20 build-only mode: manual dispatch only, outside the PR budget. Runs for deploy and build-only dispatches; estimate one per day across both.. 2026-10-21 plan B B2 adds the service_images dispatch input (role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change. B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input (requester identity on every dispatch; prod fails closed when empty); manual-only dispatches are unchanged in count, and the one-minute bump records the input change. 2026-11-15 SCA-2225 selector: conservative +1-minute p50 forecast for the parameterized dispatch surface, as required for workflow-dispatch input changes. Frequency, actual job/test timeouts, runners/matrices, global caps and activation remain unchanged; this is an estimate, not a measured speedup or permission for extra executions. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged. Proposed SCA-2225 combined-main accounting: retain a separate conservative one-minute selector dispatch-input allowance over the current operator-publication baseline; unchanged frequencies, execution timeouts, caps and activation.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2657,13 +2675,13 @@
       "budget_p50_minutes": 5,
       "display_name": "dispatch",
       "expected_runs_class": "non-pr",
-      "expected_runs_per_day": 7,
+      "expected_runs_per_day": 8,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day.",
+      "rationale": "4-hourly intraday rollout advance (cron 0 1,5,9,13,17,21 UTC = 6 dispatches/day, seconds each): python POST to the Codemagic builds API for the mobile-rollout-advance workflow. Advances only already-released rollouts; never builds or submits. 2026-10-20: a manual workflow_dispatch with capture_health_override (one-shot reason to advance past a capture-health HOLD) adds at most about one run a day. 2026-11-15: a frozen ladder fails this run instead of passing silently, and gate_freeze_override adds one more budgeted manual run a day for operator recovery while the dispatcher is paused.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4520,7 +4538,7 @@
     "gcp_backend.yml": {
       "name": "Deploy Backend to Cloud RUN",
       "owner": "CI maintainers",
-      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input.",
+      "rationale": "Manual-only backend deploy workflow. 2026-10-20 adds mode=build-only (image build and push, no deploy) alongside deploy and repair-traffic-only; no automatic trigger.. 2026-10-21 plan B B2 (named by David 2026-10-21): service_images input for mode=deploy role-image opt-in, and build-only also publishes the role images (build-role-images job). B5 (2026-10-19) adds the break_glass_lock dispatch input. 2026-10-26 dispatchtag adds the required requested_by dispatch input. 2026-11-15 SCA-2225: typed Cloud Run service selection narrows the existing manual deploy route; global serialization, schedule, jobs, runners, matrix, expected frequencies and global caps remain unchanged; job p50 forecasts are conservatively updated below for the dispatch-input inventory rule. No parallel activation or dispatch-frequency increase is authorized. 2026-11-16 David-approved operator-qualify-publish mode extends this existing manual-only workflow; no automatic or PR trigger added. The one-minute budget headroom change satisfies the reviewed dispatch-input inventory boundary; it is planning allowance, not observed extra runtime. Existing job conditions and forecast run counts are unchanged.",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4539,6 +4557,19 @@
               "default": "",
               "description": "Why the eligibility proof is unavailable (required with skip_eligibility_proof)",
               "required": "false"
+            },
+            "cloud_run_service": {
+              "default": "all",
+              "description": "Cloud Run deploy target; all retains the existing four-service path",
+              "options": [
+                "all",
+                "backend",
+                "backend-sync",
+                "backend-sync-backfill",
+                "backend-integration"
+              ],
+              "required": "false",
+              "type": "choice"
             },
             "deploy_gateway": {
               "default": "false",
@@ -4572,7 +4603,8 @@
               "options": [
                 "deploy",
                 "build-only",
-                "repair-traffic-only"
+                "repair-traffic-only",
+                "operator-qualify-publish"
               ],
               "required": "true",
               "type": "choice"
@@ -5787,7 +5819,7 @@
     "mobile_rollout_watch.yml": {
       "name": "Mobile rollout watch",
       "owner": "CI maintainers",
-      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD.",
+      "rationale": "Intraday half of the self-driving mobile release lane (see .github/agent-docs/mobile-release-process.md): every 4h dispatches the Codemagic mobile-rollout-advance workflow, which moves only ALREADY-RELEASED rollouts along the agreed 12h exposure profile (iOS phased jump to 100% after its 12h observation window, Android staged ladder hop 1->10->50->100% per 4h window). Dispatch-only ubuntu runner (~seconds), no build; 2026-10-17, operator-approved posture. 2026-10-20: manual workflow_dispatch with a capture_health_override input for a one-shot advance past a capture-health HOLD. 2026-11-15: a frozen ladder now fails the scheduled run instead of reporting a green no-op, and a gate_freeze_override input is the documented recovery path when the dispatcher is paused on purpose.",
       "triggers": {
         "schedule": [
           {
@@ -5799,6 +5831,11 @@
             "capture_health_override": {
               "default": "",
               "description": "Reason to advance past a capture-health HOLD for this run only; empty = no override",
+              "type": "string"
+            },
+            "gate_freeze_override": {
+              "default": "",
+              "description": "Reason to advance although no daily train succeeded in the last 26h; empty = stay frozen",
               "type": "string"
             }
           }

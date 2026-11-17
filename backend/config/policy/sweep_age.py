@@ -3,6 +3,8 @@
 import math
 import os
 
+from config.batch_pipeline_retention import LIFECYCLE_SECONDS
+
 DEFAULT_MAX_AGE_DAYS = 14.0
 
 
@@ -21,7 +23,9 @@ def _days(raw: str) -> float:
 
 def max_age_seconds(queue: str) -> float:
     if queue == 'provider-stt':
-        days = _days(os.getenv('BATCH_PIPELINE_PROVIDER_STT_SWEEP_MAX_AGE_DAYS', '14'))
+        # Recovery must reach the final provider recheck without exceeding audio retention.
+        # A separate day override could strand still-live inputs or outlive the bucket.
+        return float(LIFECYCLE_SECONDS)
     elif queue == 'enrichment-fresh':
         days = _days(os.getenv('BATCH_PIPELINE_ENRICHMENT_FRESH_SWEEP_MAX_AGE_DAYS', '14'))
     else:

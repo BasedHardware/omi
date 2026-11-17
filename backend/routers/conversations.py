@@ -12,7 +12,8 @@ import hashlib
 import os
 from contextlib import ExitStack, nullcontext
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks, Header
 from typing import Annotated, Any, Dict, List, Literal, Optional
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -163,7 +164,42 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+from config.conversations_v3 import conversations_v3_enabled
+from config.app_channel import APP_CHANNEL_HEADER, app_channel
+from utils.episodes import client_gate
+from models.conversation import ConversationsLiveResponse
+from utils.conversations.v3 import audio as v3_audio, summary as v3_summary
+
 router = APIRouter()
+
+
+@router.get('/v1/conversations/live', response_model=ConversationsLiveResponse, response_model_exclude_unset=True)
+def get_live_conversation(
+    uid: str = Depends(auth.get_current_user_uid), channel: Optional[str] = Header(None, alias=APP_CHANNEL_HEADER)
+):
+    if app_channel(channel) == 'beta':
+        client_gate.note_client_seen(uid)
+    enabled = conversations_v3_enabled(uid)
+    if not enabled:
+        return {'v3': False, 'conversation': None}
+    rows = conversations_db.get_conversations_without_photos(uid, limit=1, statuses=['in_progress'], hide_home=True)
+    row = next((r for r in rows if not r.get('recording')), None)
+    compact = (
+        {
+            key: row[key]
+            for key in ('id', 'structured', 'started_at', 'created_at', 'status', 'tile_state')
+            if key in row
+        }
+        if row
+        else None
+    )
+    if compact is not None:
+        compact['finished_at'] = row.get('finished_at')
+    if compact and 'structured' in compact:
+        compact['structured'] = {
+            key: compact['structured'][key] for key in ('title', 'emoji') if key in compact['structured']
+        }
+    return {'v3': True, 'conversation': compact}
 
 
 def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:
@@ -175,7 +211,9 @@ def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[st
         ) from error
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
+def _get_valid_conversation_by_id(
+    uid: str, conversation_id: str, *, follow_sync_bridge: bool = False, allow_recording: bool = False
+) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
@@ -191,6 +229,8 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+    if conversation.get('recording') and not allow_recording:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     _heal_locked_conversations_if_eligible(uid, [conversation])
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -500,7 +540,47 @@ class ConversationTestPromptResponse(BaseModel):
     summary: str
 
 
-@router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
+@router.post(
+    "/v1/conversations",
+    response_model=CreateConversationResponse,
+    responses={
+        404: {'description': 'No in-progress conversation was found'},
+        500: {
+            'description': 'Conversation processing failed',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {'detail': {'type': 'string'}},
+                    }
+                }
+            },
+        },
+        503: {
+            'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {
+                            'detail': {
+                                'type': 'object',
+                                'required': ['code', 'message'],
+                                'properties': {
+                                    'code': {'type': 'string', 'enum': ['conversation_processing_retryable']},
+                                    'message': {'type': 'string'},
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+        },
+    },
+    tags=['conversations'],
+)
 def process_in_progress_conversation(
     request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
@@ -558,7 +638,7 @@ def process_in_progress_conversation(
         bind_report = _carry_projection_bind_report(extra_updates)
         admitted = lifecycle_service.admit_processing(uid, conversation.id, extra_updates=extra_updates)
     if not admitted:
-        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        latest = _get_valid_conversation_by_id(uid, conversation.id, allow_recording=True)
         latest_conversation = deserialize_conversation(latest)
         # Losing the compare-and-swap still 200s, but must not silently drop a
         # valid projection. Hash-bind against the conversation actually stored
@@ -608,7 +688,7 @@ def process_in_progress_conversation(
             trigger=ProcessingTrigger.CLIENT_FINALIZE,
         )
     if not persisted:
-        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        latest = _get_valid_conversation_by_id(uid, conversation.id, allow_recording=True)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     # The durable finalizer's episode hook: tail notes and item reconciliation, off the request path.
     episode_finalize.schedule_after_finalization(uid, conversation.id, ProcessingTrigger.CLIENT_FINALIZE)
@@ -638,7 +718,7 @@ def finalize_conversation(
     "current in-progress" pointer, so desktop retry/rotation cannot accidentally
     finalize a newer recording.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, allow_recording=True)
     conversation = deserialize_conversation(conversation)
 
     if conversation.status != ConversationStatus.in_progress:
@@ -707,7 +787,7 @@ def finalize_conversation(
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
 
     if finalization['route'] == 'noop':
-        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = _get_valid_conversation_by_id(uid, conversation_id, allow_recording=True)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
 
     # Requiring Cloud Tasks keeps REST finalization off the pusher-only route.
@@ -748,7 +828,7 @@ def get_conversation_finalization_status(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    _get_valid_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id, allow_recording=True)
     status = lifecycle_service.get_finalization_status(uid, conversation_id)
     if status is None:
         raise HTTPException(status_code=404, detail='Conversation finalization job not found')
@@ -766,7 +846,40 @@ def get_conversation_finalization_status(
             'description': 'The selected app is disabled or not enabled by this user, or the conversation '
             'is already being processed (detail code conversation_processing_in_progress)'
         },
+        500: {
+            'description': 'Conversation processing failed',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {'detail': {'type': 'string'}},
+                    }
+                }
+            },
+        },
         502: {'description': 'The selected app produced no summary (detail code app_result_failed)'},
+        503: {
+            'description': 'Transient provider failure; the in-progress conversation is recoverable and may be retried',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'required': ['detail'],
+                        'properties': {
+                            'detail': {
+                                'type': 'object',
+                                'required': ['code', 'message'],
+                                'properties': {
+                                    'code': {'type': 'string', 'enum': ['conversation_processing_retryable']},
+                                    'message': {'type': 'string'},
+                                },
+                            }
+                        },
+                    }
+                }
+            },
+        },
     },
     tags=['conversations'],
 )
@@ -1050,6 +1163,17 @@ def get_conversations(
         budget=budget,
         list_fields_only=True,
         presentation=True,
+        include_recordings=status_filter == ['in_progress'],
+        capture_only=status_filter == ['in_progress'],
+        hide_home=not (
+            include_discarded
+            or sources
+            or start_date
+            or end_date
+            or folder_id
+            or starred is not None
+            or statuses != 'processing,completed'
+        ),
     )
 
     conversations = home_membership.project_list(
@@ -1136,6 +1260,16 @@ def get_conversations_count(
         folder_id=folder_id,
         starred=starred,
         sources=source_list,
+        include_recordings=status_list == ['in_progress'],
+        hide_home=not (
+            include_discarded
+            or source_list
+            or start_date
+            or end_date
+            or folder_id
+            or starred is not None
+            or status_list
+        ),
     )
     if source_list:
         # Echo the filter so clients can tell this backend applied it (older
@@ -1679,7 +1813,7 @@ def _delete_conversation_under_gate(
     tags=['conversations'],
 )
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_valid_conversation_by_id(uid, conversation_id)
+    _get_valid_conversation_by_id(uid, conversation_id, allow_recording=True)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
@@ -2688,7 +2822,7 @@ def merge_conversations(
 
     conversations = []
     for conv_id in request.conversation_ids:
-        conv = conversations_db.get_conversation(uid, conv_id)
+        conv = _get_valid_conversation_by_id(uid, conv_id)
         if conv is None:
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         conversations.append(conv)
@@ -2710,4 +2844,48 @@ def merge_conversations(
         warning=warning_message,
         conversation_ids=request.conversation_ids,
         merged_conversation_id=job['merge_target_id'],
+    )
+
+
+@router.get(
+    '/v1/conversations/{conversation_id}/summary/stream',
+    tags=['conversations'],
+    response_class=StreamingResponse,
+    responses={
+        200: {'content': {'text/event-stream': {'schema': {'type': 'string'}}}},
+        409: {
+            'description': 'Another summary writer holds the lease; poll conversation detail.',
+            'content': {
+                'application/json': {
+                    'schema': {
+                        'type': 'object',
+                        'properties': {'detail': {'type': 'string', 'const': 'summary_in_progress'}},
+                        'required': ['detail'],
+                    }
+                }
+            },
+        },
+    },
+)
+async def conversation_summary_stream(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    await run_blocking(db_executor, require_generated_compute, uid, 'conversation_v3_summary_open')
+    if conversation.get('v3_derived') and conversation.get('status') == 'in_progress':
+        from utils.conversations.v3.service import reconcile
+
+        try:
+            from utils.executors import start_background_task
+
+            work = start_background_task(
+                reconcile(uid, on_open=True, conversation_id=conversation_id), name='v3-reconcile-open'
+            )
+            await asyncio.wait_for(asyncio.shield(work), timeout=8)
+        except Exception as exc:
+            logger.warning('event=v3_on_open_reconcile outcome=stored exception_type=%s', type(exc).__name__)
+        conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
+    token = await v3_summary.prepare(uid, conversation)
+    return StreamingResponse(
+        v3_summary.stream(uid, conversation, token=token),
+        media_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache'},
     )

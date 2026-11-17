@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "id": "FC-archive-os-metadata-imported-as-content",
+  "family": "vendor-platform-behavior",
   "violated_contract": "An archive importer must enumerate only the user's export files. A ZIP re-compressed in macOS Finder adds a __MACOSX/ tree and ._<name> AppleDouble files beside every real file; the Limitless importer selected entries from zf.namelist() by path and extension alone, so ._<lifelog>.md entries were counted as lifelogs, failed UTF-8 decoding, and the job reported files failed with an inflated file count.",
   "canonical_prevention": "Drop OS archive metadata (any __MACOSX path component and ._ AppleDouble names) when the archive's entries are enumerated, before any counting, selection or reading, as the transcript-file importer does. A behavioural test imports an in-memory ZIP holding real files plus __MACOSX/ and ._ entries and asserts only the real files are counted and processed and no failures are reported.",
   "canonical_prevention_artifact": [

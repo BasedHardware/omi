@@ -4373,3 +4373,22 @@ def test_cloud_run_secret_alias_env_name_fallback_no_longer_resolves(checker, tm
     assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
     assert sync.status == 'DRIFT', sync
     assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_every_deployed_cloud_run_role_allows_only_its_live_release_stamp(checker, prod_declared):
+    state = {
+        'services': {
+            name: {
+                'env': [
+                    *({'name': key, 'value': 'synthetic'} for key in sorted(prod_declared[name])),
+                    {'name': 'OMI_BACKEND_RELEASE_SHA', 'value': 'a' * 40},
+                    {'name': 'UNEXPECTED_SYNTHETIC_KEY', 'value': 'synthetic'},
+                ]
+            }
+            for name in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
+        }
+    }
+    _, _, results = checker.inspect_services_drift(env='prod', manifest_path=PROD_MANIFEST, cloud_run_state=state)
+    for result in results:
+        assert 'OMI_BACKEND_RELEASE_SHA' in result.allowlisted_live_only
+        assert result.unallowlisted_live_only == ('UNEXPECTED_SYNTHETIC_KEY',)

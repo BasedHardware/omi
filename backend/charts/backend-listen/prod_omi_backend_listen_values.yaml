@@ -125,6 +125,11 @@ env:
     value: "true"
   - name: EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED
     value: "false"
+  # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set "on".
+  - name: EPISODES_ENABLED
+    value: "off"
+  - name: OCCASION_CONVERSATIONS_ENABLED
+    value: "off"
   - name: HOME_SETTLED_EMPTY_WIRE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
@@ -145,6 +150,12 @@ env:
     value: "true"
   - name: SYNC_RECORD_DECODE_FAILURE_MEMO
     value: "true"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}
@@ -234,6 +245,9 @@ env:
   # Separate listen roll after mobile batch-only 100; lead expands by 2026-11-03.
   - name: RECORD_SEAL_OVERLAP_TRIM_ENABLED
     value: "true"
+  # Shared backend routes remain held off until the margin-40 lead expands.
+  - name: BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED
+    value: "false"
   - name: BATCH_PIPELINE_SERVING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_WORKER_ENABLED

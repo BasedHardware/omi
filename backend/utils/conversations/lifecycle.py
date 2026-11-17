@@ -55,7 +55,10 @@ from utils.conversations.finalization_decision import (
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.terminal_relevance import stamp_terminal_decision
-from utils.llm.gateway_error_contract import is_byok_account_state_http_exception
+from utils.llm.gateway_error_contract import (
+    is_byok_account_state_http_exception,
+    is_retryable_processing_http_exception,
+)
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -161,6 +164,9 @@ def create_in_progress_conversation(
 ) -> bool:
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
+    from utils.conversations.v3.triggers import mark_new
+
+    mark_new(uid, conversation_data)
     if server_batch_requested:
         # The decorated reservation resolves a missing/None privacy level first.
         _reserve_batch_live_capture(
@@ -215,6 +221,9 @@ def ingest_sync_conversation(
     Existing lifecycle fields are preserved by the transactional append.
     """
     _require_status(incoming, ConversationStatus.completed)
+    from utils.conversations.v3.triggers import mark_new
+
+    mark_new(uid, incoming)
     checkpoint_hooks: dict[str, Any] = {}
     if recovery_checkpoint is not None:
         before, after = sync_cap_recovery.ingest_hooks(uid, recovery_checkpoint, incoming)
@@ -222,6 +231,10 @@ def ingest_sync_conversation(
     assigned, created, survivors = conversations_db.assign_sync_conversation(
         uid, incoming, candidate_id=candidate_id, target_id=target_id, **checkpoint_hooks
     )
+    if assigned.get('recording'):
+        from utils.conversations.v3.triggers import changed
+
+        changed(uid, assigned['id'])
     size_bucket = assigned.pop('_sync_projected_size_bucket', None)
     record_sync_intake_outcome(created=created, projected_size_bucket=size_bucket)
     if created:
@@ -542,11 +555,20 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
     thread.start()
     try:
         yield
-    except Exception as error:
+    except BaseException as error:
         # The composition boundary already logged a typed BYOK account-state halt
-        # by its bounded class; a traceback here would re-emit the chained
-        # provider error body for account state only the user can fix.
-        log_failure = logger.warning if is_byok_account_state_http_exception(error) else logger.exception
+        # or a retryable transient provider halt by its bounded class; a
+        # traceback here would re-emit the chained provider error body for a
+        # fault the caller is expected to retry.
+        log_failure = (
+            logger.warning
+            if (
+                not isinstance(error, Exception)
+                or is_byok_account_state_http_exception(error)
+                or is_retryable_processing_http_exception(error)
+            )
+            else logger.exception
+        )
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
@@ -1435,3 +1457,12 @@ def close_no_speech_capture(
         speech_basis='vad',
     )
     return committed
+
+
+def commit_v3_projection(uid, token, recordings, existing, rows, cache, *, clear_pending=True):
+    """The lifecycle owner delegates the atomic derived-row/claim transaction."""
+    from database import conversations_v3
+
+    return conversations_v3.commit_projection(
+        uid, token, recordings, existing, rows, cache, clear_pending=clear_pending
+    )

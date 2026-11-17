@@ -141,7 +141,7 @@ def commit_capture(
             sample_rate=int(metadata['sample_rate']),
         )
         CUSTODY_COMMITS.inc()
-        if framed and metadata.get('conversation_id'):
+        if metadata.get('conversation_id'):
             storage.invalidate_pack_index(bucket, uid, str(metadata['conversation_id']))
         return receipt
     except Exception:

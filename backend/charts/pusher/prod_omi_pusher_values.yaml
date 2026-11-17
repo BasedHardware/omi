@@ -141,10 +141,19 @@ env:
     value: "true"
   - name: EPISODE_EMPTY_MEMBER_CLEANUP_ENABLED
     value: "false"
+  # Episodes off in prod (product decision 2026-11-16). Rollback: remove or set "on".
+  - name: EPISODES_ENABLED
+    value: "off"
   - name: HOME_SETTLED_EMPTY_WIRE_ENABLED
     value: "true"
   - name: CONVERSATION_NOTES_SCALED_DETAIL_ENABLED
     value: "true"
+  - name: CONVERSATIONS_V3_STAGE
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_STAGE}
+  - name: CONVERSATIONS_V3_FIRST_APP_BUILD
+    valueFrom:
+      configMapKeyRef: {name: prod-omi-backend-config, key: CONVERSATIONS_V3_FIRST_APP_BUILD}
   - name: RECORD_TOKEN_LEASE_MODE
     valueFrom:
       configMapKeyRef: {name: prod-omi-backend-config, key: RECORD_TOKEN_LEASE_MODE}

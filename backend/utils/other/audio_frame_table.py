@@ -80,6 +80,8 @@ def _manifest(
     pinned = int(generation or blob.generation)
     if pinned <= 0:
         raise ValueError('frame manifest requires generation')
+    if blob.size is None or blob.size > MAX_MANIFEST_BYTES:
+        raise ValueError('frame manifest exceeds read bound')
     raw = blob.download_as_bytes(if_generation_match=pinned, timeout=io_timeout(deadline), retry=None)
     if len(raw) > MAX_MANIFEST_BYTES:
         raise ValueError('frame manifest exceeds read bound')
@@ -154,11 +156,15 @@ def gapped_frames(bucket, blob, uid: str, *, deadline=None, metadata=None) -> tu
     internal gaps are unknowable without it.
     """
     prefix = f'audio-outbox/{uid}/{media_name(blob.name, uid)}/'
-    candidates = [
-        candidate
-        for candidate in bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)
-        if (candidate.metadata or {}).get('format') == 'audio-custody-manifest-v1'
-    ]
+    candidates = []
+    for index, candidate in enumerate(bucket.list_blobs(prefix=prefix, timeout=io_timeout(deadline), retry=None)):
+        io_timeout(deadline)
+        if index >= MAX_FRAMES:
+            raise TimeoutError('capture manifest listing budget exhausted')
+        if (candidate.metadata or {}).get('format') == 'audio-custody-manifest-v1':
+            candidates.append(candidate)
+            if len(candidates) > 1:
+                break
     if len(candidates) != 1:
         raise ValueError('gapped capture has no unique custody manifest')
     return unframed_frames(bucket, blob, uid, candidates[0].name, deadline=deadline, metadata=metadata)

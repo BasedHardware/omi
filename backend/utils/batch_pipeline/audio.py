@@ -20,6 +20,7 @@ class AudioUnit:
     stored_capture_at: float | None = None
     # Original source identity for receipt imports; never a synthetic time key.
     recovery_id: str | None = None
+    source_reuse_key: str | None = None
 
 
 def audio_unit(capture_at: float, pcm: bytes) -> AudioUnit:

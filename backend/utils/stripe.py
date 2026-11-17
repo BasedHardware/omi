@@ -20,6 +20,18 @@ base_url = os.getenv('BASE_API_URL')
 if base_url and not base_url.startswith(('http://', 'https://')):
     base_url = 'https://' + base_url
 
+# Checkout's own price line must render the same currency string the app shows.
+# The app formats every purchase amount as an explicit, locale-independent
+# "US$269.91" (app/lib/utils/billing_price.dart). Stripe renders the same USD
+# amount differently per session locale: 'en' -> "$269.91", 'de' -> "269,91 $",
+# 'en-GB' -> "US$269.91". With 'auto' the cart followed the buyer's browser
+# language, so a reviewer comparing the offer page against the cart saw a
+# currency difference; Google Play rejected Android 1.0.587 (code 1560) for
+# exactly that ("Currency differences with prominent display price"). Pinning
+# the locale makes the cart deterministic and identical to the app. Verified
+# against live Checkout renders for en, en-GB and de on 2026-11-16.
+CHECKOUT_LOCALE = 'en-GB'
+
 
 def create_product(name: str, description: str, image: str):
     """Create a new product in Stripe."""
@@ -243,8 +255,9 @@ def create_subscription_checkout_session(
             ],
             'mode': 'subscription',
             'currency': currency,
-            # Language only; this does not choose or convert the currency.
-            'locale': 'auto',
+            # Pinned, not 'auto': the cart must render the same currency string
+            # the app shows (see CHECKOUT_LOCALE). Language follows the pin.
+            'locale': CHECKOUT_LOCALE,
             'success_url': success_url,
             'cancel_url': cancel_url,
             'metadata': dict(metadata),

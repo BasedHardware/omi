@@ -51,8 +51,16 @@ class MemoryL1Reason(StrEnum):
     UNKNOWN = 'unknown'
 
 
+class NotesQualityRepairReason(StrEnum):
+    UNKNOWN = 'unknown'
+    CAPTURE_AVAILABILITY = 'capture_availability'
+    EMPTY_HEADING = 'empty_heading'
+
+
 class ReasonFamily(StrEnum):
+    AUDIO_RAW = 'audio_raw'
     MEMORY_L1 = 'memory_l1'
+    OWNER_RECOGNITION = 'owner_recognition'
     PUSHER_PCM = 'pusher_pcm'
     LIVE_STT = 'live_stt'
     WORKER_VALIDATION = 'worker_validation'
@@ -72,6 +80,7 @@ class ReasonFamily(StrEnum):
     SPEAKER_EVIDENCE = 'speaker_evidence'
     NOTES_AGENT_FORCE = 'notes_agent_force'
     NOTES_AGENT_TRANSPORT = 'notes_agent_transport'
+    NOTES_QUALITY_REPAIR = 'notes_quality_repair'
     SYNC_DISPATCH = 'sync_dispatch'
     SYNC_CAPTURE_TIME = 'sync_capture_time'
     SYNC_BRIDGE_CONTAINMENT = 'sync_bridge_containment'
@@ -92,6 +101,64 @@ class ReasonFamily(StrEnum):
     LISTEN_NO_AUDIO_CLOSE = 'listen_no_audio_close'
     DUE_MARKER_SWEEP = 'due_marker_sweep'
     RECORD_SEAL_REPAIR = 'record_seal_repair'
+
+
+class OwnerRecognitionProofReason(StrEnum):
+    """Original-unit proof refusals; never identifiers or exception text."""
+
+    UNKNOWN = 'unknown'
+    NO_JOB = 'no_job'
+    NO_RESULT = 'no_result'
+    JOB_OWNER_MISMATCH = 'job_owner_mismatch'
+    JOB_UNIT_MISMATCH = 'job_unit_mismatch'
+    BINDING_OWNER_MISMATCH = 'binding_owner_mismatch'
+    RECEIPT_MISSING = 'receipt_missing'
+    ARTIFACT_ROW_MISSING = 'artifact_row_missing'
+    ARTIFACT_CLEANED = 'artifact_cleaned'
+    ARTIFACT_KIND_MISMATCH = 'artifact_kind_mismatch'
+    ARTIFACT_OWNER_MISMATCH = 'artifact_owner_mismatch'
+    ARTIFACT_UNIT_MISMATCH = 'artifact_unit_mismatch'
+    GENERATION_MISMATCH = 'generation_mismatch'
+    ERASURE = 'erasure'
+    URI_MISMATCH = 'uri_mismatch'
+    SKIPPED_EXPIRED = 'skipped_expired'
+    SKIPPED_MERGED = 'skipped_merged'
+    SKIPPED_SHARED_UNIT = 'skipped_shared_unit'
+    PROJECTION_SEGMENT_MISSING = 'projection_segment_missing'
+    PROJECTION_TEXT_MISMATCH = 'projection_text_mismatch'
+    PROJECTION_POINT_WORDS = 'projection_point_words'
+    PROJECTION_UNASSIGNED_WORDS = 'projection_unassigned_words'
+    UNIT_PCM_FORMAT = 'unit_pcm_format'
+    UNIT_DURATION = 'unit_duration'
+    ENDPOINT_UNCONFIGURED = 'endpoint_unconfigured'
+    PRIVATE_CLOUD_DISABLED = 'private_cloud_disabled'
+    INVENTORY_PAIR_MISMATCH = 'inventory_pair_mismatch'
+    INVENTORY_COUNT_MISMATCH = 'inventory_count_mismatch'
+    DECODED_COVERAGE_HOLE = 'decoded_coverage_hole'
+    DECODED_OVERLAP = 'decoded_overlap'
+    DECODED_DURATION_MISMATCH = 'decoded_duration_mismatch'
+    MANIFEST_UNVALIDATED = 'manifest_unvalidated'
+    NO_PROVEN_WINDOW = 'no_proven_window'
+    UNCOVERED_WINDOW = 'uncovered_window'
+    GLOBAL_MANIFEST_AMBIGUITY = 'global_manifest_ambiguity'
+    STALE_GENERATION = 'stale_generation'
+    READ_BUDGET = 'read_budget'
+    OTHER = 'other'
+
+
+class OwnerRecognitionFinalPassOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    DISABLED = 'disabled'
+    INELIGIBLE = 'ineligible'
+    ADMITTED = 'admitted'
+    DEPENDENCY_UNAVAILABLE = 'dependency_unavailable'
+
+
+class OwnerRecognitionBatchEmbeddingOutcome(StrEnum):
+    UNKNOWN = 'unknown'
+    ATTEMPTED = 'attempted'
+    SUCCESSFUL = 'successful'
+    CACHED = 'cached'
 
 
 class RecordSealRepairRunOutcome(StrEnum):
@@ -118,6 +185,19 @@ class PusherPcmStage(StrEnum):
     UNKNOWN = 'unknown'
     LIVE = 'live'
     TAIL = 'tail'
+
+
+class RawPackExclusionReason(StrEnum):
+    UNKNOWN = 'unknown'
+    ARRIVAL_CLOCK = 'arrival_clock'
+    DISABLED = 'disabled'
+    BOUNDS = 'bounds'
+    CHANNELS = 'channels'
+    CODEC = 'codec'
+    LAYOUT = 'layout'
+    MISSING_MANIFEST = 'missing_manifest'
+    AMBIGUOUS_MANIFEST = 'ambiguous_manifest'
+    INVALID = 'invalid'
 
 
 class PusherPcmErrorReason(StrEnum):
@@ -228,6 +308,7 @@ class CaptureEndProofOutcome(StrEnum):
     NO_SPEECH_CLOCK = 'no_speech_clock'
     RESUMED = 'resumed'
     CLOCK_UNKNOWN = 'clock_unknown'
+    SEALED = 'sealed'
 
 
 class UploadTraceGateReason(StrEnum):

@@ -64,6 +64,7 @@ async def upload(
     unit_count=1,
     paths=(),
     record_origin=False,
+    batch_percent=0.0,
 ):
     """Run a new sync upload through intake; staging raises so admission stops at custody."""
     staged = []
@@ -79,15 +80,18 @@ async def upload(
     conversation_id = 'synthetic-conversation' if conversation_language is not None else None
 
     def authorize(store, seed, snapshots):
-        snapshots['user'] = {
-            'language': user_language,
-            'transcription_preferences': {'single_language_mode': single},
-        }
-        if conversation_id:
-            row = {'language': conversation_language}
-            if owner:
-                row['record_lane_owner'] = owner
-            snapshots['conversations'] = {conversation_id: row}
+        # The probe guard asks for a decision only (snapshots=None); intake asks
+        # for the row export it consumes.
+        if snapshots is not None:
+            snapshots['user'] = {
+                'language': user_language,
+                'transcription_preferences': {'single_language_mode': single},
+            }
+            if conversation_id:
+                row = {'language': conversation_language}
+                if owner:
+                    row['record_lane_owner'] = owner
+                snapshots['conversations'] = {conversation_id: row}
         return ProtectionContext('standard', 0)
 
     def stage(work, body):
@@ -121,7 +125,7 @@ async def upload(
         conversation_id=conversation_id,
         client_device_id=None,
         client_platform='ios',
-        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=record_origin, batch_percent=batch_percent),
         evidence=evidence,
     )
     return response, staged, probe

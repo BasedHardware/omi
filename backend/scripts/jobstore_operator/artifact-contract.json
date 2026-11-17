@@ -1,0 +1,54 @@
+{
+  "repository": "BasedHardware/omi",
+  "source_sha": "97074e78defa1a84b9d39c021e28aa70cf4f2e4e",
+  "source_tree": "25c38ee2fa9caff96ce6b920fd4f0843e80d6ad0",
+  "build_inputs_sha256": "b31b54686ca5c29d5ee0d22d4c8e5ba493f52c2c329d55204e24c18d345f04bc",
+  "supervisor_sha256": "1b6a0a1ed5ca8dbc7f8087ae51441539a8aa9b4f4da2171932e2f08af9de699f",
+  "oci_manifest_digest": "sha256:a79982bb85f0d612c256041493339c147d50869d6734f0862e4082d184e82d99",
+  "archive_sha256": "6fbb5975d2dcc0099dfa443dcdc12aa1c4e239f7511bb461eff9e59121a8772b",
+  "archive_bytes": 3514784256,
+  "parts": [
+    {
+      "name": "operator.oci.tar.part-000",
+      "bytes": 1800000000,
+      "sha256": "7a09d3f6fb4b6505407c7ae777ce2774a0f6c92f286f4da93903e285188553f8",
+      "asset_id": 756110156
+    },
+    {
+      "name": "operator.oci.tar.part-001",
+      "bytes": 1714784256,
+      "sha256": "f0e2f9b2b198283ab92d0b980a5766005db3aa52680ba716b6d6922824ea065e",
+      "asset_id": 756110162
+    }
+  ],
+  "fixture": {
+    "name": "operator-fixtures.tar.gz",
+    "bytes": 39551,
+    "sha256": "0c633aeaa66f47f8ffbcd5d1b8df3c28550e07d00e85eb68dca23d7ca8cab441",
+    "asset_id": 756110158
+  },
+  "release_tag": "jobstore-operator-input-a79982bb85f0",
+  "release_id": 447481682,
+  "asset_ids": [
+    756110156,
+    756110162,
+    756110158
+  ],
+  "native_qualification": null,
+  "registry_write_authorization": null,
+  "required_disposable_free_bytes": 20963197952,
+  "destination": "gcr.io/based-hardware/jobstore-reconcile-operator",
+  "status": "REVIEWED_EXACT_INPUTS_FOR_GUARDED_PUBLICATION",
+  "loaded_tag": "omi-jobstore-operator:root-97074-readiness-config-20261116-credentialfree",
+  "registry_access_evidence": {
+    "decision": "REVIEWED_EXISTING_ALLOW_AND_TRUST_FOR_BOUNDED_ATTEMPT",
+    "repository": "gcr.io/based-hardware/jobstore-reconcile-operator",
+    "iam_resource": "projects/based-hardware/locations/us/repositories/gcr.io",
+    "principal": "omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com",
+    "effective_authorization": "UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS",
+    "allow_policy_receipt_sha256": "86bdb76a0b57dc383cfc64a21c937df417627449c5e6d143b35e53ad12d4eeed",
+    "wif_metadata_receipt_sha256": "9514752dee8ebf61b40a7faab48946bdaed54d21d0e3f3d274a572bc689f0aa1",
+    "sa_trust_receipt_sha256": "45706b58f3972a31e7e8a9f7edb254b5a04cf9b6b0b851c359e4c50a64d69243"
+  },
+  "readiness_sha256": "28d07dc7a0eb8aee4e4f5df721fbfa5988ebf2ac64aa5d2b696b815db1277055"
+}

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as path;
@@ -26,6 +27,9 @@ class RecordingInventoryRow {
   final String? owner;
   final bool rebase;
 }
+
+/// Concurrent stats per batch while walking a recordings directory.
+const _statConcurrency = 64;
 
 class _Metadata {
   _Metadata(this.filePath, this.kind, this.bytes, this.modifiedMs, this.changedMs);
@@ -258,32 +262,38 @@ Future<Map<String, Object?>> captureRecordingInventory(
   final directoryErrors = <int>[];
   var statErrors = 0, linksSkipped = 0;
   for (var i = 0; i < roots.length; i++) {
+    final files = <File>[];
     try {
       await for (final entry in Directory(roots[i]).list(followLinks: false)) {
         if (entry is Link) {
           linksSkipped++;
           continue;
         }
-        if (entry is! File) continue;
-        final name = path.basename(entry.path), kind = _kind(path.basename(entry.path));
-        try {
-          final stat = await entry.stat();
-          if (stat.type != FileSystemEntityType.file) {
-            statErrors++;
-            continue;
-          }
-          final value = _Metadata(path.normalize(entry.path), kind ?? (_audio(name) ? 'audio' : 'other'), stat.size,
-              stat.modified.millisecondsSinceEpoch, stat.changed.millisecondsSinceEpoch);
-          // Stat all regular files so a referenced legacy name is not falsely
-          // called missing merely because it predates today's audio prefix.
-          audio[value.filePath] = value;
-          if (kind != null) metadata.add(value);
-        } catch (_) {
-          statErrors++;
-        }
+        if (entry is File) files.add(entry);
       }
     } catch (_) {
       directoryErrors.add(i);
+    }
+    // Stat in bounded parallel batches. Awaiting one stat at a time costs an
+    // I/O-service round trip per file: with ~164k leaked audio files in
+    // Documents that alone took ~40 s of the diagnostics export.
+    for (var start = 0; start < files.length; start += _statConcurrency) {
+      final batch = files.sublist(start, min(start + _statConcurrency, files.length));
+      final stats = await Future.wait(batch.map((f) => f.stat().then<FileStat?>((s) => s, onError: (_) => null)));
+      for (var j = 0; j < batch.length; j++) {
+        final entry = batch[j], stat = stats[j];
+        if (stat == null || stat.type != FileSystemEntityType.file) {
+          statErrors++;
+          continue;
+        }
+        final name = path.basename(entry.path), kind = _kind(name);
+        final value = _Metadata(path.normalize(entry.path), kind ?? (_audio(name) ? 'audio' : 'other'), stat.size,
+            stat.modified.millisecondsSinceEpoch, stat.changed.millisecondsSinceEpoch);
+        // Stat all regular files so a referenced legacy name is not falsely
+        // called missing merely because it predates today's audio prefix.
+        audio[value.filePath] = value;
+        if (kind != null) metadata.add(value);
+      }
     }
   }
   final buckets = Map<String, List<RecordingInventoryRow>>.of(memoryBuckets);

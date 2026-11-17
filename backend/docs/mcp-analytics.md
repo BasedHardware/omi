@@ -99,6 +99,34 @@ complete. The rate comes from `MCP_TOOL_CALL_USER_SAMPLE_RATE` (default
 back to the default. Sampling fails open — a misconfigured sampler never
 blocks tool calls.
 
+## Per-tool Prometheus metrics
+
+`MCP Tool Call` is sampled per user and has no response size. Every hosted
+`tools/call` also updates these unsampled series
+(`backend/utils/mcp_server/tool_metrics.py`). Every label is bounded: `tool` is allowlisted to
+the registry (anything else is `unknown`), and `client` is the analytics client family
+(`chatgpt`, `claude`, `other_registered`, `api_key`, `unknown`). REST twins are not counted.
+
+| Series | Labels | Meaning |
+| --- | --- | --- |
+| `omi_mcp_tool_calls_total` | `tool`, `client`, `outcome`, `error_category` | Every tools/call; `error_category` adds `capped` (daily cap or usage budget) to the PostHog set |
+| `omi_mcp_tool_duration_seconds` | `tool` | Wall time from admission to result (buckets to 120s; calls rejected before dispatch are not observed) |
+| `omi_mcp_tool_response_chars` | `tool` | Compact JSON characters in a successful result |
+| `omi_mcp_tool_truncated_results_total` | `tool` | Successful results with `truncated=true` (more to page) |
+
+```promql
+# Error rate by tool
+sum by (tool) (rate(omi_mcp_tool_calls_total{outcome="error"}[1h]))
+  / sum by (tool) (rate(omi_mcp_tool_calls_total[1h]))
+
+# p95 latency by tool
+histogram_quantile(0.95, sum by (tool, le) (rate(omi_mcp_tool_duration_seconds_bucket[1h])))
+
+# Share of detail reads that were cut short and need another page
+sum(rate(omi_mcp_tool_truncated_results_total{tool="get_conversation_by_id"}[1d]))
+  / sum(rate(omi_mcp_tool_calls_total{tool="get_conversation_by_id",outcome="success"}[1d]))
+```
+
 ## `MCP Active`
 
 At most one event per UID + normalized client per UTC day. A Redis marker
