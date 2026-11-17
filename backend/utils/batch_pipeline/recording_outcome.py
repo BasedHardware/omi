@@ -41,8 +41,8 @@ class RecordingOutcome:
         self._refresh_lock = threading.Lock()
         self._due = 0.0
         self._observed = None
-        self._counts = None
-        self._sample_time = None
+        # (finished, transcribed, summarized, sample unix time) from the last successful triple.
+        self._counts: tuple[int, int, int, float] | None = None
         self._active = False
         registry.register(self)
 
@@ -73,9 +73,8 @@ class RecordingOutcome:
                 sample_time = time.time()
                 counts = recording_outcome_counts(store.client, sample_time)
                 with self._lock:
-                    self._counts = counts
+                    self._counts = (*counts, sample_time)
                     self._observed = time.monotonic()
-                    self._sample_time = sample_time
             except Exception as error:
                 # A failed triple withdraws the counts (never a fresh zero); the age keeps advancing.
                 with self._lock:
@@ -91,14 +90,14 @@ class RecordingOutcome:
             if not enabled() or not self._active or self._observed is None:
                 return
             age = max(0.0, time.monotonic() - self._observed)
-            values = {'sample_age_seconds': age}
+            values: dict[str, float] = {'sample_age_seconds': age}
             if self._counts is not None and age < EXPIRY_SECONDS:
-                finished, transcribed, summarized = self._counts
+                finished, transcribed, summarized, sample_time = self._counts
                 values.update(
                     finished_window_total=finished,
                     transcribed_window_total=transcribed,
                     summarized_window_total=summarized,
-                    sample_timestamp_seconds=self._sample_time,
+                    sample_timestamp_seconds=sample_time,
                 )
         for name, value in values.items():
             yield GaugeMetricFamily(PREFIX + name, METRICS[name], value=value)
