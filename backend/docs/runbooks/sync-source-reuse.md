@@ -171,3 +171,8 @@ Proposed operator dry run, not an automatically enabled reprocessor:
 No historical reprocessor is run by this change. A packet containing only
 source/time associations and no exact source proofs yields zero proved
 historical exclusions, regardless of its overlap opportunity estimate.
+
+Removal: the job-marker inheritance is a mixed-version bridge. Each admission increments
+`omi_fallback_total{component="sync_dispatch",from_mode="row_source_marker",to_mode="job_source_marker"}`.
+Once the GPU worker runs a merger that copies the markers and that series has stayed at 0 for 7 days with no
+pending unmarked protocol-2 rows, delete the inheritance branch in `source_reader_marked`.
