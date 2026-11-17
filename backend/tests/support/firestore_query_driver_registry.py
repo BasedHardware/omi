@@ -158,6 +158,8 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_conversation_purge_scans._claim': '84a439fd65b361a8ed3e02277a67fa29a8ed61354d40a67577d1557aa4328c1e',
+    'database.batch_pipeline_conversation_purge_scans.run_job': 'c64db666e4ed7ba093b61c298efc276d72d9a1ee14bfa6b0f14f8d9dfb8ecea8',
     'database.batch_pipeline_store.FirestoreStore.protected_retries': 'b55d2960c94057cb8df9b9cdd2e7728b6af63728bc0a2cb6f5bd333efed443a2',
     'database.batch_pipeline_store.FirestoreTransaction.protected_ready': 'c722019b927498cd74c6d5c4d3e52506c4e1318ef5ae74da4ddd17af978ae564',
     'database.batch_census_export._filtered': '6bac588e6afae4b032a876bd6944c4e0a6ec9e5f6ef9a37a0a744ddc940cf4e7',
@@ -407,6 +409,27 @@ _add(
         domains={'collection': ['conversation_batch_purge_jobs', 'conversation_erasure_jobs']},
     )
 )
+# Sealed owner groups use an existing single-field uid index on obligations.
+_add(
+    DriverEntry(
+        'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+        base={'uid': UID},
+    )
+)
+for _name in ('_claim', 'run_job'):
+    _function = 'database.batch_pipeline_conversation_purge_scans.' + _name
+    _add(
+        CoveredByEntry(
+            _function,
+            covered_by=(
+                'database.batch_pipeline_conversation_purge_scans.owner_candidates',
+                'database.conversation_batch_purge_jobs.segment_records',
+            ),
+            reason='delegates owner discovery to owner_candidates and member journals to segment_records',
+            expect_observed=False,
+            body_digest=BODY_DIGEST[_function],
+        )
+    )
 # Its durable per-segment erasure work: one equality filter inside a single obligation.
 _add(
     DriverEntry(

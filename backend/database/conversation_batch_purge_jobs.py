@@ -107,7 +107,13 @@ def accept_fields(
 def arm_fields(uid: str, conversation_id: str, now: datetime | None = None) -> dict[str, Any]:
     """Fields a delete writes (merge) next to its tombstone; generation/attempts/progress survive re-arms."""
     current = now or _now()
-    return {'uid': uid, 'conversation_id': conversation_id, 'due_at': current, 'armed_at': current}
+    return {
+        'uid': uid,
+        'conversation_id': conversation_id,
+        'due_at': current,
+        'armed_at': current,
+        'arm_revision': uuid4().hex,
+    }
 
 
 def _in_transaction(client: Any, body: Callable[[Any], Any]) -> Any:

@@ -8,6 +8,7 @@ import logging
 import os
 
 KILL_SWITCHES = {
+    'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED': True,
     'BATCH_ALLOWANCE_PARK_ENABLED': True,
     'BATCH_PIPELINE_FRESH_GUARD_ENABLED': True,
     'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED': True,
@@ -100,6 +101,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
         'BATCH_PIPELINE_DELIVERED_SHARE_ENABLED',
     }:
         enabled = value not in {'false', '0', 'off', 'no'}
+    elif name == 'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED':
+        enabled = value not in {'false', '0', 'off', 'no'}
     elif name == 'PARAKEET_WINDOW_STRANDED_DRIFT_SETTLE_ENABLED':
         enabled = value not in {'false', '0', 'off'}
     else:
@@ -109,6 +112,7 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None, log: bool 
     # Preserve the explicit off-only controls and true-only pump selector
     # in every parser mode.
     if name not in {
+        'CONVERSATION_BATCH_PURGE_COALESCING_ENABLED',
         'BATCH_ALLOWANCE_PARK_ENABLED',
         'BATCH_PIPELINE_SERVING_PROJECTION_SWEEP',
         'BATCH_PIPELINE_PROJECTION_PUMP_ENABLED',
