@@ -201,6 +201,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
     List<String> legacyFiles = const [],
     String legacyJobs = '',
     String corruptLegacyJobs = '',
+    bool legacyPreferencesComplete = true,
     OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
     int? freeBytes}) async {
   final started = DateTime.now().millisecondsSinceEpoch;
@@ -427,7 +428,9 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
       'orphan_scope': 'unreferenced_by_readable_indexes_journals_preferences_and_memory_snapshot',
       'audio_file_scope': 'audio_prefix_bin_part_torn_and_wav',
       'local_only_history': buckets.values.expand((rows) => rows).any((r) => r.onDeviceOnly || r.holdForUser),
-      'orphan_census_complete': unreadable == 0 &&
+      'legacy_preferences_complete': legacyPreferencesComplete,
+      'orphan_census_complete': legacyPreferencesComplete &&
+          unreadable == 0 &&
           invalidRows == 0 &&
           unresolvedReferences == 0 &&
           changed == 0 &&
@@ -498,6 +501,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
         List<String> legacyFiles = const [],
         String legacyJobs = '',
         String corruptLegacyJobs = '',
+        bool legacyPreferencesComplete = true,
         OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
         int? freeBytes}) async =>
     (await captureRecordingCensus(
@@ -509,6 +513,7 @@ Future<Map<String, Object?>> captureRecordingInventory(
             legacyFiles: legacyFiles,
             legacyJobs: legacyJobs,
             corruptLegacyJobs: corruptLegacyJobs,
+            legacyPreferencesComplete: legacyPreferencesComplete,
             frameCache: frameCache,
             freeBytes: freeBytes))
         .summary;

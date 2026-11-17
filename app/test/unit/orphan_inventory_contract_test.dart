@@ -27,5 +27,7 @@ void main() {
         reason: 'support diagnostics must expose the same recovery classification');
     expect((result['orphan_classification'] as Map)['classes']['recoverable']['count'], 1);
     expect(jsonEncode(result), isNot(contains('private')));
+    expect(jsonEncode(result), isNot(contains(dir.path)));
+    expect(jsonEncode(result), isNot(contains('audio_private-device_')));
   });
 }

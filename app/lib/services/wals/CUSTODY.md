@@ -284,7 +284,14 @@ inventory census runs outside the capture queue and includes active, retired,
 foreign, main, backup, temporary and quarantined rows, batch journals, native
 owner receipts, legacy jobs/preferences, ring checkpoint/download refs and
 capture-committed journals (including temporary files). Unreadable, invalid,
-changed or unresolved census sources prevent adoption. Ring receipts reserve
+changed or unresolved census sources prevent adoption. Wrong-typed or quarantined
+legacy preference inputs also make the census incomplete; recovery and support
+export share one raw, read-only preference snapshot. That snapshot is compared
+again at admission. Consent reads never repair unknown types to cloud defaults:
+non-string STT settings, wrong-typed policy booleans and archived consent preserve
+a hold. Ring checkpoints must match the known version and full range/reference
+schema, including batch-session chunks and download receipts; unknown keys,
+versions or skipped malformed entries block certainty. Ring receipts reserve
 local files; capture receipts are read for owner history, never inferred as a
 file-bound server receipt for a rowless orphan.
 

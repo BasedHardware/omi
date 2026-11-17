@@ -33,7 +33,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
     final generation = _sessionGeneration, uid = SharedPreferencesUtil().uid;
     RecordingOrphanCensus? census;
     final counts = <String, int>{};
-    var result = 'completed';
+    var result = 'completed', published = false;
     String? fence() {
       if (!_isCurrent(generation) || uid.isEmpty || uid != SharedPreferencesUtil().uid) return 'generation_changed';
       if (_headlessIndexLoad) return 'headless';
@@ -65,12 +65,10 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         result = fence() ?? 'completed';
         if (result != 'completed') return;
       }
+      final legacyPreferences = RecordingInventoryPreferences.capture(prefs.getKeys(), prefs.get);
       if (_orphanCensusOverride != null) {
         census = await _orphanCensusOverride!();
       } else {
-        String text(String key) => prefs.get(key) is String ? prefs.get(key)! as String : '';
-        final configured = text('batchAudioDir');
-        final legacy = prefs.get('flash_page_pending_uploads');
         // The full stat walk, JSON and frame parsing never hold _bufferQueue.
         census = await captureRecordingCensus(
             documents: documents.path,
@@ -78,10 +76,11 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             phoneSeconds: _now().millisecondsSinceEpoch ~/ 1000,
             currentOwner: uid,
             frameCache: _orphanFrameCache,
-            additionalDirectories: configured.isEmpty ? [] : [configured],
-            legacyFiles: legacy is List ? legacy.whereType<String>().toList() : [],
-            legacyJobs: text('localRecordingJobs'),
-            corruptLegacyJobs: text('localRecordingJobsCorrupt'));
+            additionalDirectories: legacyPreferences.directories,
+            legacyFiles: legacyPreferences.files,
+            legacyJobs: legacyPreferences.jobs,
+            corruptLegacyJobs: legacyPreferences.corruptJobs,
+            legacyPreferencesComplete: legacyPreferences.complete);
       }
       result = fence() ?? 'completed';
       if (result != 'completed') return;
@@ -157,7 +156,8 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         final commitOff = await (_orphanRecoveryOffOverride ?? OrphanAudioRecoveryPolicy.isOff)();
         result = fence() ?? (commitOff ? 'kill_switch' : 'completed');
         if (result != 'completed') return;
-        if (!snapshot.sourcesUnchanged()) {
+        if (!legacyPreferences.matches(RecordingInventoryPreferences.capture(prefs.getKeys(), prefs.get)) ||
+            !snapshot.sourcesUnchanged()) {
           result = 'sources_changed';
           return;
         }
@@ -169,6 +169,11 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           return;
         }
         final refs = buckets.where((r) => r.filePath != null).map((r) => path.basename(r.filePath!)).toSet();
+        // No await until publication: consent and memory are stable in this
+        // isolate. Decode the settings once for the entire bounded admission.
+        final holdForUser = snapshot.hasLocalOnlyHistory ||
+            buckets.any((r) => r.onDeviceOnly || r.holdForUser) ||
+            _orphanUploadNeedsHold(prefs);
         final admitted = Set<Wal>.identity();
         void rollbackUnpublished() {
           if (_isCurrent(generation) && uid == SharedPreferencesUtil().uid) {
@@ -209,9 +214,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               // history anywhere on this phone AND a cloud-permitting choice.
               // Read preferences and memory again after budget I/O, with no
               // await before publication. Held rows keep explicit user actions.
-              holdForUser: snapshot.hasLocalOnlyHistory ||
-                  buckets.any((r) => r.onDeviceOnly || r.holdForUser) ||
-                  _orphanUploadNeedsHold(),
+              holdForUser: holdForUser,
               filePath: path.basename(candidate.filePath),
               device: info.marker,
               ownerUid: uid,
@@ -236,26 +239,43 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
           rollbackUnpublished();
           rethrow;
         }
-        result = fence() ?? 'completed';
-        if (result != 'completed') return;
+        if (!_isCurrent(generation) || uid != SharedPreferencesUtil().uid) {
+          result = 'generation_changed';
+          return;
+        }
+        // A successful save published these rows even if foreground/admission
+        // changed during I/O. Publish the view revision within the same owner.
+        published = true;
         heldRevision.value++;
         _notifyUpdated(generation);
       });
-      result = fence() ?? result;
+      result = published ? 'completed' : fence() ?? result;
     } catch (_) {
       result = fence() ?? 'failed';
     } finally {
+      if (published) result = 'completed';
       _emitOrphanRecovery(census, counts, result);
     }
   }
 
-  bool _orphanUploadNeedsHold() {
-    final prefs = SharedPreferencesUtil();
-    final raw = prefs.getString('customSttConfig');
+  bool _orphanUploadNeedsHold(SharedPreferences prefs) {
+    const localKeys = [
+      'onDeviceTranscription.keepEverythingOnDevice',
+      'onDeviceTranscription.saveLiveHours',
+      'onDeviceOverflowActive'
+    ];
+    final consentKeys = ['customSttConfig', 'autoSyncOfflineRecordings', ...localKeys];
+    if (prefs.getKeys().any((k) => consentKeys.any((name) => k.startsWith('$name.corrupt-')))) return true;
+    final auto = prefs.get('autoSyncOfflineRecordings');
+    if (auto != null && auto != true) return true;
+    if (localKeys.any((k) => prefs.get(k) != null && prefs.get(k) != false)) return true;
+    final value = prefs.get('customSttConfig');
+    if (value != null && value is! String) return true;
+    final raw = value as String? ?? '';
     if (raw.isNotEmpty) {
       try {
-        // The normal settings reader repairs invalid configs to cloud defaults.
-        // Consent cannot use that fallback: unknown policy preserves a hold.
+        // Read raw values: repairing getters discard wrong types and default
+        // to cloud. Unknown or quarantined consent cannot authorize upload.
         final config = jsonDecode(raw);
         if (config is! Map ||
             config['provider'] != 'omi' ||
@@ -266,12 +286,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         return true;
       }
     }
-    return !prefs.autoSyncOfflineRecordings ||
-        prefs.useCustomStt ||
-        prefs.getBool('onDeviceTranscription.keepEverythingOnDevice') ||
-        prefs.getBool('onDeviceTranscription.saveLiveHours') ||
-        prefs.getBool('onDeviceOverflowActive') ||
-        LocalSttCustody.keepsPhoneAudio;
+    return LocalSttCustody.keepsPhoneAudio;
   }
 
   int _orphanPendingCount() =>

@@ -166,8 +166,13 @@ void main() {
     await json('pendant_ring_custody/custody_device.json', {
       'version': 1,
       'device_id': 'device',
+      'ring_ranges': [],
       'live_ranges': [
         {
+          'start_seq': 0,
+          'end_seq': 1,
+          'start_live': 0,
+          'end_live': 50,
           'wals': [
             {'file': names[6], 'owner': 'owner-a', 'bytes': 250, 'frames': 50}
           ]
@@ -199,8 +204,11 @@ void main() {
     await json('pendant_ring_custody/custody_device.json', {
       'version': 1,
       'device_id': 'device',
+      'live_ranges': [],
       'ring_ranges': [
         {
+          'start_seq': 0,
+          'end_seq': 1,
           'wals': [
             {'file': name(now), 'bytes': 250, 'frames': 50}
           ]
@@ -211,6 +219,55 @@ void main() {
     expect(result.complete, isTrue);
     expect(result.orphans.length, 1);
     expect(result.orphans.single.classification, 'owner_unknown');
+  });
+
+  test('valid batch-session and download receipts reserve every file', () async {
+    await Directory('${dir.path}/pendant_ring_custody').create();
+    for (var i = 0; i < 3; i++) {
+      await audio(name(now - i));
+    }
+    await json('pendant_ring_custody/custody_device.json', {
+      'version': 1,
+      'device_id': 'device',
+      'live_ranges': [],
+      'ring_ranges': [],
+      'batch_sessions': [
+        {
+          'id': 's',
+          'marks': [
+            [0, 0, 0]
+          ],
+          'chunks': [
+            {'file': name(now), 'owner': 'owner-a', 'bytes': 250, 'frames': 50, 'live_start': 0, 'live_end': 50}
+          ]
+        }
+      ]
+    });
+    await json('pendant_ring_custody/custody_device.json.downloads.1.tmp', {
+      'device': 'device',
+      'ring': 1,
+      'ranges': [
+        {
+          'start_seq': 0,
+          'end_seq': 1,
+          'wals': [
+            {
+              'file': name(now - 1),
+              'owner': 'owner-a',
+              'bytes': 250,
+              'frames': 50,
+              'download_ring': 1,
+              'download_start': 0,
+              'download_end': 1,
+              'download_device': 'device'
+            }
+          ]
+        }
+      ]
+    });
+    final result = await census();
+    expect(result.complete, isTrue);
+    expect(result.orphans.single.filePath, '${dir.path}/${name(now - 2)}');
   });
 
   test('classifier scales to 3000 files and caches only unchanged framing', () async {
@@ -266,6 +323,7 @@ void main() {
       Future<RecordingOrphanCensus> Function()? scan,
       Future<bool> Function()? off,
       bool foreground = true,
+      bool Function()? foregroundProbe,
       bool realCensus = false,
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events}) async {
@@ -275,11 +333,10 @@ void main() {
         periodic: periodic,
         orphanCensus: realCensus ? null : scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
-        orphanForeground: () => foreground,
-        orphanTelemetry: (v) {
-          events?.add(v);
-          onEvent?.call(v);
-        },
+        orphanForeground: foregroundProbe ?? () => foreground, orphanTelemetry: (v) {
+      events?.add(v);
+      onEvent?.call(v);
+    },
         persistWals: persist ??
             (rows) async {
               await WalFileManager.saveWals(rows);
@@ -405,6 +462,124 @@ void main() {
     expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
   });
 
+  for (final value in [
+    1,
+    true,
+    <String>['local']
+  ]) {
+    test('non-string STT setting $value cannot grant cloud consent', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      final prefs = await SharedPreferences.getInstance();
+      if (value is int) await prefs.setInt('customSttConfig', value);
+      if (value is bool) await prefs.setBool('customSttConfig', value);
+      if (value is List<String>) await prefs.setStringList('customSttConfig', value);
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+
+  for (final key in [
+    'autoSyncOfflineRecordings',
+    'onDeviceTranscription.keepEverythingOnDevice',
+    'onDeviceTranscription.saveLiveHours',
+    'onDeviceOverflowActive',
+    'customSttConfig.corrupt-1'
+  ]) {
+    test('unknown or quarantined consent $key stays held', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      await (await SharedPreferences.getInstance()).setInt(key, 1);
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+
+  for (final key in [
+    'localRecordingJobs',
+    'localRecordingJobsCorrupt',
+    'batchAudioDir',
+    'flash_page_pending_uploads',
+    'localRecordingJobs.corrupt-1'
+  ]) {
+    test('invalid custody preference $key makes adoption fail closed', () async {
+      await (await SharedPreferences.getInstance()).setInt(key, 1);
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    });
+  }
+
+  for (final payload in <Map<String, Object?>>[
+    {'version': 99, 'device_id': 'device'},
+    {'version': 1.0, 'device_id': 'device'},
+    {
+      'version': 1,
+      'device_id': 'device',
+      'ring_ranges': [7]
+    },
+    {'version': 1, 'device_id': 'device', 'live_ranges': {}},
+    {
+      'version': 1,
+      'device_id': 'device',
+      'ring_ranges': [
+        {
+          'start_seq': 0,
+          'end_seq': 1,
+          'wals': [7]
+        }
+      ]
+    },
+    {
+      'version': 1,
+      'device_id': 'device',
+      'batch_sessions': [
+        {
+          'id': 's',
+          'marks': [],
+          'chunks': [7]
+        }
+      ]
+    },
+    {'version': 1, 'device_id': 'device', 'future_refs': []},
+    {
+      'device': 'device',
+      'ring': 1,
+      'ranges': [7]
+    },
+  ]) {
+    test('unsupported ring checkpoint $payload is incomplete', () async {
+      await Directory('${dir.path}/pendant_ring_custody').create();
+      await json('pendant_ring_custody/custody_device.json', {
+        if (!payload.containsKey('ranges')) ...{'live_ranges': [], 'ring_ranges': []},
+        ...payload
+      });
+      await audio(name(now));
+      expect((await census()).complete, isFalse);
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+    });
+  }
+
+  test('legacy references appearing during census fence admission', () async {
+    await audio(name(now));
+    final sync = await ledger(scan: () async {
+      final result = await census();
+      await (await SharedPreferences.getInstance()).setString('localRecordingJobs', jsonEncode({name(now): 'job'}));
+      return result;
+    });
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
+  });
+
   test('preference changed during census is rechecked before admission', () async {
     await json('wals.json', {
       'wals': [row('existing.bin')]
@@ -485,6 +660,31 @@ void main() {
     await sync.recoverOrphanAudio();
     expect(saves, before);
     expect((await WalFileManager.loadIndexedWals()).length, 206);
+  });
+
+  test('a durable adoption publishes the held view after a background transition', () async {
+    await audio(name(now));
+    var foreground = true, armed = false;
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        foregroundProbe: () => foreground,
+        events: events,
+        persist: (rows) async {
+          await WalFileManager.saveWals(rows);
+          if (armed) foreground = false;
+        });
+    final view = LocalRecordingsProvider(ledger: sync);
+    addTearDown(view.dispose);
+    await view.refresh();
+    final revision = sync.heldRevision.value;
+    armed = true;
+    await sync.recoverOrphanAudio();
+    await pumpEventQueue(times: 100);
+    expect(sync.heldRevision.value, revision + 1);
+    expect(view.recordings.length, 1);
+    expect(events.single['result'], 'completed');
+    expect((events.single['counts'] as Map)['adopted'], 1);
+    expect((await WalFileManager.loadIndexedWals()).where((w) => w.status == WalStatus.miss).length, 1);
   });
 
   test('failed index save rolls back unpublished held rows and a later pass retries them', () async {
