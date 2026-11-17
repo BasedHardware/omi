@@ -253,6 +253,11 @@
       "owner": "Goal: Pipeline",
       "review_by": "2026-12-14"
     },
+    "BATCH_PIPELINE_PROJECTION_OVERLAP_DIAGNOSTICS": {
+      "owner": "firestore-cost / projection overlap source owner",
+      "review_by": "2026-11-24",
+      "reason": "Default-on diagnostic off switch requested by PR25596 review; review after the first qualified overlap readout. Does not change discovery or the seeded flag budget."
+    },
     "BATCH_PIPELINE_PROJECTION_PREFETCH": {
       "seeded": "2026-10-25"
     },
