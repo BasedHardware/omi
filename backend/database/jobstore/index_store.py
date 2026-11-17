@@ -34,6 +34,7 @@ from database import rpc_deadline
 from database.jobstore.cohort import production_policy_applies
 from database.jobstore.dual_store import DualStore
 from database.jobstore.postgres_store import PostgresStore
+from database.jobstore.connection import sql
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import FallbackReason, ReasonFamily, reason_label
 
@@ -155,7 +156,11 @@ class BoundedPostgresReader(PostgresStore):
             with connection_deadline(conn, deadline):
                 with conn.transaction():
                     conn.execute('SET TRANSACTION READ ONLY')
-                    conn.execute(f'SET LOCAL statement_timeout = {max(1, int(_remaining(deadline) * 1000))}')
+                    conn.execute(
+                        sql()
+                        .SQL('SET LOCAL statement_timeout = {}')
+                        .format(sql().Literal(max(1, int(_remaining(deadline) * 1000))))
+                    )
                     yield conn
                     _remaining(deadline)
 
