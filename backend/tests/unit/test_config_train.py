@@ -38,6 +38,22 @@ def test_fresh_queue_smoothing_keeps_concurrency_and_retry_ownership():
     assert (queue['max_attempts'], queue['min_backoff'], queue['max_backoff']) == (5, '60s', '300s')
 
 
+@pytest.mark.parametrize(
+    'environment,service', [('prod', 'backend-integration'), ('staging', 'backend-integration-staging')]
+)
+def test_restored_integration_cadence_is_pinned_only_on_its_ops_service(environment, service):
+    services = yaml.safe_load((BACKEND / f'deploy/ops/{environment}.yaml').read_text())['cloud_run']
+    expected = {
+        'BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS': '200',
+        'BATCH_PIPELINE_SERVING_TICK_SECONDS': '10',
+        'BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT': '16',
+    }
+    assert service in services
+    for name, config in services.items():
+        actual = {key: value for key, value in config.get('env', {}).items() if key in expected}
+        assert actual == (expected if name == service else {}), name
+
+
 def _container(image: str, env: dict[str, str], *, ports: bool = True, name: str = 'backend') -> dict[str, Any]:
     out: dict[str, Any] = {'name': name, 'image': image, 'env': [{'name': k, 'value': v} for k, v in env.items()]}
     if ports:
