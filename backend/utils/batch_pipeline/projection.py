@@ -818,12 +818,16 @@ class Projector:
         )
 
         event = 'batch_held_partial'
-        start = self.held_after = load_release_cursor(self.store, key=key, event=event)['after_id']
+        durable = load_release_cursor(self.store, key=key, event=event)['after_id']
+        # After a failed save the in-memory cursor is the newer one; keep it.
+        unsaved = getattr(self, 'held_cursor_unsaved', False)
+        start = self.held_after = self.held_after if unsaved else durable
         if start is None:
             self.held_pass_seen = set()
         counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
-        if self.held_after != start:
-            save_release_cursor(self.store, self.held_after, self.clock(), key=key, event=event)
+        if self.held_after != start or unsaved:
+            saved = save_release_cursor(self.store, self.held_after, self.clock(), key=key, event=event)
+            self.held_cursor_unsaved = not saved
         return counts
 
     def _sweep_held_pages(

@@ -177,7 +177,9 @@ class ResultLog:
         return operation(Tx(self))
 
     def note_head_blocked(self, sid, now, block_type):
-        row = self.results.get(sid) or {}
+        row = self.results.get(sid)
+        if row is None:
+            return False
         if row.get('projection_blocked_since') is not None or row.get('projection_state') not in (
             'pending',
             'persisted',

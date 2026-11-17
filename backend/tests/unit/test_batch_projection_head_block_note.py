@@ -73,8 +73,10 @@ def test_projector_never_runs_store_transactions_itself():
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and node.func.attr == 'run'
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == 'store'
+        and (
+            (isinstance(node.func.value, ast.Attribute) and node.func.value.attr == 'store')
+            or (isinstance(node.func.value, ast.Name) and node.func.value.id == 'store')
+        )
     ]
     assert direct == [], f'store.run called from utils/batch_pipeline/projection.py lines {direct}'
 
@@ -113,14 +115,27 @@ def test_old_backfill_head_awaiting_a_live_target_holds_on_the_age_gate(monkeypa
     assert log.projection_watermark(owner_key(BURST)) == ids[-1]
 
 
-def test_recent_head_awaiting_a_live_target_is_stamped_then_held_after_the_bound(monkeypatch):
-    """The path this PR repairs: a recent awaiting-writer head waits, is stamped
+def test_a_head_failing_transiently_is_stamped_then_held_after_the_bound(monkeypatch):
+    """The path this PR repairs: a head failing on infrastructure waits, is stamped
     on its first failure, and the 24 h bound later holds it and frees the chain."""
     from tests.unit.test_batch_pipeline_owner_chain_projection import BURST
     from utils.batch_pipeline.projection import PROJECTION_HEAD_BLOCKED_SINCE, PROJECTION_HEAD_RETRY_SECONDS
     from utils.batch_pipeline.scheduler import owner_key
 
-    log, ids, projector = _live_target_chain(monkeypatch, fail_first_n=2)
+    import database.conversations as conversations
+
+    log, ids, projector = _live_target_chain(monkeypatch, fail_first_n=0)
+    # Infrastructure trouble, not an awaiting-writer conflict: the 6 h capture
+    # age gate cannot decide it, so only the durable 24 h bound holds the head.
+    assign, failures = conversations.assign_sync_conversation, {'left': 3}
+
+    def flaky(*args, **kwargs):
+        if failures['left']:
+            failures['left'] -= 1
+            raise TimeoutError('synthetic datastore timeout')
+        return assign(*args, **kwargs)
+
+    monkeypatch.setattr('database.conversations.assign_sync_conversation', flaky)
     now = {'t': 100.0}
     projector.clock = lambda: now['t']
     projector.project_owner(BURST)
@@ -128,6 +143,9 @@ def test_recent_head_awaiting_a_live_target_is_stamped_then_held_after_the_bound
     assert head['projection_state'] == 'pending'
     assert head[PROJECTION_HEAD_BLOCKED_SINCE] == 100.0
     assert log.projection_watermark(owner_key(BURST)) != ids[-1]
+    now['t'] = 100.0 + PROJECTION_HEAD_RETRY_SECONDS - 1
+    projector.project_owner(BURST)
+    assert log.results[ids[0]]['projection_state'] == 'pending', 'the bound, not the age gate, decides'
     now['t'] = 100.0 + PROJECTION_HEAD_RETRY_SECONDS + 1
     projector.project_owner(BURST)
     assert log.results[ids[0]]['projection_state'] == 'quarantine_held'

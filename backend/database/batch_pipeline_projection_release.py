@@ -464,16 +464,18 @@ def save_release_cursor(
     key=RELEASE_CURSOR_KEY,
     event='batch_projection action=release_held',
     **extra,
-) -> None:
+) -> bool:
     @firestore.transactional
     def put(transaction):
         transaction.set(store.ref('control', key), {'after_id': after_id, 'updated_at': now, **extra})
 
     try:
         store.run(put)
+        return True
     except Exception as error:
         # Advisory: a lost write only repeats rows the next instance re-checks.
         logger.warning('event=%s action=cursor_save outcome=retry exception_type=%s', event, type(error).__name__)
+        return False
 
 
 def release_page_settled(

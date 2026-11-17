@@ -1804,6 +1804,25 @@ def test_restarted_instance_resumes_the_held_pass_from_the_durable_cursor(setup,
     assert restarted.held_pass_seen == set()
 
 
+def test_a_failed_cursor_save_keeps_the_in_memory_cursor(setup, monkeypatch):
+    """A lost durable write must not send the next segment back to the stale cursor."""
+    from utils.batch_pipeline.projection import Projector
+
+    client, store, binding, artifacts, _, _ = setup
+    row(client)['recovery_state'] = 'failed_held'
+    rows = held_unit_rows(client, 4)
+    pages = Mock(side_effect=[rows[0:2], rows[2:4]])
+    monkeypatch.setattr('utils.batch_pipeline.projection.held_candidates', pages)
+    saves = Mock(side_effect=[False, True])
+    monkeypatch.setattr('database.batch_pipeline_projection_release.save_release_cursor', saves)
+    projector = Projector(store, artifacts.load_result, clock=lambda: 101)
+    monkeypatch.setattr(projector, 'complete_held', lambda b: None)
+    projector.sweep_held(2, max_pages=1)
+    projector.sweep_held(2, max_pages=1)
+    assert pages.call_args_list[1].kwargs['after_id'] == 'unit-0001'
+    assert saves.call_args_list[1].args[1] == 'unit-0003'
+
+
 def test_pass_deadline_stops_between_pages_and_keeps_the_cursor(setup, monkeypatch):
     from utils.batch_pipeline import projection as projection_module
     from utils.batch_pipeline.projection import Projector
