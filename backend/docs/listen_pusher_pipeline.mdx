@@ -10177,7 +10177,8 @@ dispatch and processing retain their existing queue latency. Explicit user/end
 provenance bypasses the grace. Switch-off refuses marked-row resume, ends a drained hold on reconnect and
 rearms its quiet check due now; workers also ignore the stored grace while off.
 Active owners drain and finalize at teardown on upgraded listeners. Unmarked
-sessions retain origin/main behavior while off.
+sessions finalize on drop while off; the #25460 drop hold also requires the switch
+(2026-11-17-drop-hold-regate.md).
 
 `listen_batch_producer` is server-owned metadata: version, producer token, origin,
 session binding, phase, lease expiry, hard boundary, drain proof, and optional
