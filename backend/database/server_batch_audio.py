@@ -66,6 +66,21 @@ def note_server_batch_audio(
     return run_transactional(client, note)
 
 
+def close_patch(row) -> dict:
+    """Fields that publish the archive-close barrier for one capture row.
+
+    A sealed archive that never committed an original-audio window retained no
+    audio, so the first-frame marker is cleared with the barrier. Leaving it set
+    makes the row unprovable-empty: empty cleanup refuses it and the finalizer
+    retries forever, which strands the recording-session binding and rolls every
+    reconnect into a fresh empty generation.
+    """
+    patch: dict = {'server_batch_audio_closed': True}
+    if row.get('server_batch_audio_start') is None and row.get('server_batch_audio_end') is None:
+        patch['server_batch_audio_received'] = False
+    return patch
+
+
 def close_server_batch_audio(
     uid: str, conversation_id: str, *, firestore_client=None, producer_token: str | None = None
 ) -> bool:
@@ -85,7 +100,7 @@ def close_server_batch_audio(
             or any(row.get(key) for key in ('deleted', 'discarded', 'is_locked'))
         ):
             return False
-        transaction.update(ref, {'server_batch_audio_closed': True})
+        transaction.update(ref, close_patch(row))
         return True
 
     return run_transactional(client, close)

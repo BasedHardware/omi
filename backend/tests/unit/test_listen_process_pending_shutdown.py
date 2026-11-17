@@ -65,7 +65,7 @@ class _RecordingController(LiveConversationController):
         self.processed: list[str] = []
         self.scheduled: list[str] = []
 
-    async def process_conversation(self, conversation_id: str) -> bool:
+    async def process_conversation(self, conversation_id: str, **_options) -> bool:
         self.processed.append(conversation_id)
         return True
 
@@ -159,7 +159,7 @@ class _FailingController(_RecordingController):
         super().__init__(host)
         self.failing = failing
 
-    async def process_conversation(self, conversation_id: str) -> bool:
+    async def process_conversation(self, conversation_id: str, **_options) -> bool:
         self.processed.append(conversation_id)
         if conversation_id in self.failing:
             raise _OversizedDocument('document exceeds the maximum allowed size')
@@ -234,7 +234,7 @@ class _RaisingController(_RecordingController):
         self.errors = errors
         self.completed_events: list[str] = []
 
-    async def process_conversation(self, conversation_id: str) -> bool:
+    async def process_conversation(self, conversation_id: str, **_options) -> bool:
         self.processed.append(conversation_id)
         if conversation_id in self.errors:
             raise self.errors[conversation_id]
@@ -382,7 +382,7 @@ async def test_cancellation_still_propagates_out_of_the_sweep():
     """Isolation is for ordinary failures only; drain must still be able to cancel the task."""
 
     class _CancelledController(_RecordingController):
-        async def process_conversation(self, conversation_id: str) -> bool:
+        async def process_conversation(self, conversation_id: str, **_options) -> bool:
             raise asyncio.CancelledError
 
     host = _Host(woken_by_shutdown=False, processing=[{'id': 'conv-processing'}])

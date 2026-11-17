@@ -20,9 +20,10 @@ from database.quiet_check_retirement import (
 )
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
+from database import server_batch_audio
 from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for, quiet_empty_exit_enabled
-from config.server_batch import owned, proven_empty
+from config.server_batch import has_audio, owned, proven_empty
 from config import listen_reconnect
 from utils.conversations.lifecycle_clocks import speech_clock
 
@@ -215,6 +216,23 @@ def _evaluate_quiet_check(
         empty = refusal == 'no_content' and serving_for('LIFECYCLE_V2_MODE', job['uid'])
         enabled_empty_exit = quiet_empty_exit_enabled() and refusal == 'no_content'
         ready = lease_expiry is not None and not active and deadline is not None and deadline <= now
+        if (
+            ready
+            and owned(row)
+            and (listen_reconnect.end_due(row, now) or (not listen_reconnect.producer(row) and not has_audio(row)))
+        ):
+            # A producer-less (legacy) capture has no drained phase to wait for:
+            # the quiet deadline is its end, and once the socket is gone nothing
+            # else can publish the barrier. A row with no committed window then
+            # keeps server_batch_audio_received without server_batch_audio_closed
+            # and empty cleanup refuses it forever. Published before any
+            # retirement below, so a no-content row is still sealed when its
+            # check retires. A row with committed audio keeps its barrier for the
+            # batch handoff, as before.
+            patch: dict[str, Any] = server_batch_audio.close_patch(row)
+            if listen_reconnect.end_due(row, now) and not listen_reconnect.enabled():
+                patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
+            transaction.update(row_ref, patch)
         # Only an exact owned, closed, token-free empty archive may widen base
         # admission. No storage read occurs for any other shape or while live.
         empty_exit = bool(
@@ -275,11 +293,6 @@ def _evaluate_quiet_check(
             'reconcile_after_at': due,
             'updated_at': now,
         }
-        if ready and owned(row) and listen_reconnect.end_due(row, now):
-            patch: dict[str, Any] = {'server_batch_audio_closed': True}
-            if not listen_reconnect.enabled():
-                patch[listen_reconnect.FIELD] = {**listen_reconnect.producer(row), 'phase': 'ended', 'deadline_at': now}
-            transaction.update(row_ref, patch)
         transaction.set(job_ref, updated)
         return updated | {
             'job_id': job_id,
