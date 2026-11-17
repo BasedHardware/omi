@@ -164,6 +164,17 @@ def fixture_files(archive_path, target):
     return manifest
 
 
+def cli_import_report(smoke):
+    reports = [json.loads(line) for line in smoke.splitlines() if line.startswith('{')]
+    report = next(
+        (row for row in reports if isinstance(row, dict) and row.get('result') == 'GENERAL_COPIER_CLI_IMPORT_PASS'),
+        None,
+    )
+    if report is None:
+        raise ValueError('GENERAL_COPIER_ACTUAL_CLI_IMPORT_REQUIRED')
+    return report
+
+
 def qualify(contract, archive, fixtures, output):
     P.validate_contract(contract)
     source_program = image_smoke.source_refusal_program(contract.get('catalog_sha256'))
@@ -199,8 +210,7 @@ def qualify(contract, archive, fixtures, output):
         smoke = image_smoke.run_container(
             ['--entrypoint=/opt/operator-venv/bin/python', image_id, '-c', image_smoke.PROGRAM]
         )
-        cli_reports = [json.loads(line) for line in smoke.splitlines() if line.startswith('{')]
-        cli_smoke = next(row for row in cli_reports if row.get('result') == 'GENERAL_COPIER_CLI_IMPORT_PASS')
+        cli_smoke = cli_import_report(smoke)
         with tempfile.TemporaryDirectory(prefix='operator-native-fixtures-', dir=output.parent) as temporary:
             target = Path(temporary)
             target.chmod(0o755)

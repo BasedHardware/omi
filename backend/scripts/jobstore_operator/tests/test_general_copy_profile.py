@@ -1,4 +1,6 @@
-import ast, copy, hashlib, json, os, pathlib, sys, tempfile, unittest
+"""Keep full-copy catalog source, nested programs and qualification proof bound offline."""
+
+import ast, copy, hashlib, importlib.util, json, os, pathlib, sys, tempfile, types, unittest
 from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -171,3 +173,51 @@ class GeneralProfileTests(unittest.TestCase):
         self.assertIn("'-E','-s','-B','-m'", image_smoke.PROGRAM)
         compile(image_smoke.PROGRAM, 'image-smoke', 'exec')
         compile(image_smoke.source_refusal_program(P.CATALOG_SHA), 'source-refusal', 'exec')
+
+    def test_catalog_import_and_nested_source_refusal_child_compile(self):
+        contract_spec = importlib.util.spec_from_file_location(
+            'isolated_catalog_contract', ROOT / 'general_copy_catalog_contract.py'
+        )
+        contract = importlib.util.module_from_spec(contract_spec)
+        contract_spec.loader.exec_module(contract)
+        modules = {'general_copy_catalog_contract': contract}
+        # The production image is Linux. Keep this import check portable without
+        # replacing SDK modules or running any runtime/identity operation.
+        if importlib.util.find_spec('pwd') is None:
+            modules['pwd'] = types.ModuleType('pwd')
+        catalog_spec = importlib.util.spec_from_file_location('isolated_catalog', ROOT / 'general_copy_catalog.py')
+        catalog = importlib.util.module_from_spec(catalog_spec)
+        with patch.dict(sys.modules, modules), patch.object(sys, 'path', list(sys.path)):
+            catalog_spec.loader.exec_module(catalog)
+        self.assertEqual(catalog.C.SOURCE, P.SOURCE)
+        self.assertEqual(catalog.C.TREE, P.TREE)
+        program = ast.parse(image_smoke.source_refusal_program(P.CATALOG_SHA))
+        child = next(
+            node.value
+            for node in program.body
+            if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'child' for t in node.targets)
+        )
+        compile(ast.literal_eval(child), 'source-refusal-child', 'exec')
+
+    def test_complete_source_vector_matches_all_nine_migrations(self):
+        spec = importlib.util.spec_from_file_location(
+            'isolated_source_vector', ROOT / 'general_copy_catalog_contract.py'
+        )
+        contract = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(contract)
+        self.assertEqual([row[0] for row in contract.SOURCE_VECTOR], list(range(1, 10)))
+        migrations = ROOT.parents[1] / 'database/jobstore/migrations'
+        for version, name, expected in contract.SOURCE_VECTOR:
+            with self.subTest(version=version):
+                self.assertEqual(
+                    hashlib.sha256((migrations / f'{version:04d}_{name}.sql').read_bytes()).hexdigest(), expected
+                )
+
+    def test_missing_actual_cli_report_has_named_refusal(self):
+        report = receipt()['general_cli_import_smoke']
+        self.assertEqual(qualify_operator.cli_import_report(json.dumps(report)), report)
+        for output in ('', 'unrelated output', '{}', '[]'):
+            with self.subTest(output=output), self.assertRaisesRegex(
+                ValueError, 'GENERAL_COPIER_ACTUAL_CLI_IMPORT_REQUIRED'
+            ):
+                qualify_operator.cli_import_report(output)
