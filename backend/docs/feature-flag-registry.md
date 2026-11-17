@@ -944,6 +944,7 @@ and an explicit empty literal renders as `''`.
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `mobile-chat-apps-all-channels` | Omi store only: private chat channel endpoints for David; prevents the public Telegram rule from exposing iMessage/WhatsApp. Default off, explicit allowlist only; backend channel admission remains authoritative | mobile | posthog | closed | — | — | — | absent (enable) | keep | keep | — | auditfix |
+| `orphan_audio_reclaim_off` | Only resolved false permits foreground aged orphan reclaim; true, unknown or unreadable retains all files | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | mobile-custody |
 | `orphan_audio_recovery_off` | True stops non-destructive foreground orphan audio adoption; unknown or false keeps recovery on | mobile | posthog | open | — | — | — | expected (kill) | keep | keep | — | mobile-custody |
 | `upload_end_marker_off` | True stops the phone sending the end-of-recording marker; absent, false or unreadable sends it | mobile | posthog | open | — | — | — | absent (kill) | keep | keep | — | lifecycle-owner |
 | `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | uicleanup |
@@ -1075,6 +1076,7 @@ and an explicit empty literal renders as `''`.
 | `custody_capture_committed_release` | integrated synthetic and test cohort → 1% → 10% → 100% | Zero custody loss, duplicate session/chunk conversations, manual-label regressions, false frame acceptance or new upload failures; omi_clients_refactor_shadow_total errors stay zero | dazheng | 2026-10-26 |
 | `episode_f_join` | 5 → 25 → 100 | omi_jev_decision_total{lane=episode_boundary_f} non-success share and latency, omi_episode_boundary_total f_close/(f_close+f_continue) and f_no_answer, omi_episode_closed_members and omi_episode_closed_span_seconds by arm, closed episodes per arm normalized by percent | dazheng | 2026-11-07 |
 | `mobile-session-replay` | internal test identities → 20% of new device owners during onboarding → 50% of new device owners | Stored frames match the device screen in sampled recordings; no rise in slow frames (lag recorder) or crash-free rate in the cohort; recording volume within the PostHog replay budget | nik | 2026-11-25 |
+| `orphan_audio_reclaim_off` | David device → whole fleet within one week | Census unreferenced count falls by exactly deleted count; missing-recording reports do not rise | mobile custody lead | 2026-11-24 |
 
 ## Undeclared env flags
 

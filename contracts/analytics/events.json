@@ -1,6 +1,8 @@
 {
   "version": 1,
-  "adopted_files": [],
+  "adopted_files": [
+    "app/lib/services/wals/wal_orphan_reclaim.dart"
+  ],
   "events": [
     {
       "id": "onDeviceTranscriptionUsed",
@@ -5472,6 +5474,88 @@
       },
       "consumers": [
         "orphan-audio-recovery"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "orphanAudioReclaim",
+      "wire_name": "Orphan Audio Reclaim",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "deletedFiles": {
+          "type": "int",
+          "wire_name": "deleted_files"
+        },
+        "deletedBytes": {
+          "type": "int",
+          "wire_name": "deleted_bytes"
+        },
+        "working": {
+          "type": "int",
+          "wire_name": "working"
+        },
+        "unknownCaptureTime": {
+          "type": "int",
+          "wire_name": "unknown_capture_time"
+        },
+        "captureTooYoung": {
+          "type": "int",
+          "wire_name": "capture_too_young"
+        },
+        "mtimeTooYoung": {
+          "type": "int",
+          "wire_name": "mtime_too_young"
+        },
+        "outsideDocuments": {
+          "type": "int",
+          "wire_name": "outside_documents"
+        },
+        "passCap": {
+          "type": "int",
+          "wire_name": "pass_cap"
+        },
+        "sourcesChanged": {
+          "type": "int",
+          "wire_name": "sources_changed"
+        },
+        "referenced": {
+          "type": "int",
+          "wire_name": "referenced"
+        },
+        "fileChanged": {
+          "type": "int",
+          "wire_name": "file_changed"
+        },
+        "sidecarType": {
+          "type": "int",
+          "wire_name": "sidecar_type"
+        },
+        "result": {
+          "type": "enum",
+          "wire_name": "result",
+          "values": [
+            "completed",
+            "admission_pending",
+            "headless",
+            "background",
+            "kill_switch",
+            "generation_changed",
+            "incomplete_census",
+            "sources_changed",
+            "journal_unavailable",
+            "failed"
+          ]
+        },
+        "censusComplete": {
+          "type": "bool",
+          "wire_name": "census_complete"
+        }
+      },
+      "consumers": [
+        "orphan-audio-reclaim"
       ],
       "correlation": null
     }

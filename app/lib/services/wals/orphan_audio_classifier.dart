@@ -30,6 +30,14 @@ class RecordingOrphanCensus {
   final OrphanAudioFrameCache frameCache;
   bool isDocumentsFile(OrphanAudioFile file) => path.dirname(file.filePath) == _directories.keys.first;
   bool get complete => summary['orphan_census_complete'] == true;
+
+  /// Only call immediately after this queue turn unlinked a Documents orphan,
+  /// with no await since sourcesUnchanged(). Source-file stamps stay immutable.
+  void acknowledgeReclaimUnlink() {
+    // omi-perf-allow: sync-file-io -- One parent-directory stamp after our synchronous unlink; no traversal.
+    _directories[_directories.keys.first] = FileStat.statSync(_directories.keys.first);
+  }
+
   bool get hasLocalOnlyHistory => summary['local_only_history'] != false;
 
   /// Small metadata-only commit fence. No directory walk on the capture queue.
@@ -73,6 +81,26 @@ class OrphanAudioFile {
   final String classification;
   final BatchRecordingInfo? info;
   final String? clockRun;
+
+  /// Independent of the adoption owner class: multiple accounts may reclaim.
+  String? reclaimSkipReason(DateTime now) {
+    if (classification == 'working') return 'working';
+    if (info == null) return 'unknown_capture_time';
+    final match = RegExp(r'_(-?\d+(?:\.\d+)?)(?:_u\d{1,9})?\.bin$').firstMatch(path.basename(filePath));
+    final raw = double.tryParse(match?.group(1) ?? '');
+    if (raw == null || !raw.isFinite) return 'unknown_capture_time';
+    final seconds = raw >= 100000000000 ? raw / 1000 : raw;
+    final captureUs = (seconds * 1000000).ceil();
+    final currentUs = now.microsecondsSinceEpoch;
+    if (seconds < 1704067200 || currentUs > 0x7fffffff * 1000000 || seconds > currentUs / 1000000) {
+      return 'unknown_capture_time';
+    }
+    const ageUs = 45 * 86400 * 1000000;
+    if (currentUs - captureUs <= ageUs) return 'capture_too_young';
+    if (currentUs - modifiedUs <= ageUs) return 'mtime_too_young';
+    return null;
+  }
+
   bool unchanged() {
     try {
       if (FileSystemEntity.typeSync(filePath, followLinks: false) != FileSystemEntityType.file) return false;

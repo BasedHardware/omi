@@ -67,7 +67,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
       return;
     }
     _lastOrphanRecoveryWake = now;
-    unawaited(recoverOrphanAudio());
+    unawaited(recoverOrphanAudio().then((_) => reclaimOrphanAudio()));
   }
 
   /// Explicit recovery pass, separate from startup admission/native intake.
