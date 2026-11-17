@@ -114,21 +114,26 @@ def save_outline(uid, token, fingerprint, entries, *, firestore_client=None):
 BLOCKED_BACKOFF_MAX = timedelta(hours=1)
 
 
-def record_blocked(uid, reason, *, firestore_client=None):
-    """Deterministic conflicts back off per owner instead of retrying through the shared queue."""
+def record_blocked(uid, token, reason, *, firestore_client=None):
+    """Deterministic conflicts back off per owner instead of retrying through the shared queue.
+
+    Fenced by the builder token: a stale pass must not park an owner after a successor committed.
+    """
     client = firestore_client or get_firestore_client()
     ref = leases.lease_ref(client, uid, 'builder')
-    row = ref.get().to_dict() or {}
-    count = int(row.get('v3_blocked_count') or 0) + 1
-    delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
-    ref.set(
-        {
-            'v3_blocked_count': count,
-            'v3_blocked_reason': reason,
-            'v3_backoff_until': datetime.now(timezone.utc) + delay,
-        },
-        merge=True,
-    )
+
+    @firestore.transactional
+    def park(tx):
+        row = ref.get(transaction=tx).to_dict() or {}
+        now = datetime.now(timezone.utc)
+        if row.get('token') != token or row.get('until', datetime.min.replace(tzinfo=timezone.utc)) <= now:
+            return False
+        count = int(row.get('v3_blocked_count') or 0) + 1
+        delay = min(BLOCKED_BACKOFF_MAX, timedelta(minutes=5) * (2 ** min(count - 1, 6)))
+        tx.update(ref, {'v3_blocked_count': count, 'v3_blocked_reason': reason, 'v3_backoff_until': now + delay})
+        return True
+
+    return park(client.transaction())
 
 
 def backoff_until(uid, *, firestore_client=None):
@@ -190,7 +195,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
     queried = set()
     # Follow linked recordings until the closure converges. Each round adds at least one recording and
     # derived rows stay bounded by LIMIT; a fixed hop depth failed the same owner on every retry.
-    for _round in range(LIMIT):
+    for _round in range(LIMIT + 1):
         ids = {rid for row in existing.values() for rid in row.get('v3_recording_ids') or []}
         ids.update(
             p['recording_id']
@@ -213,7 +218,7 @@ def load(uid, *, conversation_id=None, firestore_client=None):
         intervals = []
         for row in sorted(fresh, key=lambda r: r['started_at']):
             left = row['started_at'] - timedelta(minutes=20)
-            right = speech_end(row) + timedelta(minutes=20)
+            right = min(speech_end(row), datetime.now(timezone.utc) + timedelta(minutes=5)) + timedelta(minutes=20)
             if intervals and left <= intervals[-1][1]:
                 intervals[-1] = (intervals[-1][0], max(intervals[-1][1], right))
             else:

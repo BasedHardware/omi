@@ -275,10 +275,11 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
         rows = await plan()
         # A planned id that already exists outside the loaded closure is adopted as the prior once,
         # never overwritten and never retried in a loop (each replan may cost outline work).
-        unseen = [row['id'] for row in rows if row['id'] not in existing]
+        # Backfill never adopts: its rows are stamped backfilled and must not move a live conversation.
+        unseen = [] if derive else [row['id'] for row in rows if row['id'] not in existing]
         adopted = await run_blocking(db_executor, store.adoptable, uid, unseen) if unseen else {}
         if adopted:
-            metrics.RECONCILES.labels('adopted').inc()
+            metrics.ADOPTED.inc(len(adopted))
             logger.info('v3 reconcile adopted existing derived rows count=%d', len(adopted))
             existing.update(adopted)
             rows = await plan()
@@ -312,8 +313,11 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
         # A deterministic conflict fails identically on every retry: answer the task (no Cloud Tasks
         # retry storm through the shared queue) and back this owner off; v3_pending stays owed.
         metrics.RECONCILES.labels('blocked').inc()
+        metrics.BLOCKED.labels(reason).inc()
         logger.warning('v3 reconcile blocked reason=%s', reason)
-        await run_blocking(db_executor, store.record_blocked, uid, reason)
+        if not derive:
+            # A backfill conflict must not park the owner's live builder.
+            await run_blocking(db_executor, store.record_blocked, uid, token, reason)
         return 'blocked'
     except Exception:
         metrics.RECONCILES.labels('error').inc()
@@ -326,7 +330,7 @@ async def reconcile(uid, *, on_open=False, conversation_id=None, derive=False, _
     await drain_processing(uid)
     if not derive and await run_blocking(db_executor, has_pending, uid):
         if _pass < 2:
-            await reconcile(uid, _pass=_pass + 1)
+            return await reconcile(uid, _pass=_pass + 1)
         else:
             await run_blocking(db_executor, enqueue, uid, at=datetime.now(timezone.utc) + timedelta(minutes=1))
     return 'committed'
