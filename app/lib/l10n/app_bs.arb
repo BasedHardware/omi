@@ -11691,7 +11691,7 @@
     "summaryBusyTitle": "Obrada je još u toku",
     "summaryBusyBody": "Omi već radi na ovom razgovoru. Sažetak će se pojaviti ovdje kada bude gotov.",
     "summaryTranscriptionPendingTitle": "Još nije transkribovano",
-    "summaryTranscriptionPendingBody": "Zvuk ovog snimka još nije transkribovan, pa ponovni pokušaj sažetka neće pomoći.",
+    "summaryTranscriptionPendingBody": "Sažetak će se pojaviti kada transkript bude spreman.",
     "summaryCheckAgain": "Provjeri ponovo",
     "summaryLimitTitle": "Dostignut je limit sažetaka",
     "summaryLimitBody": "U posljednjih sat vremena ste više puta ponovo generisali sažetke. Pokušajte ponovo kasnije.",

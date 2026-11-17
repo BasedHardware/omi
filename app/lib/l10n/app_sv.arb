@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Bearbetas fortfarande",
     "summaryBusyBody": "Omi arbetar redan med det här samtalet. Sammanfattningen visas här när den är klar.",
     "summaryTranscriptionPendingTitle": "Inte transkriberad än",
-    "summaryTranscriptionPendingBody": "Ljudet i den här inspelningen har inte transkriberats än, så det hjälper inte att försöka med sammanfattningen igen.",
+    "summaryTranscriptionPendingBody": "Sammanfattningen visas när transkriptionen är klar.",
     "summaryCheckAgain": "Kontrollera igen",
     "summaryLimitTitle": "Gränsen för sammanfattningar har nåtts",
     "summaryLimitBody": "Du har skapat om flera sammanfattningar under den senaste timmen. Försök igen senare.",

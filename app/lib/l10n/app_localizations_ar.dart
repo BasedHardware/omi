@@ -13881,8 +13881,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'لم يُفرَّغ نصيًا بعد';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'لم يُفرَّغ صوت هذا التسجيل نصيًا بعد، لذا لن تفيد إعادة محاولة الملخص.';
+  String get summaryTranscriptionPendingBody => 'سيظهر الملخص عندما يصبح النص جاهزًا.';
 
   @override
   String get summaryCheckAgain => 'تحقق مرة أخرى';

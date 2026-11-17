@@ -14006,8 +14006,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Все още не е транскрибирано';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Аудиото на този запис още не е транскрибирано, така че повторното обобщение няма да помогне.';
+  String get summaryTranscriptionPendingBody => 'Обобщението ще се появи, когато транскрипцията е готова.';
 
   @override
   String get summaryCheckAgain => 'Провери отново';

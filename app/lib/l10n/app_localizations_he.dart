@@ -13859,8 +13859,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'עדיין לא תומלל';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'השמע של ההקלטה הזו עדיין לא תומלל, ולכן ניסיון חוזר של הסיכום לא יעזור.';
+  String get summaryTranscriptionPendingBody => 'הסיכום יופיע כשהתמלול יהיה מוכן.';
 
   @override
   String get summaryCheckAgain => 'בדיקה חוזרת';

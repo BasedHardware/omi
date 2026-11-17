@@ -4306,7 +4306,7 @@
     "summaryBusyTitle": "Trwa przetwarzanie",
     "summaryBusyBody": "Omi już pracuje nad tą rozmową. Podsumowanie pojawi się tutaj po zakończeniu.",
     "summaryTranscriptionPendingTitle": "Jeszcze nie przepisano",
-    "summaryTranscriptionPendingBody": "Dźwięk tego nagrania nie został jeszcze przepisany, więc ponowienie podsumowania nie pomoże.",
+    "summaryTranscriptionPendingBody": "Podsumowanie pojawi się, gdy transkrypcja będzie gotowa.",
     "summaryCheckAgain": "Sprawdź ponownie",
     "summaryLimitTitle": "Osiągnięto limit podsumowań",
     "summaryLimitBody": "W ciągu ostatniej godziny kilkakrotnie wygenerowano ponownie podsumowania. Spróbuj ponownie później.",

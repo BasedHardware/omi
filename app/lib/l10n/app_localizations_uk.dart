@@ -13990,8 +13990,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Ще не транскрибовано';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Аудіо цього запису ще не транскрибовано, тому повторна спроба підсумку не допоможе.';
+  String get summaryTranscriptionPendingBody => 'Підсумок з\'явиться, щойно буде готова транскрипція.';
 
   @override
   String get summaryCheckAgain => 'Перевірити знову';

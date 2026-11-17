@@ -13987,8 +13987,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Još nije transkribovano';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Zvuk ovog snimka još nije transkribovan, pa ponovni pokušaj sažetka neće pomoći.';
+  String get summaryTranscriptionPendingBody => 'Sažetak će se pojaviti kada transkript bude spreman.';
 
   @override
   String get summaryCheckAgain => 'Provjeri ponovo';

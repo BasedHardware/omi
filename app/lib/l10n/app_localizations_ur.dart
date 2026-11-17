@@ -13973,8 +13973,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'ابھی تک ٹرانسکرائب نہیں ہوا';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'اس ریکارڈنگ کی آڈیو ابھی ٹرانسکرائب نہیں ہوئی، اس لیے خلاصہ دوبارہ آزمانے سے فائدہ نہیں ہوگا۔';
+  String get summaryTranscriptionPendingBody => 'ٹرانسکرپٹ تیار ہونے پر خلاصہ ظاہر ہوگا۔';
 
   @override
   String get summaryCheckAgain => 'دوبارہ چیک کریں';

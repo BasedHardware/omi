@@ -13941,8 +13941,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'अभी तक ट्रांसक्राइब नहीं हुआ';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'इस रिकॉर्डिंग का ऑडियो अभी तक ट्रांसक्राइब नहीं हुआ है, इसलिए सारांश दोबारा आज़माने से मदद नहीं मिलेगी।';
+  String get summaryTranscriptionPendingBody => 'ट्रांसक्रिप्ट तैयार होने पर सारांश दिखाई देगा।';
 
   @override
   String get summaryCheckAgain => 'फिर से जांचें';

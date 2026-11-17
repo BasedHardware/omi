@@ -13993,8 +13993,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Još nije transkribirano';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Zvuk ove snimke još nije transkribiran, pa ponovni pokušaj sažetka neće pomoći.';
+  String get summaryTranscriptionPendingBody => 'Sažetak će se pojaviti kad transkript bude spreman.';
 
   @override
   String get summaryCheckAgain => 'Provjeri ponovno';

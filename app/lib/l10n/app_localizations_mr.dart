@@ -13967,8 +13967,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'अद्याप ट्रान्सक्राइब केलेले नाही';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'या रेकॉर्डिंगचा ऑडिओ अद्याप ट्रान्सक्राइब झालेला नाही, त्यामुळे सारांश पुन्हा करून पाहण्याचा उपयोग नाही.';
+  String get summaryTranscriptionPendingBody => 'ट्रान्सक्रिप्ट तयार झाल्यावर सारांश दिसेल.';
 
   @override
   String get summaryCheckAgain => 'पुन्हा तपासा';

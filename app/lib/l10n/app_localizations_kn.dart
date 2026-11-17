@@ -14002,8 +14002,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಮಾಡಲಾಗಿಲ್ಲ';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'ಈ ರೆಕಾರ್ಡಿಂಗ್‌ನ ಆಡಿಯೋ ಇನ್ನೂ ಲಿಪ್ಯಂತರ ಆಗಿಲ್ಲ, ಆದ್ದರಿಂದ ಸಾರಾಂಶವನ್ನು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸುವುದರಿಂದ ಪ್ರಯೋಜನವಿಲ್ಲ.';
+  String get summaryTranscriptionPendingBody => 'ಲಿಪ್ಯಂತರ ಸಿದ್ಧವಾದಾಗ ಸಾರಾಂಶ ಕಾಣಿಸುತ್ತದೆ.';
 
   @override
   String get summaryCheckAgain => 'ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ';

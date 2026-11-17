@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "仍在处理中",
     "summaryBusyBody": "Omi 已在处理此对话。完成后，摘要将显示在这里。",
     "summaryTranscriptionPendingTitle": "尚未转录",
-    "summaryTranscriptionPendingBody": "这段录音的音频尚未转录，因此重试摘要也无济于事。",
+    "summaryTranscriptionPendingBody": "转录完成后将显示摘要。",
     "summaryCheckAgain": "再次检查",
     "summaryLimitTitle": "已达到摘要次数上限",
     "summaryLimitBody": "你在过去一小时内多次重新生成了摘要。请稍后再试。",

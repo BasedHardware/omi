@@ -13983,8 +13983,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Dar netranskribuota';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Šio įrašo garsas dar netranskribuotas, todėl santraukos kartojimas nepadės.';
+  String get summaryTranscriptionPendingBody => 'Santrauka bus parodyta, kai bus paruošta transkripcija.';
 
   @override
   String get summaryCheckAgain => 'Tikrinti dar kartą';

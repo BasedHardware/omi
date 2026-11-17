@@ -13946,8 +13946,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Ikke transskriberet endnu';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Lyden i denne optagelse er ikke transskriberet endnu, så det hjælper ikke at prøve resuméet igen.';
+  String get summaryTranscriptionPendingBody => 'Opsummeringen vises, når transskriptionen er klar.';
 
   @override
   String get summaryCheckAgain => 'Tjek igen';

@@ -14020,8 +14020,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Încă netranscris';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Audio din această înregistrare nu a fost încă transcris, așa că reîncercarea rezumatului nu va ajuta.';
+  String get summaryTranscriptionPendingBody => 'Rezumatul va apărea când transcrierea este gata.';
 
   @override
   String get summaryCheckAgain => 'Verifică din nou';

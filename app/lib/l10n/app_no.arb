@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Behandles fortsatt",
     "summaryBusyBody": "Omi jobber allerede med denne samtalen. Oppsummeringen vises her når den er ferdig.",
     "summaryTranscriptionPendingTitle": "Ikke transkribert ennå",
-    "summaryTranscriptionPendingBody": "Lyden i dette opptaket er ikke transkribert ennå, så det hjelper ikke å prøve sammendraget på nytt.",
+    "summaryTranscriptionPendingBody": "Oppsummeringen vises når transkripsjonen er klar.",
     "summaryCheckAgain": "Sjekk igjen",
     "summaryLimitTitle": "Grensen for oppsummeringer er nådd",
     "summaryLimitBody": "Du har generert flere oppsummeringer på nytt den siste timen. Prøv igjen senere.",

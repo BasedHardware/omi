@@ -13965,8 +13965,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Inte transkriberad än';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Ljudet i den här inspelningen har inte transkriberats än, så det hjälper inte att försöka med sammanfattningen igen.';
+  String get summaryTranscriptionPendingBody => 'Sammanfattningen visas när transkriptionen är klar.';
 
   @override
   String get summaryCheckAgain => 'Kontrollera igen';

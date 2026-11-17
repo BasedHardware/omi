@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Käsittely on yhä kesken",
     "summaryBusyBody": "Omi käsittelee jo tätä keskustelua. Tiivistelmä näkyy tässä, kun se on valmis.",
     "summaryTranscriptionPendingTitle": "Ei vielä litteroitu",
-    "summaryTranscriptionPendingBody": "Tämän tallenteen ääntä ei ole vielä litteroitu, joten yhteenvedon uudelleenyritys ei auta.",
+    "summaryTranscriptionPendingBody": "Tiivistelmä näkyy, kun litterointi on valmis.",
     "summaryCheckAgain": "Tarkista uudelleen",
     "summaryLimitTitle": "Tiivistelmien raja saavutettu",
     "summaryLimitBody": "Olet luonut useita tiivistelmiä uudelleen viimeisen tunnin aikana. Yritä myöhemmin uudelleen.",

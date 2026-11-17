@@ -150,6 +150,9 @@ Future<void> _drain(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
 }
 
+/// Title text drawn at rest (the editable field underneath also holds the stored title).
+Finder _shownTitle(String text) => find.byWidgetPredicate((w) => w is Text && w.data == text);
+
 void main() {
   setUpAll(initHeldWireEnv);
   setUp(() async {
@@ -170,6 +173,8 @@ void main() {
     expect(find.text(l10n.generateSummary), findsNothing);
     expect(find.text(l10n.retry), findsNothing);
     expect(find.text(l10n.errorProcessingConversation), findsNothing);
+    // The header no longer says "Couldn't transcribe" above a notice that the summary is coming.
+    expect(_shownTitle(TranscriptionPendingConversations.serverHoldTitle), findsNothing);
   }
 
   testWidgets('legacy, opened from the Home row: after the 409 the tab shows the notice and no action', (tester) async {
@@ -198,8 +203,9 @@ void main() {
       addTearDown(() => OmiColors.active = previousPalette);
     }
     final (detail, l10n) = await _pumpPage(tester, heldDetail());
-    // Before any answer the server copy alone offers Generate Summary.
+    // Before any answer the server copy alone offers Generate Summary under its stand-in title.
     expect(find.text(l10n.generateSummary), findsOneWidget);
+    expect(_shownTitle(TranscriptionPendingConversations.serverHoldTitle), findsOneWidget);
     await tester.tap(find.text(l10n.generateSummary));
     await _settle(tester);
     expect(TranscriptionPendingConversations.contains(heldConversationId), isTrue);

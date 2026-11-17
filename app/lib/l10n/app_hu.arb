@@ -4367,7 +4367,7 @@
     "summaryBusyTitle": "Feldolgozás folyamatban",
     "summaryBusyBody": "Az Omi már dolgozik ezen a beszélgetésen. Az összefoglaló itt jelenik meg, amikor elkészül.",
     "summaryTranscriptionPendingTitle": "Még nincs átírva",
-    "summaryTranscriptionPendingBody": "A felvétel hangja még nincs átírva, ezért az összefoglaló újrapróbálása nem segít.",
+    "summaryTranscriptionPendingBody": "Az összefoglaló akkor jelenik meg, amikor az átirat elkészül.",
     "summaryCheckAgain": "Újbóli ellenőrzés",
     "summaryLimitTitle": "Elérted az összefoglalók korlátját",
     "summaryLimitBody": "Az elmúlt órában több összefoglalót is újrageneráltál. Próbáld újra később.",

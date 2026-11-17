@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-legacy-detail-transcription-pending.png",
       "platform": "mobile-ios",
-      "description": "Legacy (prod-default) conversation detail for a held recording's real detail copy (status completed, no home_step, empty transcript) after Generate Summary is answered 409 transcription_pending: the Summary tab shows Not transcribed yet with no Generate Summary or Retry and no error",
+      "description": "Legacy (prod-default) conversation detail for a held recording's real detail copy (status completed, no home_step, empty transcript) after Generate Summary is answered 409 transcription_pending: the header shows the recording's date instead of Couldn't transcribe, and the Summary tab says Not transcribed yet / The summary will appear once the transcript is ready, with no Generate Summary, Retry or error",
       "captured_by": "agent",
       "source": "visual-audit"
     },

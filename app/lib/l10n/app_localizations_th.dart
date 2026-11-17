@@ -13891,8 +13891,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'ยังไม่ได้ถอดเสียง';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'เสียงของการบันทึกนี้ยังไม่ได้ถอดเสียง การลองสรุปอีกครั้งจึงไม่ช่วยอะไร';
+  String get summaryTranscriptionPendingBody => 'สรุปจะปรากฏเมื่อการถอดเสียงพร้อม';
 
   @override
   String get summaryCheckAgain => 'ตรวจสอบอีกครั้ง';

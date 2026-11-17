@@ -13962,8 +13962,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Ikke transkribert ennå';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Lyden i dette opptaket er ikke transkribert ennå, så det hjelper ikke å prøve sammendraget på nytt.';
+  String get summaryTranscriptionPendingBody => 'Oppsummeringen vises når transkripsjonen er klar.';
 
   @override
   String get summaryCheckAgain => 'Sjekk igjen';

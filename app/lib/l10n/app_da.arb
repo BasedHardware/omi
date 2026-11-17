@@ -4313,7 +4313,7 @@
     "summaryBusyTitle": "Behandles stadig",
     "summaryBusyBody": "Omi arbejder allerede på denne samtale. Opsummeringen vises her, når den er færdig.",
     "summaryTranscriptionPendingTitle": "Ikke transskriberet endnu",
-    "summaryTranscriptionPendingBody": "Lyden i denne optagelse er ikke transskriberet endnu, så det hjælper ikke at prøve resuméet igen.",
+    "summaryTranscriptionPendingBody": "Opsummeringen vises, når transskriptionen er klar.",
     "summaryCheckAgain": "Tjek igen",
     "summaryLimitTitle": "Grænsen for opsummeringer er nået",
     "summaryLimitBody": "Du har genereret flere opsummeringer igen inden for den seneste time. Prøv igen senere.",

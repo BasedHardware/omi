@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "まだ処理中です",
     "summaryBusyBody": "Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。",
     "summaryTranscriptionPendingTitle": "まだ文字起こしされていません",
-    "summaryTranscriptionPendingBody": "この録音の音声はまだ文字起こしされていないため、要約を再試行しても解決しません。",
+    "summaryTranscriptionPendingBody": "文字起こしが完了すると、要約が表示されます。",
     "summaryCheckAgain": "再確認",
     "summaryLimitTitle": "要約の上限に達しました",
     "summaryLimitBody": "過去 1 時間に何度も要約を再生成しました。しばらくしてからもう一度お試しください。",

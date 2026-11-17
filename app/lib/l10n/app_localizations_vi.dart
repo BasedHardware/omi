@@ -13960,8 +13960,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Chưa được chép lời';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Âm thanh của bản ghi này chưa được chép lời, nên thử lại bản tóm tắt cũng không giúp được.';
+  String get summaryTranscriptionPendingBody => 'Bản tóm tắt sẽ xuất hiện khi bản chép lời sẵn sàng.';
 
   @override
   String get summaryCheckAgain => 'Kiểm tra lại';

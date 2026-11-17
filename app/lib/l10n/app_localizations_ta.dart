@@ -14058,8 +14058,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'இன்னும் படியெடுக்கப்படவில்லை';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'இந்தப் பதிவின் ஒலி இன்னும் படியெடுக்கப்படவில்லை, எனவே சுருக்கத்தை மீண்டும் முயற்சிப்பது உதவாது.';
+  String get summaryTranscriptionPendingBody => 'படியெடுப்பு தயாரானதும் சுருக்கம் தோன்றும்.';
 
   @override
   String get summaryCheckAgain => 'மீண்டும் சரிபார்';

@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Elaborazione in corso",
     "summaryBusyBody": "Omi sta già lavorando su questa conversazione. Il riassunto apparirà qui al termine.",
     "summaryTranscriptionPendingTitle": "Non ancora trascritto",
-    "summaryTranscriptionPendingBody": "L'audio di questa registrazione non è ancora stato trascritto, quindi riprovare il riepilogo non servirà.",
+    "summaryTranscriptionPendingBody": "Il riassunto apparirà quando la trascrizione sarà pronta.",
     "summaryCheckAgain": "Controlla di nuovo",
     "summaryLimitTitle": "Limite di riassunti raggiunto",
     "summaryLimitBody": "Hai rigenerato diversi riassunti nell'ultima ora. Riprova più tardi.",

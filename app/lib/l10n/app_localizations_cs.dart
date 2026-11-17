@@ -13960,8 +13960,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Zatím nepřepsáno';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Zvuk této nahrávky zatím nebyl přepsán, takže opakování shrnutí nepomůže.';
+  String get summaryTranscriptionPendingBody => 'Shrnutí se zobrazí, až bude přepis hotový.';
 
   @override
   String get summaryCheckAgain => 'Zkontrolovat znovu';

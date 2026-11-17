@@ -13992,8 +13992,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Яшчэ не транскрыбавана';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Аўдыя гэтага запісу яшчэ не транскрыбавана, таму паўтор зводкі не дапаможа.';
+  String get summaryTranscriptionPendingBody => 'Падсумаванне з\'явіцца, калі будзе гатовая транскрыпцыя.';
 
   @override
   String get summaryCheckAgain => 'Праверыць зноў';

@@ -13744,7 +13744,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => '尚未转录';
 
   @override
-  String get summaryTranscriptionPendingBody => '这段录音的音频尚未转录，因此重试摘要也无济于事。';
+  String get summaryTranscriptionPendingBody => '转录完成后将显示摘要。';
 
   @override
   String get summaryCheckAgain => '再次检查';

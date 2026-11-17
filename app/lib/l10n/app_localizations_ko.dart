@@ -13769,7 +13769,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => '아직 전사되지 않음';
 
   @override
-  String get summaryTranscriptionPendingBody => '이 녹음의 오디오가 아직 전사되지 않아 요약을 다시 시도해도 도움이 되지 않습니다.';
+  String get summaryTranscriptionPendingBody => '전사가 완료되면 요약이 표시됩니다.';
 
   @override
   String get summaryCheckAgain => '다시 확인';

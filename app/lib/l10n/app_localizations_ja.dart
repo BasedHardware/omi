@@ -13763,7 +13763,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'まだ文字起こしされていません';
 
   @override
-  String get summaryTranscriptionPendingBody => 'この録音の音声はまだ文字起こしされていないため、要約を再試行しても解決しません。';
+  String get summaryTranscriptionPendingBody => '文字起こしが完了すると、要約が表示されます。';
 
   @override
   String get summaryCheckAgain => '再確認';

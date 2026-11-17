@@ -13952,8 +13952,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Pole veel transkribeeritud';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Selle salvestise heli pole veel transkribeeritud, seega kokkuvõtte uuesti proovimine ei aita.';
+  String get summaryTranscriptionPendingBody => 'Kokkuvõte ilmub, kui transkriptsioon on valmis.';
 
   @override
   String get summaryCheckAgain => 'Kontrolli uuesti';

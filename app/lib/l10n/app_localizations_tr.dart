@@ -13971,8 +13971,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Henüz yazıya dökülmedi';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Bu kaydın sesi henüz yazıya dökülmedi, bu yüzden özeti yeniden denemek işe yaramaz.';
+  String get summaryTranscriptionPendingBody => 'Özet, döküm hazır olduğunda görünecek.';
 
   @override
   String get summaryCheckAgain => 'Tekrar kontrol et';

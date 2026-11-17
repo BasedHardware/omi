@@ -14068,8 +14068,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Hindi pa naita-transcribe';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Hindi pa naita-transcribe ang audio ng recording na ito, kaya hindi makakatulong ang pag-retry ng buod.';
+  String get summaryTranscriptionPendingBody => 'Lalabas ang buod kapag handa na ang transcript.';
 
   @override
   String get summaryCheckAgain => 'Suriin muli';

@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "لا تزال المعالجة جارية",
     "summaryBusyBody": "يعمل Omi بالفعل على هذه المحادثة. سيظهر الملخص هنا عند الانتهاء.",
     "summaryTranscriptionPendingTitle": "لم يُفرَّغ نصيًا بعد",
-    "summaryTranscriptionPendingBody": "لم يُفرَّغ صوت هذا التسجيل نصيًا بعد، لذا لن تفيد إعادة محاولة الملخص.",
+    "summaryTranscriptionPendingBody": "سيظهر الملخص عندما يصبح النص جاهزًا.",
     "summaryCheckAgain": "تحقق مرة أخرى",
     "summaryLimitTitle": "تم بلوغ حد الملخصات",
     "summaryLimitBody": "لقد أعدت إنشاء عدة ملخصات خلال الساعة الماضية. حاول مرة أخرى لاحقًا.",

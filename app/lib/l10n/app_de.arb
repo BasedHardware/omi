@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Wird noch verarbeitet",
     "summaryBusyBody": "Omi arbeitet bereits an diesem Gespräch. Die Zusammenfassung erscheint hier, sobald sie fertig ist.",
     "summaryTranscriptionPendingTitle": "Noch nicht transkribiert",
-    "summaryTranscriptionPendingBody": "Der Ton dieser Aufnahme wurde noch nicht transkribiert, daher hilft ein neuer Versuch der Zusammenfassung nicht.",
+    "summaryTranscriptionPendingBody": "Die Zusammenfassung erscheint, sobald das Transkript fertig ist.",
     "summaryCheckAgain": "Erneut prüfen",
     "summaryLimitTitle": "Limit für Zusammenfassungen erreicht",
     "summaryLimitBody": "Du hast in der letzten Stunde mehrere Zusammenfassungen neu erstellt. Versuche es später erneut.",

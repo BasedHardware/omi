@@ -13944,8 +13944,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'This recording\'s audio hasn\'t been transcribed, so retrying the summary can\'t help.';
+  String get summaryTranscriptionPendingBody => 'The summary will appear once the transcript is ready.';
 
   @override
   String get summaryCheckAgain => 'Check Again';

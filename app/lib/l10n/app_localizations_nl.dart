@@ -13994,8 +13994,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Nog niet getranscribeerd';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'De audio van deze opname is nog niet getranscribeerd, dus de samenvatting opnieuw proberen helpt niet.';
+  String get summaryTranscriptionPendingBody => 'De samenvatting verschijnt zodra het transcript klaar is.';
 
   @override
   String get summaryCheckAgain => 'Opnieuw controleren';

@@ -13987,8 +13987,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Še ni prepisano';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Zvok tega posnetka še ni prepisan, zato ponovni poskus povzetka ne bo pomagal.';
+  String get summaryTranscriptionPendingBody => 'Povzetek se bo prikazal, ko bo prepis pripravljen.';
 
   @override
   String get summaryCheckAgain => 'Preveri znova';

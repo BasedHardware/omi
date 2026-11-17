@@ -14006,8 +14006,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Ещё не расшифровано';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Аудио этой записи ещё не расшифровано, поэтому повторная попытка сводки не поможет.';
+  String get summaryTranscriptionPendingBody => 'Сводка появится, когда будет готова расшифровка.';
 
   @override
   String get summaryCheckAgain => 'Проверить снова';

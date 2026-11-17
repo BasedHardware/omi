@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Все още се обработва",
     "summaryBusyBody": "Omi вече работи по този разговор. Обобщението ще се появи тук, когато приключи.",
     "summaryTranscriptionPendingTitle": "Все още не е транскрибирано",
-    "summaryTranscriptionPendingBody": "Аудиото на този запис още не е транскрибирано, така че повторното обобщение няма да помогне.",
+    "summaryTranscriptionPendingBody": "Обобщението ще се появи, когато транскрипцията е готова.",
     "summaryCheckAgain": "Провери отново",
     "summaryLimitTitle": "Достигнат е лимитът за обобщения",
     "summaryLimitBody": "Генерирахте отново няколко обобщения през последния час. Опитайте отново по-късно.",

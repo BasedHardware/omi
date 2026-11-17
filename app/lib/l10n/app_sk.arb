@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Stále sa spracúva",
     "summaryBusyBody": "Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.",
     "summaryTranscriptionPendingTitle": "Zatiaľ neprepísané",
-    "summaryTranscriptionPendingBody": "Zvuk tejto nahrávky zatiaľ nebol prepísaný, takže opakovanie zhrnutia nepomôže.",
+    "summaryTranscriptionPendingBody": "Zhrnutie sa zobrazí, keď bude prepis hotový.",
     "summaryCheckAgain": "Skontrolovať znova",
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",

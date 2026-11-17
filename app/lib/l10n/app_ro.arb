@@ -4271,7 +4271,7 @@
     "summaryBusyTitle": "Se procesează încă",
     "summaryBusyBody": "Omi lucrează deja la această conversație. Rezumatul va apărea aici când se termină.",
     "summaryTranscriptionPendingTitle": "Încă netranscris",
-    "summaryTranscriptionPendingBody": "Audio din această înregistrare nu a fost încă transcris, așa că reîncercarea rezumatului nu va ajuta.",
+    "summaryTranscriptionPendingBody": "Rezumatul va apărea când transcrierea este gata.",
     "summaryCheckAgain": "Verifică din nou",
     "summaryLimitTitle": "Limita de rezumate a fost atinsă",
     "summaryLimitBody": "Ai regenerat mai multe rezumate în ultima oră. Încearcă din nou mai târziu.",

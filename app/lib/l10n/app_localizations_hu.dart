@@ -14015,8 +14015,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Még nincs átírva';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'A felvétel hangja még nincs átírva, ezért az összefoglaló újrapróbálása nem segít.';
+  String get summaryTranscriptionPendingBody => 'Az összefoglaló akkor jelenik meg, amikor az átirat elkészül.';
 
   @override
   String get summaryCheckAgain => 'Újbóli ellenőrzés';

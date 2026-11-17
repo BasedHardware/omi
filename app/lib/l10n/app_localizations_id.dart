@@ -13972,8 +13972,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Belum ditranskripsi';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Audio rekaman ini belum ditranskripsi, jadi mencoba ulang ringkasan tidak akan membantu.';
+  String get summaryTranscriptionPendingBody => 'Ringkasan akan muncul setelah transkrip siap.';
 
   @override
   String get summaryCheckAgain => 'Periksa lagi';

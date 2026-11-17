@@ -13955,8 +13955,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Zatiaľ neprepísané';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Zvuk tejto nahrávky zatiaľ nebol prepísaný, takže opakovanie zhrnutia nepomôže.';
+  String get summaryTranscriptionPendingBody => 'Zhrnutie sa zobrazí, keď bude prepis hotový.';
 
   @override
   String get summaryCheckAgain => 'Skontrolovať znova';

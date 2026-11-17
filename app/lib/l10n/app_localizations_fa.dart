@@ -13956,8 +13956,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'هنوز رونویسی نشده';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'صدای این ضبط هنوز رونویسی نشده است، پس تلاش دوباره برای خلاصه کمکی نمی‌کند.';
+  String get summaryTranscriptionPendingBody => 'خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.';
 
   @override
   String get summaryCheckAgain => 'بررسی دوباره';

@@ -14001,8 +14001,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Aún sin transcribir';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'El audio de esta grabación aún no se ha transcrito, así que reintentar el resumen no servirá.';
+  String get summaryTranscriptionPendingBody => 'El resumen aparecerá cuando la transcripción esté lista.';
 
   @override
   String get summaryCheckAgain => 'Volver a comprobar';

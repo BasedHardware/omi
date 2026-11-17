@@ -11691,7 +11691,7 @@
     "summaryBusyTitle": "هنوز در حال پردازش",
     "summaryBusyBody": "Omi در حال حاضر روی این گفتگو کار می‌کند. خلاصه پس از اتمام اینجا نمایش داده می‌شود.",
     "summaryTranscriptionPendingTitle": "هنوز رونویسی نشده",
-    "summaryTranscriptionPendingBody": "صدای این ضبط هنوز رونویسی نشده است، پس تلاش دوباره برای خلاصه کمکی نمی‌کند.",
+    "summaryTranscriptionPendingBody": "خلاصه پس از آماده شدن رونوشت نمایش داده می‌شود.",
     "summaryCheckAgain": "بررسی دوباره",
     "summaryLimitTitle": "به سقف خلاصه‌ها رسیدید",
     "summaryLimitBody": "در یک ساعت گذشته چندین خلاصه را دوباره ایجاد کرده‌اید. بعداً دوباره امتحان کنید.",

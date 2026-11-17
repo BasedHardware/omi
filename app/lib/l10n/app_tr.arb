@@ -4306,7 +4306,7 @@
     "summaryBusyTitle": "Hâlâ işleniyor",
     "summaryBusyBody": "Omi bu konuşma üzerinde zaten çalışıyor. Özet tamamlandığında burada görünecek.",
     "summaryTranscriptionPendingTitle": "Henüz yazıya dökülmedi",
-    "summaryTranscriptionPendingBody": "Bu kaydın sesi henüz yazıya dökülmedi, bu yüzden özeti yeniden denemek işe yaramaz.",
+    "summaryTranscriptionPendingBody": "Özet, döküm hazır olduğunda görünecek.",
     "summaryCheckAgain": "Tekrar kontrol et",
     "summaryLimitTitle": "Özet sınırına ulaşıldı",
     "summaryLimitBody": "Son bir saat içinde birkaç özeti yeniden oluşturdunuz. Daha sonra tekrar deneyin.",

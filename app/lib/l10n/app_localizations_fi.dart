@@ -13963,8 +13963,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Ei vielä litteroitu';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Tämän tallenteen ääntä ei ole vielä litteroitu, joten yhteenvedon uudelleenyritys ei auta.';
+  String get summaryTranscriptionPendingBody => 'Tiivistelmä näkyy, kun litterointi on valmis.';
 
   @override
   String get summaryCheckAgain => 'Tarkista uudelleen';

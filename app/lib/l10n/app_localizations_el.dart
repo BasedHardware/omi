@@ -14051,8 +14051,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Δεν έχει μεταγραφεί ακόμα';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Ο ήχος αυτής της ηχογράφησης δεν έχει μεταγραφεί ακόμα, οπότε η επανάληψη της περίληψης δεν θα βοηθήσει.';
+  String get summaryTranscriptionPendingBody => 'Η σύνοψη θα εμφανιστεί μόλις είναι έτοιμη η μεταγραφή.';
 
   @override
   String get summaryCheckAgain => 'Νέος έλεγχος';

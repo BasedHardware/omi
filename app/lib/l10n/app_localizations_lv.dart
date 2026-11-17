@@ -13992,8 +13992,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Vēl nav transkribēts';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Šī ieraksta audio vēl nav transkribēts, tāpēc kopsavilkuma atkārtošana nepalīdzēs.';
+  String get summaryTranscriptionPendingBody => 'Kopsavilkums parādīsies, kad transkripcija būs gatava.';
 
   @override
   String get summaryCheckAgain => 'Pārbaudīt vēlreiz';

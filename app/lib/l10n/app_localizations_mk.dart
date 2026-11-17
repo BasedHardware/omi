@@ -14021,8 +14021,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Сè уште не е транскрибирано';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'Звукот од оваа снимка сè уште не е транскрибиран, па повторниот обид за резиме нема да помогне.';
+  String get summaryTranscriptionPendingBody => 'Резимето ќе се појави кога транскриптот ќе биде подготвен.';
 
   @override
   String get summaryCheckAgain => 'Провери повторно';

@@ -14033,8 +14033,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'Non ancora trascritto';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'L\'audio di questa registrazione non è ancora stato trascritto, quindi riprovare il riepilogo non servirà.';
+  String get summaryTranscriptionPendingBody => 'Il riassunto apparirà quando la trascrizione sarà pronta.';
 
   @override
   String get summaryCheckAgain => 'Controlla di nuovo';

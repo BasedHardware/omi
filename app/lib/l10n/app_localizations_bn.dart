@@ -13957,8 +13957,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get summaryTranscriptionPendingTitle => 'এখনও ট্রান্সক্রাইব হয়নি';
 
   @override
-  String get summaryTranscriptionPendingBody =>
-      'এই রেকর্ডিংয়ের অডিও এখনও ট্রান্সক্রাইব হয়নি, তাই সারাংশ আবার চেষ্টা করে লাভ নেই।';
+  String get summaryTranscriptionPendingBody => 'ট্রান্সক্রিপ্ট তৈরি হলে সারসংক্ষেপ দেখা যাবে।';
 
   @override
   String get summaryCheckAgain => 'আবার দেখুন';
