@@ -209,14 +209,11 @@ async def test_real_sync_endpoint_refuses_before_raw_gcs_or_admission_write(
         deny(client, reason, monkeypatch)
         before.update(deepcopy(client.rows))
     forbidden = {}
+    # Legacy staging, job creation and content claims were deleted with legacy sync (C9-C11).
     for name in (
         '_retrieve_file_paths_v2',
-        '_stage_files_to_gcs',
         'registered_record_response',
         'accept_batch_upload',
-        'create_sync_job',
-        'claim_sync_content',
-        'start_background_task',
         'record_product_event',
     ):
         forbidden[name] = Mock(side_effect=AssertionError('denied upload reached ' + name))
