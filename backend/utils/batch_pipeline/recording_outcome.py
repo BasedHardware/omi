@@ -69,6 +69,9 @@ class RecordingOutcome:
                 if time.monotonic() < self._due:
                     return
                 self._due = time.monotonic() + SAMPLE_SECONDS
+            # Unlike FreshGuard, the previous triple stays published while this one is in flight. Each count is
+            # bounded by a 10s timeout and EXPIRY_SECONDS bounds staleness, so withdrawing here would only punch
+            # a gap into every sample that a scrape happens to hit.
             try:
                 sample_time = time.time()
                 counts = recording_outcome_counts(store.client, sample_time)

@@ -123,6 +123,11 @@ def test_log_metric_source_scopes_and_real_turn_extraction():
     }
     # Log-based metrics are declared from their source file; other gmp-cloud-run declarations are app families.
     assert {name for name in declared if name.startswith('logging_googleapis_com:')} == expected
+    # The app-family declarations are not derived from a source file, so each must still be read by a rule.
+    rules_text = (MONITORING / 'alert-rules.json').read_text()
+    assert [
+        name for name in declared if not name.startswith('logging_googleapis_com:') and name not in rules_text
+    ] == []
     upload = metrics['omi_pipeline_upload_admission_503']['filter']
     for token in (
         'resource.type="cloud_run_revision"',

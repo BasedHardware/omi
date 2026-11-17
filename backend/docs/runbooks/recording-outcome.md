@@ -23,7 +23,17 @@ for that owner waited behind the refused head.
 
 - *Transcribed* means `record_projection_revision > 0`. The live projection sets
   it in the same write that lands the transcript.
+  - The revision counts projected units, each up to an hour of audio. A longer
+    recording therefore counts as soon as its first unit lands.
+  - The whole-record proof (the `transcribed` transition) is written only to the
+    per-user `pipeline_ledger`. A count over conversations cannot join it.
+  - A stalled head still leaves every recording queued behind it at revision 0,
+    which is the failure this page exists for.
 - *Summarized* means `summary_output_present == true`.
+- *"Within 15 min"* on the tiles means every counted recording has had at least
+  15 and at most 45 minutes to get its output. The share is presence at sample
+  time, not a per-recording landing clock: a count cannot compare two fields of
+  one document.
 
 The denominator is every finished recording, so a stall in any stage lowers the
 share. A latency histogram such as `omi_closed_to_summary_seconds` only observes
