@@ -13,6 +13,8 @@ import time
 
 from prometheus_client import Counter
 
+from google.api_core.exceptions import NotFound
+
 from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled
@@ -100,6 +102,47 @@ SECOND_PROVIDER_CALLS = Counter(
     'Second multilingual recovery calls after an empty or failed Modulate response',
     ['provider', 'outcome'],
 )
+
+# The recovery sweep's fetch settles a unit only for the deterministic,
+# generation-pinned read faults. The four typed decode-invalid classes ride
+# the closed refusal family through their typed arms below, and the storage
+# 404 completes the ``decode_artifact_missing`` custody the worker boundary
+# books for the same gone object (``diarizer.batch_pipeline.decode_artifact_failure_reason``):
+# a deleted object never comes back at the pinned generation, so the
+# re-read every sweep performs reproduces the fault exactly. A transient
+# transport fault maps to None and keeps its retry verdict. The map is
+# ordered: ``InvalidRetainedManifest`` subclasses ``RetainedAudioInvalid``
+# and must claim its own token first, and the typed arms claim their classes
+# before this family is consulted. The verdict reads the exception type
+# only — never a message — mirroring the worker boundary's deterministic
+# verdicts, so the split cannot drift with storage wording.
+#
+# Failure-Class: FC-decode-artifact-notfound-custody-reattacks-the-gone-object-every-recovery-sweep
+RECOVERY_FETCH_REFUSALS = (
+    (InvalidRetainedManifest, 'invalid_retained_manifest'),
+    (RetainedAudioInvalid, 'retained_audio_invalid'),
+    (StagedAudioInvalid, 'staged_audio_invalid'),
+    (StagedArtifactInvalid, 'staged_audio_invalid'),
+    (NotFound, 'decode_artifact_missing'),
+)
+
+
+def recovery_fetch_refusal(error: object) -> str | None:
+    """The closed refusal token for a deterministic fetch loss, else None.
+
+    One authority for the sweep's fetch custody family: the token it returns
+    is the closed worker-vocabulary reason the unit's evidence carries end to
+    end, and ``None`` leaves the caller's existing verdict (the transport and
+    contention families keep their retry budgets; a bare ``ValueError`` at
+    this surface stays retryable exactly like its pinned fixture). Hostile
+    non-exception input is not a family member and answers None; never
+    raises.
+    """
+
+    for klass, token in RECOVERY_FETCH_REFUSALS:
+        if isinstance(error, klass):
+            return token
+    return None
 
 
 def log_failure(failure):
@@ -399,6 +442,39 @@ class QuarantineRecovery:
                 ):
                     return 'held'
                 logger.info('event=batch_quarantine_recovery outcome=failed_held reason=staged_audio_invalid')
+                return 'failed_held'
+            except Exception as error:
+                # The remaining deterministic fetch losses settle through the
+                # one closed family: a ``NotFound`` from the generation-pinned
+                # read is the gone-object verdict (retention sweep, staging
+                # GC, the raw-audio discard sweep, an expired staging
+                # window). The generation is pinned in the manifest and a
+                # deleted object never comes back at it, so the identical
+                # re-read every sweep performs reproduces the fault exactly —
+                # without this arm the lane re-attacked the 404 on every pass
+                # forever: one paid generation-pinned GET plus one anonymous
+                # ``action=dispatch outcome=retry`` line per held unit per
+                # sweep, because ``failed_held`` leaves the candidate set but
+                # the retrying units never do. Settling once here completes
+                # the custody handoff the worker boundary books for this
+                # fault (``decode_artifact_missing``: the worker ends its
+                # chain and retains the unit for this fenced lane), under the
+                # worker's own closed-vocabulary token so the unit's evidence
+                # names the same family end to end. Everything the family
+                # does not claim — the transport/contention families, a bare
+                # ``ValueError`` at this retryable-by-fixture surface,
+                # privacy and projection fences — re-raises and keeps its
+                # existing verdict and budget untouched.
+                #
+                # Failure-Class: FC-decode-artifact-notfound-custody-reattacks-the-gone-object-every-recovery-sweep
+                refusal = recovery_fetch_refusal(error)
+                if refusal is None:
+                    raise
+                if not self.protocol.hold_invalid_manifest(
+                    segment_id, token, self.clock(), audio_uri=item.audio_uri, refusal_reason=refusal
+                ):
+                    return 'held'
+                logger.info('event=batch_quarantine_recovery outcome=failed_held reason=%s', refusal)
                 return 'failed_held'
             duration = item.duration_seconds
             # The input-bound worker VAD is acoustic evidence for ordinary

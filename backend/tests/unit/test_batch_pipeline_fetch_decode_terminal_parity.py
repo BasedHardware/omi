@@ -16,6 +16,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from google.api_core.exceptions import Aborted, InvalidArgument, NotFound, ServiceUnavailable
+
 from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.contracts import (
     FailedWork,
@@ -374,6 +376,170 @@ def test_recovery_transient_error_stays_prepared(setup, monkeypatch):
     )
     assert response.status_code == 500
     assert row(client)['recovery_state'] == 'prepared' and 'refusal' not in row(client)['recovery']
+
+
+# --- Gone-artifact custody (the lane completes the worker's handoff) -------------
+
+
+def test_recovery_holds_once_for_gone_storage_object(setup, monkeypatch, caplog):
+    # The generation-pinned read answers 404 when the object is gone from the
+    # bucket (retention sweep, staging GC, the raw-audio discard sweep). A
+    # deleted object never comes back at the pinned generation, so the re-read
+    # every sweep performs reproduces the fault exactly: the fenced lane must
+    # settle the unit once under the same closed refusal family as its typed
+    # siblings, completing the decode_artifact_missing custody the worker
+    # boundary books for this fault, instead of re-attacking the gone object
+    # on every pass.
+    #
+    # Failure-Class: FC-decode-artifact-notfound-custody-reattacks-the-gone-object-every-recovery-sweep
+    caplog.set_level(logging.INFO)
+    client, _, _, artifacts, stt, _ = setup
+    artifacts.fetch_audio.side_effect = NotFound('storage object not found')
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+    assert response.status_code == 200 and response.json() == {'status': 'failed_held'}
+    job = row(client)
+    assert job['recovery_state'] == 'failed_held'
+    assert job['recovery']['refusal'] == {'reason': 'decode_artifact_missing'}
+    stt.assert_not_called()
+
+
+def test_recovery_gone_object_leaves_the_candidate_set(setup, monkeypatch):
+    client, _, binding, artifacts, stt, recovery = setup
+    artifacts.fetch_audio.side_effect = NotFound('storage object not found')
+    http = serve(setup, monkeypatch)
+    payload = {'stage': 'prod', 'segment_id': 'bad'}
+    assert http.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'failed_held'}
+    assert recovery.protocol.prepare('bad', binding.owner_id, 200) is None
+    assert http.post('/v2/batch-pipeline/recover-quarantine', json=payload).json() == {'status': 'held'}
+    artifacts.fetch_audio.assert_called_once()
+    stt.assert_not_called()
+
+
+def test_recovery_gone_object_hold_event_carries_the_worker_token(setup, monkeypatch, caplog):
+    caplog.set_level(logging.INFO)
+    client, _, _, artifacts, _, _ = setup
+    artifacts.fetch_audio.side_effect = NotFound('storage object not found')
+    serve(setup, monkeypatch).post('/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'})
+    assert 'event=batch_quarantine_recovery outcome=failed_held reason=decode_artifact_missing' in caplog.text
+
+
+def test_recovery_gone_object_keeps_audio_without_persist_or_delete(setup, monkeypatch):
+    client, _, _, artifacts, stt, _ = setup
+    artifacts.fetch_audio.side_effect = NotFound('storage object not found')
+    http = serve(setup, monkeypatch)
+    http.post('/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'})
+    assert not [name for name, *_ in artifacts.mock_calls if 'delete' in name or 'persist' in name]
+    stt.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'fault',
+    (
+        InvalidArgument('malformed pinned request'),
+        Aborted('transaction aborted'),
+        ServiceUnavailable('storage unavailable'),
+    ),
+)
+def test_recovery_transient_storage_faults_keep_their_retry_verdict(setup, monkeypatch, fault):
+    client, _, _, artifacts, stt, _ = setup
+    artifacts.fetch_audio.side_effect = fault
+    response = serve(setup, monkeypatch).post(
+        '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
+    )
+    assert response.status_code == 500
+    assert row(client)['recovery_state'] == 'prepared'
+    assert 'refusal' not in row(client)['recovery']
+    stt.assert_not_called()
+
+
+def test_recovery_hold_accepts_the_artifact_missing_reason(setup):
+    client, _, binding, _, _, recovery = setup
+    token = recovery.protocol.prepare('bad', binding.owner_id, 100)['recovery']['token']
+    assert recovery.protocol.hold_invalid_manifest(
+        'bad', token, 100, audio_uri='gs://synthetic/audio', refusal_reason='decode_artifact_missing'
+    )
+    assert row(client)['recovery']['refusal'] == {'reason': 'decode_artifact_missing'}
+
+
+# --- Closed fetch-custody family -------------------------------------------------
+
+
+def test_recovery_fetch_refusal_family_is_the_closed_map():
+    from utils.batch_pipeline.quarantine_recovery import RECOVERY_FETCH_REFUSALS
+
+    from utils.batch_pipeline.artifacts import StagedArtifactInvalid
+    from utils.batch_pipeline.audio import StagedAudioInvalid
+    from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedAudioInvalid
+
+    assert RECOVERY_FETCH_REFUSALS == (
+        (InvalidRetainedManifest, 'invalid_retained_manifest'),
+        (RetainedAudioInvalid, 'retained_audio_invalid'),
+        (StagedAudioInvalid, 'staged_audio_invalid'),
+        (StagedArtifactInvalid, 'staged_audio_invalid'),
+        (NotFound, 'decode_artifact_missing'),
+    )
+
+
+def test_recovery_fetch_refusal_types_the_typed_classes_before_the_parent_token():
+    from utils.batch_pipeline.quarantine_recovery import recovery_fetch_refusal
+    from utils.batch_pipeline.source_audio import InvalidRetainedManifest, RetainedAudioInvalid
+
+    # The manifest subclass must claim its own token, not ride its parent's.
+    assert (
+        recovery_fetch_refusal(InvalidRetainedManifest('invalid retained audio slice')) == 'invalid_retained_manifest'
+    )
+    assert (
+        recovery_fetch_refusal(RetainedAudioInvalid('retained capture checksum mismatch')) == 'retained_audio_invalid'
+    )
+    assert recovery_fetch_refusal(NotFound('storage object not found')) == 'decode_artifact_missing'
+    assert recovery_fetch_refusal(NotFound('pinned generation 42 no longer exists')) == 'decode_artifact_missing'
+
+
+def test_recovery_fetch_refusal_reads_the_type_only():
+    from utils.batch_pipeline.quarantine_recovery import recovery_fetch_refusal
+
+    assert (
+        recovery_fetch_refusal(NotFound('a'))
+        == recovery_fetch_refusal(NotFound('b path /private/x omitted'))
+        == 'decode_artifact_missing'
+    )
+
+
+def test_recovery_fetch_refusal_leaves_every_transient_verdict_untouched():
+    from utils.batch_pipeline.quarantine_recovery import recovery_fetch_refusal
+
+    assert recovery_fetch_refusal(InvalidArgument('malformed pinned request')) is None
+    assert recovery_fetch_refusal(Aborted('transaction aborted')) is None
+    assert recovery_fetch_refusal(ServiceUnavailable('storage unavailable')) is None
+    assert recovery_fetch_refusal(ValueError('transient retained audio read failure')) is None
+    assert recovery_fetch_refusal(OSError('storage unavailable')) is None
+    assert recovery_fetch_refusal(KeyError('audio_uri')) is None
+    assert recovery_fetch_refusal(None) is None
+    assert recovery_fetch_refusal(object()) is None
+
+
+def test_recovery_fetch_refusal_tokens_name_their_closed_vocabularies():
+    from utils.batch_pipeline.errors import WORKER_VALIDATION_REASON_TOKENS
+    from utils.batch_pipeline.quarantine_recovery import RECOVERY_FETCH_REFUSALS
+
+    tokens = {token for _, token in RECOVERY_FETCH_REFUSALS}
+    assert tokens == {
+        'invalid_retained_manifest',
+        'retained_audio_invalid',
+        'staged_audio_invalid',
+        'decode_artifact_missing',
+    }
+    # The recovery store's manifest-defect token predates the worker
+    # vocabulary and stays the store's own; the other three are the closed
+    # worker tokens the unit's evidence carries end to end.
+    assert tokens - WORKER_VALIDATION_REASON_TOKENS == {'invalid_retained_manifest'}
+    assert {
+        'retained_audio_invalid',
+        'staged_audio_invalid',
+        'decode_artifact_missing',
+    } <= WORKER_VALIDATION_REASON_TOKENS
 
 
 def test_recovery_hold_default_refusal_reason_unchanged(setup):

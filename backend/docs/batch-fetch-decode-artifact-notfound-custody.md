@@ -42,6 +42,50 @@ The boundary now types the loss and ends the chain at its first occurrence:
   report only: durable state, evidence, metrics, custody and the
   awaiting-fenced-recovery warning are unchanged.
 
+## The recovery lane completes the custody
+
+The custody handoff names a consumer: the worker ends the chain and retains
+the unit "for the fenced recovery lane", and the held unit's manifest stays in
+place for that lane to settle. But the sweep's own fetch — the
+generation-pinned read it performs on every recovery attempt — had no arm for
+the gone-object verdict either. A `NotFound` from `fetch_audio` escaped all
+four typed decode-invalid arms, propagated out of the recovery intent, and was
+booked by the sweep's per-unit fault handler as an anonymous
+`event=batch_quarantine_recovery action=dispatch outcome=retry
+exception_type=NotFound` line with the unit kept `prepared`. Because
+`failed_held` units leave the recovery candidate set but retrying ones never
+do, that booked the same unit on every sweep forever: one paid
+generation-pinned GET plus one anonymous ERROR line per held unit per pass —
+the loop the sensor sees as a persistent fetch_decode NotFound cohort even
+after the worker boundary was fixed.
+
+The sweep's fetch now carries the missing arm. The closed family lives in one
+place (`utils.batch_pipeline.quarantine_recovery.RECOVERY_FETCH_REFUSALS`):
+the four typed decode-invalid classes keep their tokens, and the storage 404
+joins with the worker boundary's own `decode_artifact_missing` token, so the
+unit's evidence names the same family end to end. The settle rides the same
+`hold_invalid_manifest` CAS the typed arms ride: the unit reaches
+`failed_held` once, leaves the candidate set, and neither a Cloud Tasks retry
+nor a later sweep re-reads it. Everything the family does not claim — the
+transport and contention families (429/5xx/`Aborted`), a bare `ValueError` at
+this surface (retryable by its pinned fixture), privacy and projection fences
+— re-raises and keeps its existing verdict and retry budget. The arm reads no
+switch: the settle is decided by the pinned bytes' fault class alone.
+
+## Expected production shape after the sweep arm ships
+
+- The anonymous `action=dispatch outcome=retry exception_type=NotFound` lines
+  disappear; each affected held unit books exactly one
+  `event=batch_quarantine_recovery outcome=failed_held
+  reason=decode_artifact_missing` INFO transition and is never fetched again.
+- One paid generation-pinned GET per gone unit per sweep becomes one GET per
+  gone unit total.
+- The typed decode-invalid siblings keep their existing event names and
+  tokens; transient storage storms keep walking the retry budgets they are
+  shaped for.
+
+Failure-Class: FC-decode-artifact-notfound-custody-reattacks-the-gone-object-every-recovery-sweep
+
 ## Expected production shape after ship
 
 - `error_class=NotFound stage=fetch_decode reason=unclassified` disappears:
