@@ -117,6 +117,7 @@ class PublicationOutcomeTests(unittest.TestCase):
     def run_case(self, mode, expected_error=None):
         c, _, receipt = controls.ControlTests().prepared()
         _, release, parts = inputs()
+        release['target_commitish'] = c['source_sha']
         raw = b'{"reviewed":"manifest"}'
         digest = 'sha256:' + hashlib.sha256(raw).hexdigest()
         c['oci_manifest_digest'] = digest

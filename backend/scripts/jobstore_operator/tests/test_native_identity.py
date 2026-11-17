@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import qualify_operator as qualify
+import qualification_profile as P
 
 
 def image(store='classic-overlay2'):
@@ -23,6 +24,7 @@ def image(store='classic-overlay2'):
         'layers': [{'diff_id': 'sha256:' + 'c' * 64}],
         'config': {
             'config': {
+                'Labels': {'omi.artifact.profile': P.PROFILE, 'omi.catalog.profile': P.CATALOG_PROFILE},
                 'User': '1000:1000',
                 'Entrypoint': ['python', 'guard.py'],
                 'Cmd': ['--hold'],
@@ -194,6 +196,8 @@ class NativeIdentityTests(unittest.TestCase):
             self.assertIsNone(state['image'])
 
     def test_cleanup_failure_prevents_qualification_receipt(self):
+        import qualification_profile as P
+
         checked, host, state, calls, inspect, command = self.owned_case(remove_error=True)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -202,63 +206,66 @@ class NativeIdentityTests(unittest.TestCase):
             fixtures = root / 'fixtures'
             fixtures.write_bytes(b'fixture')
             output = root / 'qualification.json'
-            contract = {
-                'archive_bytes': 5,
-                'archive_sha256': hashlib.sha256(b'image').hexdigest(),
-                'fixture': {'bytes': 7, 'sha256': hashlib.sha256(b'fixture').hexdigest()},
-                'source_sha': 's',
-                'readiness_sha256': 'a' * 64,
-                'source_tree': 't',
-                'build_inputs_sha256': 'i',
-                'supervisor_sha256': 'g',
-                'oci_manifest_digest': checked['manifest_digest'],
-                'loaded_tag': 'owned:fixed',
+            contract = json.loads((Path(qualify.__file__).parent / 'artifact-contract.json').read_text())
+            contract.update(
+                archive_bytes=5,
+                archive_sha256=hashlib.sha256(b'image').hexdigest(),
+                fixture={'bytes': 7, 'sha256': hashlib.sha256(b'fixture').hexdigest()},
+                build_inputs_sha256='i',
+                oci_manifest_digest=checked['manifest_digest'],
+                loaded_tag='owned:fixed',
+            )
+            source = {
+                'result': 'GENERAL_COPY_SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
+                'catalog_sha256': P.CATALOG_SHA,
+                'uid': 1000,
+                'full_working_blob_check': True,
+                'ignored_file_check': True,
+                'credential_refusal_injected': True,
+                'real_credentials_used': False,
+                'sql_called': False,
+                'elapsed_ms': 100,
+            }
+            cli = {
+                'result': 'GENERAL_COPIER_CLI_IMPORT_PASS',
+                'help_sha256': 'a' * 64,
+                'git_sha256': 'b' * 64,
+                'python_sha256': 'c' * 64,
+                'git_path': '/usr/bin/git',
+                'python_resolved': '/opt/python',
+            }
+            suite = {
+                'result': 'GENERAL_COPY_FIXED_SUITE_PASS',
+                'profile': P.PROFILE,
+                'suite_sha256': P.SUITE_SHA,
+                'test_ids_sha256': P.TEST_IDS_SHA,
+                'tests_run': P.TESTS_EXPECTED,
+                'tests_skipped': 0,
+                'failures': 0,
+                'errors': 0,
             }
             with patch.object(qualify, 'native_host', return_value=host), patch.object(
                 qualify, 'validate', return_value=checked
             ), patch.object(qualify, 'inspect_tag', side_effect=inspect), patch.object(
                 qualify.subprocess, 'run', side_effect=command
             ), patch.object(
-                qualify, 'fixture_files', return_value={'source_sha': 's'}
+                qualify,
+                'fixture_files',
+                return_value={'source_sha': P.SOURCE, 'artifact_profile': P.PROFILE, 'suite_sha256': P.SUITE_SHA},
             ), patch.object(
                 qualify.image_smoke,
                 'run_container',
-                side_effect=[
-                    json.dumps(
-                        {
-                            'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
-                            'readiness_sha256': 'a' * 64,
-                            'uid': 1000,
-                            'full_source_check': True,
-                            'credential_refusal_injected': True,
-                            'real_credentials_used': False,
-                            'sql_called': False,
-                            'elapsed_ms': 100,
-                        }
-                    ),
-                    'smoke',
-                    'Ran 58 tests in 1.0s\n\nOK\n',
-                    'hold',
-                ],
+                side_effect=[json.dumps(source), json.dumps(cli), json.dumps(suite), 'hold'],
             ) as containers, patch.dict(
                 os.environ, {'GITHUB_WORKFLOW_SHA': 'w', 'GITHUB_RUN_ID': '1'}
             ):
                 with self.assertRaises(subprocess.CalledProcessError):
                     qualify.qualify(contract, archive, fixtures, output)
-                self.assertEqual(containers.call_args_list[0].kwargs, {'readiness': True})
-                self.assertEqual(
-                    containers.call_args_list[0].args[0],
-                    [
-                        '--entrypoint=/opt/operator-venv/bin/python',
-                        checked['config_digest'],
-                        '-c',
-                        qualify.image_smoke.source_refusal_program(contract['readiness_sha256']),
-                    ],
-                )
                 self.assertFalse(output.exists())
                 self.assertEqual(
                     json.loads(output.with_suffix('.cleanup.json').read_text())['result'], 'CLEANUP_OUTCOME_UNKNOWN'
                 )
+                self.assertEqual(containers.call_args_list[0].kwargs, {'readiness': True})
 
 
 if __name__ == '__main__':

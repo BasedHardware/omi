@@ -1,5 +1,7 @@
 """Proposed exact-digest publication; invoked only by the protected CI job."""
 
+import qualification_profile as P
+
 import argparse
 import image_smoke
 import base64
@@ -17,7 +19,8 @@ DESTINATION = 'gcr.io/based-hardware/jobstore-reconcile-operator'
 
 
 def validate_qualification(contract, receipt):
-    image_smoke.source_refusal_program(contract.get('readiness_sha256'))
+    P.validate_contract(contract)
+    image_smoke.source_refusal_program(contract.get('catalog_sha256'))
     expected = {
         'result': 'NATIVE_AMD64_QUALIFIED_OFFLINE_ONLY',
         'source_sha': contract['source_sha'],
@@ -26,7 +29,11 @@ def validate_qualification(contract, receipt):
         'oci_manifest_digest': contract['oci_manifest_digest'],
         'build_inputs_sha256': contract['build_inputs_sha256'],
         'supervisor_sha256': contract['supervisor_sha256'],
-        'tests_run': 58,
+        'tests_run': P.TESTS_EXPECTED,
+        'artifact_profile': P.PROFILE,
+        'catalog_profile': P.CATALOG_PROFILE,
+        'suite_sha256': P.SUITE_SHA,
+        'test_ids_sha256': P.TEST_IDS_SHA,
         'tests_skipped': 0,
         'uid': 1000,
         'container_network': 'none',
@@ -35,9 +42,20 @@ def validate_qualification(contract, receipt):
         'workflow_sha': os.environ['GITHUB_WORKFLOW_SHA'],
         'run_id': os.environ['GITHUB_RUN_ID'],
     }
-    if any(receipt.get(k) != v for k, v in expected.items()):
+    if any(not P.exact(receipt.get(k), v) for k, v in expected.items()):
         raise ValueError('CURRENT_RUN_EXACT_NATIVE_QUALIFICATION_REQUIRED')
-    image_smoke.validate_source_refusal(receipt.get('resource_bound_source_refusal', {}), contract['readiness_sha256'])
+    image_smoke.validate_source_refusal(receipt.get('resource_bound_source_refusal', {}), contract['catalog_sha256'])
+    cli = receipt.get('general_cli_import_smoke', {})
+    if (
+        cli.get('result') != 'GENERAL_COPIER_CLI_IMPORT_PASS'
+        or any(
+            not isinstance(cli.get(k), str) or not re.fullmatch('[0-9a-f]{64}', cli[k])
+            for k in ('help_sha256', 'git_sha256', 'python_sha256')
+        )
+        or not cli.get('git_path', '').startswith('/')
+        or not cli.get('python_resolved', '').startswith('/')
+    ):
+        raise ValueError('GENERAL_COPIER_ACTUAL_CLI_IMPORT_REQUIRED')
     host = receipt.get('native_host', {})
     if (
         host.get('system') != 'Linux'

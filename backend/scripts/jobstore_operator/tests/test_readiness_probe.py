@@ -193,11 +193,18 @@ class ReadinessTests(unittest.TestCase):
     def test_contract_matches_pinned_image_and_first_eight_source_migrations(self):
         package = Path(probe.__file__).parent
         artifact = json.loads((package / 'artifact-contract.json').read_text())
-        self.assertEqual(probe.CONTRACT['source_sha'], artifact['source_sha'])
-        self.assertEqual(probe.CONTRACT['supervisor_sha256'], artifact['supervisor_sha256'])
-        self.assertEqual(probe.CONTRACT['image'], artifact['destination'] + '@' + artifact['oci_manifest_digest'])
+        # Legacy consumed readiness stays separately pinned; the new general
+        # artifact contract must never relabel that prior runtime acceptance.
+        self.assertEqual(probe.CONTRACT['source_sha'], '97074e78defa1a84b9d39c021e28aa70cf4f2e4e')
         self.assertEqual(
-            hashlib.sha256((package / 'runner_readiness.py').read_bytes()).hexdigest(), artifact['readiness_sha256']
+            probe.CONTRACT['image'],
+            'gcr.io/based-hardware/jobstore-reconcile-operator@sha256:f713574047679618ecea32ff29b939f20fa3d63cfea33ba9cdf6643577d2c145',
+        )
+        self.assertNotEqual(probe.CONTRACT['source_sha'], artifact['source_sha'])
+        self.assertEqual(probe.CONTRACT['supervisor_sha256'], artifact['supervisor_sha256'])
+        self.assertEqual(
+            hashlib.sha256((package / 'runner_readiness.py').read_bytes()).hexdigest(),
+            '68954c63e888dcc720f6466394d472d5a308a119a80c74622efeae2908f417bb',
         )
         self.assertEqual([r[0] for r in probe.CONTRACT['migrations']], list(range(1, 9)))
         for version, name, checksum in probe.CONTRACT['migrations']:

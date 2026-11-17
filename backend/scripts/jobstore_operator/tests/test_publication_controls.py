@@ -20,6 +20,7 @@ import publish_operator
 import qualify_operator
 import registry_access
 import image_smoke
+import qualification_profile as P
 from test_operator_ingress import inputs
 
 
@@ -88,7 +89,7 @@ guard=types.ModuleType('process_guard')
 guard.run_group=lambda *a,**kw: ({'result':'COMPLETED','exit_code':2}, '{"result":"HOLD","failure_class":"DefaultCredentialsError","failure_stage":"credentials","failure_stage_elapsed_ms":1,"write_attempted":false,"state_initialized":false,"customer_rows_read":false}')
 sys.modules['process_guard']=guard
 '''
-        program = image_smoke.source_refusal_program(hashlib.sha256(b'fixture').hexdigest())
+        program = image_smoke.source_refusal_program(P.CATALOG_SHA)
         result = subprocess.run(
             [sys.executable, '-O', '-c', bootstrap + program], capture_output=True, text=True, timeout=10
         )
@@ -116,57 +117,71 @@ sys.modules['process_guard']=guard
             with self.subTest(value=value), patch.object(
                 qualify_operator, 'native_host', side_effect=AssertionError('NO_HOST_ACCESS')
             ):
-                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
-                    qualify_operator.qualify({'readiness_sha256': value}, None, None, None)
                 c, e, receipt = self.prepared()
-                c['readiness_sha256'] = value
-                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                c['catalog_sha256'] = value
+                with self.assertRaisesRegex(ValueError, 'EXACT_GENERAL_COPY_PROFILE_REQUIRED'):
+                    qualify_operator.qualify(c, None, None, None)
+                with self.assertRaisesRegex(ValueError, 'EXACT_GENERAL_COPY_PROFILE_REQUIRED'):
                     preflight.check(c, e, 100)
-                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                with self.assertRaisesRegex(ValueError, 'EXACT_GENERAL_COPY_PROFILE_REQUIRED'):
                     publish_operator.validate_qualification(c, receipt)
-                with self.assertRaisesRegex(ValueError, 'READINESS_SHA256'):
+                with self.assertRaisesRegex(ValueError, 'EXACT_CATALOG_PROFILE_SHA_REQUIRED'):
                     image_smoke.validate_source_refusal(receipt['resource_bound_source_refusal'], value)
 
     def test_optimized_python_still_enforces_source_proof_after_optimization_gate(self):
-        runner = b'fixture'
-        digest = hashlib.sha256(runner).hexdigest()
         good = {
-            'result': 'HOLD',
-            'failure_class': 'DefaultCredentialsError',
-            'failure_stage': 'credentials',
-            'failure_stage_elapsed_ms': 1,
-            'write_attempted': False,
-            'state_initialized': False,
-            'customer_rows_read': False,
+            'full_working_blob_check': True,
+            'ignored_file_check': True,
+            'credential_refusal_injected': True,
+            'real_credentials_used': False,
+            'sql_called': False,
+            'elapsed_ms': 1,
         }
-        program = image_smoke.source_refusal_program(digest).replace(
-            "require(sys.flags.optimize==0, 'SOURCE_REFUSAL_OPTIMIZATION_REFUSED')", ''
-        )
-        for guard, report in [
-            ({'result': 'PROCESS_DEADLINE', 'exit_code': 2}, good),
-            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, failure_stage='source_clean')),
-            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, sql_called=True)),
-            ({'result': 'COMPLETED', 'exit_code': 2}, dict(good, write_attempted=True)),
+        gate = "if sys.flags.optimize: raise ValueError('SOURCE_REFUSAL_OPTIMIZATION_REFUSED')\n"
+        original = image_smoke.source_refusal_program(P.CATALOG_SHA)
+        self.assertIn(gate, original)
+        program = original.replace(gate, '', 1)
+        completed = {'result': 'COMPLETED', 'exit_code': 0}
+        for guard, report, success in [
+            (completed, good, True),
+            ({'result': 'PROCESS_DEADLINE', 'exit_code': 2}, good, False),
+            (completed, dict(good, full_working_blob_check=False), False),
+            (completed, dict(good, sql_called=True), False),
+            (completed, dict(good, credential_refusal_injected=False), False),
         ]:
             bootstrap = (
-                'import sys,types,os,pathlib\n'
-                'os.getuid=lambda:1000\npathlib.Path.read_bytes=lambda _:b"fixture"\n'
-                'guard=types.ModuleType("process_guard")\n'
-                f'guard.run_group=lambda *a,**kw: ({guard!r}, {json.dumps(report)!r})\n'
-                'sys.modules["process_guard"]=guard\n'
+                'import sys,types,os,pathlib,hashlib\nos.getuid=lambda:1000\npathlib.Path.read_bytes=lambda _:b"fixture"\n'
+                + f'hashlib.sha256=lambda _:types.SimpleNamespace(hexdigest=lambda:{P.CATALOG_SHA!r})\n'
+                + 'guard=types.ModuleType("process_guard")\n'
+                + f'guard.run_group=lambda *a,**kw: ({guard!r},{json.dumps(report)!r})\n'
+                + 'sys.modules["process_guard"]=guard\n'
             )
             with self.subTest(guard=guard, report=report):
                 result = subprocess.run(
                     [sys.executable, '-O', '-c', bootstrap + program], capture_output=True, text=True, timeout=10
                 )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn('SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
+                if success:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn('GENERAL_COPY_SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
+                else:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertNotIn('GENERAL_COPY_SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL', result.stdout)
 
     def prepared(self):
         c, _, _ = inputs()
         c.update(
-            source_tree='b' * 40,
-            readiness_sha256='a' * 64,
+            source_sha=P.SOURCE,
+            source_tree=P.TREE,
+            readiness_sha256=P.READINESS_SHA,
+            artifact_profile=P.PROFILE,
+            catalog_profile=P.CATALOG_PROFILE,
+            catalog_sha256=P.CATALOG_SHA,
+            catalog_contract_sha256=P.CONTRACT_SHA,
+            catalog_structure_sha256=P.STRUCTURE_SHA,
+            guard_sha256=P.GUARD_SHA,
+            suite_sha256=P.SUITE_SHA,
+            test_ids_sha256=P.TEST_IDS_SHA,
+            tests_expected=P.TESTS_EXPECTED,
             build_inputs_sha256='c' * 64,
             supervisor_sha256='d' * 64,
             oci_manifest_digest='sha256:' + 'e' * 64,
@@ -204,12 +219,25 @@ sys.modules['process_guard']=guard
                     'supervisor_sha256',
                 )
             },
-            'tests_run': 58,
+            'tests_run': P.TESTS_EXPECTED,
+            'artifact_profile': P.PROFILE,
+            'catalog_profile': P.CATALOG_PROFILE,
+            'suite_sha256': P.SUITE_SHA,
+            'test_ids_sha256': P.TEST_IDS_SHA,
+            'general_cli_import_smoke': {
+                'result': 'GENERAL_COPIER_CLI_IMPORT_PASS',
+                'help_sha256': 'a' * 64,
+                'git_sha256': 'b' * 64,
+                'python_sha256': 'c' * 64,
+                'git_path': '/usr/bin/git',
+                'python_resolved': '/opt/python',
+            },
             'resource_bound_source_refusal': {
-                'result': 'SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
-                'readiness_sha256': c['readiness_sha256'],
+                'result': 'GENERAL_COPY_SOURCE_CHECKS_REACHED_CREDENTIAL_REFUSAL',
+                'catalog_sha256': c['catalog_sha256'],
                 'uid': 1000,
-                'full_source_check': True,
+                'full_working_blob_check': True,
+                'ignored_file_check': True,
                 'credential_refusal_injected': True,
                 'real_credentials_used': False,
                 'sql_called': False,
@@ -273,8 +301,8 @@ sys.modules['process_guard']=guard
         c, _, receipt = self.prepared()
         cases = [None]
         for key, value in [
-            ('readiness_sha256', 'z' * 64),
-            ('full_source_check', False),
+            ('catalog_sha256', 'z' * 64),
+            ('full_working_blob_check', False),
             ('real_credentials_used', True),
             ('sql_called', True),
             ('elapsed_ms', 60000),
@@ -296,7 +324,9 @@ sys.modules['process_guard']=guard
             for proof in (None, 1, True, 'proof', []):
                 bad = copy.deepcopy(receipt)
                 bad['resource_bound_source_refusal'] = proof
-                with self.subTest(malformed=proof), self.assertRaisesRegex(ValueError, 'SOURCE_REFUSAL_REQUIRED'):
+                with self.subTest(malformed=proof), self.assertRaisesRegex(
+                    ValueError, 'REAL_FULL_SOURCE_CATALOG_REFUSAL_REQUIRED'
+                ):
                     publish_operator.validate_qualification(c, bad)
 
     def test_emulated_host_receipt_refused(self):

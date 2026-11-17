@@ -1,21 +1,54 @@
-# Bounded operator publication under existing CI access
+# Exact post-SQL operator qualification
 
-This package qualifies and publishes the exact artifact pinned in artifact-contract.json through the existing gcp_backend.yml operator-qualify-publish mode. David authorized the source/publication chain and continued production-serving work in the owning jobstore thread on 2026-11-16. Firestore remains authoritative; the final authority cutover remains a separate go/no-go decision. Contract values record that scoped decision and never establish effective IAM permission or runtime admission.
+The current candidate is `general-copy-postsql-v2.c282.schema8`, with runtime source
+`c2824362c2a52925def3ef83f13c3b58487a6aa0` and tree
+`a5c8acbd193b6b85661c9fe91759b2ec0eb80608`. The source includes nine migrations;
+the catalog-only profile deliberately accepts the existing database's exact first
+eight migrations. It checks the complete schema, generated/default expressions,
+primary-key timing, index validity, effective grants, read-only session and TLS
+before reporting readiness. It neither applies migrations nor copies data.
 
-The missing provider metadata was recovered read-only through the existing org-access LIST path using ro-prod. The exact pool/provider are ACTIVE; the mapping and condition include the actual repository/owner IDs, main, prod and existing gcp_backend.yml. Fresh direct AR policy and SA trust reads confirm the existing unconditional writer binding and workloadIdentityUser workflow member. These are actual allow/trust facts, not effective permission proof. Organization deny/boundary visibility remains unavailable and Policy Troubleshooter was disabled; those failures are not retried or hidden.
+`qualification_profile.py` pins the catalog source, contract, structure, frozen
+process guard, retained legacy readiness helper and exact 36-case fixture suite.
+The catalog verifies every tracked working blob and the complete file set,
+including ignored files, without trusting Git index flags. Its bindings must be
+on a read-only filesystem. Missing or incorrect psycopg refuses before ADC.
+These source checks are separate from authentication and runtime admission.
 
-The admission policy is explicit: require reviewed existing allow/trust evidence for a narrowly approved artifact-publication attempt, rather than assert effective permission before it is observable. registry_write_authorization stays null. The permission-evidence schema records UNKNOWN_UNTIL_ACTUAL_REGISTRY_OPERATIONS and fixed principal/image/AR resource plus receipt hashes. The reviewed contract status/decision is bound to the explicit source/publication authorization; it does not authorize bypasses or access expansion. No IAM grant, API enable, human login, deployer key, new role, worker or new workflow is proposed.
+The default image entry point remains the frozen guard's `--hold`. Qualification
+must bind the loaded image's complete configuration, platform, layers and store
+identity to the validated archive, exercise the real general copier CLI import,
+run the complete fixed suite with zero skips, and reach an injected credential
+refusal after full source verification under the actual resource limit. The
+publisher rejects legacy readiness-only receipts and mismatched profiles,
+sources, suite identities or proof fields. Earlier image qualification cannot
+qualify this full rebuild. `readiness.md` documents the retained legacy metadata
+probe; its source and receipt identity remain unchanged.
 
-The existing gcp_backend.yml mode and all native/source/eligibility/private-asset/UID/network/state/digest guards remain unchanged. After successful native qualification and existing WIF authentication, the publisher makes one fixed-resource testIamPermissions request with its actual workflow token. Missing, malformed, oversized, redirect, auth or transport results stop before any registry operation. A complete result is recorded ONLY as a diagnostic CLI hint with authorization_proof=false; it cannot authorize a write or stand in for deny/PAB evaluation. The real registry requests enforce IAM. An approved immutable-image write is only recorded as successful after digest-preserving copy and complete manifest/blob/diffID readback. An already-present artifact is read back without claiming write authority. Failed/uncertain copy stays unverified; no runtime/pilot change follows.
+The candidate contract is closed: archive, immutable image, release assets,
+registry evidence and native qualification remain null until measured. The
+existing `gcp_backend.yml` qualification/publication workflow is unchanged.
+Release must admit the reviewed main control and exact candidate, then complete
+native AMD64 qualification and immutable publication before a separately reviewed
+execution packet can run. Local tests, an ARM-hosted build or a publication
+receipt do not establish production serving or Firestore reads removed.
 
-No token enters argv, a URL, logs or receipts. The hint endpoint/resource is fixed, TLS is verified and redirects are refused. Existing private auth-file cleanup and bounded artifact output remain unchanged. Source tests alone do not establish effective registry permission. The prior image `8b0bf0de...` completed native qualification and a new immutable registry write with full readback in [Actions run43851897045](https://github.com/BasedHardware/omi/actions/runs/43851897045), under control1ed16cae960589255dfc70f63db31e95cc587a4c. That completed operation does not prove future authorization or production serving; do not redispatch it as a status check.
+Registry admission requires reviewed existing allow/trust evidence for the fixed
+publication destination. `registry_write_authorization` remains null until an
+actual write and full digest-preserving readback succeed. The fixed-resource
+`testIamPermissions` request is diagnostic only; missing, malformed, oversized,
+redirect, authentication or transport outcomes stop before registry operations.
+Existing private auth-file cleanup and bounded output guards remain in force.
+No access expansion, new workflow or deploy is included in this source change.
 
-Dispatch remains Release-only, prod gated, exact main control/runtime Release Eligibility-bound and limited to the reviewed source97074 candidate image manifestf7135740... and unpublished draft448153636. The new candidate must pass the correct-host resource-bound source check and all58 fixture cases before any immutable registry publication; prior qualification does not carry forward. No image rebuild/latest overwrite, account/state/SQL/index migration, runtime installation, cohort policy or pilot admission. Firestore stays authoritative until separate runtime/fleet/privacy/cohort/absolute budget/ramp acceptance gates are complete.
+Portable publication tests use standard-library seams that fail on SDK use.
+Discovery never substitutes SDK modules or skips for missing packages. Run the
+mandatory control suite from the repository root:
 
-The `f7135740…` candidate is a readiness-only derivative of the exact `a79982bb…` base, whose native58 qualification and immutable publication completed in [Actions run43960712883](https://github.com/BasedHardware/omi/actions/runs/43960712883). All13 original layers remain identical and one added layer replaces only the readiness helper. The full offline rebuild failed with local Docker VM ENOSPC; no shared prune or capacity change was used. The new fixture freezes28 payloads, including the actual derivative recipe, verifier, closed input manifest and provenance, while retaining58 test cases. Base qualification does not qualify this derivative. Its source check has up to30 seconds inside the same50-second overall deadline, with the same full source checks and resources; an actual native/source-refusal result and later metadata-readiness result are still required.
+```sh
+python -B -m unittest discover -s backend/scripts/jobstore_operator/tests -v
+```
 
-Primary docs: [Artifact Registry permission hint API](https://docs.cloud.google.com/artifact-registry/docs/reference/rest/v1/projects.locations.repositories/testIamPermissions), [IAM testIamPermissions caution](https://docs.cloud.google.com/agent-registry/reference/rpc/google.iam.v1), [real Artifact Registry API enforcement](https://docs.cloud.google.com/artifact-registry/docs/access-control), [Policy Troubleshooter scope](https://docs.cloud.google.com/iam/docs/troubleshoot-policies). The diagnostic result is deliberately not an authorization oracle.
-
-The next independent step is the [state-free metadata readiness packet](readiness.md). It requires fresh exact-candidate native qualification and publication first, then a separately reviewed execution packet. It neither copies data, mounts persistent state nor applies migrations.
-
-Portable publication controls run with the Python standard library alone. During unittest setup, source/receipt tests load a private runner copy through the sanctioned import-isolation helper, with SDK seams that fail on use. Discovery never substitutes SDK modules, and tests never skip for missing packages. Actual dependency imports and credential-refusal behavior remain separate exact-image native qualification gates.
+The separately hashed catalog fixture suite, real Linux image and workload
+identity checks remain additional gates. Firestore authority and cohort ramps
+require their own runtime, fleet, privacy, budget, metrics and rollback evidence.
