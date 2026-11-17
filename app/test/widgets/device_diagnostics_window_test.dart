@@ -24,12 +24,13 @@ class _NoConnectivityPlatform extends ConnectivityPlatform {
   Stream<List<ConnectivityResult>> get onConnectivityChanged => const Stream.empty();
 }
 
-BleDisconnectEvent _event(int timestamp, {String eventType = 'disconnect', int timeToReconnectMs = 0}) {
+BleDisconnectEvent _event(int timestamp,
+    {String eventType = 'disconnect', int timeToReconnectMs = 0, bool isManual = false}) {
   return BleDisconnectEvent(
     timestamp: timestamp,
     reason: eventType == 'fail_to_connect' ? 'connection_timeout' : 'clean_disconnect',
     reasonCode: 8,
-    isManual: false,
+    isManual: isManual,
     eventType: eventType,
     lastRssi: -70,
     connectionDurationMs: eventType == 'disconnect' ? 60000 : 0,
@@ -150,7 +151,7 @@ void main() {
         _event(since + 3600 * 1000, timeToReconnectMs: 5000), // recovered → counted
         _event(since + 90 * 60 * 1000, timeToReconnectMs: 7000), // recovered → counted
         _event(since + 2 * 3600 * 1000, eventType: 'fail_to_connect'), // counted as failed connect
-        _event(since + 3 * 3600 * 1000, timeToReconnectMs: 0), // not yet reconnected → excluded
+        _event(since + 3 * 3600 * 1000, timeToReconnectMs: 0), // not yet reconnected → still a drop
       ]),
     );
     mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({'counters_since': since}));
@@ -160,17 +161,17 @@ void main() {
     expect(find.text('Right Now'), findsOneWidget);
     expect(find.text('Last 7 Days'), findsOneWidget);
     expect(find.text('Drops'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
     expect(find.text('Failed connections'), findsOneWidget);
     expect(find.text('1'), findsOneWidget);
     expect(find.text('Longest gap'), findsOneWidget);
     expect(find.text('7s'), findsOneWidget);
-    expect(find.text('Since pairing: 10048 drops, 12 failed connections.'), findsOneWidget);
+    expect(find.text('Since pairing: 10048 reconnections, 12 failed connections.'), findsOneWidget);
     // The failed connect is days old, so the verdict stays healthy; median of 5 s and 7 s.
     expect(find.byKey(const Key('diagnostics_verdict_ok')), findsOneWidget);
     expect(find.text('Brief drops, back in about 6s each time'), findsOneWidget);
     // Counts are neutral text, never status colours.
-    expect(textColor(tester, '2'), OmiColors.textSecondary);
+    expect(textColor(tester, '3'), OmiColors.textSecondary);
     expect(textColor(tester, '1'), OmiColors.textSecondary);
     // Lifetime numbers no longer hold the headline position.
     expect(find.text('10048'), findsNothing);
@@ -206,23 +207,26 @@ void main() {
       expect(find.text('Drops'), findsOneWidget);
       expect(find.text('Failed connections'), findsOneWidget);
       expect(find.text(hasRecentEvents ? '1' : '0'), findsNWidgets(2));
-      expect(find.text('Since pairing: 10048 drops, 12 failed connections.'), findsOneWidget);
+      expect(find.text('Since pairing: 10048 reconnections, 12 failed connections.'), findsOneWidget);
     });
   }
 
-  testWidgets('missing window anchor falls back to lifetime counts, labelled since pairing', (tester) async {
-    mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));
+  testWidgets('missing anchor counts retained unrecovered drops and keeps lifetime reconnections separate',
+      (tester) async {
+    mockBleHostApi(
+        'getDeviceDiagnostics', diagnostics([_event(DateTime.now().millisecondsSinceEpoch - 1000)], connectedAt: 0));
     // No counters_since: extended diagnostics came back empty.
     mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({}));
 
     await pumpPage(tester);
 
     expect(find.text('Drops'), findsOneWidget);
-    expect(find.text('10048 since pairing'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('Failed connections'), findsOneWidget);
-    expect(find.text('12 since pairing'), findsOneWidget);
-    expect(find.textContaining('Since pairing:'), findsNothing);
-    expect(find.text('No drops this week'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('Since pairing: 10048 reconnections, 12 failed connections.'), findsOneWidget);
+    expect(find.text('No drops this week'), findsNothing);
+    expect(find.byKey(const Key('diagnostics_verdict_ok')), findsNothing);
   });
 
   testWidgets('a failed connection in the last 24 hours turns the verdict', (tester) async {
@@ -297,7 +301,7 @@ void main() {
     expect(find.text('357'), findsOneWidget);
     expect(find.text('about 2 an hour'), findsOneWidget);
     expect(find.text('40s'), findsOneWidget);
-    expect(find.text('Since pairing: 368 drops, 0 failed connections.'), findsOneWidget);
+    expect(find.text('Since pairing: 368 reconnections, 0 failed connections.'), findsOneWidget);
     expect(textColor(tester, '357'), OmiColors.textSecondary);
     // −68 dBm is Good, and Good is green.
     expect(find.text('Good'), findsOneWidget);
@@ -358,6 +362,41 @@ void main() {
       expect(recent.failedLast24h, 1);
     });
 
+    test('unrecovered drops count but manual actions and audio recovery stamps do not', () {
+      final summary = summarizeDiagnostics([
+        _event(now - hour, timeToReconnectMs: 0),
+        _event(now - hour, timeToReconnectMs: 2000, isManual: true),
+        _event(now - hour, eventType: 'audio_recovered', timeToReconnectMs: 5000),
+        _event(now - hour, eventType: 'fail_to_connect', timeToReconnectMs: 9000),
+      ], nowMs: now, sinceMs: now - 2 * hour);
+      expect(summary.drops, 1);
+      expect(summary.failed, 1);
+      expect(summary.medianReconnectMs, isNull);
+      expect(summary.longestGapMs, isNull);
+    });
+
+    test('bundle and UI share the retained window even without an anchor or for future rows', () {
+      final times = [now - 8 * 24 * hour, now - hour, now + hour];
+      final events = [for (final t in times) _event(t)];
+      final rows = [
+        for (final t in times) {'timestamp': t, 'eventType': 'disconnect', 'isManual': false}
+      ];
+      expect(summarizeDiagnostics(events, nowMs: now).drops, 1);
+      expect(
+          diagnosticsWindowDropCount([
+            ...rows,
+            {'timestamp': now - hour, 'eventType': 'disconnect', 'isManual': true},
+            {'timestamp': now - hour, 'eventType': 'audio_recovered', 'isManual': false},
+          ], nowMs: now),
+          1);
+      expect(
+          diagnosticsWindowDropCount([
+            {'timestamp': now - hour, 'lostAudioResolvedAt': now},
+          ], nowMs: now),
+          0,
+          reason: 'legacy recovery stamps are not BLE drops');
+    });
+
     test('median, longest gap and hourly rate over the window', () {
       final summary = summarizeDiagnostics(
         [
@@ -370,10 +409,10 @@ void main() {
         nowMs: now,
         sinceMs: now - 2 * hour,
       );
-      expect(summary.drops, 2);
+      expect(summary.drops, 3);
       expect(summary.medianReconnectMs, 2500);
       expect(summary.longestGapMs, 3000);
-      expect(summary.dropsPerHour, 1);
+      expect(summary.dropsPerHour, 2);
     });
 
     test('no drops and no window anchor leave the derived values empty', () {

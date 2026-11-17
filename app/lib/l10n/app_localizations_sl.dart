@@ -12255,7 +12255,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Od seznanitve: izpadov $drops, neuspešnih povezav $failed.';
+    return 'Od seznanitve: $drops ponovnih povezav, $failed neuspelih povezav.';
   }
 
   @override
@@ -13493,16 +13493,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Pretvarjanje $amount v pogovore';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Končano $done od $total · lahko zapustite ta zaslon';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount pripravljeno za sinhronizacijo';
   }
@@ -13526,7 +13516,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Čaka na tem telefonu';
 
   @override
-  String get syncDetailsTranscribing => 'Prepisovanje v Omi';
+  String get syncDetailsTranscribing => 'Naloženo, čaka na strežnik';
 
   @override
   String get syncDetailsAudioFiles => 'Zvočne datoteke';
@@ -15585,4 +15575,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Pišemo vaš povzetek…';
+
+  @override
+  String get onTheWayServerWork => 'Delo, ki ga poroča strežnik';
 }

@@ -23,6 +23,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/wal_derived_sync_views.dart';
 
 class _EnvFields implements EnvFields {
   const _EnvFields();
@@ -79,7 +80,7 @@ Future<void> _frame(WidgetTester tester, String name) async {
 /// recording read as dozens of identical rows, and ten "too old" files from one afternoon were ten
 /// Delete buttons.
 
-class _Sync extends ChangeNotifier implements SyncProvider {
+class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvider {
   _Sync(this.wals, {this.removeOnDelete = true, this.relistOnDiscover = const []});
 
   final List<Wal> wals;

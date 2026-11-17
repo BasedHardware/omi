@@ -12235,7 +12235,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'जोडणीनंतर: $drops खंड, $failed अयशस्वी कनेक्शन.';
+    return 'पेअरिंगपासून: $drops पुनर्जोडण्या, $failed अयशस्वी जोडण्या.';
   }
 
   @override
@@ -13469,16 +13469,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount चे संभाषणांमध्ये रूपांतर होत आहे';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total पूर्ण · तुम्ही ही स्क्रीन सोडू शकता';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount सिंकसाठी तयार';
   }
@@ -13502,7 +13492,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'या फोनवर प्रतीक्षेत';
 
   @override
-  String get syncDetailsTranscribing => 'Omi वर ट्रान्सक्राइब होत आहे';
+  String get syncDetailsTranscribing => 'अपलोड झाले, सर्व्हरची प्रतीक्षा';
 
   @override
   String get syncDetailsAudioFiles => 'ऑडिओ फाइल्स';
@@ -15564,4 +15554,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'तुमचा सारांश लिहित आहे…';
+
+  @override
+  String get onTheWayServerWork => 'सर्व्हरने नोंदवलेले काम';
 }

@@ -21792,7 +21792,7 @@ abstract class AppLocalizations {
   /// Device Diagnostics footnote under the 7-day summary with lifetime counts
   ///
   /// In en, this message translates to:
-  /// **'Since pairing: {drops} drops, {failed} failed connections.'**
+  /// **'Since pairing: {drops} reconnections, {failed} failed connections.'**
   String diagnosticsSincePairingSummary(int drops, int failed);
 
   /// Caption beside the live signal chart title; duration is the chart window, e.g. 60s
@@ -23937,18 +23937,6 @@ abstract class AppLocalizations {
   /// **'Uploading · {done} of {total}'**
   String syncStepUploadingAmount(String done, String total);
 
-  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
-  ///
-  /// In en, this message translates to:
-  /// **'Turning {amount} into conversations'**
-  String syncCardTranscribingAmount(String amount);
-
-  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
-  ///
-  /// In en, this message translates to:
-  /// **'{done} of {total} done · you can leave this screen'**
-  String syncCardTranscribedOf(String done, String total);
-
   /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
   ///
   /// In en, this message translates to:
@@ -23991,10 +23979,10 @@ abstract class AppLocalizations {
   /// **'Waiting on this phone'**
   String get syncDetailsWaitingOnPhone;
 
-  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  /// Sync details stage label for uploaded audio awaiting a confirmed server outcome.
   ///
   /// In en, this message translates to:
-  /// **'Transcribing on Omi'**
+  /// **'Uploaded, awaiting server'**
   String get syncDetailsTranscribing;
 
   /// Sync details row label: number of raw audio files the app holds.
@@ -27296,6 +27284,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Writing your summary…'**
   String get conversationWritingSummary;
+
+  /// No description provided for @onTheWayServerWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-reported work'**
+  String get onTheWayServerWork;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

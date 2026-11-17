@@ -12258,7 +12258,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'З моманту спарвання: разрываў — $drops, няўдалых злучэнняў — $failed.';
+    return 'З моманту спалучэння: $drops паўторных падключэнняў, $failed няўдалых падключэнняў.';
   }
 
   @override
@@ -13498,16 +13498,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Ператварэнне $amount у размовы';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Гатова $done з $total · можна пакінуць гэты экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount гатова да сінхранізацыі';
   }
@@ -13531,7 +13521,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Чакае на гэтым тэлефоне';
 
   @override
-  String get syncDetailsTranscribing => 'Расшыфроўваецца ў Omi';
+  String get syncDetailsTranscribing => 'Запампавана, чаканне сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аўдыяфайлы';
@@ -15592,4 +15582,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пішам ваша рэзюмэ…';
+
+  @override
+  String get onTheWayServerWork => 'Праца паводле сервера';
 }

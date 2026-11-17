@@ -12307,7 +12307,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Από τη σύζευξη: $drops διακοπές, $failed αποτυχημένες συνδέσεις.';
+    return 'Από τη σύζευξη: $drops επανασυνδέσεις, $failed αποτυχημένες συνδέσεις.';
   }
 
   @override
@@ -13549,16 +13549,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Μετατροπή $amount σε συζητήσεις';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Ολοκληρώθηκαν $done από $total · μπορείτε να φύγετε από αυτήν την οθόνη';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount έτοιμα για συγχρονισμό';
   }
@@ -13582,7 +13572,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Αναμονή για αυτό το τηλέφωνο';
 
   @override
-  String get syncDetailsTranscribing => 'Απομαγνητοφώνηση στο Omi';
+  String get syncDetailsTranscribing => 'Μεταφορτώθηκε, αναμονή διακομιστή';
 
   @override
   String get syncDetailsAudioFiles => 'Αρχεία ήχου';
@@ -15658,4 +15648,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Γράφεται η σύνοψή σας…';
+
+  @override
+  String get onTheWayServerWork => 'Εργασία που αναφέρει ο διακομιστής';
 }

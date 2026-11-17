@@ -12312,7 +12312,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'இணைத்ததிலிருந்து: $drops துண்டிப்புகள், $failed தோல்வியுற்ற இணைப்புகள்.';
+    return 'இணைத்ததிலிருந்து: $drops மறு இணைப்புகள், $failed தோல்வியடைந்த இணைப்புகள்.';
   }
 
   @override
@@ -13556,16 +13556,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return '$amount உரையாடல்களாக மாற்றப்படுகிறது';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done / $total முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount ஒத்திசைக்கத் தயார்';
   }
@@ -13589,7 +13579,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'இந்த ஃபோனில் காத்திருக்கிறது';
 
   @override
-  String get syncDetailsTranscribing => 'Omi இல் எழுத்தாக்கம் நடக்கிறது';
+  String get syncDetailsTranscribing => 'பதிவேற்றப்பட்டது, சேவையகத்திற்குக் காத்திருக்கிறது';
 
   @override
   String get syncDetailsAudioFiles => 'ஆடியோ கோப்புகள்';
@@ -15660,4 +15650,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'உங்கள் சுருக்கம் எழுதப்படுகிறது…';
+
+  @override
+  String get onTheWayServerWork => 'சேவையகம் தெரிவித்த பணி';
 }

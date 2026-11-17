@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "Mga pagputol",
     "diagnosticsDropsPerHour": "mga {count} kada oras",
     "diagnosticsLongestGap": "Pinakamahabang puwang",
-    "diagnosticsSincePairingSummary": "Mula nang ipares: {drops} pagputol, {failed} bigong koneksyon.",
+    "diagnosticsSincePairingSummary": "Mula nang ipinares: {drops} muling pagkonekta, {failed} nabigong koneksyon.",
     "diagnosticsLastDuration": "Nakaraang {duration}",
     "chatReplyOffline": "Hindi makakonekta. Suriin ang iyong koneksyon at subukan ulit.",
     "chatReplyServerError": "May nangyaring mali sa aming panig. Subukan muli.",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "Sini-sync ang mga recording mo",
     "syncStepDownloadingAmount": "Dina-download mula sa Omi mo · {done} sa {total}",
     "syncStepUploadingAmount": "Ina-upload · {done} sa {total}",
-    "syncCardTranscribingAmount": "Ginagawang mga usapan ang {amount}",
-    "syncCardTranscribedOf": "{done} sa {total} tapos na · puwede mong iwan ang screen na ito",
     "syncCardReadyAmount": "{amount} handa nang i-sync",
     "syncDetailsTitle": "Mga detalye ng sync",
     "syncDetailsRightNow": "Ngayon",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "Bilis ng paglipat",
     "syncDetailsWaitingOnOmi": "Naghihintay sa Omi mo",
     "syncDetailsWaitingOnPhone": "Naghihintay sa phone na ito",
-    "syncDetailsTranscribing": "Tina-transcribe sa Omi",
+    "syncDetailsTranscribing": "Na-upload, naghihintay sa server",
     "syncDetailsAudioFiles": "Mga audio file",
     "syncDetailsServerJobs": "Mga server job (tapos / kabuuan)",
     "syncDetailsCopy": "Kopyahin ang mga detalye para sa support",
@@ -12241,5 +12239,6 @@
     "onDeviceModelDownloadSize": "{size} MB na download",
     "downloadNow": "I-download Ngayon",
     "onWifiLater": "Mamaya sa Wi-Fi",
-    "conversationWritingSummary": "Isinusulat ang iyong buod…"
+    "conversationWritingSummary": "Isinusulat ang iyong buod…",
+    "onTheWayServerWork": "Trabahong iniulat ng server"
 }

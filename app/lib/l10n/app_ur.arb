@@ -11185,7 +11185,7 @@
     "diagnosticsDrops": "رکاوٹیں",
     "diagnosticsDropsPerHour": "تقریباً {count} فی گھنٹہ",
     "diagnosticsLongestGap": "طویل ترین وقفہ",
-    "diagnosticsSincePairingSummary": "جوڑنے کے بعد سے: {drops} رکاوٹیں، {failed} ناکام کنکشن۔",
+    "diagnosticsSincePairingSummary": "پیئرنگ کے بعد سے: {drops} دوبارہ کنکشن، {failed} ناکام کنکشن۔",
     "diagnosticsLastDuration": "پچھلے {duration}",
     "chatReplyOffline": "منسلک نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
     "chatReplyServerError": "ہماری طرف سے کچھ غلط ہوا۔ براہ کرم دوبارہ کوشش کریں۔",
@@ -11545,8 +11545,6 @@
     "syncCardSyncingTitle": "آپ کی ریکارڈنگز سنک ہو رہی ہیں",
     "syncStepDownloadingAmount": "آپ کے Omi سے ڈاؤن لوڈ · {done} / {total}",
     "syncStepUploadingAmount": "اپ لوڈ · {done} / {total}",
-    "syncCardTranscribingAmount": "{amount} کو گفتگو میں تبدیل کیا جا رہا ہے",
-    "syncCardTranscribedOf": "{done} / {total} مکمل · آپ اس اسکرین سے باہر جا سکتے ہیں",
     "syncCardReadyAmount": "{amount} سنک کے لیے تیار",
     "syncDetailsTitle": "سنک کی تفصیلات",
     "syncDetailsRightNow": "ابھی",
@@ -11554,7 +11552,7 @@
     "syncDetailsTransferSpeed": "منتقلی کی رفتار",
     "syncDetailsWaitingOnOmi": "Omi پر منتظر",
     "syncDetailsWaitingOnPhone": "اس فون پر منتظر",
-    "syncDetailsTranscribing": "Omi پر ٹرانسکرائب ہو رہا ہے",
+    "syncDetailsTranscribing": "اپ لوڈ ہو گیا، سرور کا انتظار ہے",
     "syncDetailsAudioFiles": "آڈیو فائلیں",
     "syncDetailsServerJobs": "سرور جابز (مکمل / کل)",
     "syncDetailsCopy": "سپورٹ کے لیے تفصیلات کاپی کریں",
@@ -12241,5 +12239,6 @@
     "onDeviceModelDownloadSize": "{size} MB ڈاؤن لوڈ",
     "downloadNow": "ابھی ڈاؤن لوڈ کریں",
     "onWifiLater": "بعد میں Wi-Fi پر",
-    "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…"
+    "conversationWritingSummary": "آپ کا خلاصہ لکھا جا رہا ہے…",
+    "onTheWayServerWork": "سرور کی بتائی ہوئی کارروائی"
 }

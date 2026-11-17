@@ -12252,7 +12252,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'Sejak pemasangan: $drops pemutusan, $failed sambungan gagal.';
+    return 'Sejak dipasangkan: $drops sambungan semula, $failed sambungan gagal.';
   }
 
   @override
@@ -13495,16 +13495,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Menukar $amount kepada perbualan';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return '$done daripada $total selesai · anda boleh tinggalkan skrin ini';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount sedia untuk disegerakkan';
   }
@@ -13528,7 +13518,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Menunggu telefon ini';
 
   @override
-  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+  String get syncDetailsTranscribing => 'Dimuat naik, menunggu pelayan';
 
   @override
   String get syncDetailsAudioFiles => 'Fail audio';
@@ -15593,4 +15583,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Menulis ringkasan anda…';
+
+  @override
+  String get onTheWayServerWork => 'Kerja yang dilaporkan pelayan';
 }

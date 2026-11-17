@@ -12269,7 +12269,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String diagnosticsSincePairingSummary(int drops, int failed) {
-    return 'С момента сопряжения: обрывов — $drops, неудачных подключений — $failed.';
+    return 'С момента сопряжения: $drops повторных подключений, $failed неудачных подключений.';
   }
 
   @override
@@ -13510,16 +13510,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String syncCardTranscribingAmount(String amount) {
-    return 'Преобразование $amount в разговоры';
-  }
-
-  @override
-  String syncCardTranscribedOf(String done, String total) {
-    return 'Готово $done из $total · можно покинуть этот экран';
-  }
-
-  @override
   String syncCardReadyAmount(String amount) {
     return '$amount готово к синхронизации';
   }
@@ -13543,7 +13533,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncDetailsWaitingOnPhone => 'Ожидает на этом телефоне';
 
   @override
-  String get syncDetailsTranscribing => 'Расшифровывается в Omi';
+  String get syncDetailsTranscribing => 'Загружено, ожидание сервера';
 
   @override
   String get syncDetailsAudioFiles => 'Аудиофайлы';
@@ -15606,4 +15596,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get conversationWritingSummary => 'Пишем ваше резюме…';
+
+  @override
+  String get onTheWayServerWork => 'Работа по данным сервера';
 }

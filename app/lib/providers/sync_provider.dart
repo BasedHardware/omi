@@ -97,7 +97,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       _derived?.dispose();
       _derivedSource = source;
       _derivedLength = source.length;
-      _derived = WalDerivedViews(source);
+      _derived = WalDerivedViews(source, onPendingWorkExpired: () {
+        if (!_isDisposed) notifyListeners();
+      });
     }
     _derived!.refresh();
     return _derived!;
