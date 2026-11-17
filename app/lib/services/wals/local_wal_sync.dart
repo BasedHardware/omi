@@ -153,6 +153,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _pendantTimer;
   DateTime? _lastOrphanRecoveryWake;
   Future<void>? _orphanRecoveryInFlight;
+  OrphanAudioFrameCache _orphanFrameCache = const OrphanAudioFrameCache.empty();
   final Future<RecordingOrphanCensus> Function()? _orphanCensusOverride;
   final Future<bool> Function()? _orphanRecoveryOffOverride;
   final bool Function()? _orphanForegroundOverride;
@@ -304,6 +305,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   void clearUserData() {
     _backlogTelemetry.clearUserData();
+    _orphanFrameCache = const OrphanAudioFrameCache.empty();
     _sessionGeneration++;
     _drainGroupBatchCounts.clear();
     _drainGroupCountedAt.clear();
@@ -752,6 +754,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future stop() async {
+    _orphanFrameCache = const OrphanAudioFrameCache.empty();
     final generation = _sessionGeneration;
     BleBridge.instance.removeBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _chunkingTimer?.cancel();

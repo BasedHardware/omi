@@ -212,11 +212,42 @@ void main() {
     expect(result.orphans.single.classification, 'owner_unknown');
   });
 
-  test('classifier scales to 3000 files', () async {
+  test('classifier scales to 3000 files and caches only unchanged framing', () async {
     await Future.wait(List.generate(3000, (i) => audio(name(now - i))));
     final result = await census();
     expect(result.orphans.length, 3000);
     expect(result.orphans.every((f) => f.classification == 'recoverable'), isTrue);
+    expect((result.summary['orphan_classification'] as Map)['frame_files_read'], 3000);
+    final cached = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: result.frameCache);
+    expect((cached.summary['orphan_classification'] as Map)['frame_files_read'], 0);
+    expect((cached.summary['orphan_classification'] as Map)['frame_cache_hits'], 3000);
+    final changed = File('${dir.path}/${name(now)}');
+    final stamp = (await changed.stat()).modified;
+    await changed.writeAsBytes(List.filled(250, 0)); // same size, invalid framing
+    await changed.setLastModified(stamp.add(const Duration(seconds: 1)));
+    final rechecked = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: cached.frameCache);
+    expect((rechecked.summary['orphan_classification'] as Map)['frame_files_read'], 1);
+    expect((rechecked.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
+    expect(rechecked.orphans.singleWhere((f) => f.filePath == changed.path).classification, 'unparseable');
+    // Zero may mean a transient read failure; never persist a negative cache.
+    final retried = await captureRecordingCensus(
+        documents: dir.path,
+        memoryBuckets: {'active': []},
+        phoneSeconds: now,
+        currentOwner: 'owner-a',
+        frameCache: rechecked.frameCache);
+    expect((retried.summary['orphan_classification'] as Map)['frame_files_read'], 1);
+    expect((retried.summary['orphan_classification'] as Map)['frame_cache_hits'], 2999);
   });
   Future<LocalWalSyncImpl> ledger(
       {DateTime Function()? clock,
@@ -226,13 +257,14 @@ void main() {
       Future<RecordingOrphanCensus> Function()? scan,
       Future<bool> Function()? off,
       bool foreground = true,
+      bool realCensus = false,
       Future<void> Function(List<Wal>)? persist,
       List<Map<String, Object?>>? events}) async {
     final sync = LocalWalSyncImpl(_Listener(),
         now: clock ?? () => DateTime.fromMillisecondsSinceEpoch(now * 1000),
         uploadGate: gate,
         periodic: periodic,
-        orphanCensus: scan ?? census,
+        orphanCensus: realCensus ? null : scan ?? census,
         orphanRecoveryOff: off ?? () async => false,
         orphanForeground: () => foreground,
         orphanTelemetry: (v) {
@@ -280,10 +312,14 @@ void main() {
       await audio(name(now - i));
     }
     var saves = 0;
-    final sync = await ledger(persist: (rows) async {
-      saves++;
-      await WalFileManager.saveWals(rows);
-    });
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        realCensus: true,
+        events: events,
+        persist: (rows) async {
+          saves++;
+          await WalFileManager.saveWals(rows);
+        });
     saves = 0;
     final bytes = await File('${dir.path}/${name(now - 204)}').readAsBytes();
     await sync.recoverOrphanAudio();
@@ -298,6 +334,9 @@ void main() {
     expect(await File('${dir.path}/${name(now - 204)}').readAsBytes(), bytes);
     await sync.recoverOrphanAudio();
     expect(sync.testWals.where((w) => w.status == WalStatus.miss).length, 205);
+    expect((events.first['classification'] as Map)['frame_files_read'], 205);
+    expect((events[1]['classification'] as Map)['frame_files_read'], 0);
+    expect((events[1]['classification'] as Map)['frame_cache_hits'], 5);
     final before = saves;
     await sync.recoverOrphanAudio();
     expect(saves, before);
@@ -616,6 +655,30 @@ void main() {
     expect(sync.testWals.where((w) => w.status == WalStatus.miss), isEmpty);
     expect((events.single['counts'] as Map)['outsideDocuments'], 1);
     expect(await file.readAsBytes(), [1, 0, 0, 0, 7]);
+  });
+
+  test('outside-Documents files cannot spend the adoption budget or starve eligible files', () async {
+    final native = await Directory.systemTemp.createTemp('orphan-native-');
+    addTearDown(() => native.delete(recursive: true));
+    await Future.wait(
+        List.generate(200, (i) => File('${native.path}/${name(now - 1000 - i)}').writeAsBytes([1, 0, 0, 0, 7])));
+    await audio(name(now));
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(
+        events: events,
+        scan: () => captureRecordingCensus(
+            documents: dir.path,
+            memoryBuckets: {'active': []},
+            phoneSeconds: now,
+            currentOwner: 'owner-a',
+            additionalDirectories: [native.path]));
+    await sync.recoverOrphanAudio();
+    expect(sync.testWals.where((w) => w.status == WalStatus.miss).single.filePath, name(now));
+    expect((events.single['counts'] as Map)['outsideDocuments'], 200);
+    final raw = jsonDecode(await File('${dir.path}/orphan_audio_recovery_budget.json').readAsString()) as Map;
+    final spent = (raw.values.single as List).fold<int>(0, (n, r) => n + (r['count'] as int));
+    expect(spent, 1);
+    expect((await native.list().toList()).length, 200);
   });
 
   test('a large metadata archive defers the bounded commit, never the outside-queue census', () async {

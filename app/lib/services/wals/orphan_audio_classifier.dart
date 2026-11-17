@@ -2,14 +2,32 @@
 // diagnostics. Local file identities never enter the aggregate export.
 part of 'recording_inventory.dart';
 
+/// Derived framing results only; never ownership, references or deletion proof.
+/// Process-local and replaced with the current corpus after each census.
+class OrphanAudioFrameCache {
+  const OrphanAudioFrameCache.empty() : _entries = const {};
+  OrphanAudioFrameCache._(this._entries);
+  final Map<String, _CachedAudioFrames> _entries;
+}
+
+class _CachedAudioFrames {
+  _CachedAudioFrames(_Metadata file, this.frames)
+      : bytes = file.bytes,
+        modifiedUs = file.modifiedUs,
+        changedUs = file.changedUs;
+  final int bytes, modifiedUs, changedUs, frames;
+  bool matches(_Metadata file) => bytes == file.bytes && modifiedUs == file.modifiedUs && changedUs == file.changedUs;
+}
+
 /// Device-local data only. Export [summary], never this object or its candidates.
 class RecordingOrphanCensus {
-  RecordingOrphanCensus(this.summary, this.orphans, this._directories, this._sources, this.owner);
+  RecordingOrphanCensus(this.summary, this.orphans, this._directories, this._sources, this.owner, this.frameCache);
   final Map<String, Object?> summary;
   final List<OrphanAudioFile> orphans;
   final Map<String, FileStat> _directories;
   final List<_Metadata> _sources;
   final String owner;
+  final OrphanAudioFrameCache frameCache;
   bool isDocumentsFile(OrphanAudioFile file) => path.dirname(file.filePath) == _directories.keys.first;
   bool get complete => summary['orphan_census_complete'] == true;
 
@@ -70,8 +88,11 @@ class OrphanAudioFile {
 const orphanRecoveryWindowSeconds = 28 * 86400;
 const orphanAudioClasses = ['working', 'unparseable', 'recoverable', 'expired', 'owner_unknown'];
 
-List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeconds, bool owned) {
-  return candidates.map((file) {
+({List<OrphanAudioFile> files, OrphanAudioFrameCache cache, int reads, int hits}) _classifyOrphans(
+    List<_Metadata> candidates, int phoneSeconds, bool owned, OrphanAudioFrameCache frameCache) {
+  final entries = <String, _CachedAudioFrames>{};
+  var reads = 0, hits = 0;
+  final files = candidates.map((file) {
     final name = path.basename(file.filePath);
     final working = name.endsWith('.part') ||
         name.endsWith('.torn') ||
@@ -104,7 +125,16 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
           info.timerStart >= 1704067200 &&
           info.timerStart <= phoneSeconds &&
           phoneSeconds <= 0x7fffffff) {
-        frames = _strictFrameCount(file.filePath, file.bytes);
+        final previous = frameCache._entries[file.filePath];
+        if (previous != null && previous.matches(file)) {
+          frames = previous.frames;
+          hits++;
+        } else {
+          frames = _strictFrameCount(file.filePath, file.bytes);
+          reads++;
+        }
+        // Zero also represents transient I/O failure; retry it next census.
+        if (frames > 0) entries[file.filePath] = _CachedAudioFrames(file, frames);
       }
       classification = frames <= 0
           ? 'unparseable'
@@ -116,6 +146,7 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
     }
     return OrphanAudioFile(file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames);
   }).toList();
+  return (files: files, cache: OrphanAudioFrameCache._(entries), reads: reads, hits: hits);
 }
 
 /// Streaming strict framing, off the UI isolate. Unlike native crash recovery,

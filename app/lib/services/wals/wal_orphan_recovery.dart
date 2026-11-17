@@ -74,6 +74,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
             memoryBuckets: recordingInventorySnapshot,
             phoneSeconds: _now().millisecondsSinceEpoch ~/ 1000,
             currentOwner: uid,
+            frameCache: _orphanFrameCache,
             additionalDirectories: configured.isEmpty ? [] : [configured],
             legacyFiles: legacy is List ? legacy.whereType<String>().toList() : [],
             legacyJobs: text('localRecordingJobs'),
@@ -81,12 +82,15 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
       }
       result = fence() ?? 'completed';
       if (result != 'completed') return;
+      _orphanFrameCache = census.frameCache;
       if (!census.complete || census.owner != uid) {
         result = 'incomplete_census';
         return;
       }
       final snapshot = census;
-      final candidates = snapshot.orphans.where((f) => f.classification == 'recoverable').toList()
+      final recoverable = snapshot.orphans.where((f) => f.classification == 'recoverable');
+      counts['outsideDocuments'] = recoverable.where((f) => !snapshot.isDocumentsFile(f)).length;
+      final candidates = recoverable.where(snapshot.isDocumentsFile).toList()
         ..sort((a, b) => a.info!.timerStart.compareTo(b.info!.timerStart));
       await _enqueueBuffer(() async {
         result = fence() ?? 'completed';
@@ -193,12 +197,6 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
               ownerUid: uid,
               storageTotalBytes: candidate.bytes)
             ..frameSize = info.frameSize;
-          // Only Documents files may use the ledger's rebased relative path.
-          // Configured native roots remain classified but are never adopted here.
-          if (!snapshot.isDocumentsFile(candidate)) {
-            counts['outsideDocuments'] = (counts['outsideDocuments'] ?? 0) + 1;
-            continue;
-          }
           _wals.add(wal);
           refs.add(path.basename(candidate.filePath));
           counts['adopted'] = (counts['adopted'] ?? 0) + 1;

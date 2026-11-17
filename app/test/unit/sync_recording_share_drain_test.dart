@@ -156,11 +156,9 @@ void main() {
         await writeWal(2145916800 + i * 60, conversationId: 'shared', seconds: 300)
           ..recordingSessionId = 'same-session',
     ];
-    // An already submitted held refusal retains its existing automatic recovery
-    // authority; a held miss still requires the user's explicit submission.
-    unknown.first
-      ..markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400)
-      ..holdForUser = true;
+    // This unheld refusal participates in automatic clock recovery. Held rows
+    // require a fresh explicit user action, covered by orphan recovery tests.
+    unknown.first.markUploadRejected(reasonCode: WalUploadRejection.invalidCaptureTime, nowSeconds: now - 10 * 86400);
     final firstValid = await writeWal(now - 100, conversationId: 'shared', seconds: 300)
       ..recordingSessionId = 'same-session';
     sync.testWals = [...unknown, firstValid];

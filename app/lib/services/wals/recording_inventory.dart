@@ -195,6 +195,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
     List<String> legacyFiles = const [],
     String legacyJobs = '',
     String corruptLegacyJobs = '',
+    OrphanAudioFrameCache frameCache = const OrphanAudioFrameCache.empty(),
     int? freeBytes}) async {
   final started = DateTime.now().millisecondsSinceEpoch;
   final roots =
@@ -467,10 +468,17 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
   final complete = summary['orphan_census_complete'] == true;
   final candidates =
       audio.values.where((m) => _audio(path.basename(m.filePath)) && !allReferences.contains(m.filePath)).toList();
-  final classified = await offUiIsolate(() => _classifyOrphans(candidates, phoneSeconds, singleOwner && complete),
-      size: candidates.length, threshold: 0, debugName: 'orphan_audio_classifier');
-  summary['orphan_classification'] = orphanClassificationSummary(classified, phoneSeconds);
-  return RecordingOrphanCensus(summary, classified, sourceDirectories, metadata, currentOwner);
+  final classified = await offUiIsolate(
+      () => _classifyOrphans(candidates, phoneSeconds, singleOwner && complete, frameCache),
+      size: candidates.length,
+      threshold: 0,
+      debugName: 'orphan_audio_classifier');
+  summary['orphan_classification'] = {
+    ...orphanClassificationSummary(classified.files, phoneSeconds),
+    'frame_files_read': classified.reads,
+    'frame_cache_hits': classified.hits,
+  };
+  return RecordingOrphanCensus(summary, classified.files, sourceDirectories, metadata, currentOwner, classified.cache);
 }
 
 /// Aggregate-only diagnostics. Local paths/owners in the census never escape.

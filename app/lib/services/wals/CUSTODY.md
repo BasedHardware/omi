@@ -321,8 +321,19 @@ without adoption, conservatively delaying the next pass. A torn budget blocks
 adoption; logout cannot clear this budget with account preferences. Each nonempty pass
 makes one index save. Generation, foreground, admission, kill switch, references,
 source metadata, file size and mtime/ctime are rechecked before committing rows.
-Configured directories outside Documents are classified but retained in place.
-No census or audio decoding runs inside the capture queue. Commit metadata
+Configured directories outside Documents are classified but retained in place,
+and excluded before reserving pass/daily budget so they cannot starve eligible
+Documents files.
+No census or audio decoding runs inside the capture queue. The first census
+validates every file's framing; later foreground passes reuse a process-local
+positive frame-count cache only when path, size, mtime and ctime are unchanged.
+Zero/failed reads are never cached, so transient I/O failure can recover on a
+later pass; malformed files are conservatively re-read. Every pass
+still performs the full reference/ownership/stat census and recomputes age and
+classification. This cache is derived data, never custody/deletion proof; only
+entries in the latest orphan corpus survive, and stop/account reset clears it.
+Diagnostics count actual frame-reader calls and cache hits. Cold scans after a
+restart still read the corpus; no device-scale timing or memory claim is made. Commit metadata
 checks are bounded to 512 sources and four directories; larger source sets
 retain everything for a later supported pass. The automatic drain excludes
 these held pending rows; only a deliberate user upload can start transfer.
