@@ -157,8 +157,11 @@ audio keeps priority, with a separate unknown-clock batch after at most 36 valid
 batch attempts. This shared budget is checkpointed on waiting WALs in the same owner
 index before each valid attempt and resets after an unknown batch enters the
 gate, so restarts cannot erase it and unknown backlog cannot monopolize uploads.
-Local-only custody stays closed; a held recording already submitted explicitly may recover
-automatically. No install migration, clock reset, or receipt is needed: an old
+Local-only and held custody stay closed to automatic uploads, including refusal
+recovery. A held recording may retry a recoverable refusal through Home's
+explicit Process now action; the hold and stored clocks stay intact. Deterministic
+`too_large`/`too_many_parts` refusals retain their existing no-retry guards.
+No install migration, clock reset, or receipt is needed: an unheld old
 invalid-date refusal automatically becomes eligible on its next weekly due date.
 `OMI_INVALID_CAPTURE_TIME_RECOVERY_OFF=true` restores the seven-day expiry for
 this reason without changing any stored state (compile-time, default false).
@@ -268,3 +271,134 @@ mapping restoration or new reclaim proof. Audio, upload choice, retry caps,
 legacy firmware, Custom STT routing and ordinary live custody are unchanged.
 Regression guard: `test/services/wals/batch_ring_proof_test.dart` (also executed
 with the real compile-time switch off).
+
+## Orphan audio recovery (stage 1, INV-CAP-1)
+
+Orphans are never deleted without file-bound server proof or an explicit user
+act. Filename age, a local ring receipt, an empty index or a transport label
+never supplies that proof. Stage 1 never deletes or rewrites audio or sidecars.
+
+The ledger's explicit foreground resume/15-minute recovery pass runs only after
+startup admission finishes; headless workers skip it. The shared read-only
+inventory census runs outside the capture queue and includes active, retired,
+foreign, main, backup, temporary and quarantined rows, batch journals, native
+owner receipts, legacy jobs/preferences, ring checkpoint/download refs and
+capture-committed journals (including temporary files). Unreadable, invalid,
+changed or unresolved census sources prevent adoption. Wrong-typed or quarantined
+legacy preference inputs also make the census incomplete; recovery and support
+export share one raw, read-only preference snapshot. That snapshot is compared
+again at admission. Consent reads never repair unknown types to cloud defaults:
+non-string STT settings, wrong-typed policy booleans and archived consent preserve
+a hold. Ring checkpoints must match the known version and full range/reference
+schema, including batch-session chunks and download receipts; unknown keys,
+versions or skipped malformed entries block certainty. Ring receipts reserve
+local files; capture receipts are read for owner history, never inferred as a
+file-bound server receipt for a rowless orphan.
+
+The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
+`omimobilebatch*`), unparseable, owner_unknown, expired or recoverable. A complete
+mono filename and strict complete length-prefixed frames establish capture time
+and duration. Automatic recovery requires a plausible capture time within 28
+days, leaving two days inside the server's 30-day admission window. Older audio
+stays on disk. Unknown, missing or foreign owners in any custody source, including legacy
+pending-file/job preferences, prevent
+single-owner proof; at least one index/memory row must prove the current owner.
+A capture journal's owner hash must match the current UID. No inference from
+filenames or the currently signed-in account overrides historical ownership.
+
+David's superseding ruling (2026-11-17): recovered rows enter plain `miss`
+for automatic upload only with single-owner proof, no `onDeviceOnly` or
+`holdForUser` row in any current, backup, temporary or quarantined generation
+or live/retired/foreign memory bucket, and an account preference permitting cloud
+upload. Otherwise `holdForUser=true`. An unavailable history snapshot fails closed to a hold. Optional legacy WAL
+policy fields retain the same false defaults as `Wal.fromJson`; a missing/null
+optional flag does not assert local-only history. Present non-null invalid flag
+types are treated conservatively as local-only. Unknown storage enums, malformed file-path types and disk rows without a nonempty path make the census incomplete; they cannot erase a possible reference. Offline auto-sync off, any durable Custom STT choice (including the pinned
+on-device choice), malformed/unknown STT settings, keep-everything-on-device, save-live-hours, active
+on-device overflow or the selected local capture route all preserve the hold.
+The raw Custom STT document must match the current serialized schema, including
+nullable text, port, transport, string maps and response schema fields. Unknown
+keys, wrong types or invalid structured values hold even when provider is Omi
+and send-raw is true; no coercing parser can silently manufacture cloud consent.
+Preferences, memory policy and the kill switch are checked again after budget I/O at admission.
+The ruling is recorded in the lane evidence `ruling-2026-11-17-orphans.md`. The hold also overrides the daily
+`uploadRejected` retry lane after a refused manual request; a refusal cannot
+create automatic consent. `holdForUser` (rather than
+`onDeviceOnly`, which blocks `syncWal` even for an explicit action) is the
+existing user-controlled path: `LocalRecordingsProvider` lists held rows in
+Home, `RecordingListItem` opens the recording sheet, and its Process now and
+confirmed Delete actions call the provider's `upload`/`delete`. No new UI is
+needed. New recovered rows persist `recovered_orphan=true`; their WAL id is a
+stable hash of the original basename, keeping same-second/fractional/collision
+files separate in playback/share caches and upload attempts. Source filenames,
+device and capture time stay intact. Existing rows retain their legacy ids. Recovery publishes `heldRevision` after its batched save so an open
+recordings view refreshes. Manual upload uses the existing ledger/uploader;
+if the server rejects a later attempt after 30 days, the existing
+`outsideRecoveryWindow` status is persisted, the held row stays visible as
+failed, and every audio byte remains retained until explicit user deletion.
+
+At most 200 oldest eligible files enter `miss` custody per pass, at most 400 per
+rolling 24 hours, and pending rows across all buckets never rise above 720.
+Timestamped reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget
+without adoption, conservatively delaying the next pass. A torn budget blocks
+adoption; logout cannot clear this budget with account preferences. Each nonempty pass
+makes one index save. Generation, foreground, admission, kill switch, references,
+source metadata, file size and mtime/ctime are rechecked before committing rows.
+An unsuccessful save rolls back unpublished rows by object identity within the
+same session; a later pass can retry them. The daily reservation remains spent,
+and audio remains untouched. Only successful publication advances `heldRevision`.
+Configured directories outside Documents are classified but retained in place,
+and excluded before reserving pass/daily budget so they cannot starve eligible
+Documents files.
+No census or audio decoding runs inside the capture queue. The first census
+validates every file's framing; later foreground passes reuse a process-local
+positive frame-count cache only when path, size, mtime and ctime are unchanged.
+Zero/failed reads are never cached, so transient I/O failure can recover on a
+later pass; malformed files are conservatively re-read. Every pass
+still performs the full reference/ownership/stat census and recomputes age and
+classification. Known Limitless random/sequence, collision and estimated-clock
+filename suffixes are parsed without changing the source name; the recovered
+row preserves `clockRun`. The server's supported trailing `_uN` collision form
+is accepted; a nonce between `clke` and timestamp stays unparseable/retained
+because uploading that original name would lose its clock partition.
+Age is read again immediately before each admission,
+after budget I/O, and a capture outside the current 28-day window is retained.
+This cache is derived data, never custody/deletion proof; only
+entries in the latest orphan corpus survive, and stop/account reset clears it.
+Diagnostics count actual frame-reader calls and cache hits.
+Support exports reuse the opaque ledger framing snapshot when available, while
+still refreshing reference, owner, stat and age evidence. Only aggregate results
+are serialized; the cache never enters diagnostics or telemetry.
+Cold scans after a restart still read the corpus; no device-scale timing or memory claim is made. Commit metadata
+checks are bounded to 512 sources and four directories; larger source sets
+retain everything for a later supported pass. The automatic drain excludes
+held pending rows; a clean-phone plain `miss` follows the existing automatic
+drain. Normal server confirmation and retention govern uploaded copies.
+
+PostHog `orphan_audio_recovery_off` is a kill switch: only true stops recovery;
+unknown/false keeps it on. This is safe to default on because adoption preserves
+all bytes, owner uncertainty retains, local-only history/choices preserve a
+hold, and held rows cannot automatically upload. Local caps bound the backlog;
+existing server backfill pacing bounds processed-speech cost. This stage makes no storage
+reclamation or duplicate-processing outcome claim. `Orphan Audio Recovery` is
+one typed aggregate event per pass: class/age counts and bytes, adopted count,
+cap/change/reference, commit-time expiry and outside-Documents skips, and a bounded fence result. The diagnostics export's
+`local_recording_inventory.orphan_classification` uses the same summary and
+never exports paths, basenames, account IDs or per-file entries.
+
+Guard: `test/unit/wal_orphan_recovery_test.dart`; startup admission's existing
+no-orphan-discovery contract remains separately guarded by
+`test/unit/wal_startup_admission_test.dart`.
+
+Consent/custody preference quarantine is an observation of the current store,
+not a permanent historical marker: the shared preference-quarantine subsystem
+prunes archives after seven days. While an archive exists, it holds consent or
+invalidates reference completeness. After pruning, the defined current setting
+defaults apply; this pass adds no durable unknown-consent marker. Indexed local-only
+or held rows still preserve phone-wide history regardless of preference pruning.
+
+Unreadable index quarantine is custody evidence, not disposable diagnostics.
+It intentionally prevents adoption until repaired; do not prune it merely to
+make a census complete. More than 512 sources also defers the bounded commit.
+Unknown-owner files are retained, not assigned to the current account or
+surfaced as its held rows; `owner_unknown` remains an aggregate diagnostic.

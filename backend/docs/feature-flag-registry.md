@@ -943,6 +943,7 @@ and an explicit empty literal renders as `''`.
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | keep | — | unowned |
 | `mobile-chat-apps-all-channels` | Omi store only: private chat channel endpoints for David; prevents the public Telegram rule from exposing iMessage/WhatsApp. Default off, explicit allowlist only; backend channel admission remains authoritative | mobile | posthog | closed | — | — | — | absent (enable) | keep | keep | — | auditfix |
+| `orphan_audio_recovery_off` | True stops non-destructive foreground orphan audio adoption; unknown or false keeps recovery on | mobile | posthog | open | — | — | — | expected (kill) | keep | keep | — | mobile-custody |
 | `upload_end_marker_off` | True stops the phone sending the end-of-recording marker; absent, false or unreadable sends it | mobile | posthog | open | — | — | — | absent (kill) | keep | keep | — | lifecycle-owner |
 | `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | uicleanup |
 
