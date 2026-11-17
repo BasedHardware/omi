@@ -275,24 +275,69 @@ def test_empty_structure_minimum_treats_a_placeholder_title_as_untitled(monkeypa
     assert result.title_provenance == 'server_minimum'
 
 
-@pytest.mark.parametrize('title', ['Discussion notes', 'Discussion 3'])
-def test_recovery_replaces_a_row_that_only_carries_a_placeholder(pc, monkeypatch, title):
-    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
-    captured: dict = {}
-    conversation = _empty_structure_conversation()
-    _set_stored_structure(conversation, title=title)
-    with pytest.raises(_RecoveryProbeReached):
-        _run_empty_structure_recovery(pc, conversation, captured=captured)
-    assert captured['structured'].title_provenance == 'server_minimum'
+def _short_recovery_conversation(**overrides):
+    """A kept English capture short enough for the recovery quiet minimum."""
+    from models.conversation import Conversation
+    from models.conversation_enums import ConversationSource, ConversationStatus
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    values = dict(
+        id='recovery-short',
+        created_at=STALE_FINISHED,
+        started_at=STALE_FINISHED,
+        finished_at=NOW,
+        language='en',
+        structured=Structured(),
+        transcript_segments=[
+            TranscriptSegment(
+                id='seg-1',
+                text='the pilot budget is eight thousand dollars',
+                speaker='SPEAKER_00',
+                speaker_id=0,
+                is_user=True,
+                start=0.0,
+                end=2.0,
+            )
+        ],
+        source=ConversationSource.omi,
+        status=ConversationStatus.processing,
+    )
+    values.update(overrides)
+    return Conversation(**values)
 
 
-@pytest.mark.parametrize('title', ['Pilot budget', 'Discussion notes Q3'])
-def test_recovery_keeps_a_real_stored_title(pc, monkeypatch, title):
-    monkeypatch.delenv('LISTEN_FINALIZATION_EMPTY_STRUCTURE_MINIMUM_ENABLED', raising=False)
-    conversation = _empty_structure_conversation()
-    _set_stored_structure(conversation, title=title)
-    with pytest.raises(RecoveryStructureUnavailableError):
-        _run_empty_structure_recovery(pc, conversation)
+@pytest.mark.parametrize(
+    'title,replaced',
+    [('Discussion notes', True), ('Discussion 3', True), ('Transcribing…', True), ('Pilot budget', False)],
+)
+def test_recovery_guard_replaces_only_a_placeholder_title(pc, monkeypatch, title, replaced):
+    """Drive the real ``_get_structured`` guard, not a stubbed replacement."""
+    from models.structured import Structured
+
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED', 'true')
+    monkeypatch.setenv('NOTES_SHORT_CLIP_FLOOR', 'false')
+    conversation = _short_recovery_conversation(structured=Structured(title=title))
+    transcript = 'the pilot budget is eight thousand dollars'
+    monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda *_: 'UTC')
+    monkeypatch.setattr(pc, 'resolve_output_language', lambda *a, **kw: 'en')
+    monkeypatch.setattr(pc, 'selected_summary_app', lambda *a, **kw: False)
+    monkeypatch.setattr(pc, 'content_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'quiet_minimum', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'occasion_retention', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *a: (transcript, transcript, {}))
+    monkeypatch.setattr(pc, 'should_discard_conversation', lambda *a, **kw: False)
+    monkeypatch.setattr(pc, 'adjacent_conversation', lambda *a: None)
+    monkeypatch.setattr(pc, '_calendar_overlap_retains_conversation', lambda *a: False)
+    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *a, **kw: (None, None, None, None, 0))
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: [])
+    monkeypatch.setattr(pc, 'before_notes', lambda *a, **kw: None)
+    monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a: [])
+    monkeypatch.setattr(pc, 'notes_agent_inputs', lambda *a: {})
+    monkeypatch.setattr(pc, 'get_conversation_notes', lambda *a, **kw: Structured())
+
+    structured, _ = pc._get_structured('uid-recovery', 'en', conversation, trigger=ProcessingTrigger.SERVER_RECOVERY)
+    assert (structured.title_provenance == 'server_minimum') is replaced
 
 
 def _eligibility_arguments(conversation, structured, **overrides):

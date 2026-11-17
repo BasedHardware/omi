@@ -20,8 +20,8 @@ from utils.summary_quality import valid_title
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
-_RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
-_PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview')
+_RICH_STRUCTURED_FIELDS = ('overview', 'gist', 'sections', 'action_items', 'events')
+_PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview', 'gist')
 _PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
@@ -119,6 +119,20 @@ def structured_is_rich(structured: Any) -> bool:
         elif value:
             return True
     return False
+
+
+def stored_structure_is_replaceable(structured: Any) -> bool:
+    """Whether recovery may replace this stored structure with the deterministic minimum.
+
+    Not rich, and no real title. A placeholder label ("Discussion notes") is not
+    a title, so a row that only carries one is still replaceable; a
+    ``server_minimum`` stand-in is provisional by definition (2026-11-16
+    incident). One owner for the rule: the recovery guard and the
+    post-enrichment eligibility both call this.
+    """
+    return not structured_is_rich(structured) and (
+        not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum'
+    )
 
 
 def verified_recovery_discard(discarded: Any, decision: Any) -> bool:

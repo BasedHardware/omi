@@ -284,6 +284,25 @@ def test_legacy_completed_row_with_only_a_placeholder_is_transcribing():
 
 
 @pytest.mark.parametrize(
+    'notes',
+    [
+        {'title': '', 'overview': 'Approval is due Friday.'},
+        {'title': '', 'gist': 'Pilot budget approval'},
+        {'title': '', 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]},
+        {'title': '', 'action_items': [{'description': 'Send the budget'}]},
+    ],
+)
+def test_legacy_completed_row_with_notes_and_no_title_stays_ready(notes):
+    """An empty title is not evidence of a missing transcript when notes exist."""
+    row = capture(
+        structured=notes,
+        home_transcription_pending_at=None,
+        home_transcription_deadline_at=None,
+    )
+    assert home_step.classify(row) == home_step.READY
+
+
+@pytest.mark.parametrize(
     'structured,protected',
     [
         ({'title': FALLBACK}, False),
@@ -292,6 +311,7 @@ def test_legacy_completed_row_with_only_a_placeholder_is_transcribing():
         ({'title': ''}, False),
         ({'title': 'Pilot budget'}, True),
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
     ],
 )
 def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
@@ -300,3 +320,25 @@ def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, p
 
     assert structured_has_protected_content(structured) is protected
     assert structured_has_protected_content(structured, user_title='My chat') is True
+
+
+@pytest.mark.parametrize(
+    'structured,replaceable',
+    [
+        ({'title': FALLBACK}, True),
+        ({'title': 'Discussion 3'}, True),
+        ({'title': 'Transcribing…'}, True),
+        ({'title': ''}, True),
+        ({'title': 'Recording · 3:00 PM', 'title_provenance': 'server_minimum'}, True),
+        ({'title': 'Pilot budget'}, False),
+        ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, False),
+        ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, False),
+        ({'title': FALLBACK, 'sections': [{'heading': '', 'body_markdown': 'Approval is due Friday.'}]}, False),
+        ({'title': FALLBACK, 'action_items': [{'description': 'Send the budget'}]}, False),
+    ],
+)
+def test_stored_structure_is_replaceable_only_without_a_real_title_or_notes(structured, replaceable):
+    """The recovery guard and the post-enrichment eligibility share this one rule."""
+    from utils.conversations.recovery import stored_structure_is_replaceable
+
+    assert stored_structure_is_replaceable(structured) is replaceable

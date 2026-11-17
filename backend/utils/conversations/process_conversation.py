@@ -119,6 +119,7 @@ from utils.conversations.recovery import (
     recovery_rule_discard,
     recovery_transcript_below_content_floor,
     recovery_transcript_word_count,
+    stored_structure_is_replaceable,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -614,13 +615,7 @@ def _get_structured(
                     )
                 return Structured(), True
             stored_structured = getattr(main_conv, 'structured', None)
-            stored_title = getattr(stored_structured, 'title', '') or ''
-            stored_title_provenance = getattr(stored_structured, 'title_provenance', None)
-            # A placeholder label ("Discussion notes") is not a title: a row that
-            # only carries one is still replaceable (2026-11-16 incident).
-            stored_content_is_replaceable = not structured_is_rich(stored_structured) and (
-                not valid_title(stored_title) or stored_title_provenance == 'server_minimum'
-            )
+            stored_content_is_replaceable = stored_structure_is_replaceable(stored_structured)
             if (
                 recovery_transcript_decoded
                 and stored_content_is_replaceable

@@ -43,7 +43,7 @@ from utils.conversations import transcribing_hold
 from utils.conversations import home_latency, legacy_empty_wire
 from utils.conversations import empty_capture
 from utils.conversations.fragment_visibility import is_completed_below_floor, is_user_curated
-from utils.conversations.home_titles import summary_owed, untitled_pending
+from utils.conversations.home_titles import notes_pending, summary_owed, untitled_pending
 from utils.conversations.summary_delivery import EMPTY_BLOCKED_REASONS, present
 
 READY = 'ready'
@@ -148,11 +148,12 @@ def classify(row: Mapping[str, Any]) -> str | None:
             return READY
         # The stand-in title is final: nothing will ever summarize this row.
         return NOISE
-    if untitled_pending(structured) and not row.get('transcript_segments'):
+    if notes_pending(structured) and not row.get('transcript_segments'):
         # A capture whose speech has not landed. A placeholder label is not
-        # content, so it cannot make the row look finished (2026-11-16 incident).
-        # Unstamped legacy rows get the same bound the stamped ones have, so none
-        # can stay Processing forever.
+        # content, so it cannot make the row look finished (2026-11-16 incident);
+        # a row with notes keeps its previous result. Unstamped legacy rows get
+        # the same bound the stamped ones have, so none can stay Processing
+        # forever.
         if home_transcription_queue_hold_enabled():
             seconds = home_transcription_max_age_seconds()
             anchor = transcribing_hold.wait_started_at(row)
