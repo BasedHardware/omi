@@ -166,7 +166,7 @@ FIELD_SITES = {
         )
     ],
     'utils/conversations/v3/service.py': [
-        ('reconcile', 'status', "prior['status']", ('status',)),
+        ('reconcile.plan', 'status', "prior['status']", ('status',)),
         ('recording_short_path.guarded', 'status', 'ConversationStatus.completed', ('status',)),
     ],
     'utils/batch_pipeline/empty_transcription.py': [
