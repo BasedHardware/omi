@@ -24,6 +24,7 @@ from database import legal_holds, rpc_deadline
 from database._client import get_firestore_client, run_transactional
 from database.batch_pipeline_conversation_purge import PurgeCheckpointed, purge_conversations
 from database.batch_pipeline_purge import NAMESPACES
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 MAX_MEMBERS = 16
@@ -115,7 +116,17 @@ def handback(client: Any, leader: str, epoch: str, token: str) -> bool:
             transaction.update(_ref(client, job), changes)
         return True
 
-    return _in_transaction(client, body)
+    changed = _in_transaction(client, body)
+    if changed:
+        record_fallback(
+            component='other',
+            from_mode='coalesced_owner_scan',
+            to_mode='per_conversation_purge',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+    return changed
 
 
 def _claim(client: Any, job: str, generation: int) -> tuple[str, dict[str, Any] | None]:
@@ -278,6 +289,9 @@ class ScanProgress(jobs.RunProgress):
             row = rows[job]
             if not _delegated(row, self.scan, member) or not _same_arm(row, member):
                 raise jobs.RunSuperseded()
+        leader = rows[self.job]
+        if leader.get('lease_generation') != self.generation or leader.get('lease_until') is None:
+            raise jobs.RunSuperseded()  # A paused run cannot keep checkpointing with its retained proof token.
         for member in self.scan['members'].values():
             ref = (
                 self.client.collection('users')
@@ -289,8 +303,11 @@ class ScanProgress(jobs.RunProgress):
                 raise jobs.RunSuperseded()
 
     def _renew_all(self, transaction: Any) -> None:
+        renewal = self._renewal()
         for job in self.scan['members']:
-            transaction.update(_ref(self.client, job), self._renewal())
+            # A delegated member cannot dispatch before this lease expires.
+            # Keep active groups out of the bounded due queue until then.
+            transaction.update(_ref(self.client, job), {**renewal, 'due_at': renewal['lease_until']})
 
     def checkpoint(self, position: dict[str, Any], *, add_segments=None) -> None:
         if add_segments is not None:

@@ -416,3 +416,46 @@ def test_ambiguous_claim_commit_recovers_same_members_and_token(monkeypatch, wor
         row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
         assert row['run_token'] == scan['token'] and row['generation'] == member['generation']
     scans.ScanProgress(world.client, leader, scan).checkpoint({'ns': 0, 'phase': 'discover'})
+
+
+def test_paused_scan_retains_takeover_proof_but_cannot_write_again(world):
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    _, scan = scans._claim(world.client, leader, generation)
+    progress = scans.ScanProgress(world.client, leader, scan)
+    progress.finish('checkpointed')
+    for operation in (
+        lambda: progress.checkpoint({'ns': 1}),
+        lambda: progress.add_segments(follower, purge.NAMESPACES[0], ['stale']),
+    ):
+        with pytest.raises(jobs.RunSuperseded):
+            operation()
+    assert not jobs.segment_records(follower, purge.NAMESPACES[0], firestore_client=world.client)
+
+
+def test_lease_renewal_keeps_active_members_out_of_the_due_queue(monkeypatch, world):
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    _, scan = scans._claim(world.client, leader, generation)
+    sealed = jobs._now()
+    renewed = sealed + timedelta(seconds=240)
+    monkeypatch.setattr(jobs, '_now', lambda: renewed)
+    scans.ScanProgress(world.client, leader, scan).checkpoint({'ns': 0, 'phase': 'discover'})
+    for job in (leader, follower):
+        row = world.client.collection(jobs.COLLECTION).document(job).get().to_dict()
+        assert row['due_at'] == row['lease_until'] == renewed + timedelta(seconds=jobs.LEASE_SECONDS)
+    assert jobs.due_jobs(now=sealed + timedelta(seconds=301), firestore_client=world.client) == []
+
+
+def test_handback_emits_shared_fallback_telemetry_once(monkeypatch, world):
+    from unittest.mock import Mock
+
+    leader, follower = world.arm('one'), world.arm('two')
+    generation = _dispatch(world, leader)
+    _, scan = scans._claim(world.client, leader, generation)
+    event = Mock()
+    monkeypatch.setattr(scans, 'record_fallback', event)
+    assert scans.handback(world.client, leader, scan['epoch'], scan['token'])
+    assert not scans.handback(world.client, leader, scan['epoch'], scan['token'])
+    event.assert_called_once()
+    assert event.call_args.kwargs['outcome'] == 'degraded'

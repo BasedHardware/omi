@@ -45,6 +45,14 @@ WAL prefix re-listing, exactly-once capacity release and mirror refresh still us
 the existing implementation. WAL originals are re-listed for each member on every
 run, including a resumed cursor already past metadata.
 
+Active group renewals move `due_at` with `lease_until`: this preserves the
+first time a member could actually be claimed while preventing a large active
+group from filling the reconciler's bounded due page. A paused leader retains its
+proof token but clears its active lease generation; that progress object cannot
+write again. A legacy takeover changes the token and invalidates the saved scan,
+even if the legacy worker subsequently releases its lease. Handback emits the
+shared `record_fallback` event once per committed transition.
+
 ## Switch, mixed versions and rollback
 
 `CONVERSATION_BATCH_PURGE_COALESCING_ENABLED` is an `ops_kill`, default **on**.
