@@ -299,7 +299,8 @@ class IndexStore:
         if last is None or self._clock() - last >= self.sweep_interval_s:
             return self._primary_due(state, now, limit, query, IndexReadReason.SAFETY_SWEEP)
         try:
-            result = self._index.due(state, now, limit)
+            # Validate the driver's runtime answer before trusting its shape.
+            result: Any = self._index.due(state, now, limit)
         except Exception as exc:
             timeout = isinstance(exc, TimeoutError) or getattr(exc, 'sqlstate', None) == '57014'
             return self._primary_due(
