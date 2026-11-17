@@ -5,6 +5,53 @@ part of 'local_wal_sync.dart';
 const orphanRecoveryPassCap = 200;
 const orphanRecoveryDailyCap = 400;
 
+// Validate the current serialized CustomSttConfig shape, without coercing or
+// repairing any value. Future keys/types cannot silently become cloud consent.
+bool _orphanCloudConfigKnown(Object? value) {
+  const text = {'api_key', 'language', 'model', 'url', 'host', 'request_type', 'audio_field_name'};
+  const fields = {'provider', 'send_raw_audio_to_omi', 'port', 'headers', 'params', 'schema', ...text};
+  if (value is! Map || value.keys.any((key) => !fields.contains(key)) || value['provider'] != 'omi') return false;
+  if (value['send_raw_audio_to_omi'] != null && value['send_raw_audio_to_omi'] != true) return false;
+  if (text.any((key) => value[key] != null && value[key] is! String)) return false;
+  final port = value['port'];
+  if (port != null && (port is! int || port < 1 || port > 65535)) return false;
+  final request = value['request_type'];
+  if (request != null && !const {'multipart_form', 'raw_binary', 'json_base64', 'streaming'}.contains(request)) {
+    return false;
+  }
+  for (final key in ['headers', 'params']) {
+    final entries = value[key];
+    if (entries != null &&
+        (entries is! Map ||
+            entries.entries.any((e) => e.key is! String || (e.key as String).isEmpty || e.value is! String))) {
+      return false;
+    }
+  }
+  final schema = value['schema'];
+  if (schema != null) {
+    const paths = {
+      'segments_path',
+      'segments_text_field',
+      'segments_start_field',
+      'segments_end_field',
+      'segments_speaker_field',
+      'segments_speaker_id_field',
+      'segments_is_user_field',
+      'segments_person_id_field',
+      'segments_translations_field',
+      'text_path'
+    };
+    if (schema is! Map ||
+        schema.keys.any((key) => !paths.contains(key) && key != 'default_segment_duration') ||
+        paths.any((key) => schema[key] != null && schema[key] is! String)) {
+      return false;
+    }
+    final duration = schema['default_segment_duration'];
+    if (duration != null && (duration is! num || !duration.isFinite || duration <= 0)) return false;
+  }
+  return true;
+}
+
 extension LocalOrphanRecovery on LocalWalSyncImpl {
   /// Opaque, read-only derived framing for diagnostics; never export the cache.
   OrphanAudioFrameCache get orphanFrameCache => _orphanFrameCache;
@@ -278,11 +325,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         // Read raw values: repairing getters discard wrong types and default
         // to cloud. Unknown or quarantined consent cannot authorize upload.
         final config = jsonDecode(raw);
-        if (config is! Map ||
-            config['provider'] != 'omi' ||
-            (config['send_raw_audio_to_omi'] != null && config['send_raw_audio_to_omi'] != true)) {
-          return true;
-        }
+        if (!_orphanCloudConfigKnown(config)) return true;
       } catch (_) {
         return true;
       }

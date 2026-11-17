@@ -316,6 +316,10 @@ optional flag does not assert local-only history. Present non-null invalid flag
 types are treated conservatively as local-only. Unknown storage enums, malformed file-path types and disk rows without a nonempty path make the census incomplete; they cannot erase a possible reference. Offline auto-sync off, any durable Custom STT choice (including the pinned
 on-device choice), malformed/unknown STT settings, keep-everything-on-device, save-live-hours, active
 on-device overflow or the selected local capture route all preserve the hold.
+The raw Custom STT document must match the current serialized schema, including
+nullable text, port, transport, string maps and response schema fields. Unknown
+keys, wrong types or invalid structured values hold even when provider is Omi
+and send-raw is true; no coercing parser can silently manufacture cloud consent.
 Preferences, memory policy and the kill switch are checked again after budget I/O at admission.
 The ruling is recorded in the lane evidence `ruling-2026-11-17-orphans.md`. The hold also overrides the daily
 `uploadRejected` retry lane after a refused manual request; a refusal cannot

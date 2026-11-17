@@ -11,6 +11,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/custom_stt_config.dart';
+import 'package:omi/models/stt_response_schema.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
@@ -457,6 +459,83 @@ void main() {
       final sync = await ledger(realCensus: true);
       await sync.recoverOrphanAudio();
       expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+
+  final malformedCloudConfigs = <Map<String, Object?>>[
+    for (final key in ['api_key', 'language', 'model', 'url', 'host', 'request_type', 'audio_field_name']) {key: 7},
+    for (final port in <Object>['bad', 1.5, -1, 0, 65536]) {'port': port},
+    {'request_type': 'future_transport'},
+    {'request_type': ''},
+    {'headers': true},
+    {
+      'headers': {'key': 7}
+    },
+    {
+      'headers': {'': 'value'}
+    },
+    {'params': []},
+    {
+      'params': {'key': []}
+    },
+    {'schema': []},
+    for (final key in [
+      'segments_path',
+      'segments_text_field',
+      'segments_start_field',
+      'segments_end_field',
+      'segments_speaker_field',
+      'segments_speaker_id_field',
+      'segments_is_user_field',
+      'segments_person_id_field',
+      'segments_translations_field',
+      'text_path'
+    ])
+      {
+        'schema': {key: true}
+      },
+    for (final duration in <Object>['bad', -1, 0])
+      {
+        'schema': {'default_segment_duration': duration}
+      },
+    {
+      'schema': {'future_policy': true}
+    },
+    {'keep_everything_on_device': true},
+  ];
+  for (final patch in malformedCloudConfigs) {
+    test('raw STT schema $patch cannot grant cloud consent', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      await SharedPreferencesUtil()
+          .saveString('customSttConfig', jsonEncode({'provider': 'omi', 'send_raw_audio_to_omi': true, ...patch}));
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isTrue);
+    });
+  }
+  for (final config in [
+    CustomSttConfig.defaultConfig.toJson(),
+    CustomSttConfig.defaultConfig
+        .copyWith(
+            port: 9000,
+            headers: {'fixture': 'value'},
+            params: {'language': 'en'},
+            requestType: 'multipart_form',
+            schemaJson: SttResponseSchema.openAI.toJson())
+        .toJson(),
+  ]) {
+    test('valid complete Omi STT schema $config permits cloud recovery', () async {
+      await json('wals.json', {
+        'wals': [row('existing.bin')]
+      });
+      await SharedPreferencesUtil().saveString('customSttConfig', jsonEncode(config));
+      await audio(name(now));
+      final sync = await ledger(realCensus: true);
+      await sync.recoverOrphanAudio();
+      expect(sync.testWals.singleWhere((w) => w.status == WalStatus.miss).holdForUser, isFalse);
     });
   }
 
