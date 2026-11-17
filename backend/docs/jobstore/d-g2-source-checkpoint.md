@@ -10,12 +10,36 @@ history rewriting to resolve overlapping collection-budget registrations; both
 the existing fresh-guard budget and D projection budget are retained.
 G2 authority: Revision 3, SHA-256
 `1d9ea5dd8aae66d067e6d52c562ee3404429709e1f501d7958a96039e307b7b6`.
-The design's illustrative migration 0006 maps to actual 0006; 0007 adds D/W4,
-0008 adds immutable handoffs, 0009 closes raw-SQL authority bypasses, and 0010
-adds transactional close-drain tasks and paid-attempt admission binding.
-0011 binds original typed provider source metadata and terminal sealing.
-0012 enforces grouped typed acknowledgement at SQL COMMIT.
-0013 binds the original paid effect and grouped terminal COMPLETE.
+Current migration mapping (2026-11-14): main at
+`c5cf5a2b3dd2c3b3b638a562d066dafd92334753` already owns
+`0007_ready_owners.sql`. That file is included byte for byte; this is a targeted
+migration import, not a merge of all current main changes. The unmerged dark
+files previously numbered 0007–0024 are now 0008–0025 with identical SQL bodies
+and checksums. The design's illustrative 0006 is actual 0008 (privacy fence);
+0009 adds D/W4, 0010 immutable handoffs, 0011 raw-SQL authority guards, 0012
+privacy lifecycle, 0013 provider handoff, 0014 grouped acknowledgement and 0015
+provider effects. The sequence ends at 0025 upload terminal receipts. Numeric
+references in older continuation entries below describe their historical heads;
+use migration filenames in the current tree for the authoritative mapping.
+
+The loader refuses duplicates/gaps before executing SQL. PR #25290 separately
+adds `0007_outbox_custody_episode.sql` and must also be resequenced against the
+selected landing order: if this inventory lands first its next free version is
+0026; if #25290 lands first, this dark sequence must move again. Neither PR has
+exclusive reservation of future version numbers. The loader's applied-checksum
+guard remains unchanged: an existing synthetic DB with the old dark sequence
+is incompatible and must not be silently relabeled or replayed. No remote
+migration or database alteration was performed by this source correction.
+
+G2 Rev 3 retention (§3.5.5, §8 A4): effect registry rows exist only while the
+effect is unresolved. Every terminal path deletes the row and sink capability;
+Fenced/failed GCS retirement first requires terminal session status and verified
+absence of the original generation. Ambiguous completion stays started for drain/janitor
+resolution. Post-wipe registry count is zero. Residue targets survive until their
+last residue pass (about 90 days). Only the named owner/conversation fence,
+fence-change and Firestore guard records retain pseudonymous identifiers and
+erasure metadata indefinitely; that is not indefinite retention of registry
+rows, job keys or session capabilities.
 No old migration was edited. No staging, production, IAM, provisioning or runtime
 configuration was touched. Runtime SQL grants are an operator-rendered source
 file, never executed remotely by the harness.
