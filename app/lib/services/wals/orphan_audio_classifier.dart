@@ -34,8 +34,8 @@ class RecordingOrphanCensus {
         final stat = FileStat.statSync(source.filePath);
         if (stat.type != FileSystemEntityType.file ||
             stat.size != source.bytes ||
-            stat.modified.millisecondsSinceEpoch != source.modifiedMs ||
-            stat.changed.millisecondsSinceEpoch != source.changedMs) {
+            stat.modified.microsecondsSinceEpoch != source.modifiedUs ||
+            stat.changed.microsecondsSinceEpoch != source.changedUs) {
           return false;
         }
       }
@@ -48,9 +48,9 @@ class RecordingOrphanCensus {
 
 class OrphanAudioFile {
   OrphanAudioFile(
-      this.filePath, this.bytes, this.modifiedMs, this.changedMs, this.classification, this.info, this.frames);
+      this.filePath, this.bytes, this.modifiedUs, this.changedUs, this.classification, this.info, this.frames);
   final String filePath;
-  final int bytes, modifiedMs, changedMs, frames;
+  final int bytes, modifiedUs, changedUs, frames;
   final String classification;
   final BatchRecordingInfo? info;
   bool unchanged() {
@@ -59,8 +59,8 @@ class OrphanAudioFile {
       // omi-perf-allow: sync-file-io -- At most 200 adopted-file stamps per pass, with no await between identity validation and admission.
       final stat = FileStat.statSync(filePath);
       return stat.size == bytes &&
-          stat.modified.millisecondsSinceEpoch == modifiedMs &&
-          stat.changed.millisecondsSinceEpoch == changedMs;
+          stat.modified.microsecondsSinceEpoch == modifiedUs &&
+          stat.changed.microsecondsSinceEpoch == changedUs;
     } catch (_) {
       return false;
     }
@@ -86,7 +86,10 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
       if (RegExp(r'^audio_.+_(opus(?:_fs(?:160|320))?|pcm16|pcm8)_\d+_1_fs\d+_\d+\.bin$').hasMatch(name)) {
         info = BatchRecordingInfo.fromFileName(name);
       }
+      final suffixFrame = RegExp(r'_fs(\d+)_\d+\.bin$').firstMatch(name)?.group(1);
       if (info != null &&
+          int.tryParse(suffixFrame ?? '') == info.frameSize &&
+          info.sampleRate == info.frameSize * info.codec.getFramesPerSecond() &&
           info.sampleRate > 0 &&
           info.frameSize > 0 &&
           info.timerStart >= 1704067200 &&
@@ -102,7 +105,7 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
                   ? 'expired'
                   : 'recoverable';
     }
-    return OrphanAudioFile(file.filePath, file.bytes, file.modifiedMs, file.changedMs, classification, info, frames);
+    return OrphanAudioFile(file.filePath, file.bytes, file.modifiedUs, file.changedUs, classification, info, frames);
   }).toList();
 }
 

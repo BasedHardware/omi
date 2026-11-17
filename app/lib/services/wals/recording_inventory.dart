@@ -38,9 +38,11 @@ class RecordingInventoryRow {
 const _statConcurrency = 64;
 
 class _Metadata {
-  _Metadata(this.filePath, this.kind, this.bytes, this.modifiedMs, this.changedMs);
+  _Metadata(this.filePath, this.kind, this.bytes, this.modifiedUs, this.changedUs);
   final String filePath, kind;
-  final int bytes, modifiedMs, changedMs;
+  final int bytes, modifiedUs, changedUs;
+  int get modifiedMs => modifiedUs ~/ 1000;
+  int get changedMs => changedUs ~/ 1000;
 }
 
 class _Decoded {
@@ -240,7 +242,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         final name = path.basename(entry.path);
         final kind = path.basename(path.dirname(entry.path)) == 'pendant_ring_custody' ? 'ring_custody' : _kind(name);
         final value = _Metadata(path.normalize(entry.path), kind ?? (_audio(name) ? 'audio' : 'other'), stat.size,
-            stat.modified.millisecondsSinceEpoch, stat.changed.millisecondsSinceEpoch);
+            stat.modified.microsecondsSinceEpoch, stat.changed.microsecondsSinceEpoch);
         // Stat all regular files so a referenced legacy name is not falsely
         // called missing merely because it predates today's audio prefix.
         audio[value.filePath] = value;
@@ -269,7 +271,7 @@ Future<RecordingOrphanCensus> captureRecordingCensus(
         result = await offUiIsolate(() => _decode(bytes, meta.kind),
             size: bytes.length, threshold: 0, debugName: 'recording_inventory_decode');
         final after = await File(meta.filePath).stat();
-        if (after.size != meta.bytes || after.modified.millisecondsSinceEpoch != meta.modifiedMs) changed++;
+        if (after.size != meta.bytes || after.modified.microsecondsSinceEpoch != meta.modifiedUs) changed++;
       }
     } catch (_) {
       result = _Decoded([], 'unreadable');

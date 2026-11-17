@@ -88,6 +88,11 @@ void main() {
     expect(jsonEncode(result.summary), isNot(contains('audio_pendant')));
   });
 
+  test('conflicting frame-size markers cannot invent a duration', () async {
+    await audio('audio_device_opus_fs320_16000_1_fs160_$now.bin');
+    expect((await census()).orphans.single.classification, 'unparseable');
+  });
+
   test('foreign history, unknown rows and foreign capture journal fence ownership', () async {
     await audio(name(now));
     await json('wals_backup.json', {

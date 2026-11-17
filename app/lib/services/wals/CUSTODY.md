@@ -303,7 +303,9 @@ adoption; logout cannot clear this budget with account preferences. Each nonempt
 makes one index save. Generation, foreground, admission, kill switch, references,
 source metadata, file size and mtime/ctime are rechecked before committing rows.
 Configured directories outside Documents are classified but retained in place.
-No census or audio decoding runs inside the capture queue. The existing drain
+No census or audio decoding runs inside the capture queue. Commit metadata
+checks are bounded to 512 sources and four directories; larger source sets
+retain everything for a later supported pass. The existing drain
 honors upload/local-only preferences; normal server confirmation and retention
 remain responsible for later retirement.
 

@@ -153,7 +153,7 @@ extension LocalOrphanRecovery on LocalWalSyncImpl {
         }
         final refs = buckets.where((r) => r.filePath != null).map((r) => path.basename(r.filePath!)).toSet();
         var room = min(reserved, max(0, maxRetainedCaptureWalCount - _orphanPendingCount()));
-        for (final candidate in candidates) {
+        for (final candidate in candidates.take(reserved)) {
           if (room <= 0) break;
           if (refs.contains(path.basename(candidate.filePath))) {
             counts['referenced'] = (counts['referenced'] ?? 0) + 1;
