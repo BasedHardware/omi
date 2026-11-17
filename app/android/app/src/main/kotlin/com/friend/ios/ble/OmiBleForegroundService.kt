@@ -219,7 +219,7 @@ class OmiBleForegroundService : Service() {
             Log.i(TAG, "onGattConnected: $addr")
             val diagnosticsPrefs = getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE)
             managed.hasEverConnected = managed.hasEverConnected ||
-                BleConnectionHistory.connectedBefore(diagnosticsPrefs, addr)
+                BleConnectionHistory.connectedBefore(diagnosticsPrefs, addr, DeviceHealthPersistence.enabled(this@OmiBleForegroundService))
             if (managed.hasEverConnected) {
                 incrementReconnectionCount(addr)
             }

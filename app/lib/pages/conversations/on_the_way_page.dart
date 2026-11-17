@@ -439,7 +439,8 @@ class _DayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final stacked = MediaQuery.textScalerOf(context).scale(1) > 1.5;
-    final statusText = Text(status, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary));
+    final statusText =
+        Text(status, textAlign: TextAlign.end, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary));
     final texts = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -457,11 +458,13 @@ class _DayRow extends StatelessWidget {
           padding: const EdgeInsets.all(OmiSpacing.md),
           child: stacked
               ? Align(alignment: AlignmentDirectional.centerStart, child: texts)
-              : Row(children: [
-                  Expanded(child: texts),
-                  const SizedBox(width: OmiSpacing.xs),
-                  statusText,
-                ]),
+              : LayoutBuilder(
+                  builder: (context, constraints) => Row(children: [
+                        Expanded(child: texts),
+                        const SizedBox(width: OmiSpacing.xs),
+                        ConstrainedBox(
+                            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6), child: statusText),
+                      ])),
         ),
       ),
     );

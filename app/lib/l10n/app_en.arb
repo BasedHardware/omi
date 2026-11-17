@@ -16275,7 +16275,7 @@
     },
     "syncDetailsTranscribing": "Uploaded, awaiting server",
     "@syncDetailsTranscribing": {
-        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+        "description": "Sync details stage label for uploaded audio awaiting a confirmed server outcome."
     },
     "syncDetailsAudioFiles": "Audio files",
     "@syncDetailsAudioFiles": {

@@ -32,15 +32,18 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
   // Exactly the rows On the Way lists, so the card can never open an empty page:
   // terminal recordings belong to the bell, a lagging device twin is hidden, and
   // a drain's copied pieces fold into their source.
-  final rows = pendingWorkRows(wals, nowSeconds: nowSeconds);
+  final rows = alreadyCollapsed ? wals : pendingWorkRows(wals, nowSeconds: nowSeconds);
   var onDeviceSeconds = 0;
   var onPhoneSeconds = 0;
   var pendingSeconds = 0;
   final spans = <(DateTime, DateTime)>[];
   final ids = <String>{};
   int? expiresAt;
+  var hasPending = false, hasUploaded = false;
   for (final w in rows) {
     if (!w.countsAsPendingWork(nowSeconds: nowSeconds)) continue;
+    hasPending = true;
+    hasUploaded |= w.status == WalStatus.uploaded;
     final expires = w.pendingWorkExpiresAt;
     if (expires != null) expiresAt = expiresAt == null ? expires : min(expiresAt, expires);
     if (w.conversationId case final id? when id.isNotEmpty) ids.add(id);
@@ -78,8 +81,8 @@ DeviceCatchUpLocal deviceCatchUpLocal(List<Wal> wals, {DateTime? now, bool alrea
     onDeviceSeconds: onDeviceSeconds,
     onPhoneSeconds: onPhoneSeconds,
     pendingSeconds: pendingSeconds,
-    hasPending: rows.isNotEmpty,
-    hasUploaded: rows.any((w) => w.status == WalStatus.uploaded),
+    hasPending: hasPending,
+    hasUploaded: hasUploaded,
     start: start,
     end: end,
     targetIds: targets.join('\n'),

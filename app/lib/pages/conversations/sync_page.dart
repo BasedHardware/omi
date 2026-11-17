@@ -511,9 +511,10 @@ class _SyncPageState extends State<SyncPage> {
     }
 
     final isActive = syncProvider.isSyncing;
-    final uploaded = syncProvider.uploadedWals.length;
-    final readyToSync = syncProvider.missingWals.length;
-    final step = _runTracker.update(s, syncProvider.allWals);
+    final pending = syncProvider.derivedWals.pendingWork;
+    final uploaded = pending.where((w) => w.status == WalStatus.uploaded).length;
+    final readyToSync = pending.where((w) => w.status == WalStatus.miss).length;
+    final step = _runTracker.update(s, syncProvider.allWals, pendingWork: pending);
     String dur(int seconds) => OmiDuration.compact(seconds, l);
     // An edge throttle clears by itself and needs nothing from the user, so it is not shown (David, 11-02).
     final paused = syncProvider.isRateLimited && syncProvider.rateLimitReason != RateLimitReason.edgeThrottle;
@@ -559,16 +560,17 @@ class _SyncPageState extends State<SyncPage> {
       titleColor = Colors.orangeAccent;
     } else if (uploaded > 0) {
       // Audio length, never server jobs: "Processing 0/5914" was one job per 75 s file.
-      final job = syncProvider.offlineServerProcessingSeconds;
-      title = job.totalSeconds > 0 ? l.syncCardTranscribingAmount(dur(job.totalSeconds)) : l.syncCardProcessing;
-      subtitle = job.tracked && job.totalSeconds > 0
-          ? l.syncCardTranscribedOf(dur(job.doneSeconds), dur(job.totalSeconds))
-          : l.syncProcessingBackgroundHint;
+      final amounts = SyncPipelineAmounts.fromPending(pending);
+      title = '${l.syncDetailsTranscribing} · ${dur(amounts.processingSeconds)}';
+      subtitle = l.syncProcessingBackgroundHint;
     } else if (syncProvider.needsAttentionWalsCount > 0) {
       title = l.syncCardNeedsAttention(syncProvider.needsAttentionWalsCount);
       titleColor = Colors.orangeAccent;
+    } else if (syncProvider.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.transcriptionUnavailable;
+      titleColor = Colors.orangeAccent;
     } else if (readyToSync > 0) {
-      final seconds = syncProvider.missingWalsInSeconds;
+      final seconds = walSeconds(pending.where((w) => w.status == WalStatus.miss));
       title = seconds > 0 ? l.syncCardReadyAmount(dur(seconds)) : l.syncCardReadyCount(readyToSync);
       action = statusActionPill(l.sync, OmiColors.accent, () {
         if (context.read<ConnectivityProvider>().isConnected) {

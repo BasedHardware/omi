@@ -211,19 +211,22 @@ void main() {
     });
   }
 
-  testWidgets('missing window anchor falls back to lifetime counts, labelled since pairing', (tester) async {
-    mockBleHostApi('getDeviceDiagnostics', diagnostics(const [], connectedAt: 0));
+  testWidgets('missing anchor counts retained unrecovered drops and keeps lifetime reconnections separate',
+      (tester) async {
+    mockBleHostApi(
+        'getDeviceDiagnostics', diagnostics([_event(DateTime.now().millisecondsSinceEpoch - 1000)], connectedAt: 0));
     // No counters_since: extended diagnostics came back empty.
     mockBleHostApi('getExtendedDeviceDiagnostics', jsonEncode({}));
 
     await pumpPage(tester);
 
     expect(find.text('Drops'), findsOneWidget);
-    expect(find.text('10048 since pairing'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
     expect(find.text('Failed connections'), findsOneWidget);
-    expect(find.text('12 since pairing'), findsOneWidget);
-    expect(find.textContaining('Since pairing:'), findsNothing);
-    expect(find.text('No drops this week'), findsOneWidget);
+    expect(find.text('0'), findsOneWidget);
+    expect(find.text('Since pairing: 10048 reconnections, 12 failed connections.'), findsOneWidget);
+    expect(find.text('No drops this week'), findsNothing);
+    expect(find.byKey(const Key('diagnostics_verdict_ok')), findsNothing);
   });
 
   testWidgets('a failed connection in the last 24 hours turns the verdict', (tester) async {
@@ -370,6 +373,28 @@ void main() {
       expect(summary.failed, 1);
       expect(summary.medianReconnectMs, isNull);
       expect(summary.longestGapMs, isNull);
+    });
+
+    test('bundle and UI share the retained window even without an anchor or for future rows', () {
+      final times = [now - 8 * 24 * hour, now - hour, now + hour];
+      final events = [for (final t in times) _event(t)];
+      final rows = [
+        for (final t in times) {'timestamp': t, 'eventType': 'disconnect', 'isManual': false}
+      ];
+      expect(summarizeDiagnostics(events, nowMs: now).drops, 1);
+      expect(
+          diagnosticsWindowDropCount([
+            ...rows,
+            {'timestamp': now - hour, 'eventType': 'disconnect', 'isManual': true},
+            {'timestamp': now - hour, 'eventType': 'audio_recovered', 'isManual': false},
+          ], nowMs: now),
+          1);
+      expect(
+          diagnosticsWindowDropCount([
+            {'timestamp': now - hour, 'lostAudioResolvedAt': now},
+          ], nowMs: now),
+          0,
+          reason: 'legacy recovery stamps are not BLE drops');
     });
 
     test('median, longest gap and hourly rate over the window', () {

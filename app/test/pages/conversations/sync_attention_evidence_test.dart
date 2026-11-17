@@ -335,6 +335,16 @@ void main() {
     await writeFrame(tester, '002-mobile-ios-device-nothing-pending');
   });
 
+  testWidgets('Device settings keeps expired upload details reachable', (tester) async {
+    final wal = _wal(_at(40, 10, 0), 60, WalStatus.uploaded)..uploadedAt = 0;
+    await pumpDevice(tester, _FakeSync([wal]));
+    expect(find.byKey(const Key('device_stalled_upload_details')), findsOneWidget);
+    expect(find.text('Transcription unavailable'), findsOneWidget);
+    expect(wal.status, WalStatus.uploaded);
+    expect(walDeletionAllowed(wal), isFalse);
+    await writeFrame(tester, '004-mobile-ios-stalled-upload-details');
+  });
+
   testWidgets('On the Way with mixed days', (tester) async {
     await pumpOnTheWay(tester);
     for (final status in ['Uploading', 'Uploaded, awaiting server', 'Next', 'Queued']) {

@@ -23991,7 +23991,7 @@ abstract class AppLocalizations {
   /// **'Waiting on this phone'**
   String get syncDetailsWaitingOnPhone;
 
-  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  /// Sync details stage label for uploaded audio awaiting a confirmed server outcome.
   ///
   /// In en, this message translates to:
   /// **'Uploaded, awaiting server'**

@@ -225,9 +225,6 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       barStep = SyncStep.transcribe;
       barFraction = job.tracked && job.doneSeconds > 0 ? job.doneSeconds / job.totalSeconds : null;
       if (isActive) action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
-    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
-      title = l.transcriptionUnavailable;
-      titleColor = Colors.orangeAccent;
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
@@ -241,6 +238,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           }),
         );
       }
+    } else if (p.derivedWals.stalledUploadsAt().isNotEmpty) {
+      title = l.transcriptionUnavailable;
+      titleColor = Colors.orangeAccent;
+      action = statusActionPill(l.syncDetailsTitle, OmiColors.accent,
+          () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)));
     } else if (readyWals.isNotEmpty) {
       final seconds = walSeconds(readyWals);
       title = seconds > 0

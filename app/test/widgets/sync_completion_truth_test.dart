@@ -55,6 +55,8 @@ class _Sync extends ChangeNotifier with WalDerivedSyncViews implements SyncProvi
   @override
   int get clearableWalsCount => 0;
   @override
+  List<Wal> get retryableAttentionWals => derivedWals.retryable;
+  @override
   bool get syncCompleted => false;
   @override
   WalStatusFilter get statusFilter => WalStatusFilter.pending;
@@ -189,6 +191,41 @@ void main() {
     expect(find.text('All caught up'), findsNothing);
     expect(tester.takeException(), isNull);
     await _capture(tester, '003-mobile-ios-sync-needs-attention.png');
+  });
+
+  for (final legacy in [false, true]) {
+    testWidgets('expired uploads are unavailable without a processing spinner (legacy=$legacy)', (tester) async {
+      final wal = Wal(
+          timerStart: DateTime.now().subtract(const Duration(days: 40)).millisecondsSinceEpoch ~/ 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 120,
+          status: WalStatus.uploaded,
+          storage: WalStorage.disk);
+      await _pump(tester, legacy ? const SyncPage() : const AutoSyncPage(), WalStatus.uploaded, recordings: [wal]);
+      expect(find.text('Transcription unavailable'), findsWidgets);
+      expect(find.byType(OmiSpinner), findsNothing);
+      expect(find.textContaining('Turning'), findsNothing);
+      expect(wal.status, WalStatus.uploaded);
+      expect(walDeletionAllowed(wal), isFalse);
+    });
+  }
+
+  testWidgets('an expired upload cannot hide another recording Retry action', (tester) async {
+    final stale = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.opus,
+        seconds: 120,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk);
+    final failed = Wal(
+        timerStart: 1700001000,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        retryCount: walMaxAutoRetries);
+    await _pump(tester, const AutoSyncPage(), WalStatus.uploaded, recordings: [stale, failed]);
+    expect(find.byKey(const Key('offline_sync_card_retry_attention')), findsOneWidget);
   });
 
   testWidgets('Auto Sync reports processing without inventing a conversation result', (tester) async {

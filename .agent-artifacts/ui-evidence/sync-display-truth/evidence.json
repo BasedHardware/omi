@@ -21,6 +21,13 @@
       "description": "Offline Sync banner and Pending tab use the shared active inventory and preserve step progress.",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-stalled-upload-details.png",
+      "platform": "mobile-ios",
+      "description": "Device Settings retains a direct Offline Sync details link when only expired uploads remain.",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

@@ -51,7 +51,7 @@ abstract final class SyncPendingWork {
       s == WalSyncDisplayState.waiting || s == WalSyncDisplayState.retrying || s == WalSyncDisplayState.syncing;
 
   /// Allocation-free on purpose: every SyncProvider notify rebuilds the row.
-  static bool hasUploadedJobs(SyncProvider p) => uploaded(p).isNotEmpty;
+  static bool hasUploadedJobs(SyncProvider p) => p.derivedWals.pendingWork.any((w) => w.status == WalStatus.uploaded);
 
   static bool hasServerJobs(SyncProvider p) => hasUploadedJobs(p) || p.syncState.isProcessing;
 

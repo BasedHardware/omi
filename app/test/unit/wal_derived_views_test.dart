@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/pending_work.dart';
@@ -23,6 +24,7 @@ void main() {
     expect(amounts.processingSeconds, catchUpStaleHandleOff ? 60 : 30);
     expect(amounts.onDeviceSeconds, 0);
     expect(views.pendingSeconds, deviceCatchUpLocal(rows).pendingSeconds);
+    expect(deviceCatchUpLocal(views.pendingWork, alreadyCollapsed: true).pendingSeconds, views.pendingSeconds);
     expect(stale.status, WalStatus.uploaded);
     expect(walDeletionAllowed(stale), isFalse);
   });
@@ -35,6 +37,27 @@ void main() {
         local: local, serverProcessing: false, status: '', pending: [server], conversations: [], processing: []);
     expect(card(local)!.seconds, local.pendingSeconds);
     expect(card(deviceCatchUpLocal([]))!.seconds, 7200);
+  });
+
+  test('a mounted consumer is notified at expiry and dispose cancels the next deadline', () {
+    fakeAsync((time) {
+      final clock = time.getClock(DateTime(2026, 11, 17, 12));
+      final now = clock.now().millisecondsSinceEpoch ~/ 1000;
+      var notifications = 0;
+      final wal = _row(now - 40 * 86400, WalStatus.uploaded)..uploadedAt = now - 86400;
+      final views = WalDerivedViews([wal], clock: clock.now, onPendingWorkExpired: () => notifications++);
+      expect(views.pendingWork, [wal]);
+      time.elapse(const Duration(seconds: 1));
+      expect(notifications, catchUpStaleHandleOff ? 0 : 1);
+      expect(views.pendingWork, catchUpStaleHandleOff ? [wal] : isEmpty);
+      wal.jobPendingConfirmedAt = now + 1;
+      views.refresh();
+      expect(views.pendingWork, [wal]);
+      views.dispose();
+      time.elapse(const Duration(minutes: 10));
+      expect(notifications, catchUpStaleHandleOff ? 0 : 1);
+      expect(wal.status, WalStatus.uploaded);
+    });
   });
 
   test('pending inventory expires at its exact deadline and recovers on confirmation', () {

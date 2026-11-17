@@ -52,7 +52,8 @@ internal class BleReconnectDiagnostics {
 
 /** Per-identity durable reconnect evidence, separate from audio outage accounting. */
 internal object BleConnectionHistory {
-    fun connectedBefore(prefs: SharedPreferences, address: String): Boolean {
+    fun connectedBefore(prefs: SharedPreferences, address: String, enabled: Boolean): Boolean {
+        if (!enabled) return false
         val addr = address.uppercase()
         return prefs.getBoolean("ever_connected_$addr", false) ||
             prefs.contains("audio_outage_$addr") || prefs.getInt("reconnect_count_$addr", 0) > 0

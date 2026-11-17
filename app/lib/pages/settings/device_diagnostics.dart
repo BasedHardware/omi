@@ -88,7 +88,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       final extended = jsonDecode(await _bleHostApi.getExtendedDeviceDiagnostics(widget.deviceId));
       since = (extended as Map?)?['counters_since'] as num?;
     } catch (_) {
-      // Extended diagnostics are best-effort; the page falls back to lifetime counts.
+      // Extended diagnostics are best-effort; the page still uses the retained seven-day history.
     }
     if (mounted) {
       setState(() => _countersSinceMs = since?.toInt());
@@ -144,8 +144,10 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     } catch (_) {}
     final disconnects = (extended['disconnect_history_v2'] as List? ?? []).whereType<Map>().toList();
     final since = extended['counters_since'] as num?;
-    final sinceMs = since?.toInt() ?? DateTime.now().millisecondsSinceEpoch;
-    final windowStart = _recentWindowStart(sinceMs);
+    final sinceMs = since?.toInt();
+    final nowMs = clock.now().millisecondsSinceEpoch;
+    final windowStart =
+        max(sinceMs ?? nowMs - const Duration(days: 7).inMilliseconds, nowMs - const Duration(days: 7).inMilliseconds);
     final ringCustody = await exportCurrentRingCustody(widget.deviceId, device?.firmwareRevision);
     return {
       'device_id': widget.deviceId,
@@ -168,18 +170,12 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
       'reconnection_count': diagnostics.reconnectionCount,
       'fail_to_connect_count': diagnostics.failToConnectCount,
       'counters_since': {'reconnection_count': sinceMs, 'fail_to_connect_count': sinceMs},
-      'reconnection_count_window': disconnects
+      'reconnection_count_window': diagnosticsWindowDropCount(disconnects, nowMs: nowMs, sinceMs: sinceMs),
+      'fail_to_connect_count_window': disconnects
           .where((e) =>
               (e['timestamp'] as num? ?? 0) >= windowStart &&
-              (e['eventType'] ??
-                      (e['lostAudioResolvedAt'] != null && e['reasonCode'] == null
-                          ? 'audio_recovered'
-                          : 'disconnect')) ==
-                  'disconnect' &&
-              e['isManual'] != true)
-          .length,
-      'fail_to_connect_count_window': disconnects
-          .where((e) => (e['timestamp'] as num? ?? 0) >= windowStart && e['eventType'] == 'fail_to_connect')
+              (e['timestamp'] as num? ?? 0) <= nowMs &&
+              e['eventType'] == 'fail_to_connect')
           .length,
       ...feedbackDiagnosticsExportFields(extended,
           captureHealth: BleBridge.instance.diagnosticsCaptureHealth(widget.deviceId), batteryHistory: _batteryHistory),
@@ -456,7 +452,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
   /// The week verdict, then neutral counts. Lifetime counters read catastrophic after months of
   /// pairing (10k+ reconnections), so the 7-day window leads and the lifetime numbers sit in the
-  /// footnote. Without a window anchor the rows fall back to the lifetime counts, labelled so.
+  /// footnote. A missing anchor still uses retained seven-day rows.
   Widget _buildWeek() {
     final l10n = context.l10n;
     final summary = _summary;
@@ -469,7 +465,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
 
     return OmiSettingsGroup(
       header: l10n.diagnosticsLast7Days,
-      footer: windowed ? l10n.diagnosticsSincePairingSummary(lifetimeDrops, lifetimeFails) : null,
+      footer: l10n.diagnosticsSincePairingSummary(lifetimeDrops, lifetimeFails),
       children: [
         if (summary.hasTrouble)
           OmiSettingsRow(
@@ -478,25 +474,24 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             title: l10n.diagnosticsVerdictTrouble,
             subtitle: l10n.diagnosticsVerdictTroubleDetail(summary.failedLast24h),
           )
-        else
+        else if (summary.drops == 0 || median != null)
           OmiSettingsRow(
             key: const Key('diagnostics_verdict_ok'),
             leading: FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.success),
             title: l10n.diagnosticsVerdictReconnects,
             subtitle: median == null
-                ? (summary.drops == 0 ? l10n.diagnosticsVerdictNoDrops : l10n.diagnosticsDrops)
+                ? l10n.diagnosticsVerdictNoDrops
                 : l10n.diagnosticsVerdictReconnectsDetail(_formatDurationMs(median)),
           ),
         OmiSettingsRow(
           title: l10n.diagnosticsDrops,
-          value:
-              rate == null ? (windowed ? '${summary.drops}' : l10n.diagnosticsCountSincePairing(lifetimeDrops)) : null,
+          value: rate == null ? '${summary.drops}' : null,
           trailing: rate == null ? null : _valueStack('${summary.drops}', detail: l10n.diagnosticsDropsPerHour(rate)),
         ),
         OmiSettingsRow(title: l10n.diagnosticsLongestGap, value: longest == null ? '--' : _formatDurationMs(longest)),
         OmiSettingsRow(
           title: l10n.failedConnections,
-          value: windowed ? '${summary.failed}' : l10n.diagnosticsCountSincePairing(lifetimeFails),
+          value: '${summary.failed}',
         ),
       ],
     );
@@ -1021,6 +1016,31 @@ class DiagnosticsSummary {
   bool get hasTrouble => failedLast24h > 0;
 }
 
+/// The UI and support bundle count the same observed disconnect rows.
+@visibleForTesting
+bool diagnosticsDropInWindow(
+        {required int timestamp,
+        required String eventType,
+        required bool isManual,
+        required int nowMs,
+        int? sinceMs}) =>
+    eventType == 'disconnect' &&
+    !isManual &&
+    timestamp <= nowMs &&
+    timestamp >=
+        max(sinceMs ?? nowMs - const Duration(days: 7).inMilliseconds, nowMs - const Duration(days: 7).inMilliseconds);
+
+@visibleForTesting
+int diagnosticsWindowDropCount(Iterable<Map> rows, {required int nowMs, int? sinceMs}) => rows
+    .where((e) => diagnosticsDropInWindow(
+        timestamp: (e['timestamp'] as num? ?? 0).toInt(),
+        eventType: e['eventType'] as String? ??
+            (e['lostAudioResolvedAt'] != null && e['reasonCode'] == null ? 'audio_recovered' : 'disconnect'),
+        isManual: e['isManual'] == true,
+        nowMs: nowMs,
+        sinceMs: sinceMs))
+    .length;
+
 /// Summarises [history] since [sinceMs] (the whole history, which native keeps for 7 days, when
 /// null).
 @visibleForTesting
@@ -1029,7 +1049,10 @@ DiagnosticsSummary summarizeDiagnostics(List<BleDisconnectEvent> history, {requi
   const weekMs = 7 * 24 * hourMs;
   final start = max(sinceMs ?? nowMs - weekMs, nowMs - weekMs);
   final window = history.where((e) => e.timestamp >= start && e.timestamp <= nowMs).toList();
-  final drops = window.where((e) => e.eventType == 'disconnect' && !e.isManual).toList();
+  final drops = window
+      .where((e) => diagnosticsDropInWindow(
+          timestamp: e.timestamp, eventType: e.eventType, isManual: e.isManual, nowMs: nowMs, sinceMs: sinceMs))
+      .toList();
   final gaps = [
     for (final e in drops)
       if (e.timeToReconnectMs > 0) e.timeToReconnectMs,

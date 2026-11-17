@@ -129,8 +129,7 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status,
   final previous = OmiColors.active;
   OmiColors.active = OmiPalette.dark;
   addTearDown(() => OmiColors.active = previous);
-  const evidence = String.fromEnvironment('OMI_SYNC_UI_EVIDENCE_DIR');
-  if (evidence.isNotEmpty) {
+  {
     await tester.runAsync(() async {
       for (final entry in jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>) {
         final loader = FontLoader(entry['family'] as String);
@@ -181,14 +180,8 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status,
             debugShowCheckedModeBanner: false,
             home: page,
           ))));
-  if (status == WalStatus.uploaded) {
-    // An indeterminate processing spinner is expected until the server settles.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-  } else {
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-  }
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
@@ -205,7 +198,7 @@ Future<void> _capture(WidgetTester tester, String name) async {
 }
 
 void main() {
-  final now = DateTime(2026, 11, 17, 12);
+  final now = DateTime.now();
   List<Wal> rows() {
     Wal row(int ago, int seconds, WalStatus status, {WalStorage storage = WalStorage.disk}) => Wal(
           timerStart: now.subtract(Duration(seconds: ago)).millisecondsSinceEpoch ~/ 1000,
@@ -226,6 +219,7 @@ void main() {
 
   testWidgets('On the Way separates pending audio stalled uploads and server-only work', (tester) async {
     final store = PendingWorkStore(
+        loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
         loadPending: () async => ApiSuccess(PendingWorkSnapshot(enabled: true, attentionUnseenCount: 0, items: [
               PendingWorkItem(
                 id: 'synthetic-server',
