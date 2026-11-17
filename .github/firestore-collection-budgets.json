@@ -83,6 +83,66 @@
   ],
   "dynamic": [
     {
+      "site": "backend/database/jobstore/provider_projection.py",
+      "expression": "self.handoff.ticket.namespace + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "SCA-1959 sole D/G2 source owner",
+      "unit": "one original-intake point lookup attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Default-off original custody adapter; no discovery query or new collection. Expected production volume zero; 1/day is a dark-path sentinel, not a rollout budget. Every transaction/transport retry counts separately. Measured workload and reviewed daily budget are required before enabling any production caller; synthetic loopback reads book no savings.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "site": "backend/database/jobstore/provider_upload.py",
+      "expression": "self.namespace + '_artifacts'",
+      "collection_pattern": "batch_pipeline_*_artifacts",
+      "owner": "SCA-1959 sole D/G2 source owner",
+      "unit": "one original-artifact point lookup attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Default-off conditional upload reference transaction over an existing family. Production expected zero; 1/day sentinel does not authorize serving. Count retries separately; measure and replace the daily budget before activation. No polling or savings claim.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "site": "backend/database/jobstore/published_copies.py",
+      "expression": "row['namespace'] + '_artifacts'",
+      "collection_pattern": "batch_pipeline_*_artifacts",
+      "owner": "SCA-1959 sole D/G2 source owner",
+      "unit": "one generation-bound artifact point lookup attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Default-off original-copy erasure adapter; exact-key metadata only, no discovery query. Expected production zero; 1/day sentinel is not an activation budget. Each retry/phase check is a separate attempt; bound workload and review daily volume before use. No expiry or retirement is authorized by this budget.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "site": "backend/database/jobstore/retained_manifest.py",
+      "expression": "ns + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "SCA-1959 sole D/G2 source owner",
+      "unit": "one original-intake metadata point lookup attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Default-off retained-copy manifest over existing original intake references; no new discovery scan. Expected production zero; 1/day sentinel is not a ramp allowance. Count retries separately; measured per-record workload and daily budget are required before activation. No customer data or retention changes.",
+      "reviewed": "2026-11-17"
+    },
+    {
+      "site": "backend/database/jobstore/staging_copies.py",
+      "expression": "source['namespace'] + '_intakes'",
+      "collection_pattern": "batch_pipeline_*_intakes",
+      "owner": "SCA-1959 sole D/G2 source owner",
+      "unit": "one original-intake destructive-unit check attempt",
+      "reads_per_unit_budget": 1,
+      "reads_per_day_budget": 1,
+      "basis": "planning-bound",
+      "source": "Default-off existing-family point check; real destructive-unit authority is independently required. Production expected zero; 1/day sentinel authorizes no operation or rollout. Retries count independently. Measured workload, cost and reviewed daily budget remain gates before activation.",
+      "reviewed": "2026-11-17"
+    },
+    {
       "site": "backend/database/jobstore/reconcile.py",
       "expression": "f'{primary.namespace}_{table}'",
       "collection_pattern": "batch_pipeline_*_*",
