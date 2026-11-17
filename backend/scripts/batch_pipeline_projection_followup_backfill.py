@@ -37,8 +37,17 @@ class PageRateLimiter:
     def acquire(self):
         now = self.clock()
         while now < self.next_page_at:
-            # A finite but very low rate must not overflow the platform sleep.
-            self.sleep(min(60.0, self.next_page_at - now))
+            # A finite but very low rate must not overflow the platform sleep
+            # or look like a hung operator. No customer values are printed.
+            remaining = self.next_page_at - now
+            print(
+                json.dumps(
+                    {'operation': 'projection-followup-backfill-v1', 'outcome': 'pacing', 'wait_seconds': remaining}
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
+            self.sleep(min(60.0, remaining))
             now = self.clock()
         # Slow IO earns no catch-up burst. Keep one limiter across all pages.
         self.next_page_at = now + self.interval

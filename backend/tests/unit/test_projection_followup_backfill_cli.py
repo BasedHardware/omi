@@ -151,3 +151,17 @@ def test_page_failure_stops_without_admitting_or_checkpointing_another_page(oper
     with pytest.raises(RuntimeError, match='synthetic page failure'):
         cli.main()
     page.assert_called_once()
+
+
+def test_low_rate_reports_bounded_wait_progress_without_customer_values(capsys):
+    clock = Clock()
+    limiter = cli.PageRateLimiter(1, 200, clock=clock.read, sleep=clock.sleep)
+    limiter.acquire()
+    limiter.acquire()
+    captured = capsys.readouterr()
+    assert captured.out == ''
+    reports = [json.loads(line) for line in captured.err.splitlines()]
+    assert [report['wait_seconds'] for report in reports] == [200.0, 140.0, 80.0, 20.0]
+    assert all(
+        set(report) == {'operation', 'outcome', 'wait_seconds'} and report['outcome'] == 'pacing' for report in reports
+    )
