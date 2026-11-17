@@ -25,15 +25,11 @@ _RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
 # ``summary_delivery.present`` does not count as a summary. ``gist`` and
 # ``overview`` are judged with the note policy's narration filter.
 _PROTECTED_STRUCTURED_NOTE_FIELDS = ('overview', 'gist')
-_PROTECTED_STRUCTURED_LIST_FIELDS = (
-    'sections',
-    'action_items',
-    'events',
-    'participants',
-    'insights',
-    'note_claims',
-)
-_PROTECTED_STRUCTURED_OPTIONAL_FIELDS = ('meeting_type', 'salience')
+_PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
+# Enrichment the deterministic minimum would drop. It blocks replacement but not
+# admission: refusing admission retires the quiet obligation without closing the
+# row, so only content the summary contract already respects may do that.
+_REPLACE_BLOCKING_STRUCTURED_FIELDS = ('participants', 'insights', 'note_claims', 'meeting_type', 'salience')
 
 TERMINAL_NO_DERIVED_EFFECTS_FIELD = 'terminal_no_derived_effects'
 
@@ -132,37 +128,36 @@ def structured_is_rich(structured: Any) -> bool:
     return False
 
 
-def _has_note_content(structured: Any) -> bool:
-    """Whether stored structure holds notes worth keeping.
+def _has_stored_text_content(structured: Any) -> bool:
+    """Content the summary contract respects: a note body or a generated list.
 
-    Broader than ``structured_is_rich``: that predicate verifies a fresh
-    enrichment landed and must stay aligned with ``summary_delivery.present``.
-    This one answers the admission question, so it also counts a gist, people,
-    insights, claim provenance, a meeting kind and a salience verdict, none of
-    which ``present`` treats as a summary. Overview and gist use the note
-    policy's narration filter, so a row whose only text is "the transcript is
-    unavailable" has no notes here either.
+    Overview and gist use the note policy's narration filter, so a row whose only
+    text is "the transcript is unavailable" has no content here either.
     """
     for name in _PROTECTED_STRUCTURED_NOTE_FIELDS:
         value = _field(structured, name)
         if isinstance(value, str) and safe_body(value).strip():
             return True
-    for name in _PROTECTED_STRUCTURED_LIST_FIELDS:
-        if _field(structured, name):
-            return True
-    return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_OPTIONAL_FIELDS)
+    return any(_field(structured, name) for name in _PROTECTED_STRUCTURED_LIST_FIELDS)
+
+
+def _has_replace_blocking_content(structured: Any) -> bool:
+    """Everything the deterministic minimum would drop if it replaced this structure."""
+    return _has_stored_text_content(structured) or any(
+        _field(structured, name) for name in _REPLACE_BLOCKING_STRUCTURED_FIELDS
+    )
 
 
 def stored_structure_is_replaceable(structured: Any) -> bool:
     """Whether recovery may replace this stored structure with the deterministic minimum.
 
-    No notes and no real title. A placeholder label ("Discussion notes") is not
+    No content and no real title. A placeholder label ("Discussion notes") is not
     a title, so a row that only carries one is still replaceable; a
     ``server_minimum`` stand-in is provisional by definition (2026-11-16
     incident). One owner for the rule: the recovery guard and the
     post-enrichment eligibility both call this.
     """
-    return not _has_note_content(structured) and (
+    return not _has_replace_blocking_content(structured) and (
         not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum'
     )
 
@@ -198,7 +193,7 @@ def structured_has_protected_content(structured: Any, user_title: Any = None) ->
             return True
     elif user_title:
         return True
-    return bool(valid_title(_field(structured, 'title'))) or _has_note_content(structured)
+    return bool(valid_title(_field(structured, 'title'))) or _has_stored_text_content(structured)
 
 
 def raw_transcript_bytes(conversation: Mapping[str, Any]) -> int:

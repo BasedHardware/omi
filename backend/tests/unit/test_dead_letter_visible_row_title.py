@@ -246,6 +246,21 @@ def test_placeholder_title_beside_real_notes_is_untouched():
     assert 'structured' not in patch
 
 
+def test_blank_title_beside_real_notes_still_gets_the_deterministic_title():
+    """A blank title has nothing to keep, so every kept row leaves titled."""
+    conversation = _conversation(
+        {
+            'structured': {'title': '', 'overview': 'The pilot budget is approved.', 'category': 'other'},
+            'transcript_segments': _segments('We picked the venue for Friday.'),
+        }
+    )
+
+    patch = _dead_letter(conversation)
+
+    assert patch['structured']['title'] == 'We picked the venue for Friday.'
+    assert patch['structured']['overview'] == 'The pilot budget is approved.'
+
+
 def test_enhanced_encrypted_compressed_transcript_is_decoded_for_the_title():
     compressed_hex = zlib.compress(json.dumps(_segments('Encrypted words matter here. Tail.')).encode()).hex()
     conversation = _conversation(

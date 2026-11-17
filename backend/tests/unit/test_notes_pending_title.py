@@ -282,10 +282,12 @@ def test_placeholder_title_beside_real_notes_is_a_finished_row_not_a_transcripti
         ({'title': FALLBACK, 'overview': 'Approval is due Friday.'}, True),
         ({'title': FALLBACK, 'gist': 'Pilot budget approval'}, True),
         ({'title': FALLBACK, 'overview': 'The transcript is unavailable.'}, False),
-        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, True),
-        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, True),
-        ({'title': FALLBACK, 'meeting_type': 'meeting'}, True),
-        ({'title': FALLBACK, 'salience': 'highlight'}, True),
+        # These block replacement, not admission: refusing admission would retire
+        # the quiet obligation without closing the row.
+        ({'title': FALLBACK, 'participants': [{'name': 'Alex'}]}, False),
+        ({'title': FALLBACK, 'insights': [{'text': 'The budget is tight.'}]}, False),
+        ({'title': FALLBACK, 'meeting_type': 'meeting'}, False),
+        ({'title': FALLBACK, 'salience': 'highlight'}, False),
     ],
 )
 def test_protected_content_does_not_count_a_placeholder_as_a_title(structured, protected):
