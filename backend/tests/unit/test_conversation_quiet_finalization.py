@@ -505,6 +505,24 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
 from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
 
 
+@pytest.mark.parametrize(
+    'structured,refusal',
+    [
+        ({'title': 'Discussion notes'}, None),
+        ({'title': 'Discussion 3'}, None),
+        ({'title': 'Pilot budget'}, 'protected_content'),
+        ({'title': 'Discussion notes', 'gist': 'Pilot budget approval'}, 'protected_content'),
+    ],
+)
+def test_recovery_admission_ignores_a_placeholder_title(store, monkeypatch, structured, refusal):
+    """A placeholder-only row is admitted; a real title or a gist still protects it."""
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    row = store.rows[ROW]
+    row['structured'] = structured
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) == refusal
+
+
 @pytest.mark.parametrize('legacy_finish', [None, NOW + timedelta(hours=1)])
 def test_quiet_run_admits_speech_only_or_stale_heartbeat_row_once(store, monkeypatch, legacy_finish):
     """Exercise the whole check -> admission path, including its second quiet fence."""

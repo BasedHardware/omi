@@ -37,6 +37,7 @@ from utils.conversations.relevance_rules import RULES_VERSION
 from utils.conversations.terminal_relevance import terminal_decision, valid_decision, stamp_terminal_decision
 from utils.conversations.terminal_calendar import calendar_retains
 from utils.metrics import record_conversation_relevance
+from utils.summary_quality import valid_title
 
 # Terminal failure codes after which a user reprocess can still succeed: the
 # retry budget ran out on a provider, parser or worker failure. Deliberately
@@ -96,9 +97,9 @@ def _title_update(
     structured = conversation.get('structured')
     fields = dict(structured) if isinstance(structured, Mapping) else {'title': '', 'overview': ''}
     title = fields.get('title')
-    if conversations_db.effective_user_title(conversation.get('user_title')) is None and not (
-        isinstance(title, str) and title.strip()
-    ):
+    # A placeholder label ("Discussion notes") is not a title: the row is still
+    # untitled and gets the deterministic one (2026-11-16 incident).
+    if conversations_db.effective_user_title(conversation.get('user_title')) is None and not valid_title(title):
         started_at = conversation.get('started_at')
         if not isinstance(started_at, datetime):
             started_at = conversation.get('created_at')

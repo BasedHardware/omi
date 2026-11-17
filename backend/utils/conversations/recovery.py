@@ -20,7 +20,7 @@ from utils.summary_quality import valid_title
 RECOVERY_MAX_AUDIO_FILE_IDS = 256
 RECOVERY_QUIET_MINIMUM_MAX_WORDS = 12
 
-_RICH_STRUCTURED_FIELDS = ('overview', 'gist', 'sections', 'action_items', 'events')
+_RICH_STRUCTURED_FIELDS = ('overview', 'sections', 'action_items', 'events')
 _PROTECTED_STRUCTURED_TEXT_FIELDS = ('title', 'overview', 'gist')
 _PROTECTED_STRUCTURED_LIST_FIELDS = ('sections', 'action_items', 'events')
 
@@ -129,9 +129,18 @@ def stored_structure_is_replaceable(structured: Any) -> bool:
     ``server_minimum`` stand-in is provisional by definition (2026-11-16
     incident). One owner for the rule: the recovery guard and the
     post-enrichment eligibility both call this.
+
+    A gist counts as content here even though ``structured_is_rich`` leaves it
+    out: that predicate also gates the typed recovery refusal, and
+    ``summary_delivery.present`` does not treat a gist as a summary, so widening
+    it would turn a refusal into a persist-time ``SummaryOutputUnavailable``.
     """
-    return not structured_is_rich(structured) and (
-        not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum'
+    gist = _field(structured, 'gist')
+    has_gist = isinstance(gist, str) and bool(gist.strip())
+    return (
+        not structured_is_rich(structured)
+        and not has_gist
+        and (not valid_title(_field(structured, 'title')) or _field(structured, 'title_provenance') == 'server_minimum')
     )
 
 
