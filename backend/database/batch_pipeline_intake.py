@@ -1,5 +1,7 @@
 """Atomic batch protocol ownership, durable projection binding and queue admission."""
 
+from database import batch_pipeline_upload_metrics as upload_metrics
+
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -66,6 +68,7 @@ def admit(
         serialized_binding.pop('partial_record')
 
     def commit(tx):
+        created_units = 0
         if coalescing_group is not None:
             from database.batch_pipeline_coalescing import guard
 
@@ -194,6 +197,7 @@ def admit(
                     marked = tx.get('jobs', item.segment_id)
                     marked.update(protocol_version=2, source_reuse_version=1)
                     tx.put('jobs', item.segment_id, marked)
+            created_units += int(bool(created) and not item.shadow)
             job = tx.get('jobs', item.segment_id)
             previous_binding = dict(job.get('projection_binding') or {})
             if previous_binding.get('partial_record') is False:
@@ -235,6 +239,7 @@ def admit(
             content_key,
             {
                 **coalescing_completion.manifest(coalescing_group),
+                **{k: v for k, v in (intake or {}).items() if k in {'upload_arrived_at', 'upload_entitlement'}},
                 'status': 'processing',
                 'job_id': binding.job_id,
                 'lane': 'batch',
@@ -257,9 +262,15 @@ def admit(
             '_policy_id': admission.policy_id,
             '_admitted_seconds': sum(i.duration_seconds for i in items),
             '_reused_seconds': sum(i.duration_seconds for i in items if i.segment_id in (source_aliases or {})),
+            '_created_units': created_units,
         }
 
     outcome = store.run(commit)
+    created_units = int(outcome.pop('_created_units', 0) or 0)
+    if created_units:
+        upload_metrics.CREATED.labels(upload_metrics.bounded_class((intake or {}).get('upload_entitlement'))).inc(
+            created_units
+        )
     policy_id = str(outcome.pop('_policy_id', policy.policy_id))
     reused_seconds = outcome.pop('_reused_seconds', 0.0)
     if reused_seconds:

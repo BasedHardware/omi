@@ -1,5 +1,7 @@
 """Flagged sync admission. Failures never fall through to the legacy dispatcher."""
 
+from config.request_clock import context_fields
+
 from dataclasses import replace
 from functools import partial
 import hashlib
@@ -1073,6 +1075,7 @@ async def accept_upload(
                 'lane': lane,
                 'repair_lineage': lineage_record(intake_context),
                 'repair_languages': repair_languages,
+                **context_fields(intake_context),
                 # Funded period the owner's choice was made in (cap-hold re-entry); projection
                 # attributes usage to it across a month rollover (lane 6, Subscription ruling B).
                 **({'usage_period': usage_period} if usage_period else {}),

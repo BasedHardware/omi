@@ -8,8 +8,8 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
-from starlette.responses import Response, JSONResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from starlette.responses import Response
 
 from config.batch_pipeline import projection_pump_enabled, read_only_metrics_enabled
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
@@ -17,49 +17,14 @@ from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_record_dead_letter import requeue_record as requeue_record_job
 from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
-from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.batch_pipeline.shadow_projection import run as run_shadow_projection
-from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
-from utils.observability.reasons import RetryReason
+from utils.executors import db_executor, run_blocking, sync_executor
 from utils.workers.retry import retry_response
+from utils.observability.reasons import RetryReason
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
-
-# Static retry classes; never IDs. 'unexpected' answers 500, the others 409.
-ENRICHMENT_RETRIES = Counter(
-    'batch_enrichment_sync_reprocess_retries_total',
-    'Enrichment task retries by expected or unexpected class',
-    ['retry_class'],
-)
-# Deliberate retain-and-retry signals, matched by defining module and name so
-# this router does not import the sync pipeline at startup.
-EXPECTED_RETRIES = {
-    # Keyed by the defining module: utils.sync.reprocess is only an alias of utils.enrichment.outbox (#22431).
-    ('utils.enrichment.outbox', 'FirstSummaryCallbackPending'): 'callback_pending',
-    ('utils.enrichment.admission', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
-}
-
-
-def expected_retry_reason(error: BaseException) -> str | None:
-    for cls in type(error).__mro__:
-        reason = EXPECTED_RETRIES.get((cls.__module__, cls.__qualname__))
-        if reason is not None:
-            return reason
-    if dependency_failure(error):
-        return RetryReason.DEPENDENCY_WARMING.value
-    return None
-
-
-def dependency_failure(error: BaseException) -> bool:
-    """Conversation processing's HTTP contract for a failed dependency (LLM/provider step or app), not a bug.
-
-    ``process_conversation`` raises 429 (BYOK rate limit or quota), 500 (generic processing failure) or
-    502 (selected app failed). Inside a task delivery these are transient dependency outages: answering
-    500 would make Cloud Tasks system-throttle the queue (contract (d)). Other 4xx stay unexpected.
-    """
-    return isinstance(error, HTTPException) and (error.status_code == 429 or error.status_code >= 500)
 
 
 def verify_worker(request: Request) -> int:
@@ -307,60 +272,3 @@ async def authorize_compute(body: HeartbeatRequest, request: Request):
         [lease.model_dump() for lease in body.leases],
         budget=request.headers.get('x-omi-admission-seconds'),
     )
-
-
-async def enrichment_response(payload: dict):
-    document_id, token = payload.get('key'), payload.get('task_token')
-    if set(payload) != {'kind', 'key', 'task_token'} or not all(
-        isinstance(value, str) and value for value in (document_id, token)
-    ):
-        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-    assert isinstance(document_id, str) and isinstance(token, str)
-    from utils.sync import reprocess
-
-    if not reprocess.owns_runtime():
-        return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
-    try:
-        from config.enrichment import route
-
-        if route() == 'enrichment_queue':
-            # C3: one state machine. Rows still bound to /v2/sync-jobs/run drain through the same
-            # consumer as /v2/enrichment/run; the route lever flips both together.
-            from routers.enrichment import consume
-            from utils.workers.consumer import http_response
-
-            return http_response(
-                await run_blocking(postprocess_executor, consume, document_id, token, time.monotonic())
-            )
-        # Summaries must not queue behind long transcription jobs. Reuse the
-        # conversation-processing bulkhead for every first-summary obligation.
-        executor = postprocess_executor
-        status = await run_blocking(executor, run_enrichment, document_id, token)
-        if status == 'busy':
-            logger.info('event=batch_enrichment_sync_reprocess outcome=busy')
-            # The leased outbox and task watchdog retain custody after this ACK.
-            return JSONResponse(status_code=200, content={'status': status})
-        return JSONResponse(status_code=200, content={'status': status})
-    except (ValueError, TypeError):
-        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-    except Exception as error:
-        from config.sync_telemetry import bounded_exception_class
-
-        reason = expected_retry_reason(error)
-        if reason is None:
-            ENRICHMENT_RETRIES.labels('unexpected').inc()
-            logger.error(
-                'event=batch_enrichment_sync_reprocess outcome=retry retry_class=unexpected site=run_enrichment exception_type=%s',
-                bounded_exception_class(error),
-            )
-            return JSONResponse(status_code=500, content={'status': 'retry'})
-        ENRICHMENT_RETRIES.labels(reason).inc()
-        logger.warning(
-            'event=batch_enrichment_sync_reprocess outcome=retry retry_class=%s site=run_enrichment exception_type=%s',
-            reason,
-            bounded_exception_class(error),
-        )
-        # 409 keeps Cloud Tasks retrying (any non-2xx) without the 429/503
-        # queue throttling that caused the 2026-10-18 backlog, and keeps these
-        # by-design waits out of 5xx error gates.
-        return JSONResponse(status_code=409, content={'status': 'retry', 'reason': reason})

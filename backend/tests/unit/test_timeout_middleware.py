@@ -283,3 +283,34 @@ async def test_dream_v2_outer_timeout_is_dynamic_and_path_scoped(monkeypatch, pa
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
     await middleware.dispatch(request, immediate)
     assert seen == [90, 90 if path == '/other' else 1710, 90]
+
+
+@pytest.mark.asyncio
+async def test_original_upload_arrival_clock_is_server_owned_and_reset():
+    from config.request_clock import started_at
+    from starlette.responses import Response
+
+    middleware = TimeoutMiddleware(Starlette())
+    seen = []
+
+    async def handler(request):
+        clock = started_at.get()
+        assert isinstance(clock, float) and clock <= time.time()
+        seen.append(clock)
+        await asyncio.sleep(0)
+        assert started_at.get() == clock
+        return Response(status_code=202)
+
+    assert started_at.get() is None
+    responses = await asyncio.gather(*(middleware.dispatch(_make_request(method="POST"), handler) for _ in range(2)))
+    assert [response.status_code for response in responses] == [202, 202]
+    assert len(seen) == 2 and started_at.get() is None
+
+
+@pytest.mark.asyncio
+async def test_original_upload_arrival_clock_resets_on_timeout():
+    from config.request_clock import started_at
+
+    middleware = TimeoutMiddleware(Starlette(), methods_timeout={"GET": 0.001})
+    response = await middleware.dispatch(_make_request(), _never_returns)
+    assert response.status_code == 504 and started_at.get() is None
