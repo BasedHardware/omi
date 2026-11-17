@@ -45,6 +45,14 @@ overlay:
       values_file: backend/charts/parakeet/prod_omi_parakeet_lid_values.yaml
     backend-listen:
       env:
+        OMI_DEPLOYMENT: {value: 'prod', category: config}
+        FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
+        JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
+        JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
+        JOBSTORE_PG_USER: {value: 'backend-listen-runtime@based-hardware.iam', category: config}
+        JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
+        JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
+        BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
         # Shared backend routes: keep the silence kill switch off on listen too.
         BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
         PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -598,6 +606,14 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          OMI_DEPLOYMENT: {value: 'prod', category: config}
+          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
+          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
+          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
+          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
+          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
+          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
+          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -993,6 +1009,14 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          OMI_DEPLOYMENT: {value: 'prod', category: config}
+          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
+          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
+          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
+          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
+          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
+          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
+          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -1423,6 +1447,14 @@ overlay:
         # (SCA-2283).
         - BATCH_PROJECTION_FINISH_BACKOFF_ENABLED
         env:
+          OMI_DEPLOYMENT: {value: 'prod', category: config}
+          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
+          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
+          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
+          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
+          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
+          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
+          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Hold silent read skipping until the release-owner canary (review F1).
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED: {value: 'false', category: ops_kill}
           PUSHER_RECORD_CLOSE_NOTIFY_ENABLED: {value: 'false', category: rollout}
@@ -1801,6 +1833,14 @@ overlay:
         - REPEAT_WORK_REVISION_ENABLED
         - HOSTED_DIARIZATION_API_URL
         env:
+          OMI_DEPLOYMENT: {value: 'prod', category: config}
+          FIRESTORE_DATABASE_ID: {value: '(default)', category: config}
+          JOBSTORE_PG_HOST: {value: '172.25.29.2', category: config}
+          JOBSTORE_PG_DATABASE: {value: 'jobstore_prod', category: config}
+          JOBSTORE_PG_USER: {value: 'backend-runtime@based-hardware.iam', category: config}
+          JOBSTORE_SHADOW_NAMESPACES: {value: 'batch_pipeline_prod', category: config}
+          JOBSTORE_PRODUCTION_MIRROR: {value: 'off', category: config}
+          BATCH_JOBSTORE_MODE: {value: 'firestore', category: config}
           # Margin-40 O1 inverse: full deploys must retain the admitted 200/10/class16 cadence.
           BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
           BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}

@@ -266,9 +266,8 @@ BODY_DIGEST = {
     'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
     'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
     'database.jobstore.backfill.backfill_table': '4ee7bc177237443422fcd2fbef51e7dde2d6841f20751b26fa6b943d39824343',
-    # Reviewed 2026-11-15: bounded reconcile-page operator CLI, not a serving caller.
-    'database.jobstore.reconcile._primary_keys': '47158c3d453cda1ca78ea73d191f342a72e677bb2012ac67ee0c172f4e673cc8',
-    'database.jobstore.reconcile.process_page': '0a7c1c343f8a0397e152558629477f9d0127e9e10a73fa829c7863d7209a0eea',
+    # Reviewed 2026-11-18: bounded serving rotation; query helper driven below, callbacks add only PG SQL.
+    'database.jobstore.reconcile.process_page': '3566a8c6c32bd741726fab3eb915f2a39a6a5c5dfe3b4c353eadab2ef2425244',
     'database.pinecone_partition_state._uncertain_mutations_are_deletes': '6b08a953074c2ae24cc1cf503ee5ae2e32049b62d3446e11248d5f72253b162d',
     'database.pinecone_partition_state.uncertain_mutations_are_deletes': '49b0052e3a4aeb004ae9680393cd599fe972e1716ec3089a9ac163c445c6d384',
 }
@@ -4368,21 +4367,58 @@ for _key, _reason in (
         'database.jobstore.backfill.backfill',
         'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
     ),
-    (
-        'database.jobstore.reconcile._primary_keys',
-        'Bounded reconcile-page operator CLI only, never serving: one batch collection page ordered by '
-        'document id, optional document-id start_after, and explicit limit; bounded RPC with retries disabled. '
-        'No filters or composite index; built-in document-id ordering only.',
-    ),
-    (
-        'database.jobstore.reconcile.process_page',
-        'Bounded reconcile-page operator CLI only: orchestrates the pinned _primary_keys helper for primary '
-        'discovery or a limited PG key page, then exact-key primary get_all rereads. No additional Firestore '
-        'query shape; row/read/statement/deadline budgets and commit-only cursor checked by '
-        'tests/unit/test_jobstore_reconcile.py.',
-    ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
+
+
+# The bounded source page is now reachable from the supervised serving tick,
+# so exercise every table/cursor shape rather than keeping an operator-only skip.
+def _jobstore_primary_page_setup(client, kwargs, trial):
+    from database.jobstore.reconcile import _Budget, PageCounts
+
+    kwargs['primary'] = SimpleNamespace(namespace='batch_pipeline_prod', client=client)
+    kwargs['budget'] = _Budget(3, 20, 500, PageCounts())
+
+
+_add(
+    DriverEntry(
+        'database.jobstore.reconcile._primary_keys',
+        base={'primary': None},
+        domains={
+            'table': [
+                'jobs',
+                'queues',
+                'owners',
+                'control',
+                'results',
+                'gpus',
+                'intakes',
+                'artifacts',
+                'allowance_holds',
+                'pull_claims',
+                'merge_holds',
+            ],
+            'after': [None, 'cursor'],
+        },
+        neutrals={
+            'limit': (10, 'bounded page size; no filter/index effect'),
+            'budget': (None, 'RPC timeout/read cap only; fresh budget supplied per trial'),
+        },
+        setup=_jobstore_primary_page_setup,
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.jobstore.reconcile.process_page',
+        covered_by=('database.jobstore.reconcile._primary_keys',),
+        reason='Serving-hosted bounded rotation/CLI share the driven document-id page. '
+        'Copy-source discovery is SQL; fresh get_all uses exact document references. '
+        'Cursor load/advance callbacks run in the same PG transaction and add no Firestore shape. '
+        'Row/read/SQL/deadline budgets remain tested in test_jobstore_reconcile.py.',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.jobstore.reconcile.process_page'],
+    )
+)
 
 
 # Transparent raw-snapshot transport: the callers above continue to own every

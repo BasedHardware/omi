@@ -3256,6 +3256,30 @@ environments:
           BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
           BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
           BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST: {value: '', category: rollout}
+          OMI_DEPLOYMENT:
+            value: prod
+            category: config
+          FIRESTORE_DATABASE_ID:
+            value: (default)
+            category: config
+          JOBSTORE_PG_HOST:
+            value: 172.25.29.2
+            category: config
+          JOBSTORE_PG_DATABASE:
+            value: jobstore_prod
+            category: config
+          JOBSTORE_PG_USER:
+            value: backend-listen-runtime@based-hardware.iam
+            category: config
+          JOBSTORE_SHADOW_NAMESPACES:
+            value: batch_pipeline_prod
+            category: config
+          JOBSTORE_PRODUCTION_MIRROR:
+            value: 'off'
+            category: config
+          BATCH_JOBSTORE_MODE:
+            value: firestore
+            category: config
           BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
             value: 'false'
             category: ops_kill
@@ -4330,6 +4354,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -4884,6 +4932,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5427,6 +5499,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'off', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SILENCE_READ_SKIP_ENABLED:
               value: 'false'
               category: ops_kill
@@ -5915,6 +6011,30 @@ environments:
             BATCH_PIPELINE_PROJECTION_PAGINATION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_ASYNC_PROJECTION_ENABLED: {value: 'true', category: rollout}
             BATCH_PIPELINE_RECOVERY_MODE: {value: 'on', category: rollout}
+            OMI_DEPLOYMENT:
+              value: prod
+              category: config
+            FIRESTORE_DATABASE_ID:
+              value: (default)
+              category: config
+            JOBSTORE_PG_HOST:
+              value: 172.25.29.2
+              category: config
+            JOBSTORE_PG_DATABASE:
+              value: jobstore_prod
+              category: config
+            JOBSTORE_PG_USER:
+              value: backend-runtime@based-hardware.iam
+              category: config
+            JOBSTORE_SHADOW_NAMESPACES:
+              value: batch_pipeline_prod
+              category: config
+            JOBSTORE_PRODUCTION_MIRROR:
+              value: 'off'
+              category: config
+            BATCH_JOBSTORE_MODE:
+              value: firestore
+              category: config
             BATCH_PIPELINE_SERVING_SWEEP_PAGE_ROWS: {value: '200', category: rollout}
             BATCH_PIPELINE_SERVING_TICK_SECONDS: {value: '10', category: rollout}
             BATCH_PROJECTION_FINISH_CLASSIFY_PAGE_LIMIT: {value: '16', category: rollout}

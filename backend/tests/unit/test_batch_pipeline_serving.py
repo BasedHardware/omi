@@ -1062,3 +1062,34 @@ def test_stage_metrics_use_existing_lease_system_with_independent_bounded_role(m
         assert service.leader.ttl_seconds == 60
     finally:
         serving.serving_for_stage.cache_clear()
+
+
+@pytest.mark.parametrize(
+    'periodic,supervised,leader,expected',
+    [
+        (True, True, True, True),
+        (True, False, True, False),
+        (False, True, True, False),
+        (True, True, False, False),
+    ],
+)
+def test_retirement_only_on_supervised_maintenance_leader_after_critical_work(periodic, supervised, leader, expected):
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+    service = Serving(store, leader=SimpleNamespace(acquire=lambda: leader))
+    events = []
+    service.merge.reoffer_marked = lambda *_: events.append('critical_finished')
+    service._retirement = SimpleNamespace(tick=lambda *_: events.append('retirement'))
+    service.reconcile(periodic=periodic, supervised=supervised)
+    assert ('retirement' in events) is expected
+    if expected:
+        assert events == ['critical_finished', 'retirement']
+
+
+def test_retirement_failure_cannot_fail_critical_maintenance():
+    store = MemoryStore()
+    store.namespace = 'batch_pipeline_dev'
+    service = Serving(store)
+    service._retirement = SimpleNamespace(tick=Mock(side_effect=RuntimeError('private-provider-error')))
+    service.reconcile(periodic=True, supervised=True)
+    service._retirement.tick.assert_called_once()
