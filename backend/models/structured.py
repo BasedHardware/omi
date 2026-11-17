@@ -259,6 +259,20 @@ except ModuleNotFoundError:
             except ValueError:
                 return CategoryEnum.other
 
+        @field_validator('participants', mode='before')
+        @classmethod
+        def default_stored_participant_source(cls, value):
+            # v3 planner rows stored before 2026-11-17 carry participants as {'name'} only; one
+            # such row made every conversation list and v3 summary for that account fail
+            # validation. A participant with no recorded source was evidenced by the transcript.
+            # The JSON schema (and so the model's required field) is unchanged.
+            if not isinstance(value, list):
+                return value
+            return [
+                {**item, 'source': 'transcript'} if isinstance(item, dict) and item.get('source') is None else item
+                for item in value
+            ]
+
         def __str__(self):
             result = (
                 f"{str(self.title).capitalize()} ({str(self.category.value).capitalize()})\n"

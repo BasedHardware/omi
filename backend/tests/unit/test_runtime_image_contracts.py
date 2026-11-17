@@ -448,6 +448,10 @@ assert structured.ActionItem.__module__ == "models.structured"
 assert structured.Event.__module__ == "models.structured"
 assert structured.Section.__module__ == "models.structured"
 assert structured.Structured(title="fallback").title == "fallback"
+# Runtime images load this fallback: stored v3 rows with {'name'} participants must read back.
+legacy = structured.Structured(participants=[{"name": "A"}, {"name": "B", "source": "roster"}])
+assert [(p.name, p.source) for p in legacy.participants] == [("A", "transcript"), ("B", "roster")]
+assert "source" in structured.Participant.model_json_schema()["required"]
 '''
     environment = dict(os.environ)
     environment['PYTHONPATH'] = str(tmp_path)
