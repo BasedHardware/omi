@@ -68,6 +68,14 @@ def _router():
     return module, saved, BytesIO
 
 
+@pytest.fixture(scope='module', autouse=True)
+def _warm_sync_router():
+    # Pay the router's one-time dependency imports in setup, not in the first test's
+    # call phase, which the fast-unit CPU guard measures.
+    _, saved, _ = _router()
+    _restore(saved)
+
+
 async def _upload(module, BytesIO, *, conversation_id=None):
     # This suite tests routing counters, not wall-clock lookback admission. Keep
     # the classifier's clock aligned with its fixed synthetic file timestamp.
