@@ -616,9 +616,9 @@ async def sync_local_files_v2(
     x_omi_upload_trace: Optional[str] = Header(None, alias='X-Omi-Upload-Trace', include_in_schema=False),
 ):
     """
-    Async version of sync-local-files. Saves raw files and returns 202
-    immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
-    an async background task. The app polls GET /v2/sync-local-files/{job_id}.
+    Save raw files and admit supported uploads to the batch pipeline.
+    Legacy-owned content is answered by its durable fence; new legacy jobs are retired.
+    The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Empty/torn-header clips contain no audio frames. Acknowledge them before
     # clock/age admission; a bogus date on zero audio has nothing to recover.
