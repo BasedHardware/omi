@@ -108,7 +108,8 @@ metadata:
   name: {{ .Release.Name }}
   namespace: {{ .Values.namespace }}
 spec:
-  suspend: {{ .Values.parakeetSuspended | default false }}
+  # Parakeet retirement must not stop the independent batch observer.
+  suspend: false
   schedule: '*/5 * * * *'
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 60
@@ -168,6 +169,8 @@ spec:
                   value: {{ .Values.dryRun | quote }}
                 - name: PROMETHEUS_URL
                   value: {{ .Values.prometheusUrl | quote }}
+                - name: PARAKEET_SUSPENDED
+                  value: {{ .Values.parakeetSuspended | default false | quote }}
                 - name: NAMESPACE
                   value: {{ .Values.namespace | quote }}
                 - name: HPA_NAME
