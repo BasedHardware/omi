@@ -19,6 +19,10 @@
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
   },
+  "backend/database/batch_pipeline_recording_outcome.py:collection_group": {
+    "policy": "operator",
+    "reason": "Monitoring SLI: count aggregations over finished batch-live rows for the recording-outcome page; returns three integers, reads no document content and never reaches a product or model surface."
+  },
   "backend/database/batch_pipeline_store.py:collection": {
     "policy": "storage",
     "reason": "Persistence boundary: user-scoped storage and authoritative lifecycle/privacy/custody metadata. Public-facing methods apply the central visibility predicate."
