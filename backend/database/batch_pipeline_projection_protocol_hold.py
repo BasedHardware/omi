@@ -21,7 +21,7 @@ PROTOCOL_REFUSAL_SECONDS = 15 * 60.0
 PROTOCOL_HOLD_REASON = 'missing_source_marker'
 PROTOCOL_BLOCK_TYPE = ProjectionSourceMarkerMissing.__name__
 PROTOCOL_HOLDS = Counter(
-    'omi_batch_projection_protocol_held_total',
+    'omi_batch_pipeline_projection_protocol_held_total',
     'Committed ordering-only quarantine holds after the missing-source-marker refusal bound',
     ['reason'],
 )

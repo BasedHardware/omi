@@ -29,7 +29,7 @@ text, claim source reuse, mark usage or acknowledge delivery. It writes an empty
 quarantined receipt, marks job recovery_state=held, advances the owner watermark
 and retains the immutable result and audio under existing held recovery policy.
 It adds no TTL. The successful hold emits
-omi_batch_projection_protocol_held_total{reason="missing_source_marker"}, one
+omi_batch_pipeline_projection_protocol_held_total{reason="missing_source_marker"}, one
 structured protocol_head_bound log with reason/age and no identifiers, and the
 shared degraded fallback event. Transaction retries/no-op replays do not count.
 A held result remains delivery debt; ordering progress is not completion.
@@ -98,3 +98,9 @@ the generic retry rule ignores the old protocol stamp and starts its ordinary
 24-hour window at that first transient failure. A stale hint or an already
 redriven row that is ineligible for this hold is a quiet no-op, while actual
 binding/privacy/ledger/source failures still retain their ordinary refusal.
+
+The hold counter uses the existing `omi_batch_pipeline_*` scrape namespace and
+an exact dev/prod Prometheus bridge prefix. Its regression reads the actual
+Counter registration and checks the current scrape and bridge filters, so a
+future rename cannot silently hide the disposition metric. This PR changes only
+the repository configuration; it does not deploy that configuration or add alerts.

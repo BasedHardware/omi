@@ -82,6 +82,33 @@ def test_timeliness_families_survive_cloud_run_and_prometheus_bridge(stage):
         ), f'Prometheus bridge drops {name}'
 
 
+@pytest.mark.parametrize('stage', ['dev', 'prod'])
+def test_protocol_hold_counter_survives_scrape_and_bridge_filters(stage):
+    source = ast.parse((BACKEND / 'database/batch_pipeline_projection_protocol_hold.py').read_text())
+    registration = next(
+        node
+        for node in source.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == 'PROTOCOL_HOLDS' for target in node.targets)
+    )
+    name = ast.literal_eval(registration.value.args[0])
+    config = yaml.safe_load((BACKEND / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    labels = {'__name__': name, 'reason': 'missing_source_marker'}
+    for rule in config['spec']['endpoints'][0]['metricRelabeling']:
+        value = ';'.join(labels.get(label, '') for label in rule['sourceLabels'])
+        if rule['action'] == 'keep':
+            assert re.fullmatch(rule['regex'], value), f'Cloud Run drops {name}'
+        elif rule['action'] == 'drop':
+            assert not re.fullmatch(rule['regex'], value), f'Cloud Run drops {name}'
+    bridge = yaml.safe_load(
+        (
+            BACKEND
+            / f'charts/monitoring/prometheus-stackdriver-exporter/{stage}_sync_omi_cloud_run_metrics_exporter.yaml'
+        ).read_text()
+    )['stackdriver']['metrics']
+    assert any(f'prometheus.googleapis.com/{name}/'.startswith(prefix) for prefix in bridge['prefixes'])
+
+
 OBSERVED = 'max_over_time(omi_batch_timeliness_observed_at_seconds[20m])'
 NEWEST = f'({OBSERVED} == scalar(max({OBSERVED})))'
 FRESH_NEWEST = f'({NEWEST} and (time() - {OBSERVED} < 1200))'
