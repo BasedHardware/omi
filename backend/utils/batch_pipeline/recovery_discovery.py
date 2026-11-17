@@ -13,6 +13,8 @@ from typing import Any, Callable, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from utils.observability.reasons import ReasonFamily, reason_label
+
 
 class RecoveryCaller(StrEnum):
     UNKNOWN = 'unknown'
@@ -73,29 +75,28 @@ def primary_failure_generation(namespace: str) -> int:
 _EVENTS = frozenset(
     {'entry', 'eligible', 'selected', 'pg_attempt', 'primary', 'candidate', 'useful_candidate', 'completed', 'error'}
 )
-_REASONS = frozenset(
-    {
-        'entry',
-        'bypass',
-        'unknown_caller',
-        'policy_unset',
-        'policy_invalid',
-        'unselected',
-        'disabled',
-        'excluded',
-        'coverage_unknown',
-        'safety_sweep',
-        'backlog',
-        'hint_ineligible',
-        'index',
-        'error',
-        'timeout',
-        'returned',
-        'transition',
-        'no_transition',
-        'unknown',
-    }
-)
+
+
+class RecoveryDiscoveryReason(StrEnum):
+    ENTRY = 'entry'
+    BYPASS = 'bypass'
+    UNKNOWN_CALLER = 'unknown_caller'
+    POLICY_UNSET = 'policy_unset'
+    POLICY_INVALID = 'policy_invalid'
+    UNSELECTED = 'unselected'
+    DISABLED = 'disabled'
+    EXCLUDED = 'excluded'
+    COVERAGE_UNKNOWN = 'coverage_unknown'
+    SAFETY_SWEEP = 'safety_sweep'
+    BACKLOG = 'backlog'
+    HINT_INELIGIBLE = 'hint_ineligible'
+    INDEX = 'index'
+    ERROR = 'error'
+    TIMEOUT = 'timeout'
+    RETURNED = 'returned'
+    TRANSITION = 'transition'
+    NO_TRANSITION = 'no_transition'
+    UNKNOWN = 'unknown'
 
 
 @dataclass(frozen=True)
@@ -156,7 +157,7 @@ class RecoveryQuery:
             caller=self.caller.value,
             event=event if event in _EVENTS else 'error',
             source=source if source in {'none', 'primary', 'postgres'} else 'none',
-            reason=reason if reason in _REASONS else 'unknown',
+            reason=reason_label(ReasonFamily.FALLBACK, reason, RecoveryDiscoveryReason),
         ).inc()
 
     def __enter__(self) -> RecoveryQuery:
