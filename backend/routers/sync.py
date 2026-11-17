@@ -26,6 +26,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
+from utils.sync.upload_shadow import offer_shadow_upload as _offer_shadow_upload
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response, Header
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
@@ -315,16 +316,6 @@ _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files
 # Decode has not run at the staging seam, so the last file's duration is the
 # one admitted-audio fact this slack stands in for.
 SESSION_CLAIM_TRAILING_SLACK_SECONDS = 60.0
-
-
-async def _offer_shadow_upload(**kwargs) -> None:
-    # The shadow is best effort: its import or handoff must never fail a legacy upload.
-    try:
-        from utils.batch_pipeline.shadow_intake import offer_upload
-
-        await offer_upload(**kwargs)
-    except Exception as error:
-        logger.info('event=batch_shadow_intake outcome=error exception_type=%s', type(error).__name__)
 
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
