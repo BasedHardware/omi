@@ -272,7 +272,11 @@ async def mcp_token(request: Request):
 
 @router.post("/api/oauth/register", tags=["mcp"], response_model=McpClientRegistrationResponse)
 async def mcp_register_client(request: Request, registration: McpClientRegistrationRequest):
-    """Register an exact-redirect public PKCE client per RFC 7591."""
+    """Register an exact-redirect public PKCE client per RFC 7591.
+
+    Identical metadata re-registered while the earlier client is live returns
+    the same ``client_id`` (see ``register_dynamic_public_client``).
+    """
     source = request.client.host if request.client else "unknown"
     await run_blocking(
         critical_executor,
@@ -305,6 +309,7 @@ async def mcp_register_client(request: Request, registration: McpClientRegistrat
             mcp_oauth_db.register_dynamic_public_client,
             registration.client_name,
             registration.redirect_uris,
+            registration.grant_types,
         )
     except ValueError as exc:
         logger.warning(f"Dynamic client registration failed: {exc}", exc_info=True)
@@ -327,7 +332,7 @@ async def mcp_register_client(request: Request, registration: McpClientRegistrat
             "redirect_uris": client["allowed_redirect_uris"],
             "client_name": client["name"],
             "token_endpoint_auth_method": "none",
-            "grant_types": registration.grant_types,
+            "grant_types": client.get("grant_types") or registration.grant_types,
             "response_types": ["code"],
         },
     )

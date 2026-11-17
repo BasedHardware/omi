@@ -4,6 +4,7 @@ Route functions in ``routers/mcp_sse.py`` delegate here so the OAuth surface
 stays identical on the canonical and legacy endpoints.
 """
 
+import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -26,6 +27,7 @@ from utils.other.endpoints import check_rate_limit_inline
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 TOKEN_RESPONSE_HEADERS = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+logger = logging.getLogger(__name__)
 
 
 class McpSseAuthMethodResponse(BaseModel):
@@ -363,6 +365,16 @@ async def mcp_authorize_consent(
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 
+async def _touch_dynamic_client(client: Dict[str, Any]) -> None:
+    """Best-effort expiry slide for dynamic clients; never fails a token response."""
+    if client.get("registration_mode") != mcp_oauth_db.DYNAMIC_CLIENT_REGISTRATION_MODE:
+        return
+    try:
+        await run_blocking(db_executor, mcp_oauth_db.touch_dynamic_client, client)
+    except Exception as exc:  # noqa: BLE001 — the token pair is already minted
+        logger.warning(f"Dynamic client expiry refresh failed: {type(exc).__name__}")
+
+
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     metric_grant_type = "unknown"
@@ -428,6 +440,7 @@ async def mcp_token(request: Request):
             return _oauth_temporarily_unavailable()
         if not token_pair:
             return token_error("invalid_grant", "Invalid authorization code")
+        await _touch_dynamic_client(client)
         record_outcome("issued")
         return JSONResponse(content=token_pair, headers=TOKEN_RESPONSE_HEADERS)
 
@@ -455,6 +468,7 @@ async def mcp_token(request: Request):
         outcome = outcomes[0] if outcomes else ("rotated" if token_pair else "invalid")
         if not token_pair:
             return token_error("invalid_grant", "Invalid refresh token", outcome=outcome)
+        await _touch_dynamic_client(client)
         record_outcome(outcome)
         return JSONResponse(content=token_pair, headers=TOKEN_RESPONSE_HEADERS)
 

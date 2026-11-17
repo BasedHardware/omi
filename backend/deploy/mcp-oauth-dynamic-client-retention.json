@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "field": "expires_at",
+  "collection_groups": [
+    "mcp_oauth_clients",
+    "mcp_oauth_dynamic_client_registrations"
+  ],
+  "unused_client_ttl_hours": 168,
+  "idle_client_ttl_days": 90,
+  "operator_clients_ttl": false
+}
