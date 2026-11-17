@@ -9,7 +9,7 @@ import math
 import re
 import threading
 import time
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 
@@ -132,7 +132,7 @@ class RecoveryQuery:
         store: Any,
         now: float,
         limit: int,
-        caller: RecoveryCaller,
+        caller: object,
         *,
         clock: Callable[[], float] = time.monotonic,
         wall_clock: Callable[[], float] = time.time,
@@ -205,7 +205,7 @@ class RecoveryQuery:
             CUTOFF_AGE_SECONDS.labels(self.namespace, self.caller.value).observe(age)
         gateway = getattr(self.store, 'recovery_due', None)
         if callable(gateway):
-            return gateway(self)
+            return cast(list[str], gateway(self))
         return self.primary('unknown_caller' if self.caller == RecoveryCaller.UNKNOWN else 'bypass')
 
     def candidate(self, useful: bool) -> None:
