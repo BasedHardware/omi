@@ -1,43 +1,39 @@
-# Preserve the admitted integration sweep settings
+# Preserve restored integration cadence and admitted classification
 
-The integration ops config now carries a 100-row serving sweep every 20 seconds
-and a finish classification page limit of 16. These are the values admitted by
-the margin-40 lead and applied by Release on 2026-11-16. Declaring them in the
-ops config keeps subsequent config trains from treating them as unexplained
-live-only settings. The staging integration service mirrors the keys under the
-existing prod/staging parity contract.
-Until a separately authorized staging config train applies the keys, staging
-source/live or staging/prod drift reports may still show them as missing. This
-source merge is not proof that staging already carries the values.
-The staging deploy path replaces the complete environment from its runtime
-manifest and does not merge this ops file. A subsequent staging deploy therefore
-drops these ops-only keys and restores code defaults (100/20/classification 8)
-until a later staging config train reapplies them. This source carry does not
-change that deployment path or authorize staging classification 16.
+The current production ops source pins a 200-row sweep every 10 seconds and
+finish classification limit 16. The margin-40 lead ordered this O1 cadence
+inverse on 2026-11-17 at 04:12:20Z after projection backlog and useful throughput
+regressed under 100/20. Release reports the inverse serving at 04:14:14Z on the
+same artifact with the full privacy map unchanged. This owner receipt is not an
+independent recovery, old-instance cessation or cost-window acceptance.
 
-This changes config source only. A merge does not dispatch a config train,
-create a revision, establish a clean guard window or prove monetary savings.
-The privacy qualification map is separate and is not changed by this carry.
-Normal privacy, custody, funding and provider checks remain in force.
+This supersedes the earlier 2026-11-16 admission of 100/20. PR25539's former
+forward cadence is held: removing it from source does not by itself lift the
+hold. Explicit current source admission from Release is required before merge
+or config-train apply. Hold expiry, green CI and source merge do not authorize
+restoring 100/20. The separate privacy persistence and classification16 remain.
 
-Release retains runtime rollback and must serialize it with config trains.
-The admitted inverse is 200 rows / 10 seconds and classification limit 8, using
-the current capable artifact. After an inverse, reconcile these source values
-before another config-train apply so it cannot silently reapply the forward
-settings. The `RESTORED_DEFAULTS` constants in
-`backend/scripts/runtime_env_canary_ops.py` and
-`backend/scripts/integration_canary_controller.py` intentionally retain the old
-200/10 inverse. They must not be equated with the 100/20 forward values in the
-ops file. Do not invoke that integration-only canary packet without its own
-current admission.
+The staging ops file mirrors these keys under the existing parity contract;
+staging application remains a separately authorized config train. Its deploy
+path replaces the complete environment from the runtime manifest and does not
+merge the ops file. A later staging deploy drops these ops-only keys and restores
+code defaults (100/20/classification8) until another admitted staging config train.
+This source carry changes neither that deploy path nor staging admission.
 
-Use `backend/scripts/ops/drift_check.py` for the source-aware ops comparison.
-The separate manifest-only `check_cloud_run_env_drift.py` report may still list
-these ops-only keys as extra live bindings; this carry does not add a static
-allowlist or duplicate their ownership in the generated runtime manifest.
+Release owns production and any later inverse, serialized with config trains.
+Reconcile source after a new ruling before another train can reassert stale
+values. The legacy `RESTORED_DEFAULTS` in `runtime_env_canary_ops.py` and
+`integration_canary_controller.py` belong to their separately gated canary
+packet. Its historical classification8 must not be mistaken for the current
+200/10/classification16 state or invoked without fresh admission.
 
-The margin-40 lead owns the matched safety and cost readout after the relevant
-old revisions cease. Follow the existing
-[serving sweep contract](../../batch-pipeline-serving.md) and
-[finish classification runbook](../../runbooks/projection-finish-async-skip.md).
-No runtime defaults, controller logic or enforcement flags change here.
+Use `backend/scripts/ops/drift_check.py` for source-aware ops comparison.
+The manifest-only `check_cloud_run_env_drift.py` can still list ops-only keys as
+extra bindings; this carry adds no broad allowlist or duplicate manifest owner.
+Runtime defaults, controller logic, capacity and enforcement behavior are unchanged.
+
+The margin-40 lead owns projection recovery and matched safety/cost readouts.
+No savings claim survives merely because the former cadence reduced reads;
+useful throughput and projection age must qualify independently. Follow the
+[serving contract](../../batch-pipeline-serving.md) and
+[classification runbook](../../runbooks/projection-finish-async-skip.md).
