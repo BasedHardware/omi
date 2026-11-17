@@ -16,8 +16,12 @@ class RecordingOrphanCensus {
   /// Small metadata-only commit fence. No directory walk on the capture queue.
   /// A new/removed receipt or index changes its parent directory stamp.
   bool sourcesUnchanged() {
+    // An unusually large receipt archive remains classified but is deferred
+    // rather than doing unbounded synchronous work on the capture queue.
+    if (_sources.length > 512 || _directories.length > 4) return false;
     try {
       for (final e in _directories.entries) {
+        // omi-perf-allow: sync-file-io -- At most four directory stamps; no traversal, and no await between final fence and publication.
         final stat = FileStat.statSync(e.key);
         if (stat.type != FileSystemEntityType.directory ||
             stat.modified != e.value.modified ||
@@ -26,6 +30,7 @@ class RecordingOrphanCensus {
         }
       }
       for (final source in _sources) {
+        // omi-perf-allow: sync-file-io -- At most 512 metadata stamps; larger archives defer, and audio/frame reads stay off the queue.
         final stat = FileStat.statSync(source.filePath);
         if (stat.type != FileSystemEntityType.file ||
             stat.size != source.bytes ||
@@ -51,6 +56,7 @@ class OrphanAudioFile {
   bool unchanged() {
     try {
       if (FileSystemEntity.typeSync(filePath, followLinks: false) != FileSystemEntityType.file) return false;
+      // omi-perf-allow: sync-file-io -- At most 200 adopted-file stamps per pass, with no await between identity validation and admission.
       final stat = FileStat.statSync(filePath);
       return stat.size == bytes &&
           stat.modified.millisecondsSinceEpoch == modifiedMs &&
@@ -105,6 +111,7 @@ List<OrphanAudioFile> _classifyOrphans(List<_Metadata> candidates, int phoneSeco
 int _strictFrameCount(String path, int expectedBytes) {
   RandomAccessFile? file;
   try {
+    // omi-perf-allow: sync-file-io -- This parser is called only by the forced offUiIsolate classifier, never on the capture/UI isolate.
     file = File(path).openSync();
     final buffer = Uint8List(64 * 1024), header = Uint8List(4);
     var headerHave = 0, remaining = 0, frames = 0, bytes = 0;
