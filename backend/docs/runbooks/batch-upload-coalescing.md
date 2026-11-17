@@ -145,3 +145,52 @@ Then set OFF everywhere, drain individually, and prove zero unexplained residue
 before removing compatible readers. Never roll back to an incompatible binary
 with nonterminal member receipts. Book $0 until the release-owner live readback
 proves reads per unchanged admitted audio-hour down with quality/custody PASS.
+
+## Counts-only production diagnosis
+
+Sync and integration use `deploy/cloud_run_gmp_sync.yaml`, not the shared
+`omi_.*` sidecar profile. Retain the explicitly listed coalescing hold/scan
+metrics and `omi_batch_leader_lease_total` there. The retention test in
+`tests/unit/test_attach_cloud_run_gmp_sidecar.py` covers both the hold outcomes
+and the strict scan's counter, histogram and last-success gauge. A registered
+zero gauge on a non-draining backend instance does not establish scan health.
+
+After the collector configuration is serving, query the emitting service:
+
+```promql
+sum by (service_name,outcome) (increase(omi_batch_upload_coalescing_total[1h]))
+sum by (service_name,outcome) (increase(omi_batch_upload_coalescing_scan_total[1h]))
+max(omi_batch_upload_coalescing_scan_last_success_seconds{service_name="backend-integration"})
+sum by (outcome) (increase(omi_batch_leader_lease_total{role="upload_coalescing_scan",service_name="backend-integration"}[1h]))
+```
+
+An absent outcome counter is unknown until ingestion is qualified. Even after
+that, `accepted` is an observation count, not a unique-source denominator.
+The producer declines when its shared quota heartbeat is absent, older than
+five seconds, or more than five seconds in the future. The GMP scrape interval
+is sixty seconds, so the last-success gauge alone cannot certify that
+five-second admission condition. Positive
+`accepted` and `drained_merged` observations establish execution separately.
+
+There is no coalescing-specific percentage or allowlist. Batch admission's
+`rollout_cohorts/_ramp` percentage is a different control and must not be reduced
+to implement a 5% coalescing canary. A release owner needs an isolated 5% producer
+route, with the remaining producers OFF and all shared drainers ON (OFF drainers
+intentionally convert individually). If that topology cannot be verified, a
+5% isolated canary is not available from the current boolean flag.
+
+For a canary, require attributable hold acceptance and merged draining, healthy
+scan/lease outcomes, conserved source samples, terminal receipts, paired quality
+acceptance, and fewer total batch-family billed reads per unchanged source audio
+hour including scan, artifact and completion-fanout overhead. Measure latency
+from each original upload's arrival through delivered transcript, including the
+hold. Fresh paid and trial p50/p90 and their existing speed targets must not
+worsen against a matched control; adding sixty seconds to an existing target is
+not acceptance. Existing unit/processing clocks start too late and queue-age
+metrics do not substitute for that measurement. Stop on missed latency budgets,
+privacy/custody errors, quality regressions or unexplained read amplification.
+Do not activate without an attributable original-upload latency measurement.
+
+Rollback is `BATCH_PIPELINE_UPLOAD_COALESCING_ENABLED=false` on every producer
+and drainer, retaining the compatible binary until all existing holds drain
+individually and every original receipt is terminal. No saving is claimed.
