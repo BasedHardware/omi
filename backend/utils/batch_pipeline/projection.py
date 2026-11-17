@@ -811,6 +811,27 @@ class Projector:
     def sweep_held(
         self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
     ) -> dict[str, int]:
+        """Resume the fleet's pass durably: instances restart far more often than a pass wraps.
+
+        A fresh pass drops this process's upload dedupe, which another instance's wrap made stale."""
+        from database.batch_pipeline_projection_release import (
+            HELD_PARTIAL_CURSOR_KEY as key,
+            load_release_cursor,
+            save_release_cursor,
+        )
+
+        event = 'batch_held_partial'
+        start = self.held_after = load_release_cursor(self.store, key=key, event=event)['after_id']
+        if start is None:
+            self.held_pass_seen = set()
+        counts = self._sweep_held_pages(limit, deadline=deadline, max_pages=max_pages)
+        if self.held_after != start:
+            save_release_cursor(self.store, self.held_after, self.clock(), key=key, event=event)
+        return counts
+
+    def _sweep_held_pages(
+        self, limit: int = HELD_PARTIAL_PAGE, *, deadline: float | None = None, max_pages: int | None = None
+    ) -> dict[str, int]:
         """Pages of held units chained into one bounded pass; one partial attempt per upload.
 
         A ``deadline`` (a ``time.monotonic`` instant) or ``max_pages`` chains

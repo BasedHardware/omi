@@ -443,22 +443,28 @@ def assignment_held_page_ids(client: Any, namespace: str, limit: int, after_id: 
 # doc carries no scheduler field, so control-shard queries never select it.
 RELEASE_CURSOR_KEY = 'projection_release_cursor'
 ASSIGNMENT_RELEASE_CURSOR_KEY = 'projection_assignment_release_cursor'
+HELD_PARTIAL_CURSOR_KEY = 'projection_held_partial_cursor'
 
 
-def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY) -> dict:
+def load_release_cursor(store, *, key=RELEASE_CURSOR_KEY, event='batch_projection action=release_held') -> dict:
     try:
         row = store.ref('control', key).get().to_dict() or {}
     except Exception as error:
-        logger.warning(
-            'event=batch_projection action=release_held action=cursor_load outcome=retry exception_type=%s',
-            type(error).__name__,
-        )
+        logger.warning('event=%s action=cursor_load outcome=retry exception_type=%s', event, type(error).__name__)
         return {'after_id': None}
     after = row.get('after_id')
     return {**row, 'after_id': after if isinstance(after, str) and after else None}
 
 
-def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_CURSOR_KEY, **extra) -> None:
+def save_release_cursor(
+    store,
+    after_id: str | None,
+    now: float,
+    *,
+    key=RELEASE_CURSOR_KEY,
+    event='batch_projection action=release_held',
+    **extra,
+) -> None:
     @firestore.transactional
     def put(transaction):
         transaction.set(store.ref('control', key), {'after_id': after_id, 'updated_at': now, **extra})
@@ -467,10 +473,7 @@ def save_release_cursor(store, after_id: str | None, now: float, *, key=RELEASE_
         store.run(put)
     except Exception as error:
         # Advisory: a lost write only repeats rows the next instance re-checks.
-        logger.warning(
-            'event=batch_projection action=release_held action=cursor_save outcome=retry exception_type=%s',
-            type(error).__name__,
-        )
+        logger.warning('event=%s action=cursor_save outcome=retry exception_type=%s', event, type(error).__name__)
 
 
 def release_page_settled(
