@@ -3569,3 +3569,56 @@ final class MobileDeviceHealthDailyRingRead extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"disconnects_during_ring_read": disconnectsDuringRingRead, "disconnects_with_ring_read_state": disconnectsWithRingReadState, "ring_read_disconnect_rssi_below_minus90": rssiBelowMinus90, "ring_read_disconnect_rssi_minus90_to_minus80": rssiMinus90ToMinus80, "ring_read_disconnect_rssi_minus80_to_minus60": rssiMinus80ToMinus60, "ring_read_disconnect_rssi_at_least_minus60": rssiAtLeastMinus60, "ring_read_disconnect_rssi_unknown": rssiUnknown};
 }
+
+enum OrphanAudioRecoveryResult {
+  completed("completed"),
+  admissionPending("admission_pending"),
+  headless("headless"),
+  background("background"),
+  killSwitch("kill_switch"),
+  generationChanged("generation_changed"),
+  incompleteCensus("incomplete_census"),
+  sourcesChanged("sources_changed"),
+  budgetUnavailable("budget_unavailable"),
+  failed("failed");
+  const OrphanAudioRecoveryResult(this.wireName);
+  final String wireName;
+}
+
+final class OrphanAudioRecovery extends RegisteredEvent {
+  const OrphanAudioRecovery({required this.classWorkingCount, required this.classWorkingBytes, required this.classUnparseableCount, required this.classUnparseableBytes, required this.classRecoverableCount, required this.classRecoverableBytes, required this.classExpiredCount, required this.classExpiredBytes, required this.classOwnerUnknownCount, required this.classOwnerUnknownBytes, required this.age07Count, required this.age07Bytes, required this.age814Count, required this.age814Bytes, required this.age1528Count, required this.age1528Bytes, required this.age2945Count, required this.age2945Bytes, required this.ageOver45Count, required this.ageOver45Bytes, required this.ageUnknownCount, required this.ageUnknownBytes, required this.adopted, required this.changed, required this.referenced, required this.passCap, required this.dailyCap, required this.pressureCap, required this.result, required this.censusComplete});
+  final int classWorkingCount;
+  final int classWorkingBytes;
+  final int classUnparseableCount;
+  final int classUnparseableBytes;
+  final int classRecoverableCount;
+  final int classRecoverableBytes;
+  final int classExpiredCount;
+  final int classExpiredBytes;
+  final int classOwnerUnknownCount;
+  final int classOwnerUnknownBytes;
+  final int age07Count;
+  final int age07Bytes;
+  final int age814Count;
+  final int age814Bytes;
+  final int age1528Count;
+  final int age1528Bytes;
+  final int age2945Count;
+  final int age2945Bytes;
+  final int ageOver45Count;
+  final int ageOver45Bytes;
+  final int ageUnknownCount;
+  final int ageUnknownBytes;
+  final int adopted;
+  final int changed;
+  final int referenced;
+  final int passCap;
+  final int dailyCap;
+  final int pressureCap;
+  final OrphanAudioRecoveryResult result;
+  final bool censusComplete;
+  @override
+  String get wireName => "Orphan Audio Recovery";
+  @override
+  Map<String, Object> get properties => {"class_working_count": classWorkingCount, "class_working_bytes": classWorkingBytes, "class_unparseable_count": classUnparseableCount, "class_unparseable_bytes": classUnparseableBytes, "class_recoverable_count": classRecoverableCount, "class_recoverable_bytes": classRecoverableBytes, "class_expired_count": classExpiredCount, "class_expired_bytes": classExpiredBytes, "class_owner_unknown_count": classOwnerUnknownCount, "class_owner_unknown_bytes": classOwnerUnknownBytes, "age_0_7_count": age07Count, "age_0_7_bytes": age07Bytes, "age_8_14_count": age814Count, "age_8_14_bytes": age814Bytes, "age_15_28_count": age1528Count, "age_15_28_bytes": age1528Bytes, "age_29_45_count": age2945Count, "age_29_45_bytes": age2945Bytes, "age_over_45_count": ageOver45Count, "age_over_45_bytes": ageOver45Bytes, "age_unknown_count": ageUnknownCount, "age_unknown_bytes": ageUnknownBytes, "adopted": adopted, "changed": changed, "referenced": referenced, "passCap": passCap, "dailyCap": dailyCap, "pressureCap": pressureCap, "result": result.wireName, "census_complete": censusComplete};
+}

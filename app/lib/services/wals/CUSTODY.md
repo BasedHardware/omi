@@ -268,3 +268,55 @@ mapping restoration or new reclaim proof. Audio, upload choice, retry caps,
 legacy firmware, Custom STT routing and ordinary live custody are unchanged.
 Regression guard: `test/services/wals/batch_ring_proof_test.dart` (also executed
 with the real compile-time switch off).
+
+## Orphan audio recovery (stage 1, INV-CAP-1)
+
+Orphans are never deleted without file-bound server proof or an explicit user
+act. Filename age, a local ring receipt, an empty index or a transport label
+never supplies that proof. Stage 1 never deletes or rewrites audio or sidecars.
+
+The ledger's explicit foreground resume/15-minute recovery pass runs only after
+startup admission finishes; headless workers skip it. The shared read-only
+inventory census runs outside the capture queue and includes active, retired,
+foreign, main, backup, temporary and quarantined rows, batch journals, native
+owner receipts, legacy jobs/preferences, ring checkpoint/download refs and
+capture-committed journals (including temporary files). Unreadable, invalid,
+changed or unresolved census sources prevent adoption. Ring receipts reserve
+local files; capture receipts are read for owner history, never inferred as a
+file-bound server receipt for a rowless orphan.
+
+The local-only classifier assigns working (`.part`, `.torn`, `omibatch*`,
+`omimobilebatch*`), unparseable, owner_unknown, expired or recoverable. A complete
+mono filename and strict complete length-prefixed frames establish capture time
+and duration. Automatic recovery requires a plausible capture time within 28
+days, leaving two days inside the server's 30-day admission window. Older audio
+stays on disk. Unknown, missing or foreign owners in any custody source prevent
+single-owner proof; at least one index/memory row must prove the current owner.
+A capture journal's owner hash must match the current UID. No inference from
+filenames or the currently signed-in account overrides historical ownership.
+
+At most 200 oldest eligible files enter `miss` custody per pass, at most 400 per
+rolling 24 hours, and pending rows across all buckets never rise above 720.
+Reservations fsync to a device-local budget file before row admission; a crash/failure may spend budget
+without adoption, conservatively delaying the next pass. A torn budget blocks
+adoption; logout cannot clear this budget with account preferences. Each nonempty pass
+makes one index save. Generation, foreground, admission, kill switch, references,
+source metadata, file size and mtime/ctime are rechecked before committing rows.
+Configured directories outside Documents are classified but retained in place.
+No census or audio decoding runs inside the capture queue. The existing drain
+honors upload/local-only preferences; normal server confirmation and retention
+remain responsible for later retirement.
+
+PostHog `orphan_audio_recovery_off` is a kill switch: only true stops recovery;
+unknown/false keeps it on. This is safe to default on because adoption preserves
+all bytes, owner uncertainty retains, local caps bound the backlog and existing
+server backfill pacing bounds processed-speech cost. This stage makes no storage
+reclamation or duplicate-processing outcome claim. `Orphan Audio Recovery` is
+one typed aggregate event per pass: class/age counts and bytes, adopted count,
+cap/change/reference skips and a bounded fence result. The diagnostics export's
+`local_recording_inventory.orphan_classification` uses the same summary and
+never exports paths, basenames, account IDs or per-file entries.
+
+Guard: `test/unit/wal_orphan_recovery_test.dart`; startup admission's existing
+no-orphan-discovery contract remains separately guarded by
+`test/unit/wal_startup_admission_test.dart`.

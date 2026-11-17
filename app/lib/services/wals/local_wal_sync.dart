@@ -10,6 +10,13 @@ import 'dart:async';
 import 'native_custody_diagnostics.dart';
 import 'ring_custody_diagnostics.dart';
 import 'recording_inventory.dart';
+import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:omi/services/experiments/orphan_audio_recovery.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+// TypedEvents must resolve through its registry library, not the legacy re-export.
+// ignore: unnecessary_import
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/watch_live_coverage.dart';
@@ -75,6 +82,7 @@ part 'wal_index_persistence.dart';
 part 'device_chunk_persistence.dart';
 part 'wal_account_purge.dart';
 part 'wal_discard.dart';
+part 'wal_orphan_recovery.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
@@ -143,6 +151,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Timer? _chunkingTimer;
   Timer? _flushingTimer;
   Timer? _pendantTimer;
+  DateTime? _lastOrphanRecoveryWake;
+  Future<void>? _orphanRecoveryInFlight;
+  final Future<RecordingOrphanCensus> Function()? _orphanCensusOverride;
+  final Future<bool> Function()? _orphanRecoveryOffOverride;
+  final bool Function()? _orphanForegroundOverride;
+  final void Function(Map<String, Object?>)? _orphanTelemetryOverride;
 
   Future<void> _bufferQueue = Future.value();
   Future<void>? _initializationInFlight;
@@ -373,6 +387,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   LocalWalSyncImpl(
     this.listener, {
+    Future<RecordingOrphanCensus> Function()? orphanCensus,
+    Future<bool> Function()? orphanRecoveryOff,
+    bool Function()? orphanForeground,
+    void Function(Map<String, Object?>)? orphanTelemetry,
     SyncUploadGate? uploadGate,
     SyncJobPoller? jobPoller,
     WalBacklogTelemetry? backlogTelemetry,
@@ -388,7 +406,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     Future<void> Function(Duration duration)? sleep,
     PendantRingCustody? custody,
     Future<DeviceConnection?> Function(String deviceId)? connectionResolver,
-  })  : _jobPollerOverride = jobPoller,
+  })  : _orphanCensusOverride = orphanCensus,
+        _orphanRecoveryOffOverride = orphanRecoveryOff,
+        _orphanForegroundOverride = orphanForeground,
+        _orphanTelemetryOverride = orphanTelemetry,
+        _jobPollerOverride = jobPoller,
         _backlogTelemetry = backlogTelemetry ?? WalBacklogTelemetry(),
         _uploadGateOverride = uploadGate,
         _nowOverride = now,
@@ -543,6 +565,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       final generation = _sessionGeneration;
       await _drainPendantTail(generation);
       await _drainPhoneTail(generation);
+      _maybeRecoverOrphanAudio();
     });
     try {
       WidgetsBinding.instance.addObserver(this);
@@ -553,6 +576,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _runNativeIntake();
+      unawaited(recoverOrphanAudio());
       final generation = _sessionGeneration;
       unawaited(_reportStaleWalsWhenReady(generation));
     }
