@@ -2348,6 +2348,8 @@
     "omi_batch_timeliness_observed_at_seconds",
     "omi_batch_timeliness_scan_truncated",
     "omi_capture_retry_cap_total",
+    "omi_conversation_selfheal_tick_timestamp_seconds",
+    "omi_conversation_stale_content_holding",
     "omi_delivery_outcome_total",
     "omi_demand_processing_queue_age_seconds",
     "omi_enrichment_obligation_count",
