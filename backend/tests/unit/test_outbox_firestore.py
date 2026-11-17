@@ -4,16 +4,17 @@ The emulator conformance suite (lane 12, ``tests/integration/test_outbox_conform
 persistence; this file pins the row semantics and their compatibility with ``mark``/``run``.
 """
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from database.outbox import Claim, Outcome
-from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, firestore_outbox
-from database.outbox import OutboxKind
+from database.outbox import Claim, Outcome, OutboxKind
+from database.outbox_firestore import ENRICHMENT_OUTBOX as outbox, FirestoreOutbox, firestore_outbox
 from tests.unit.test_sync_reprocess_coalesce import state, sweep_query  # noqa: F401
 from utils.enrichment import custody
 from utils.enrichment import outbox as reprocess
+from utils.enrichment import scan as enrichment_scan
 
 KEY = reprocess.key('u', 'c')
 PAYLOAD = {'conversation_id': 'c', 'language': 'en'}
@@ -326,3 +327,294 @@ def test_claim_stamps_a_fallback_snapshot_on_a_batch_row_without_one(rows):
     claim = _claim(rows, now=10)
     assert state_rows[KEY]['first_summary_policy_source'] == 'fallback'
     assert claim.payload['first_summary_policy'] == state_rows[KEY]['first_summary_policy']
+
+
+def _install_paged_due_query(state_rows, monkeypatch):
+    """Fake Firestore collection that enforces <=100 per-page limits and DocumentSnapshot start_after cursors."""
+    from types import SimpleNamespace
+
+    stream_calls: list[tuple[int, tuple | None]] = []
+
+    class _Snapshot:
+        exists = True
+
+        def __init__(self, doc_id: str, row: dict):
+            self.id = doc_id
+            self.reference = SimpleNamespace(id=doc_id)
+            self._row = dict(row)
+
+        def to_dict(self):
+            return dict(self._row)
+
+    class _Query:
+        def __init__(self, max_due=None, orders=(), page_limit=100, cursor=None):
+            self._max_due = max_due
+            self._orders = orders
+            self._limit = page_limit
+            self._cursor = cursor
+
+        def where(self, field, op, value):
+            assert (field, op) == ('due_at', '<=')
+            return _Query(value, self._orders, self._limit, self._cursor)
+
+        def order_by(self, field):
+            return _Query(self._max_due, (*self._orders, field), self._limit, self._cursor)
+
+        def limit(self, count):
+            assert 1 <= count <= 100
+            return _Query(self._max_due, self._orders, count, self._cursor)
+
+        def start_after(self, snapshot):
+            if isinstance(snapshot, dict):
+                raise TypeError('Firestore query ordered by __name__ requires a DocumentSnapshot cursor')
+            assert isinstance(snapshot, _Snapshot)
+            row = snapshot.to_dict()
+            return _Query(self._max_due, self._orders, self._limit, (row['due_at'], snapshot.id))
+
+        def stream(self):
+            assert self._orders == ('due_at', '__name__')
+            stream_calls.append((self._limit, self._cursor))
+            items = [
+                (doc_id, dict(row))
+                for doc_id, row in state_rows.items()
+                if row.get('due_at') is not None and row['due_at'] <= self._max_due
+            ]
+            items.sort(key=lambda item: (item[1]['due_at'], item[0]))
+            if self._cursor is not None:
+                items = [item for item in items if (item[1]['due_at'], item[0]) > self._cursor]
+            page = items[: self._limit]
+            return [_Snapshot(doc_id, row) for doc_id, row in page]
+
+    class _Collection(_Query):
+        def document(self, doc_id):
+            def _get(transaction=None):
+                if doc_id in state_rows:
+                    return _Snapshot(doc_id, state_rows[doc_id])
+                return SimpleNamespace(exists=False, to_dict=lambda: None)
+
+            return SimpleNamespace(id=doc_id, get=_get)
+
+    monkeypatch.setattr(
+        reprocess,
+        'get_firestore_client',
+        lambda: SimpleNamespace(collection=lambda name: _Collection() if name == reprocess.COLLECTION else None),
+    )
+    return stream_calls
+
+
+def test_pl002_live_lease_prefix_cannot_hide_runnable_work(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    for i in range(101):
+        cid = f'leased-{i}'
+        queued = outbox.enqueue(
+            reprocess.key('u', cid), 'u', {'conversation_id': cid, 'language': 'en'}, t0 - 200 + i, now=t0
+        )
+        assert isinstance(outbox.claim_key(queued.row_id, queued.wake_token, 120.0, now=t0), Claim)
+    valid = outbox.enqueue(
+        reprocess.key('u', 'runnable'), 'u', {'conversation_id': 'runnable', 'language': 'en'}, t0, now=t0
+    )
+
+    claims = outbox.claim(1, 120.0, now=t0 + 1)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert len(stream_calls) >= 2
+    assert outbox.ack(claims[0], 'done', now=t0 + 2)
+    assert outbox.claim(1, 120.0, now=t0 + 3) == []
+
+
+def test_pl002_retired_privacy_prefix_cannot_consume_the_claim_budget(rows, monkeypatch):
+    from database.outbox_firestore import FirestoreOutbox
+
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    blocked: set[tuple[str, str]] = set()
+    injected = FirestoreOutbox(
+        OutboxKind.ENRICHMENT,
+        privacy_blocked=lambda owner_id, payload: (owner_id, payload['conversation_id']) in blocked,
+        create_wake=lambda *_args: None,
+    )
+    for i in range(101):
+        cid = f'deleted-{i}'
+        injected.enqueue(reprocess.key('u', cid), 'u', {'conversation_id': cid, 'language': 'en'}, t0 - 200 + i, now=t0)
+        blocked.add(('u', cid))
+    valid = injected.enqueue(
+        reprocess.key('u', 'runnable'), 'u', {'conversation_id': 'runnable', 'language': 'en'}, t0, now=t0
+    )
+
+    claims = injected.claim(1, 120.0, now=t0)
+    assert [claim.row_id for claim in claims] == [valid.row_id]
+    assert len(stream_calls) >= 2
+    assert set(state_rows) == {valid.row_id}
+    assert injected.ack(claims[0], 'done', now=t0 + 1)
+    assert injected.claim(1, 120.0, now=t0 + 2) == []
+
+
+def test_pl003_explicit_backlog_budget_is_not_silently_capped_at_100(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    expected = {
+        outbox.enqueue(
+            reprocess.key('u', f'due-{i:03}'),
+            'u',
+            {'conversation_id': f'due-{i:03}', 'language': 'en'},
+            t0 - 200 + i,
+            now=t0,
+        ).row_id
+        for i in range(125)
+    }
+    future = outbox.enqueue(
+        reprocess.key('u', 'future'),
+        'u',
+        {'conversation_id': 'future', 'language': 'en'},
+        t0 + 60,
+        now=t0,
+    )
+
+    claims = outbox.claim(125, 120.0, now=t0)
+    assert len(claims) == 125
+    assert {claim.row_id for claim in claims} == expected
+    assert all(claim.attempt == 1 for claim in claims)
+    assert len(stream_calls) == 2
+    assert outbox.claim(125, 120.0, now=t0 + 1) == []
+    for claim in claims:
+        assert outbox.ack(claim, 'done', now=t0 + 2)
+    assert outbox.claim(125, 120.0, now=t0 + 59) == []
+    assert [claim.row_id for claim in outbox.claim(125, 120.0, now=t0 + 60)] == [future.row_id]
+
+
+def test_due_rows_passes_real_firestore_document_snapshot_cursor_across_pages():
+    import threading
+    from google.auth.credentials import AnonymousCredentials
+    from google.cloud import firestore
+    from google.cloud.firestore_v1.base_document import DocumentSnapshot
+    from google.cloud.firestore_v1.query import Query
+
+    client = firestore.Client(project='test-outbox', credentials=AnonymousCredentials())
+    # Simulate an active gRPC channel lock on the live client (deepcopying a dict with a DocumentReference fails).
+    client._live_channel_lock = threading.Lock()
+    collection = client.collection(reprocess.COLLECTION)
+
+    page1 = [
+        DocumentSnapshot(
+            reference=collection.document(f'{i:064x}'),
+            data={'due_at': 10.0 + i, 'lease_until': 0.0, 'task_token': f'{i + 1:032x}'},
+            exists=True,
+            read_time=None,
+            create_time=None,
+            update_time=None,
+        )
+        for i in range(2)
+    ]
+    page2 = [
+        DocumentSnapshot(
+            reference=collection.document(f'{2:064x}'),
+            data={'due_at': 12.0, 'lease_until': 0.0, 'task_token': f'{3:032x}'},
+            exists=True,
+            read_time=None,
+            create_time=None,
+            update_time=None,
+        )
+    ]
+    seen_queries = []
+
+    def fake_stream(self, *_args, **_kwargs):
+        pb = self._to_protobuf()
+        seen_queries.append(pb)
+        return iter(page1 if len(seen_queries) == 1 else page2)
+
+    original_stream = Query.stream
+    Query.stream = fake_stream
+    try:
+        yielded = list(reprocess.due_rows(now=100.0, limit=2, client=client))
+    finally:
+        Query.stream = original_stream
+
+    assert [doc_id for doc_id, _ in yielded] == [f'{0:064x}', f'{1:064x}', f'{2:064x}']
+    assert len(seen_queries) == 2
+    assert not seen_queries[0]._pb.HasField('start_at')
+    assert seen_queries[1]._pb.HasField('start_at')
+    assert seen_queries[1].start_at.before is False
+    assert seen_queries[1].start_at.values[0].double_value == 11.0
+    assert seen_queries[1].start_at.values[1].reference_value.endswith(f'/{reprocess.COLLECTION}/{1:064x}')
+
+
+def test_pl004_failed_wakes_are_errors_until_a_repair_actually_succeeds(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    monkeypatch.setattr(enrichment_scan, 'observe', lambda *_: None)
+
+    wakes: list[tuple[str, str, float]] = []
+    fail_wakes = [False]
+
+    def create_wake(row_id: str, token: str, available_at: float) -> None:
+        if fail_wakes[0]:
+            raise RuntimeError('simulated Cloud Tasks outage')
+        wakes.append((row_id, token, available_at))
+
+    injected = FirestoreOutbox(
+        OutboxKind.ENRICHMENT,
+        privacy_blocked=lambda *_args: False,
+        create_wake=create_wake,
+    )
+    t0 = 1000.0
+    tx = SimpleNamespace(set=lambda ref, value: state_rows.__setitem__(ref.id, dict(value)))
+    queued = {
+        injected.enqueue(
+            reprocess.key('u', f'pending-{i}'),
+            'u',
+            {'conversation_id': f'pending-{i}', 'language': 'en'},
+            t0 - 10 + i,
+            tx=tx,
+            now=t0,
+        ).row_id
+        for i in range(3)
+    }
+    assert wakes == []
+
+    fail_wakes[0] = True
+    failed = injected.sweep(now=t0 + 1, limit=2)
+    assert (failed.rewoken, failed.expired_leases, failed.discarded, failed.errors) == (0, 0, 0, 3)
+    assert wakes == []
+    assert all(state_rows[row_id].get('wake_check_after', 0) == 0 for row_id in queued)
+    assert len(stream_calls) == 2
+
+    fail_wakes[0] = False
+    repaired = injected.sweep(now=t0 + 2, limit=2)
+    assert (repaired.rewoken, repaired.expired_leases, repaired.discarded, repaired.errors) == (3, 0, 0, 0)
+    assert {row_id for row_id, _, _ in wakes} == queued
+    assert len(stream_calls) == 4
+
+    wakes.clear()
+    settled = injected.sweep(now=t0 + 3, limit=2)
+    assert (settled.rewoken, settled.expired_leases, settled.discarded, settled.errors) == (0, 0, 0, 0)
+    assert wakes == []
+
+
+def test_due_rows_cursor_survives_page_boundary_row_deletion_mid_scan(rows, monkeypatch):
+    state_rows, _tasks = rows
+    stream_calls = _install_paged_due_query(state_rows, monkeypatch)
+    t0 = 1000.0
+    ordered_ids = []
+    for i in range(4):
+        cid = f'boundary-{i}'
+        res = outbox.enqueue(
+            reprocess.key('u', cid),
+            'u',
+            {'conversation_id': cid, 'language': 'en'},
+            t0 + i,
+            now=t0,
+        )
+        ordered_ids.append(res.row_id)
+
+    seen_ids = []
+    for row_id, _row in reprocess.due_rows(now=t0 + 10, limit=2):
+        seen_ids.append(row_id)
+        if row_id == ordered_ids[1]:
+            # Delete page 1's boundary row before advancing to page 2.
+            state_rows.pop(row_id)
+
+    assert seen_ids == ordered_ids
+    assert len(stream_calls) == 3
