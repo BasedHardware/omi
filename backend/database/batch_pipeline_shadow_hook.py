@@ -1,6 +1,6 @@
 """A2 shadow seams and the hook for batch writers that commit outside ``Store.run`` (projection apply, purge).
 
-Kept outside ``database.jobstore`` on purpose: importing it costs one ``os`` lookup, and the job-store package
+Kept outside ``database.jobstore`` on purpose: required core metrics are import-light, and the job-store package
 (Postgres store, outbox, migrations) is imported only when this process runs in shadow or index mode.
 """
 
@@ -9,6 +9,8 @@ from __future__ import annotations
 import logging
 import os
 from typing import Iterable
+
+from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +59,8 @@ def shadow_parity_collectors() -> tuple:
     ``omi_jobstore_shadow_{parity,convergence}_*`` live in the default registry; a process that serves its own
     ``CollectorRegistry`` (the batch worker) must register them there or the series are never exported.
     Optional jobstore import failures keep the core caller collectors available.
-    recovery_discovery is a required core dependency, already imported by Scheduler.
+    Core collectors are required; their import does not traverse caller utilities or jobstore.
     """
-    from utils.batch_pipeline.recovery_discovery import RECOVERY_COLLECTORS
-
     if not _shadow_mode():
         return RECOVERY_COLLECTORS
     try:

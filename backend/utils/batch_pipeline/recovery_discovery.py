@@ -11,7 +11,14 @@ import threading
 import time
 from typing import Any, Callable, cast
 
-from prometheus_client import Counter, Gauge, Histogram
+from database.batch_pipeline_recovery_metrics import (
+    CALLER_GAP_SECONDS,
+    CUTOFF_AGE_SECONDS,
+    PRIMARY_QUERY_SECONDS,
+    PRIMARY_SCAN_SUCCESS_TIMESTAMP,
+    RECOVERY_COLLECTORS,
+    RECOVERY_DISCOVERY_TOTAL,
+)
 
 from utils.observability.reasons import ReasonFamily, reason_label
 
@@ -27,41 +34,6 @@ def metric_namespace(namespace: str) -> str:
     return namespace if namespace in {'batch_pipeline_dev', 'batch_pipeline_prod'} else 'other'
 
 
-RECOVERY_DISCOVERY_TOTAL = Counter(
-    'omi_jobstore_recovery_discovery_total',
-    'Caller entries, attempts and candidate work; not billed reads.',
-    ['namespace', 'caller', 'event', 'source', 'reason'],
-)
-PRIMARY_SCAN_SUCCESS_TIMESTAMP = Gauge(
-    'omi_jobstore_index_primary_scan_success_timestamp_seconds',
-    'Unix completion time of the last successful bounded primary due query; not backlog coverage.',
-    ['namespace', 'query'],
-)
-CALLER_GAP_SECONDS = Histogram(
-    'omi_jobstore_recovery_caller_gap_seconds',
-    'Monotonic gap between actual per-process caller entries.',
-    ['namespace', 'caller'],
-    buckets=(1, 5, 15, 30, 60, 120, 300, 900),
-)
-CUTOFF_AGE_SECONDS = Histogram(
-    'omi_jobstore_recovery_cutoff_age_seconds',
-    'Wall-time age of the recovery cutoff at leased discovery after migration.',
-    ['namespace', 'caller'],
-    buckets=(0.01, 0.2, 1, 5, 15, 60, 120, 300, 900),
-)
-PRIMARY_QUERY_SECONDS = Histogram(
-    'omi_jobstore_recovery_primary_query_seconds',
-    'Actual primary discovery duration including failures.',
-    ['namespace', 'caller'],
-    buckets=(0.01, 0.05, 0.2, 1, 5, 15, 60),
-)
-RECOVERY_COLLECTORS = (
-    RECOVERY_DISCOVERY_TOTAL,
-    PRIMARY_SCAN_SUCCESS_TIMESTAMP,
-    CALLER_GAP_SECONDS,
-    CUTOFF_AGE_SECONDS,
-    PRIMARY_QUERY_SECONDS,
-)
 _LAST_ENTRY: dict[tuple[str, str], float] = {}
 _ENTRY_LOCK = threading.Lock()
 _FAILURES: dict[str, int] = {}
