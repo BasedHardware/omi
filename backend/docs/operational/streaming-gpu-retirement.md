@@ -55,11 +55,16 @@ it before callers drain is unsafe.
 5. Merge this PR with `parakeetSuspended=true`, then deploy the guard chart at
    that exact reviewed SHA once, with its production values. Do not deploy the
    intervening cap-assert fix alone: that would let a blind trip restore 12.
-   Verify the CronJob's guard container has `PARAKEET_SUSPENDED=true`, no HPA
-   patch permission, and no floors.json. The CronJob stays scheduled for its
-   independent batch observer. Check every Job referenced by `status.active`:
-   each must also have `PARAKEET_SUSPENDED=true` in its pod template. Wait for
-   any pre-retirement Job without that setting to finish (deadline 240 seconds).
+   Verify the CronJob is **not suspended**, its guard container has
+   `PARAKEET_SUSPENDED=true`, no HPA patch permission, and no floors.json.
+   Apply the script ConfigMap together with the CronJob: the teardown fence
+   compares the mounted `guard.py` content and `omi.me/guard-script-sha256`
+   annotations on the ConfigMap and pod template with the reviewed local
+   chart script. An env-only/spec-only apply or a stale script fails closed.
+   Run teardown from that same reviewed checkout. Check every Job referenced
+   by `status.active`: each must also have the skip setting, reviewed script
+   hash and script mount in its pod template. Wait for any pre-retirement Job
+   without that contract to finish (deadline 240 seconds).
    Never raise a cap to satisfy the guard. Batch-only active Jobs do not block
    retirement. Independent batch monitoring/state remain intact. Keep the guard
    state.
@@ -80,8 +85,8 @@ it before callers drain is unsafe.
 
    The default executes no commands. Apply requires explicit lead gates,
    positive saved rollback replicas, fully rolled callers, the Parakeet-specific
-   guard skip in the CronJob and every active Job, and removed HPA write
-   permission. Each operation prints before/after state and a
+   guard skip in the unsuspended CronJob and every active Job, a matching
+   reviewed mounted script ConfigMap, and removed HPA write permission. Each operation prints before/after state and a
    rollback instruction. A batch/diarizer/unknown pod, persistent/host audio
    volume, or repurposed pool label stops the operation. Every non-DaemonSet pod
    must leave target pools before capacity is changed.

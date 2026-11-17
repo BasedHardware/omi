@@ -62,6 +62,8 @@ kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-script
   namespace: {{ .Values.namespace }}
+  annotations:
+    omi.me/guard-script-sha256: {{ .Files.Get "files/guard.py" | sha256sum | quote }}
 data:
   omi_logging.py: |
 {{ .Files.Get "files/omi_logging.py" | indent 4 }}
@@ -121,6 +123,8 @@ spec:
       backoffLimit: 0
       template:
         metadata:
+          annotations:
+            omi.me/guard-script-sha256: {{ .Files.Get "files/guard.py" | sha256sum | quote }}
           labels:
             app.kubernetes.io/name: incluster-guards
         spec:

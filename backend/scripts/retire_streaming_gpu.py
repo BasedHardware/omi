@@ -11,6 +11,7 @@ absent from the allowlist. Re-run after a partial failure with the same backup.
 """
 
 import argparse
+import hashlib
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -28,6 +29,8 @@ CLUSTER = 'prod-omi-gke'
 POOLS = ('parakeet-pool', 'parakeet-pool-b', 'parakeet-pool-v2')
 DEPLOYMENTS = ('prod-omi-parakeet',)
 GUARD = 'prod-omi-incluster-guards'
+GUARD_SCRIPT_HASH_ANNOTATION = 'omi.me/guard-script-sha256'
+GUARD_SCRIPT = Path(__file__).resolve().parents[1] / 'charts/incluster-guards/files/guard.py'
 
 
 def execute(args):
@@ -356,19 +359,55 @@ def snapshot(backup):
     print(f'SNAPSHOT: capacity/floor baseline saved locally under {backup}; no cloud writes')
 
 
-def assert_parakeet_guard_retired(guard, role, active_jobs):
-    """Retire only the Parakeet writer; batch-only Jobs may keep running."""
+def assert_parakeet_guard_retired(guard, role, active_jobs, script_cm):
+    """Keep the observer live and require the reviewed skip-aware mounted script."""
+    if guard['spec'].get('suspend', False) is not False:
+        raise RuntimeError('Guard CronJob must not be suspended; restore the batch observer first')
 
-    def skips_parakeet(pod_spec):
+    expected_hash = hashlib.sha256(GUARD_SCRIPT.read_bytes()).hexdigest()
+    script = script_cm.get('data', {}).get('guard.py', '')
+    if (
+        script_cm.get('metadata', {}).get('name') != GUARD + '-script'
+        or script_cm.get('metadata', {}).get('annotations', {}).get(GUARD_SCRIPT_HASH_ANNOTATION) != expected_hash
+        or hashlib.sha256(script.encode()).hexdigest() != expected_hash
+    ):
+        raise RuntimeError('Apply the reviewed guard script ConfigMap with its matching script hash first')
+
+    def skips_parakeet(template):
+        pod_spec = template['spec']
         containers = [c for c in pod_spec.get('containers', []) if c.get('name') == 'guard']
         if len(containers) != 1:
             return False
-        settings = [e for e in containers[0].get('env', []) if e.get('name') == 'PARAKEET_SUSPENDED']
-        return len(settings) == 1 and settings[0].get('value') == 'true'
+        container = containers[0]
+        settings = [e for e in container.get('env', []) if e.get('name') == 'PARAKEET_SUSPENDED']
+        mounts = [
+            m
+            for m in container.get('volumeMounts', [])
+            if m.get('mountPath', '') == '/guard' or m.get('mountPath', '').startswith('/guard/')
+        ]
+        volumes = [v for v in pod_spec.get('volumes', []) if v.get('name') == 'script']
+        return (
+            len(settings) == 1
+            and settings[0].get('value') == 'true'
+            and 'valueFrom' not in settings[0]
+            and container.get('command') == ['python3', '/guard/guard.py']
+            and not container.get('args')
+            and len(mounts) == 1
+            and mounts[0].get('name') == 'script'
+            and mounts[0].get('mountPath') == '/guard'
+            and not mounts[0].get('subPath')
+            and not mounts[0].get('subPathExpr')
+            and len(volumes) == 1
+            and volumes[0].get('configMap', {}).get('name') == GUARD + '-script'
+            and not volumes[0].get('configMap', {}).get('items')
+            and template.get('metadata', {}).get('annotations', {}).get(GUARD_SCRIPT_HASH_ANNOTATION) == expected_hash
+        )
 
-    if not skips_parakeet(guard['spec']['jobTemplate']['spec']['template']['spec']):
-        raise RuntimeError('Apply reviewed Parakeet guard retirement (PARAKEET_SUSPENDED=true) first')
-    if any(not skips_parakeet(job['spec']['template']['spec']) for job in active_jobs):
+    if not skips_parakeet(guard['spec']['jobTemplate']['spec']['template']):
+        raise RuntimeError(
+            'Apply reviewed Parakeet guard retirement (PARAKEET_SUSPENDED=true, reviewed script mount/hash) first'
+        )
+    if any(not skips_parakeet(job['spec']['template']) for job in active_jobs):
         raise RuntimeError('Wait for pre-retirement Parakeet guard Jobs to finish (deadline 240 seconds)')
     if any(
         'patch' in r.get('verbs', []) and 'horizontalpodautoscalers' in r.get('resources', []) for r in role['rules']
@@ -393,8 +432,12 @@ def apply(backup):
     active_jobs = [
         kubectl('get', 'job', ref['name'], '-o', 'json') for ref in guard.get('status', {}).get('active', [])
     ]
-    assert_parakeet_guard_retired(guard, role, active_jobs)
-    print(f'before guard: parakeet_skipped=true active_batch_only_jobs={len(active_jobs)} hpa_patch=false')
+    script_cm = kubectl('get', 'cm', GUARD + '-script', '-o', 'json')
+    assert_parakeet_guard_retired(guard, role, active_jobs, script_cm)
+    print(
+        f'before guard: suspended=false parakeet_skipped=true reviewed_script=true '
+        f'active_batch_only_jobs={len(active_jobs)} hpa_patch=false'
+    )
     for name in DEPLOYMENTS:
         deploy = kubectl('get', 'deployment', name, '-o', 'json')
         save_once(backup / f'{name}-replicas.json', {'replicas': deploy['spec']['replicas']})

@@ -15,9 +15,14 @@ its state ConfigMap. Parakeet is recorded as `SKIPPED`; no Parakeet HPA,
 deployment, events, floor schedule or rollback API is read or written. Existing
 Parakeet state is preserved. Production HPA RBAC remains read-only and the
 separate Cloud Run batch rollback writer stays disabled.
-The streaming GPU teardown tool verifies this setting in both the CronJob and
-every referenced active Job. Batch-only Jobs can remain active; an older Job
-without the skip setting must finish before teardown proceeds.
+The streaming GPU teardown tool requires the CronJob to be unsuspended and
+verifies this setting in both the CronJob and every referenced active Job.
+The chart stamps `omi.me/guard-script-sha256` on its script ConfigMap and pod
+template. The tool verifies the actual mounted ConfigMap content and those
+annotations against `files/guard.py` in the same reviewed checkout. A partial
+apply that updates the env/spec without the script ConfigMap fails closed.
+Batch-only Jobs with the reviewed hash and mount can remain active; an older
+Job without this contract must finish before teardown proceeds.
 
 The batch observer records a fresh oldest uncommitted age over thirty minutes
 as TRIP; missing, stale or incomplete metrics as BLIND; other usable readings
