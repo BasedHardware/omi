@@ -301,6 +301,24 @@ void main() {
     await sync.reclaimOrphanAudio();
     expect(await file.exists(), isTrue);
   });
+  test('torn tombstone JSON reports journal_unavailable', () async {
+    await audio(name(old));
+    await Directory('${dir.path}/orphan_audio_reclaim').create();
+    await File('${dir.path}/orphan_audio_reclaim/tombstones.json').writeAsString('{');
+    final events = <Map<String, Object?>>[];
+    final sync = await ledger(event: events.add);
+    await sync.reclaimOrphanAudio();
+    expect(events.single['result'], 'journal_unavailable');
+  });
+  test('an index reference differing only in case retains the audio', () async {
+    final file = await audio(name(old));
+    await json('wals_backup.json', {
+      'wals': [row(name(old).toUpperCase())]
+    });
+    final sync = await ledger();
+    await sync.reclaimOrphanAudio();
+    expect(await file.exists(), isTrue);
+  });
   test('missing memory snapshot cannot authorize deletion', () async {
     final file = await audio(name(old));
     final sync = await ledger(scan: () => census(buckets: {}));

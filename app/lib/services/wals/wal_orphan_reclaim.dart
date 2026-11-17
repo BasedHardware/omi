@@ -69,7 +69,14 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
           result = 'journal_unavailable';
           return;
         }
-        final decoded = jsonDecode(await journal.readAsString());
+        final Object? decoded;
+        try {
+          decoded = jsonDecode(await journal.readAsString());
+        } on FormatException {
+          // Torn JSON is a journal problem, distinct from an I/O failure in telemetry.
+          result = 'journal_unavailable';
+          return;
+        }
         if (decoded is! Map ||
             decoded['version'] != 1 ||
             decoded['entries'] is! List ||
@@ -181,9 +188,9 @@ extension LocalOrphanReclaim on LocalWalSyncImpl {
               if (legacyReferenceNames.contains(path.basename(file.filePath).toLowerCase())) {
                 return 'referenced';
               }
-              if (recordingInventorySnapshot.values
-                  .expand((rows) => rows)
-                  .any((row) => row.filePath != null && path.basename(row.filePath!) == path.basename(file.filePath))) {
+              if (recordingInventorySnapshot.values.expand((rows) => rows).any((row) =>
+                  row.filePath != null &&
+                  path.basename(row.filePath!).toLowerCase() == path.basename(file.filePath).toLowerCase())) {
                 return 'referenced';
               }
               if (!file.unchanged()) return 'file_changed';
