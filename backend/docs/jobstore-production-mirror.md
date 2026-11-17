@@ -146,7 +146,7 @@ rotate too. No full-table key sets or extra normal pool are created.
 | --- | --- |
 | `JOBSTORE_RETIREMENT_MAX_ROWS` | 10 / 1..1000 |
 | `JOBSTORE_RETIREMENT_MAX_PRIMARY_READS` | 20 / 2..2000 (includes discovery and fresh rereads) |
-| `JOBSTORE_RETIREMENT_MAX_STATEMENTS` | 500 / 10..20000 (includes cursor SQL and timeout controls) |
+| `JOBSTORE_RETIREMENT_MAX_STATEMENTS` | 500 / 24..20000 (includes cursor SQL and timeout controls; a one-row page needs about 18) |
 | `JOBSTORE_RETIREMENT_PAGE_SECONDS` | 3 / positive, at most 3s |
 | `JOBSTORE_RETIREMENT_INTERVAL_SECONDS` | 20 / 20..3600s per process |
 | Total tick | 10s absolute budget; pool warmup outside the page budget |

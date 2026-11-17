@@ -1,6 +1,7 @@
 """Import-light retirement telemetry, exported even with mirror/driver disabled."""
 
 from enum import StrEnum
+import math
 import time
 
 from prometheus_client import Counter, Gauge
@@ -52,5 +53,6 @@ def observe(namespace: str, source: str, table: str, deleted: int, timestamps: t
     baseline = (completed or created).timestamp()
     # This grows between ticks (including failed ticks). No SQL on scrape.
     ROTATION_LAG.labels(namespace=namespace, source=source, table=table).set_function(
-        lambda: max(0.0, time.time() - baseline)
+        # A future database clock is UNKNOWN, not fresh.
+        lambda: (time.time() - baseline) if time.time() >= baseline else math.nan
     )

@@ -6,10 +6,11 @@ from dataclasses import dataclass
 import math
 import os
 import threading
+import logging
 import time
 
 from database.jobstore.copy_connections import copy_pools
-from database.jobstore.dual_store import DualStore, MIRRORED_TABLES
+from database.jobstore.dual_store import DualStore, MIRRORED_TABLES, shadow_writes_enabled
 from database.jobstore.index_store import connection_deadline
 from database.jobstore.postgres_store import PostgresStore
 from database.jobstore.reconcile import process_page
@@ -48,7 +49,7 @@ class Settings:
         if not (
             1 <= values.rows <= 1000
             and 2 <= values.reads <= 2000
-            and 10 <= values.statements <= 20000
+            and 24 <= values.statements <= 20000
             and math.isfinite(values.page_seconds)
             and 0 < values.page_seconds <= 3
             and math.isfinite(values.interval_seconds)
@@ -102,7 +103,13 @@ class Retirement:
             settings = Settings.from_env()
             configured = True
             self._due = time.monotonic() + settings.interval_seconds
-            sources = ('copy', 'primary') if prod and jobstore_production_mirror_configured() else ('copy',)
+            from database.batch_pipeline_shadow_hook import shadow_mode_enabled
+
+            # Primary pages read Firestore; schedule them only while copies are actually written.
+            copying = (
+                prod and jobstore_production_mirror_configured() and shadow_mode_enabled() and shadow_writes_enabled()
+            )
+            sources = ('copy', 'primary') if copying else ('copy',)
             schedule = [(src, tbl) for tbl in sorted(MIRRORED_TABLES) for src in sources]
             source, table = schedule[self._position % len(schedule)]
             self._position += 1  # A failed table must not starve other tables.
@@ -152,8 +159,16 @@ class Retirement:
             page_error(namespace, source, table, reason)
         except TimeoutError:
             page_error(namespace, source, table, RetirementPageReason.TIMEOUT)
-        except Exception:
+        except Exception as error:
             # Never export provider errors: SQL exceptions can contain cursor/keys.
+            # Type and SQLSTATE only, so permission, ordering and codec failures are separable.
+            logging.getLogger(__name__).warning(
+                'event=jobstore_retirement outcome=page_error source=%s table=%s exception_type=%s sqlstate=%s',
+                source,
+                table,
+                type(error).__name__,
+                getattr(error, 'sqlstate', None) or '-',
+            )
             page_error(namespace, source, table, RetirementPageReason.OPERATION_FAILED)
         finally:
             self._lock.release()

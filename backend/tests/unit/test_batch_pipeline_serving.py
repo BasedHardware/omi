@@ -1081,7 +1081,9 @@ def test_retirement_only_on_supervised_maintenance_leader_after_critical_work(pe
     service.merge.reoffer_marked = lambda *_: events.append('critical_finished')
     service._retirement = SimpleNamespace(tick=lambda *_: events.append('retirement'))
     service.reconcile(periodic=periodic, supervised=supervised)
-    assert ('retirement' in events) is expected
+    assert events.count('retirement') == int(expected)
+    if leader:
+        assert events[0] == 'critical_finished'
     if expected:
         assert events == ['critical_finished', 'retirement']
 

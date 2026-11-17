@@ -83,10 +83,27 @@ def test_default_on_complete_target_mirror_off_only_retires_and_round_robins(set
 
 
 def test_primary_backfill_only_when_production_mirror_configured(setup, monkeypatch):
+    from database import batch_pipeline_shadow_hook as hook
+
     monkeypatch.setattr(worker, 'jobstore_production_mirror_configured', lambda: True)
+    monkeypatch.setattr(hook, 'shadow_mode_enabled', lambda: True)
+    monkeypatch.setattr(worker, 'shadow_writes_enabled', lambda: True)
     for _ in range(22):
         tick(setup)
     assert len({(page['source'], page['table']) for page in setup.pages}) == 22
+
+
+@pytest.mark.parametrize('mode,writes', [(False, True), (True, False), (False, False)])
+def test_mirror_configuration_alone_never_schedules_primary_pages(setup, monkeypatch, mode, writes):
+    # Primary pages read Firestore; with copying off they would only spend reads.
+    from database import batch_pipeline_shadow_hook as hook
+
+    monkeypatch.setattr(worker, 'jobstore_production_mirror_configured', lambda: True)
+    monkeypatch.setattr(hook, 'shadow_mode_enabled', lambda: mode)
+    monkeypatch.setattr(worker, 'shadow_writes_enabled', lambda: writes)
+    for _ in range(22):
+        tick(setup)
+    assert {page['source'] for page in setup.pages} == {'copy'}
 
 
 @pytest.mark.parametrize('gate', ['kill', 'missing_target', 'partial_target', 'context', 'namespace', 'budget'])
@@ -156,3 +173,7 @@ def test_collectors_export_in_private_registry_with_mirror_off_and_rotation_lag_
     assert registry.get_sample_value('omi_jobstore_retirement_rotation_lag_seconds', labels) == 10
     monkeypatch.setattr(metrics.time, 'time', lambda: 170)
     assert registry.get_sample_value('omi_jobstore_retirement_rotation_lag_seconds', labels) == 30
+    future = datetime.fromtimestamp(500, timezone.utc)
+    metrics.observe('batch_pipeline_dev', 'copy', 'jobs', 0, (created, future, future))
+    lag = registry.get_sample_value('omi_jobstore_retirement_rotation_lag_seconds', labels)
+    assert lag != lag  # NaN: a future database clock is unknown, never fresh
