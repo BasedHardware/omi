@@ -736,6 +736,8 @@ def deployment_workflow_contract_errors(
             errors.append(f'{path}: registered deployment workflow has no exact-path workflow contract')
         elif not any(discovered.intersection(contract.get('tests') or []) for contract in exact_contracts):
             errors.append(f'{path}: exact-path workflow contracts select no existing discovered backend tests')
+        elif not (REPO_DIR / path).is_file():
+            errors.append(f'{path}: registered deployment workflow does not exist; update registry and exact mapping')
     return errors
 
 

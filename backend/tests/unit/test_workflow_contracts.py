@@ -357,7 +357,7 @@ def test_new_deployment_workflow_requires_exact_mapping(selector_and_all_tests, 
 )
 def test_deployment_workflow_exact_mapping_requires_discovered_target(selector_and_all_tests, targets):
     selector, all_tests = selector_and_all_tests
-    path = '.github/workflows/new_deploy.yml'
+    path = '.github/workflows/gcp_diarizer.yml'
     registry = {'images': [{'deployment_workflows': [path]}], 'services': {}}
     contracts = [
         {'sources': [path], 'tests': targets},
@@ -370,6 +370,30 @@ def test_deployment_workflow_exact_mapping_requires_discovered_target(selector_a
     ]
     contracts[0]['tests'] = ['tests/unit/test_workflow_contracts.py']
     assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+
+@pytest.mark.parametrize('registration', ['image', 'service'])
+def test_renamed_deployment_workflow_rejects_stale_registry_and_catalog(
+    selector_and_all_tests, monkeypatch, tmp_path, registration
+):
+    selector, all_tests = selector_and_all_tests
+    monkeypatch.setattr(selector, 'REPO_DIR', tmp_path)
+    path = '.github/workflows/deploy.yml'
+    workflow = tmp_path / path
+    workflow.parent.mkdir(parents=True)
+    workflow.write_text('jobs: {}\n', encoding='utf-8')
+    registry = {'images': [], 'services': {}}
+    if registration == 'image':
+        registry['images'].append({'deployment_workflows': [path]})
+    else:
+        registry['services']['service'] = {'current_deploy': [path]}
+    contracts = [{'sources': [path], 'tests': ['tests/unit/test_workflow_contracts.py']}]
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == []
+
+    workflow.rename(workflow.with_name('renamed_deploy.yml'))
+    assert selector.deployment_workflow_contract_errors(registry, contracts, all_tests) == [
+        f'{path}: registered deployment workflow does not exist; update registry and exact mapping'
+    ]
 
 
 @pytest.mark.parametrize('mode', ['--all', '--changed-files', '--from-test-list', '--check-deployment-contracts'])
