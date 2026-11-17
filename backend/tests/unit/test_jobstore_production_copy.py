@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 import pytest
+from psycopg import sql
 
 from database import batch_pipeline_shadow_hook as hook
 from database import batch_pipeline_store
@@ -41,7 +42,7 @@ class Conn:
         self.shadow, self.result = shadow, []
 
     def execute(self, query, params=None):
-        text = str(query)
+        text = query.as_string(None) if isinstance(query, sql.Composable) else str(query)
         self.shadow.statements.append((text, params))
         self.result = []
         # Only owner-census SQL needs results; normal copy reads/writes use
