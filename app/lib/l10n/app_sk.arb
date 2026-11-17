@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Radšej zhrnúť pomocou Omi",
     "summaryBusyTitle": "Stále sa spracúva",
     "summaryBusyBody": "Omi už na tomto rozhovore pracuje. Zhrnutie sa tu zobrazí po dokončení.",
+    "summaryTranscriptionPendingTitle": "Zatiaľ neprepísané",
+    "summaryTranscriptionPendingBody": "Zhrnutie sa zobrazí, keď bude prepis hotový.",
     "summaryCheckAgain": "Skontrolovať znova",
     "summaryLimitTitle": "Dosiahnutý limit zhrnutí",
     "summaryLimitBody": "Za poslednú hodinu ste niekoľkokrát znova vygenerovali zhrnutia. Skúste to neskôr.",

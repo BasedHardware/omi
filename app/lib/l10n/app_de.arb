@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Stattdessen mit Omi zusammenfassen",
     "summaryBusyTitle": "Wird noch verarbeitet",
     "summaryBusyBody": "Omi arbeitet bereits an diesem Gespräch. Die Zusammenfassung erscheint hier, sobald sie fertig ist.",
+    "summaryTranscriptionPendingTitle": "Noch nicht transkribiert",
+    "summaryTranscriptionPendingBody": "Die Zusammenfassung erscheint, sobald das Transkript fertig ist.",
     "summaryCheckAgain": "Erneut prüfen",
     "summaryLimitTitle": "Limit für Zusammenfassungen erreicht",
     "summaryLimitBody": "Du hast in der letzten Stunde mehrere Zusammenfassungen neu erstellt. Versuche es später erneut.",

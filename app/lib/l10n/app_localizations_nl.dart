@@ -13981,6 +13981,12 @@ class AppLocalizationsNl extends AppLocalizations {
   String get summaryBusyBody => 'Omi is al met dit gesprek bezig. De samenvatting verschijnt hier zodra deze klaar is.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Nog niet getranscribeerd';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'De samenvatting verschijnt zodra het transcript klaar is.';
+
+  @override
   String get summaryCheckAgain => 'Opnieuw controleren';
 
   @override

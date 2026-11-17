@@ -13939,6 +13939,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get summaryBusyBody => 'Omi juba töötab selle vestlusega. Kokkuvõte ilmub siia, kui see valmis saab.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Pole veel transkribeeritud';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Kokkuvõte ilmub, kui transkriptsioon on valmis.';
+
+  @override
   String get summaryCheckAgain => 'Kontrolli uuesti';
 
   @override

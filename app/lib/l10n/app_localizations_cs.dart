@@ -13947,6 +13947,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get summaryBusyBody => 'Omi už na této konverzaci pracuje. Shrnutí se zde zobrazí, až bude hotové.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Zatím nepřepsáno';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Shrnutí se zobrazí, až bude přepis hotový.';
+
+  @override
   String get summaryCheckAgain => 'Zkontrolovat znovu';
 
   @override

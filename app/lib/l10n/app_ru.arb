@@ -4303,6 +4303,8 @@
     "summaryWithOmiInstead": "Обобщить с Omi вместо этого",
     "summaryBusyTitle": "Ещё обрабатывается",
     "summaryBusyBody": "Omi уже работает над этим разговором. Сводка появится здесь, когда будет готова.",
+    "summaryTranscriptionPendingTitle": "Ещё не расшифровано",
+    "summaryTranscriptionPendingBody": "Сводка появится, когда будет готова расшифровка.",
     "summaryCheckAgain": "Проверить снова",
     "summaryLimitTitle": "Достигнут лимит сводок",
     "summaryLimitBody": "За последний час вы несколько раз пересоздали сводки. Повторите попытку позже.",

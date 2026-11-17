@@ -13949,6 +13949,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get summaryBusyBody => 'Omi jobber allerede med denne samtalen. Oppsummeringen vises her når den er ferdig.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Ikke transkribert ennå';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Oppsummeringen vises når transkripsjonen er klar.';
+
+  @override
   String get summaryCheckAgain => 'Sjekk igjen';
 
   @override

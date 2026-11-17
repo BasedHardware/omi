@@ -14055,6 +14055,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get summaryBusyBody => 'Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Hindi pa naita-transcribe';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Lalabas ang buod kapag handa na ang transcript.';
+
+  @override
   String get summaryCheckAgain => 'Suriin muli';
 
   @override

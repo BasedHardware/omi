@@ -11688,6 +11688,8 @@
     "summaryWithOmiInstead": "I-summarize na lang gamit ang Omi",
     "summaryBusyTitle": "Pinoproseso pa",
     "summaryBusyBody": "Ginagawa na ng Omi ang usapang ito. Lalabas dito ang buod kapag tapos na.",
+    "summaryTranscriptionPendingTitle": "Hindi pa naita-transcribe",
+    "summaryTranscriptionPendingBody": "Lalabas ang buod kapag handa na ang transcript.",
     "summaryCheckAgain": "Suriin muli",
     "summaryLimitTitle": "Naabot na ang limitasyon ng buod",
     "summaryLimitBody": "Ilang beses ka nang gumawa muli ng buod sa nakaraang oras. Subukan muli mamaya.",

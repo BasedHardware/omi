@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "Raději shrnout pomocí Omi",
     "summaryBusyTitle": "Stále se zpracovává",
     "summaryBusyBody": "Omi už na této konverzaci pracuje. Shrnutí se zde zobrazí, až bude hotové.",
+    "summaryTranscriptionPendingTitle": "Zatím nepřepsáno",
+    "summaryTranscriptionPendingBody": "Shrnutí se zobrazí, až bude přepis hotový.",
     "summaryCheckAgain": "Zkontrolovat znovu",
     "summaryLimitTitle": "Dosažen limit shrnutí",
     "summaryLimitBody": "Za poslední hodinu jste několikrát znovu vygenerovali shrnutí. Zkuste to později.",

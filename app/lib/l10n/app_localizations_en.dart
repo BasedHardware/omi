@@ -13931,6 +13931,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Omi is already working on this conversation. The summary will appear here when it finishes.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Not transcribed yet';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'The summary will appear once the transcript is ready.';
+
+  @override
   String get summaryCheckAgain => 'Check Again';
 
   @override

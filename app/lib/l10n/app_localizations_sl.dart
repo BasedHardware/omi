@@ -13974,6 +13974,12 @@ class AppLocalizationsSl extends AppLocalizations {
   String get summaryBusyBody => 'Omi že obdeluje ta pogovor. Povzetek se bo prikazal tukaj, ko bo končan.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'Še ni prepisano';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'Povzetek se bo prikazal, ko bo prepis pripravljen.';
+
+  @override
   String get summaryCheckAgain => 'Preveri znova';
 
   @override

@@ -13731,6 +13731,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get summaryBusyBody => 'Omi 已在处理此对话。完成后，摘要将显示在这里。';
 
   @override
+  String get summaryTranscriptionPendingTitle => '尚未转录';
+
+  @override
+  String get summaryTranscriptionPendingBody => '转录完成后将显示摘要。';
+
+  @override
   String get summaryCheckAgain => '再次检查';
 
   @override

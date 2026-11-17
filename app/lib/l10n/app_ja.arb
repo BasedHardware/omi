@@ -4268,6 +4268,8 @@
     "summaryWithOmiInstead": "代わりに Omi で要約",
     "summaryBusyTitle": "まだ処理中です",
     "summaryBusyBody": "Omi はすでにこの会話を処理しています。完了すると、ここに要約が表示されます。",
+    "summaryTranscriptionPendingTitle": "まだ文字起こしされていません",
+    "summaryTranscriptionPendingBody": "文字起こしが完了すると、要約が表示されます。",
     "summaryCheckAgain": "再確認",
     "summaryLimitTitle": "要約の上限に達しました",
     "summaryLimitBody": "過去 1 時間に何度も要約を再生成しました。しばらくしてからもう一度お試しください。",

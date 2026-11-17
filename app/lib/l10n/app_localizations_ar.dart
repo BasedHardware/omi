@@ -13868,6 +13868,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get summaryBusyBody => 'يعمل Omi بالفعل على هذه المحادثة. سيظهر الملخص هنا عند الانتهاء.';
 
   @override
+  String get summaryTranscriptionPendingTitle => 'لم يُفرَّغ نصيًا بعد';
+
+  @override
+  String get summaryTranscriptionPendingBody => 'سيظهر الملخص عندما يصبح النص جاهزًا.';
+
+  @override
   String get summaryCheckAgain => 'تحقق مرة أخرى';
 
   @override
