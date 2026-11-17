@@ -1086,10 +1086,16 @@ def test_retirement_only_on_supervised_maintenance_leader_after_critical_work(pe
         assert events == ['critical_finished', 'retirement']
 
 
-def test_retirement_failure_cannot_fail_critical_maintenance():
+def test_retirement_failure_cannot_fail_critical_maintenance(monkeypatch, caplog):
+    import database.batch_pipeline_retirement_metrics as retirement_metrics
+
+    errors = []
+    monkeypatch.setattr(retirement_metrics, 'page_error', lambda *args: errors.append(args))
     store = MemoryStore()
     store.namespace = 'batch_pipeline_dev'
     service = Serving(store)
     service._retirement = SimpleNamespace(tick=Mock(side_effect=RuntimeError('private-provider-error')))
     service.reconcile(periodic=True, supervised=True)
     service._retirement.tick.assert_called_once()
+    assert errors == [('batch_pipeline_dev', 'copy', 'jobs', retirement_metrics.RetirementPageReason.OPERATION_FAILED)]
+    assert 'private-provider-error' not in caplog.text

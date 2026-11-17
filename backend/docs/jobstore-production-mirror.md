@@ -36,7 +36,7 @@ It requires all of the following, with exact values and no inferred defaults:
 | `OMI_ENV_STAGE` | `prod` |
 | `GOOGLE_CLOUD_PROJECT` | `based-hardware` |
 | `OMI_CUSTOMER_DATA_PROJECT` | `based-hardware` |
-| `OMI_FIRESTORE_DATA_PLANE_PROJECT` | `based-hardware` |
+| `OMI_FIRESTORE_DATA_PLANE_PROJECT` | `based-hardware` when present; may be unset |
 | `FIRESTORE_DATABASE_ID` | `(default)` |
 | `JOBSTORE_SHADOW_NAMESPACES` | Exact entry `batch_pipeline_prod`; no wildcard |
 | `JOBSTORE_PG_HOST`, `JOBSTORE_PG_DATABASE`, `JOBSTORE_PG_USER` | All explicitly nonempty |

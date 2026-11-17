@@ -136,9 +136,10 @@ _PRODUCTION_MIRROR_CONTEXT = {
     'OMI_ENV_STAGE': 'prod',
     'GOOGLE_CLOUD_PROJECT': 'based-hardware',
     'OMI_CUSTOMER_DATA_PROJECT': 'based-hardware',
-    'OMI_FIRESTORE_DATA_PLANE_PROJECT': 'based-hardware',
     'FIRESTORE_DATABASE_ID': '(default)',
 }
+# OMI_FIRESTORE_DATA_PLANE_PROJECT stays in _OPTIONAL_PROJECT_ENV: a present value must name
+# based-hardware, but serving Cloud Run services do not set it (their ADC project is required above).
 _OWNER_KEY = re.compile(r'[0-9a-f]{64}')
 _MIRROR_SAMPLE_BPS = re.compile(r'(?:[1-9][0-9]{0,3}|10000)')
 _MIRROR_SAMPLE_DOMAIN = 'omi:jobstore-production-mirror:v1:'

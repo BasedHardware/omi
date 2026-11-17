@@ -31,9 +31,6 @@ class CursorScope:
         return self.namespace, self.source, self.table, self.mode, self.target_identity
 
 
-_WHERE = 'namespace = %s AND source = %s AND tbl = %s AND mode = %s AND target_identity = %s'
-
-
 class CursorPage:
     def __init__(self, scope: CursorScope):
         self.scope = scope
@@ -49,7 +46,9 @@ class CursorPage:
             self.scope.params,
         )
         row = conn.execute(
-            f'SELECT cursor, version FROM jobstore_retirement_cursor WHERE {_WHERE} FOR UPDATE', self.scope.params
+            'SELECT cursor, version FROM jobstore_retirement_cursor '
+            'WHERE namespace = %s AND source = %s AND tbl = %s AND mode = %s AND target_identity = %s FOR UPDATE',
+            self.scope.params,
         ).fetchone()
         if row is None:
             raise RuntimeError('retirement cursor disappeared')
@@ -71,7 +70,8 @@ class CursorPage:
             'UPDATE jobstore_retirement_cursor SET cursor = %s, version = version + 1, passes = passes + %s, '
             'updated_at = clock_timestamp(), '
             'rotation_completed_at = CASE WHEN %s THEN clock_timestamp() ELSE rotation_completed_at END '
-            f'WHERE {_WHERE} AND version = %s AND cursor IS NOT DISTINCT FROM %s '
+            'WHERE namespace = %s AND source = %s AND tbl = %s AND mode = %s AND target_identity = %s '
+            'AND version = %s AND cursor IS NOT DISTINCT FROM %s '
             'RETURNING created_at, rotation_completed_at, updated_at',
             (
                 result.cursor,

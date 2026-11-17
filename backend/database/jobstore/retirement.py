@@ -85,6 +85,7 @@ class Retirement:
             return
         namespace = getattr(store, 'namespace', '')
         source, table = 'copy', 'jobs'
+        configured = False
         if namespace not in {'batch_pipeline_prod', 'batch_pipeline_dev'}:
             self._lock.release()
             return
@@ -99,6 +100,7 @@ class Retirement:
             if not (jobstore_production_context_matches() if prod else jobstore_shadow_admits(namespace)):
                 return
             settings = Settings.from_env()
+            configured = True
             self._due = time.monotonic() + settings.interval_seconds
             sources = ('copy', 'primary') if prod and jobstore_production_mirror_configured() else ('copy',)
             schedule = [(src, tbl) for tbl in sorted(MIRRORED_TABLES) for src in sources]
@@ -143,7 +145,11 @@ class Retirement:
             if checkpoint.timestamps is not None:
                 observe(namespace, source, table, result.counts.deleted, checkpoint.timestamps)
         except ValueError:
-            page_error(namespace, source, table, RetirementPageReason.INVALID_CONFIG)
+            # After settings parse, a ValueError is page data (cursor regression or a corrupt
+            # cursor row), not configuration. A corrupt row is cleared by deleting that
+            # jobstore_retirement_cursor row; the next pass restarts from the beginning.
+            reason = RetirementPageReason.OPERATION_FAILED if configured else RetirementPageReason.INVALID_CONFIG
+            page_error(namespace, source, table, reason)
         except TimeoutError:
             page_error(namespace, source, table, RetirementPageReason.TIMEOUT)
         except Exception:
