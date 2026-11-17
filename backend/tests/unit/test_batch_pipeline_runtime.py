@@ -535,7 +535,7 @@ def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
     monkeypatch.setattr(builtins, '__import__', refuse)
     from database.batch_pipeline_shadow_hook import shadow_parity_collectors
 
-    from utils.batch_pipeline.recovery_discovery import RECOVERY_COLLECTORS
+    from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
     assert shadow_parity_collectors() == RECOVERY_COLLECTORS
 

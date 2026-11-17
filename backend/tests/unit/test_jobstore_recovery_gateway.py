@@ -13,8 +13,9 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.jobstore import index_store
 from database.jobstore.index_store import IndexReadReason, IndexStore
 from tests.unit.test_jobstore_index_recovery_cadence import LeasedPrimary, SyntheticMirror
-from utils.batch_pipeline import recovery_discovery as discovery, scheduler
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller, RecoveryExposure, RecoveryQuery
+from database import batch_pipeline_recovery_discovery as discovery
+from utils.batch_pipeline import scheduler
+from database.batch_pipeline_recovery_discovery import RecoveryCaller, RecoveryExposure, RecoveryQuery
 
 
 @pytest.fixture

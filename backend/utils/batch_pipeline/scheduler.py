@@ -36,7 +36,7 @@ from utils.batch_pipeline.errors import error_site_field, validate_worker_failur
 from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 from config.backlog_state_machine import MAX_HELD_REDRIVES, held_redrive_budget_enabled, held_redrive_counter_enabled
 from database import batch_pipeline_allowance_hold as allowance_hold
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller, RecoveryQuery
+from database.batch_pipeline_recovery_discovery import RecoveryCaller, RecoveryQuery
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0

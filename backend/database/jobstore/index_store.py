@@ -38,7 +38,7 @@ from database.jobstore.postgres_store import PostgresStore
 from database.jobstore.connection import sql
 from utils.observability.fallback import record_fallback
 from utils.observability.reasons import FallbackReason, ReasonFamily, reason_label
-from utils.batch_pipeline.recovery_discovery import (
+from database.batch_pipeline_recovery_discovery import (
     PRIMARY_SCAN_SUCCESS_TIMESTAMP,
     RecoveryCaller,
     RecoveryExposure,

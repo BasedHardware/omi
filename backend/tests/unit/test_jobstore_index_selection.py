@@ -136,7 +136,7 @@ def test_private_worker_registry_keeps_other_modes_separate(configured, monkeypa
     if mode == 'shadow':
         assert dual_store.SHADOW_PARITY_TOTAL in collectors
     else:
-        from utils.batch_pipeline.recovery_discovery import RECOVERY_COLLECTORS
+        from database.batch_pipeline_recovery_metrics import RECOVERY_COLLECTORS
 
         assert collectors == RECOVERY_COLLECTORS
 

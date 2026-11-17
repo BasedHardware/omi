@@ -12,7 +12,7 @@ import pytest
 from database.jobstore.index_store import IndexStore
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 
 
 class LeasedPrimary(MemoryStore):

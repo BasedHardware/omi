@@ -40,7 +40,7 @@ from utils.batch_pipeline.ready_discovery import ReadyDiscovery
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.allowance_hold import AllowanceHolds, entitlement
 from utils.batch_pipeline.retention import cleanup_completed_artifacts
 from utils.sync.stage import current_stage

@@ -17,7 +17,7 @@ from config.policy import resolve_stage_policy
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection_drain, serving
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 
 
 async def isolated_pump(pump, holds):

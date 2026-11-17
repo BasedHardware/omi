@@ -38,7 +38,7 @@ from utils.batch_pipeline import worker_metrics
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.stage_timings import StageTimings
 from utils.executors import admission_executor, db_executor, run_blocking, sync_executor
 

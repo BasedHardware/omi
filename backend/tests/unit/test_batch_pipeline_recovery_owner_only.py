@@ -14,7 +14,7 @@ from tests.unit.test_batch_pipeline_recovered_release import recovered
 from tests.unit.test_batch_pipeline_owner_chain_projection import BURST, ResultLog, chain, projector_for
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 from utils.batch_pipeline import projection, projection_followup
-from utils.batch_pipeline.recovery_discovery import RecoveryCaller
+from database.batch_pipeline_recovery_discovery import RecoveryCaller
 from utils.batch_pipeline.serving import Serving
 
 SWITCH = 'BATCH_PIPELINE_RECOVERY_OWNER_ONLY_ENABLED'

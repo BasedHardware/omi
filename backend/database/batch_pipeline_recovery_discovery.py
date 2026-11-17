@@ -1,4 +1,4 @@
-"""Caller-bound leased hints and feedback; no jobstore/driver import on primary paths."""
+"""Shared leased-recovery contract and process state below caller utilities."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from database.batch_pipeline_recovery_metrics import (
     RECOVERY_DISCOVERY_TOTAL,
 )
 
-from utils.observability.reasons import ReasonFamily, reason_label
+from database.reason_labels import ReasonFamily, reason_label
 
 
 class RecoveryCaller(StrEnum):
