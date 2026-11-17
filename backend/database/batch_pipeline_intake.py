@@ -16,6 +16,7 @@ from database import batch_pipeline_coalescing_completion as coalescing_completi
 from database.sync_ledger import LEDGER_RETENTION_DAYS, is_valid_completed_sync_content_result
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.batch_pipeline.result_protocol import stamp
 from utils.batch_pipeline.scheduler import Scheduler
 
 PROTOCOL = 'batch_v1'
@@ -192,7 +193,7 @@ def admit(
                 created = enqueue_item(tx, item, now, policy=admission)
                 if getattr(item, 'source_reuse_key', None):
                     marked = tx.get('jobs', item.segment_id)
-                    marked.update(protocol_version=2, source_reuse_version=1)
+                    stamp(marked, 'source_reuse_version')
                     tx.put('jobs', item.segment_id, marked)
             job = tx.get('jobs', item.segment_id)
             previous_binding = dict(job.get('projection_binding') or {})
