@@ -12,7 +12,9 @@ OPTIONAL_PROJECTS = ('OMI_FIRESTORE_DATA_PLANE_PROJECT', 'GCLOUD_PROJECT', 'GCP_
 
 
 def test_cloud_run_and_listen_deletion_executors_have_complete_dark_target_context():
-    manifest = yaml.safe_load((ROOT / 'backend/deploy/runtime_env.yaml').read_text())['environments']['prod']
+    manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)[
+        'environments'
+    ]['prod']
     from utils.staging_fence import _PRODUCTION_MIRROR_CONTEXT
 
     required = {
