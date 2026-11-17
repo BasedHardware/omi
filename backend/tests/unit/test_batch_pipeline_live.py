@@ -890,7 +890,6 @@ def test_projection_debt_stamp_skips_every_non_empty_summary_block(reason):
         {'summary_completed_at': 90.0},
         {'summary_output_present': True},
         {'summary_due_at': 170.0},
-        {'summary_first_pending_at': 50.0},
         {'structured': {'title': 'Synthetic title'}},
         {'structured': {'overview': 'Synthetic overview'}},
         {'structured': {'sections': [{'body_markdown': 'Synthetic body'}]}},

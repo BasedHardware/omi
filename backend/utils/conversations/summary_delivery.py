@@ -218,7 +218,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     server-minimum intake path, so it carries no debt: Home hides it and the
     repair refuses it as ``unknown_provenance``. The projection is the only
     write that sees the transcript land, so it stamps the same obligation the
-    intake minimum would have. Rows that already carry debt or a summary,
+    intake minimum would have. Rows that already carry armed debt or a summary,
     curated rows, discards, below-floor clips, blocked rows and local-only rows
     are untouched.
 
@@ -227,6 +227,10 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     apps, goals, memories, folders and vectors, and a projection stamp must not
     suppress those effects on a later reprocess. Home reads the row-level
     provenance together with the debt clock.
+
+    Processing acceptance can leave a pending timestamp without a due time.
+    Keep that original clock when arming it. Batch-live rows retaining a
+    finalization id require transactionally verified, generation-bound custody.
 
     A row whose ``created_at`` is already past the repair age gate gets the
     provenance but no debt. That is an honest non-debt disposition: the repair
@@ -247,7 +251,7 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
         return False
     if write.get('summary_completed_at') or write.get('summary_output_present'):
         return False
-    if write.get('summary_due_at') is not None or write.get('summary_first_pending_at') is not None:
+    if write.get('summary_due_at') is not None:
         return False
     blocked = write.get('summary_blocked_reason')
     if blocked is not None:
@@ -277,10 +281,30 @@ def stamp_projection_debt(write: Row, *, now: float | None = None) -> bool:
     write['summary_title_provenance'] = 'server_minimum'
     if _past_age_gate(write.get('created_at'), now=current):
         return False
-    write['summary_first_pending_at'] = current
-    write['summary_due_at'] = current + deadline_seconds()
+    accepted = write.get('summary_first_pending_at')
+    if not isinstance(accepted, (float, int)) or isinstance(accepted, bool) or not math.isfinite(accepted):
+        accepted = current
+    write['summary_first_pending_at'] = accepted
+    write['summary_due_at'] = accepted + deadline_seconds()
     write.setdefault('summary_lane', lane(write))
     return True
+
+
+def projection_owns_finalization(row: Row) -> bool:
+    """A transaction verified this exact finalizer's successful terminal handoff."""
+    proof = row.get('summary_projection_finalization')
+    revision = row.get('finalization_revision')
+    return bool(
+        projection_debt_enabled()
+        and row.get('record_lane_owner') == 'batch_live_v1'
+        and row.get('record_projection_revision')
+        and isinstance(proof, dict)
+        and proof.get('job_id') == row.get('finalization_job_id')
+        and row.get('finalization_job_id')
+        and type(revision) is int
+        and revision > 0
+        and proof.get('revision') == revision
+    )
 
 
 def _refusal(row: Row) -> str | None:
@@ -302,7 +326,9 @@ def _refusal(row: Row) -> str | None:
         return row['summary_blocked_reason']
     if row.get('summary_title_provenance') != 'server_minimum':
         return 'unknown_provenance'
-    if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':
+    if row.get('finalization_status') == 'blocked_byok' or (
+        row.get('finalization_job_id') and not projection_owns_finalization(row)
+    ):
         return 'generation_owned'
     return None
 

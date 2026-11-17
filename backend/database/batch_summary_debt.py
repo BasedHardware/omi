@@ -1,0 +1,55 @@
+"""Transfer summary custody only after the batch capture's finalizer has finished."""
+
+from google.cloud import firestore
+from database.conversation_finalization_schema import FINALIZATION_JOBS_COLLECTION
+from utils.conversations import summary_delivery as delivery
+
+
+def arm_projection_summary(uid, client, transaction, payload, current):
+    """Read the bound job before assignment writes; content and proof commit together.
+
+    A capture handoff retains finalization_job_id (and a stale queued status).
+    Never infer that this generation finished from the conversation's lifecycle
+    alone. Bind the proof to both job id and revision so a new finalizer restores
+    the ordinary generation fence. This creates no task: projection and repair
+    continue using the same conversation-keyed enrichment outbox.
+    """
+    if (
+        not delivery.projection_debt_enabled()
+        or payload.get('record_lane_owner') != 'batch_live_v1'
+        or payload.get('status') != 'completed'
+        or not payload.get('transcript_segments')
+        or (payload.get('record_projection_revision') or 0) <= ((current or {}).get('record_projection_revision') or 0)
+        or payload.get('summary_completed_at')
+        or payload.get('summary_output_present')
+    ):
+        return
+    job_id = payload.get('finalization_job_id')
+    if job_id:
+        job = (
+            client.collection(FINALIZATION_JOBS_COLLECTION).document(job_id).get(transaction=transaction).to_dict()
+            or {}
+        )
+        revision = payload.get('finalization_revision')
+        if not (
+            type(revision) is int
+            and revision > 0
+            and job.get('uid') == uid
+            and job.get('conversation_id') == payload['id']
+            and job.get('finalization_revision') == revision
+            and job.get('status') == 'completed'
+            and job.get('terminal_outcome') == 'success'
+            and job.get('fanout_status') == 'completed'
+        ):
+            return
+        payload['summary_projection_finalization'] = {'job_id': job_id, 'revision': revision}
+    # Assignment has already staged this invalidation. DELETE_FIELD is truthy;
+    # eligibility must describe the committed row, not mistake the sentinel
+    # for an active local-processing projection.
+    candidate = dict(payload)
+    if candidate.get('client_processing') is firestore.DELETE_FIELD:
+        candidate.pop('client_processing')
+    delivery.stamp_projection_debt(candidate)
+    for name in ('summary_title_provenance', 'summary_first_pending_at', 'summary_due_at', 'summary_lane'):
+        if name in candidate:
+            payload[name] = candidate[name]
