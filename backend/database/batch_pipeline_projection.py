@@ -659,7 +659,12 @@ class ProjectionStore:
 
         held = self.run(commit, policy=policy)
         for row_id, token in notes_wakes:
-            outbox.wake(row_id, token)
+            try:
+                outbox.wake(row_id, token)
+            except Exception as error:  # The due row is durable; the outbox sweep repairs a missed wake.
+                logger.warning(
+                    'event=batch_projection action=notes_wake outcome=error exception_type=%s', type(error).__name__
+                )
         self._mirror(binding)
         return held
 

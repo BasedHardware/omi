@@ -58,9 +58,13 @@ def test_row_level_projection_provenance_is_writing_notes_without_structured_pro
         summary_due_at=NOW.timestamp(),
     )
     assert home_step.classify(stamped) == 'writing_notes'
-    # No debt means no summary will ever replace the stand-in: hide it, do not
-    # present Writing notes forever.
-    assert home_step.classify({**stamped, 'summary_due_at': None}) == 'noise'
+    # No debt means no summary will ever come: never present Writing notes
+    # forever. The projection stamps the row alone only when transcript text
+    # landed, so the row stays on Home as a finished card instead of noise.
+    assert home_step.classify({**stamped, 'summary_due_at': None}) == 'ready'
+    # An intake stand-in title with no debt is still final noise.
+    stand_in = {**stamped, 'structured': {'title': 'Mm-hmm.', 'overview': '', 'title_provenance': 'server_minimum'}}
+    assert home_step.classify({**stand_in, 'summary_due_at': None}) == 'noise'
 
 
 def test_restamped_finished_title_is_never_processing_forever():
@@ -409,3 +413,28 @@ def test_feed_read_of_a_projected_batch_row_owing_notes_is_writing_notes(title):
     )
     read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
     assert home_step.classify(read) == 'writing_notes'
+
+
+def test_past_age_gate_projection_stamp_stays_on_home_through_the_feed_mask():
+    """A late batch transcript past the repair age gate gets the row marker but no debt."""
+    from database.home_feed import CONVERSATION_FIELDS
+    from utils.conversations import summary_delivery
+
+    old = NOW - timedelta(days=4)
+    projected = row(
+        created_at=old,
+        started_at=old,
+        finished_at=old + timedelta(minutes=20),
+        structured={'title': '', 'overview': ''},
+        record_lane_owner='batch_live_v1',
+        record_projection_revision=1,
+        record_audio_closed=True,
+        data_protection_level='enhanced',
+        transcript_segments=[{'text': 'we closed the round', 'start': 0, 'end': 3}],
+    )
+    assert summary_delivery.stamp_projection_debt(projected, now=NOW.timestamp()) is False
+    assert projected['summary_title_provenance'] == 'server_minimum'
+    assert 'summary_due_at' not in projected
+    read = {key: value for key, value in projected.items() if key in CONVERSATION_FIELDS}
+    # The feed, slim list and full-row list reads agree: a finished card, never hidden as noise.
+    assert home_step.classify(read) == home_step.classify(projected) == 'ready'

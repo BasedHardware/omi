@@ -606,6 +606,8 @@ def test_a_unit_held_for_recovery_does_not_hold_the_sealed_records_first_notes(r
     # for 65 minutes and kept the record's completion (and its notes) open.
     f = recording
     monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    # Without a queue binding (this fixture) no wake is armed; give the row one.
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
     row = _sealed_live(f)
     conversation = f.client.rows[f.conversation.path]
     held = {'state': 'quarantined', 'merge_pending': False, 'result': None, 'recovery_state': 'held'}
@@ -624,7 +626,10 @@ def test_a_unit_held_for_recovery_does_not_hold_the_sealed_records_first_notes(r
         assert conversation['sync_processing_hold']['units_settled_seal_at'] == NOW - 300
         assert conversation['sync_processing_hold']['held'] is True
         assert capture_end.seal_proof(conversation, None) == 'units_held'
-        assert row.get().to_dict()['due_at'] == NOW + 5
+        stored = row.get().to_dict()
+        assert stored['due_at'] == stored['task_due_at'] == NOW + 5
+        # The new wake goes out with the rotated token.
+        assert f.wake.call_args.args == (reprocess.key(f.binding.owner_id, 'capture'), stored['task_token'])
     else:
         assert 'units_settled_seal_at' not in conversation['sync_processing_hold']
         assert row.get().to_dict()['due_at'] == NOW + 120
@@ -643,3 +648,22 @@ def test_a_held_unit_after_first_notes_changes_nothing(recording, monkeypatch):
     assert f.store.hold_for_quarantine('first', f.binding, NOW, policy=POLICY) is True
     assert 'units_settled_seal_at' not in f.client.rows[f.conversation.path]['sync_processing_hold']
     assert row.get().to_dict()['due_at'] == NOW + 120
+
+
+@pytest.mark.parametrize('recording', [2], indirect=True)
+def test_a_failed_held_unit_notes_wake_never_fails_the_unit_job(recording, monkeypatch):
+    f = recording
+    monkeypatch.setenv('RECORD_NOTES_EAGER_ENABLED', 'false')
+    monkeypatch.setattr(FirestoreEnrichmentOutbox, '_can_wake', lambda self, row, effects=False: True)
+    row = _sealed_live(f)
+    f.client.rows[f.store.ref('jobs', 'last').path].update(
+        {'state': 'quarantined', 'merge_pending': False, 'result': None, 'recovery_state': 'held'}
+    )
+    del f.client.rows[f.store.ref('results', 'last').path]
+    f.store.mark_enrichment('first', f.binding, NOW, 'capture', 'en', policy=POLICY)
+    f.wake.reset_mock()
+    f.wake.side_effect = RuntimeError('synthetic task queue outage')
+    assert f.store.hold_for_quarantine('first', f.binding, NOW, policy=POLICY) is True
+    f.wake.assert_called_once()
+    # The committed obligation stays due now for the sweep to wake.
+    assert row.get().to_dict()['due_at'] == NOW

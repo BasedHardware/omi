@@ -27,8 +27,13 @@ still waited for the 120 s deadline after the first mark (ledger `noted - transc
 ## Scope
 
 The move and stamp are the first notes only: the barrier refuses rows with notes. A held unit that recovers later is
-late content: normal hold epoch, at most one material late run. A unit still transcribing (not quarantined) keeps
-the existing wait. Partial-record pages and non-record bindings are untouched.
+late content: normal hold epoch, at most one material late run. Accepted tradeoff: an immaterial or capped
+(`immaterial`, `late_cap`) recovered unit lands in the transcript but not in the notes. A unit still transcribing
+(not quarantined) keeps the existing wait. Partial-record pages and non-record bindings are untouched.
+
+Ordering: the obligation moves to due now inside the completion (or held-unit) transaction; the ledger's
+`transcribed` is written after that commit and before the wake. A wake failure in the held-unit path is logged and
+left to the outbox sweep; it never fails the unit job.
 
 Writes: one outbox row update per qualifying completion or held-unit hold; one conversation field update the first
 time a held row's seal is stamped. Reads: one conversation and one outbox document in the held-unit transaction.
