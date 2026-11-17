@@ -6,8 +6,8 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_derived_views.dart';
 
 class _CountedWal extends Wal {
-  _CountedWal(int start, WalStatus status, {WalStorage storage = WalStorage.disk})
-      : super(timerStart: start, codec: BleAudioCodec.opus, seconds: 30, status: status, storage: storage);
+  _CountedWal(int start, WalStatus status, {super.storage = WalStorage.disk})
+      : super(timerStart: start, codec: BleAudioCodec.opus, seconds: 30, status: status);
   int reads = 0;
   @override
   WalStatus get status {
