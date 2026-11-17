@@ -58,6 +58,14 @@ workers can process normal source-key jobs; an image rollback must retain new
 projection readers and the fallback-aware ordered merger to drain accepted protocol-2 work. Releasing an old image
 is not a safe way to make accepted aliases into ordinary paid work.
 
+The ordered merger also runs in the GPU pump (`batch-pipeline-worker`, its own
+deploy). A pump image older than source reuse copies `protocol_version=2` onto
+the result row without the marker. The projector admits such a row on the
+immutable job's marker (`source_reader_marked`), so the owner's chain is not
+stopped behind it; a row with a present but wrong marker stays refused. Roll
+the worker with intake regardless: 2026-11-16 intake served source keys for
+~16h against a 2026-11-14 pump image.
+
 ## Custody and privacy
 
 Source equivalence is transcription authority only. It produces no covered
