@@ -178,7 +178,7 @@ run_proof "provider merge conformance (sim + emulator required; Postgres when av
 # PL-606/607/608: independent projection clocks cannot hide owed follow-ups.
 run_proof "projection discovery conformance (sim + emulator required; Postgres when available)" \
   env OMI_REQUIRE_STORE_BACKENDS="${OMI_REQUIRE_STORE_BACKENDS:-sim,emulator}" \
-  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_projection_discovery_conformance.py
+  "$PYTHON" -m pytest -q -p no:cacheprovider scripts/projection_discovery_emulator_test.py
 
 run_proof "Firestore read budget: batch unit end-to-end (M3 scenario 1)" \
   "$PYTHON" -m pytest -q -s -p no:cacheprovider tests/integration/test_firestore_read_budget_batch_unit.py

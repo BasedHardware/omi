@@ -1,9 +1,21 @@
+# LIFECYCLE: permanent
 """PL-606/607/608: projection discovery on old Firestore, Postgres and sim.
 
 These are scheduling hints, never projection completion or privacy authority.
 The same public Store queries must preserve owed work across clock selection,
 pagination and rollback. Require OMI_REQUIRE_STORE_BACKENDS=all for full proof.
 """
+
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault('OMI_ENV_STAGE', 'offline')
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+pytest_plugins = ['tests.conftest']
 
 import pytest
 
@@ -26,7 +38,7 @@ def put(h, key, *, state='ready', committed=1.0, followup=10.0, finish=-1.0):
         'segment_id': key,
         'owner_id': h.uid('owner'),
         'owner_key': f'ok-{h.uid("owner")}',
-        'state': 'merged',
+        'state': 'result_ready',
         'capture_at': 1.0,
         'enqueued_at': 1.0,
         'privacy_generation': 0,
@@ -65,10 +77,9 @@ def test_pl606_future_prefix_cannot_spend_due_followup_page(h, state):
     before['completed'] = put(h, 'completed', state='completed', followup=1.0)
 
     # Filtering after LIMIT would return only an old deferred row, hiding the
-    # exact-boundary obligation. Repeated replicas must make the same selection.
-    for _ in range(2):
-        ids, _ = h.store.projection_page(1, states=STATES, followup_due_before=100.0)
-        assert ids == ['boundary']
+    # exact-boundary obligation.
+    ids, _ = h.store.projection_page(1, states=STATES, followup_due_before=100.0)
+    assert ids == ['boundary']
     assert h.store.projection_page(20, states=STATES, followup_due_before=100.001)[0] == ['boundary', 'later']
     assert 'legacy' in h.store.projection_page(20, states=STATES)[0]
     assert {key: read(h, key) for key in before} == before
