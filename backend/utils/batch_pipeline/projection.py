@@ -35,6 +35,8 @@ from config.record_latency import recent_native_record
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
+from database.batch_pipeline_projection_protocol import ProjectionSourceMarkerMissing
+from database.batch_pipeline_projection_protocol_hold import bound_protocol_head
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -1582,6 +1584,14 @@ class Projector:
                 stop, blocked_head = 'privacy_blocked', (segment_id, getattr(snapshot, 'update_time', None))
                 break
             except ProjectionBlocked as error:
+                if isinstance(error, ProjectionSourceMarkerMissing) and binding is not None:
+                    try:
+                        if bound_protocol_head(self.store, segment_id, job, entry, binding, self.clock()):
+                            previous = segment_id
+                            advanced.append(segment_id)
+                            continue
+                    except Exception as hold_error:
+                        failed(hold_error)
                 stop = walk_block_stop(error, projection_block_reason(error))
                 if stop.startswith('blocked_privacy_'):
                     blocked_head = (segment_id, getattr(snapshot, 'update_time', None))
@@ -1716,6 +1726,17 @@ class Projector:
                                 'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
                                 error_type(error),
                             )
+                continue
+            except ProjectionSourceMarkerMissing:
+                counts['blocked'] += 1
+                if binding is not None:
+                    try:
+                        bound_protocol_head(self.store, segment_id, job, entry, binding, self.clock())
+                    except Exception as error:
+                        logger.warning(
+                            'event=batch_projection action=protocol_head_bound outcome=retry exception_type=%s',
+                            error_type(error),
+                        )
                 continue
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1

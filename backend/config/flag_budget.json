@@ -244,6 +244,11 @@
       "review_by": "2026-12-06",
       "registry": "config/feature-flags.yaml"
     },
+    "BATCH_PIPELINE_PROJECTION_PROTOCOL_HEAD_BOUND_ENABLED": {
+      "owner": "omi-pipeline",
+      "review_by": "2026-12-18",
+      "registry": "config/feature-flags.yaml"
+    },
     "BATCH_PIPELINE_PROJECTION_HOLD_LOG_ENABLED": {
       "owner": "omi-pipeline",
       "review_by": "2026-12-08",

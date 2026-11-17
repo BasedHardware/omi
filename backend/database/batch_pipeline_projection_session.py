@@ -26,6 +26,8 @@ from database.batch_pipeline_projection_protocol import (
     ProjectionReplay,
     normalized_binding,
     source_reader_marked,
+    missing_canonical_source_marker,
+    ProjectionSourceMarkerMissing,
 )
 from database.batch_pipeline_projection_finish import projection_finish_state_fields
 
@@ -79,6 +81,7 @@ class ProjectionSession:
         self._source_deleted = False
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
+        self._protocol_hold_transaction = None
         self._privacy_fence_ids: set[str] | None = None
 
     def receipt(self) -> dict:
@@ -278,13 +281,23 @@ class ProjectionSession:
                 # it. Reconcile its receipt, while later input parts still owe
                 # their own assignments. Never authorize input deletion here.
 
-    def prepare(self, transaction, *, replay=True, privacy_deleted=False, privacy_refusal=None, privacy_replay=False):
+    def prepare(
+        self,
+        transaction,
+        *,
+        replay=True,
+        privacy_deleted=False,
+        privacy_refusal=None,
+        privacy_replay=False,
+        protocol_hold=False,
+    ):
         if privacy_deleted and privacy_refusal is not None:
             raise ProjectionBlocked('privacy dispositions must be distinct')
         self._privacy_refusal_transaction = None
         self._privacy_replay_transaction = None
         self._source_deletion_transaction = None
         self._source_deleted = False
+        self._protocol_hold_transaction = None
         self._privacy_fence_ids = set()
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
@@ -296,29 +309,43 @@ class ProjectionSession:
             or self.segment_id not in self.binding.segment_ids
             or self.job.get('owner_id') != self.binding.owner_id
             or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
-            or not (
-                self.entry.get('protocol_version') == 1
-                or self.entry.get('protocol_version') == 2
-                and source_reader_marked(self.entry, self.job)
-                or self.entry.get('protocol_version') == 2
-                and self.entry.get('projection_release_version') == 1
-                or self.entry.get('protocol_version') == 2
-                and checkpoint(self.entry)
-                or self.entry.get('protocol_version') == 2
-                and self.entry.get('lineage_quarantine_version') == 1
-                and any(
-                    part.get('quarantine_version') == 1 and part.get('state') == 'quarantined'
-                    for part in (
-                        self.entry.get('projection_parts') or {'single': self.entry.get('projection') or {}}
-                    ).values()
-                )
-            )
             or self.entry.get('segment_id') != self.segment_id
             or self.entry.get('capture_at') != self.job.get('capture_at')
             or self.job.get('privacy_generation') != self.binding.privacy_generation
             or self.job.get('result') != self.entry.get('result')
             or 'previous_segment_id' not in self.entry
         ):
+            raise ProjectionBlocked('immutable result binding mismatch')
+        protocol_accepted = (
+            self.entry.get('protocol_version') == 1
+            or self.entry.get('protocol_version') == 2
+            and source_reader_marked(self.entry, self.job)
+            or self.entry.get('protocol_version') == 2
+            and self.entry.get('projection_release_version') == 1
+            or self.entry.get('protocol_version') == 2
+            and checkpoint(self.entry)
+            or self.entry.get('protocol_version') == 2
+            and self.entry.get('lineage_quarantine_version') == 1
+            and any(
+                part.get('quarantine_version') == 1 and part.get('state') == 'quarantined'
+                for part in (
+                    self.entry.get('projection_parts') or {'single': self.entry.get('projection') or {}}
+                ).values()
+            )
+        )
+        if protocol_hold:
+            if (
+                protocol_accepted
+                or not missing_canonical_source_marker(self.entry, self.job)
+                or self.entry.get('projection_state') != 'pending'
+                or self.receipt()
+                or self.entry.get('projection_parts')
+                or self.entry.get('projection_redriven_at')
+            ):
+                raise ProjectionBlocked('protocol refusal no longer applies')
+        elif not protocol_accepted:
+            if missing_canonical_source_marker(self.entry, self.job):
+                raise ProjectionSourceMarkerMissing('immutable result binding mismatch')
             raise ProjectionBlocked('immutable result binding mismatch')
         try:
             self._prepare_privacy(transaction, privacy_deleted=privacy_deleted)
@@ -389,6 +416,8 @@ class ProjectionSession:
         if erased is None:
             raise ProjectionPredecessorPending('earlier committed projection must persist first')
         self.erased_predecessors = erased
+        if protocol_hold:
+            self._protocol_hold_transaction = transaction
 
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
@@ -397,6 +426,15 @@ class ProjectionSession:
     def persist(
         self, transaction, planned=None, *, superseded=False, quarantined=False, privacy_deleted=False, silence=False
     ):
+        if self._protocol_hold_transaction is transaction and (
+            not quarantined
+            or planned is not None
+            or superseded
+            or privacy_deleted
+            or silence
+            or self.part_index is not None
+        ):
+            raise ProjectionBlocked('protocol hold cannot assign or acknowledge content')
         if silence and (
             planned is not None
             or superseded
@@ -454,14 +492,15 @@ class ProjectionSession:
         }
         from database.batch_pipeline_source_reuse import claim
 
-        claim(
-            self,
-            transaction,
-            {
-                **receipt,
-                'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
-            },
-        )
+        if self._protocol_hold_transaction is not transaction:
+            claim(
+                self,
+                transaction,
+                {
+                    **receipt,
+                    'size_rollover_outputs': [{'conversation_id': row['id']} for row, _ in outputs if row.get('id')],
+                },
+            )
         if len(outputs) > 1:
             receipt['size_rollover_outputs'] = [
                 {'conversation_id': row['id'], 'created': row_created} for row, row_created in outputs

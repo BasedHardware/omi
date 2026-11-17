@@ -13,6 +13,24 @@ class ProjectionPredecessorPending(ProjectionBlocked):
     """The owner chain must replay an earlier committed row before this one."""
 
 
+class ProjectionSourceMarkerMissing(ProjectionBlocked):
+    """Known canonical source job, refused solely by the reader's marker gate."""
+
+
+def missing_canonical_source_marker(entry: dict, job: dict) -> bool:
+    """The 11-16 shape and pre-marker residual; unknown versions/aliases stay fenced."""
+    return bool(
+        entry.get('protocol_version') == 2
+        and job.get('protocol_version') == 2
+        and job.get('source_reuse_key')
+        and job.get('source_reuse_version') in (None, 1)
+        and not job.get('source_alias')
+        and job.get('source_alias_version') is None
+        and 'source_reuse_version' not in entry
+        and 'source_alias_version' not in entry
+    )
+
+
 class ProjectionGenerationAmbiguous(ProjectionBlocked):
     """Validated intake reached the unresolved generation fence; never assign text."""
 

@@ -36,6 +36,8 @@ import utils.conversations.deterministic_minimum  # noqa: F401
 import utils.stt.pre_recorded  # noqa: F401
 import utils.sync.capture  # noqa: F401
 from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
+from database.batch_pipeline_projection_protocol_hold import PROTOCOL_REFUSAL_SECONDS
+from tests.unit.test_batch_pipeline_projection_protocol_hold import incident, walk  # noqa: F401
 from tests.unit.test_batch_pipeline_owner_chain_projection import (
     BURST,
     SUCCESS_PAYLOAD,
@@ -79,7 +81,13 @@ POISON_PAYLOAD_KINDS = frozenset(
 )
 
 CONFLICT_KINDS = sorted(f'conflict:{subtype}' for subtype in POISON_CONFLICT_SUBTYPES)
-ALL_KINDS = CONFLICT_KINDS + sorted(POISON_PAYLOAD_KINDS) + ['contention-value-error', 'generation-ambiguous']
+PROTOCOL_POISON_KINDS = ['protocol:missing-source-marker']
+ALL_KINDS = (
+    CONFLICT_KINDS
+    + sorted(POISON_PAYLOAD_KINDS)
+    + ['contention-value-error', 'generation-ambiguous']
+    + PROTOCOL_POISON_KINDS
+)
 
 
 def expected_outcome(kind: str, lane: str) -> str:
@@ -137,7 +145,7 @@ def owner_chain(*, record=True, fresh_capture=False, outcome='success'):
 
 
 @pytest.mark.parametrize('lane', ['backfill', 'fresh'])
-@pytest.mark.parametrize('kind', ALL_KINDS, ids=ALL_KINDS)
+@pytest.mark.parametrize('kind', [kind for kind in ALL_KINDS if kind not in PROTOCOL_POISON_KINDS])
 def test_permanent_poison_head_advances_or_waits_observably(monkeypatch, kind, lane):
     """The matrix: each injected kind must produce its declared outcome within
     the bounded attempt count — nothing may wedge a third state."""
@@ -224,6 +232,21 @@ def test_permanent_poison_head_advances_or_waits_observably(monkeypatch, kind, l
         assert log.persist_order == []
         assert all(log.results[sid]['projection_state'] == 'pending' for sid in ids)
         assert 'recovery_state' not in log.jobs[head], 'wait kinds must not take the held disposition'
+
+
+@pytest.mark.parametrize('kind', PROTOCOL_POISON_KINDS)
+@pytest.mark.parametrize('lane', ['backfill', 'fresh'])
+def test_protocol_poison_head_advances_after_durable_bound(incident, kind, lane):
+    f = incident
+    for job in f.client.rows.values():
+        if job.get('state') == 'committed':
+            job['fresh_capture'] = lane == 'fresh'
+    assert expected_outcome(kind, lane) == ADVANCE
+    for _ in range(WAIT_ATTEMPTS):
+        assert walk(f).advanced == []
+    f.now[0] += PROTOCOL_REFUSAL_SECONDS
+    assert walk(f).advanced == ['head', 'next', 'tail']
+    assert f.row('head')['projection_state'] == 'quarantine_held'
 
 
 def test_conflicting_conflict_seam_raises_the_named_subtype(monkeypatch):

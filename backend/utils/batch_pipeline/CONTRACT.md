@@ -726,3 +726,22 @@ metadata attestation. Count overflow, queue expiry and unsettled/metadata deadli
 all keep the producer token fenced. The queue holds no extra drain slot or PCM
 copy. The 256 entries cover eight default 32-drain budgets for scale-down bursts;
 this is a bounded admission choice, not a measured fleet burst guarantee.
+
+### Bounded missing-source-marker heads
+
+`ProjectionSourceMarkerMissing` identifies only a protocol-2 canonical source-key
+row with absent result markers and an absent/v1 job reuse marker, after ordinary
+immutable binding comparisons pass. `bound_protocol_head` stamps the existing
+first-refusal fields and, after 900 seconds, revalidates privacy, source ownership,
+ledger, predecessor and age in the quarantine transaction. It uses
+`quarantine_held`/`recovery_state=held`, advances only ordering, writes no source
+claim, assigns no text and acknowledges no usage. Unknown versions, aliases and
+other binding failures keep their existing stop/alert behavior.
+
+`BATCH_PIPELINE_PROJECTION_PROTOCOL_HEAD_BOUND_ENABLED` defaults on; false stops
+new stamps/holds. A committed hold logs/counts `missing_source_marker` without
+identifiers. Release requires the original source protocol to be readable, then
+uses the existing pending redrive behind the watermark. Assignment sorts late
+text by capture timestamp; it never moves the watermark backward. No new TTL,
+query, index or alert is introduced. See
+`backend/docs/listen_pusher_pipeline/changes/2026-11-18-projection-head-bound.md`.
