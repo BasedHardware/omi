@@ -268,6 +268,7 @@ def test_blank_title_beside_real_notes_still_gets_the_deterministic_title():
         ({'title': 'Discussion notes', 'overview': ''}, True),
         ({'title': 'Discussion notes', 'overview': 'The pilot budget is approved.'}, False),
         ({'title': 'Pilot budget'}, False),
+        ({'title': 123, 'overview': 'The pilot budget is approved.'}, True),
     ],
 )
 def test_title_update_is_the_same_rule_for_every_terminal(structured, retitled):
